@@ -88,11 +88,22 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
     const [historyBoundary, setHistoryBoundary] = useState<number | null>(null);
     const [earliestHistoryEventId, setEarliestHistoryEventId] = useState<string | null>(null);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    const [shouldShowDisconnectDivider, setShouldShowDisconnectDivider] = useState(false);
 
     // Set history boundary timestamp to prevent duplicates with WebSocket events
-    const setHistoryBoundaryNow = useCallback(() => {
+    // If lastMessageBeforeDisconnect is provided and the gap is > 10 minutes, mark to show divider
+    const setHistoryBoundaryNow = useCallback((lastMessageBeforeDisconnect?: number) => {
         const boundary = Date.now();
         setHistoryBoundary(boundary);
+
+        // Calculate if we should show divider (gap > 10 minutes = 600000 ms)
+        if (lastMessageBeforeDisconnect && lastMessageBeforeDisconnect > 0) {
+            const disconnectGapMs = boundary - lastMessageBeforeDisconnect;
+            const tenMinutesMs = 10 * 60 * 1000;
+            setShouldShowDisconnectDivider(disconnectGapMs > tenMinutesMs);
+        } else {
+            setShouldShowDisconnectDivider(false);
+        }
     }, []);
 
     // Check if a WebSocket event timestamp is before history boundary (duplicate)
@@ -414,5 +425,6 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
         fetchInitialHistory,
         fetchMoreHistory,
         isLoadingHistory,
+        shouldShowDisconnectDivider,
     };
 };

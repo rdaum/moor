@@ -30,6 +30,7 @@ interface OutputWindowProps {
     isLoadingHistory?: boolean;
     onLinkClick?: (url: string) => void;
     fontSize?: number;
+    shouldShowDisconnectDivider?: boolean;
 }
 
 export const OutputWindow: React.FC<OutputWindowProps> = ({
@@ -38,6 +39,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
     isLoadingHistory = false,
     onLinkClick,
     fontSize,
+    shouldShowDisconnectDivider = false,
 }) => {
     const outputRef = useRef<HTMLDivElement>(null);
     const shouldAutoScroll = useRef(true);
@@ -193,8 +195,8 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
 
             {/* Render all messages, grouping no_newline messages and consecutive messages with same presentationHint */}
             {(() => {
-                const groupedMessages = [];
-                let currentGroup = [];
+                const groupedMessages: typeof messages[] = [];
+                let currentGroup: typeof messages = [];
 
                 for (let i = 0; i < messages.length; i++) {
                     const message = messages[i];
@@ -216,6 +218,28 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                 }
 
                 return groupedMessages.map((group, groupIndex) => {
+                    const firstMessage = group[0];
+                    const isDividerGroup = shouldShowDisconnectDivider && !firstMessage.isHistorical && groupIndex > 0;
+                    const previousGroup = groupIndex > 0 ? groupedMessages[groupIndex - 1] : null;
+                    const shouldShowDivider = isDividerGroup && previousGroup
+                        && previousGroup[previousGroup.length - 1].isHistorical;
+
+                    const result = [];
+
+                    // Add divider if this is the first non-historical message and we should show it
+                    if (shouldShowDivider) {
+                        result.push(
+                            <div
+                                key={`divider_${groupIndex}`}
+                                className="history_separator"
+                                role="separator"
+                                aria-label="Reconnection point: messages before this occurred during a disconnection lasting more than 10 minutes"
+                            >
+                                <span aria-hidden="true">●●●</span>
+                            </div>,
+                        );
+                    }
+
                     if (group.length === 1) {
                         // Single message
                         const message = group[0];
@@ -225,7 +249,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                             const baseClassName = getMessageClassName(message.type, message.isHistorical);
                             const wrapperClassName = message.presentationHint === "inset" ? "presentation_inset" : "";
 
-                            return (
+                            result.push(
                                 <div key={message.id} className={wrapperClassName}>
                                     {message.thumbnail && (
                                         <img
@@ -241,33 +265,35 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                             onLinkClick={onLinkClick}
                                         />
                                     </div>
-                                </div>
+                                </div>,
+                            );
+                        } else {
+                            // Regular message without presentationHint
+                            result.push(
+                                <div
+                                    key={message.id}
+                                    className={getMessageClassName(
+                                        message.type,
+                                        message.isHistorical,
+                                    )}
+                                >
+                                    {message.thumbnail && (
+                                        <img
+                                            src={message.thumbnail.data}
+                                            alt="thumbnail"
+                                            className="narrative_thumbnail"
+                                        />
+                                    )}
+                                    <ContentRenderer
+                                        content={message.content}
+                                        contentType={message.contentType}
+                                        onLinkClick={onLinkClick}
+                                    />
+                                </div>,
                             );
                         }
 
-                        // Regular message without presentationHint
-                        return (
-                            <div
-                                key={message.id}
-                                className={getMessageClassName(
-                                    message.type,
-                                    message.isHistorical,
-                                )}
-                            >
-                                {message.thumbnail && (
-                                    <img
-                                        src={message.thumbnail.data}
-                                        alt="thumbnail"
-                                        className="narrative_thumbnail"
-                                    />
-                                )}
-                                <ContentRenderer
-                                    content={message.content}
-                                    contentType={message.contentType}
-                                    onLinkClick={onLinkClick}
-                                />
-                            </div>
-                        );
+                        return result;
                     } else {
                         // Multiple messages grouped together
                         const lastMessage = group[group.length - 1];
@@ -286,7 +312,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                 ? "presentation_inset"
                                 : "";
 
-                            return (
+                            result.push(
                                 <div key={`group_${groupIndex}_${lastMessage.id}`} className={wrapperClassName}>
                                     {group.map(msg => (
                                         <div key={msg.id} className={baseClassName}>
@@ -304,7 +330,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                             />
                                         </div>
                                     ))}
-                                </div>
+                                </div>,
                             );
                         } else {
                             // noNewline group - combine content on same line
@@ -324,7 +350,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                 }
                             }).join("");
 
-                            return (
+                            result.push(
                                 <div
                                     key={`group_${groupIndex}_${lastMessage.id}`}
                                     className={getMessageClassName(
@@ -337,9 +363,11 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                         contentType="text/html"
                                         onLinkClick={onLinkClick}
                                     />
-                                </div>
+                                </div>,
                             );
                         }
+
+                        return result;
                     }
                 });
             })()}

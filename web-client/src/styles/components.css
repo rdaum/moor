@@ -1045,7 +1045,7 @@
 }
 
 /* ====== HISTORICAL CONTENT ====== */
-/* Historical events - lighter, muted appearance */
+/* Historical events - same appearance as live events */
 .historical_narrative {
   font-family: var(--font-sans);
   font-size: 1em;
@@ -1054,14 +1054,12 @@
   overflow: auto;
   padding: 0;
   margin: 0;
-  color: var(--color-text-historical);
-  opacity: 0.8;
+  color: var(--color-text-primary);
 }
 
 .historical_djot,
 .historical_html {
-  color: var(--color-text-historical);
-  opacity: 0.8;
+  color: var(--color-text-primary);
 }
 
 /* Live events - normal appearance */

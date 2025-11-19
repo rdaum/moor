@@ -41,6 +41,7 @@ interface NarrativeProps {
     fontSize?: number;
     inputMetadata?: InputMetadata | null;
     onClearInputMetadata?: () => void;
+    shouldShowDisconnectDivider?: boolean;
 }
 
 export interface NarrativeRef {
@@ -57,6 +58,7 @@ export interface NarrativeRef {
     prependHistoricalMessages: (messages: NarrativeMessage[]) => void;
     getContainerHeight: () => number;
     clearAll: () => void;
+    getLastMessageTimestamp: () => number;
 }
 
 const COMMAND_HISTORY_STORAGE_PREFIX = "moor-command-history";
@@ -81,6 +83,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     fontSize,
     inputMetadata,
     onClearInputMetadata,
+    shouldShowDisconnectDivider = false,
 }, ref) => {
     const connected = connectionStatus === "connected";
     const [messages, setMessages] = useState<NarrativeMessage[]>([]);
@@ -88,6 +91,8 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     const narrativeContainerRef = useRef<HTMLDivElement>(null);
     const storageKeyRef = useRef<string | null>(null);
     const previousStorageKeyRef = useRef<string | null>(null);
+    const lastMessageTimestampRef = useRef<number>(0);
+    const lastDisconnectMessageTimestampRef = useRef<number>(0);
     const currentStorageKey = getCommandHistoryStorageKey(playerOid);
 
     if (storageKeyRef.current !== currentStorageKey) {
@@ -124,16 +129,20 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         presentationHint?: string,
         thumbnail?: { contentType: string; data: string },
     ) => {
+        const now = Date.now();
         const newMessage: NarrativeMessage = {
-            id: `msg_${Date.now()}_${Math.random()}`,
+            id: `msg_${now}_${Math.random()}`,
             content,
             type,
-            timestamp: Date.now(),
+            timestamp: now,
             contentType,
             noNewline,
             presentationHint,
             thumbnail,
         };
+
+        // Track the latest message timestamp (update even for input echo)
+        lastMessageTimestampRef.current = now;
 
         setMessages(prev => [...prev, newMessage]);
         if (type !== "input_echo") {
@@ -244,6 +253,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         prependHistoricalMessages,
         getContainerHeight,
         clearAll,
+        getLastMessageTimestamp: () => lastDisconnectMessageTimestampRef.current,
     }), [
         addNarrativeContent,
         addSystemMessage,
@@ -295,6 +305,13 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         }
     }, [currentStorageKey]);
 
+    // Track disconnect time: when we lose connection, save the last message timestamp
+    useEffect(() => {
+        if (connectionStatus === "disconnected" || connectionStatus === "error") {
+            lastDisconnectMessageTimestampRef.current = lastMessageTimestampRef.current;
+        }
+    }, [connectionStatus]);
+
     if (!visible) {
         return null;
     }
@@ -319,6 +336,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
                     isLoadingHistory={isLoadingHistory}
                     onLinkClick={onLinkClick}
                     fontSize={fontSize}
+                    shouldShowDisconnectDivider={shouldShowDisconnectDivider}
                 />
                 {promptActive && (
                     <>

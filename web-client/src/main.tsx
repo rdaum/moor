@@ -449,6 +449,7 @@ function AppContent({
         fetchInitialHistory,
         fetchMoreHistory,
         isLoadingHistory,
+        shouldShowDisconnectDivider,
     } = useHistory(authToken, encryptionKeyForHistory);
 
     // Custom close handler for verb editor that also dismisses presentation
@@ -1017,7 +1018,8 @@ function AppContent({
 
             console.log("[HistoryDebug] Loading history with encryption key");
             setHistoryLoaded(true);
-            setHistoryBoundaryNow();
+            const lastMsgTimestamp = narrativeRef.current?.getLastMessageTimestamp() || 0;
+            setHistoryBoundaryNow(lastMsgTimestamp);
 
             setTimeout(() => {
                 fetchInitialHistory()
@@ -1292,6 +1294,7 @@ function AppContent({
                                     fontSize={narrativeFontSize}
                                     inputMetadata={inputMetadata}
                                     onClearInputMetadata={clearInputMetadata}
+                                    shouldShowDisconnectDivider={shouldShowDisconnectDivider}
                                 />
                             </section>
 
