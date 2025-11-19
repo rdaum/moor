@@ -428,7 +428,13 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
                         height="100%"
                         defaultLanguage="moo"
                         value={content}
-                        onChange={(value) => setContent(value || "")}
+                        onChange={(value) => {
+                            setContent(value || "");
+                            // Clear error when user starts typing
+                            if (error) {
+                                setError(null);
+                            }
+                        }}
                         onMount={handleEditorMount}
                         options={{
                             fontSize,

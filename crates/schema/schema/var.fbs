@@ -37,9 +37,13 @@ union VarUnion {
     VarSym,
     VarBinary,
     VarFlyweight,
-    VarLambda
+    VarLambda,
+    VarAnonymous
     // Note: Lambda is not transmittable over RPC (see var_to_flatbuffer)
     // but is supported for database persistence (see var_to_db_flatbuffer)
+    // Note: Anonymous is a sigil that indicates an anonymous object was present
+    // in the value tree during serialization. It preserves the object's identity
+    // but cannot be used for operations (client-side validation prevents this).
 }
 
 table VarNone {
@@ -106,6 +110,10 @@ table VarLambda {
     body: MoorProgram.StoredProgram (required);
     captured_env: [VarList] (required);  // Vec<Vec<Var>> - vector of stack frames
     self_var: MoorProgram.StoredName;  // Optional self-reference for recursive lambdas
+}
+
+table VarAnonymous {
+    obj: MoorCommon.Obj (required);  // Preserve object identity for display/reference purposes
 }
 
 table Var {

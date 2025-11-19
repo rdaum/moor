@@ -18,6 +18,7 @@ import { ErrorCode } from "../generated/moor-common/error-code.js";
 import { ObjId } from "../generated/moor-common/obj-id.js";
 import { ObjUnion } from "../generated/moor-common/obj-union.js";
 import { UuObjId } from "../generated/moor-common/uu-obj-id.js";
+import { VarAnonymous } from "../generated/moor-var/var-anonymous.js";
 import { VarBinary } from "../generated/moor-var/var-binary.js";
 import { VarBool } from "../generated/moor-var/var-bool.js";
 import { VarErr } from "../generated/moor-var/var-err.js";
@@ -121,6 +122,35 @@ export class MoorVar {
                 if (!uuObjId) return null;
                 // Return the packed UUID value as a string
                 return { uuid: uuObjId.packedValue().toString() };
+            }
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * Extract anonymous object reference, or null if not an anonymous object
+     * Returns a simple object with either oid (number) or uuid (string), marked as anonymous
+     * Anonymous objects are sigils that preserve identity but cannot be used for operations
+     */
+    asAnonymous(): { oid?: number; uuid?: string; anonymous?: true } | null {
+        if (this.fb.variantType() !== VarUnion.VarAnonymous) return null;
+        const varAnon = this.fb.variant(new VarAnonymous()) as VarAnonymous | null;
+        if (!varAnon) return null;
+
+        const obj = varAnon.obj();
+        if (!obj) return null;
+
+        const objType = obj.objType();
+        switch (objType) {
+            case ObjUnion.ObjId: {
+                const objId = obj.obj(new ObjId()) as ObjId | null;
+                return objId ? { oid: objId.id(), anonymous: true } : null;
+            }
+            case ObjUnion.UuObjId: {
+                const uuObjId = obj.obj(new UuObjId()) as UuObjId | null;
+                if (!uuObjId) return null;
+                return { uuid: uuObjId.packedValue().toString(), anonymous: true };
             }
             default:
                 return null;
@@ -240,6 +270,9 @@ export class MoorVar {
             case VarUnion.VarObj:
                 return this.asObject();
 
+            case VarUnion.VarAnonymous:
+                return this.asAnonymous();
+
             case VarUnion.VarSym:
                 return this.asSymbol();
 
@@ -310,6 +343,11 @@ export class MoorVar {
                 if (!obj) return "#-1";
                 const objStr = objToString(obj);
                 return objStr ? `#${objStr}` : "#-1";
+            }
+
+            case VarUnion.VarAnonymous: {
+                // Anonymous objects display as *anonymous* sigil
+                return "*anonymous*";
             }
 
             case VarUnion.VarList: {

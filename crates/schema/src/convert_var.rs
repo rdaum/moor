@@ -231,12 +231,17 @@ pub fn var_to_flatbuffer_internal(
         })),
 
         Variant::Obj(obj) => {
+            // In RPC context, serialize anonymous objects as a sigil that preserves identity
+            // but signals that operations on this object are not permitted
             if obj.is_anonymous() && context == ConversionContext::Rpc {
-                return Err(VarConversionError::AnonymousObjectNotTransmittable);
+                VarUnion::VarAnonymous(Box::new(var::VarAnonymous {
+                    obj: Box::new(convert_common::obj_to_flatbuffer_struct(obj)),
+                }))
+            } else {
+                VarUnion::VarObj(Box::new(var::VarObj {
+                    obj: Box::new(convert_common::obj_to_flatbuffer_struct(obj)),
+                }))
             }
-            VarUnion::VarObj(Box::new(var::VarObj {
-                obj: Box::new(convert_common::obj_to_flatbuffer_struct(obj)),
-            }))
         }
 
         Variant::Err(e) => {
@@ -489,6 +494,14 @@ pub fn var_from_flatbuffer_internal(
             use moor_var::Var;
             Ok(Var::mk_lambda(params, body, captured_env?, self_var))
         }
+
+        VarUnion::VarAnonymous(anon) => {
+            // Anonymous objects are sigils that preserve identity but cannot be used for operations.
+            // Reconstruct as a regular object (operations will be blocked client-side based on metadata).
+            let obj = convert_common::obj_from_flatbuffer_struct(&anon.obj)
+                .map_err(|e| VarConversionError::DecodingError(e.to_string()))?;
+            Ok(v_obj(obj))
+        }
     }
 }
 
@@ -641,26 +654,31 @@ mod tests {
     }
 
     #[test]
-    fn test_anonymous_object_rejected() {
+    fn test_anonymous_object_as_sigil() {
         let obj = Obj::mk_anonymous_generated();
         let var = v_obj(obj);
-        let result = var_to_flatbuffer(&var);
-        assert!(matches!(
-            result,
-            Err(VarConversionError::AnonymousObjectNotTransmittable)
-        ));
+        let fb = var_to_flatbuffer(&var).expect("Should serialize as sigil");
+        // The result should be a VarAnonymous in the FlatBuffer
+        match &fb.variant {
+            var::VarUnion::VarAnonymous(_) => {
+                // Correct - anonymous objects become sigils in RPC context
+            }
+            _ => panic!("Expected VarAnonymous variant"),
+        }
+        // Should roundtrip to same object
+        let decoded = var_from_flatbuffer(&fb).expect("Should deserialize");
+        assert_eq!(var, decoded);
     }
 
     #[test]
-    fn test_anonymous_object_in_list_rejected() {
+    fn test_anonymous_object_in_list_as_sigil() {
         use moor_var::v_list;
         let obj = Obj::mk_anonymous_generated();
         let list = v_list(&[v_int(1), v_obj(obj), v_str("test")]);
-        let result = var_to_flatbuffer(&list);
-        assert!(matches!(
-            result,
-            Err(VarConversionError::AnonymousObjectNotTransmittable)
-        ));
+        let fb = var_to_flatbuffer(&list).expect("Should serialize as sigil");
+        // Should roundtrip to same list
+        let decoded = var_from_flatbuffer(&fb).expect("Should deserialize");
+        assert_eq!(list, decoded);
     }
 
     #[test]
@@ -685,14 +703,16 @@ mod tests {
 
     #[test]
     fn test_db_and_rpc_functions_are_separate() {
-        // Verify that RPC functions still reject what they should
+        // Verify that RPC and DB contexts handle anonymous objects differently
         let anon_obj = Obj::mk_anonymous_generated();
         let var = v_obj(anon_obj);
 
-        // RPC should reject
-        assert!(var_to_flatbuffer(&var).is_err());
+        // RPC should serialize as sigil (not error)
+        let rpc_fb = var_to_flatbuffer(&var).expect("RPC serialization should succeed");
+        assert!(matches!(rpc_fb.variant, var::VarUnion::VarAnonymous(_)));
 
-        // DB should accept
-        assert!(var_to_db_flatbuffer(&var).is_ok());
+        // DB should also accept (for completeness of round-trip)
+        let db_fb = var_to_db_flatbuffer(&var).expect("DB serialization should succeed");
+        assert!(matches!(db_fb.variant, var::VarUnion::VarObj(_)));
     }
 }

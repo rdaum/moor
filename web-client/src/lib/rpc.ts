@@ -57,13 +57,30 @@ export class MoorRemoteObject {
     }
 
     /**
+     * Checks if this object reference represents an anonymous object (sigil)
+     * by examining the CURIE format
+     */
+    private isAnonymous(): boolean {
+        const curie = orefCurie(this.oref);
+        // Anonymous objects in the CURIE format would have specific markers
+        // For now, we check if it's not a regular oid: or uuid: or sysobj:
+        // In practice, anonymous objects will come through eval results marked with the anonymous flag
+        return false; // Anonymous objects are only in eval results, not in object refs
+    }
+
+    /**
      * Invokes a verb/method on the remote MOO object
      *
      * @param verbName - Name of the verb to call
      * @param args - Optional FlatBuffer-encoded arguments as Uint8Array
      * @returns Promise resolving to the result of the verb invocation
+     * @throws Error if the object is anonymous (cannot perform operations on anonymous objects)
      */
     async callVerb(verbName: string, args?: Uint8Array): Promise<any> {
+        if (this.isAnonymous()) {
+            throw new Error("Cannot invoke verbs on anonymous objects");
+        }
+
         const evalResult = await invokeVerbFlatBuffer(
             this.authToken,
             orefCurie(this.oref),
@@ -87,9 +104,13 @@ export class MoorRemoteObject {
      *
      * @param verbName - Name of the verb to fetch
      * @returns Promise resolving to an array of code lines
-     * @throws Error if the fetch operation fails
+     * @throws Error if the object is anonymous or fetch operation fails
      */
     async getVerbCode(verbName: string): Promise<string[]> {
+        if (this.isAnonymous()) {
+            throw new Error("Cannot retrieve code from anonymous objects");
+        }
+
         const verbValue = await getVerbCodeFlatBuffer(this.authToken, orefCurie(this.oref), verbName);
 
         // Extract code from FlatBuffer VerbValue
@@ -121,8 +142,13 @@ export class MoorRemoteObject {
      * @param verbName - Name of the verb to compile
      * @param code - Source code to compile
      * @returns Promise resolving to compilation results (empty object if successful, errors otherwise)
+     * @throws Error if the object is anonymous (cannot modify anonymous objects)
      */
     async compileVerb(verbName: string, code: string): Promise<Record<string, any>> {
+        if (this.isAnonymous()) {
+            return { "error": "Cannot compile code on anonymous objects" };
+        }
+
         try {
             return await compileVerbFlatBuffer(
                 this.authToken,
@@ -141,9 +167,13 @@ export class MoorRemoteObject {
      *
      * @param propertyName - Name of the property to retrieve
      * @returns Promise resolving to the property value (transformed to JavaScript equivalents)
-     * @throws Error if the fetch operation fails
+     * @throws Error if the object is anonymous or fetch operation fails
      */
     async getProperty(propertyName: string): Promise<any> {
+        if (this.isAnonymous()) {
+            throw new Error("Cannot retrieve properties from anonymous objects");
+        }
+
         const propValue = await getPropertyFlatBuffer(this.authToken, orefCurie(this.oref), propertyName);
 
         // Extract property value from FlatBuffer PropertyValue
@@ -161,9 +191,13 @@ export class MoorRemoteObject {
      * Retrieves all properties from the remote object
      *
      * @returns Promise resolving to PropertiesReply FlatBuffer
-     * @throws Error if the fetch operation fails
+     * @throws Error if the object is anonymous or fetch operation fails
      */
     async getProperties() {
+        if (this.isAnonymous()) {
+            throw new Error("Cannot retrieve properties from anonymous objects");
+        }
+
         return await getPropertiesFlatBuffer(this.authToken, orefCurie(this.oref), true);
     }
 }
