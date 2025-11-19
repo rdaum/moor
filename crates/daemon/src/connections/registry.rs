@@ -25,7 +25,10 @@ use moor_var::{Obj, Symbol, Var};
 use rpc_common::RpcMessageError;
 use std::path::Path;
 
-pub const CONNECTION_TIMEOUT_DURATION: Duration = Duration::from_secs(30);
+/// Maximum time we'll keep an idle connection around without hearing from it.
+/// The window is intentionally large (24h) so transports like the web host can
+/// rely on soft reattachment rather than constantly provoking new connections.
+pub const CONNECTION_TIMEOUT_DURATION: Duration = Duration::from_secs(60 * 60 * 24);
 
 /// Parameters for creating a new connection
 #[derive(Debug)]

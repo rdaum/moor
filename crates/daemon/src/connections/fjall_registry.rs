@@ -646,21 +646,25 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         // Check timestamps in-memory cache for stale connections
         let timestamps = self.timestamps.lock().unwrap();
         let mut to_remove = vec![];
+        let now = SystemTime::now();
 
         for (&client_uuid, ts) in timestamps.iter() {
-            // Check if last_ping is too old
-            match ts.last_ping.elapsed() {
-                Ok(elapsed) if elapsed < CONNECTION_TIMEOUT_DURATION => continue,
-                _ => {
-                    // Need to find the connection_id for this client
-                    if let Ok(Some(bytes)) = inner
-                        .client_connection_table
-                        .get(client_uuid.as_u128().to_le_bytes())
-                        && let Ok(connection_id) = Obj::from_bytes(bytes.as_ref())
-                    {
-                        to_remove.push((connection_id, client_uuid.as_u128()));
-                    }
-                }
+            // Keep connections around unless they've been idle for a very long time.
+            let idle_duration = match now.duration_since(ts.last_activity) {
+                Ok(duration) => duration,
+                Err(_) => continue,
+            };
+            if idle_duration < CONNECTION_TIMEOUT_DURATION {
+                continue;
+            }
+
+            // Need to find the connection_id for this client
+            if let Ok(Some(bytes)) = inner
+                .client_connection_table
+                .get(client_uuid.as_u128().to_le_bytes())
+                && let Ok(connection_id) = Obj::from_bytes(bytes.as_ref())
+            {
+                to_remove.push((connection_id, client_uuid.as_u128()));
             }
         }
         drop(timestamps);
