@@ -120,7 +120,10 @@ function AppContent({
     const [isEvalPanelOpen, setIsEvalPanelOpen] = useState<boolean>(false);
     const [showEncryptionSetup, setShowEncryptionSetup] = useState(false);
     const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
-    const [userSkippedEncryption, setUserSkippedEncryption] = useState(false);
+    const [userSkippedEncryption, setUserSkippedEncryption] = usePersistentState<boolean>(
+        "moor-skip-encryption-setup",
+        false,
+    );
     const [oauth2UserInfo, setOAuth2UserInfo] = useState<OAuth2UserInfo | null>(null);
     const [splitRatio, setSplitRatio] = usePersistentState<number>(
         "moor-split-ratio",
@@ -776,9 +779,11 @@ function AppContent({
         }
         setUnseenCount(0);
         disconnectWS("LOGOUT");
+        // Reset the "skip encryption setup" flag so they see the prompt again if they log back in
+        setUserSkippedEncryption(false);
         // Just disconnect from auth - the useEffect above will handle all cleanup
         disconnect();
-    }, [disconnect, disconnectWS, narrativeRef]);
+    }, [disconnect, disconnectWS, narrativeRef, setUserSkippedEncryption]);
 
     // Handle OAuth2 callback from URL parameters
     useEffect(() => {

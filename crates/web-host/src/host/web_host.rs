@@ -185,6 +185,8 @@ pub struct ReattachQuery {
     #[serde(default)]
     client_id: Option<String>,
     #[serde(default)]
+    /// Indicates if this is a fresh login (initial attach) vs a reconnection
+    /// Initial attaches should create new connections to trigger :user_connected
     is_initial_attach: bool,
 }
 
@@ -956,6 +958,8 @@ async fn attach(
 
     let auth_token = AuthToken(auth_token);
 
+    // Only attempt reattachment if this is not an initial attach AND we have client credentials
+    // Initial attaches (fresh logins) should always create new connections to trigger :user_connected
     let reattach_details = if !is_initial_attach && client_hint.is_some() {
         let (hint_id, hint_token) = client_hint.clone().unwrap();
         match host
