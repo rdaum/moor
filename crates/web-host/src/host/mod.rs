@@ -22,7 +22,7 @@ pub mod web_host;
 mod webhooks;
 mod ws_connection;
 
-pub use auth::{connect_auth_handler, create_auth_handler, validate_auth_handler};
+pub use auth::{connect_auth_handler, create_auth_handler, validate_auth_handler, logout_handler};
 pub use event_log::{
     delete_history_handler, dismiss_presentation_handler, get_pubkey_handler, history_handler,
     presentations_handler, set_pubkey_handler,

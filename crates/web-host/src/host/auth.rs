@@ -24,7 +24,7 @@ use axum::{
 };
 use moor_schema::rpc as moor_rpc;
 use rpc_async_client::rpc_client::RpcClient;
-use rpc_common::{AuthToken, ClientToken, mk_login_command_msg};
+use rpc_common::{AuthToken, ClientToken, mk_detach_msg, mk_login_command_msg};
 use serde_derive::Deserialize;
 use std::net::SocketAddr;
 use tracing::{debug, error, warn};
@@ -274,6 +274,56 @@ pub async fn validate_auth_handler(
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
                 .body(Body::empty())
                 .unwrap()
+        }
+    }
+}
+
+/// Explicit logout endpoint that notifies daemon that player is disconnecting
+pub async fn logout_handler(
+    State(host): State<WebHost>,
+    header_map: HeaderMap,
+) -> impl IntoResponse {
+    // Verify auth token is present (though we don't use it directly)
+    let _auth_token = match extract_auth_token_header(&header_map) {
+        Ok(token) => token,
+        Err(status) => return status.into_response(),
+    };
+
+    // Client credentials are required for logout
+    let (client_id, client_token) = match extract_client_credentials(&header_map) {
+        Some(creds) => creds,
+        None => {
+            debug!("No client credentials provided for logout");
+            return Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(Body::empty())
+                .unwrap()
+                .into_response();
+        }
+    };
+
+    debug!("Processing explicit logout for client: {}", client_id);
+
+    // Send detach message with disconnected=true to trigger user_disconnected
+    let detach_msg = mk_detach_msg(&client_token, true);
+    let rpc_client = host.create_rpc_client();
+
+    match rpc_client.make_client_rpc_call(client_id, detach_msg).await {
+        Ok(_) => {
+            debug!("Logout detach sent successfully");
+            Response::builder()
+                .status(StatusCode::OK)
+                .body(Body::empty())
+                .unwrap()
+                .into_response()
+        }
+        Err(e) => {
+            error!("Failed to send logout detach: {}", e);
+            Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::empty())
+                .unwrap()
+                .into_response()
         }
     }
 }

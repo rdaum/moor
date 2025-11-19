@@ -280,6 +280,7 @@ fn mk_routes(
         .route("/auth/connect", post(host::connect_auth_handler))
         .route("/auth/create", post(host::create_auth_handler))
         .route("/auth/validate", get(host::validate_auth_handler))
+        .route("/auth/logout", post(host::logout_handler))
         .route(
             "/fb/system_property/{*path}",
             get(host::system_property_handler),

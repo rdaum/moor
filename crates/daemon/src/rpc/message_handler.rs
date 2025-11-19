@@ -996,23 +996,48 @@ impl RpcMessageHandler {
             .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
 
         if disconnected {
-            if let Some(player) = self.connections.player_object_for_client(client_id)
-                && let Err(e) = self.submit_disconnected_task(
-                    &SYSTEM_OBJECT,
-                    scheduler_client,
-                    client_id,
-                    &player,
-                    &connection,
-                )
-            {
-                error!(error = ?e, "Error submitting user_disconnected task");
-            }
+            // Get player before removing connection
+            if let Some(player) = self.connections.player_object_for_client(client_id) {
+                // Remove this connection
+                let Ok(_) = self.connections.remove_client_connection(client_id) else {
+                    return Err(RpcMessageError::InternalError(
+                        "Unable to remove client connection".to_string(),
+                    ));
+                };
 
-            let Ok(_) = self.connections.remove_client_connection(client_id) else {
-                return Err(RpcMessageError::InternalError(
-                    "Unable to remove client connection".to_string(),
-                ));
-            };
+                // Only trigger user_disconnected if this was the last connection for the player
+                match self.connections.client_ids_for(player) {
+                    Ok(remaining_clients) if remaining_clients.is_empty() => {
+                        // Last connection for this player - trigger user_disconnected
+                        if let Err(e) = self.submit_disconnected_task(
+                            &SYSTEM_OBJECT,
+                            scheduler_client,
+                            client_id,
+                            &player,
+                            &connection,
+                        ) {
+                            error!(error = ?e, "Error submitting user_disconnected task");
+                        }
+                    }
+                    Ok(remaining_clients) => {
+                        debug!(
+                            player = ?player,
+                            remaining_connections = remaining_clients.len(),
+                            "Player still has active connections after detach"
+                        );
+                    }
+                    Err(e) => {
+                        error!(error = ?e, "Error checking remaining connections for player");
+                    }
+                }
+            } else {
+                // No player associated - just remove the connection
+                let Ok(_) = self.connections.remove_client_connection(client_id) else {
+                    return Err(RpcMessageError::InternalError(
+                        "Unable to remove client connection".to_string(),
+                    ));
+                };
+            }
         } else if let Err(e) = self
             .connections
             .record_client_activity(client_id, connection)

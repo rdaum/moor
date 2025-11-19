@@ -781,9 +781,20 @@ function AppContent({
         disconnectWS("LOGOUT");
         // Reset the "skip encryption setup" flag so they see the prompt again if they log back in
         setUserSkippedEncryption(false);
+        // Notify server of explicit logout (triggers user_disconnected if last connection)
+        if (authState.player?.clientToken && authState.player?.clientId) {
+            fetch("/auth/logout", {
+                method: "POST",
+                headers: {
+                    "X-Moor-Auth-Token": authState.player.authToken,
+                    "X-Moor-Client-Token": authState.player.clientToken,
+                    "X-Moor-Client-Id": authState.player.clientId,
+                },
+            }).catch((e) => console.error("Failed to send logout notification:", e));
+        }
         // Just disconnect from auth - the useEffect above will handle all cleanup
         disconnect();
-    }, [disconnect, disconnectWS, narrativeRef, setUserSkippedEncryption]);
+    }, [disconnect, disconnectWS, narrativeRef, setUserSkippedEncryption, authState.player]);
 
     // Handle OAuth2 callback from URL parameters
     useEffect(() => {
