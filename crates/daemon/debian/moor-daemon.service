@@ -5,15 +5,21 @@ AssertPathExists=/usr/bin/moor-daemon
 Environment="RUST_BACKTRACE=full"
 Environment="XDG_CONFIG_HOME=/etc"
 Environment="XDG_DATA_HOME=/var/lib"
-ExecStart=/usr/bin/moor-daemon --config-file /etc/moor/daemon-config.yaml /var/spool/moor-daemon/moor.db
+ExecStart=/usr/bin/moor-daemon \
+  --config-file /etc/moor/daemon-config.yaml \
+  --events-listen ipc:///run/moor/events.sock \
+  --rpc-listen ipc:///run/moor/rpc.sock \
+  --workers-response-listen ipc:///run/moor/workers-response.sock \
+  --workers-request-listen ipc:///run/moor/workers-request.sock \
+  /var/spool/moor-daemon/moor.db
 WorkingDirectory=/var/spool/moor-daemon
 Restart=always
-# TODO: This is off so that IPC files can be shared between the daemon and the hosts
-#   but we should be bale to maybe put the IPC files in a different directory, but requires changes to config files
 PrivateTmp=false
 NoNewPrivileges=true
 User=moor
 Group=moor
+RuntimeDirectory=moor
+RuntimeDirectoryMode=0750
 
 [Install]
 WantedBy=default.target

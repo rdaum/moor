@@ -4,7 +4,12 @@ AssertPathExists=/usr/bin/moor-web-host
 [Service]
 Environment="RUST_BACKTRACE=full"
 Environment="XDG_CONFIG_HOME=/etc"
-ExecStart=/usr/bin/moor-web-host --config-file /etc/moor/web-host.yaml
+ExecStart=/usr/bin/moor-web-host \
+  --config-file /etc/moor/web-host.yaml \
+  --rpc-address ipc:///run/moor/rpc.sock \
+  --events-address ipc:///run/moor/events.sock \
+  --workers-dispatch-address ipc:///run/moor/workers-response.sock \
+  --workers-address ipc:///run/moor/workers-request.sock
 WorkingDirectory=/var/lib/moor
 Restart=always
 PrivateTmp=false

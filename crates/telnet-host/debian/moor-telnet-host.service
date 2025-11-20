@@ -4,8 +4,13 @@ AssertPathExists=/usr/bin/moor-telnet-host
 [Service]
 Environment="RUST_BACKTRACE=full"
 Environment="XDG_CONFIG_HOME=/etc"
-ExecStart=/usr/bin/moor-telnet-host --config-file /etc/moor/telnet-host.yaml
-WorkingDirectory=/tmp
+ExecStart=/usr/bin/moor-telnet-host \
+  --config-file /etc/moor/telnet-host.yaml \
+  --rpc-address ipc:///run/moor/rpc.sock \
+  --events-address ipc:///run/moor/events.sock \
+  --workers-dispatch-address ipc:///run/moor/workers-response.sock \
+  --workers-address ipc:///run/moor/workers-request.sock
+WorkingDirectory=/var/spool/moor-daemon
 Restart=always
 PrivateTmp=false
 NoNewPrivileges=true
