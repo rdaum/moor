@@ -117,6 +117,7 @@ function AppContent({
     const [isObjectBrowserOpen, setIsObjectBrowserOpen] = useState<boolean>(false);
     const [objectBrowserPresentationIds, setObjectBrowserPresentationIds] = useState<string[]>([]);
     const [objectBrowserLinkedToPresentation, setObjectBrowserLinkedToPresentation] = useState(false);
+    const [objectBrowserFocusedObjectCurie, setObjectBrowserFocusedObjectCurie] = useState<string | undefined>();
     const [isEvalPanelOpen, setIsEvalPanelOpen] = useState<boolean>(false);
     const [showEncryptionSetup, setShowEncryptionSetup] = useState(false);
     const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
@@ -681,6 +682,7 @@ function AppContent({
             if (objectBrowserLinkedToPresentation) {
                 setIsObjectBrowserOpen(false);
                 setObjectBrowserLinkedToPresentation(false);
+                setObjectBrowserFocusedObjectCurie(undefined);
             }
             return;
         }
@@ -695,6 +697,21 @@ function AppContent({
             return;
         }
 
+        // Use the most recent presentation and dismiss old ones
+        const latestPresentation = objectPresentations[objectPresentations.length - 1];
+        const objectCurie = latestPresentation.attrs.object || latestPresentation.attrs.objectCurie;
+        if (objectCurie) {
+            setObjectBrowserFocusedObjectCurie(objectCurie);
+        }
+
+        // Dismiss superseded presentations
+        if (objectPresentations.length > 1 && authToken) {
+            for (let i = 0; i < objectPresentations.length - 1; i++) {
+                dismissPresentation(objectPresentations[i].id, authToken);
+            }
+        }
+
+        // Open browser if not already open
         if (!isObjectBrowserOpen) {
             handleOpenObjectBrowser();
             setObjectBrowserLinkedToPresentation(true);
@@ -1419,6 +1436,7 @@ function AppContent({
                                     splitMode={true}
                                     onToggleSplitMode={toggleObjectBrowserDock}
                                     isInSplitMode={true}
+                                    focusedObjectCurie={objectBrowserFocusedObjectCurie}
                                 />
                             )}
                             {evalPanelDocked && canUseObjectBrowser && (
@@ -1542,6 +1560,7 @@ function AppContent({
                     splitMode={false}
                     onToggleSplitMode={toggleObjectBrowserDock}
                     isInSplitMode={false}
+                    focusedObjectCurie={objectBrowserFocusedObjectCurie}
                 />
             )}
 

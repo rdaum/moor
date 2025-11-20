@@ -41,6 +41,7 @@ interface ObjectBrowserProps {
     onSplitTouchStart?: (e: React.TouchEvent) => void;
     onToggleSplitMode?: () => void;
     isInSplitMode?: boolean;
+    focusedObjectCurie?: string; // Focus on specific object when presentation opens it
 }
 
 interface ObjectData {
@@ -169,6 +170,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     onSplitTouchStart,
     onToggleSplitMode,
     isInSplitMode = false,
+    focusedObjectCurie,
 }) => {
     const isMobile = useMediaQuery("(max-width: 768px)");
     const isTouchDevice = useTouchDevice();
@@ -190,6 +192,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [propertyFilter, setPropertyFilter] = useState("");
     const [verbFilter, setVerbFilter] = useState("");
     const containerRef = useRef<HTMLDivElement | null>(null);
+    const objectsPaneRef = useRef<HTMLDivElement | null>(null);
 
     // Editor state
     const [selectedProperty, setSelectedProperty] = useState<PropertyData | null>(null);
@@ -259,6 +262,30 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             }
         }
     }, [verbs, lastEditorType, lastVerbIndex, lastVerbLocation, selectedVerb, selectedObject]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Focus on a specific object when presentation opens the browser
+    useEffect(() => {
+        if (focusedObjectCurie && objects.length > 0) {
+            // Use stringToCurie to normalize both the focused CURIE and object strings for comparison
+            const normalizedFocusCurie = stringToCurie(focusedObjectCurie);
+            const objectToFocus = objects.find(obj => stringToCurie(obj.obj) === normalizedFocusCurie);
+            if (objectToFocus) {
+                setSelectedObject(objectToFocus);
+            }
+        }
+    }, [focusedObjectCurie, objects]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Scroll to selected object when it changes
+    useEffect(() => {
+        if (selectedObject && objectsPaneRef.current) {
+            const selectedElement = objectsPaneRef.current.querySelector(
+                `.browser-item[data-obj-id="${selectedObject.obj}"]`,
+            );
+            if (selectedElement) {
+                selectedElement.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+        }
+    }, [selectedObject]);
 
     const [browserPaneHeight, setBrowserPaneHeight] = useState(350); // Fixed pixel height for browser pane
     const [isSplitDragging, setIsSplitDragging] = useState(false);
@@ -1681,6 +1708,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                 />
                             </div>
                             <div
+                                ref={objectsPaneRef}
                                 className="browser-pane-content"
                                 style={{ fontSize: `${baseFontSize}px` }}
                             >
@@ -1698,6 +1726,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                 return (
                                                     <div
                                                         key={obj.obj}
+                                                        data-obj-id={obj.obj}
                                                         className={`browser-item ${
                                                             selectedObject?.obj === obj.obj ? "selected" : ""
                                                         }`}
@@ -1744,6 +1773,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                         return (
                                                             <div
                                                                 key={obj.obj}
+                                                                data-obj-id={obj.obj}
                                                                 className={`browser-item ${
                                                                     selectedObject?.obj === obj.obj ? "selected" : ""
                                                                 }`}

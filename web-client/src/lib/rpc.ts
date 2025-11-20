@@ -61,7 +61,6 @@ export class MoorRemoteObject {
      * by examining the CURIE format
      */
     private isAnonymous(): boolean {
-        const curie = orefCurie(this.oref);
         // Anonymous objects in the CURIE format would have specific markers
         // For now, we check if it's not a regular oid: or uuid: or sysobj:
         // In practice, anonymous objects will come through eval results marked with the anonymous flag
