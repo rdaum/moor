@@ -271,6 +271,11 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             const objectToFocus = objects.find(obj => stringToCurie(obj.obj) === normalizedFocusCurie);
             if (objectToFocus) {
                 setSelectedObject(objectToFocus);
+                setEditingName(objectToFocus.name);
+                setSelectedProperty(null);
+                setSelectedVerb(null);
+                setEditorVisible(false);
+                loadPropertiesAndVerbs(objectToFocus);
             }
         }
     }, [focusedObjectCurie, objects]); // eslint-disable-line react-hooks/exhaustive-deps
