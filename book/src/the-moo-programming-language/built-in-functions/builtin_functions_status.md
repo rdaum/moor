@@ -97,6 +97,9 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 | [`is_anonymous`](objects.md#is_anonymous)       | &check;  |                                    |
 | [`is_uuobjid`](objects.md#is_uuobjid)           | &check;  |                                    |
 | [`move`](objects.md#move)                       | &check;  |                                    |
+| [`parse_command`](objects.md#parse_command)     | &check;  | mooR extension. Wizard only.       |
+| [`find_command_verb`](objects.md#find_command_verb) | &check;  | mooR extension. Enables custom command dispatching. |
+| [`dispatch_command_verb`](objects.md#dispatch_command_verb) | &check;  | mooR extension. Wizard only. |
 
 ### Properties
 

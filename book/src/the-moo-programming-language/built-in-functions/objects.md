@@ -164,9 +164,11 @@ If object is not a valid object, `E_INVARG` is raised.
 int is_uuobjid(obj object)
 ```
 
-Returns a non-zero integer (i.e., a true value) if object is a UUID object (like `#048D05-1234567890`) and zero (i.e., a false value) otherwise.
+Returns a non-zero integer (i.e., a true value) if object is a UUID object (like `#048D05-1234567890`) and zero (i.e., a
+false value) otherwise.
 
-Since UUID objects have `typeof(obj) == OBJ` (same as numbered and anonymous objects), this is the way to distinguish them programmatically.
+Since UUID objects have `typeof(obj) == OBJ` (same as numbered and anonymous objects), this is the way to distinguish
+them programmatically.
 
 ```
 let numbered_obj = create($thing);        // Regular numbered object
@@ -179,7 +181,8 @@ typeof(uuid_obj);         =>  1   // OBJ - same as other objects!
 
 If object is not a valid object, `E_INVARG` is raised.
 
-> **Feature requirement**: UUID objects require the `use_uuobjids` feature flag to be enabled by the server administrator.
+> **Feature requirement**: UUID objects require the `use_uuobjids` feature flag to be enabled by the server
+> administrator.
 
 ### Functions: `parent`
 
@@ -711,17 +714,20 @@ Returns a list of the object numbers of all player objects in the database
 list objects()
 ```
 
-Returns a list of all valid object numbers in the database. This includes all objects that have been created and not yet recycled, regardless of whether they are player objects, numbered objects, UUID objects, or anonymous objects.
+Returns a list of all valid object numbers in the database. This includes all objects that have been created and not yet
+recycled, regardless of whether they are player objects, numbered objects, UUID objects, or anonymous objects.
 
 This function is wizard-only. If the programmer is not a wizard, `E_PERM` is raised.
 
-> **Note**: This is a mooR-specific extension not present in LambdaMOO or ToastStunt. It provides a way to enumerate all valid objects in the database for administrative purposes.
+> **Note**: This is a mooR-specific extension not present in LambdaMOO or ToastStunt. It provides a way to enumerate all
+> valid objects in the database for administrative purposes.
 
 ```
 objects()    =>   {#0, #1, #2, #5, #048D05-1234567890, ...}
 ```
 
-> **Warning**: In large databases, this function may be slow and return a very large list. Use with caution in production environments.
+> **Warning**: In large databases, this function may be slow and return a very large list. Use with caution in
+> production environments.
 
 ### `is_player`
 
@@ -752,3 +758,207 @@ returned by `players()`, the expression `is_player(object)` will return false, a
 name when they log into the server. In addition, if a user is connected to object at the time that it loses "player
 object" status, then that connection is immediately broken, just as if `boot_player(object)` had been called (see the
 description of `boot_player()` below).
+
+---
+
+## Command Parsing and Dispatching
+
+These functions allow programmers to implement custom command parsing, ambiguity resolution, and verb dispatching.
+They provide low-level access to the command parser components, enabling more sophisticated command handling systems
+than the naive builtin one, while still using its components.
+
+### `parse_command`
+
+```
+map parse_command(str command, list environment [, bool complex])
+```
+
+Parses a command string into its components (verb, objects, preposition) and returns a map with the results.
+
+**Arguments:**
+
+- `command`: The command string to parse (e.g., `"get lamp"`, `"put lamp on table"`)
+- `environment`: A list of objects to search for object name matching. Each entry can be:
+    - A simple object (e.g., `player`)
+    - A list with format `{object, "name1", "name2", ...}` to provide custom aliases
+- `complex`: (Optional, default false) When true, enables fuzzy matching and ordinal support (e.g., "first lamp", "
+  second bottle")
+
+**Returns:** A map with the following keys:
+
+| Key              | Type          | Description                                                           |
+|------------------|---------------|-----------------------------------------------------------------------|
+| `verb`           | symbol/string | The parsed verb (first word of command)                               |
+| `argstr`         | string        | Everything after the first word                                       |
+| `args`           | list          | List of individual argument strings                                   |
+| `dobjstr`        | string        | Direct object string that was matched (empty if none)                 |
+| `dobj`           | object        | Direct object found, or `#-1` if none                                 |
+| `ambiguous_dobj` | list          | List of objects if dobj was ambiguous, empty list otherwise           |
+| `prepstr`        | string        | Preposition string found (empty if none)                              |
+| `prep`           | int           | Preposition code: `-2`=any, `-1`=none, `0`-`14`=specific prepositions |
+| `iobjstr`        | string        | Indirect object string (empty if none)                                |
+| `iobj`           | object        | Indirect object found, or `#-1` if none                               |
+| `ambiguous_iobj` | list          | List of objects if iobj was ambiguous, empty list otherwise           |
+
+**Notes:**
+
+- Object matching searches through the provided environment list
+- Multiple matching objects are reported in `ambiguous_dobj` or `ambiguous_iobj`
+- The `complex` parameter enables the enhanced matching system with ordinals and fuzzy matching
+- This is a wizard-only function when called directly; see [`find_command_verb`](#find_command_verb) for finding actual
+  verbs
+
+**Example:**
+
+```moo
+cmd = "get lamp";
+env = {player, player.location};
+pc = parse_command(cmd, env);
+// Returns:
+// ["verb" -> "get", "argstr" -> "lamp", "args" -> {"lamp"},
+//  "dobjstr" -> "lamp", "dobj" -> #123, "iobj" -> #-1, "prep" -> -1, ...]
+```
+
+### `find_command_verb`
+
+```
+list find_command_verb(map parsed_command_spec, list command_environment)
+```
+
+Searches for command verbs that match a parsed command specification across a set of target objects.
+
+**Arguments:**
+
+- `parsed_command_spec`: A map returned from [`parse_command()`](#parse_command) containing the parsed command
+  components
+- `command_environment`: A list of objects to search for verbs (typically `{player, player.location}`)
+
+**Returns:** A list of matches. Each match is a list `[target_object, verb_info]` where:
+
+- `target_object`: The object where the matching verb was found
+- `verb_info`: A list `[owner, permissions, display_names, matched_verb_name]` where:
+    - `owner`: The object that owns the verb
+    - `permissions`: Permission string (combination of `r`, `w`, `x`, `d`)
+    - `display_names`: Full verb names concatenated with spaces (e.g., `"d*rop th*row"`)
+    - `matched_verb_name`: The actual verb name that matched the command
+
+**Notes:**
+
+- Searches verbs in order: command_environment objects, then dobj, then iobj
+- Returns first matching verb for each target; stops at first successful match overall
+- Respects verb argument specifiers (dobj/prep/iobj requirements)
+- Permission errors are skipped silently; continue searching other targets
+- Returns empty list if no matching verbs are found
+
+**Example:**
+
+```moo
+pc = parse_command("get lamp", {player, player.location}, true);
+matches = find_command_verb(pc, {player, player.location});
+foreach m in (matches) {
+  {target, verbspec} = m;
+  {owner, perms, names, verb} = verbspec;
+  player:inform(sprintf("Found verb '%s' on %O (owner: %O)", verb, target, owner));
+}
+```
+
+### `dispatch_command_verb`
+
+```
+any dispatch_command_verb(obj target, str verb_name, map parsed_command_spec)
+```
+
+Executes a command verb on a target object with full command environment (dobj, iobj, prep, etc.). This is the
+lowest-level command execution function and is wizard-only.
+
+**Arguments:**
+
+- `target`: The object on which to execute the verb
+- `verb_name`: The name of the verb to execute
+- `parsed_command_spec`: A map from [`parse_command()`](#parse_command) containing command components (dobj, iobj, prep,
+  argstr, etc.)
+
+**Returns:** The return value from the executed verb
+
+**Permissions:** Wizard-only. If the programmer is not a wizard, `E_PERM` is raised.
+
+**Notes:**
+
+- Bypasses the normal exec bit requirement on verbs
+- Looks up the verb on the target object and validates it exists
+- Uses the parsed command spec to fill all command variables (dobj, dobjstr, iobj, iobjstr, prep, prepstr, argstr, args)
+- Sets caller_perms_override to `#-1` to mimic top-level command execution behavior
+- Raises `E_VERBNF` if the verb is not found on the target
+- Raises `E_PERM` if permission checks fail
+- Raises `E_INVARG` on other lookup errors
+
+**Example:**
+
+```moo
+// Custom command dispatcher with ambiguity resolution
+parse_result = parse_command("put coin in jar", env, true);
+
+// Get list of possible matches
+matches = find_command_verb(parse_result, command_env);
+
+if (matches) {
+  // Execute the first matching verb
+  {target, verb_info} = matches[1];
+  {owner, perms, names, verb_name} = verb_info;
+
+  return dispatch_command_verb(target, verb_name, parse_result);
+} else {
+  player:inform("I don't understand that.");
+}
+```
+
+### Complete Example: Custom Command Handler
+
+The cowbell core's `$sysobj:_command_handler()` verb demonstrates a complete implementation that handles ambiguous
+object matches by trying different combinations:
+
+```moo
+verb _command_handler (this none this) owner: ARCH_WIZARD flags: "rxd"
+  {command, match_env} = args;
+
+  // Parse the command with complex matching enabled
+  pc = parse_command(command, match_env, true);
+
+  // Get verb search targets
+  command_env = player:command_environment();
+
+  // Build list of dobj/iobj candidates to try
+  dobj_candidates = (pc["dobj"] == $ambiguous_match)
+    ? pc["ambiguous_dobj"]
+    : {pc["dobj"]};
+  iobj_candidates = (pc["iobj"] == $ambiguous_match)
+    ? pc["ambiguous_iobj"]
+    : {pc["iobj"]};
+
+  // Try each combination of dobj/iobj
+  for dobj in (dobj_candidates) {
+    for iobj in (iobj_candidates) {
+      test_pc = pc;
+      test_pc["dobj"] = dobj;
+      test_pc["iobj"] = iobj;
+
+      // Find verbs matching this combination
+      vm_matches = find_command_verb(test_pc, command_env);
+
+      if (vm_matches) {
+        // Execute the first match
+        {target, verbspec} = vm_matches[1];
+        {def, flags, verbnames, v} = verbspec;
+        return dispatch_command_verb(target, v, test_pc);
+      }
+    }
+  }
+
+  // No match found - handle "I don't understand" case
+  player:inform("I don't understand that.");
+  return true;
+endverb
+```
+
+See [The Built-in Command Parser](../../the-built-in-command-parser.md) for an overview of how MOO command parsing
+works.
