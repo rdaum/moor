@@ -201,27 +201,47 @@ result = max_func(10, 7);  // Returns 10
 
 ### Storing Functions in Properties
 
-Functions can be stored in object properties and called later:
+Functions can be stored in object properties, but they have significant limitations and a grammar constraint:
 
 ```moo
 this.validator = {input} => length(input) >= 3;
-this.formatter = fn(text) 
-    return uppercase(text[1]) + lowercase(text[2..$]); 
+this.formatter = fn(text)
+    return uppercase(text[1]) + lowercase(text[2..$]);
 endfn;
 
 // Later in another verb:
-if (this.validator(user_input))
-    return this.formatter(user_input);
+// NOTE: You cannot call directly as this.validator(input) due to a grammar limitation.
+// You must capture it in a variable first:
+let validator = this.validator;
+if (validator(user_input))
+    let formatter = this.formatter;
+    return formatter(user_input);
 endif
 ```
 
-**Important caveat:** Storing functions in properties is rarely what you actually want to do. When you call a function
-stored in a property, it doesn't get the `this`, `player`, `caller`, etc. values you'd expect from the object the
-property is on - instead it inherits those values from the calling verb. This can lead to confusing behavior.
+**Grammar Limitation:** You cannot directly call a function stored in a property using the syntax `this.property()`. The
+mooR grammar does not permit function calls on property access expressions. You must first capture the function in a
+variable, then call it. These all fail:
 
-In most cases, you'll want to use regular verbs instead. Function properties might occasionally be useful for things
-like configuration callbacks or data transformation functions, but consider carefully whether a verb wouldn't be
-clearer.
+```moo
+this.test();           // ERROR: expected an operator or assignment
+(this.test)();         // ERROR: expected an operator or assignment
+```
+
+But this works:
+
+```moo
+let func = this.test;
+func();                // OK
+```
+
+**Semantic caveat:** When you call a function stored in a property, it doesn't get the `this`, `player`, `caller`, etc.
+values you'd expect from the object the property is on - instead it inherits those values from the calling verb. This can
+lead to confusing behavior.
+
+**Recommendation:** Storing functions in properties is rarely what you actually want to do. In most cases, you should use
+regular verbs instead. Function properties might occasionally be useful for things like configuration callbacks or data
+transformation functions, but consider carefully whether a verb wouldn't be clearer.
 
 ### Passing Functions as Arguments
 
