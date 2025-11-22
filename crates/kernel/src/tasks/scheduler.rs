@@ -54,6 +54,10 @@ use crate::{
     trace_task_create_verb,
     vm::{Fork, TaskSuspend, builtins::BuiltinRegistry},
 };
+
+#[cfg(feature = "trace_events")]
+use crate::trace_task_resume;
+
 use moor_common::{
     tasks::{
         AbortLimitReason, CommandError, Event, NarrativeEvent, SchedulerError,
@@ -360,6 +364,34 @@ impl Scheduler {
             if let Some(to_wake) = self.task_q.collect_wake_tasks(self.gc_sweep_in_progress) {
                 for sr in to_wake {
                     let task_id = sr.task.task_id;
+
+                    #[cfg(feature = "trace_events")]
+                    {
+                        let max_ticks = sr.task.vm_host.max_ticks;
+                        let tick_count = sr.task.vm_host.tick_count();
+
+                        let (wake_condition, wake_reason) = match &sr.wake_condition {
+                            WakeCondition::Time(_) => ("Time", "Timer expired"),
+                            WakeCondition::Input(_) => ("Input", "Input request fulfilled"),
+                            WakeCondition::Task(_) => ("Task", "Dependency task completed"),
+                            WakeCondition::Immediate(_) => ("Immediate", "Immediate wake"),
+                            WakeCondition::Worker(_) => ("Worker", "Worker response received"),
+                            WakeCondition::GCComplete => {
+                                ("GCComplete", "Garbage collection completed")
+                            }
+                            WakeCondition::Never => ("Never", "Manual wake"),
+                        };
+
+                        trace_task_resume!(
+                            task_id,
+                            wake_condition,
+                            wake_reason,
+                            to_literal(&v_int(0)),
+                            max_ticks,
+                            tick_count
+                        );
+                    }
+
                     if let Err(e) = self.task_q.wake_task_thread(
                         sr.task,
                         ResumeAction::Return(v_int(0)),
@@ -1615,6 +1647,21 @@ impl Scheduler {
             }
         };
 
+        #[cfg(feature = "trace_events")]
+        {
+            let max_ticks = sr.task.vm_host.max_ticks;
+            let tick_count = sr.task.vm_host.tick_count();
+
+            trace_task_resume!(
+                task_id,
+                "Immediate",
+                "Immediate wake",
+                to_literal(&return_value),
+                max_ticks,
+                tick_count
+            );
+        }
+
         if let Err(e) = self.task_q.wake_task_thread(
             sr.task,
             ResumeAction::Return(return_value),
@@ -1667,6 +1714,27 @@ impl Scheduler {
             warn!(?request_id, "Task for worker request not found; expired?");
             return;
         };
+
+        #[cfg(feature = "trace_events")]
+        {
+            let task_id = sr.task.task_id;
+            let max_ticks = sr.task.vm_host.max_ticks;
+            let tick_count = sr.task.vm_host.tick_count();
+
+            let (return_value_str, wake_reason) = match &resume_action {
+                ResumeAction::Return(v) => (to_literal(v), "Worker response"),
+                ResumeAction::Raise(e) => (e.to_string(), "Worker error"),
+            };
+
+            trace_task_resume!(
+                task_id,
+                "Worker",
+                wake_reason,
+                return_value_str,
+                max_ticks,
+                tick_count
+            );
+        }
 
         if let Err(e) = self.task_q.wake_task_thread(
             sr.task,

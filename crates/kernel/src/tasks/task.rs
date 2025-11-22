@@ -44,8 +44,8 @@ use crate::{
 
 #[cfg(feature = "trace_events")]
 use crate::{
-    trace_task_create_command, trace_task_create_eval, trace_task_create_fork,
-    trace_task_create_verb,
+    trace_abort_limit_reached, trace_task_create_command, trace_task_create_eval,
+    trace_task_create_fork, trace_task_create_verb,
 };
 
 use moor_common::{
@@ -666,6 +666,31 @@ impl Task {
                     .vm_host
                     .line_number()
                     .expect("Task has empty activation stack during abort - critical bug");
+
+                // Emit trace event for abort limit
+                #[cfg(feature = "trace_events")]
+                {
+                    let (limit_type, limit_value) = match &reason {
+                        AbortLimitReason::Ticks(ticks) => {
+                            ("Ticks".to_string(), format!("{}", ticks))
+                        }
+                        AbortLimitReason::Time(duration) => (
+                            "Time".to_string(),
+                            format!("{:.3}s", duration.as_secs_f64()),
+                        ),
+                    };
+
+                    trace_abort_limit_reached!(
+                        self.task_id,
+                        &limit_type,
+                        limit_value,
+                        self.vm_host.max_ticks,
+                        self.vm_host.tick_count(),
+                        verb_name,
+                        this.clone(),
+                        line_number
+                    );
+                }
 
                 // If we're not already handling a timeout, try to call $handle_task_timeout
                 if !self.handling_task_timeout {

@@ -18,9 +18,6 @@ use std::{
 
 use tracing::{debug, error, warn};
 
-#[cfg(feature = "trace_events")]
-use crate::tracing_events::{TraceEventType, emit_trace_event};
-
 use moor_common::{
     model::{ObjFlag, VerbDef},
     tasks::{AbortLimitReason, TaskId},
@@ -513,12 +510,6 @@ impl VmHost {
         self.vm_exec_state.tick_count = 0;
         self.running = true;
 
-        // Emit task resume trace event
-        #[cfg(feature = "trace_events")]
-        emit_trace_event(TraceEventType::TaskResume {
-            task_id: self.vm_exec_state.task_id,
-        });
-
         // If there's no activations at all, that means we're a Fork, not returning to something.
         if !self.vm_exec_state.stack.is_empty() {
             // coming back from any suspend, we need a return value to feed back to `bf_suspend` or
@@ -534,12 +525,6 @@ impl VmHost {
         self.vm_exec_state.start_time = Some(SystemTime::now());
         self.vm_exec_state.tick_count = 0;
         self.running = true;
-
-        // Emit task resume trace event
-        #[cfg(feature = "trace_events")]
-        emit_trace_event(TraceEventType::TaskResume {
-            task_id: self.vm_exec_state.task_id,
-        });
 
         // Set pending error to be raised when execution starts
         self.vm_exec_state.pending_raise_error = Some(error);

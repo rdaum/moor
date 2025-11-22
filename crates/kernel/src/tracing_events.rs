@@ -76,6 +76,11 @@ pub enum TraceEventType {
     },
     TaskResume {
         task_id: TaskId,
+        wake_condition: String, // "Time", "Input", "Task", "Immediate", "Worker", "GCComplete", "Never"
+        wake_reason: String,    // Human-readable description of why task woke
+        return_value: String,   // The value being returned to resume execution
+        max_ticks: usize,
+        tick_count: usize,
     },
     TaskAbort {
         task_id: TaskId,
@@ -118,6 +123,16 @@ pub enum TraceEventType {
         error_message: Option<String>,
         max_ticks: usize,
         tick_count: usize,
+    },
+    AbortLimitReached {
+        task_id: TaskId,
+        limit_type: String,  // "Ticks" or "Time"
+        limit_value: String, // The actual limit that was hit
+        max_ticks: usize,
+        tick_count: usize,
+        verb_name: String,
+        this: String,
+        line_number: usize,
     },
 
     /// Scheduler events
@@ -280,6 +295,7 @@ pub fn shutdown_tracing() {
 fn tracing_thread_main(receiver: Receiver<TracingMessage>, output_path: PathBuf) {
     let mut trace_file = TraceFile::new();
     let start_time = current_timestamp_us();
+    let mut seen_tids = std::collections::HashSet::new();
 
     // Add initial metadata
     add_metadata_events(&mut trace_file, start_time);
@@ -293,6 +309,39 @@ fn tracing_thread_main(receiver: Receiver<TracingMessage>, output_path: PathBuf)
         match receiver.recv_timeout(std::time::Duration::from_millis(1000)) {
             Ok(TracingMessage::Event(event_type)) => {
                 if let Some(trace_event) = convert_to_trace_event(event_type, start_time) {
+                    let tid = trace_event.tid;
+
+                    // Emit thread_name metadata on first encounter with a new thread
+                    if seen_tids.insert(tid) {
+                        let mut args = HashMap::new();
+                        args.insert(
+                            "name".to_string(),
+                            Value::String(format!("Task Thread {}", tid)),
+                        );
+
+                        let thread_name_event = TraceEvent {
+                            name: "thread_name".to_string(),
+                            cat: None,
+                            ph: EventPhase::Metadata,
+                            ts: trace_event.ts,
+                            tts: None,
+                            pid: trace_event.pid,
+                            tid,
+                            dur: None,
+                            tdur: None,
+                            args: Some(args),
+                            sf: None,
+                            stack: None,
+                            esf: None,
+                            estack: None,
+                            s: None,
+                            id: None,
+                            scope: None,
+                            cname: None,
+                        };
+                        trace_file.add_event(thread_name_event);
+                    }
+
                     trace_file.add_event(trace_event);
                 }
 
@@ -352,6 +401,8 @@ fn flush_trace_file(trace_file: &TraceFile, output_path: &PathBuf) {
 fn add_metadata_events(trace_file: &mut TraceFile, start_time: u64) {
     use std::process;
 
+    let pid = process::id() as u64;
+
     // Add process name metadata
     let mut args = HashMap::new();
     args.insert("name".to_string(), Value::String("moor".to_string()));
@@ -362,7 +413,7 @@ fn add_metadata_events(trace_file: &mut TraceFile, start_time: u64) {
         ph: EventPhase::Metadata,
         ts: start_time,
         tts: None,
-        pid: process::id() as u64,
+        pid,
         tid: 0,
         dur: None,
         tdur: None,
@@ -378,6 +429,33 @@ fn add_metadata_events(trace_file: &mut TraceFile, start_time: u64) {
     };
 
     trace_file.add_event(process_name_event);
+
+    // Add thread name for scheduler thread
+    let mut args = HashMap::new();
+    args.insert("name".to_string(), Value::String("Scheduler".to_string()));
+
+    let scheduler_thread_event = TraceEvent {
+        name: "thread_name".to_string(),
+        cat: None,
+        ph: EventPhase::Metadata,
+        ts: start_time,
+        tts: None,
+        pid,
+        tid: 0,
+        dur: None,
+        tdur: None,
+        args: Some(args),
+        sf: None,
+        stack: None,
+        esf: None,
+        estack: None,
+        s: None,
+        id: None,
+        scope: None,
+        cname: None,
+    };
+
+    trace_file.add_event(scheduler_thread_event);
 }
 
 /// Get the current OS thread ID as a u64
@@ -660,15 +738,40 @@ fn convert_to_trace_event(event_type: TraceEventType, _start_time: u64) -> Optio
             })
         }
 
-        TraceEventType::TaskResume { task_id } => {
+        TraceEventType::TaskResume {
+            task_id,
+            wake_condition,
+            wake_reason,
+            return_value,
+            max_ticks,
+            tick_count,
+        } => {
             let mut args = HashMap::new();
             args.insert(
                 "task_id".to_string(),
                 Value::Number((task_id as u64).into()),
             );
+            args.insert(
+                "wake_condition".to_string(),
+                Value::String(wake_condition.clone()),
+            );
+            args.insert(
+                "wake_reason".to_string(),
+                Value::String(wake_reason.clone()),
+            );
+            args.insert(
+                "return_value".to_string(),
+                Value::String(return_value.clone()),
+            );
+            args.insert("max_ticks".to_string(), Value::Number(max_ticks.into()));
+            args.insert("tick_count".to_string(), Value::Number(tick_count.into()));
+            args.insert(
+                "remaining_ticks".to_string(),
+                Value::Number((max_ticks.saturating_sub(tick_count)).into()),
+            );
 
             Some(TraceEvent {
-                name: format!("Task Resume ({task_id})"),
+                name: format!("Task Resume ({task_id}): {wake_condition} - {wake_reason}"),
                 cat: Some("task".to_string()),
                 ph: EventPhase::Instant,
                 ts: now,
@@ -949,6 +1052,60 @@ fn convert_to_trace_event(event_type: TraceEventType, _start_time: u64) -> Optio
                 id: None,
                 scope: None,
                 cname: Some("yellow".to_string()),
+            })
+        }
+
+        TraceEventType::AbortLimitReached {
+            task_id,
+            limit_type,
+            limit_value,
+            max_ticks,
+            tick_count,
+            verb_name,
+            this,
+            line_number,
+        } => {
+            let mut args = HashMap::new();
+            args.insert(
+                "task_id".to_string(),
+                Value::Number((task_id as u64).into()),
+            );
+            args.insert("limit_type".to_string(), Value::String(limit_type.clone()));
+            args.insert(
+                "limit_value".to_string(),
+                Value::String(limit_value.clone()),
+            );
+            args.insert("max_ticks".to_string(), Value::Number(max_ticks.into()));
+            args.insert("tick_count".to_string(), Value::Number(tick_count.into()));
+            args.insert(
+                "remaining_ticks".to_string(),
+                Value::Number((max_ticks.saturating_sub(tick_count)).into()),
+            );
+            args.insert("verb_name".to_string(), Value::String(verb_name.clone()));
+            args.insert("this".to_string(), Value::String(this.clone()));
+            args.insert("line_number".to_string(), Value::Number(line_number.into()));
+
+            Some(TraceEvent {
+                name: format!(
+                    "Abort Limit (task {task_id}): {limit_type} exceeded at {verb_name}:{line_number}"
+                ),
+                cat: Some("abort".to_string()),
+                ph: EventPhase::Instant,
+                ts: now,
+                tts: None,
+                pid,
+                tid: current_thread_id(),
+                dur: None,
+                tdur: None,
+                args: Some(args),
+                sf: None,
+                stack: None,
+                esf: None,
+                estack: None,
+                s: Some(InstantScope::Thread),
+                id: None,
+                scope: None,
+                cname: Some("bad".to_string()),
             })
         }
 
@@ -1330,11 +1487,18 @@ macro_rules! trace_task_suspend_with_delay {
 /// Macro to emit task resume events - generates no code when trace_events is disabled
 #[macro_export]
 macro_rules! trace_task_resume {
-    ($task_id:expr) => {
+    ($task_id:expr, $wake_condition:expr, $wake_reason:expr, $return_value:expr, $max_ticks:expr, $tick_count:expr) => {
         #[cfg(feature = "trace_events")]
         {
             use $crate::tracing_events::{TraceEventType, emit_trace_event};
-            emit_trace_event(TraceEventType::TaskResume { task_id: $task_id });
+            emit_trace_event(TraceEventType::TaskResume {
+                task_id: $task_id,
+                wake_condition: $wake_condition.to_string(),
+                wake_reason: $wake_reason.to_string(),
+                return_value: $return_value,
+                max_ticks: $max_ticks,
+                tick_count: $tick_count,
+            });
         }
     };
 }
@@ -1527,6 +1691,37 @@ macro_rules! trace_transaction_rollback {
                 tx_id: $tx_id.to_string(),
                 thread_id: $thread_id,
                 reason: $reason.to_string(),
+            });
+        }
+    };
+}
+
+/// Macro to emit abort limit reached events - generates no code when trace_events is disabled
+#[macro_export]
+macro_rules! trace_abort_limit_reached {
+    (
+        $task_id:expr,
+        $limit_type:expr,
+        $limit_value:expr,
+        $max_ticks:expr,
+        $tick_count:expr,
+        $verb_name:expr,
+        $this:expr,
+        $line_number:expr
+    ) => {
+        #[cfg(feature = "trace_events")]
+        {
+            use moor_compiler::to_literal;
+            use $crate::tracing_events::{TraceEventType, emit_trace_event};
+            emit_trace_event(TraceEventType::AbortLimitReached {
+                task_id: $task_id,
+                limit_type: $limit_type.to_string(),
+                limit_value: $limit_value,
+                max_ticks: $max_ticks,
+                tick_count: $tick_count,
+                verb_name: $verb_name.to_string(),
+                this: format!("{}", to_literal(&$this)),
+                line_number: $line_number,
             });
         }
     };
