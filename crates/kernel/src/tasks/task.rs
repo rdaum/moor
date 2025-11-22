@@ -45,21 +45,25 @@ use crate::{
 #[cfg(feature = "trace_events")]
 use crate::{
     trace_abort_limit_reached, trace_task_create_command, trace_task_create_eval,
-    trace_task_create_fork, trace_task_create_verb,
+    trace_task_create_exception_handler, trace_task_create_fork, trace_task_create_verb,
 };
 
+#[cfg(feature = "trace_events")]
+use moor_common::tasks::AbortLimitReason;
 use moor_common::{
     model::{CommitResult, VerbDef, WorldState, WorldStateError},
-    tasks::{AbortLimitReason, CommandError, CommandError::PermissionDenied, Exception, TaskId},
+    tasks::{CommandError, CommandError::PermissionDenied, Exception, TaskId},
     util::{PerfTimerGuard, parse_into_words},
 };
-use moor_var::{List, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Var, Variant, v_int, v_obj, v_str};
+use moor_var::{
+    List, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant, v_err, v_int, v_obj, v_str, v_string,
+};
 
 use crate::{
     config::{Config, FeaturesConfig},
     tasks::{
         ServerOptions, TaskStart, sched_counters,
-        task_scheduler_client::{TaskControlMsg, TaskSchedulerClient},
+        task_scheduler_client::{TaskControlMsg, TaskSchedulerClient, TimeoutHandlerInfo},
     },
     vm::{
         TaskSuspend, VMHostResponse, builtins::BuiltinRegistry, exec_state::VMExecState,
@@ -130,10 +134,6 @@ pub struct Task {
     pub(crate) handling_uncaught_error: bool,
     /// The original exception when calling handle_uncaught_error, in case it returns false.
     pub(crate) pending_exception: Option<Exception>,
-    /// True if we're currently handling a task timeout to prevent infinite recursion.
-    pub(crate) handling_task_timeout: bool,
-    /// The original timeout reason when calling handle_task_timeout, in case it returns false.
-    pub(crate) pending_timeout: Option<(AbortLimitReason, Var, Symbol, usize)>,
 }
 
 impl Task {
@@ -190,6 +190,9 @@ impl Task {
                 TaskStart::StartEval { .. } => {
                     trace_task_create_eval!(task_id, &player);
                 }
+                TaskStart::StartExceptionHandler { .. } => {
+                    trace_task_create_exception_handler!(task_id, &player);
+                }
             }
         }
 
@@ -206,8 +209,6 @@ impl Task {
             retry_state,
             handling_uncaught_error: false,
             pending_exception: None,
-            handling_task_timeout: false,
-            pending_timeout: None,
         })
     }
 
@@ -448,38 +449,6 @@ impl Task {
                     self.pending_exception = None;
                 }
 
-                // Special case: if we're returning from $handle_task_timeout, check the result
-                if self.handling_task_timeout {
-                    self.handling_task_timeout = false;
-
-                    // If handler returned false, proceed with normal timeout handling
-                    if !result.is_true() {
-                        let Some((reason, this, verb_name, line_number)) =
-                            self.pending_timeout.take()
-                        else {
-                            error!(
-                                task_id = self.task_id,
-                                "handle_task_timeout returned false, but original timeout info lost"
-                            );
-                            return None; // Can't restore timeout, abort task
-                        };
-
-                        // Restore the original timeout and handle it normally
-                        self.vm_host.stop();
-                        rollback_current_transaction().expect("Could not rollback world state");
-                        task_scheduler_client.abort_limits_reached(
-                            reason,
-                            this,
-                            verb_name,
-                            line_number,
-                        );
-                        return None;
-                    }
-
-                    // Handler returned true, clear pending timeout and continue with success
-                    self.pending_timeout = None;
-                }
-
                 let commit_result = commit_current_transaction().expect("Could not attempt commit");
 
                 let CommitResult::Success {
@@ -526,11 +495,18 @@ impl Task {
                 None
             }
             VMHostResponse::CompleteException(exception) => {
-                // If we're already handling uncaught error, proceed with normal exception handling
+                // Check if we're already handling an uncaught error (prevent infinite recursion)
                 if self.handling_uncaught_error {
-                    // Fall through to normal exception handling
+                    // We're in the handler and it threw an exception.
+                    // Fall through to normal exception reporting below.
+                } else if let TaskState::Prepared(TaskStart::StartExceptionHandler { .. })
+                | TaskState::Pending(TaskStart::StartExceptionHandler { .. }) =
+                    &self.state
+                {
+                    // Current task IS the exception handler and it threw.
+                    // Fall through to normal exception reporting.
                 } else {
-                    // Try to find and call $handle_uncaught_error on #0 (SYSTEM_OBJECT)
+                    // Try to find and invoke $handle_uncaught_error on #0 (SYSTEM_OBJECT)
                     let verb_lookup = with_current_transaction(|world_state| {
                         world_state.find_method_verb_on(
                             &self.perms,
@@ -540,31 +516,30 @@ impl Task {
                     });
 
                     if let Ok((program, verbdef)) = verb_lookup {
-                        // Set flag to prevent infinite recursion and store original exception
-                        self.handling_uncaught_error = true;
-                        self.pending_exception = Some((*exception).clone());
-
-                        // Prepare arguments for $handle_uncaught_error(code, msg, value, traceback, formatted)
-                        let code = v_str(&format!("{}", exception.error.err_type));
-                        let msg = v_str(&exception.error.message());
+                        // Handler exists - prepare to invoke it
+                        // Prepare arguments: {code, msg, value, stack, traceback}
+                        let code = v_err(exception.error.err_type);
+                        let msg = match &exception.error.msg {
+                            Some(m) => v_string(m.to_string()),
+                            None => v_str(""),
+                        };
                         let value = exception
                             .error
                             .value
                             .as_deref()
                             .cloned()
                             .unwrap_or(v_int(0));
-                        let traceback = List::from_iter(exception.stack.clone());
-                        let formatted = List::from_iter(exception.backtrace.clone());
+                        let stack = List::from_iter(exception.stack.clone());
+                        let traceback = List::from_iter(exception.backtrace.clone());
 
-                        let args = List::from_iter(vec![
-                            code,
-                            msg,
-                            value,
-                            traceback.clone().into(),
-                            formatted.clone().into(),
-                        ]);
+                        let args =
+                            List::from_iter(vec![code, msg, value, stack.into(), traceback.into()]);
 
-                        // Start the handler verb
+                        // Store the original exception and mark that we're handling uncaught error
+                        self.pending_exception = Some((*exception).clone());
+                        self.handling_uncaught_error = true;
+
+                        // Set up the handler as a method call on SYSTEM_OBJECT
                         self.vm_host.start_call_method_verb(
                             self.task_id,
                             self.perms,
@@ -578,29 +553,30 @@ impl Task {
                             program,
                         );
 
-                        // Continue execution in the handler
+                        // Continue execution - the handler will now run
                         return Some(self);
                     }
-                    // No handler exists or error looking it up, proceed with normal exception handling
+
+                    // No handler exists or error looking it up
                     match verb_lookup.unwrap_err() {
                         WorldStateError::VerbNotFound(_, _) => {
-                            // No handler exists, proceed with normal exception handling
+                            // No handler exists, proceed with normal exception reporting
                         }
                         e => {
                             error!(task_id = ?self.task_id, "Error looking up handle_uncaught_error: {:?}", e);
-                            // Proceed with normal exception handling
+                            // Proceed with normal exception reporting
                         }
                     }
                 }
 
-                // Normal exception handling (either no handler found, or we're already in handler)
+                // Normal exception reporting (either no handler found, or handler itself threw)
                 // Commands that end in exceptions are still expected to be committed, to
                 // conform with MOO's expectations.
                 let commit_result = commit_current_transaction().expect("Could not attempt commit");
 
                 let CommitResult::Success { .. } = commit_result else {
                     warn!(
-                        "Conflict during commit before complete, asking scheduler to retry task ({})",
+                        "Conflict during commit before exception, asking scheduler to retry task ({})",
                         self.task_id
                     );
                     session.rollback().unwrap();
@@ -692,69 +668,24 @@ impl Task {
                     );
                 }
 
-                // If we're not already handling a timeout, try to call $handle_task_timeout
-                if !self.handling_task_timeout {
-                    let verb_lookup = with_current_transaction(|world_state| {
-                        world_state.find_method_verb_on(
-                            &self.perms,
-                            &SYSTEM_OBJECT,
-                            *HANDLE_TASK_TIMEOUT_SYM,
-                        )
-                    });
+                // Collect traceback information for the handler
+                let (stack_list, backtrace_list) = self.vm_host.get_traceback();
+                let handler_info = TimeoutHandlerInfo {
+                    stack: stack_list,
+                    backtrace: backtrace_list,
+                };
 
-                    if let Ok((program, verbdef)) = verb_lookup {
-                        // Set flag to prevent infinite recursion and store original timeout info
-                        self.handling_task_timeout = true;
-                        self.pending_timeout = Some((reason, this.clone(), verb_name, line_number));
-
-                        // Prepare arguments for $handle_task_timeout(resource, traceback, formatted)
-                        let resource = match reason {
-                            AbortLimitReason::Ticks(_) => v_str("ticks"),
-                            AbortLimitReason::Time(_) => v_str("seconds"),
-                        };
-
-                        // Get proper traceback from VM stack
-                        let (stack_list, backtrace_list) = self.vm_host.get_traceback();
-                        let traceback = List::from_iter(stack_list);
-                        let formatted = List::from_iter(backtrace_list);
-
-                        let args =
-                            List::from_iter(vec![resource, traceback.into(), formatted.into()]);
-
-                        // Start the handler verb
-                        self.vm_host.start_call_method_verb(
-                            self.task_id,
-                            self.perms,
-                            verbdef,
-                            *HANDLE_TASK_TIMEOUT_SYM,
-                            v_obj(SYSTEM_OBJECT),
-                            self.player,
-                            args,
-                            v_obj(self.player),
-                            String::new(),
-                            program,
-                        );
-
-                        // Continue execution in the handler
-                        return Some(self);
-                    } else {
-                        // No handler exists or error looking it up, proceed with normal timeout handling
-                        match verb_lookup.unwrap_err() {
-                            WorldStateError::VerbNotFound(_, _) => {
-                                // No handler exists, proceed with normal timeout handling
-                            }
-                            e => {
-                                error!(task_id = ?self.task_id, "Error looking up handle_task_timeout: {:?}", e);
-                                // Proceed with normal timeout handling
-                            }
-                        }
-                    }
-                }
-
-                // Normal timeout handling (either no handler found, or we're already in handler)
+                // Stop execution, rollback transaction, and abort the task.
+                // The scheduler will handle invoking $handle_task_timeout as a separate task.
                 self.vm_host.stop();
                 rollback_current_transaction().expect("Could not rollback world state");
-                task_scheduler_client.abort_limits_reached(reason, this, verb_name, line_number);
+                task_scheduler_client.abort_limits_reached(
+                    reason,
+                    this,
+                    verb_name,
+                    line_number,
+                    handler_info,
+                );
                 None
             }
             VMHostResponse::RollbackRetry => {
@@ -871,6 +802,41 @@ impl Task {
             }
             TaskStart::StartDoCommand { .. } => {
                 panic!("StartDoCommand invocation should not happen on initial setup_task_start");
+            }
+            TaskStart::StartExceptionHandler { player, args, .. } => {
+                // Start $handle_uncaught_error on the system object with the exception args
+                // Find and set up the handler verb
+                match with_current_transaction(|world_state| {
+                    world_state.find_method_verb_on(
+                        &self.perms,
+                        &SYSTEM_OBJECT,
+                        *HANDLE_UNCAUGHT_ERROR_SYM,
+                    )
+                }) {
+                    Err(WorldStateError::VerbNotFound(_, _)) => {
+                        // No handler defined - this shouldn't happen in setup, we would have checked before
+                        warn!("handle_uncaught_error verb not found during setup");
+                        return false;
+                    }
+                    Err(e) => {
+                        error!(task_id = ?self.task_id, "Error resolving handle_uncaught_error: {e:?}");
+                        return false;
+                    }
+                    Ok((program, verbdef)) => {
+                        self.vm_host.start_call_method_verb(
+                            self.task_id,
+                            self.perms,
+                            verbdef,
+                            *HANDLE_UNCAUGHT_ERROR_SYM,
+                            v_obj(SYSTEM_OBJECT),
+                            *player,
+                            args.clone(),
+                            v_obj(*player),
+                            String::new(),
+                            program,
+                        );
+                    }
+                }
             }
         };
         true

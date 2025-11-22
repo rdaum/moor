@@ -135,6 +135,22 @@ pub enum TraceEventType {
         line_number: usize,
     },
 
+    /// Exception handler events
+    ExceptionHandlerRequested {
+        original_task_id: TaskId,
+        handler_task_id: TaskId,
+        exception_type: String,
+    },
+    ExceptionHandlerStarted {
+        handler_task_id: TaskId,
+        original_task_id: TaskId,
+    },
+    ExceptionHandlerCompleted {
+        handler_task_id: TaskId,
+        original_task_id: TaskId,
+        handler_returned_true: bool,
+    },
+
     /// Scheduler events
     SchedulerTick {
         active_tasks: usize,
@@ -461,16 +477,24 @@ fn add_metadata_events(trace_file: &mut TraceFile, start_time: u64) {
 /// Get the current OS thread ID as a u64
 #[cfg(feature = "trace_events")]
 fn current_thread_id() -> u64 {
-    use std::{
-        collections::hash_map::DefaultHasher,
-        hash::{Hash, Hasher},
-    };
+    #[cfg(target_os = "linux")]
+    {
+        unsafe { libc::gettid() as u64 }
+    }
 
-    // Get the current thread ID and hash it to a u64
-    let thread_id = std::thread::current().id();
-    let mut hasher = DefaultHasher::new();
-    thread_id.hash(&mut hasher);
-    hasher.finish()
+    #[cfg(not(target_os = "linux"))]
+    {
+        // Fallback: use pthread_self on Unix-like systems, or a simple counter on Windows
+        #[cfg(unix)]
+        {
+            unsafe { libc::pthread_self() as u64 }
+        }
+
+        #[cfg(not(unix))]
+        {
+            std::thread::current().id().as_u64().get()
+        }
+    }
 }
 
 /// Convert a TraceEventType to a Chrome TraceEvent
@@ -1109,6 +1133,129 @@ fn convert_to_trace_event(event_type: TraceEventType, _start_time: u64) -> Optio
             })
         }
 
+        TraceEventType::ExceptionHandlerRequested {
+            original_task_id,
+            handler_task_id,
+            exception_type,
+        } => {
+            let mut args = HashMap::new();
+            args.insert(
+                "original_task_id".to_string(),
+                Value::String(original_task_id.to_string()),
+            );
+            args.insert(
+                "handler_task_id".to_string(),
+                Value::String(handler_task_id.to_string()),
+            );
+            args.insert(
+                "exception_type".to_string(),
+                Value::String(exception_type.clone()),
+            );
+
+            Some(TraceEvent {
+                name: format!(
+                    "Exception Handler Requested (task {original_task_id}): {exception_type}"
+                ),
+                cat: Some("exception".to_string()),
+                ph: EventPhase::Instant,
+                ts: now,
+                tts: None,
+                pid,
+                tid: current_thread_id(),
+                dur: None,
+                tdur: None,
+                args: Some(args),
+                sf: None,
+                stack: None,
+                esf: None,
+                estack: None,
+                s: Some(InstantScope::Thread),
+                id: None,
+                scope: None,
+                cname: Some("orange".to_string()),
+            })
+        }
+
+        TraceEventType::ExceptionHandlerStarted {
+            handler_task_id,
+            original_task_id,
+        } => {
+            let mut args = HashMap::new();
+            args.insert(
+                "handler_task_id".to_string(),
+                Value::String(handler_task_id.to_string()),
+            );
+            args.insert(
+                "original_task_id".to_string(),
+                Value::String(original_task_id.to_string()),
+            );
+
+            Some(TraceEvent {
+                name: format!("Exception Handler Started (task {handler_task_id})"),
+                cat: Some("exception".to_string()),
+                ph: EventPhase::Begin,
+                ts: now,
+                tts: None,
+                pid,
+                tid: current_thread_id(),
+                dur: None,
+                tdur: None,
+                args: Some(args),
+                sf: None,
+                stack: None,
+                esf: None,
+                estack: None,
+                s: None,
+                id: None,
+                scope: None,
+                cname: Some("orange".to_string()),
+            })
+        }
+
+        TraceEventType::ExceptionHandlerCompleted {
+            handler_task_id,
+            original_task_id,
+            handler_returned_true,
+        } => {
+            let mut args = HashMap::new();
+            args.insert(
+                "handler_task_id".to_string(),
+                Value::String(handler_task_id.to_string()),
+            );
+            args.insert(
+                "original_task_id".to_string(),
+                Value::String(original_task_id.to_string()),
+            );
+            args.insert(
+                "suppress_traceback".to_string(),
+                Value::Bool(handler_returned_true),
+            );
+
+            Some(TraceEvent {
+                name: format!(
+                    "Exception Handler Completed (task {handler_task_id}): suppress_traceback={}",
+                    handler_returned_true
+                ),
+                cat: Some("exception".to_string()),
+                ph: EventPhase::End,
+                ts: now,
+                tts: None,
+                pid,
+                tid: current_thread_id(),
+                dur: None,
+                tdur: None,
+                args: Some(args),
+                sf: None,
+                stack: None,
+                esf: None,
+                estack: None,
+                s: None,
+                id: None,
+                scope: None,
+                cname: Some("orange".to_string()),
+            })
+        }
+
         TraceEventType::SchedulerTick {
             active_tasks,
             queued_tasks,
@@ -1400,6 +1547,21 @@ macro_rules! trace_task_create_oob {
 /// Macro to emit task creation events for fork - generates no code when trace_events is disabled
 #[macro_export]
 macro_rules! trace_task_create_fork {
+    ($task_id:expr, $player:expr) => {
+        #[cfg(feature = "trace_events")]
+        {
+            use $crate::tracing_events::{TraceEventType, emit_trace_event};
+            emit_trace_event(TraceEventType::TaskCreateFork {
+                task_id: $task_id,
+                player: format!("{}", $player),
+            });
+        }
+    };
+}
+
+/// Macro to emit task creation events for exception handlers - generates no code when trace_events is disabled
+#[macro_export]
+macro_rules! trace_task_create_exception_handler {
     ($task_id:expr, $player:expr) => {
         #[cfg(feature = "trace_events")]
         {
@@ -1722,6 +1884,53 @@ macro_rules! trace_abort_limit_reached {
                 verb_name: $verb_name.to_string(),
                 this: format!("{}", to_literal(&$this)),
                 line_number: $line_number,
+            });
+        }
+    };
+}
+
+/// Macro to emit exception handler requested events - generates no code when trace_events is disabled
+#[macro_export]
+macro_rules! trace_exception_handler_requested {
+    ($original_task_id:expr, $handler_task_id:expr, $exception_type:expr) => {
+        #[cfg(feature = "trace_events")]
+        {
+            use $crate::tracing_events::{TraceEventType, emit_trace_event};
+            emit_trace_event(TraceEventType::ExceptionHandlerRequested {
+                original_task_id: $original_task_id,
+                handler_task_id: $handler_task_id,
+                exception_type: $exception_type.to_string(),
+            });
+        }
+    };
+}
+
+/// Macro to emit exception handler started events - generates no code when trace_events is disabled
+#[macro_export]
+macro_rules! trace_exception_handler_started {
+    ($handler_task_id:expr, $original_task_id:expr) => {
+        #[cfg(feature = "trace_events")]
+        {
+            use $crate::tracing_events::{TraceEventType, emit_trace_event};
+            emit_trace_event(TraceEventType::ExceptionHandlerStarted {
+                handler_task_id: $handler_task_id,
+                original_task_id: $original_task_id,
+            });
+        }
+    };
+}
+
+/// Macro to emit exception handler completed events - generates no code when trace_events is disabled
+#[macro_export]
+macro_rules! trace_exception_handler_completed {
+    ($handler_task_id:expr, $original_task_id:expr, $handler_returned_true:expr) => {
+        #[cfg(feature = "trace_events")]
+        {
+            use $crate::tracing_events::{TraceEventType, emit_trace_event};
+            emit_trace_event(TraceEventType::ExceptionHandlerCompleted {
+                handler_task_id: $handler_task_id,
+                original_task_id: $original_task_id,
+                handler_returned_true: $handler_returned_true,
             });
         }
     };

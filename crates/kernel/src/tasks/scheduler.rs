@@ -72,7 +72,7 @@ use moor_common::{
 use moor_objdef::{collect_object, dump_object};
 use moor_var::{
     E_EXEC, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, List, NOTHING, Obj, SYSTEM_OBJECT,
-    Symbol, Var, Variant, v_bool_int, v_err, v_int, v_obj, v_string,
+    Symbol, Var, Variant, v_bool_int, v_err, v_int, v_obj, v_str, v_string,
 };
 use std::collections::HashMap;
 
@@ -1048,9 +1048,26 @@ impl Scheduler {
                 // Task already dead, can't access session. Just send error result directly.
                 task_q.send_task_result(task_id, Err(TaskAbortedError));
             }
-            TaskControlMsg::TaskAbortLimitsReached(limit_reason, this, verb, line_number) => {
+            TaskControlMsg::TaskAbortLimitsReached(
+                limit_reason,
+                this,
+                verb,
+                line_number,
+                handler_info,
+            ) => {
                 let perfc = sched_counters();
                 let _t = PerfTimerGuard::new(&perfc.task_abort_limits);
+
+                // Get the task's session and player for notifications and handler invocation
+                let Some(task) = task_q.active.remove(&task_id) else {
+                    warn!(task_id, "Task not found for abort");
+                    return;
+                };
+
+                let player = task.player;
+                let session = task.session.clone();
+
+                // Send abort notification to player
                 let abort_reason_text = match limit_reason {
                     AbortLimitReason::Ticks(t) => {
                         warn!(?task_id, ticks = t, "Task aborted, ticks exceeded");
@@ -1065,22 +1082,62 @@ impl Scheduler {
                     }
                 };
 
-                // Commit the session
-                let Some(task) = task_q.active.get_mut(&task_id) else {
-                    warn!(task_id, "Task not found for abort");
-
-                    return;
-                };
-
-                if let Err(e) = task
-                    .session
-                    .send_system_msg(task.player, &abort_reason_text)
-                {
+                if let Err(e) = session.send_system_msg(player, &abort_reason_text) {
                     warn!("Could not send abort message to player: {e:?}");
                 }
 
-                let _ = task.session.commit();
+                let _ = session.commit();
 
+                // Attempt to invoke the handler verb as a separate task
+                let resource_str = match limit_reason {
+                    AbortLimitReason::Ticks(_) => "ticks",
+                    AbortLimitReason::Time(_) => "seconds",
+                };
+
+                let handler_args = List::from_iter(vec![
+                    v_str(resource_str),
+                    List::from_iter(handler_info.as_ref().stack.clone()).into(),
+                    List::from_iter(handler_info.as_ref().backtrace.clone()).into(),
+                ]);
+
+                let handler_task_start = TaskStart::StartVerb {
+                    player,
+                    vloc: v_obj(SYSTEM_OBJECT),
+                    verb: Symbol::mk("handle_task_timeout"),
+                    args: handler_args,
+                    argstr: "".to_string(),
+                };
+
+                let handler_task_id = self.next_task_id;
+                self.next_task_id += 1;
+
+                debug!(
+                    "Spawning handler task {} for timeout on task {}",
+                    handler_task_id, task_id
+                );
+
+                let handler_result = task_q.submit_new_task(
+                    handler_task_id,
+                    &player,
+                    &player, // Use player as permissions for handler
+                    handler_task_start,
+                    None,
+                    session.clone().fork().unwrap_or_else(|_| session.clone()),
+                    &self.server_options,
+                    self.config.features.anonymous_objects
+                        && (self.gc_sweep_in_progress || self.gc_force_collect),
+                );
+
+                match handler_result {
+                    Ok(_) => {
+                        debug!("Handler task {} started successfully", handler_task_id);
+                    }
+                    Err(e) => {
+                        warn!("Failed to start handler task: {:?}", e);
+                    }
+                }
+
+                // Report the original task as aborted (handler outcome doesn't affect this)
                 task_q.send_task_result(task_id, Err(TaskAbortedLimit(limit_reason)));
             }
             TaskControlMsg::TaskException(exception) => {

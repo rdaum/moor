@@ -414,8 +414,8 @@ table Task {
     retry_state: VMExecState (required);
     handling_uncaught_error: bool;
     pending_exception: MoorCommon.Exception;  // Optional - empty if None
-    handling_task_timeout: bool;
-    pending_timeout: PendingTimeout;  // Optional - empty if None
+    waiting_for_exception_handler_task: uint64;  // Use 0 for None
+    has_waiting_for_exception_handler_task: bool;
 }
 
 // ============================================================================

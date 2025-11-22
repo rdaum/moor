@@ -30,6 +30,18 @@ use moor_common::{
 };
 use moor_var::{Error, Obj, Symbol, Var};
 
+/// Information for invoking a timeout handler verb on #0.
+/// This contains the traceback data that should be passed to $handle_task_timeout.
+/// The abort reason is provided separately in TaskAbortLimitsReached.
+/// Structured similarly to Exception for consistency.
+#[derive(Debug, Clone)]
+pub struct TimeoutHandlerInfo {
+    /// Stack trace as Vars
+    pub stack: Vec<Var>,
+    /// Formatted backtrace strings
+    pub backtrace: Vec<Var>,
+}
+
 /// Information about a worker type and its current state
 #[derive(Debug, Clone)]
 pub struct WorkerInfo {
@@ -122,11 +134,18 @@ impl TaskSchedulerClient {
         this: Var,
         verb_name: Symbol,
         line_number: usize,
+        handler_info: TimeoutHandlerInfo,
     ) {
         self.scheduler_sender
             .send((
                 self.task_id,
-                TaskControlMsg::TaskAbortLimitsReached(reason, this, verb_name, line_number),
+                TaskControlMsg::TaskAbortLimitsReached(
+                    reason,
+                    this,
+                    verb_name,
+                    line_number,
+                    Box::new(handler_info),
+                ),
             ))
             .expect("Could not deliver client message -- scheduler shut down?");
     }
@@ -479,7 +498,14 @@ pub enum TaskControlMsg {
     /// The task thread panicked with the given message.
     TaskAbortPanicked(String, Box<Backtrace>),
     /// The task is letting us know that it has reached its abort limits.
-    TaskAbortLimitsReached(AbortLimitReason, Var, Symbol, usize),
+    /// Handler info contains traceback data for $handle_task_timeout.
+    TaskAbortLimitsReached(
+        AbortLimitReason,
+        Var,
+        Symbol,
+        usize,
+        Box<TimeoutHandlerInfo>,
+    ),
     /// Tell the scheduler that the task in a suspended state, with a time to resume (if any)
     TaskSuspend(TaskSuspend, Box<Task>),
     /// Tell the scheduler we're suspending until we get input from the client.

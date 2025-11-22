@@ -33,7 +33,6 @@ use crate::{
         vm_host::VmHost as KernelVmHost,
     },
 };
-use moor_common::tasks::AbortLimitReason as KernelAbortLimitReason;
 use moor_compiler::{Label, Offset};
 use moor_schema::{
     common as fb_common, convert as convert_schema,
@@ -272,44 +271,6 @@ pub(crate) fn wake_condition_from_flatbuffer(
 // ============================================================================
 // AbortLimitReason Conversion
 // ============================================================================
-
-pub(crate) fn abort_limit_reason_to_flatbuffer(
-    reason: &KernelAbortLimitReason,
-) -> Result<fb::AbortLimitReason, TaskConversionError> {
-    use fb::*;
-
-    let reason_union = match reason {
-        KernelAbortLimitReason::Ticks(ticks) => {
-            AbortLimitReasonUnion::AbortTicks(Box::new(AbortTicks {
-                ticks: *ticks as u64,
-            }))
-        }
-        KernelAbortLimitReason::Time(duration) => {
-            AbortLimitReasonUnion::AbortTime(Box::new(AbortTime {
-                seconds: duration.as_secs(),
-            }))
-        }
-    };
-
-    Ok(AbortLimitReason {
-        reason: reason_union,
-    })
-}
-
-pub(crate) fn abort_limit_reason_from_flatbuffer(
-    fb: &fb::AbortLimitReason,
-) -> Result<KernelAbortLimitReason, TaskConversionError> {
-    use fb::AbortLimitReasonUnion;
-
-    match &fb.reason {
-        AbortLimitReasonUnion::AbortTicks(at) => {
-            Ok(KernelAbortLimitReason::Ticks(at.ticks as usize))
-        }
-        AbortLimitReasonUnion::AbortTime(at) => Ok(KernelAbortLimitReason::Time(
-            Duration::from_secs(at.seconds),
-        )),
-    }
-}
 
 // ============================================================================
 // PcType Conversion
@@ -1246,6 +1207,10 @@ pub(crate) fn task_start_to_flatbuffer(
                 program: Box::new(fb_program),
             }))
         }
+        KernelTaskStart::StartExceptionHandler { .. } => {
+            // Exception handlers don't get suspended, so they shouldn't be serialized
+            panic!("Attempted to serialize StartExceptionHandler task state");
+        }
     };
 
     Ok(fb::TaskStart { start: start_union })
@@ -1395,53 +1360,6 @@ pub(crate) fn fork_from_flatbuffer(fb: &fb::Fork) -> Result<Fork, TaskConversion
 }
 
 // ============================================================================
-// PendingTimeout Conversion
-// ============================================================================
-
-pub(crate) fn pending_timeout_to_flatbuffer(
-    timeout: &(
-        KernelAbortLimitReason,
-        moor_var::Var,
-        moor_var::Symbol,
-        usize,
-    ),
-) -> Result<fb::PendingTimeout, TaskConversionError> {
-    let (reason, this, verb_name, line_number) = timeout;
-
-    let fb_reason = abort_limit_reason_to_flatbuffer(reason)?;
-    let fb_this = convert_schema::var_to_db_flatbuffer(this)
-        .map_err(|e| TaskConversionError::VarError(format!("Error encoding this: {e}")))?;
-    let fb_verb_name = convert_schema::symbol_to_flatbuffer_struct(verb_name);
-
-    Ok(fb::PendingTimeout {
-        reason: Box::new(fb_reason),
-        this: Box::new(fb_this),
-        verb_name: Box::new(fb_verb_name),
-        line_number: *line_number as u64,
-    })
-}
-
-pub(crate) fn pending_timeout_from_flatbuffer(
-    fb: &fb::PendingTimeout,
-) -> Result<
-    (
-        KernelAbortLimitReason,
-        moor_var::Var,
-        moor_var::Symbol,
-        usize,
-    ),
-    TaskConversionError,
-> {
-    let reason = abort_limit_reason_from_flatbuffer(&fb.reason)?;
-    let this = convert_schema::var_from_db_flatbuffer(&fb.this)
-        .map_err(|e| TaskConversionError::VarError(format!("Error decoding this: {e}")))?;
-    let verb_name = convert_schema::symbol_from_flatbuffer_struct(&fb.verb_name);
-    let line_number = fb.line_number as usize;
-
-    Ok((reason, this, verb_name, line_number))
-}
-
-// ============================================================================
 // Task Conversion
 // ============================================================================
 
@@ -1456,12 +1374,6 @@ pub(crate) fn task_to_flatbuffer(task: &KernelTask) -> Result<fb::Task, TaskConv
         .map(exception_to_flatbuffer)
         .transpose()?;
 
-    let fb_pending_timeout = task
-        .pending_timeout
-        .as_ref()
-        .map(pending_timeout_to_flatbuffer)
-        .transpose()?;
-
     Ok(fb::Task {
         version: CURRENT_TASK_VERSION,
         task_id: task.task_id as u64,
@@ -1473,8 +1385,9 @@ pub(crate) fn task_to_flatbuffer(task: &KernelTask) -> Result<fb::Task, TaskConv
         retry_state: Box::new(fb_retry_state),
         handling_uncaught_error: task.handling_uncaught_error,
         pending_exception: fb_pending_exception.map(Box::new),
-        handling_task_timeout: task.handling_task_timeout,
-        pending_timeout: fb_pending_timeout.map(Box::new),
+        // Note: waiting_for_exception_handler_task removed - exception handlers no longer suspend
+        waiting_for_exception_handler_task: 0,
+        has_waiting_for_exception_handler_task: false,
     })
 }
 
@@ -1498,12 +1411,6 @@ pub(crate) fn task_from_flatbuffer(fb: &fb::Task) -> Result<KernelTask, TaskConv
         .map(|e| exception_from_flatbuffer(e))
         .transpose()?;
 
-    let pending_timeout = fb
-        .pending_timeout
-        .as_ref()
-        .map(|t| pending_timeout_from_flatbuffer(t))
-        .transpose()?;
-
     Ok(KernelTask {
         task_id: fb.task_id as usize,
         creation_time: minstant::Instant::now(),
@@ -1520,8 +1427,6 @@ pub(crate) fn task_from_flatbuffer(fb: &fb::Task) -> Result<KernelTask, TaskConv
         retry_state,
         handling_uncaught_error: fb.handling_uncaught_error,
         pending_exception,
-        handling_task_timeout: fb.handling_task_timeout,
-        pending_timeout,
     })
 }
 

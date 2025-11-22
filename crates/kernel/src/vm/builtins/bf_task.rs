@@ -393,6 +393,10 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             TaskStart::StartEval { player, program: _ } => {
                 v_list(&[sym_or_str(Symbol::mk("eval")), v_obj(*player)])
             }
+            TaskStart::StartExceptionHandler { .. } => {
+                // Exception handlers run inline, so they never appear in tasks() output
+                panic!("Exception handler should not appear in tasks() listing");
+            }
         };
         let entry = v_list(&[task_id, player_id, task_start]);
         output.push(entry);

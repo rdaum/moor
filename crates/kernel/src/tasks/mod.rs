@@ -21,7 +21,7 @@ use moor_var::{List, Obj, Symbol, Var};
 pub use crate::tasks::tasks_db::{NoopTasksDb, TasksDb, TasksDbError};
 use crate::vm::Fork;
 use moor_common::{
-    tasks::{SchedulerError, TaskId},
+    tasks::{Exception, SchedulerError, TaskId},
     util::PerfCounter,
 };
 
@@ -321,6 +321,13 @@ pub enum TaskStart {
     },
     /// The scheduler is telling the task to evaluate a specific (MOO) program.
     StartEval { player: Obj, program: Program },
+    /// The task is executing $handle_uncaught_error to handle an exception.
+    /// The original exception is stored so if the handler returns false, we can re-raise it.
+    StartExceptionHandler {
+        player: Obj,
+        args: List,
+        original_exception: Box<Exception>,
+    },
 }
 
 impl TaskStart {
@@ -366,6 +373,9 @@ impl TaskStart {
             }
             TaskStart::StartEval { player, .. } => {
                 format!("Eval(player: {player})")
+            }
+            TaskStart::StartExceptionHandler { player, .. } => {
+                format!("ExceptionHandler(player: {player})")
             }
         }
     }
