@@ -115,6 +115,9 @@ pub enum TraceEventType {
     StackUnwind {
         task_id: TaskId,
         reason: String,
+        error_message: Option<String>,
+        max_ticks: usize,
+        tick_count: usize,
     },
 
     /// Scheduler events
@@ -903,13 +906,29 @@ fn convert_to_trace_event(event_type: TraceEventType, _start_time: u64) -> Optio
             })
         }
 
-        TraceEventType::StackUnwind { task_id, reason } => {
+        TraceEventType::StackUnwind {
+            task_id,
+            reason,
+            error_message,
+            max_ticks,
+            tick_count,
+        } => {
             let mut args = HashMap::new();
             args.insert(
                 "task_id".to_string(),
                 Value::Number((task_id as u64).into()),
             );
             args.insert("reason".to_string(), Value::String(reason.clone()));
+            args.insert("max_ticks".to_string(), Value::Number(max_ticks.into()));
+            args.insert("tick_count".to_string(), Value::Number(tick_count.into()));
+            args.insert(
+                "remaining_ticks".to_string(),
+                Value::Number((max_ticks.saturating_sub(tick_count)).into()),
+            );
+
+            if let Some(msg) = error_message {
+                args.insert("error_message".to_string(), Value::String(msg));
+            }
 
             Some(TraceEvent {
                 name: format!("Stack Unwind (task {task_id}): {reason}"),
@@ -1416,6 +1435,22 @@ macro_rules! trace_stack_unwind {
             emit_trace_event(TraceEventType::StackUnwind {
                 task_id: $task_id,
                 reason: $reason.to_string(),
+                error_message: None,
+                max_ticks: 0,
+                tick_count: 0,
+            });
+        }
+    };
+    ($task_id:expr, $reason:expr, $error_message:expr, $max_ticks:expr, $tick_count:expr) => {
+        #[cfg(feature = "trace_events")]
+        {
+            use $crate::tracing_events::{TraceEventType, emit_trace_event};
+            emit_trace_event(TraceEventType::StackUnwind {
+                task_id: $task_id,
+                reason: $reason.to_string(),
+                error_message: $error_message,
+                max_ticks: $max_ticks,
+                tick_count: $tick_count,
             });
         }
     };

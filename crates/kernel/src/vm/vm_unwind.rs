@@ -191,16 +191,25 @@ impl VMExecState {
         // Emit stack unwind trace event
         #[cfg(feature = "trace_events")]
         {
-            let reason = match &why {
-                FinallyReason::Fallthrough => "Fallthrough".to_string(),
-                FinallyReason::Raise(exception) => format!("Raise({})", exception.error.err_type),
-                FinallyReason::Return(value) => format!("Return({})", to_literal(value)),
-                FinallyReason::Abort => "Abort".to_string(),
+            let (reason, error_message) = match &why {
+                FinallyReason::Fallthrough => ("Fallthrough".to_string(), None),
+                FinallyReason::Raise(exception) => (
+                    format!("Raise({})", exception.error.err_type),
+                    Some(exception.error.message()),
+                ),
+                FinallyReason::Return(value) => (format!("Return({})", to_literal(value)), None),
+                FinallyReason::Abort => ("Abort".to_string(), None),
                 FinallyReason::Exit { stack, label } => {
-                    format!("Exit(stack: {stack:?}, label: {label:?})")
+                    (format!("Exit(stack: {stack:?}, label: {label:?})"), None)
                 }
             };
-            trace_stack_unwind!(self.task_id, &reason);
+            trace_stack_unwind!(
+                self.task_id,
+                &reason,
+                error_message,
+                self.max_ticks,
+                self.tick_count
+            );
         }
         // Walk activation stack from bottom to top, tossing frames as we go.
         while let Some(a) = self.stack.last_mut() {
