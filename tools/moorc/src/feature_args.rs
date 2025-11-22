@@ -91,6 +91,12 @@ pub struct FeatureArgs {
                 This provides better uniqueness guarantees and avoids integer overflow issues."
     )]
     pub use_uuobjids: Option<bool>,
+
+    #[arg(
+        long,
+        help = "Enable anonymous objects, which are garbage-collected when no longer referenced."
+    )]
+    pub anonymous_objects: Option<bool>,
 }
 
 impl FeatureArgs {
@@ -130,6 +136,9 @@ impl FeatureArgs {
         }
         if let Some(args) = self.use_uuobjids {
             config.use_uuobjids = args;
+        }
+        if let Some(args) = self.anonymous_objects {
+            config.anonymous_objects = args;
         }
         Ok(())
     }
