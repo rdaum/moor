@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import React, { useCallback, useId, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { renderDjot, renderPlainText } from "../lib/djot-renderer";
 import { InputMetadata } from "../types/input";
 
@@ -43,8 +43,20 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
     const alternativeDescriptionId = `${baseId}-alternative-description`;
     const promptStatusId = `${baseId}-prompt-status`;
     const trimmedValue = value.trim();
+    const primaryButtonRef = useRef<HTMLButtonElement>(null);
     const alternativeButtonRef = useRef<HTMLButtonElement>(null);
     const alternativeTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // Auto-focus the primary button when the component mounts or when returning from alternative view
+    useEffect(() => {
+        if (!disabled && primaryButtonRef.current) {
+            // Small delay to ensure DOM is ready and screen reader announcements complete
+            const timer = setTimeout(() => {
+                primaryButtonRef.current?.focus();
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [disabled, showAlternative, metadata.input_type]);
 
     // Render prompt text as djot with ANSI escape codes
     const renderPrompt = useCallback((text: string) => {
@@ -116,7 +128,10 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
     if (metadata.input_type === "yes_no_alternative") {
         if (showAlternative) {
             return (
-                <div className="rich_input_prompt" role="application" aria-label={metadata.prompt || "Respond"}>
+                <div className="rich_input_prompt" role="form" aria-label="Provide alternative response">
+                    <div className="sr-only" role="status" aria-live="polite">
+                        Alternative response form is now active
+                    </div>
                     {promptStatus}
                     <div className="rich_input_buttons">
                         <button
@@ -199,10 +214,14 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
         }
 
         return (
-            <div className="rich_input_prompt" role="application" aria-label={metadata.prompt || "Respond"}>
+            <div className="rich_input_prompt" role="form" aria-label="Respond with yes, no, or alternative">
+                <div className="sr-only" role="status" aria-live="polite">
+                    Response required: choose yes, no, or provide an alternative
+                </div>
                 {promptStatus}
                 <div className="rich_input_buttons">
                     <button
+                        ref={primaryButtonRef}
                         type="button"
                         className="rich_input_button rich_input_button_primary"
                         onClick={() => handleSubmit("yes")}
@@ -241,10 +260,14 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
     // Yes/No input type
     if (metadata.input_type === "yes_no") {
         return (
-            <div className="rich_input_prompt" role="group" aria-label={metadata.prompt || "Respond"}>
+            <div className="rich_input_prompt" role="form" aria-label="Respond with yes or no">
+                <div className="sr-only" role="status" aria-live="polite">
+                    Response required: choose yes or no
+                </div>
                 {promptStatus}
                 <div className="rich_input_buttons">
                     <button
+                        ref={primaryButtonRef}
                         type="button"
                         className="rich_input_button rich_input_button_primary"
                         onClick={() => handleSubmit("yes")}
@@ -272,12 +295,16 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
         // If there are 4 or fewer choices, show as buttons
         if (metadata.choices.length <= 4) {
             return (
-                <div className="rich_input_prompt" role="group" aria-label={metadata.prompt || "Choose an option"}>
+                <div className="rich_input_prompt" role="form" aria-label="Choose an option">
+                    <div className="sr-only" role="status" aria-live="polite">
+                        Response required: choose one of {metadata.choices.length} options
+                    </div>
                     {promptStatus}
                     <div className="rich_input_buttons">
                         {metadata.choices.map((choice, index) => (
                             <button
                                 key={`${choice}-${index}`}
+                                ref={index === 0 ? primaryButtonRef : undefined}
                                 type="button"
                                 className={`rich_input_button ${index === 0 ? "rich_input_button_primary" : ""}`}
                                 onClick={() => handleSubmit(choice)}
@@ -410,10 +437,14 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
     // Confirmation input type
     if (metadata.input_type === "confirmation") {
         return (
-            <div className="rich_input_prompt" role="group" aria-label={metadata.prompt || "Confirm"}>
+            <div className="rich_input_prompt" role="form" aria-label="Confirmation required">
+                <div className="sr-only" role="status" aria-live="polite">
+                    Confirmation required: press OK to continue
+                </div>
                 {promptStatus}
                 <div className="rich_input_buttons">
                     <button
+                        ref={primaryButtonRef}
                         type="button"
                         className="rich_input_button rich_input_button_primary"
                         onClick={() => handleSubmit("ok")}

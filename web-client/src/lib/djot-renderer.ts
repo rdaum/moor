@@ -147,19 +147,53 @@ export function isSafeUrl(url: string): boolean {
  * Escapes underscores in identifier-like contexts to prevent unwanted emphasis.
  * Matches patterns like: $obj.property_name, variable_name, func_call(), etc.
  * This prevents underscores within identifiers from being interpreted as italic markers.
+ *
+ * IMPORTANT: This function preserves content within backticks (inline code) and code blocks,
+ * as those should not have their underscores escaped.
  */
 function escapeIdentifierUnderscores(content: string): string {
-    return content.replace(
-        /(\$?[a-zA-Z0-9_.]+_[a-zA-Z0-9_.]*)/g,
-        (match) => {
-            // Only escape if this looks like an identifier (contains word chars around the underscore)
-            // and doesn't have spaces (which would indicate intentional formatting)
-            if (!/\s/.test(match) && /[a-zA-Z0-9]_[a-zA-Z0-9]/.test(match)) {
-                return match.replace(/_/g, "\\_");
-            }
-            return match;
-        },
-    );
+    // Split content by code blocks and inline code to preserve them
+    const parts: Array<{ text: string; isCode: boolean }> = [];
+    let currentPos = 0;
+
+    // Match both inline code (`...`) and code blocks (```...```)
+    // We need to handle these carefully to not escape underscores inside them
+    const codeRegex = /(`+)([^`]+?)\1/g;
+    let match;
+
+    while ((match = codeRegex.exec(content)) !== null) {
+        // Add text before the code
+        if (match.index > currentPos) {
+            parts.push({ text: content.slice(currentPos, match.index), isCode: false });
+        }
+        // Add the code itself (including backticks)
+        parts.push({ text: match[0], isCode: true });
+        currentPos = match.index + match[0].length;
+    }
+
+    // Add remaining text after the last code block
+    if (currentPos < content.length) {
+        parts.push({ text: content.slice(currentPos), isCode: false });
+    }
+
+    // Process only non-code parts
+    return parts.map(part => {
+        if (part.isCode) {
+            return part.text;
+        }
+
+        return part.text.replace(
+            /(\$?[a-zA-Z0-9_.]+_[a-zA-Z0-9_.]*)/g,
+            (match) => {
+                // Only escape if this looks like an identifier (contains word chars around the underscore)
+                // and doesn't have spaces (which would indicate intentional formatting)
+                if (!/\s/.test(match) && /[a-zA-Z0-9]_[a-zA-Z0-9]/.test(match)) {
+                    return match.replace(/_/g, "\\_");
+                }
+                return match;
+            },
+        );
+    }).join("");
 }
 
 /**
