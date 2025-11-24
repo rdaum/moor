@@ -97,7 +97,7 @@ pub enum ObjDefParseError {
     #[error("Failed to parse object definition: {0}")]
     ParseError(CompileError),
     #[error("Failed to compile verb: {0}")]
-    VerbCompileError(CompileError),
+    VerbCompileError(CompileError, String),
     #[error("Failed to parse verb flags: {0}")]
     BadVerbFlags(String),
     #[error("Failed to parse verb argspec: {0}")]
@@ -113,10 +113,78 @@ pub enum ObjDefParseError {
 }
 
 impl ObjDefParseError {
-    pub fn compile_error(&self) -> Option<&CompileError> {
+    pub fn compile_error(&self) -> Option<(&CompileError, &str)> {
         match self {
-            ObjDefParseError::VerbCompileError(error) => Some(error),
+            ObjDefParseError::VerbCompileError(error, source) => Some((error, source)),
             _ => None,
+        }
+    }
+}
+
+/// Offset all line numbers in a CompileError by the given amount
+fn offset_compile_error(error: CompileError, line_offset: usize) -> CompileError {
+    match error {
+        CompileError::ParseError {
+            error_position,
+            context,
+            end_line_col,
+            message,
+            details,
+        } => {
+            let (line, col) = error_position.line_col;
+            CompileError::ParseError {
+                error_position: CompileContext::new((line + line_offset, col)),
+                context,
+                end_line_col: end_line_col.map(|(l, c)| (l + line_offset, c)),
+                message,
+                details,
+            }
+        }
+        CompileError::StringLexError(context, msg) => {
+            let (line, col) = context.line_col;
+            CompileError::StringLexError(CompileContext::new((line + line_offset, col)), msg)
+        }
+        CompileError::UnknownBuiltinFunction(context, name) => {
+            let (line, col) = context.line_col;
+            CompileError::UnknownBuiltinFunction(
+                CompileContext::new((line + line_offset, col)),
+                name,
+            )
+        }
+        CompileError::UnknownTypeConstant(context, name) => {
+            let (line, col) = context.line_col;
+            CompileError::UnknownTypeConstant(CompileContext::new((line + line_offset, col)), name)
+        }
+        CompileError::UnknownLoopLabel(context, label) => {
+            let (line, col) = context.line_col;
+            CompileError::UnknownLoopLabel(CompileContext::new((line + line_offset, col)), label)
+        }
+        CompileError::DuplicateVariable(context, var) => {
+            let (line, col) = context.line_col;
+            CompileError::DuplicateVariable(CompileContext::new((line + line_offset, col)), var)
+        }
+        CompileError::AssignToConst(context, var) => {
+            let (line, col) = context.line_col;
+            CompileError::AssignToConst(CompileContext::new((line + line_offset, col)), var)
+        }
+        CompileError::DisabledFeature(context, feature) => {
+            let (line, col) = context.line_col;
+            CompileError::DisabledFeature(CompileContext::new((line + line_offset, col)), feature)
+        }
+        CompileError::BadSlotName(context, name) => {
+            let (line, col) = context.line_col;
+            CompileError::BadSlotName(CompileContext::new((line + line_offset, col)), name)
+        }
+        CompileError::InvalidAssignmentTarget(context) => {
+            let (line, col) = context.line_col;
+            CompileError::InvalidAssignmentTarget(CompileContext::new((line + line_offset, col)))
+        }
+        CompileError::InvalidTypeLiteralAssignment(type_name, context) => {
+            let (line, col) = context.line_col;
+            CompileError::InvalidTypeLiteralAssignment(
+                type_name,
+                CompileContext::new((line + line_offset, col)),
+            )
         }
     }
 }
@@ -176,8 +244,8 @@ fn parse_literal_lambda(
     // For now, convert the body expression back to source and compile it
     // This is not ideal but works for the objdef format
     let body_source = format!("return {};", body_pair.as_str());
-    let body_program =
-        crate::compile(&body_source, crate::CompileOptions::default()).map_err(VerbCompileError)?;
+    let body_program = crate::compile(&body_source, crate::CompileOptions::default())
+        .map_err(|e| VerbCompileError(e, body_source.clone()))?;
 
     // Parse optional metadata
     let mut captured_env = vec![];
@@ -355,10 +423,13 @@ fn parse_literal(context: &mut ObjFileContext, pair: Pair<Rule>) -> Result<Var, 
                         let slot_name = Symbol::mk(slot_ident.as_str());
 
                         if slot_name == Symbol::mk("delegate") || slot_name == Symbol::mk("slots") {
-                            return Err(VerbCompileError(CompileError::BadSlotName(
-                                CompileContext::new(slot_ident.line_col()),
-                                slot_name.to_string(),
-                            )));
+                            return Err(VerbCompileError(
+                                CompileError::BadSlotName(
+                                    CompileContext::new(slot_ident.line_col()),
+                                    slot_name.to_string(),
+                                ),
+                                String::new(),
+                            ));
                         }
 
                         let slot_literal = inner.next().unwrap();
@@ -419,10 +490,10 @@ fn parse_object_literal(pair: Pair<Rule>) -> Result<Obj, ObjDefParseError> {
 fn parse_string_literal(pair: Pair<Rule>) -> Result<String, ObjDefParseError> {
     let string = pair.as_str();
     let parsed = unquote_str(string).map_err(|e| {
-        VerbCompileError(CompileError::StringLexError(
-            CompileContext::new(pair.line_col()),
-            e,
-        ))
+        VerbCompileError(
+            CompileError::StringLexError(CompileContext::new(pair.line_col()), e),
+            String::new(),
+        )
     })?;
     Ok(parsed)
 }
@@ -436,28 +507,24 @@ fn parse_literal_atom(
             let objid = parse_object_literal(pair)?;
             Ok(v_obj(objid))
         }
-        Rule::integer => Ok(v_int(
-            pair.as_str()
-                .parse::<i64>()
-                .map_err(|e| {
-                    CompileError::StringLexError(
-                        CompileContext::new(pair.line_col()),
-                        format!("Failed to parse '{}' to i64: {e}", pair.as_str()),
-                    )
-                })
-                .map_err(VerbCompileError)?,
-        )),
-        Rule::float => Ok(v_float(
-            pair.as_str()
-                .parse::<f64>()
-                .map_err(|e| {
-                    CompileError::StringLexError(
-                        CompileContext::new(pair.line_col()),
-                        format!("Failed to parse '{}' to f64: {e}", pair.as_str()),
-                    )
-                })
-                .map_err(VerbCompileError)?,
-        )),
+        Rule::integer => Ok(v_int(pair.as_str().parse::<i64>().map_err(|e| {
+            VerbCompileError(
+                CompileError::StringLexError(
+                    CompileContext::new(pair.line_col()),
+                    format!("Failed to parse '{}' to i64: {e}", pair.as_str()),
+                ),
+                String::new(),
+            )
+        })?)),
+        Rule::float => Ok(v_float(pair.as_str().parse::<f64>().map_err(|e| {
+            VerbCompileError(
+                CompileError::StringLexError(
+                    CompileContext::new(pair.line_col()),
+                    format!("Failed to parse '{}' to f64: {e}", pair.as_str()),
+                ),
+                String::new(),
+            )
+        })?)),
         Rule::string => {
             let str = parse_string_literal(pair)?;
             Ok(v_str(&str))
@@ -465,13 +532,16 @@ fn parse_literal_atom(
         Rule::err => {
             let e = pair.as_str();
             let Some(e) = ErrorCode::parse_str(e) else {
-                return Err(VerbCompileError(CompileError::ParseError {
-                    error_position: CompileContext::new(pair.line_col()),
-                    end_line_col: None,
-                    context: e.to_string(),
-                    message: e.to_string(),
-                    details: Box::new(ParseErrorDetails::default()),
-                }));
+                return Err(VerbCompileError(
+                    CompileError::ParseError {
+                        error_position: CompileContext::new(pair.line_col()),
+                        end_line_col: None,
+                        context: e.to_string(),
+                        message: e.to_string(),
+                        details: Box::new(ParseErrorDetails::default()),
+                    },
+                    String::new(),
+                ));
             };
             Ok(v_err(e))
         }
@@ -499,22 +569,30 @@ fn parse_literal_atom(
                 .strip_prefix("b\"")
                 .and_then(|s| s.strip_suffix("\""))
                 .ok_or_else(|| {
-                    VerbCompileError(CompileError::StringLexError(
-                        CompileContext::new(pair.line_col()),
-                        format!(
-                            "invalid binary literal '{binary_literal}': missing b\" prefix or \" suffix"
+                    VerbCompileError(
+                        CompileError::StringLexError(
+                            CompileContext::new(pair.line_col()),
+                            format!(
+                                "invalid binary literal '{binary_literal}': missing b\" prefix or \" suffix"
+                            ),
                         ),
-                    ))
+                        String::new(),
+                    )
                 })?;
 
             // Decode the base64 content
             let decoded = general_purpose::URL_SAFE
                 .decode(base64_content)
                 .map_err(|e| {
-                    VerbCompileError(CompileError::StringLexError(
-                        CompileContext::new(pair.line_col()),
-                        format!("invalid binary literal '{binary_literal}': invalid base64: {e}"),
-                    ))
+                    VerbCompileError(
+                        CompileError::StringLexError(
+                            CompileContext::new(pair.line_col()),
+                            format!(
+                                "invalid binary literal '{binary_literal}': invalid base64: {e}"
+                            ),
+                        ),
+                        String::new(),
+                    )
                 })?;
 
             Ok(v_binary(decoded))
@@ -537,13 +615,16 @@ pub fn parse_literal_value(literal_str: &str) -> Result<Var, ObjDefParseError> {
                 LineColLocation::Span(begin, end) => (begin, Some(end)),
             };
 
-            return Err(VerbCompileError(CompileError::ParseError {
-                error_position: CompileContext::new((line, column)),
-                end_line_col,
-                context: e.line().to_string(),
-                message: e.variant.message().to_string(),
-                details: Box::new(ParseErrorDetails::default()),
-            }));
+            return Err(VerbCompileError(
+                CompileError::ParseError {
+                    error_position: CompileContext::new((line, column)),
+                    end_line_col,
+                    context: e.line().to_string(),
+                    message: e.variant.message().to_string(),
+                    details: Box::new(ParseErrorDetails::default()),
+                },
+                String::new(),
+            ));
         }
     };
 
@@ -986,8 +1067,15 @@ fn parse_verb_decl(
     let program = match verb_body.as_rule() {
         Rule::verb_statements => {
             // Extract just the statements text (everything between verb declaration and endverb)
-            let statements_text = verb_body.into_inner().as_str();
-            compile(statements_text, compile_options.clone()).map_err(VerbCompileError)?
+            let (verb_start_line, _verb_start_col) = verb_body.line_col();
+            let statements_inner = verb_body.into_inner();
+            let statements_text = statements_inner.as_str();
+
+            compile(statements_text, compile_options.clone()).map_err(|e| {
+                // Offset the error's line number by the verb's starting line in the file
+                let adjusted_error = offset_compile_error(e, verb_start_line - 1);
+                VerbCompileError(adjusted_error, statements_text.to_string())
+            })?
         }
         _ => {
             panic!("Expected verb body, got {verb_body:?}");

@@ -69,65 +69,106 @@ pub fn emit_compile_error(
     source_name: &str,
     use_color: bool,
 ) {
-    let CompileError::ParseError {
+    // Handle ParseError specially with full span information
+    if let CompileError::ParseError {
         message, details, ..
     } = error
-    else {
-        eprintln!("Compile error: {}", error);
-        return;
-    };
+    {
+        let Some(src) = source else {
+            eprintln!("Parse error: {}", message);
+            return;
+        };
 
-    let Some(src) = source else {
-        eprintln!("Parse error: {}", message);
-        return;
-    };
+        let Some((start, end)) = details.span else {
+            eprintln!("Parse error: {}", message);
+            return;
+        };
 
-    let Some((start, end)) = details.span else {
-        eprintln!("Parse error: {}", message);
-        return;
-    };
+        let report = Report::build(ReportKind::Error, source_name, start)
+            .with_config(
+                Config::default()
+                    .with_color(use_color)
+                    .with_char_set(CharSet::Unicode),
+            )
+            .with_message(message)
+            .with_label(Label::new((source_name, start..end)).with_message("parser stopped here"))
+            .finish();
 
-    let report = Report::build(ReportKind::Error, source_name, start)
-        .with_config(
-            Config::default()
-                .with_color(use_color)
-                .with_char_set(CharSet::Unicode),
-        )
-        .with_message(message)
-        .with_label(Label::new((source_name, start..end)).with_message("parser stopped here"))
-        .finish();
+        let mut stderr = io::stderr().lock();
+        let _ = report.write((source_name, Source::from(src)), &mut stderr);
+        let _ = stderr.flush();
 
-    let mut stderr = io::stderr().lock();
-    let _ = report.write((source_name, Source::from(src)), &mut stderr);
-    let _ = stderr.flush();
-
-    // Add helpful notes after the main report
-    if details.expected_tokens.is_empty() && details.notes.is_empty() {
-        return;
-    }
-
-    let _ = writeln!(&mut stderr);
-
-    if !details.expected_tokens.is_empty() {
-        let quoted: Vec<String> = details
-            .expected_tokens
-            .iter()
-            .map(|token| format!("`{}`", token))
-            .collect();
-
-        if quoted.len() == 1 {
-            let _ = writeln!(&mut stderr, "help: expected token {}", quoted[0]);
-        } else {
-            let _ = writeln!(
-                &mut stderr,
-                "help: expected one of {}",
-                format_list(quoted.iter().map(|s| s.as_str()))
-            );
+        // Add helpful notes after the main report
+        if details.expected_tokens.is_empty() && details.notes.is_empty() {
+            return;
         }
+
+        let _ = writeln!(&mut stderr);
+
+        if !details.expected_tokens.is_empty() {
+            let quoted: Vec<String> = details
+                .expected_tokens
+                .iter()
+                .map(|token| format!("`{}`", token))
+                .collect();
+
+            if quoted.len() == 1 {
+                let _ = writeln!(&mut stderr, "help: expected token {}", quoted[0]);
+            } else {
+                let _ = writeln!(
+                    &mut stderr,
+                    "help: expected one of {}",
+                    format_list(quoted.iter().map(|s| s.as_str()))
+                );
+            }
+        }
+
+        for note in &details.notes {
+            let _ = writeln!(&mut stderr, "help: {}", note);
+        }
+        return;
     }
 
-    for note in &details.notes {
-        let _ = writeln!(&mut stderr, "help: {}", note);
+    // For all other compile errors, show file/line/column info with source context
+    let context = error.context();
+    let (line, col) = context.line_col;
+
+    // If we have source, create a simple single-point report
+    if let Some(src) = source {
+        // Convert line/col to byte offset
+        let mut current_line = 1;
+        let mut current_col = 1;
+        let mut offset = 0;
+
+        for (idx, ch) in src.char_indices() {
+            if current_line == line && current_col == col {
+                offset = idx;
+                break;
+            }
+            if ch == '\n' {
+                current_line += 1;
+                current_col = 1;
+            } else {
+                current_col += 1;
+            }
+        }
+
+        let report = Report::build(ReportKind::Error, source_name, offset)
+            .with_config(
+                Config::default()
+                    .with_color(use_color)
+                    .with_char_set(CharSet::Unicode),
+            )
+            .with_message(&error.to_string())
+            .with_label(Label::new((source_name, offset..offset + 1)))
+            .finish();
+
+        let mut stderr = io::stderr().lock();
+        let _ = report.write((source_name, Source::from(src)), &mut stderr);
+        let _ = stderr.flush();
+    } else {
+        // No source available, just show file:line:col and message
+        eprintln!("{}:{}:{}: {}", source_name, line, col, error);
     }
 }
 

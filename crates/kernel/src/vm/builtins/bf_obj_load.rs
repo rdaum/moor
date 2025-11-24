@@ -488,12 +488,14 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let result = match loader_result {
         Ok(results) => results,
         Err(e) => {
-            if let Some((_, compile_error)) = e.compile_error() {
-                let formatted = format_compile_error(
-                    compile_error,
-                    Some(&object_definition),
-                    diagnostic_options,
-                );
+            if let Some((_, compile_error, verb_source)) = e.compile_error() {
+                let source_to_use = if !verb_source.is_empty() {
+                    Some(verb_source)
+                } else {
+                    Some(object_definition.as_str())
+                };
+                let formatted =
+                    format_compile_error(compile_error, source_to_use, diagnostic_options);
                 let message = formatted.join("\n");
                 return Err(BfErr::ErrValue(E_INVARG.msg(message)));
             }

@@ -107,22 +107,27 @@ fn acquire_data_directory_lock(data_dir: &PathBuf) -> Result<File, Report> {
     }
 }
 
-fn log_objdef_compile_error(path: &str, compile_error: &CompileError) {
-    let source = if path != "<string>" {
+fn log_objdef_compile_error(path: &str, compile_error: &CompileError, verb_source: &str) {
+    let (source, source_name) = if !verb_source.is_empty() {
+        (
+            Some(verb_source.to_string()),
+            format!("{} (verb body)", path),
+        )
+    } else if path != "<string>" {
         match fs::read_to_string(path) {
-            Ok(text) => Some(text),
+            Ok(text) => (Some(text), path.to_string()),
             Err(err) => {
                 error!("Failed to read {path} for diagnostic rendering: {err}");
-                None
+                (None, path.to_string())
             }
         }
     } else {
-        None
+        (None, path.to_string())
     };
 
     let use_color = io::stderr().is_terminal();
     eprintln!();
-    emit_compile_error(compile_error, source.as_deref(), path, use_color);
+    emit_compile_error(compile_error, source.as_deref(), &source_name, use_color);
 }
 
 fn perform_import(
@@ -146,8 +151,8 @@ fn perform_import(
             ) {
                 Ok(results) => results,
                 Err(e) => {
-                    if let Some((source, compile_error)) = e.compile_error() {
-                        log_objdef_compile_error(source, compile_error);
+                    if let Some((source, compile_error, verb_source)) = e.compile_error() {
+                        log_objdef_compile_error(source, compile_error, verb_source);
                         return Err(eyre::eyre!("Failed to compile object definitions"));
                     }
                     return Err(Report::new(e));

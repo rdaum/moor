@@ -101,12 +101,13 @@ impl ObjdefLoaderError {
         }
     }
 
-    pub fn compile_error(&self) -> Option<(&str, &CompileError)> {
+    pub fn compile_error(&self) -> Option<(&str, &CompileError, &str)> {
         match self {
             ObjdefLoaderError::ObjectDefParseError(source, box_error) => {
-                if let moor_compiler::ObjDefParseError::VerbCompileError(error) = box_error.as_ref()
+                if let moor_compiler::ObjDefParseError::VerbCompileError(error, verb_source) =
+                    box_error.as_ref()
                 {
-                    Some((source.as_str(), error))
+                    Some((source.as_str(), error, verb_source.as_str()))
                 } else {
                     None
                 }

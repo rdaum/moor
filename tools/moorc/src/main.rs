@@ -127,23 +127,23 @@ fn emit_objdef_compile_error(
     compile_error: &CompileError,
     inline_source: Option<&str>,
 ) {
-    let source = if let Some(source) = inline_source {
-        Some(source.to_string())
+    let (source, source_name) = if let Some(source) = inline_source {
+        (Some(source.to_string()), format!("{} (verb body)", path))
     } else if path != "<string>" {
         match fs::read_to_string(path) {
-            Ok(text) => Some(text),
+            Ok(text) => (Some(text), path.to_string()),
             Err(err) => {
                 error!("Failed to read {path} for diagnostic rendering: {err}");
-                None
+                (None, path.to_string())
             }
         }
     } else {
-        None
+        (None, path.to_string())
     };
 
     let use_color = io::stderr().is_terminal();
     eprintln!();
-    emit_compile_error(compile_error, source.as_deref(), path, use_color);
+    emit_compile_error(compile_error, source.as_deref(), &source_name, use_color);
 }
 
 fn run_tests(
@@ -288,8 +288,13 @@ fn main() -> Result<(), eyre::Report> {
                 results.commit
             }
             Err(e) => {
-                if let Some((source, compile_error)) = e.compile_error() {
-                    emit_objdef_compile_error(source, compile_error, None);
+                if let Some((file_path, compile_error, verb_source)) = e.compile_error() {
+                    let source_to_use = if !verb_source.is_empty() {
+                        Some(verb_source)
+                    } else {
+                        None
+                    };
+                    emit_objdef_compile_error(file_path, compile_error, source_to_use);
                     error!("Object load failed");
                     return Ok(());
                 }
