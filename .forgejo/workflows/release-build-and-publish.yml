@@ -130,7 +130,7 @@ jobs:
 
   create_release:
     needs: build_and_publish
-    runs-on: ubuntu-latest
+    runs-on: linux-x86
     steps:
       - uses: actions/checkout@v4
         with:
