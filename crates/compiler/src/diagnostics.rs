@@ -20,7 +20,7 @@ use std::{
     ops::Range,
 };
 
-use ariadne::{CharSet, Config, Label, Report, ReportKind, Source};
+use ariadne::{CharSet, Config, Label, Report, ReportKind, Source, sources};
 use itertools::Itertools;
 use moor_var::{Symbol, Var, v_int, v_list, v_map, v_str, v_sym};
 use pest::error::{Error, ErrorVariant, InputLocation};
@@ -84,18 +84,21 @@ pub fn emit_compile_error(
             return;
         };
 
-        let report = Report::build(ReportKind::Error, source_name, start)
+        let source_id = source_name.to_string();
+        let report = Report::build(ReportKind::Error, (source_id.clone(), start..end))
             .with_config(
                 Config::default()
                     .with_color(use_color)
                     .with_char_set(CharSet::Unicode),
             )
             .with_message(message)
-            .with_label(Label::new((source_name, start..end)).with_message("parser stopped here"))
+            .with_label(
+                Label::new((source_id.clone(), start..end)).with_message("parser stopped here"),
+            )
             .finish();
 
         let mut stderr = io::stderr().lock();
-        let _ = report.write((source_name, Source::from(src)), &mut stderr);
+        let _ = report.write(sources([(source_id, src)]), &mut stderr);
         let _ = stderr.flush();
 
         // Add helpful notes after the main report
@@ -153,18 +156,19 @@ pub fn emit_compile_error(
             }
         }
 
-        let report = Report::build(ReportKind::Error, source_name, offset)
+        let source_id = source_name.to_string();
+        let report = Report::build(ReportKind::Error, (source_id.clone(), offset..offset + 1))
             .with_config(
                 Config::default()
                     .with_color(use_color)
                     .with_char_set(CharSet::Unicode),
             )
             .with_message(error.to_string())
-            .with_label(Label::new((source_name, offset..offset + 1)))
+            .with_label(Label::new((source_id.clone(), offset..offset + 1)))
             .finish();
 
         let mut stderr = io::stderr().lock();
-        let _ = report.write((source_name, Source::from(src)), &mut stderr);
+        let _ = report.write(sources([(source_id, src)]), &mut stderr);
         let _ = stderr.flush();
     } else {
         // No source available, just show file:line:col and message
@@ -448,7 +452,7 @@ fn render_plain_context(
 }
 
 fn render_report(program_text: &str, summary: &str, span: Range<usize>, use_color: bool) -> String {
-    let mut builder = Report::build(ReportKind::Error, (), span.start)
+    let mut builder = Report::build(ReportKind::Error, span.clone())
         .with_config(
             Config::default()
                 .with_color(use_color)
