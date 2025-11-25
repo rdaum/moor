@@ -127,9 +127,19 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
                 });
 
                 if (oauth2Token) {
-                    onSystemMessage("Authenticated via OAuth2! Loading history...", 2);
+                    onSystemMessage(
+                        hasEventLogEncryption
+                            ? "Authenticated via OAuth2! Loading history..."
+                            : "Authenticated via OAuth2!",
+                        2,
+                    );
                 } else {
-                    onSystemMessage("Restoring session...", 2);
+                    onSystemMessage(
+                        hasEventLogEncryption
+                            ? "Restoring session..."
+                            : "Session restored",
+                        2,
+                    );
                 }
             } catch (error) {
                 console.error("Error validating auth token:", error);
@@ -309,7 +319,9 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
                 error: null,
             });
 
-            onSystemMessage("Authenticated! Loading history...", 2);
+            // Check if user has history encryption to show appropriate message
+            const hasHistory = localStorage.getItem(`moor_event_log_identity_${playerOid}`) !== null;
+            onSystemMessage(hasHistory ? "Authenticated! Loading history..." : "Authenticated!", 2);
 
             // TODO: Fetch and display historical events and current presentations
             // WebSocket connection will be handled by useWebSocket hook
@@ -364,10 +376,18 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
     }, []);
 
     const clearInitialAttach = useCallback(() => {
-        setAuthState(prev => ({
-            ...prev,
-            player: prev.player ? { ...prev.player, isInitialAttach: false } : null,
-        }));
+        setAuthState(prev => {
+            if (!prev.player) return prev;
+            // Check if user has history encryption - if not, keep isInitialAttach true
+            // so reconnects will trigger user_connected (otherwise they'd see a blank page)
+            const hasEventLogEncryption = localStorage.getItem(
+                `moor_event_log_identity_${prev.player.oid}`,
+            ) !== null;
+            return {
+                ...prev,
+                player: { ...prev.player, isInitialAttach: !hasEventLogEncryption },
+            };
+        });
     }, []);
 
     return {

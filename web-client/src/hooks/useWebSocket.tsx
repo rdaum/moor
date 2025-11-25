@@ -57,6 +57,8 @@ export const useWebSocket = (
     const isDisconnectingRef = useRef(false);
     const connectionStatusRef = useRef<WebSocketState["connectionStatus"]>("disconnected");
     const hasEverConnectedRef = useRef(false);
+    // Ref to current connect function - used by reconnect timeout to avoid stale closures
+    const connectRef = useRef<((mode: "connect" | "create") => Promise<void>) | null>(null);
 
     useEffect(() => {
         connectionStatusRef.current = wsState.connectionStatus;
@@ -144,7 +146,7 @@ export const useWebSocket = (
 
             if (player.isInitialAttach) {
                 queryParams.push("is_initial_attach=true");
-                console.log("[WebSocket] Initial attach after fresh login");
+                console.log("[WebSocket] Initial attach - will trigger user_connected");
             }
 
             if (sessionActive && clientToken && clientId) {
@@ -181,7 +183,7 @@ export const useWebSocket = (
                     onPlayerConnectedChange(true);
                 }
 
-                // Clear initial attach flag after first successful connection
+                // Notify parent to update isInitialAttach based on history encryption
                 if (player?.isInitialAttach && onInitialAttachComplete) {
                     onInitialAttachComplete();
                 }
@@ -235,12 +237,13 @@ export const useWebSocket = (
                     );
 
                     // Schedule reconnect for non-normal closures (only if we've connected before)
+                    // Uses connectRef to get current connect function, avoiding stale closure issues
                     const delay = 3000;
                     if (!reconnectTimeoutRef.current) {
                         reconnectTimeoutRef.current = window.setTimeout(() => {
                             reconnectTimeoutRef.current = null;
-                            if (connectionStatusRef.current !== "connected") {
-                                connect(mode);
+                            if (connectionStatusRef.current !== "connected" && connectRef.current) {
+                                connectRef.current(mode);
                             }
                         }, delay);
                     }
@@ -255,6 +258,11 @@ export const useWebSocket = (
             );
         }
     }, [handleMessage, onPlayerConnectedChange, onSystemMessage, player, onInitialAttachComplete]);
+
+    // Keep connectRef updated so reconnect timeouts use current function
+    useEffect(() => {
+        connectRef.current = connect;
+    }, [connect]);
 
     // Disconnect from WebSocket
     const disconnect = useCallback((reason?: string) => {

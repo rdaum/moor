@@ -1043,7 +1043,9 @@ function AppContent({
                     .then(async (historicalMessages) => {
                         setPendingHistoricalMessages(historicalMessages);
 
-                        showMessage("History loaded successfully", 2);
+                        if (historicalMessages.length > 0) {
+                            showMessage("History loaded successfully", 2);
+                        }
 
                         try {
                             await fetchCurrentPresentations(authToken, encryptionKeyForHistory);
