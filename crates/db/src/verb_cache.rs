@@ -21,19 +21,19 @@ use std::{
     sync::Arc,
 };
 
-/// Create an optimized cache key by packing Obj and Symbol into a single u64.
-/// Upper 32 bits: obj.id(), Lower 32 bits: symbol.compare_id()
-fn make_cache_key(obj: &Obj, symbol: &Symbol) -> u64 {
-    ((obj.as_u64()) << 32) | (symbol.compare_id() as u64)
+/// Create an optimized cache key by packing Obj and Symbol into a single u128.
+/// Upper 64 bits: obj.as_u64(), Lower 64 bits: symbol.compare_id()
+fn make_cache_key(obj: &Obj, symbol: &Symbol) -> u128 {
+    ((obj.as_u64() as u128) << 64) | (symbol.compare_id() as u128)
 }
 
 fn remove_entries_for_objects(
-    entries: &mut HashMap<u64, Option<VerbDef>, BuildHasherDefault<AHasher>>,
+    entries: &mut HashMap<u128, Option<VerbDef>, BuildHasherDefault<AHasher>>,
     obj_ids: &HashSet<u64>,
 ) -> usize {
     let before = entries.len();
     entries.retain(|key, _| {
-        let obj_id = key >> 32;
+        let obj_id = (key >> 64) as u64;
         !obj_ids.contains(&obj_id)
     });
     before - entries.len()
@@ -71,13 +71,13 @@ struct Inner {
     version: i64,
     flushed: bool,
 
-    entries: Arc<HashMap<u64, Option<VerbDef>, BuildHasherDefault<AHasher>>>,
+    entries: Arc<HashMap<u128, Option<VerbDef>, BuildHasherDefault<AHasher>>>,
     first_parent_with_verbs_cache: Arc<HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>>>,
 }
 
 impl Inner {
     /// Get a mutable reference to entries, cloning if necessary (copy-on-write)
-    fn entries_mut(&mut self) -> &mut HashMap<u64, Option<VerbDef>, BuildHasherDefault<AHasher>> {
+    fn entries_mut(&mut self) -> &mut HashMap<u128, Option<VerbDef>, BuildHasherDefault<AHasher>> {
         Arc::make_mut(&mut self.entries)
     }
 
