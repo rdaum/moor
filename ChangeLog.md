@@ -5,6 +5,51 @@ All notable changes to mooR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Book documentation for `parse_command` and related builtins
+- Object browser can be opened focused on a specific object from MOO code
+- Web client eval panel has proper return value MOO literal output
+
+### Changed
+
+- Upgraded ariadne library for compiler error reporting
+- Anonymous objects can now be transmitted over RPC to hosts (but not for use as a stored reference, e.g. not traced
+  for GC)
+- Dependency updates (Cargo, npm)
+
+### Fixed
+
+`daemon`:
+
+- Critical bug fix: property and verb cache keys now work correctly with UUID objids and anonymous objects (#575)
+- `handle_task_timeout` and `handle_uncaught_error` verbs now called correctly
+- Fixes to line numbers & file names in objdef compilation errors. They were showing inconsistently.
+
+`web-client`:
+
+- Web client reconnection (hopefully) no longer spams connection attempts (#567)
+- Web client disconnection events now fire correctly
+- Web-client object browser pre-selection fixes
+- Web client remembers user's encryption prompt choice
+
+packaging / release:
+
+- IPC socket directories for Debian package installs
+
+### Known Issues
+
+`web-client`:
+
+- TTS dictation inside "inset" panels constantly repeats itself as new events are added to them.
+- Odd formatting of spacing inside the fixed-width "ANSI graphics" eval error output
+
+- ?
+
+---
+
 ## [1.0-beta1] - 2025-11-18
 
 ### Status
@@ -16,13 +61,13 @@ performance optimization leading up to the 1.0 stable release.
 ### Added
 
 - Official pre-built Docker images available on Codeberg Container Registry
-  - `codeberg.org/timbran/moor:latest-x86_64` and `latest-aarch64` for backend services
-  - `codeberg.org/timbran/moor-frontend:latest-x86_64` and `latest-aarch64` for frontend
+    - `codeberg.org/timbran/moor:latest-x86_64` and `latest-aarch64` for backend services
+    - `codeberg.org/timbran/moor-frontend:latest-x86_64` and `latest-aarch64` for frontend
 - Debian packages published to Codeberg Debian package repository
 - Production deployment configurations in `deploy/` directory:
-  - `telnet-only/` - Minimal telnet-only setup
-  - `web-basic/` - Web-enabled HTTP deployment
-  - `web-ssl/` - Production HTTPS with Let's Encrypt
+    - `telnet-only/` - Minimal telnet-only setup
+    - `web-basic/` - Web-enabled HTTP deployment
+    - `web-ssl/` - Production HTTPS with Let's Encrypt
 - Comprehensive deployment documentation in README files
 - Formal ChangeLog documenting release history and stability commitments
 
@@ -30,10 +75,10 @@ performance optimization leading up to the 1.0 stable release.
 
 - **Database format is now stable**: Database format version `release-1.0.0` is locked for the beta
   period
-  - Pre-beta version 3.0.0 databases are automatically migrated to `release-1.0.0` on first startup
-  - Migration is a simple version marker update (no data format changes)
-  - No breaking format changes expected before stable 1.0 release
-  - LambdaMOO 1.8.x textdump databases continue to be fully supported
+    - Pre-beta version 3.0.0 databases are automatically migrated to `release-1.0.0` on first startup
+    - Migration is a simple version marker update (no data format changes)
+    - No breaking format changes expected before stable 1.0 release
+    - LambdaMOO 1.8.x textdump databases continue to be fully supported
 - Simplified database migration: Older pre-beta formats (1.0.0, 2.0.0) no longer supported for
   direct migration
 - Docker Compose examples now default to pre-built images from Codeberg
@@ -49,26 +94,6 @@ performance optimization leading up to the 1.0 stable release.
 ### Known Issues
 
 - None documented yet - this is the baseline for the 1.0-beta phase
-
----
-
-## [Unreleased]
-
-### Added
-
--
-
-### Changed
-
--
-
-### Fixed
-
--
-
-### Known Issues
-
--
 
 ---
 
