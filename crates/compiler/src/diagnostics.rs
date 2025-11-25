@@ -159,7 +159,7 @@ pub fn emit_compile_error(
                     .with_color(use_color)
                     .with_char_set(CharSet::Unicode),
             )
-            .with_message(&error.to_string())
+            .with_message(error.to_string())
             .with_label(Label::new((source_name, offset..offset + 1)))
             .finish();
 
