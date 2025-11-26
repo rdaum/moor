@@ -137,6 +137,9 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
+      - name: Install jq
+        run: apt-get update && apt-get install -y jq
+
       - name: Download all Debian packages
         uses: https://code.forgejo.org/forgejo/download-artifact@v4
         with:
