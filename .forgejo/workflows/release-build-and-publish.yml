@@ -30,7 +30,7 @@ jobs:
       x86_64-packages: ${{ steps.list-packages.outputs.x86_64 }}
       aarch64-packages: ${{ steps.list-packages.outputs.aarch64 }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: https://code.forgejo.org/actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
           submodules: 'true'
@@ -131,8 +131,9 @@ jobs:
   create_release:
     needs: build_and_publish
     runs-on: linux-x86
+    container: moor-ci:1.90.0
     steps:
-      - uses: actions/checkout@v4
+      - uses: https://code.forgejo.org/actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
 
@@ -171,11 +172,23 @@ jobs:
         env:
           FORGEJO_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
         run: |
+          # Get the release ID from the tag
+          RELEASE_ID=$(curl -s -H "Authorization: token $FORGEJO_TOKEN" \
+            https://codeberg.org/api/v1/repos/timbran/moor/releases/tags/${{ inputs.ref }} | jq -r '.id')
+
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+            echo "ERROR: Could not find release ID for tag ${{ inputs.ref }}"
+            exit 1
+          fi
+
+          echo "Found release ID: $RELEASE_ID"
+
           # Find all .deb files recursively
           find debian-artifacts -name "*.deb" -type f | while read deb_file; do
-            echo "Uploading $deb_file to release..."
+            filename=$(basename "$deb_file")
+            echo "Uploading $filename to release..."
             curl -X POST \
               -H "Authorization: token $FORGEJO_TOKEN" \
               -F "attachment=@$deb_file" \
-              https://codeberg.org/api/v1/repos/timbran/moor/releases/tags/${{ inputs.ref }}/assets
+              "https://codeberg.org/api/v1/repos/timbran/moor/releases/${RELEASE_ID}/assets?name=${filename}"
           done
