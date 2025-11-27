@@ -243,6 +243,15 @@ where
             dirty: false,
         }
     }
+
+    /// Mark this relation as fully loaded from its backing provider.
+    /// After this call, scans will skip provider I/O and use only cached data.
+    pub fn mark_fully_loaded(&self) {
+        let index = self.index.load();
+        let mut new_index = (**index).fork();
+        new_index.set_provider_fully_loaded(true);
+        self.index.store(Arc::new(new_index));
+    }
 }
 
 impl<Domain, Codomain, Source> Canonical<Domain, Codomain> for Relation<Domain, Codomain, Source>

@@ -224,9 +224,13 @@ macro_rules! define_relations {
                             .expect(concat!("Failed to seed ", stringify!($field)));
                     )*
 
-                    Relations {
+                    let relations = Relations {
                         $( $field: [<$field _relation>], )*
-                    }
+                    };
+                    // All data has been scanned from providers into cache - mark as fully loaded
+                    // to skip provider I/O on subsequent scans
+                    relations.mark_all_fully_loaded();
+                    relations
                 }
 
                 /// Stop all relation providers.
@@ -301,6 +305,12 @@ macro_rules! define_relations {
                 pub fn wait_for_write_barrier(&self, barrier_timestamp: Timestamp, timeout: std::time::Duration) -> Result<(), crate::tx_management::Error> {
                     $( self.$field.source().wait_for_write_barrier(barrier_timestamp, timeout)?; )*
                     Ok(())
+                }
+
+                /// Mark all relations as fully loaded from their backing providers.
+                /// After calling this, scans will skip provider I/O and use only cached data.
+                pub fn mark_all_fully_loaded(&self) {
+                    $( self.$field.mark_fully_loaded(); )*
                 }
             }
 

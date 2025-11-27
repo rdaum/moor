@@ -78,6 +78,12 @@ impl TxDB {
         let (storage, fresh) = MoorDB::open(path, database_config);
         (Self { storage }, fresh)
     }
+
+    /// Mark all relations as fully loaded from their backing providers.
+    /// Call this after bulk import operations to enable optimized reads.
+    pub fn mark_all_fully_loaded(&self) {
+        self.storage.mark_all_fully_loaded();
+    }
 }
 impl WorldStateSource for TxDB {
     fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {

@@ -543,6 +543,8 @@ fn main() -> Result<(), Report> {
 
                 exit(1);
             }
+            // Import succeeded - mark all relations as fully loaded to skip provider I/O
+            database.mark_all_fully_loaded();
         }
     }
 

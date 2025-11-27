@@ -397,6 +397,12 @@ impl MoorDB {
         self.keyspace.disk_space() as usize
     }
 
+    /// Mark all relations as fully loaded from their backing providers.
+    /// Call this after bulk import operations to enable optimized reads.
+    pub fn mark_all_fully_loaded(&self) {
+        self.relations.mark_all_fully_loaded();
+    }
+
     fn start_processing_thread(
         self: Arc<Self>,
         receiver: flume::Receiver<CommitSet>,
