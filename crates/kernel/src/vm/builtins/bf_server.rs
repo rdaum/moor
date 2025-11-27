@@ -181,33 +181,18 @@ fn bf_ftime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(ErrValue(E_ARGS.msg("ftime() requires 0 or 1 arguments")));
     }
 
-    // If argument is provided and equals 1, return uptime
-    if bf_args.args.len() == 1 {
-        let Some(arg) = bf_args.args[0].as_integer() else {
-            return Err(ErrValue(
-                E_TYPE.msg("ftime() requires an integer as the first argument"),
-            ));
-        };
+    // If argument is provided and equals 1/true, return uptime, otherwise, epoch time in float
+    if bf_args.args.len() == 1 && bf_args.args[1].is_true() {
+        // Use Instant::now() to get the current monotonic time
+        // We need to use a static to track the start time
+        use std::sync::OnceLock;
+        static START_TIME: OnceLock<Instant> = OnceLock::new();
 
-        if arg == 1 {
-            // Use Instant::now() to get the current monotonic time
-            // We need to use a static to track the start time
-            use std::sync::OnceLock;
-            static START_TIME: OnceLock<Instant> = OnceLock::new();
+        // Initialize on first call
+        let start = START_TIME.get_or_init(Instant::now);
+        let uptime = start.elapsed().as_secs_f64();
 
-            // Initialize on first call
-            let start = START_TIME.get_or_init(Instant::now);
-            let uptime = start.elapsed().as_secs_f64();
-
-            return Ok(Ret(v_float(uptime)));
-        } else if arg == 0 {
-            // ftime(0) behaves the same as ftime()
-            // Fall through to the default case
-        } else {
-            return Err(ErrValue(
-                E_INVARG.msg("ftime() requires 0 or 1 as the first argument"),
-            ));
-        }
+        return Ok(Ret(v_float(uptime)));
     }
 
     // Default: return time since Unix epoch as a float
