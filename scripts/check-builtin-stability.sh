@@ -12,7 +12,9 @@ BASE_REF="${1:-origin/main}"
 BUILTINS_FILE="crates/common/src/builtins.rs"
 
 extract_builtins() {
-  grep -oP 'mk_builtin\("\K[^"]+' "$1" || true
+  # Handle both single-line: mk_builtin("name", ...)
+  # and multi-line: mk_builtin(\n    "name", ...)
+  grep -ozP 'mk_builtin\(\s*"\K[^"]+' "$1" | tr '\0' '\n' || true
 }
 
 extract_builtins "$BUILTINS_FILE" > /tmp/pr_builtins.txt
