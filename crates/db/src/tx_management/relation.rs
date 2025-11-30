@@ -273,7 +273,12 @@ where
             return Ok(Some((entry.ts, entry.value.clone())));
         }
 
-        // Not in cache, need to insert from backing store
+        // If provider is fully loaded, not being in index means it doesn't exist
+        if index.is_provider_fully_loaded() {
+            return Ok(None);
+        }
+
+        // Provider not fully loaded - need to check backing store
         // Fork the index, insert the new entry, and swap it in
         let mut new_index = (**index).fork();
         if let Some((ts, codomain)) = self.source.get(domain)? {
@@ -289,8 +294,25 @@ where
     where
         F: Fn(&Domain, &Codomain) -> bool,
     {
-        let results = self.source.scan(&predicate)?;
         let index = self.index.load();
+
+        // If provider is fully loaded, scan directly from index
+        if index.is_provider_fully_loaded() {
+            let results: Vec<_> = index
+                .iter()
+                .filter_map(|(domain, entry)| {
+                    if predicate(domain, &entry.value) {
+                        Some((entry.ts, domain.clone(), entry.value.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            return Ok(results);
+        }
+
+        // Provider not fully loaded - need to scan backing source
+        let results = self.source.scan(&predicate)?;
         let mut new_index = (**index).fork();
 
         for (ts, domain, codomain) in &results {

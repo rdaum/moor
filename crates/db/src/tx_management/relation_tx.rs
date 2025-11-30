@@ -312,7 +312,12 @@ where
         // value for it. We'll then update our own copy, and create an operations log entry for the
         // update
 
-        // Not in the index, we check the backing source.
+        // If provider is fully loaded, not being in master means it doesn't exist
+        if self.index.provider_fully_loaded {
+            return Ok(None);
+        }
+
+        // Provider not fully loaded - check the backing source
         let Some((read_ts, backing_value)) = self.backing_source.get(domain)? else {
             // Not in the backing source, we can't update it.
             return Ok(None);
@@ -408,26 +413,27 @@ where
             return Ok(Some(old_value));
         }
 
-        // Check backing source for existing data
-        if let Some((read_ts, backing_value)) = self.backing_source.get(&domain)?
-            && read_ts < self.tx.ts
-        {
-            // Existing entry in backing - do update via local operation
-            self.index.local_operations.insert(
-                domain.clone(),
-                Op {
-                    read_ts,
-                    write_ts: self.tx.ts,
-                    operation: OpType::Update(value.clone()),
-                    guaranteed_unique: false,
-                },
-            );
-            self.index.has_local_mutations = true;
-            // Update local secondary index
-            return Ok(Some(backing_value));
-        }
+        // If provider not fully loaded, check backing source for existing data
+        if !self.index.provider_fully_loaded
+            && let Some((read_ts, backing_value)) = self.backing_source.get(&domain)?
+                && read_ts < self.tx.ts
+            {
+                // Existing entry in backing - do update via local operation
+                self.index.local_operations.insert(
+                    domain.clone(),
+                    Op {
+                        read_ts,
+                        write_ts: self.tx.ts,
+                        operation: OpType::Update(value.clone()),
+                        guaranteed_unique: false,
+                    },
+                );
+                self.index.has_local_mutations = true;
+                // Update local secondary index
+                return Ok(Some(backing_value));
+            }
 
-        // No existing entry anywhere - do insert via local operation
+        // No existing entry anywhere (or provider fully loaded) - do insert via local operation
         self.index.local_operations.insert(
             domain.clone(),
             Op {
@@ -473,7 +479,12 @@ where
                 continue;
             }
 
-            // Check backing source
+            // If provider fully loaded, not being in master means it doesn't exist
+            if self.index.provider_fully_loaded {
+                continue;
+            }
+
+            // Provider not fully loaded - check backing source
             if let Some((ts, _)) = self.backing_source.get(&domain)?
                 && ts <= self.tx.ts
             {
@@ -532,7 +543,12 @@ where
             return Ok(Some(entry.value.clone()));
         }
 
-        // Try upstream.
+        // If provider is fully loaded into master entries, not being there means it doesn't exist
+        if self.index.provider_fully_loaded {
+            return Ok(None);
+        }
+
+        // Provider not fully loaded - need to check backing source
         match self.backing_source.get(domain)? {
             Some((read_ts, value)) if read_ts < self.tx.ts => Ok(Some(value)),
             _ => Ok(None),
@@ -616,7 +632,12 @@ where
         // value for it. We'll then update our own copy, and create an operations log entry for the
         // update
 
-        // Not in the index, we check the backing source.
+        // If provider is fully loaded, not being in master means it doesn't exist
+        if self.index.provider_fully_loaded {
+            return Ok(None);
+        }
+
+        // Provider not fully loaded - check the backing source
         let Some((read_ts, backing_value)) = self.backing_source.get(domain)? else {
             // Not in the backing source, we can't update it.
             return Ok(None);
@@ -765,7 +786,12 @@ where
                 continue;
             }
 
-            // Check backing source as fallback
+            // If provider fully loaded, not being in master means it doesn't exist
+            if self.index.provider_fully_loaded {
+                continue;
+            }
+
+            // Provider not fully loaded - check backing source as fallback
             if let Some((ts, value)) = self.backing_source.get(domain)?
                 && ts <= self.tx.ts
             {

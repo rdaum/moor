@@ -1101,7 +1101,7 @@ impl WorldStateTransaction {
 
         // No local propflags entry - need to find the property definition in ancestry chain
         // and compute permissions lazily
-        let propdef = self.find_property_by_name_with_uuid(obj, uuid)?;
+        let propdef = self.find_property_by_uuid(obj, uuid)?;
         let defining_obj = propdef.definer();
 
         // Get the canonical permissions from the defining object
@@ -1130,11 +1130,7 @@ impl WorldStateTransaction {
     }
 
     // Helper function to find property definition by UUID instead of name
-    fn find_property_by_name_with_uuid(
-        &self,
-        obj: &Obj,
-        uuid: Uuid,
-    ) -> Result<PropDef, WorldStateError> {
+    fn find_property_by_uuid(&self, obj: &Obj, uuid: Uuid) -> Result<PropDef, WorldStateError> {
         // Walk up the ancestry chain looking for the property definition
         let ancestors = self.ancestors(obj, true)?;
         for ancestor in ancestors.iter() {
