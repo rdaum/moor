@@ -230,6 +230,7 @@ mod tests {
                     tx_counter += 1;
                     let tx = Tx {
                         ts: Timestamp(tx_counter),
+                        snapshot_version: 0,
                     };
                     let transaction = backing_store.clone().start(&tx);
                     backing_store.clone().start(&tx);

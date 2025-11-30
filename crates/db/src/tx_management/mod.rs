@@ -24,6 +24,7 @@ pub struct Timestamp(pub u64);
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Tx {
     pub ts: Timestamp,
+    pub snapshot_version: u64,
 }
 
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]

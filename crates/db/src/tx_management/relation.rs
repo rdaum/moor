@@ -201,6 +201,12 @@ where
             self.index.set_provider_fully_loaded(true);
         }
 
+        // Mark as dirty if we have mutations - critical for commit_all to swap the index
+        // This is needed when check() was skipped via the conflict-check optimization
+        if !working_set.is_empty() {
+            self.dirty = true;
+        }
+
         // Apply phase.
         for (domain, op) in working_set.tuples().into_iter() {
             match op.operation {
@@ -406,7 +412,10 @@ mod tests {
         let domain = TestDomain(1);
         let codomain = TestCodomain(1);
 
-        let tx = Tx { ts: Timestamp(1) };
+        let tx = Tx {
+            ts: Timestamp(1),
+            snapshot_version: 0,
+        };
         let mut lc = relation.clone().start(&tx);
         lc.insert(domain.clone(), codomain.clone()).unwrap();
         assert_eq!(lc.get(&domain).unwrap(), Some(codomain.clone()));
@@ -431,8 +440,14 @@ mod tests {
         let codomain_a = TestCodomain(1);
         let codomain_b = TestCodomain(2);
 
-        let tx_a = Tx { ts: Timestamp(0) };
-        let tx_b = Tx { ts: Timestamp(1) };
+        let tx_a = Tx {
+            ts: Timestamp(0),
+            snapshot_version: 0,
+        };
+        let tx_b = Tx {
+            ts: Timestamp(1),
+            snapshot_version: 0,
+        };
 
         let mut r_tx_a = relation.clone().start(&tx_a);
 
@@ -467,8 +482,14 @@ mod tests {
 
         let domain = TestDomain(1);
 
-        let tx_1 = Tx { ts: Timestamp(10) };
-        let tx_2 = Tx { ts: Timestamp(20) };
+        let tx_1 = Tx {
+            ts: Timestamp(10),
+            snapshot_version: 0,
+        };
+        let tx_2 = Tx {
+            ts: Timestamp(20),
+            snapshot_version: 0,
+        };
 
         // T1 reads the value
         let mut r_tx_1 = relation.clone().start(&tx_1);
@@ -504,8 +525,14 @@ mod tests {
 
         let domain = TestDomain(1);
 
-        let tx_1 = Tx { ts: Timestamp(10) };
-        let tx_2 = Tx { ts: Timestamp(20) };
+        let tx_1 = Tx {
+            ts: Timestamp(10),
+            snapshot_version: 0,
+        };
+        let tx_2 = Tx {
+            ts: Timestamp(20),
+            snapshot_version: 0,
+        };
 
         // Both transactions update the same key
         let mut r_tx_1 = relation.clone().start(&tx_1);
@@ -542,8 +569,14 @@ mod tests {
         let domain_1 = TestDomain(1);
         let domain_2 = TestDomain(2);
 
-        let tx_1 = Tx { ts: Timestamp(10) };
-        let tx_2 = Tx { ts: Timestamp(20) };
+        let tx_1 = Tx {
+            ts: Timestamp(10),
+            snapshot_version: 0,
+        };
+        let tx_2 = Tx {
+            ts: Timestamp(20),
+            snapshot_version: 0,
+        };
 
         // T1 scans for all entries (finds none)
         let mut r_tx_1 = relation.clone().start(&tx_1);
@@ -583,8 +616,14 @@ mod tests {
 
         let domain = TestDomain(1);
 
-        let tx_1 = Tx { ts: Timestamp(10) };
-        let tx_2 = Tx { ts: Timestamp(20) };
+        let tx_1 = Tx {
+            ts: Timestamp(10),
+            snapshot_version: 0,
+        };
+        let tx_2 = Tx {
+            ts: Timestamp(20),
+            snapshot_version: 0,
+        };
 
         // T1 deletes the entry
         let mut r_tx_1 = relation.clone().start(&tx_1);
@@ -621,7 +660,10 @@ mod tests {
         let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
 
         let domain = TestDomain(1);
-        let tx = Tx { ts: Timestamp(10) };
+        let tx = Tx {
+            ts: Timestamp(10),
+            snapshot_version: 0,
+        };
 
         let mut r_tx = relation.clone().start(&tx);
         let result = r_tx.update(&domain, TestCodomain(100)).unwrap();
@@ -645,7 +687,10 @@ mod tests {
 
         // Execute transactions in timestamp order
         for i in 1..=5 {
-            let tx = Tx { ts: Timestamp(i) };
+            let tx = Tx {
+                ts: Timestamp(i),
+                snapshot_version: 0,
+            };
             let mut r_tx = relation.clone().start(&tx);
 
             // Read current value and increment it
@@ -672,9 +717,18 @@ mod tests {
         let provider = Arc::new(TestProvider { data });
         let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
 
-        let tx_1 = Tx { ts: Timestamp(10) };
-        let tx_2 = Tx { ts: Timestamp(20) };
-        let tx_3 = Tx { ts: Timestamp(30) };
+        let tx_1 = Tx {
+            ts: Timestamp(10),
+            snapshot_version: 0,
+        };
+        let tx_2 = Tx {
+            ts: Timestamp(20),
+            snapshot_version: 0,
+        };
+        let tx_3 = Tx {
+            ts: Timestamp(30),
+            snapshot_version: 0,
+        };
 
         // T1: Update existing key and insert new key
         let mut r_tx_1 = relation.clone().start(&tx_1);
@@ -743,8 +797,14 @@ mod tests {
         let domain = TestDomain(1);
 
         // Start both transactions, older one reads first
-        let tx_older = Tx { ts: Timestamp(10) };
-        let tx_newer = Tx { ts: Timestamp(20) };
+        let tx_older = Tx {
+            ts: Timestamp(10),
+            snapshot_version: 0,
+        };
+        let tx_newer = Tx {
+            ts: Timestamp(20),
+            snapshot_version: 0,
+        };
 
         let mut r_tx_older = relation.clone().start(&tx_older);
         let _old_val = r_tx_older.get(&domain).unwrap().unwrap(); // Read with ts=10
@@ -776,7 +836,10 @@ mod tests {
         let provider = Arc::new(TestProvider { data });
         let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
 
-        let tx = Tx { ts: Timestamp(10) };
+        let tx = Tx {
+            ts: Timestamp(10),
+            snapshot_version: 0,
+        };
         let mut r_tx = relation.clone().start(&tx);
 
         // Read both keys - they should be consistent
@@ -828,7 +891,10 @@ mod tests {
         let codomain_a = TestCodomain(100);
         let codomain_b = TestCodomain(200);
 
-        let tx = Tx { ts: Timestamp(10) };
+        let tx = Tx {
+            ts: Timestamp(10),
+            snapshot_version: 0,
+        };
         let mut r_tx = relation.clone().start(&tx);
 
         // Insert entries
@@ -854,7 +920,10 @@ mod tests {
         cr.commit(relation.index());
 
         // Test that committed secondary index state is visible in new transaction
-        let tx2 = Tx { ts: Timestamp(20) };
+        let tx2 = Tx {
+            ts: Timestamp(20),
+            snapshot_version: 0,
+        };
         let r_tx2 = relation.clone().start(&tx2);
 
         let committed_result_a = r_tx2.get_by_codomain(&codomain_a);

@@ -120,13 +120,6 @@ macro_rules! define_relations {
                     true $( && self.$field.check(&ws.$field).is_ok() )*
                 }
 
-                /// Check if all relation checkers are clean (no pending changes).
-                ///
-                /// Returns `true` if no relations have pending changes, `false` otherwise.
-                fn all_clean(&self) -> bool {
-                    true $( && !self.$field.dirty() )*
-                }
-
                 /// Apply all working sets to their respective relations.
                 ///
                 /// Consumes the working sets and applies them to the relations.

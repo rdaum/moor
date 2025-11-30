@@ -251,6 +251,7 @@ impl MoorDB {
                     self.monotonic
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
                 ),
+                snapshot_version: v1,
             };
 
             let caches = self.caches.load();
@@ -482,16 +483,27 @@ impl MoorDB {
 
                     // Get the transaction timestamp and mutations flag before extracting working sets
                     let tx_timestamp = ws.tx.ts;
+                    let snapshot_version = ws.tx.snapshot_version;
                     let has_mutations = ws.has_mutations;
                     let (relation_ws, verb_cache, prop_cache, ancestry_cache) = ws.extract_relation_working_sets();
+
+                    // Optimization: If no commits completed since transaction start, skip conflict checking.
+                    // The transaction already validated against its snapshot when creating operations.
+                    // If the snapshot is still current (commit_version unchanged), those validations remain valid.
+                    let current_version = this.commit_version.load(std::sync::atomic::Ordering::Acquire);
+                    let skip_conflict_check = snapshot_version == current_version;
+
                     {
-                        if !checkers.check_all(&relation_ws) {
+                        // Conflict validation - can skip if no concurrent commits
+                        if !skip_conflict_check && !checkers.check_all(&relation_ws) {
                             reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         }
                         drop(_t);
 
-                        if checkers.all_clean() {
+                        // Mutation detection - use has_mutations since we might have skipped check_all
+                        // (which normally sets the dirty flags that all_clean checks)
+                        if !has_mutations {
                             reply.send(CommitResult::Success {
                                 mutations_made: false,
                                 timestamp: tx_timestamp.0,
