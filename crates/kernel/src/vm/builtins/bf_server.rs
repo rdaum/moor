@@ -182,7 +182,7 @@ fn bf_ftime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     // If argument is provided and equals 1/true, return uptime, otherwise, epoch time in float
-    if bf_args.args.len() == 1 && bf_args.args[1].is_true() {
+    if bf_args.args.len() == 1 && bf_args.args[0].is_true() {
         // Use Instant::now() to get the current monotonic time
         // We need to use a static to track the start time
         use std::sync::OnceLock;
