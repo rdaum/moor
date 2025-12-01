@@ -1155,30 +1155,32 @@ impl MoorClient {
                             .map_err(|e| eyre!("Missing objects: {}", e))?;
                         let mut result = Vec::new();
                         for obj in objects.iter().flatten() {
-                            // Format object flags (u=user, p=programmer, w=wizard, r=read, W=write, f=fertile)
+                            // Format object flags using MOO builtin property names
                             let flag_bits = obj.flags().ok().unwrap_or(0);
-                            let mut flags = String::new();
+                            let mut flag_parts = Vec::new();
                             if flag_bits & 0x01 != 0 {
-                                flags.push('u');
-                            } // User
-                            if flag_bits & 0x02 != 0 {
-                                flags.push('p');
-                            } // Programmer
-                            if flag_bits & 0x04 != 0 {
-                                flags.push('w');
-                            } // Wizard
-                            if flag_bits & 0x10 != 0 {
-                                flags.push('r');
-                            } // Read
-                            if flag_bits & 0x20 != 0 {
-                                flags.push('W');
-                            } // Write
-                            if flag_bits & 0x80 != 0 {
-                                flags.push('f');
-                            } // Fertile
-                            if flags.is_empty() {
-                                flags.push_str("none");
+                                flag_parts.push("player");
                             }
+                            if flag_bits & 0x02 != 0 {
+                                flag_parts.push("programmer");
+                            }
+                            if flag_bits & 0x04 != 0 {
+                                flag_parts.push("wizard");
+                            }
+                            if flag_bits & 0x10 != 0 {
+                                flag_parts.push("r");
+                            }
+                            if flag_bits & 0x20 != 0 {
+                                flag_parts.push("w");
+                            }
+                            if flag_bits & 0x80 != 0 {
+                                flag_parts.push("f");
+                            }
+                            let flags = if flag_parts.is_empty() {
+                                "none".to_string()
+                            } else {
+                                flag_parts.join(" ")
+                            };
                             result.push(ObjectInfo {
                                 obj: obj.obj().map(|o| format!("{:?}", o)).unwrap_or_default(),
                                 name: obj

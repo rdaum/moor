@@ -264,9 +264,9 @@ pub async fn execute_moo_dump_object(
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
-    // Build the MOO expression: dump_object(obj, [`constants -> 1])
+    // Build the MOO expression: dump_object(obj, ['constants -> 1])
     let expr = if use_constants {
-        format!("return dump_object({}, [`constants -> 1]);", object_str)
+        format!("return dump_object({}, ['constants -> 1]);", object_str)
     } else {
         format!("return dump_object({});", object_str)
     };

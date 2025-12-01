@@ -275,6 +275,7 @@ All objects have these server-provided properties:
 - `.owner` (object) - who controls access
 - `.location` (object) - where it physically is (read-only, use `move()`)
 - `.contents` (list) - objects inside (read-only, modified by `move()`)
+- `is_player(obj)` (function) - checks if object is a player
 - `.programmer` (bool) - has programmer rights
 - `.wizard` (bool) - has superuser rights
 - `.r` (bool) - publicly readable
@@ -457,18 +458,27 @@ verb check_access (this none this) owner: #2 flags: "rxd"
   caller_perms().wizard || raise(E_PERM);
 ```
 
-## Object Flags
+## Object Builtin Properties (Flags)
 
-| Flag | Name | Meaning |
-|------|------|---------|
-| `u` | User | Object is a player/user |
-| `p` | Programmer | Can write and execute code |
-| `w` | Wizard | Superuser - bypasses most permission checks |
-| `r` | Read | Anyone can see property values |
-| `W` | Write | Anyone can modify properties (capital W) |
-| `f` | Fertile | Can be used as parent for new objects |
+Objects have builtin properties that control permissions and capabilities. These are accessed
+as regular properties (e.g., `obj.programmer`) or via functions (e.g., `is_player(obj)`):
 
-Example: `"upw"` = user, programmer, and wizard flags set.
+| Property | Type | Meaning |
+|----------|------|---------|
+| `is_player(obj)` | function | Object is a player/user (can login) |
+| `.programmer` | bool | Can write and execute code |
+| `.wizard` | bool | Superuser - bypasses most permission checks |
+| `.r` | bool | Publicly readable (anyone can see property values) |
+| `.w` | bool | Publicly writable (anyone can modify properties) |
+| `.f` | bool | Fertile (can be used as parent for new objects) |
+
+```moo
+// Example: check and set flags
+obj.programmer = 1;
+if (obj.wizard)
+  notify(player, "This is a wizard!");
+endif
+```
 
 ## Property Flags
 

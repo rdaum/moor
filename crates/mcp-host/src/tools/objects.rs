@@ -290,8 +290,9 @@ pub async fn execute_moo_resolve(client: &mut MoorClient, args: &Value) -> Resul
         .ok_or_else(|| eyre::eyre!("Missing 'object' parameter"))?;
 
     // Build a MOO expression that returns rich object information
+    // Return builtin properties as separate booleans, matching MOO's property style
     let expr = format!(
-        r#"o = {}; if (!valid(o)) return E_INVARG; endif flags = ""; if (is_player(o)) flags = flags + "p"; endif if (`o.programmer ! E_PROPNF => 0') flags = flags + "r"; endif if (`o.wizard ! E_PROPNF => 0') flags = flags + "w"; endif return ["obj" -> o, "name" -> o.name, "parent" -> parent(o), "children" -> children(o), "location" -> `o.location ! E_PROPNF => #-1', "contents" -> `o.contents ! E_PROPNF => {{}}', "owner" -> o.owner, "flags" -> flags, "verb_count" -> length(verbs(o)), "prop_count" -> length(properties(o))];"#,
+        r#"o = {}; if (!valid(o)) return E_INVARG; endif return ["obj" -> o, "name" -> o.name, "parent" -> parent(o), "children" -> children(o), "location" -> `o.location ! E_PROPNF => #-1', "contents" -> `o.contents ! E_PROPNF => {{}}', "owner" -> o.owner, "player" -> is_player(o), "programmer" -> `o.programmer ! E_PROPNF => 0', "wizard" -> `o.wizard ! E_PROPNF => 0', "r" -> `o.r ! E_PROPNF => 0', "w" -> `o.w ! E_PROPNF => 0', "f" -> `o.f ! E_PROPNF => 0', "verb_count" -> length(verbs(o)), "prop_count" -> length(properties(o))];"#,
         object_str
     );
 
@@ -301,68 +302,43 @@ pub async fn execute_moo_resolve(client: &mut MoorClient, args: &Value) -> Resul
             if let Some(map) = var.as_map() {
                 let mut output = String::new();
 
-                // Extract values from map
-                let obj = map
-                    .iter()
-                    .find(|(k, _)| var_key_eq(k, "obj"))
-                    .map(|(_, v)| format_var(&v))
-                    .unwrap_or_default();
-                let name = map
-                    .iter()
-                    .find(|(k, _)| var_key_eq(k, "name"))
-                    .map(|(_, v)| format_var(&v))
-                    .unwrap_or_default();
-                let parent = map
-                    .iter()
-                    .find(|(k, _)| var_key_eq(k, "parent"))
-                    .map(|(_, v)| format_var(&v))
-                    .unwrap_or_default();
-                let children = map
-                    .iter()
-                    .find(|(k, _)| var_key_eq(k, "children"))
-                    .map(|(_, v)| format_var(&v))
-                    .unwrap_or_default();
-                let location = map
-                    .iter()
-                    .find(|(k, _)| var_key_eq(k, "location"))
-                    .map(|(_, v)| format_var(&v))
-                    .unwrap_or_default();
-                let contents = map
-                    .iter()
-                    .find(|(k, _)| var_key_eq(k, "contents"))
-                    .map(|(_, v)| format_var(&v))
-                    .unwrap_or_default();
-                let owner = map
-                    .iter()
-                    .find(|(k, _)| var_key_eq(k, "owner"))
-                    .map(|(_, v)| format_var(&v))
-                    .unwrap_or_default();
-                let flags = map
-                    .iter()
-                    .find(|(k, _)| var_key_eq(k, "flags"))
-                    .map(|(_, v)| format_var(&v))
-                    .unwrap_or_default();
-                let verb_count = map
-                    .iter()
-                    .find(|(k, _)| var_key_eq(k, "verb_count"))
-                    .map(|(_, v)| format_var(&v))
-                    .unwrap_or_default();
-                let prop_count = map
-                    .iter()
-                    .find(|(k, _)| var_key_eq(k, "prop_count"))
-                    .map(|(_, v)| format_var(&v))
-                    .unwrap_or_default();
+                // Helper to extract a value from the map
+                let get_val = |key: &str| -> String {
+                    map.iter()
+                        .find(|(k, _)| var_key_eq(k, key))
+                        .map(|(_, v)| format_var(&v))
+                        .unwrap_or_default()
+                };
 
-                output.push_str(&format!("Object: {} {}\n", obj, name));
-                output.push_str(&format!("  Parent: {}\n", parent));
-                output.push_str(&format!("  Children: {}\n", children));
-                output.push_str(&format!("  Location: {}\n", location));
-                output.push_str(&format!("  Contents: {}\n", contents));
-                output.push_str(&format!("  Owner: {}\n", owner));
-                output.push_str(&format!("  Flags: {}\n", flags));
+                // Helper to check if a value is truthy (for builtin properties)
+                let is_truthy = |key: &str| -> bool {
+                    map.iter()
+                        .find(|(k, _)| var_key_eq(k, key))
+                        .map(|(_, v)| {
+                            v.as_integer().map(|i| i != 0).unwrap_or(false)
+                                || v.as_bool().unwrap_or(false)
+                        })
+                        .unwrap_or(false)
+                };
+
+                output.push_str(&format!("Object: {} {}\n", get_val("obj"), get_val("name")));
+                output.push_str(&format!("  Parent: {}\n", get_val("parent")));
+                output.push_str(&format!("  Children: {}\n", get_val("children")));
+                output.push_str("  Builtin properties:\n");
+                output.push_str(&format!("    name: {}\n", get_val("name")));
+                output.push_str(&format!("    owner: {}\n", get_val("owner")));
+                output.push_str(&format!("    location: {}\n", get_val("location")));
+                output.push_str(&format!("    contents: {}\n", get_val("contents")));
+                output.push_str(&format!("    player: {}\n", is_truthy("player")));
+                output.push_str(&format!("    programmer: {}\n", is_truthy("programmer")));
+                output.push_str(&format!("    wizard: {}\n", is_truthy("wizard")));
+                output.push_str(&format!("    r: {}\n", is_truthy("r")));
+                output.push_str(&format!("    w: {}\n", is_truthy("w")));
+                output.push_str(&format!("    f: {}\n", is_truthy("f")));
                 output.push_str(&format!(
                     "  Verbs: {}, Properties: {}",
-                    verb_count, prop_count
+                    get_val("verb_count"),
+                    get_val("prop_count")
                 ));
 
                 Ok(ToolCallResult::text(output))
