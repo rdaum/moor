@@ -18,7 +18,7 @@
 
 use crate::mcp_types::*;
 use crate::moor_client::MoorClient;
-use crate::{resources, tools};
+use crate::{prompts, resources, tools};
 use eyre::Result;
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -143,8 +143,9 @@ impl McpServer {
             "resources/list" => self.handle_resources_list().await,
             "resources/read" => self.handle_resources_read(&params).await,
 
-            // Prompt methods (we don't have any prompts yet)
-            "prompts/list" => Ok(json!({ "prompts": [] })),
+            // Prompt methods
+            "prompts/list" => self.handle_prompts_list().await,
+            "prompts/get" => self.handle_prompts_get(&params).await,
 
             // Ping
             "ping" => Ok(json!({})),
@@ -265,6 +266,25 @@ impl McpServer {
         let result = resources::read_resource(&mut self.client, &read_params.uri)
             .await
             .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+
+        Ok(serde_json::to_value(result).unwrap())
+    }
+
+    /// Handle prompts/list request
+    async fn handle_prompts_list(&self) -> Result<Value, JsonRpcError> {
+        let result = PromptsListResponse {
+            prompts: prompts::get_prompts(),
+        };
+        Ok(serde_json::to_value(result).unwrap())
+    }
+
+    /// Handle prompts/get request
+    async fn handle_prompts_get(&self, params: &Value) -> Result<Value, JsonRpcError> {
+        let get_params: PromptGetParams = serde_json::from_value(params.clone())
+            .map_err(|e| JsonRpcError::invalid_params(e.to_string()))?;
+
+        let result = prompts::get_prompt(&get_params.name)
+            .ok_or_else(|| JsonRpcError::invalid_params(format!("Unknown prompt: {}", get_params.name)))?;
 
         Ok(serde_json::to_value(result).unwrap())
     }

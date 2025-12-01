@@ -370,9 +370,27 @@ pub struct PromptArgument {
     pub required: bool,
 }
 
-/// Prompts list result
+/// Prompts list result (for prompts/list)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
-pub struct PromptsListResult {
+pub struct PromptsListResponse {
     pub prompts: Vec<Prompt>,
+}
+
+/// Prompt get result (for prompts/get)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptsListResult {
+    pub messages: Vec<PromptMessage>,
+}
+
+/// Prompt message content
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptMessage {
+    pub role: String,
+    pub content: String,
+}
+
+/// Prompt get params
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptGetParams {
+    pub name: String,
 }

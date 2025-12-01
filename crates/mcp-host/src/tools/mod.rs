@@ -48,6 +48,7 @@ pub fn get_tools() -> Vec<Tool> {
         eval::tool_moo_eval(),
         eval::tool_moo_command(),
         eval::tool_moo_invoke_verb(),
+        eval::tool_moo_function_help(),
         // Object inspection tools
         objects::tool_moo_list_objects(),
         objects::tool_moo_resolve(),
@@ -98,6 +99,7 @@ pub async fn execute_tool(
         "moo_eval" => eval::execute_moo_eval(client, arguments).await,
         "moo_command" => eval::execute_moo_command(client, arguments).await,
         "moo_invoke_verb" => eval::execute_moo_invoke_verb(client, arguments).await,
+        "moo_function_help" => eval::execute_moo_function_help(client, arguments).await,
         // Object inspection tools
         "moo_list_objects" => objects::execute_moo_list_objects(client, arguments).await,
         "moo_resolve" => objects::execute_moo_resolve(client, arguments).await,

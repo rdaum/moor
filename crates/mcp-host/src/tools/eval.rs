@@ -95,6 +95,25 @@ pub fn tool_moo_invoke_verb() -> Tool {
     }
 }
 
+pub fn tool_moo_function_help() -> Tool {
+    Tool {
+        name: "moo_function_help".to_string(),
+        description: "Get documentation for a MOO builtin function. Returns usage information, \
+            argument types, and description for functions like 'notify', 'move', 'create', etc."
+            .to_string(),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "function_name": {
+                    "type": "string",
+                    "description": "Name of the builtin function (e.g., 'notify', 'move', 'create', 'eval')"
+                }
+            },
+            "required": ["function_name"]
+        }),
+    }
+}
+
 // ============================================================================
 // Tool Implementations
 // ============================================================================
@@ -148,4 +167,21 @@ pub async fn execute_moo_invoke_verb(
 
     let result = client.invoke_verb(&object, verb, moo_args).await?;
     Ok(format_task_result(&result))
+}
+
+pub async fn execute_moo_function_help(
+    client: &mut MoorClient,
+    args: &Value,
+) -> Result<ToolCallResult> {
+    let function_name = args
+        .get("function_name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'function_name' parameter"))?;
+
+    let expression = format!("return function_help(\"{}\");", function_name);
+
+    match client.eval(&expression).await? {
+        MoorResult::Success(var) => Ok(ToolCallResult::text(format_var(&var))),
+        MoorResult::Error(msg) => Ok(ToolCallResult::error(msg)),
+    }
 }
