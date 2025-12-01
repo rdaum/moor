@@ -22,7 +22,7 @@ use serde_json::Value;
 /// Helper to check if a Var's string value matches a key (case-insensitive per MOO semantics)
 pub fn var_key_eq(v: &Var, key: &str) -> bool {
     v.as_string()
-        .map_or(false, |s| s.to_string().eq_ignore_ascii_case(key))
+        .is_some_and(|s| s.to_string().eq_ignore_ascii_case(key))
 }
 
 /// Format a MOO Var for display
@@ -164,10 +164,10 @@ pub fn json_to_var(json: &Value) -> Var {
         }
         Value::String(s) => {
             // Check if it's an object reference
-            if s.starts_with('#') {
-                if let Ok(num) = s[1..].parse::<i32>() {
-                    return v_obj(Obj::mk_id(num));
-                }
+            if let Some(num_str) = s.strip_prefix('#')
+                && let Ok(num) = num_str.parse::<i32>()
+            {
+                return v_obj(Obj::mk_id(num));
             }
             v_str(s)
         }

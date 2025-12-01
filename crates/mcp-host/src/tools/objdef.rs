@@ -16,6 +16,7 @@
 use crate::mcp_types::{Tool, ToolCallResult};
 use crate::moor_client::{MoorClient, MoorResult};
 use eyre::Result;
+use moor_compiler::{CompileOptions, ObjFileContext, compile_object_definitions};
 use serde_json::{Value, json};
 
 use super::helpers::format_var;
@@ -28,8 +29,9 @@ pub fn tool_moo_dump_object() -> Tool {
     Tool {
         name: "moo_dump_object".to_string(),
         description: "Dump an object to objdef format (a text representation of the object's \
-            definition including properties and verbs). Returns the objdef as a string. \
-            Requires wizard permissions."
+            definition including properties and verbs). Requires wizard permissions. \
+            RECOMMENDED: Use the 'path' parameter to write directly to a file instead of \
+            returning content inline - this saves significant tokens for large objects."
             .to_string(),
         input_schema: json!({
             "type": "object",
@@ -37,6 +39,15 @@ pub fn tool_moo_dump_object() -> Tool {
                 "object": {
                     "type": "string",
                     "description": "Object reference to dump (e.g., '#123', '$thing')"
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Optional file path to write the objdef to. When provided, writes to file and returns only a summary (saves tokens). When omitted, returns full objdef content inline."
+                },
+                "use_constants": {
+                    "type": "boolean",
+                    "description": "When true, emits symbolic constant names (e.g., ROOM, PLAYER) instead of raw object numbers (#7, #5). Constants are derived from objects' import_export_id properties. Defaults to true.",
+                    "default": true
                 }
             },
             "required": ["object"]
@@ -206,9 +217,10 @@ pub fn tool_moo_reload_objdef_file() -> Tool {
 pub fn tool_moo_diff_object() -> Tool {
     Tool {
         name: "moo_diff_object".to_string(),
-        description: "Compare an object in the database with an objdef file or text to show differences. \
-            Useful for seeing what changes would occur before reloading, or for identifying divergence \
-            between the database and source files."
+        description: "Compare an object in the database with an objdef file or text to show \
+            structural differences. Parses both objdefs and reports semantic changes: object \
+            attributes, added/removed/changed verbs, and added/removed/changed properties. \
+            Much more useful than line-by-line diff for understanding actual changes."
             .to_string(),
         input_schema: json!({
             "type": "object",
@@ -244,27 +256,56 @@ pub async fn execute_moo_dump_object(
         .and_then(|v| v.as_str())
         .ok_or_else(|| eyre::eyre!("Missing 'object' parameter"))?;
 
-    // Build the MOO expression: dump_object(obj)
-    // dump_object returns a list of strings, we need to join them
-    let expr = format!("return dump_object({});", object_str);
+    let path = args.get("path").and_then(|v| v.as_str());
+
+    // Default to using constants (emits ROOM instead of #7, etc.)
+    let use_constants = args
+        .get("use_constants")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    // Build the MOO expression: dump_object(obj, [`constants -> 1])
+    let expr = if use_constants {
+        format!("return dump_object({}, [`constants -> 1]);", object_str)
+    } else {
+        format!("return dump_object({});", object_str)
+    };
 
     match client.eval(&expr).await? {
         MoorResult::Success(var) => {
             // The result is a list of strings, join them with newlines
-            if let Some(list) = var.as_list() {
-                let lines: Vec<String> = list
-                    .iter()
-                    .filter_map(|v| v.as_string().map(|s| s.to_string()))
-                    .collect();
-                let objdef = lines.join("\n");
+            let Some(list) = var.as_list() else {
+                return Ok(ToolCallResult::text(format_var(&var)));
+            };
+
+            let lines: Vec<String> = list
+                .iter()
+                .filter_map(|v| v.as_string().map(|s| s.to_string()))
+                .collect();
+            let objdef = lines.join("\n");
+
+            // If path is provided, write to file instead of returning content
+            if let Some(file_path) = path {
+                match std::fs::write(file_path, &objdef) {
+                    Ok(()) => Ok(ToolCallResult::text(format!(
+                        "Object {} dumped to '{}' ({} lines, {} bytes)",
+                        object_str,
+                        file_path,
+                        lines.len(),
+                        objdef.len()
+                    ))),
+                    Err(e) => Ok(ToolCallResult::error(format!(
+                        "Failed to write to '{}': {}",
+                        file_path, e
+                    ))),
+                }
+            } else {
                 Ok(ToolCallResult::text(format!(
                     "Object {} dumped ({} lines):\n\n{}",
                     object_str,
                     lines.len(),
                     objdef
                 )))
-            } else {
-                Ok(ToolCallResult::text(format_var(&var)))
             }
         }
         MoorResult::Error(msg) => Ok(ToolCallResult::error(msg)),
@@ -588,6 +629,8 @@ pub async fn execute_moo_diff_object(
     client: &mut MoorClient,
     args: &Value,
 ) -> Result<ToolCallResult> {
+    use std::collections::HashSet;
+
     let object_str = args
         .get("object")
         .and_then(|v| v.as_str())
@@ -597,7 +640,7 @@ pub async fn execute_moo_diff_object(
     let objdef_text = args.get("objdef").and_then(|v| v.as_str());
 
     // Get the comparison objdef - either from file or text
-    let compare_objdef = if let Some(p) = path {
+    let compare_objdef_str = if let Some(p) = path {
         match std::fs::read_to_string(p) {
             Ok(content) => content,
             Err(e) => {
@@ -617,67 +660,331 @@ pub async fn execute_moo_diff_object(
 
     // Get current object definition from database
     let expr = format!("return dump_object({});", object_str);
-    let current_objdef = match client.eval(&expr).await? {
+    let current_objdef_str = match client.eval(&expr).await? {
         MoorResult::Success(var) => {
-            if let Some(list) = var.as_list() {
-                let lines: Vec<String> = list
-                    .iter()
-                    .filter_map(|v| v.as_string().map(|s| s.to_string()))
-                    .collect();
-                lines.join("\n")
-            } else {
+            let Some(list) = var.as_list() else {
                 return Ok(ToolCallResult::error("Failed to dump object"));
-            }
+            };
+            let lines: Vec<String> = list
+                .iter()
+                .filter_map(|v| v.as_string().map(|s| s.to_string()))
+                .collect();
+            lines.join("\n")
         }
         MoorResult::Error(msg) => return Ok(ToolCallResult::error(msg)),
     };
 
-    // Simple line-by-line diff
-    let current_lines: Vec<&str> = current_objdef.lines().collect();
-    let compare_lines: Vec<&str> = compare_objdef.lines().collect();
+    // Parse both objdefs
+    let options = CompileOptions::default();
+    let mut db_context = ObjFileContext::new();
+    let mut file_context = ObjFileContext::new();
+
+    let db_objs = match compile_object_definitions(&current_objdef_str, &options, &mut db_context) {
+        Ok(objs) => objs,
+        Err(e) => {
+            return Ok(ToolCallResult::error(format!(
+                "Failed to parse database objdef: {e}"
+            )));
+        }
+    };
+
+    let file_objs =
+        match compile_object_definitions(&compare_objdef_str, &options, &mut file_context) {
+            Ok(objs) => objs,
+            Err(e) => {
+                return Ok(ToolCallResult::error(format!(
+                    "Failed to parse file objdef: {e}"
+                )));
+            }
+        };
+
+    let Some(db_obj) = db_objs.first() else {
+        return Ok(ToolCallResult::error("No object found in database dump"));
+    };
+
+    let Some(file_obj) = file_objs.first() else {
+        return Ok(ToolCallResult::error("No object found in file"));
+    };
 
     let mut output = String::new();
     output.push_str(&format!(
-        "Diff for {} vs {}\n\n",
+        "Structural diff: {} (database) vs {}\n",
         object_str,
         path.unwrap_or("provided objdef")
     ));
+    output.push_str("═══════════════════════════════════════════\n\n");
 
-    // Track differences
-    let mut differences = Vec::new();
-    let max_lines = current_lines.len().max(compare_lines.len());
+    let mut has_differences = false;
 
-    for i in 0..max_lines {
-        let current = current_lines.get(i).copied();
-        let compare = compare_lines.get(i).copied();
+    // Compare object attributes
+    let mut attr_diffs = Vec::new();
+    if db_obj.name != file_obj.name {
+        attr_diffs.push(format!(
+            "  name: \"{}\" → \"{}\"",
+            db_obj.name, file_obj.name
+        ));
+    }
+    if db_obj.parent != file_obj.parent {
+        attr_diffs.push(format!(
+            "  parent: {:?} → {:?}",
+            db_obj.parent, file_obj.parent
+        ));
+    }
+    if db_obj.owner != file_obj.owner {
+        attr_diffs.push(format!(
+            "  owner: {:?} → {:?}",
+            db_obj.owner, file_obj.owner
+        ));
+    }
+    if db_obj.location != file_obj.location {
+        attr_diffs.push(format!(
+            "  location: {:?} → {:?}",
+            db_obj.location, file_obj.location
+        ));
+    }
+    if db_obj.flags != file_obj.flags {
+        attr_diffs.push(format!(
+            "  flags: {:?} → {:?}",
+            db_obj.flags, file_obj.flags
+        ));
+    }
 
-        match (current, compare) {
-            (Some(c), Some(cmp)) if c != cmp => {
-                differences.push(format!(
-                    "Line {}: database has:\n  {}\nFile has:\n  {}",
-                    i + 1,
-                    c,
-                    cmp
+    if !attr_diffs.is_empty() {
+        has_differences = true;
+        output.push_str("## Object Attributes\n");
+        for diff in attr_diffs {
+            output.push_str(&diff);
+            output.push('\n');
+        }
+        output.push('\n');
+    }
+
+    // Compare verbs
+    let db_verb_names: HashSet<String> = db_obj
+        .verbs
+        .iter()
+        .map(|v| v.names.first().map(|s| s.as_string()).unwrap_or_default())
+        .collect();
+    let file_verb_names: HashSet<String> = file_obj
+        .verbs
+        .iter()
+        .map(|v| v.names.first().map(|s| s.as_string()).unwrap_or_default())
+        .collect();
+
+    let added_verbs: Vec<_> = file_verb_names.difference(&db_verb_names).collect();
+    let removed_verbs: Vec<_> = db_verb_names.difference(&file_verb_names).collect();
+    let common_verbs: Vec<_> = db_verb_names.intersection(&file_verb_names).collect();
+
+    let mut verb_diffs = Vec::new();
+
+    for name in &added_verbs {
+        verb_diffs.push(format!("  + {} (added)", name));
+    }
+    for name in &removed_verbs {
+        verb_diffs.push(format!("  - {} (removed)", name));
+    }
+
+    // Check for changed verbs
+    for name in common_verbs {
+        let db_verb = db_obj
+            .verbs
+            .iter()
+            .find(|v| v.names.first().map(|s| s.as_string()).as_ref() == Some(name));
+        let file_verb = file_obj
+            .verbs
+            .iter()
+            .find(|v| v.names.first().map(|s| s.as_string()).as_ref() == Some(name));
+
+        if let (Some(db_v), Some(file_v)) = (db_verb, file_verb) {
+            let mut changes = Vec::new();
+
+            if db_v.names != file_v.names {
+                changes.push(format!("names: {:?} → {:?}", db_v.names, file_v.names));
+            }
+            if db_v.flags != file_v.flags {
+                changes.push(format!("flags: {:?} → {:?}", db_v.flags, file_v.flags));
+            }
+            if db_v.owner != file_v.owner {
+                changes.push(format!("owner: {:?} → {:?}", db_v.owner, file_v.owner));
+            }
+            if db_v.argspec != file_v.argspec {
+                changes.push(format!(
+                    "argspec: {:?} → {:?}",
+                    db_v.argspec, file_v.argspec
                 ));
             }
-            (Some(c), None) => {
-                differences.push(format!("Line {}: only in database:\n  {}", i + 1, c));
+            // Compare program bytecode
+            if db_v.program != file_v.program {
+                changes.push("code: changed".to_string());
             }
-            (None, Some(cmp)) => {
-                differences.push(format!("Line {}: only in file:\n  {}", i + 1, cmp));
+
+            if !changes.is_empty() {
+                verb_diffs.push(format!("  ~ {} (modified: {})", name, changes.join(", ")));
             }
-            _ => {}
         }
     }
 
-    if differences.is_empty() {
-        output.push_str("No differences found - objects are identical.\n");
-    } else {
-        output.push_str(&format!("Found {} differences:\n\n", differences.len()));
-        for diff in differences {
-            output.push_str(&diff);
-            output.push_str("\n\n");
+    if !verb_diffs.is_empty() {
+        has_differences = true;
+        output.push_str("## Verbs\n");
+        for diff in &verb_diffs {
+            output.push_str(diff);
+            output.push('\n');
         }
+        output.push('\n');
+    }
+
+    // Compare property definitions
+    let db_prop_names: HashSet<String> = db_obj
+        .property_definitions
+        .iter()
+        .map(|p| p.name.as_string())
+        .collect();
+    let file_prop_names: HashSet<String> = file_obj
+        .property_definitions
+        .iter()
+        .map(|p| p.name.as_string())
+        .collect();
+
+    let added_props: Vec<_> = file_prop_names.difference(&db_prop_names).collect();
+    let removed_props: Vec<_> = db_prop_names.difference(&file_prop_names).collect();
+    let common_props: Vec<_> = db_prop_names.intersection(&file_prop_names).collect();
+
+    let mut prop_diffs = Vec::new();
+
+    for name in &added_props {
+        prop_diffs.push(format!("  + {} (added)", name));
+    }
+    for name in &removed_props {
+        prop_diffs.push(format!("  - {} (removed)", name));
+    }
+
+    for name in common_props {
+        let db_prop = db_obj
+            .property_definitions
+            .iter()
+            .find(|p| &p.name.as_string() == name);
+        let file_prop = file_obj
+            .property_definitions
+            .iter()
+            .find(|p| &p.name.as_string() == name);
+
+        if let (Some(db_p), Some(file_p)) = (db_prop, file_prop) {
+            let mut changes = Vec::new();
+
+            if db_p.perms != file_p.perms {
+                changes.push(format!("perms: {:?} → {:?}", db_p.perms, file_p.perms));
+            }
+            if db_p.value != file_p.value {
+                changes.push("value: changed".to_string());
+            }
+
+            if !changes.is_empty() {
+                prop_diffs.push(format!("  ~ {} (modified: {})", name, changes.join(", ")));
+            }
+        }
+    }
+
+    if !prop_diffs.is_empty() {
+        has_differences = true;
+        output.push_str("## Property Definitions\n");
+        for diff in &prop_diffs {
+            output.push_str(diff);
+            output.push('\n');
+        }
+        output.push('\n');
+    }
+
+    // Compare property overrides
+    let db_override_names: HashSet<String> = db_obj
+        .property_overrides
+        .iter()
+        .map(|p| p.name.as_string())
+        .collect();
+    let file_override_names: HashSet<String> = file_obj
+        .property_overrides
+        .iter()
+        .map(|p| p.name.as_string())
+        .collect();
+
+    let added_overrides: Vec<_> = file_override_names.difference(&db_override_names).collect();
+    let removed_overrides: Vec<_> = db_override_names.difference(&file_override_names).collect();
+    let common_overrides: Vec<_> = db_override_names
+        .intersection(&file_override_names)
+        .collect();
+
+    let mut override_diffs = Vec::new();
+
+    for name in &added_overrides {
+        override_diffs.push(format!("  + {} (added)", name));
+    }
+    for name in &removed_overrides {
+        override_diffs.push(format!("  - {} (removed)", name));
+    }
+
+    for name in common_overrides {
+        let db_ov = db_obj
+            .property_overrides
+            .iter()
+            .find(|p| &p.name.as_string() == name);
+        let file_ov = file_obj
+            .property_overrides
+            .iter()
+            .find(|p| &p.name.as_string() == name);
+
+        if let (Some(db_o), Some(file_o)) = (db_ov, file_ov) {
+            let mut changes = Vec::new();
+
+            if db_o.perms_update != file_o.perms_update {
+                changes.push(format!(
+                    "perms: {:?} → {:?}",
+                    db_o.perms_update, file_o.perms_update
+                ));
+            }
+            if db_o.value != file_o.value {
+                changes.push("value: changed".to_string());
+            }
+
+            if !changes.is_empty() {
+                override_diffs.push(format!("  ~ {} (modified: {})", name, changes.join(", ")));
+            }
+        }
+    }
+
+    if !override_diffs.is_empty() {
+        has_differences = true;
+        output.push_str("## Property Overrides\n");
+        for diff in &override_diffs {
+            output.push_str(diff);
+            output.push('\n');
+        }
+        output.push('\n');
+    }
+
+    // Summary
+    if !has_differences {
+        output.push_str("No structural differences found.\n");
+    } else {
+        let verb_count = added_verbs.len()
+            + removed_verbs.len()
+            + verb_diffs
+                .len()
+                .saturating_sub(added_verbs.len() + removed_verbs.len());
+        let prop_count = added_props.len()
+            + removed_props.len()
+            + prop_diffs
+                .len()
+                .saturating_sub(added_props.len() + removed_props.len());
+        let override_count = added_overrides.len()
+            + removed_overrides.len()
+            + override_diffs
+                .len()
+                .saturating_sub(added_overrides.len() + removed_overrides.len());
+
+        output.push_str(&format!(
+            "Summary: {} verb change(s), {} property def change(s), {} override change(s)\n",
+            verb_count, prop_count, override_count
+        ));
     }
 
     Ok(ToolCallResult::text(output))

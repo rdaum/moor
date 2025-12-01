@@ -248,28 +248,28 @@ pub async fn execute_moo_get_verb(client: &mut MoorClient, args: &Value) -> Resu
     output.push_str(&format!("Verb {}:{}\n", object_str, verb.name));
 
     // Try to get metadata, but don't fail if we can't
-    if let Ok(MoorResult::Success(var)) = client.eval(&expr).await {
-        if let Some(map) = var.as_map() {
-            let owner = map
-                .iter()
-                .find(|(k, _)| var_key_eq(k, "owner"))
-                .map(|(_, v)| format_var(&v))
-                .unwrap_or_default();
-            let flags = map
-                .iter()
-                .find(|(k, _)| var_key_eq(k, "flags"))
-                .map(|(_, v)| format_var(&v))
-                .unwrap_or_default();
-            let names = map
-                .iter()
-                .find(|(k, _)| var_key_eq(k, "names"))
-                .map(|(_, v)| format_var(&v))
-                .unwrap_or_default();
-            output.push_str(&format!(
-                "  Owner: {}, Flags: {}, Names: {}\n",
-                owner, flags, names
-            ));
-        }
+    if let Ok(MoorResult::Success(var)) = client.eval(&expr).await
+        && let Some(map) = var.as_map()
+    {
+        let owner = map
+            .iter()
+            .find(|(k, _)| var_key_eq(k, "owner"))
+            .map(|(_, v)| format_var(&v))
+            .unwrap_or_default();
+        let flags = map
+            .iter()
+            .find(|(k, _)| var_key_eq(k, "flags"))
+            .map(|(_, v)| format_var(&v))
+            .unwrap_or_default();
+        let names = map
+            .iter()
+            .find(|(k, _)| var_key_eq(k, "names"))
+            .map(|(_, v)| format_var(&v))
+            .unwrap_or_default();
+        output.push_str(&format!(
+            "  Owner: {}, Flags: {}, Names: {}\n",
+            owner, flags, names
+        ));
     }
 
     output.push('\n');
@@ -495,21 +495,21 @@ pub async fn execute_moo_find_verb_definition(
 
                     // Show inheritance chain
                     output.push_str("Inheritance chain searched:\n");
-                    if let Some(chain_var) = chain_var {
-                        if let Some(chain) = chain_var.as_list() {
-                            for (i, obj) in chain.iter().enumerate() {
-                                let marker = if format_var(&obj) == definer {
-                                    " <- DEFINES"
-                                } else {
-                                    ""
-                                };
-                                output.push_str(&format!(
-                                    "  {}. {}{}\n",
-                                    i + 1,
-                                    format_var(&obj),
-                                    marker
-                                ));
-                            }
+                    if let Some(chain_var) = chain_var
+                        && let Some(chain) = chain_var.as_list()
+                    {
+                        for (i, obj) in chain.iter().enumerate() {
+                            let marker = if format_var(&obj) == definer {
+                                " <- DEFINES"
+                            } else {
+                                ""
+                            };
+                            output.push_str(&format!(
+                                "  {}. {}{}\n",
+                                i + 1,
+                                format_var(&obj),
+                                marker
+                            ));
                         }
                     }
                 } else {
@@ -518,11 +518,11 @@ pub async fn execute_moo_find_verb_definition(
                         verb, target
                     ));
                     output.push_str("Inheritance chain searched:\n");
-                    if let Some(chain_var) = chain_var {
-                        if let Some(chain) = chain_var.as_list() {
-                            for (i, obj) in chain.iter().enumerate() {
-                                output.push_str(&format!("  {}. {}\n", i + 1, format_var(&obj)));
-                            }
+                    if let Some(chain_var) = chain_var
+                        && let Some(chain) = chain_var.as_list()
+                    {
+                        for (i, obj) in chain.iter().enumerate() {
+                            output.push_str(&format!("  {}. {}\n", i + 1, format_var(&obj)));
                         }
                     }
                 }

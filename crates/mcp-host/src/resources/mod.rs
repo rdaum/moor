@@ -64,7 +64,7 @@ pub async fn read_resource(client: &mut MoorClient, uri: &str) -> Result<Resourc
     let path = &uri[6..]; // Remove "moo://"
     let parts: Vec<&str> = path.split('/').collect();
 
-    match parts.get(0).map(|s| *s) {
+    match parts.first().copied() {
         Some("world") => read_world_overview(client, uri).await,
         Some("objects") => read_objects_list(client, uri, &parts[1..]).await,
         Some("object") if parts.len() >= 2 => read_object(client, uri, parts[1], &parts[2..]).await,
@@ -165,7 +165,7 @@ async fn read_object(
         .ok_or_else(|| eyre::eyre!("Invalid object reference: {}", obj_str))?;
 
     // Handle sub-resources
-    match parts.get(0).map(|s| *s) {
+    match parts.first().copied() {
         Some("verbs") => {
             let verbs = client.list_verbs(&obj_ref, false).await?;
             let mut output = String::new();

@@ -3348,6 +3348,7 @@ dependencies = [
  "figment",
  "futures-util",
  "moor-common",
+ "moor-compiler",
  "moor-schema",
  "moor-var",
  "planus",

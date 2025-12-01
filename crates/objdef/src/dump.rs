@@ -20,9 +20,7 @@ use moor_compiler::{
     ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition, program_to_tree, to_literal,
     to_literal_objsub, unparse,
 };
-use moor_var::{
-    NOTHING, Obj, SYSTEM_OBJECT, Symbol, program::ProgramType, v_arc_string, v_str, v_string,
-};
+use moor_var::{NOTHING, Obj, Symbol, program::ProgramType, v_arc_string, v_str, v_string};
 use std::{collections::HashMap, io::Write, path::Path};
 use thiserror::Error;
 use tracing::info;
@@ -195,31 +193,15 @@ fn propname(pname: Symbol) -> String {
     }
 }
 
-fn extract_system_object_references(
-    object_defs: &[ObjectDefinition],
-) -> (HashMap<Obj, String>, HashMap<Obj, String>) {
-    // First, check if ANY objects have import_export_id property
-    let import_export_id = import_export_id();
-    let has_import_export_ids = object_defs.iter().any(|od| {
-        od.property_definitions
-            .iter()
-            .any(|pd| pd.name == import_export_id)
-            || od
-                .property_overrides
-                .iter()
-                .any(|po| po.name == import_export_id)
-    });
-
-    if has_import_export_ids {
-        // Use import_export_id properties for constants
-        extract_from_import_export_ids(object_defs)
-    } else {
-        // Fall back to #0 heuristic for legacy/textdump compatibility
-        extract_from_sysobj_heuristic(object_defs)
-    }
+/// Extract the object->constant name mapping from object definitions.
+/// This is used when dumping individual objects with constant substitution.
+pub fn extract_index_names(object_defs: &[ObjectDefinition]) -> HashMap<Obj, String> {
+    let (index_names, _file_names) = extract_object_constants(object_defs);
+    index_names
 }
 
-fn extract_from_import_export_ids(
+/// Extract constant names and file names from objects' import_export_id properties.
+fn extract_object_constants(
     object_defs: &[ObjectDefinition],
 ) -> (HashMap<Obj, String>, HashMap<Obj, String>) {
     let mut index_names = HashMap::new();
@@ -307,108 +289,6 @@ fn extract_hierarchy_path(od: &ObjectDefinition) -> Vec<String> {
     Vec::new()
 }
 
-fn extract_from_sysobj_heuristic(
-    object_defs: &[ObjectDefinition],
-) -> (HashMap<Obj, String>, HashMap<Obj, String>) {
-    // Collect all potential constants from direct properties
-    let mut all_candidates = Vec::new();
-
-    if let Some(sysobj) = object_defs.iter().find(|od| od.oid == SYSTEM_OBJECT) {
-        collect_top_level_constants(sysobj, &mut all_candidates);
-    }
-
-    // Group candidates by object to handle multiple constants pointing to same object
-    let mut candidates_by_obj: HashMap<Obj, Vec<_>> = HashMap::new();
-    for candidate in all_candidates {
-        candidates_by_obj
-            .entry(candidate.obj)
-            .or_default()
-            .push(candidate);
-    }
-
-    // Pick the best candidate for each object and filter out ambiguous constant names
-    let mut constant_name_counts = HashMap::new();
-    let mut selected_candidates = Vec::new();
-
-    for (_obj, mut candidates) in candidates_by_obj {
-        // Sort by preference: shorter paths first, then alphabetical
-        candidates.sort_by(|a, b| {
-            a.path_depth
-                .cmp(&b.path_depth)
-                .then_with(|| a.constant_name.cmp(&b.constant_name))
-        });
-
-        // Pick the best candidate
-        if let Some(best) = candidates.into_iter().next() {
-            *constant_name_counts
-                .entry(best.constant_name.clone())
-                .or_insert(0) += 1;
-            selected_candidates.push(best);
-        }
-    }
-
-    // Add SYSOBJ for #0 if no constant already exists for it
-    let sysobj_constant_name = "SYSOBJ".to_string();
-    if !selected_candidates.iter().any(|c| c.obj == SYSTEM_OBJECT) {
-        *constant_name_counts
-            .entry(sysobj_constant_name.clone())
-            .or_insert(0) += 1;
-        selected_candidates.push(ConstantCandidate {
-            obj: SYSTEM_OBJECT,
-            constant_name: sysobj_constant_name,
-            file_name: "sysobj".to_string(),
-            path_depth: 0,
-        });
-    }
-
-    // Filter out ambiguous constant names and build final maps
-    let mut index_names = HashMap::new();
-    let mut file_names = HashMap::new();
-
-    for candidate in selected_candidates {
-        if *constant_name_counts
-            .get(&candidate.constant_name)
-            .unwrap_or(&0)
-            == 1
-        {
-            index_names.insert(candidate.obj, candidate.constant_name);
-            file_names.insert(candidate.obj, candidate.file_name);
-        }
-    }
-
-    (index_names, file_names)
-}
-
-#[derive(Debug, Clone)]
-struct ConstantCandidate {
-    obj: Obj,
-    constant_name: String,
-    file_name: String,
-    path_depth: usize,
-}
-
-fn collect_top_level_constants(sysobj: &ObjectDefinition, candidates: &mut Vec<ConstantCandidate>) {
-    for pd in sysobj.property_definitions.iter() {
-        if let Some(value) = pd.value.as_ref()
-            && let Some(oid) = value.as_object()
-        {
-            let constant_name = pd.name.to_string().to_ascii_uppercase();
-            let file_name = pd.name.to_string();
-
-            // Only add non-anonymous objects as constant candidates
-            // Anonymous objects shouldn't have constants since they can't be referenced by name
-            if !oid.is_anonymous() {
-                candidates.push(ConstantCandidate {
-                    obj: oid,
-                    constant_name,
-                    file_name,
-                    path_depth: 0,
-                });
-            }
-        }
-    }
-}
-
 fn generate_constants_file(
     index_names: &HashMap<Obj, String>,
     hierarchies: &HashMap<Obj, Vec<String>>,
@@ -469,7 +349,7 @@ pub fn dump_object_definitions(
     directory_path: &Path,
 ) -> Result<(), ObjectDumpError> {
     // Extract constant names and file names
-    let (index_names, file_names) = extract_system_object_references(object_defs);
+    let (index_names, file_names) = extract_object_constants(object_defs);
 
     // Extract hierarchies for all objects
     let hierarchies: HashMap<Obj, Vec<String>> = object_defs

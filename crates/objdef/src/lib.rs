@@ -40,7 +40,10 @@ use moor_compiler::ObjDefParseError;
 use moor_var::Obj;
 use std::{io, path::PathBuf};
 
-pub use dump::{collect_object, collect_object_definitions, dump_object, dump_object_definitions};
+pub use dump::{
+    collect_object, collect_object_definitions, dump_object, dump_object_definitions,
+    extract_index_names,
+};
 pub use load::{
     ConflictEntity, ConflictMode, Constants, Entity, ObjDefLoaderOptions, ObjDefLoaderResults,
     ObjectDefinitionLoader,

@@ -75,13 +75,17 @@ fn bf_dump_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     };
 
-    // Validate options argument if provided (currently ignored but must be a map)
-    if bf_args.args.len() == 2 && bf_args.args[1].as_map().is_none() {
-        return Err(BfErr::ErrValue(
-            E_TYPE.msg("dump_object() second argument must be a map"),
-        ));
+    // Parse options map (second argument)
+    let mut use_constants = false;
+    if bf_args.args.len() == 2 {
+        let options_map = bf_args.map_or_alist_to_map(&bf_args.args[1])?;
+        for (key, value) in options_map.iter() {
+            let key_sym = key.as_symbol().map_err(BfErr::ErrValue)?;
+            if key_sym == *CONSTANTS_SYM {
+                use_constants = value.is_true();
+            }
+        }
     }
-    // Options are currently ignored for phase 1 simplicity
 
     // Check that object is valid
     if !with_current_transaction(|world_state| world_state.valid(&obj))
@@ -98,7 +102,7 @@ fn bf_dump_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Use the task scheduler client to request the dump from the scheduler
     let lines = current_task_scheduler_client()
-        .dump_object(obj)
+        .dump_object(obj, use_constants)
         .map_err(|e| BfErr::ErrValue(E_INVARG.msg(format!("Failed to dump object: {e}"))))?;
 
     // Convert to MOO list of strings

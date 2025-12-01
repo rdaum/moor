@@ -69,7 +69,7 @@ use moor_common::{
     },
     util::PerfTimerGuard,
 };
-use moor_objdef::{collect_object, dump_object};
+use moor_objdef::{collect_object, collect_object_definitions, dump_object, extract_index_names};
 use moor_var::{
     E_EXEC, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, List, NOTHING, Obj, SYSTEM_OBJECT,
     Symbol, Var, Variant, v_bool_int, v_err, v_int, v_obj, v_str, v_string,
@@ -1449,8 +1449,12 @@ impl Scheduler {
                     error!(?e, "Could not send switch player reply to requester");
                 }
             }
-            TaskControlMsg::DumpObject { obj, reply } => {
-                let result = self.handle_dump_object(obj);
+            TaskControlMsg::DumpObject {
+                obj,
+                use_constants,
+                reply,
+            } => {
+                let result = self.handle_dump_object(obj, use_constants);
                 if let Err(e) = reply.send(result) {
                     error!(?e, "Could not send dump object reply to requester");
                 }
@@ -1554,7 +1558,7 @@ impl Scheduler {
         Ok(())
     }
 
-    fn handle_dump_object(&self, obj: Obj) -> Result<Vec<String>, Error> {
+    fn handle_dump_object(&self, obj: Obj, use_constants: bool) -> Result<Vec<String>, Error> {
         // Create a snapshot to avoid blocking ongoing operations
         let snapshot = self.database.create_snapshot().map_err(|e| {
             E_INVARG.with_msg(|| format!("Failed to create database snapshot: {e:?}"))
@@ -1564,8 +1568,16 @@ impl Scheduler {
         let (_, _, _, object_def) = collect_object(snapshot.as_ref(), &obj)
             .map_err(|e| E_INVARG.with_msg(|| format!("Failed to collect object {obj}: {e:?}")))?;
 
-        // Dump to objdef format
-        let index_names = HashMap::new(); // Empty index for now, keeping simple
+        // Build index_names from import_export_id properties if requested
+        let index_names = if use_constants {
+            let all_objects = collect_object_definitions(snapshot.as_ref()).map_err(|e| {
+                E_INVARG.with_msg(|| format!("Failed to collect object definitions: {e:?}"))
+            })?;
+            extract_index_names(&all_objects)
+        } else {
+            HashMap::new()
+        };
+
         let lines = dump_object(&index_names, &object_def)
             .map_err(|e| E_INVARG.with_msg(|| format!("Failed to dump object {obj}: {e:?}")))?;
 

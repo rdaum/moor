@@ -279,11 +279,6 @@ impl MoorClient {
         self.player.as_ref()
     }
 
-    /// Check if we're connected (have a client token)
-    pub fn is_connected(&self) -> bool {
-        self.client_token.is_some()
-    }
-
     /// Clear connection state without sending detach message
     fn clear_connection_state(&mut self) {
         self.client_token = None;
@@ -639,14 +634,12 @@ impl MoorClient {
 
             match event_ref {
                 moor_rpc::ClientEventUnionRef::NarrativeEventMessage(narrative_msg) => {
-                    if let Ok(event_ref) = narrative_msg.event() {
-                        if let Ok(narrative_event) = narrative_event_from_ref(event_ref) {
-                            // Extract text from the event
-                            if let Some(text) = extract_narrative_text(&narrative_event.event) {
-                                trace!("Narrative: {}", text);
-                                narrative.push(text);
-                            }
-                        }
+                    if let Ok(event_ref) = narrative_msg.event()
+                        && let Ok(narrative_event) = narrative_event_from_ref(event_ref)
+                        && let Some(text) = extract_narrative_text(&narrative_event.event)
+                    {
+                        trace!("Narrative: {}", text);
+                        narrative.push(text);
                     }
                 }
                 moor_rpc::ClientEventUnionRef::SystemMessageEvent(sys_msg) => {
@@ -656,51 +649,42 @@ impl MoorClient {
                     }
                 }
                 moor_rpc::ClientEventUnionRef::TaskSuccessEvent(success) => {
-                    if let Ok(event_task_id) = success.task_id() {
-                        if event_task_id == task_id {
-                            debug!("Task {} completed successfully", task_id);
-                            // Extract result value
-                            let result = if let Ok(result_ref) = success.result() {
-                                if let Ok(result_struct) =
-                                    moor_schema::var::Var::try_from(result_ref)
-                                {
-                                    var_from_flatbuffer(&result_struct)
-                                        .unwrap_or(moor_var::v_none())
-                                } else {
-                                    moor_var::v_none()
-                                }
-                            } else {
-                                moor_var::v_none()
-                            };
-                            return Ok(TaskResult {
-                                success: true,
-                                result,
-                                narrative,
-                            });
-                        }
+                    if let Ok(event_task_id) = success.task_id()
+                        && event_task_id == task_id
+                    {
+                        debug!("Task {} completed successfully", task_id);
+                        // Extract result value
+                        let result = success
+                            .result()
+                            .ok()
+                            .and_then(|result_ref| moor_schema::var::Var::try_from(result_ref).ok())
+                            .and_then(|result_struct| var_from_flatbuffer(&result_struct).ok())
+                            .unwrap_or(moor_var::v_none());
+                        return Ok(TaskResult {
+                            success: true,
+                            result,
+                            narrative,
+                        });
                     }
                 }
                 moor_rpc::ClientEventUnionRef::TaskErrorEvent(error_event) => {
-                    if let Ok(event_task_id) = error_event.task_id() {
-                        if event_task_id == task_id {
-                            let error_msg = if let Ok(error_ref) = error_event.error() {
-                                if let Ok(scheduler_error) =
-                                    rpc_common::scheduler_error_from_ref(error_ref)
-                                {
-                                    format!("{}", scheduler_error)
-                                } else {
-                                    "Unknown error".to_string()
-                                }
-                            } else {
-                                "Unknown error".to_string()
-                            };
-                            warn!("Task {} failed: {}", task_id, error_msg);
-                            return Ok(TaskResult {
-                                success: false,
-                                result: moor_var::v_str(&error_msg),
-                                narrative,
-                            });
-                        }
+                    if let Ok(event_task_id) = error_event.task_id()
+                        && event_task_id == task_id
+                    {
+                        let error_msg = error_event
+                            .error()
+                            .ok()
+                            .and_then(|error_ref| {
+                                rpc_common::scheduler_error_from_ref(error_ref).ok()
+                            })
+                            .map(|e| e.to_string())
+                            .unwrap_or_else(|| "Unknown error".to_string());
+                        warn!("Task {} failed: {}", task_id, error_msg);
+                        return Ok(TaskResult {
+                            success: false,
+                            result: moor_var::v_str(&error_msg),
+                            narrative,
+                        });
                     }
                 }
                 _ => {
@@ -747,68 +731,63 @@ impl MoorClient {
                             .verbs()
                             .map_err(|e| eyre!("Missing verbs: {}", e))?;
                         let mut result = Vec::new();
-                        for verb_ref in verbs.iter() {
-                            if let Ok(verb) = verb_ref {
-                                // Get names as concatenated string
-                                let name = verb
-                                    .names()
-                                    .ok()
-                                    .map(|names| {
-                                        names
-                                            .iter()
-                                            .filter_map(|s| s.ok())
-                                            .filter_map(|s| s.value().ok())
-                                            .collect::<Vec<_>>()
-                                            .join(" ")
-                                    })
-                                    .unwrap_or_default();
-                                // Build flags string from booleans (rwxd format)
-                                let r = verb.r().ok().unwrap_or(false);
-                                let w = verb.w().ok().unwrap_or(false);
-                                let x = verb.x().ok().unwrap_or(false);
-                                let d = verb.d().ok().unwrap_or(false);
-                                let mut flags = String::new();
-                                if r {
-                                    flags.push('r');
-                                }
-                                if w {
-                                    flags.push('w');
-                                }
-                                if x {
-                                    flags.push('x');
-                                }
-                                if d {
-                                    flags.push('d');
-                                }
-                                if flags.is_empty() {
-                                    flags.push_str("none");
-                                }
-                                // Get arg_spec as human-readable string (e.g., "this none this")
-                                let args = verb
-                                    .arg_spec()
-                                    .ok()
-                                    .map(|spec| {
-                                        spec.iter()
-                                            .filter_map(|s| {
-                                                s.ok().and_then(|sym| {
-                                                    sym.value().ok().map(|v| v.to_string())
-                                                })
-                                            })
-                                            .collect::<Vec<_>>()
-                                            .join(" ")
-                                    })
-                                    .unwrap_or_else(|| "none none none".to_string());
-                                result.push(VerbInfo {
-                                    name,
-                                    owner: verb
-                                        .owner()
-                                        .ok()
-                                        .map(|o| format!("{:?}", o))
-                                        .unwrap_or_default(),
-                                    flags,
-                                    args,
-                                });
+                        for verb in verbs.iter().flatten() {
+                            // Get names as concatenated string
+                            let name = verb
+                                .names()
+                                .ok()
+                                .map(|names| {
+                                    names
+                                        .iter()
+                                        .flatten()
+                                        .filter_map(|s| s.value().ok())
+                                        .collect::<Vec<_>>()
+                                        .join(" ")
+                                })
+                                .unwrap_or_default();
+                            // Build flags string from booleans (rwxd format)
+                            let r = verb.r().ok().unwrap_or(false);
+                            let w = verb.w().ok().unwrap_or(false);
+                            let x = verb.x().ok().unwrap_or(false);
+                            let d = verb.d().ok().unwrap_or(false);
+                            let mut flags = String::new();
+                            if r {
+                                flags.push('r');
                             }
+                            if w {
+                                flags.push('w');
+                            }
+                            if x {
+                                flags.push('x');
+                            }
+                            if d {
+                                flags.push('d');
+                            }
+                            if flags.is_empty() {
+                                flags.push_str("none");
+                            }
+                            // Get arg_spec as human-readable string (e.g., "this none this")
+                            let args = verb
+                                .arg_spec()
+                                .ok()
+                                .map(|spec| {
+                                    spec.iter()
+                                        .flatten()
+                                        .filter_map(|sym| sym.value().ok().map(|v| v.to_string()))
+                                        .collect::<Vec<_>>()
+                                        .join(" ")
+                                })
+                                .unwrap_or_else(|| "none none none".to_string());
+                            result.push(VerbInfo {
+                                name,
+                                owner: verb
+                                    .owner()
+                                    .ok()
+                                    .map(|o| format!("{:?}", o))
+                                    .unwrap_or_default(),
+                                flags,
+                                args,
+                            });
                         }
                         Ok(result)
                     }
@@ -996,40 +975,38 @@ impl MoorClient {
                             .properties()
                             .map_err(|e| eyre!("Missing properties: {}", e))?;
                         let mut result = Vec::new();
-                        for prop_ref in props.iter() {
-                            if let Ok(prop) = prop_ref {
-                                // Build flags string from booleans (rwc format)
-                                let r = prop.r().ok().unwrap_or(false);
-                                let w = prop.w().ok().unwrap_or(false);
-                                let chown = prop.chown().ok().unwrap_or(false);
-                                let mut flags = String::new();
-                                if r {
-                                    flags.push('r');
-                                }
-                                if w {
-                                    flags.push('w');
-                                }
-                                if chown {
-                                    flags.push('c');
-                                }
-                                if flags.is_empty() {
-                                    flags.push_str("none");
-                                }
-                                result.push(PropertyInfo {
-                                    name: prop
-                                        .name()
-                                        .ok()
-                                        .and_then(|s| s.value().ok())
-                                        .unwrap_or_default()
-                                        .to_string(),
-                                    owner: prop
-                                        .owner()
-                                        .ok()
-                                        .map(|o| format!("{:?}", o))
-                                        .unwrap_or_default(),
-                                    flags,
-                                });
+                        for prop in props.iter().flatten() {
+                            // Build flags string from booleans (rwc format)
+                            let r = prop.r().ok().unwrap_or(false);
+                            let w = prop.w().ok().unwrap_or(false);
+                            let chown = prop.chown().ok().unwrap_or(false);
+                            let mut flags = String::new();
+                            if r {
+                                flags.push('r');
                             }
+                            if w {
+                                flags.push('w');
+                            }
+                            if chown {
+                                flags.push('c');
+                            }
+                            if flags.is_empty() {
+                                flags.push_str("none");
+                            }
+                            result.push(PropertyInfo {
+                                name: prop
+                                    .name()
+                                    .ok()
+                                    .and_then(|s| s.value().ok())
+                                    .unwrap_or_default()
+                                    .to_string(),
+                                owner: prop
+                                    .owner()
+                                    .ok()
+                                    .map(|o| format!("{:?}", o))
+                                    .unwrap_or_default(),
+                                flags,
+                            });
                         }
                         Ok(result)
                     }
@@ -1177,44 +1154,42 @@ impl MoorClient {
                             .objects()
                             .map_err(|e| eyre!("Missing objects: {}", e))?;
                         let mut result = Vec::new();
-                        for obj_ref in objects.iter() {
-                            if let Ok(obj) = obj_ref {
-                                // Format object flags (u=user, p=programmer, w=wizard, r=read, W=write, f=fertile)
-                                let flag_bits = obj.flags().ok().unwrap_or(0);
-                                let mut flags = String::new();
-                                if flag_bits & 0x01 != 0 {
-                                    flags.push('u');
-                                } // User
-                                if flag_bits & 0x02 != 0 {
-                                    flags.push('p');
-                                } // Programmer
-                                if flag_bits & 0x04 != 0 {
-                                    flags.push('w');
-                                } // Wizard
-                                if flag_bits & 0x10 != 0 {
-                                    flags.push('r');
-                                } // Read
-                                if flag_bits & 0x20 != 0 {
-                                    flags.push('W');
-                                } // Write
-                                if flag_bits & 0x80 != 0 {
-                                    flags.push('f');
-                                } // Fertile
-                                if flags.is_empty() {
-                                    flags.push_str("none");
-                                }
-                                result.push(ObjectInfo {
-                                    obj: obj.obj().map(|o| format!("{:?}", o)).unwrap_or_default(),
-                                    name: obj
-                                        .name()
-                                        .ok()
-                                        .flatten()
-                                        .and_then(|s| s.value().ok())
-                                        .unwrap_or_default()
-                                        .to_string(),
-                                    flags,
-                                });
+                        for obj in objects.iter().flatten() {
+                            // Format object flags (u=user, p=programmer, w=wizard, r=read, W=write, f=fertile)
+                            let flag_bits = obj.flags().ok().unwrap_or(0);
+                            let mut flags = String::new();
+                            if flag_bits & 0x01 != 0 {
+                                flags.push('u');
+                            } // User
+                            if flag_bits & 0x02 != 0 {
+                                flags.push('p');
+                            } // Programmer
+                            if flag_bits & 0x04 != 0 {
+                                flags.push('w');
+                            } // Wizard
+                            if flag_bits & 0x10 != 0 {
+                                flags.push('r');
+                            } // Read
+                            if flag_bits & 0x20 != 0 {
+                                flags.push('W');
+                            } // Write
+                            if flag_bits & 0x80 != 0 {
+                                flags.push('f');
+                            } // Fertile
+                            if flags.is_empty() {
+                                flags.push_str("none");
                             }
+                            result.push(ObjectInfo {
+                                obj: obj.obj().map(|o| format!("{:?}", o)).unwrap_or_default(),
+                                name: obj
+                                    .name()
+                                    .ok()
+                                    .flatten()
+                                    .and_then(|s| s.value().ok())
+                                    .unwrap_or_default()
+                                    .to_string(),
+                                flags,
+                            });
                         }
                         Ok(result)
                     }

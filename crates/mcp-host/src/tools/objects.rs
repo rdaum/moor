@@ -451,25 +451,25 @@ pub async fn execute_moo_object_graph(
                     .iter()
                     .find(|(k, _)| var_key_eq(k, "ancestors"))
                     .map(|(_, v)| v.clone());
-                if let Some(ancestors_var) = ancestors_var {
-                    if let Some(ancestors) = ancestors_var.as_list() {
-                        let ancestors: Vec<_> = ancestors.iter().collect();
-                        for (i, a) in ancestors.iter().rev().enumerate() {
-                            if let Some(amap) = a.as_map() {
-                                let obj = amap
-                                    .iter()
-                                    .find(|(k, _)| var_key_eq(k, "obj"))
-                                    .map(|(_, v)| format_var(&v))
-                                    .unwrap_or_default();
-                                let name = amap
-                                    .iter()
-                                    .find(|(k, _)| var_key_eq(k, "name"))
-                                    .map(|(_, v)| format_var(&v))
-                                    .unwrap_or_default();
-                                let indent = "  ".repeat(i);
-                                let marker = if i == ancestors.len() - 1 { "* " } else { "  " };
-                                output.push_str(&format!("{}{}{} {}\n", indent, marker, obj, name));
-                            }
+                if let Some(ancestors_var) = ancestors_var
+                    && let Some(ancestors) = ancestors_var.as_list()
+                {
+                    let ancestors: Vec<_> = ancestors.iter().collect();
+                    for (i, a) in ancestors.iter().rev().enumerate() {
+                        if let Some(amap) = a.as_map() {
+                            let obj = amap
+                                .iter()
+                                .find(|(k, _)| var_key_eq(k, "obj"))
+                                .map(|(_, v)| format_var(&v))
+                                .unwrap_or_default();
+                            let name = amap
+                                .iter()
+                                .find(|(k, _)| var_key_eq(k, "name"))
+                                .map(|(_, v)| format_var(&v))
+                                .unwrap_or_default();
+                            let indent = "  ".repeat(i);
+                            let marker = if i == ancestors.len() - 1 { "* " } else { "  " };
+                            output.push_str(&format!("{}{}{} {}\n", indent, marker, obj, name));
                         }
                     }
                 }
@@ -480,32 +480,31 @@ pub async fn execute_moo_object_graph(
                     .iter()
                     .find(|(k, _)| var_key_eq(k, "descendants"))
                     .map(|(_, v)| v.clone());
-                if let Some(descendants_var) = descendants_var {
-                    if let Some(descendants) = descendants_var.as_list() {
-                        if descendants.is_empty() {
-                            output.push_str("  (no children)\n");
-                        } else {
-                            for d in descendants.iter() {
-                                if let Some(dmap) = d.as_map() {
-                                    let obj = dmap
-                                        .iter()
-                                        .find(|(k, _)| var_key_eq(k, "obj"))
-                                        .map(|(_, v)| format_var(&v))
-                                        .unwrap_or_default();
-                                    let name = dmap
-                                        .iter()
-                                        .find(|(k, _)| var_key_eq(k, "name"))
-                                        .map(|(_, v)| format_var(&v))
-                                        .unwrap_or_default();
-                                    let depth_val = dmap
-                                        .iter()
+                if let Some(descendants_var) = descendants_var
+                    && let Some(descendants) = descendants_var.as_list()
+                {
+                    if descendants.is_empty() {
+                        output.push_str("  (no children)\n");
+                    } else {
+                        for d in descendants.iter() {
+                            if let Some(dmap) = d.as_map() {
+                                let obj = dmap
+                                    .iter()
+                                    .find(|(k, _)| var_key_eq(k, "obj"))
+                                    .map(|(_, v)| format_var(&v))
+                                    .unwrap_or_default();
+                                let name = dmap
+                                    .iter()
+                                    .find(|(k, _)| var_key_eq(k, "name"))
+                                    .map(|(_, v)| format_var(&v))
+                                    .unwrap_or_default();
+                                let depth_val =
+                                    dmap.iter()
                                         .find(|(k, _)| var_key_eq(k, "depth"))
                                         .and_then(|(_, v)| v.as_integer())
-                                        .unwrap_or(1)
-                                        as usize;
-                                    let indent = "  ".repeat(depth_val);
-                                    output.push_str(&format!("{}├─ {} {}\n", indent, obj, name));
-                                }
+                                        .unwrap_or(1) as usize;
+                                let indent = "  ".repeat(depth_val);
+                                output.push_str(&format!("{}├─ {} {}\n", indent, obj, name));
                             }
                         }
                     }
