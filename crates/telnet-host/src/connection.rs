@@ -63,6 +63,14 @@ const CONTENT_TYPE_DJOT: &str = "text_djot";
 const CONTENT_TYPE_DJOT_SLASH: &str = "text/djot";
 const CONTENT_TYPE_MARKDOWN_SLASH: &str = "text/markdown";
 
+/// Output formatting result - indicates how the content should be sent
+enum FormattedOutput {
+    /// Plain text - needs newline added via send_line
+    Plain(String),
+    /// Rich formatted (markdown/djot) - termimad already handles line endings
+    Rich(String),
+}
+
 pub(crate) struct TelnetConnection {
     pub(crate) peer_addr: SocketAddr,
     /// The "handler" object, who is responsible for this connection, defaults to SYSTEM_OBJECT,
@@ -627,15 +635,20 @@ impl TelnetConnection {
                     warn!("Failed to format message: {:?}", value);
                     return Ok(());
                 };
-                if no_newline {
-                    self.send_raw_text(&formatted)
-                        .await
-                        .with_context(|| "Unable to send raw text to client")?;
-                } else {
-                    self.send_line(&formatted)
-                        .await
-                        .with_context(|| "Unable to send message to client")?;
+                match formatted {
+                    FormattedOutput::Plain(text) => {
+                        if no_newline {
+                            self.send_raw_text(&text).await
+                        } else {
+                            self.send_line(&text).await
+                        }
+                    }
+                    FormattedOutput::Rich(text) => {
+                        // Rich content (markdown/djot) already has proper line endings
+                        self.send_raw_text(&text).await
+                    }
                 }
+                .with_context(|| "Unable to send message to client")?;
             }
 
             Event::Traceback(e) => {
@@ -1346,10 +1359,15 @@ impl TelnetConnection {
                             .and_then(|v| v.as_integer())
                             .and_then(|w| if w > 0 { Some(w as usize) } else { None });
 
-                        let output_str = output_format(msg, *content_type, width)?;
-                        self.send_line(&output_str)
-                            .await
-                            .expect("Unable to send message to client");
+                        let formatted = output_format(msg, *content_type, width)?;
+                        match formatted {
+                            FormattedOutput::Plain(text) => self.send_line(&text).await,
+                            FormattedOutput::Rich(text) => {
+                                // Rich content (markdown/djot) already has proper line endings
+                                self.send_raw_text(&text).await
+                            }
+                        }
+                        .expect("Unable to send message to client");
                     }
                     Event::Traceback(exception) => {
                         for frame in &exception.backtrace {
@@ -1892,7 +1910,7 @@ fn output_format(
     content: &Var,
     content_type: Option<Symbol>,
     width: Option<usize>,
-) -> Result<String, eyre::Error> {
+) -> Result<FormattedOutput, eyre::Error> {
     match content.variant() {
         Variant::Str(s) => output_str_format(s.as_str(), content_type, width),
         Variant::Sym(s) => output_str_format(&s.as_arc_string(), content_type, width),
@@ -1918,22 +1936,22 @@ fn output_str_format(
     content: &str,
     content_type: Option<Symbol>,
     width: Option<usize>,
-) -> Result<String, eyre::Error> {
+) -> Result<FormattedOutput, eyre::Error> {
     let Some(content_type) = content_type else {
-        return Ok(content.to_string());
+        return Ok(FormattedOutput::Plain(content.to_string()));
     };
     let content_type = content_type.as_arc_string();
     Ok(match content_type.as_str() {
         CONTENT_TYPE_MARKDOWN | CONTENT_TYPE_MARKDOWN_SLASH => {
-            markdown_to_ansi_with_width(content, width)
+            FormattedOutput::Rich(markdown_to_ansi_with_width(content, width))
         }
         CONTENT_TYPE_DJOT | CONTENT_TYPE_DJOT_SLASH => {
             // For now, we treat Djot as markdown.
             // In the future, we might want to support Djot specifically, but in reality, djot
             // is mainly a (safer) subset of markdown.
-            markdown_to_ansi_with_width(content, width)
+            FormattedOutput::Rich(markdown_to_ansi_with_width(content, width))
         }
         // text/plain, None, or unknown
-        _ => content.to_string(),
+        _ => FormattedOutput::Plain(content.to_string()),
     })
 }
