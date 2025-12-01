@@ -8,6 +8,7 @@ members = [
     "crates/daemon",
     "crates/db",
     "crates/kernel",
+    "crates/mcp-host",
     "crates/objdef",
     "crates/rpc/rpc-async-client",
     "crates/rpc/rpc-common",

@@ -1,0 +1,53 @@
+[package]
+name = "moor-mcp-host"
+version = "1.0.0-beta2"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Model Context Protocol (MCP) host for the mooR system - enables AI assistants to interact with MOO virtual worlds"
+
+[dependencies]
+# Internal Dependencies
+moor-common = { path = "../common" }
+moor-schema = { path = "../schema" }
+moor-var = { path = "../var" }
+rpc-async-client = { path = "../rpc/rpc-async-client" }
+rpc-common = { path = "../rpc/rpc-common" }
+
+# Command Line & Configuration
+clap.workspace = true
+clap_derive.workspace = true
+figment.workspace = true
+
+# Serialization & Data Formats
+planus.workspace = true
+serde.workspace = true
+serde_derive.workspace = true
+serde_json.workspace = true
+
+# Networking & Communication
+tmq.workspace = true
+
+# Async Runtime & Concurrency
+futures-util.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+
+# Error Handling & Logging
+color-eyre.workspace = true
+eyre.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Utilities & Helpers
+uuid.workspace = true
+
+[[bin]]
+name = "moor-mcp-host"
+path = "src/main.rs"

@@ -3338,6 +3338,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "moor-mcp-host"
+version = "1.0.0-beta2"
+dependencies = [
+ "clap",
+ "clap_derive",
+ "color-eyre",
+ "eyre",
+ "figment",
+ "futures-util",
+ "moor-common",
+ "moor-schema",
+ "moor-var",
+ "planus",
+ "rpc-async-client",
+ "rpc-common",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "thiserror 2.0.17",
+ "tmq",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "uuid 1.18.1",
+]
+
+[[package]]
 name = "moor-model-checker"
 version = "1.0.0-beta2"
 dependencies = [
