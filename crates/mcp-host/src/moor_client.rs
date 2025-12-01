@@ -61,6 +61,8 @@ pub struct MoorClient {
     auth_token: Option<AuthToken>,
     handler_object: Obj,
     player: Option<Obj>,
+    /// Stored credentials for reconnection
+    stored_credentials: Option<(String, String)>,
 }
 
 /// Result of a MOO task operation (command or verb invoke)
@@ -115,6 +117,7 @@ impl MoorClient {
             auth_token: None,
             handler_object: SYSTEM_OBJECT,
             player: None,
+            stored_credentials: None,
         })
     }
 
@@ -183,7 +186,12 @@ impl MoorClient {
     }
 
     /// Authenticate as a player
+    ///
+    /// Stores credentials for automatic re-authentication after reconnection.
     pub async fn login(&mut self, username: &str, password: &str) -> Result<()> {
+        // Store credentials for reconnection
+        self.stored_credentials = Some((username.to_string(), password.to_string()));
+
         let client_token = self
             .client_token
             .as_ref()
@@ -269,6 +277,157 @@ impl MoorClient {
     /// Get the current player object
     pub fn player(&self) -> Option<&Obj> {
         self.player.as_ref()
+    }
+
+    /// Check if we're connected (have a client token)
+    pub fn is_connected(&self) -> bool {
+        self.client_token.is_some()
+    }
+
+    /// Clear connection state without sending detach message
+    fn clear_connection_state(&mut self) {
+        self.client_token = None;
+        self.auth_token = None;
+        self.player = None;
+    }
+
+    /// Reconnect to the mooR daemon
+    ///
+    /// Clears stale connection state, re-establishes connection, and
+    /// re-authenticates using stored credentials if available.
+    pub async fn reconnect(&mut self) -> Result<()> {
+        info!("Attempting to reconnect to mooR daemon...");
+
+        // Clear the RPC connection pool to discard stale sockets
+        self.rpc_client.clear_pool().await;
+
+        // Clear connection state
+        self.clear_connection_state();
+
+        // Re-establish connection
+        self.connect().await?;
+
+        // Re-authenticate if we have stored credentials
+        if let Some((username, password)) = self.stored_credentials.clone() {
+            info!("Re-authenticating as {}...", username);
+            self.login_internal(&username, &password).await?;
+            info!("Successfully re-authenticated as {}", username);
+        }
+
+        Ok(())
+    }
+
+    /// Reconnect with exponential backoff
+    ///
+    /// Attempts to reconnect with increasing delays between attempts.
+    pub async fn reconnect_with_backoff(&mut self, max_attempts: u32) -> Result<()> {
+        let base_delay = Duration::from_millis(100);
+        let max_delay = Duration::from_secs(5);
+
+        for attempt in 1..=max_attempts {
+            match self.reconnect().await {
+                Ok(()) => {
+                    info!("Reconnected successfully on attempt {}", attempt);
+                    return Ok(());
+                }
+                Err(e) => {
+                    if attempt == max_attempts {
+                        return Err(eyre!(
+                            "Failed to reconnect after {} attempts: {}",
+                            max_attempts,
+                            e
+                        ));
+                    }
+
+                    // Calculate delay with exponential backoff
+                    let delay = std::cmp::min(base_delay * 2u32.pow(attempt - 1), max_delay);
+                    warn!(
+                        "Reconnect attempt {} failed: {}. Retrying in {:?}...",
+                        attempt, e, delay
+                    );
+                    tokio::time::sleep(delay).await;
+                }
+            }
+        }
+
+        unreachable!()
+    }
+
+    /// Internal login that doesn't store credentials (for reconnection)
+    async fn login_internal(&mut self, username: &str, password: &str) -> Result<()> {
+        let client_token = self
+            .client_token
+            .as_ref()
+            .ok_or_else(|| eyre!("Not connected - call connect() first"))?;
+
+        let login_msg = rpc_common::mk_login_command_msg(
+            client_token,
+            &self.handler_object,
+            vec![
+                "connect".to_string(),
+                username.to_string(),
+                password.to_string(),
+            ],
+            true,
+        );
+
+        let reply_bytes = self
+            .rpc_client
+            .make_client_rpc_call(self.client_id, login_msg)
+            .await
+            .map_err(|e| eyre!("Login failed: {}", e))?;
+
+        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+            .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
+
+        match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
+            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+                let daemon_reply = client_success
+                    .reply()
+                    .map_err(|e| eyre!("Missing reply: {}", e))?;
+                match daemon_reply
+                    .reply()
+                    .map_err(|e| eyre!("Missing reply union: {}", e))?
+                {
+                    moor_rpc::DaemonToClientReplyUnionRef::LoginResult(login_result) => {
+                        if login_result.success().unwrap_or(false) {
+                            if let Ok(Some(auth_token_ref)) = login_result.auth_token() {
+                                self.auth_token = Some(AuthToken(
+                                    auth_token_ref
+                                        .token()
+                                        .map_err(|e| eyre!("Missing auth token: {}", e))?
+                                        .to_string(),
+                                ));
+                            }
+                            if let Ok(Some(player_ref)) = login_result.player() {
+                                let player_struct = moor_rpc::Obj::try_from(player_ref)
+                                    .map_err(|e| eyre!("Failed to convert player: {}", e))?;
+                                self.player = Some(
+                                    moor_schema::convert::obj_from_flatbuffer_struct(
+                                        &player_struct,
+                                    )
+                                    .map_err(|e| eyre!("Failed to decode player: {}", e))?,
+                                );
+                            }
+                            Ok(())
+                        } else {
+                            Err(eyre!("Login failed"))
+                        }
+                    }
+                    _ => Err(eyre!("Unexpected login response")),
+                }
+            }
+            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+                let error = failure
+                    .error()
+                    .ok()
+                    .and_then(|e| e.message().ok().flatten())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "unknown error".to_string());
+                Err(eyre!("Login failed: {}", error))
+            }
+            _ => Err(eyre!("Unexpected response type")),
+        }
     }
 
     /// Evaluate a MOO expression

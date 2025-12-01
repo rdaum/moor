@@ -225,9 +225,20 @@ impl McpServer {
     }
 
     /// Handle tools/call request
+    ///
+    /// Attempts to execute the tool, with automatic reconnection on connection failures.
     async fn handle_tools_call(&mut self, params: &Value) -> Result<Value, JsonRpcError> {
         let call_params: ToolCallParams = serde_json::from_value(params.clone())
             .map_err(|e| JsonRpcError::invalid_params(e.to_string()))?;
+
+        // Reconnect tool doesn't need auth check - it's used to fix connection issues
+        if call_params.name == "moo_reconnect" {
+            let result =
+                tools::execute_tool(&mut self.client, &call_params.name, &call_params.arguments)
+                    .await
+                    .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+            return Ok(serde_json::to_value(result).unwrap());
+        }
 
         // Check if we need authentication for this tool
         if !self.client.is_authenticated() && needs_auth(&call_params.name) {
@@ -236,12 +247,63 @@ impl McpServer {
             ));
         }
 
+        // Try to execute the tool
         let result =
-            tools::execute_tool(&mut self.client, &call_params.name, &call_params.arguments)
-                .await
-                .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+            tools::execute_tool(&mut self.client, &call_params.name, &call_params.arguments).await;
 
-        Ok(serde_json::to_value(result).unwrap())
+        match result {
+            Ok(result) => Ok(serde_json::to_value(result).unwrap()),
+            Err(e) => {
+                let error_str = e.to_string();
+
+                // Check if this looks like a connection error
+                if Self::is_connection_error(&error_str) {
+                    warn!(
+                        "Tool call failed with connection error, attempting reconnect: {}",
+                        error_str
+                    );
+
+                    // Attempt to reconnect with backoff
+                    match self.client.reconnect_with_backoff(3).await {
+                        Ok(()) => {
+                            info!("Reconnected successfully, retrying tool call");
+
+                            // Retry the tool call
+                            let retry_result = tools::execute_tool(
+                                &mut self.client,
+                                &call_params.name,
+                                &call_params.arguments,
+                            )
+                            .await
+                            .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+
+                            Ok(serde_json::to_value(retry_result).unwrap())
+                        }
+                        Err(reconnect_err) => {
+                            error!("Reconnection failed: {}", reconnect_err);
+                            Err(JsonRpcError::internal_error(format!(
+                                "Connection lost and reconnection failed: {}. Original error: {}",
+                                reconnect_err, error_str
+                            )))
+                        }
+                    }
+                } else {
+                    Err(JsonRpcError::internal_error(e.to_string()))
+                }
+            }
+        }
+    }
+
+    /// Check if an error message indicates a connection problem
+    fn is_connection_error(error: &str) -> bool {
+        let error_lower = error.to_lowercase();
+        error_lower.contains("could not send")
+            || error_lower.contains("could not receive")
+            || error_lower.contains("connection")
+            || error_lower.contains("timeout")
+            || error_lower.contains("not connected")
+            || error_lower.contains("host unreachable")
+            || error_lower.contains("network")
     }
 
     /// Handle resources/list request
@@ -283,8 +345,9 @@ impl McpServer {
         let get_params: PromptGetParams = serde_json::from_value(params.clone())
             .map_err(|e| JsonRpcError::invalid_params(e.to_string()))?;
 
-        let result = prompts::get_prompt(&get_params.name)
-            .ok_or_else(|| JsonRpcError::invalid_params(format!("Unknown prompt: {}", get_params.name)))?;
+        let result = prompts::get_prompt(&get_params.name).ok_or_else(|| {
+            JsonRpcError::invalid_params(format!("Unknown prompt: {}", get_params.name))
+        })?;
 
         Ok(serde_json::to_value(result).unwrap())
     }

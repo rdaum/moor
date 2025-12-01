@@ -83,6 +83,8 @@ pub fn get_tools() -> Vec<Tool> {
         objdef::tool_moo_diff_object(),
         util::tool_moo_notify(),
         verbs::tool_moo_find_verb_definition(),
+        // Connection management
+        util::tool_moo_reconnect(),
     ]
 }
 
@@ -136,6 +138,8 @@ pub async fn execute_tool(
         "moo_find_verb_definition" => {
             verbs::execute_moo_find_verb_definition(client, arguments).await
         }
+        // Connection management
+        "moo_reconnect" => util::execute_moo_reconnect(client, arguments).await,
         _ => Ok(ToolCallResult::error(format!("Unknown tool: {}", name))),
     }
 }

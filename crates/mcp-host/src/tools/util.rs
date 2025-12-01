@@ -11,16 +11,31 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Utility tools: notify
+//! Utility tools: notify, reconnect
 
 use crate::mcp_types::{Tool, ToolCallResult};
 use crate::moor_client::{MoorClient, MoorResult};
 use eyre::Result;
 use serde_json::{Value, json};
+use tracing::info;
 
 // ============================================================================
 // Tool Definitions
 // ============================================================================
+
+pub fn tool_moo_reconnect() -> Tool {
+    Tool {
+        name: "moo_reconnect".to_string(),
+        description: "Reconnect to the mooR daemon. Use this if the connection has been lost \
+            (e.g., after the daemon was restarted). This clears stale connection state, \
+            re-establishes the connection, and re-authenticates using stored credentials."
+            .to_string(),
+        input_schema: json!({
+            "type": "object",
+            "properties": {}
+        }),
+    }
+}
 
 pub fn tool_moo_notify() -> Tool {
     Tool {
@@ -58,6 +73,28 @@ pub fn tool_moo_notify() -> Tool {
 // ============================================================================
 // Tool Implementations
 // ============================================================================
+
+pub async fn execute_moo_reconnect(
+    client: &mut MoorClient,
+    _args: &Value,
+) -> Result<ToolCallResult> {
+    info!("Manual reconnect requested");
+
+    match client.reconnect().await {
+        Ok(()) => {
+            let status = if client.is_authenticated() {
+                format!(
+                    "Reconnected and authenticated as {:?}",
+                    client.player().map(|p| p.to_string()).unwrap_or_default()
+                )
+            } else {
+                "Reconnected (not authenticated - no stored credentials)".to_string()
+            };
+            Ok(ToolCallResult::text(status))
+        }
+        Err(e) => Ok(ToolCallResult::error(format!("Reconnect failed: {}", e))),
+    }
+}
 
 pub async fn execute_moo_notify(client: &mut MoorClient, args: &Value) -> Result<ToolCallResult> {
     let player_str = args
