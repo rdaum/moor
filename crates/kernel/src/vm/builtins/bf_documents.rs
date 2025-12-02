@@ -761,7 +761,10 @@ fn moo_value_to_json(value: &moor_var::Var) -> Result<JsonValue, BfErr> {
 /// Convert a JSON value to a MOO value
 fn json_value_to_moo(json_value: &JsonValue) -> Result<moor_var::Var, BfErr> {
     match json_value {
-        JsonValue::Null => Ok(moor_var::v_none()),
+        // JSON null becomes the string "null" for ToastStunt compatibility.
+        // MOO has no proper null type - v_none() is a sigil that causes problems
+        // if it ends up in variables or stack frames.
+        JsonValue::Null => Ok(v_str("null")),
         JsonValue::Bool(b) => Ok(v_bool_int(*b)),
         JsonValue::Number(n) => {
             if n.is_i64() {

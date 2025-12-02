@@ -416,22 +416,22 @@ where
         // If provider not fully loaded, check backing source for existing data
         if !self.index.provider_fully_loaded
             && let Some((read_ts, backing_value)) = self.backing_source.get(&domain)?
-                && read_ts < self.tx.ts
-            {
-                // Existing entry in backing - do update via local operation
-                self.index.local_operations.insert(
-                    domain.clone(),
-                    Op {
-                        read_ts,
-                        write_ts: self.tx.ts,
-                        operation: OpType::Update(value.clone()),
-                        guaranteed_unique: false,
-                    },
-                );
-                self.index.has_local_mutations = true;
-                // Update local secondary index
-                return Ok(Some(backing_value));
-            }
+            && read_ts < self.tx.ts
+        {
+            // Existing entry in backing - do update via local operation
+            self.index.local_operations.insert(
+                domain.clone(),
+                Op {
+                    read_ts,
+                    write_ts: self.tx.ts,
+                    operation: OpType::Update(value.clone()),
+                    guaranteed_unique: false,
+                },
+            );
+            self.index.has_local_mutations = true;
+            // Update local secondary index
+            return Ok(Some(backing_value));
+        }
 
         // No existing entry anywhere (or provider fully loaded) - do insert via local operation
         self.index.local_operations.insert(
