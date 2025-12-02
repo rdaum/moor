@@ -1839,7 +1839,10 @@ impl WorldStateTransaction {
             }
         }
 
-        Ok(reference_map.into_iter().collect())
+        Ok(reference_map
+            .into_iter()
+            .filter(|(_, refs)| !refs.is_empty())
+            .collect())
     }
 
     pub(crate) fn get_anonymous_objects(&self) -> Result<HashSet<Obj>, WorldStateError> {
