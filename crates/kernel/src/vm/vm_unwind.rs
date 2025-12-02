@@ -82,7 +82,7 @@ impl VMExecState {
                         v_obj(a.permissions),
                         v_obj(NOTHING),
                         v_obj(a.player),
-                        v_none(),
+                        v_int(0),
                     ]
                 }
             };
@@ -250,7 +250,7 @@ impl VMExecState {
                                                 .value
                                                 .as_deref()
                                                 .cloned()
-                                                .unwrap_or(v_none());
+                                                .unwrap_or(v_int(0));
                                             frame.jump(&catch.1);
                                             frame.push(v_list(&[
                                                 v_err(e.error.err_type),

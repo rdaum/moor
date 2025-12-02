@@ -2896,4 +2896,30 @@ mod tests {
         );
         assert_eq!(result, Ok(v_obj(Obj::mk_id(-3))));
     }
+
+    #[test]
+    fn test_regression_none_to_scatter_from_error() {
+        // This is causing a panic because one of the elements in the scatter from `e` is "TYPE_NONE"
+        // None is a kind of sigial for "variable not defined" not an actual "value" in mooR/MOO.
+        // So I have explicit asserts to look for scenarios where it's getting assigned in.
+        // We need to diagnose why this is happening (likely how the exception handler is populating `e`,
+        //  and/or how scatter is treating it
+        let program = r#"try
+                                raise(E_INVARG, "test");
+                              except e (ANY)
+                                {a, b, c, d} = e;
+                                return c;
+                              endtry
+                            "#;
+        let state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result, Ok(v_int(0)));
+    }
 }
