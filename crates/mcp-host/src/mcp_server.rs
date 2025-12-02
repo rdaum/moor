@@ -16,8 +16,8 @@
 //! This module implements the Model Context Protocol server that communicates
 //! over stdio using JSON-RPC 2.0.
 
+use crate::connection::ConnectionManager;
 use crate::mcp_types::*;
-use crate::moor_client::MoorClient;
 use crate::{prompts, resources, tools};
 use eyre::Result;
 use serde_json::{Value, json};
@@ -29,25 +29,17 @@ const PROTOCOL_VERSION: &str = "2024-11-05";
 
 /// MCP Server state
 pub struct McpServer {
-    client: MoorClient,
+    connections: ConnectionManager,
     initialized: bool,
-    /// Credentials to use after connection is established
-    pending_credentials: Option<(String, String)>,
 }
 
 impl McpServer {
-    /// Create a new MCP server with a mooR client
-    pub fn new(client: MoorClient) -> Self {
+    /// Create a new MCP server with a connection manager
+    pub fn new(connections: ConnectionManager) -> Self {
         Self {
-            client,
+            connections,
             initialized: false,
-            pending_credentials: None,
         }
-    }
-
-    /// Set credentials to use after connection is established
-    pub fn set_credentials(&mut self, username: String, password: String) {
-        self.pending_credentials = Some((username, password));
     }
 
     /// Run the MCP server over stdio
@@ -175,22 +167,12 @@ impl McpServer {
 
         info!("Initializing MCP server");
 
-        // Try to connect to mooR daemon
-        if let Err(e) = self.client.connect().await {
-            warn!(
-                "Failed to connect to mooR daemon: {} - continuing without connection",
-                e
-            );
-        } else {
-            // Connection succeeded - try to login with pending credentials
-            if let Some((username, password)) = self.pending_credentials.take() {
-                info!("Authenticating as {}...", username);
-                if let Err(e) = self.client.login(&username, &password).await {
-                    error!("Failed to authenticate: {}", e);
-                } else {
-                    info!("Successfully authenticated as {}", username);
-                }
-            }
+        // Log configured connections (connections are established lazily on first use)
+        if self.connections.has_programmer_credentials() {
+            info!("Programmer connection configured (will connect on first use)");
+        }
+        if self.connections.has_wizard_credentials() {
+            info!("Wizard connection configured (will connect on first use)");
         }
 
         let result = InitializeResult {
@@ -231,25 +213,40 @@ impl McpServer {
         let call_params: ToolCallParams = serde_json::from_value(params.clone())
             .map_err(|e| JsonRpcError::invalid_params(e.to_string()))?;
 
-        // Reconnect tool doesn't need auth check - it's used to fix connection issues
-        if call_params.name == "moo_reconnect" {
-            let result =
-                tools::execute_tool(&mut self.client, &call_params.name, &call_params.arguments)
-                    .await
-                    .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
-            return Ok(serde_json::to_value(result).unwrap());
+        // Check if this tool requires wizard privileges
+        let is_wizard_only = tools::WIZARD_ONLY_TOOLS.contains(&call_params.name.as_str());
+
+        // Extract wizard flag from arguments (defaults to false, unless wizard-only)
+        let wizard = if is_wizard_only {
+            true
+        } else {
+            call_params
+                .arguments
+                .get("wizard")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        };
+
+        if wizard {
+            if is_wizard_only {
+                debug!("Tool {} requires wizard privileges", call_params.name);
+            } else {
+                warn!(
+                    "Tool {} called with wizard privileges - use with caution!",
+                    call_params.name
+                );
+            }
         }
 
-        // Check if we need authentication for this tool
-        if !self.client.is_authenticated() && needs_auth(&call_params.name) {
-            return Err(JsonRpcError::internal_error(
-                "Not authenticated. Use moo_login tool first or configure credentials.",
-            ));
-        }
+        // Get the appropriate client (lazy connection)
+        let client = self
+            .connections
+            .get(wizard)
+            .await
+            .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
 
         // Try to execute the tool
-        let result =
-            tools::execute_tool(&mut self.client, &call_params.name, &call_params.arguments).await;
+        let result = tools::execute_tool(client, &call_params.name, &call_params.arguments).await;
 
         match result {
             Ok(result) => Ok(serde_json::to_value(result).unwrap()),
@@ -264,13 +261,20 @@ impl McpServer {
                     );
 
                     // Attempt to reconnect with backoff
-                    match self.client.reconnect_with_backoff(3).await {
+                    match self.connections.reconnect(wizard).await {
                         Ok(()) => {
                             info!("Reconnected successfully, retrying tool call");
 
+                            // Get client again after reconnect
+                            let client = self
+                                .connections
+                                .get(wizard)
+                                .await
+                                .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+
                             // Retry the tool call
                             let retry_result = tools::execute_tool(
-                                &mut self.client,
+                                client,
                                 &call_params.name,
                                 &call_params.arguments,
                             )
@@ -319,13 +323,14 @@ impl McpServer {
         let read_params: ResourceReadParams = serde_json::from_value(params.clone())
             .map_err(|e| JsonRpcError::invalid_params(e.to_string()))?;
 
-        if !self.client.is_authenticated() {
-            return Err(JsonRpcError::internal_error(
-                "Not authenticated. Configure credentials to browse resources.",
-            ));
-        }
+        // Resources always use programmer connection (read-only browsing)
+        let client = self
+            .connections
+            .programmer()
+            .await
+            .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
 
-        let result = resources::read_resource(&mut self.client, &read_params.uri)
+        let result = resources::read_resource(client, &read_params.uri)
             .await
             .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
 
@@ -351,18 +356,6 @@ impl McpServer {
 
         Ok(serde_json::to_value(result).unwrap())
     }
-
-    /// Login to the mooR daemon
-    #[allow(dead_code)]
-    pub async fn login(&mut self, username: &str, password: &str) -> Result<()> {
-        self.client.login(username, password).await
-    }
-}
-
-/// Check if a tool requires authentication
-fn needs_auth(tool_name: &str) -> bool {
-    // These tools work without authentication (sort of)
-    !matches!(tool_name, "moo_resolve")
 }
 
 /// Parse a request ID from JSON value

@@ -35,55 +35,60 @@ mod verbs;
 use crate::mcp_types::{Tool, ToolCallResult};
 use crate::moor_client::MoorClient;
 use eyre::Result;
+use helpers::{with_wizard_param, wizard_required};
 use serde_json::Value;
 use tracing::debug;
 
 // Re-export helper functions needed by resources module
-pub use helpers::{format_var_for_resource, parse_object_ref};
+pub use helpers::{WIZARD_ONLY_TOOLS, format_var_for_resource, parse_object_ref};
 
 /// Get all available tools
+///
+/// All tools support an optional `wizard` parameter that executes the tool
+/// with wizard privileges instead of programmer privileges. This should be
+/// used sparingly and only when elevated permissions are required.
 pub fn get_tools() -> Vec<Tool> {
     vec![
         // Execution tools
-        eval::tool_moo_eval(),
-        eval::tool_moo_command(),
-        eval::tool_moo_invoke_verb(),
-        eval::tool_moo_function_help(),
+        with_wizard_param(eval::tool_moo_eval()),
+        with_wizard_param(eval::tool_moo_command()),
+        with_wizard_param(eval::tool_moo_invoke_verb()),
+        with_wizard_param(eval::tool_moo_function_help()),
         // Object inspection tools
-        objects::tool_moo_list_objects(),
-        objects::tool_moo_resolve(),
-        objects::tool_moo_object_graph(),
+        with_wizard_param(objects::tool_moo_list_objects()),
+        with_wizard_param(objects::tool_moo_resolve()),
+        with_wizard_param(objects::tool_moo_object_graph()),
         // Verb tools
-        verbs::tool_moo_list_verbs(),
-        verbs::tool_moo_get_verb(),
-        verbs::tool_moo_program_verb(),
-        verbs::tool_moo_add_verb(),
-        verbs::tool_moo_delete_verb(),
+        with_wizard_param(verbs::tool_moo_list_verbs()),
+        with_wizard_param(verbs::tool_moo_get_verb()),
+        with_wizard_param(verbs::tool_moo_program_verb()),
+        with_wizard_param(verbs::tool_moo_add_verb()),
+        with_wizard_param(verbs::tool_moo_delete_verb()),
         // Property tools
-        properties::tool_moo_list_properties(),
-        properties::tool_moo_get_property(),
-        properties::tool_moo_set_property(),
-        properties::tool_moo_add_property(),
-        properties::tool_moo_delete_property(),
+        with_wizard_param(properties::tool_moo_list_properties()),
+        with_wizard_param(properties::tool_moo_get_property()),
+        with_wizard_param(properties::tool_moo_set_property()),
+        with_wizard_param(properties::tool_moo_add_property()),
+        with_wizard_param(properties::tool_moo_delete_property()),
         // Object manipulation tools
-        objects::tool_moo_create_object(),
-        objects::tool_moo_recycle_object(),
-        // Object definition (objdef) tools
-        objdef::tool_moo_dump_object(),
-        objdef::tool_moo_load_object(),
-        objdef::tool_moo_reload_object(),
-        // Filesystem objdef tools
-        objdef::tool_moo_read_objdef_file(),
-        objdef::tool_moo_write_objdef_file(),
-        objdef::tool_moo_load_objdef_file(),
-        objdef::tool_moo_reload_objdef_file(),
+        with_wizard_param(objects::tool_moo_create_object()),
+        with_wizard_param(objects::tool_moo_recycle_object()),
+        // Object definition (objdef) tools - wizard only
+        wizard_required(objdef::tool_moo_dump_object()),
+        wizard_required(objdef::tool_moo_load_object()),
+        wizard_required(objdef::tool_moo_reload_object()),
+        // Filesystem objdef tools - wizard only
+        wizard_required(objdef::tool_moo_read_objdef_file()),
+        wizard_required(objdef::tool_moo_write_objdef_file()),
+        wizard_required(objdef::tool_moo_load_objdef_file()),
+        wizard_required(objdef::tool_moo_reload_objdef_file()),
         // Utility tools
-        objects::tool_moo_move_object(),
-        objects::tool_moo_set_parent(),
-        objdef::tool_moo_diff_object(),
-        util::tool_moo_notify(),
-        verbs::tool_moo_find_verb_definition(),
-        // Connection management
+        with_wizard_param(objects::tool_moo_move_object()),
+        with_wizard_param(objects::tool_moo_set_parent()),
+        wizard_required(objdef::tool_moo_diff_object()),
+        with_wizard_param(util::tool_moo_notify()),
+        with_wizard_param(verbs::tool_moo_find_verb_definition()),
+        // Connection management (no wizard param needed - it reconnects both)
         util::tool_moo_reconnect(),
     ]
 }

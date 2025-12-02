@@ -13,11 +13,11 @@
 
 //! Shared helper functions for MCP tools
 
-use crate::mcp_types::ToolCallResult;
+use crate::mcp_types::{Tool, ToolCallResult};
 use crate::moor_client::TaskResult;
 use moor_common::model::ObjectRef;
 use moor_var::Var;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 /// Helper to check if a Var's string value matches a key (case-insensitive per MOO semantics)
 pub fn var_key_eq(v: &Var, key: &str) -> bool {
@@ -219,3 +219,61 @@ pub fn format_task_result(result: &TaskResult) -> ToolCallResult {
         ToolCallResult::error(output)
     }
 }
+
+/// Add the wizard parameter to a tool's input schema
+///
+/// This adds an optional `wizard` boolean parameter that controls which
+/// connection is used to execute the tool.
+pub fn with_wizard_param(mut tool: Tool) -> Tool {
+    // Add wizard parameter to the schema's properties
+    if let Some(properties) = tool.input_schema.get_mut("properties")
+        && let Some(props_obj) = properties.as_object_mut()
+    {
+        props_obj.insert(
+            "wizard".to_string(),
+            json!({
+                "type": "boolean",
+                "description": "DANGER: Execute with wizard privileges. Only use when \
+                    elevated permissions are absolutely required. Wizard mode bypasses \
+                    normal permission checks and can modify any object in the database. \
+                    Default: false (uses programmer connection).",
+                "default": false
+            }),
+        );
+    }
+
+    // Append warning to description
+    tool.description = format!(
+        "{} [Supports wizard mode for elevated privileges - use with extreme caution]",
+        tool.description
+    );
+
+    tool
+}
+
+/// Mark a tool as requiring wizard privileges
+///
+/// These tools always execute with wizard privileges and cannot be used
+/// with the programmer connection.
+pub fn wizard_required(mut tool: Tool) -> Tool {
+    // Prepend warning to description
+    tool.description = format!(
+        "[WIZARD ONLY] {} This operation requires wizard privileges and will always \
+        use the wizard connection.",
+        tool.description
+    );
+
+    tool
+}
+
+/// List of tools that always require wizard privileges
+pub const WIZARD_ONLY_TOOLS: &[&str] = &[
+    "moo_dump_object",
+    "moo_load_object",
+    "moo_reload_object",
+    "moo_read_objdef_file",
+    "moo_write_objdef_file",
+    "moo_load_objdef_file",
+    "moo_reload_objdef_file",
+    "moo_diff_object",
+];

@@ -19,16 +19,31 @@
 //!
 //! # Usage
 //!
-//! ```bash
-//! moor-mcp-host --rpc-address tcp://localhost:7899 --events-address tcp://localhost:7898
-//! ```
-//!
-//! Or with authentication:
+//! Basic usage with programmer credentials (recommended for most operations):
 //!
 //! ```bash
-//! moor-mcp-host --rpc-address tcp://localhost:7899 --username wizard --password secret
+//! moor-mcp-host --rpc-address tcp://localhost:7899 --username programmer --password secret
 //! ```
+//!
+//! With both programmer and wizard credentials (for operations requiring elevated privileges):
+//!
+//! ```bash
+//! moor-mcp-host --rpc-address tcp://localhost:7899 \
+//!     --username programmer --password secret \
+//!     --wizard-username wizard --wizard-password wizard_secret
+//! ```
+//!
+//! # Connection Model
+//!
+//! The MCP host supports two connection types:
+//! - **Programmer**: Default connection used for most operations. Uses `--username`/`--password`.
+//! - **Wizard**: Elevated privileges for operations like dump/load. Uses `--wizard-username`/`--wizard-password`.
+//!
+//! Connections are established lazily on first use. Most tools default to programmer mode
+//! and accept an optional `wizard: true` parameter for elevated access. Some tools (objdef
+//! operations) always require wizard privileges.
 
+mod connection;
 mod mcp_server;
 mod mcp_types;
 mod moor_client;
@@ -38,13 +53,14 @@ mod tools;
 
 use clap::Parser;
 use clap_derive::Parser;
+use connection::{ConnectionConfig, ConnectionManager, Credentials};
 use eyre::Result;
 use figment::{
     Figment,
     providers::{Format, Serialized, Yaml},
 };
 use mcp_server::McpServer;
-use moor_client::{MoorClient, MoorClientConfig};
+use moor_client::MoorClientConfig;
 use rpc_common::client_args::RpcClientArgs;
 use serde_derive::{Deserialize, Serialize};
 use tracing::{info, warn};
@@ -58,13 +74,21 @@ struct Args {
     #[command(flatten)]
     client_args: RpcClientArgs,
 
-    /// Username to authenticate with (optional - can also be done via MCP)
+    /// Username for default (programmer) connection
     #[arg(long)]
     username: Option<String>,
 
-    /// Password to authenticate with (optional - can also be done via MCP)
+    /// Password for default (programmer) connection
     #[arg(long)]
     password: Option<String>,
+
+    /// Username for wizard connection (elevated privileges)
+    #[arg(long)]
+    wizard_username: Option<String>,
+
+    /// Password for wizard connection (elevated privileges)
+    #[arg(long)]
+    wizard_password: Option<String>,
 
     /// Enable debug logging (logs go to stderr to avoid interfering with MCP)
     #[arg(long, default_value = "false")]
@@ -107,23 +131,46 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Create the mooR client
-    let config = MoorClientConfig {
+    // Create the client config
+    let client_config = MoorClientConfig {
         rpc_address: args.client_args.rpc_address.clone(),
         events_address: args.client_args.events_address.clone(),
         curve_keys,
     };
 
-    let client = MoorClient::new(config)?;
+    // Build credentials from args
+    let programmer_credentials = match (&args.username, &args.password) {
+        (Some(username), Some(password)) => {
+            info!("Programmer credentials configured for {}", username);
+            Some(Credentials {
+                username: username.clone(),
+                password: password.clone(),
+            })
+        }
+        _ => None,
+    };
+
+    let wizard_credentials = match (&args.wizard_username, &args.wizard_password) {
+        (Some(username), Some(password)) => {
+            info!("Wizard credentials configured for {}", username);
+            Some(Credentials {
+                username: username.clone(),
+                password: password.clone(),
+            })
+        }
+        _ => None,
+    };
+
+    // Create the connection manager
+    let connection_config = ConnectionConfig {
+        client_config,
+        programmer_credentials,
+        wizard_credentials,
+    };
+    let connections = ConnectionManager::new(connection_config);
 
     // Create MCP server
-    let mut server = McpServer::new(client);
-
-    // If credentials were provided, set them for use after connection
-    if let (Some(username), Some(password)) = (&args.username, &args.password) {
-        info!("Credentials configured for {}", username);
-        server.set_credentials(username.clone(), password.clone());
-    }
+    let mut server = McpServer::new(connections);
 
     // Run the MCP server
     info!("MCP server ready, listening on stdio");
