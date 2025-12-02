@@ -88,14 +88,38 @@ fn run_gc_mark_phase(
         .scan_anonymous_object_references()
         .map_err(|e| GarbageCollectionFailed(format!("Failed to scan DB references: {e}")))?;
 
-    // Mark reachable objects
-    let mut reachable_objects = HashSet::new();
+    // Build lookup map for transitive closure
+    let db_refs_map: std::collections::HashMap<Obj, HashSet<Obj>> = db_refs.into_iter().collect();
 
-    // Mark objects referenced from VM (filter to anonymous only)
-    reachable_objects.extend(vm_refs.into_iter().filter(|obj| obj.is_anonymous()));
+    // Start with VM refs (filter to anonymous only)
+    let mut reachable_objects: HashSet<Obj> = vm_refs
+        .into_iter()
+        .filter(|obj| obj.is_anonymous())
+        .collect();
 
-    // Mark objects referenced from DB
-    reachable_objects.extend(db_refs.iter().flat_map(|(_, refs)| refs.clone()));
+    // Add refs from regular (non-anonymous) objects - these are roots
+    for (obj, refs) in &db_refs_map {
+        if !obj.is_anonymous() {
+            reachable_objects.extend(refs.iter().copied());
+        }
+    }
+
+    // Transitive closure: follow refs from reachable anonymous objects to find more
+    let mut worklist: Vec<Obj> = reachable_objects
+        .iter()
+        .filter(|o| o.is_anonymous())
+        .copied()
+        .collect();
+
+    while let Some(obj) = worklist.pop() {
+        if let Some(refs) = db_refs_map.get(&obj) {
+            for r in refs {
+                if r.is_anonymous() && reachable_objects.insert(*r) {
+                    worklist.push(*r);
+                }
+            }
+        }
+    }
 
     // Find unreachable objects
     let unreachable_objects: HashSet<Obj> = all_anon_objects

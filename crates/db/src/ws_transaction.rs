@@ -1772,31 +1772,31 @@ impl WorldStateTransaction {
     ) -> Result<Vec<(Obj, HashSet<Obj>)>, WorldStateError> {
         let mut reference_map = std::collections::HashMap::new();
 
-        // Get all objects once - this is the only get_all() call we need
+        // Scan ALL property values directly - this catches inherited property overrides
+        // that would be missed by only scanning propdefs per object. When a child object
+        // overrides an inherited property, the value is stored in object_propvalues under
+        // the child's obj id, but the propdef only exists on the parent.
+        let all_propvalues = self
+            .object_propvalues
+            .get_all()
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+
+        for (holder, prop_value) in all_propvalues {
+            let obj = holder.obj;
+            let obj_refs = reference_map.entry(obj).or_insert_with(HashSet::new);
+            crate::extract_anonymous_refs(&prop_value, obj_refs);
+        }
+
+        // Get all objects for remaining checks (parent, location, verbdefs, propdefs metadata)
         let all_objects = self
             .object_flags
             .get_all()
             .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
 
-        // For each object, check for anonymous references using targeted queries
         for (obj, _flags) in all_objects {
-            let mut obj_refs = HashSet::new();
+            let obj_refs = reference_map.entry(obj).or_insert_with(HashSet::new);
 
-            // 1. Get property definitions (used for both values and metadata checks)
-            let propdefs = match self.get_properties(&obj) {
-                Ok(propdefs) => propdefs,
-                Err(_) => continue, // Object might not have properties
-            };
-
-            // Check property values for anonymous object references
-            for propdef in propdefs.iter() {
-                if let Ok((Some(prop_value), _perms)) = self.retrieve_property(&obj, propdef.uuid())
-                {
-                    crate::extract_anonymous_refs(&prop_value, &mut obj_refs);
-                }
-            }
-
-            // 2. Check parent relationship
+            // 1. Check parent relationship
             if let Ok(parent) = self.get_object_parent(&obj)
                 && parent.is_anonymous()
             {
@@ -1810,7 +1810,7 @@ impl WorldStateTransaction {
                 obj_refs.insert(location);
             }
 
-            // 4. Check verb definitions for object references
+            // 2. Check verb definitions for object references
             if let Ok(verbdefs) = self.get_verbs(&obj) {
                 for verbdef in verbdefs.iter() {
                     // Check location field
@@ -1824,21 +1824,18 @@ impl WorldStateTransaction {
                 }
             }
 
-            // 5. Check property definitions for object references (reuse propdefs from above)
-            for propdef in propdefs.iter() {
-                // Check definer field
-                if propdef.definer().is_anonymous() {
-                    obj_refs.insert(propdef.definer());
+            // 3. Check property definitions for object references
+            if let Ok(propdefs) = self.get_properties(&obj) {
+                for propdef in propdefs.iter() {
+                    // Check definer field
+                    if propdef.definer().is_anonymous() {
+                        obj_refs.insert(propdef.definer());
+                    }
+                    // Check location field
+                    if propdef.location().is_anonymous() {
+                        obj_refs.insert(propdef.location());
+                    }
                 }
-                // Check location field
-                if propdef.location().is_anonymous() {
-                    obj_refs.insert(propdef.location());
-                }
-            }
-
-            // Only add to map if we found references
-            if !obj_refs.is_empty() {
-                reference_map.insert(obj, obj_refs);
             }
         }
 
