@@ -212,7 +212,7 @@ setup() {
 
     # Pre-create directories with correct ownership to prevent Docker from creating them as root
     log_info "Creating data directories with correct ownership..."
-    mkdir -p ./moor-data ./moor-ipc ./moor-telnet-host-data ./moor-web-host-data ./moor-curl-worker-data 2>/dev/null || true
+    mkdir -p ./moor-data ./moor-ipc ./moor-config ./moor-local-share ./moor-telnet-host-data ./moor-web-host-data ./moor-curl-worker-data 2>/dev/null || true
 
     log_info "Setup complete"
 }

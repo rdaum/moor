@@ -7,8 +7,9 @@ networks:
   moor_net:
 
 # Named volumes for persistent application data
-volumes:
-  moor-config:
+# Note: moor-config uses a bind mount instead of a named volume
+# to avoid permission issues with non-root users
+#volumes:
 
 services:
   # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
@@ -27,12 +28,16 @@ services:
     user: "${USER_ID}:${GROUP_ID}"
     environment:
       - RUST_BACKTRACE=1
+      - HOME=/moor
+      - XDG_CONFIG_HOME=/moor/.config
+      - XDG_DATA_HOME=/moor/.local/share
     working_dir: /moor
     volumes:
       - ./moor-data:/moor/moor-data
       - ../../cores:/moor/cores:ro
       - ./moor-ipc:/var/run/moor
-      - moor-config:/root/.config/moor
+      - ./moor-config:/moor/.config/moor
+      - ./moor-local-share:/moor/.local/share/moor
     command: >
       ./moor-daemon
         /moor/moor-data
@@ -63,11 +68,15 @@ services:
     user: "${USER_ID}:${GROUP_ID}"
     environment:
       - RUST_BACKTRACE=1
+      - HOME=/moor
+      - XDG_CONFIG_HOME=/moor/.config
+      - XDG_DATA_HOME=/moor/.local/share
     working_dir: /moor
     volumes:
       - ./moor-telnet-host-data:/moor/.moor-host-data
       - ./moor-ipc:/var/run/moor
-      - moor-config:/root/.config/moor:ro
+      - ./moor-config:/moor/.config/moor:ro
+      - ./moor-local-share:/moor/.local/share/moor:ro
     command:
       - ./moor-telnet-host
       - --telnet-address=0.0.0.0
@@ -100,11 +109,15 @@ services:
     user: "${USER_ID}:${GROUP_ID}"
     environment:
       - RUST_BACKTRACE=1
+      - HOME=/moor
+      - XDG_CONFIG_HOME=/moor/.config
+      - XDG_DATA_HOME=/moor/.local/share
     working_dir: /moor
     volumes:
       - ./moor-web-host-data:/moor/.moor-host-data
       - ./moor-ipc:/var/run/moor
-      - moor-config:/root/.config/moor:ro
+      - ./moor-config:/moor/.config/moor:ro
+      - ./moor-local-share:/moor/.local/share/moor:ro
     command:
       - ./moor-web-host
       - --listen-address=0.0.0.0:8081
@@ -156,11 +169,15 @@ services:
     user: "${USER_ID}:${GROUP_ID}"
     environment:
       - RUST_BACKTRACE=1
+      - HOME=/moor
+      - XDG_CONFIG_HOME=/moor/.config
+      - XDG_DATA_HOME=/moor/.local/share
     working_dir: /moor
     volumes:
       - ./moor-curl-worker-data:/moor/.moor-host-data
       - ./moor-ipc:/var/run/moor
-      - moor-config:/root/.config/moor:ro
+      - ./moor-config:/moor/.config/moor:ro
+      - ./moor-local-share:/moor/.local/share/moor:ro
     command:
       - ./moor-curl-worker
       - --rpc-address=ipc:///var/run/moor/rpc.sock
