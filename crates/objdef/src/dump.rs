@@ -729,6 +729,18 @@ mod tests {
                 .unwrap();
             assert_eq!(system_obj, SYSTEM_OBJECT);
 
+            // Add import_export_id so the object gets a file during dump
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("import_export_id"),
+                &SYSTEM_OBJECT,
+                BitEnum::new_with(PropFlag::Read),
+                Some(v_str("sysobj")),
+            )
+            .unwrap();
+
             // Create a simple lambda by compiling a lambda expression
             let lambda_source = "return {x} => x + 1;";
             let lambda_program = compile(lambda_source, CompileOptions::default()).unwrap();
@@ -1032,37 +1044,41 @@ mod tests {
                 )
                 .unwrap();
 
-            // Make all objects get constants by referencing them from #0
+            // Define import_export_id on root object, then update values on children
+            // (children inherit the property definition, we just set their values)
             tx.define_property(
                 &SYSTEM_OBJECT,
                 &SYSTEM_OBJECT,
                 &SYSTEM_OBJECT,
-                Symbol::mk("obj1"),
+                Symbol::mk("import_export_id"),
                 &SYSTEM_OBJECT,
                 BitEnum::new_with(PropFlag::Read),
-                Some(v_obj(obj1)),
+                Some(v_str("sysobj")),
             )
             .unwrap();
 
-            tx.define_property(
+            // Set import_export_id values on child objects
+            tx.update_property(
                 &SYSTEM_OBJECT,
-                &SYSTEM_OBJECT,
-                &SYSTEM_OBJECT,
-                Symbol::mk("obj2"),
-                &SYSTEM_OBJECT,
-                BitEnum::new_with(PropFlag::Read),
-                Some(v_obj(obj2)),
+                &obj1,
+                Symbol::mk("import_export_id"),
+                &v_str("obj1"),
             )
             .unwrap();
 
-            tx.define_property(
+            tx.update_property(
                 &SYSTEM_OBJECT,
+                &obj2,
+                Symbol::mk("import_export_id"),
+                &v_str("obj2"),
+            )
+            .unwrap();
+
+            tx.update_property(
                 &SYSTEM_OBJECT,
-                &SYSTEM_OBJECT,
-                Symbol::mk("obj3"),
-                &SYSTEM_OBJECT,
-                BitEnum::new_with(PropFlag::Read),
-                Some(v_obj(obj3)),
+                &obj3,
+                Symbol::mk("import_export_id"),
+                &v_str("obj3"),
             )
             .unwrap();
 
@@ -1172,6 +1188,18 @@ mod tests {
                 )
                 .unwrap();
             assert_eq!(system_obj, SYSTEM_OBJECT);
+
+            // Add import_export_id so the object gets a file during dump
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("import_export_id"),
+                &SYSTEM_OBJECT,
+                BitEnum::new_with(PropFlag::Read),
+                Some(v_str("sysobj")),
+            )
+            .unwrap();
 
             // Create anonymous objects
             anon_obj1 = tx
