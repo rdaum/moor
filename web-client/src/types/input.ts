@@ -24,6 +24,7 @@ export type InputType =
 export interface InputMetadata {
     input_type?: InputType;
     prompt?: string;
+    tts_prompt?: string;
     choices?: string[];
     min?: number;
     max?: number;

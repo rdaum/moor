@@ -740,6 +740,7 @@ function handleTaskError(
         noNewline?: boolean,
         presentationHint?: string,
         groupId?: string,
+        ttsText?: string,
         thumbnail?: { contentType: string; data: string },
     ) => void,
 ): void {
@@ -852,6 +853,7 @@ function handleTaskError(
             undefined,
             undefined,
             undefined,
+            undefined,
         );
     }
 }
@@ -872,6 +874,7 @@ export function handleClientEventFlatBuffer(
         noNewline?: boolean,
         presentationHint?: string,
         groupId?: string,
+        ttsText?: string,
         thumbnail?: { contentType: string; data: string },
     ) => void,
     onPresentMessage?: (presentData: any) => void,
@@ -960,9 +963,10 @@ export function handleClientEventFlatBuffer(
 
                         const noNewline = notify.noNewline();
 
-                        // Extract presentation_hint, group_id, and thumbnail from metadata
+                        // Extract presentation_hint, group_id, tts_text, and thumbnail from metadata
                         let presentationHint: string | undefined;
                         let groupId: string | undefined;
+                        let ttsText: string | undefined;
                         let thumbnail: { contentType: string; data: string } | undefined;
                         const metadataLength = notify.metadataLength();
                         for (let i = 0; i < metadataLength; i++) {
@@ -984,6 +988,8 @@ export function handleClientEventFlatBuffer(
                                                         presentationHint = v;
                                                     } else if (k === "group_id" && typeof v === "string") {
                                                         groupId = v;
+                                                    } else if (k === "tts_text" && typeof v === "string") {
+                                                        ttsText = v;
                                                     } else if (
                                                         k === "thumbnail" && Array.isArray(v) && v.length === 2
                                                     ) {
@@ -1019,6 +1025,7 @@ export function handleClientEventFlatBuffer(
                                 noNewline,
                                 presentationHint,
                                 groupId,
+                                ttsText,
                                 thumbnail,
                             );
                         }
@@ -1126,6 +1133,7 @@ export function handleClientEventFlatBuffer(
                                 "text/traceback",
                                 false,
                                 false,
+                                undefined,
                                 undefined,
                                 undefined,
                                 undefined,

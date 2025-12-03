@@ -25,6 +25,7 @@ interface OutputWindowProps {
         noNewline?: boolean;
         presentationHint?: string;
         groupId?: string;
+        ttsText?: string;
         thumbnail?: { contentType: string; data: string };
     }>;
     onLoadMoreHistory?: () => void;
@@ -46,6 +47,32 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
     const shouldAutoScroll = useRef(true);
     const previousScrollHeight = useRef<number>(0);
     const [isViewingHistory, setIsViewingHistory] = useState(false);
+
+    // Render content with optional TTS text for screen readers
+    const renderContentWithTts = useCallback((
+        content: string | string[],
+        contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback" | undefined,
+        ttsText: string | undefined,
+        thumbnail?: { contentType: string; data: string },
+    ) => {
+        if (ttsText) {
+            return (
+                <>
+                    {thumbnail && <img src={thumbnail.data} alt="thumbnail" className="narrative_thumbnail" />}
+                    <span className="sr-only">{ttsText}</span>
+                    <span aria-hidden="true">
+                        <ContentRenderer content={content} contentType={contentType} onLinkClick={onLinkClick} />
+                    </span>
+                </>
+            );
+        }
+        return (
+            <>
+                {thumbnail && <img src={thumbnail.data} alt="thumbnail" className="narrative_thumbnail" />}
+                <ContentRenderer content={content} contentType={contentType} onLinkClick={onLinkClick} />
+            </>
+        );
+    }, [onLinkClick]);
 
     // Auto-scroll to bottom when new messages arrive
     useEffect(() => {
@@ -254,19 +281,13 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
 
                             result.push(
                                 <div key={message.id} className={wrapperClassName}>
-                                    {message.thumbnail && (
-                                        <img
-                                            src={message.thumbnail.data}
-                                            alt="thumbnail"
-                                            className="narrative_thumbnail"
-                                        />
-                                    )}
                                     <div className={baseClassName}>
-                                        <ContentRenderer
-                                            content={message.content}
-                                            contentType={message.contentType}
-                                            onLinkClick={onLinkClick}
-                                        />
+                                        {renderContentWithTts(
+                                            message.content,
+                                            message.contentType,
+                                            message.ttsText,
+                                            message.thumbnail,
+                                        )}
                                     </div>
                                 </div>,
                             );
@@ -280,18 +301,12 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                         message.isHistorical,
                                     )}
                                 >
-                                    {message.thumbnail && (
-                                        <img
-                                            src={message.thumbnail.data}
-                                            alt="thumbnail"
-                                            className="narrative_thumbnail"
-                                        />
+                                    {renderContentWithTts(
+                                        message.content,
+                                        message.contentType,
+                                        message.ttsText,
+                                        message.thumbnail,
                                     )}
-                                    <ContentRenderer
-                                        content={message.content}
-                                        contentType={message.contentType}
-                                        onLinkClick={onLinkClick}
-                                    />
                                 </div>,
                             );
                         }
@@ -329,18 +344,12 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                 >
                                     {group.map(msg => (
                                         <div key={msg.id} className={baseClassName}>
-                                            {msg.thumbnail && (
-                                                <img
-                                                    src={msg.thumbnail.data}
-                                                    alt="thumbnail"
-                                                    className="narrative_thumbnail"
-                                                />
+                                            {renderContentWithTts(
+                                                msg.content,
+                                                msg.contentType,
+                                                msg.ttsText,
+                                                msg.thumbnail,
                                             )}
-                                            <ContentRenderer
-                                                content={msg.content}
-                                                contentType={msg.contentType}
-                                                onLinkClick={onLinkClick}
-                                            />
                                         </div>
                                     ))}
                                 </div>,
@@ -363,6 +372,12 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                 }
                             }).join("");
 
+                            // Combine ttsText from all messages in the group
+                            const combinedTtsText = group
+                                .filter(msg => msg.ttsText)
+                                .map(msg => msg.ttsText)
+                                .join(" ");
+
                             result.push(
                                 <div
                                     key={`noline_${firstMessage.id}`}
@@ -371,11 +386,11 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                         firstMessage.isHistorical,
                                     )}
                                 >
-                                    <ContentRenderer
-                                        content={combinedHtml}
-                                        contentType="text/html"
-                                        onLinkClick={onLinkClick}
-                                    />
+                                    {renderContentWithTts(
+                                        combinedHtml,
+                                        "text/html",
+                                        combinedTtsText || undefined,
+                                    )}
                                 </div>,
                             );
                         }

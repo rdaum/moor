@@ -1665,6 +1665,7 @@ function AppWrapper() {
             noNewline?: boolean;
             presentationHint?: string;
             groupId?: string;
+            ttsText?: string;
             thumbnail?: { contentType: string; data: string };
         }>
     >([]);
@@ -1677,6 +1678,7 @@ function AppWrapper() {
         noNewline?: boolean,
         presentationHint?: string,
         groupId?: string,
+        ttsText?: string,
         thumbnail?: { contentType: string; data: string },
     ) => {
         // Handle array content by processing each line
@@ -1699,6 +1701,7 @@ function AppWrapper() {
                         noNewline,
                         presentationHint,
                         groupId,
+                        ttsText,
                         thumbnail,
                     );
                 } else {
@@ -1709,6 +1712,7 @@ function AppWrapper() {
                             noNewline,
                             presentationHint,
                             groupId,
+                            ttsText,
                             thumbnail,
                         }],
                     );
@@ -1725,11 +1729,20 @@ function AppWrapper() {
                         noNewline,
                         presentationHint,
                         groupId,
+                        ttsText,
                         thumbnail,
                     );
                 } else {
                     setPendingMessages(
-                        prev => [...prev, { content, contentType, noNewline, presentationHint, groupId, thumbnail }],
+                        prev => [...prev, {
+                            content,
+                            contentType,
+                            noNewline,
+                            presentationHint,
+                            groupId,
+                            ttsText,
+                            thumbnail,
+                        }],
                     );
                 }
             }
@@ -1747,16 +1760,19 @@ function AppWrapper() {
     // Process pending messages when narrative ref becomes available
     const narrativeCallbackRef = useCallback((node: NarrativeRef | null) => {
         if (node) {
-            pendingMessages.forEach(({ content, contentType, noNewline, presentationHint, groupId, thumbnail }) => {
-                node.addNarrativeContent(
-                    content,
-                    contentType as "text/plain" | "text/djot" | "text/html",
-                    noNewline,
-                    presentationHint,
-                    groupId,
-                    thumbnail,
-                );
-            });
+            pendingMessages.forEach(
+                ({ content, contentType, noNewline, presentationHint, groupId, ttsText, thumbnail }) => {
+                    node.addNarrativeContent(
+                        content,
+                        contentType as "text/plain" | "text/djot" | "text/html",
+                        noNewline,
+                        presentationHint,
+                        groupId,
+                        ttsText,
+                        thumbnail,
+                    );
+                },
+            );
             if (pendingMessages.length > 0) {
                 setPendingMessages([]);
             }

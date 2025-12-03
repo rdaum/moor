@@ -42,6 +42,7 @@ interface WebSocketProviderProps {
         noNewline?: boolean,
         presentationHint?: string,
         groupId?: string,
+        ttsText?: string,
         thumbnail?: { contentType: string; data: string },
     ) => void;
     handlePresentMessage: (presentData: PresentationData) => void;

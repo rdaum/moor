@@ -27,6 +27,7 @@ export interface NarrativeMessage {
     noNewline?: boolean;
     presentationHint?: string;
     groupId?: string;
+    ttsText?: string;
     thumbnail?: { contentType: string; data: string };
 }
 
@@ -52,6 +53,7 @@ export interface NarrativeRef {
         noNewline?: boolean,
         presentationHint?: string,
         groupId?: string,
+        ttsText?: string,
         thumbnail?: { contentType: string; data: string },
     ) => void;
     addSystemMessage: (content: string | string[]) => void;
@@ -130,6 +132,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         noNewline?: boolean,
         presentationHint?: string,
         groupId?: string,
+        ttsText?: string,
         thumbnail?: { contentType: string; data: string },
     ) => {
         const now = Date.now();
@@ -142,6 +145,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             noNewline,
             presentationHint,
             groupId,
+            ttsText,
             thumbnail,
         };
 
@@ -196,9 +200,10 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             noNewline?: boolean,
             presentationHint?: string,
             groupId?: string,
+            ttsText?: string,
             thumbnail?: { contentType: string; data: string },
         ) => {
-            addMessage(content, "narrative", contentType, noNewline, presentationHint, groupId, thumbnail);
+            addMessage(content, "narrative", contentType, noNewline, presentationHint, groupId, ttsText, thumbnail);
         },
         [addMessage],
     );
@@ -381,6 +386,9 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
                     }}
                 >
                     <div
+                        role="status"
+                        aria-live="polite"
+                        aria-atomic="true"
                         style={{
                             display: "flex",
                             flexDirection: "column",
@@ -395,7 +403,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
                         {connectionStatus === "connecting"
                             ? (
                                 <>
-                                    <div className="loading-spinner large" />
+                                    <div className="loading-spinner large" aria-hidden="true" />
                                     <div
                                         style={{
                                             color: "var(--color-text-primary)",
@@ -411,6 +419,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
                             : (
                                 <>
                                     <div
+                                        aria-hidden="true"
                                         style={{
                                             color: "var(--color-text-error)",
                                             fontSize: "24px",

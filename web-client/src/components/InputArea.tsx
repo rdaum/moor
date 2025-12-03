@@ -57,14 +57,15 @@ export const InputArea: React.FC<InputAreaProps> = ({
         typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     );
 
-    // Focus input area when it becomes visible and enabled
+    // Focus input area when it becomes visible and enabled, or when returning from rich input prompt
     useEffect(() => {
-        if (visible && !disabled && textareaRef.current) {
-            setTimeout(() => {
-                textareaRef.current?.focus();
-            }, 100);
+        if (visible && !disabled && !inputMetadata?.input_type && textareaRef.current) {
+            // Only focus if the textarea doesn't already have focus
+            if (document.activeElement !== textareaRef.current) {
+                textareaRef.current.focus();
+            }
         }
-    }, [visible, disabled]);
+    }, [visible, disabled, inputMetadata]);
 
     // Auto-resize textarea based on content
     useEffect(() => {
@@ -277,11 +278,13 @@ export const InputArea: React.FC<InputAreaProps> = ({
                 aria-multiline="true"
             />
             {/* Visual-only placeholder, hidden from screen readers */}
-            {!input && (
-                <div className="input_area_placeholder" aria-hidden="true">
-                    {ENCOURAGING_PLACEHOLDERS[placeholderIndex]}
-                </div>
-            )}
+            <div
+                className="input_area_placeholder"
+                aria-hidden="true"
+                style={{ visibility: input ? "hidden" : "visible" }}
+            >
+                {ENCOURAGING_PLACEHOLDERS[placeholderIndex]}
+            </div>
             <div id="input-help" className="sr-only">
                 Use Shift+Enter for new lines. Arrow keys navigate command history when at start or end of input.
             </div>

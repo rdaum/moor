@@ -52,6 +52,14 @@ export function parseInputMetadata(metadataPairs: MetadataPair[] | null): InputM
                 break;
             }
 
+            case "tts_prompt": {
+                const strValue = moorVar.asString();
+                if (strValue) {
+                    metadata.tts_prompt = strValue;
+                }
+                break;
+            }
+
             case "choices": {
                 const listValue = moorVar.asList();
                 if (listValue) {
@@ -119,6 +127,22 @@ export function parseInputMetadata(metadataPairs: MetadataPair[] | null): InputM
                 const strValue = moorVar.asString();
                 if (strValue) {
                     metadata.alternative_placeholder = strValue;
+                }
+                break;
+            }
+
+            case "metadata": {
+                // Handle nested metadata map (MOO maps come through as arrays of [key, value] pairs)
+                const metadataMap = moorVar.toJS();
+                if (Array.isArray(metadataMap)) {
+                    for (const pair of metadataMap) {
+                        if (Array.isArray(pair) && pair.length === 2) {
+                            const [k, v] = pair;
+                            if (k === "tts_prompt" && typeof v === "string") {
+                                metadata.tts_prompt = v;
+                            }
+                        }
+                    }
                 }
                 break;
             }

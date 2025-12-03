@@ -105,16 +105,42 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
             return null;
         }
 
+        // If tts_prompt is provided, use sr-only for screen readers and aria-hidden for visual
+        if (metadata.tts_prompt) {
+            return (
+                <div
+                    className="rich_input_prompt_text"
+                    role="status"
+                    aria-live="polite"
+                    id={promptStatusId}
+                    tabIndex={-1}
+                >
+                    <span className="sr-only">{metadata.tts_prompt}</span>
+                    <span aria-hidden="true">{renderPrompt(metadata.prompt)}</span>
+                </div>
+            );
+        }
+
         return (
             <div className="rich_input_prompt_text" role="status" aria-live="polite" id={promptStatusId} tabIndex={-1}>
                 {renderPrompt(metadata.prompt)}
             </div>
         );
-    }, [metadata.prompt, renderPrompt, promptStatusId]);
+    }, [metadata.prompt, metadata.tts_prompt, renderPrompt, promptStatusId]);
 
     const renderPromptLabel = useCallback((targetId: string) => {
         if (!metadata.prompt) {
             return null;
+        }
+
+        // If tts_prompt is provided, use sr-only for screen readers and aria-hidden for visual
+        if (metadata.tts_prompt) {
+            return (
+                <label htmlFor={targetId} className="rich_input_prompt_text">
+                    <span className="sr-only">{metadata.tts_prompt}</span>
+                    <span aria-hidden="true">{renderPrompt(metadata.prompt)}</span>
+                </label>
+            );
         }
 
         return (
@@ -122,7 +148,7 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                 {renderPrompt(metadata.prompt)}
             </label>
         );
-    }, [metadata.prompt, renderPrompt]);
+    }, [metadata.prompt, metadata.tts_prompt, renderPrompt]);
 
     // Yes/No/Alternative input type (for coding agents, etc.)
     if (metadata.input_type === "yes_no_alternative") {
@@ -477,7 +503,7 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                         onChange={(e) => setValue(e.target.value)}
                         onKeyDown={handleKeyDown}
                         disabled={disabled}
-                        aria-label={metadata.prompt || "Choose an option"}
+                        aria-label={metadata.tts_prompt || metadata.prompt || "Choose an option"}
                     >
                         <option value="">-- Select --</option>
                         {metadata.choices.map((choice, index) => (
@@ -516,7 +542,7 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                         max={metadata.max}
                         placeholder={metadata.placeholder}
                         disabled={disabled}
-                        aria-label={metadata.prompt || "Enter a number"}
+                        aria-label={metadata.tts_prompt || metadata.prompt || "Enter a number"}
                         autoFocus
                     />
                     <button
@@ -552,7 +578,7 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                         }}
                         placeholder={metadata.placeholder}
                         disabled={disabled}
-                        aria-label={metadata.prompt || "Enter text"}
+                        aria-label={metadata.tts_prompt || metadata.prompt || "Enter text"}
                         rows={metadata.rows || 4}
                         autoFocus
                     />
@@ -619,7 +645,7 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                     onKeyDown={handleKeyDown}
                     placeholder={metadata.placeholder}
                     disabled={disabled}
-                    aria-label={metadata.prompt || "Enter text"}
+                    aria-label={metadata.tts_prompt || metadata.prompt || "Enter text"}
                     autoFocus
                 />
                 <button
