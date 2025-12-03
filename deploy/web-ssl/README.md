@@ -43,19 +43,7 @@ This configuration runs:
    cd /path/to/deployment
    ```
 
-2. **Configure your domain and email** in `.env` (copy from `.env.example`):
-   ```bash
-   cp .env.example .env
-   nano .env
-   ```
-
-   Set these **required** values:
-   ```bash
-   DOMAIN_NAME=your-domain.com
-   CERTBOT_EMAIL=your-email@example.com
-   ```
-
-3. **Update nginx configuration** with your domain:
+2. **Update nginx configuration** with your domain:
    ```bash
    nano nginx-ssl.conf
    ```
@@ -81,10 +69,11 @@ only necessary if you're developing or need to customize the deployment.
 
 Before starting the main services, you need to obtain an SSL certificate from Let's Encrypt:
 
-1. **Start only the frontend temporarily** (for ACME challenge):
+1. **Create directories and start frontend temporarily** (for ACME challenge):
    ```bash
-   # Create directories for certbot
-   mkdir -p letsencrypt certbot-webroot
+   # Set up user permissions and create directories
+   export USER_ID=$(id -u) GROUP_ID=$(id -g)
+   mkdir -p moor-data moor-ipc moor-config moor-local-share moor-telnet-host-data moor-web-host-data moor-curl-worker-data letsencrypt certbot-webroot
 
    # Start a temporary nginx for certificate validation
    docker compose up -d moor-frontend
@@ -115,9 +104,9 @@ Before starting the main services, you need to obtain an SSL certificate from Le
    docker compose down
    ```
 
-2. **Start all services**:
+2. **Start all services** using the start script:
    ```bash
-   docker compose up -d
+   ./start.sh
    ```
 
 3. **Check logs** to verify startup:
@@ -166,14 +155,12 @@ Default wizard credentials (if using lambda-moor core):
 
 ## Configuration
 
-### Environment Variables
+### Customizing Ports and Settings
 
-See `.env.example` for all options. Required settings:
+To change ports or other settings, edit `docker-compose.yml` directly:
 
-- **DOMAIN_NAME**: Your domain name (e.g., `moo.example.com`)
-- **CERTBOT_EMAIL**: Email for Let's Encrypt notifications
-- **TELNET_PORT**: Port for telnet connections (default: 8888)
-- **DATABASE_NAME**: Database file name (default: production.db)
+- **Telnet port**: Change the `ports:` mapping for `moor-telnet-host` (default: `8888:8888`)
+- **Database name**: Modify the `--db=` argument in the daemon command (default: `production.db`)
 
 ### nginx SSL Configuration
 
@@ -217,7 +204,7 @@ tar czf certs-backup-$(date +%Y%m%d).tar.gz letsencrypt/
 ### Start services
 
 ```bash
-docker compose up -d
+./start.sh
 ```
 
 ### Stop services
@@ -382,7 +369,7 @@ To upgrade to a newer version of mooR:
 3. **Restart services**:
    ```bash
    docker compose down
-   docker compose up -d
+   ./start.sh
    ```
 
 4. **Check logs for issues**:

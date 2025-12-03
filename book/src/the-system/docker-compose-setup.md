@@ -77,23 +77,20 @@ All production configurations follow the same basic steps:
    cd /path/to/deployment
    ```
 
-2. **Set user permissions** (required for Docker deployments):
+2. **Start the services** using the included start script:
    ```bash
-   export USER_ID=$(id -u) GROUP_ID=$(id -g)
+   ./start.sh
    ```
 
-3. **Start the services**:
-   ```bash
-   docker compose up -d
-   ```
+   The start script handles user permissions and directory setup automatically.
 
-4. **Verify deployment**:
+3. **Verify deployment**:
    ```bash
    docker compose ps
    docker compose logs -f
    ```
 
-5. **Test the deployment** (optional but recommended):
+4. **Test the deployment** (optional but recommended):
    ```bash
    ./test.sh
    ```
@@ -235,7 +232,7 @@ docker compose restart moor-frontend
 : If ports 8080 (web) or 8888 (telnet) are already in use, modify the port mappings in the compose file.
 
 **Permission denied errors**
-: Ensure you've exported `USER_ID` and `GROUP_ID` environment variables before starting services.
+: Use the `./start.sh` script which handles user permissions automatically. If running `docker compose` directly, ensure you've exported `USER_ID` and `GROUP_ID` environment variables and pre-created the data directories.
 
 **Services won't start**
 : Check logs with `docker compose logs <service-name>`. Verify all required directories exist and are accessible.

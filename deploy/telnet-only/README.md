@@ -42,28 +42,23 @@ registry:
    cd /path/to/deployment
    ```
 
-2. **Review and customize** the `.env` file (copy from `.env.example`):
+2. **Start the services** using the start script:
    ```bash
-   cp .env.example .env
-   # Edit .env with your preferred settings
+   ./start.sh
    ```
 
-3. **Start the services**:
-   ```bash
-   docker compose up -d
-   ```
-
-That's it! Docker Compose will pull the latest pre-built images from Codeberg.
+That's it! The start script handles user permissions and directory setup, then pulls and starts the
+containers.
 
 ### Using Locally-Built Images
 
 If you prefer to build images locally on your machine:
 
-1. Follow steps 1-2 above
+1. Follow step 1 above
 2. Edit `docker-compose.yml` and uncomment the `build:` sections for services (replacing `image:`
    lines)
 3. Ensure you're in the mooR source directory (parent of `deploy/`)
-4. Run: `docker compose up -d`
+4. Run: `./start.sh`
 
 ### For ARM64 Systems
 
@@ -102,12 +97,12 @@ Default wizard credentials (if using lambda-moor core):
 
 ## Configuration
 
-### Environment Variables
+### Customizing Ports and Settings
 
-See `.env.example` for available configuration options. Key settings:
+To change ports or other settings, edit `docker-compose.yml` directly:
 
-- **TELNET_PORT**: Port for telnet connections (default: 8888)
-- **DATABASE_NAME**: Name of the database file (default: production.db)
+- **Telnet port**: Change the `ports:` mapping for `moor-telnet-host` (default: `8888:8888`)
+- **Database name**: Modify the `--db=` argument in the daemon command (default: `production.db`)
 
 ### Data Persistence
 
@@ -124,7 +119,7 @@ Data is stored in local directories:
 ### Start services
 
 ```bash
-docker compose up -d
+./start.sh
 ```
 
 ### Stop services
@@ -176,7 +171,7 @@ To upgrade to a newer version of mooR:
 3. **Restart services**:
    ```bash
    docker compose down
-   docker compose up -d
+   ./start.sh
    ```
 
 ## Troubleshooting
