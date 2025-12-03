@@ -11,7 +11,15 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-export type InputType = "yes_no" | "choice" | "number" | "text" | "text_area" | "confirmation" | "yes_no_alternative";
+export type InputType =
+    | "yes_no"
+    | "choice"
+    | "number"
+    | "text"
+    | "text_area"
+    | "confirmation"
+    | "yes_no_alternative"
+    | "yes_no_alternative_all";
 
 export interface InputMetadata {
     input_type?: InputType;

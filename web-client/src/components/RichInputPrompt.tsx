@@ -257,6 +257,153 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
         );
     }
 
+    // Yes/No/Alternative/All input type (for LLM wearable confirmations with "accept all" option)
+    if (metadata.input_type === "yes_no_alternative_all") {
+        if (showAlternative) {
+            return (
+                <div className="rich_input_prompt" role="form" aria-label="Provide alternative response">
+                    <div className="sr-only" role="status" aria-live="polite">
+                        Alternative response form is now active
+                    </div>
+                    {promptStatus}
+                    <div className="rich_input_buttons">
+                        <button
+                            type="button"
+                            className="rich_input_button"
+                            onClick={() => handleSubmit("yes")}
+                            disabled={disabled}
+                            aria-label="Yes"
+                        >
+                            Yes
+                        </button>
+                        <button
+                            type="button"
+                            className="rich_input_button"
+                            onClick={() => handleSubmit("no")}
+                            disabled={disabled}
+                            aria-label="No"
+                        >
+                            No
+                        </button>
+                        <button
+                            type="button"
+                            className="rich_input_button"
+                            onClick={() => setShowAlternative(false)}
+                            disabled={disabled}
+                            aria-label="Cancel alternative"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                    <div
+                        className="rich_input_alternative_container"
+                        role="group"
+                        aria-labelledby={`${baseId}-alternative-label`}
+                    >
+                        <label
+                            htmlFor={alternativeInputId}
+                            className="rich_input_prompt_text"
+                            id={`${baseId}-alternative-label`}
+                        >
+                            {renderPrompt(metadata.alternative_label || "Describe your alternative:")}
+                        </label>
+                        <div id={alternativeDescriptionId} className="sr-only">
+                            {metadata.alternative_placeholder
+                                || "Enter your alternative suggestion in the text area below. Press Ctrl+Enter to submit."}
+                        </div>
+                        <div className="rich_input_text_container">
+                            <textarea
+                                ref={alternativeTextareaRef}
+                                id={alternativeInputId}
+                                className="rich_input_textarea"
+                                value={value}
+                                onChange={(e) => setValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter" && e.ctrlKey) {
+                                        e.preventDefault();
+                                        submitAlternativeValue();
+                                    }
+                                }}
+                                placeholder={metadata.alternative_placeholder || "Enter your alternative..."}
+                                disabled={disabled}
+                                aria-label={metadata.alternative_label || "Alternative suggestion"}
+                                aria-describedby={alternativeDescriptionId}
+                                rows={4}
+                                autoFocus
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            className="rich_input_button rich_input_button_primary"
+                            onClick={submitAlternativeValue}
+                            disabled={disabled || !trimmedValue}
+                            aria-label="Submit alternative"
+                        >
+                            Submit Alternative
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div
+                className="rich_input_prompt"
+                role="form"
+                aria-label="Respond with yes, yes to all, no, or alternative"
+            >
+                <div className="sr-only" role="status" aria-live="polite">
+                    Response required: choose yes, yes to all, no, or provide an alternative
+                </div>
+                {promptStatus}
+                <div className="rich_input_buttons">
+                    <button
+                        ref={primaryButtonRef}
+                        type="button"
+                        className="rich_input_button rich_input_button_primary"
+                        onClick={() => handleSubmit("yes")}
+                        disabled={disabled}
+                        aria-label="Yes"
+                    >
+                        Yes
+                    </button>
+                    <button
+                        type="button"
+                        className="rich_input_button"
+                        onClick={() => handleSubmit("yes_all")}
+                        disabled={disabled}
+                        aria-label="Yes to all - accept this and all future changes"
+                        title="Accept this and all future changes without prompting"
+                    >
+                        Yes to All
+                    </button>
+                    <button
+                        type="button"
+                        className="rich_input_button"
+                        onClick={() => handleSubmit("no")}
+                        disabled={disabled}
+                        aria-label="No"
+                    >
+                        No
+                    </button>
+                    <button
+                        type="button"
+                        className="rich_input_button"
+                        onClick={() => {
+                            setShowAlternative(true);
+                        }}
+                        disabled={disabled}
+                        aria-label="Suggest alternative"
+                        aria-expanded={false}
+                        ref={alternativeButtonRef}
+                    >
+                        Alternative...
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     // Yes/No input type
     if (metadata.input_type === "yes_no") {
         return (
