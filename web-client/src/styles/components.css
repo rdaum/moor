@@ -380,6 +380,11 @@
   font-size: 0.8em;
 }
 
+.input_area_wrapper {
+  position: relative;
+  width: 100%;
+}
+
 .input_area {
   background-color: var(--color-bg-input);
   color: var(--color-text-primary);
@@ -395,6 +400,17 @@
   max-height: 8rem;
   width: 100%;
   box-sizing: border-box;
+}
+
+.input_area_placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: var(--space-md);
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  pointer-events: none;
+  opacity: 0.6;
 }
 
 /* ====== WINDOWS & DIALOGS ====== */

@@ -24,6 +24,7 @@ interface OutputWindowProps {
         contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback";
         noNewline?: boolean;
         presentationHint?: string;
+        groupId?: string;
         thumbnail?: { contentType: string; data: string };
     }>;
     onLoadMoreHistory?: () => void;
@@ -193,7 +194,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                 </div>
             )}
 
-            {/* Render all messages, grouping no_newline messages and consecutive messages with same presentationHint */}
+            {/* Render all messages, grouping no_newline messages and consecutive messages with same presentationHint+groupId */}
             {(() => {
                 const groupedMessages: typeof messages[] = [];
                 let currentGroup: typeof messages = [];
@@ -206,9 +207,11 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
 
                     // Continue grouping if:
                     // 1. This message has noNewline, OR
-                    // 2. This message has a presentationHint and the next message has the same one
-                    const shouldContinueGroup = message.noNewline
-                        || (message.presentationHint && nextMessage?.presentationHint === message.presentationHint);
+                    // 2. This message has a presentationHint and the next message has the same hint AND same groupId
+                    const sameHintGroup = message.presentationHint
+                        && nextMessage?.presentationHint === message.presentationHint
+                        && message.groupId === nextMessage?.groupId;
+                    const shouldContinueGroup = message.noNewline || sameHintGroup;
 
                     // If we shouldn't continue grouping or it's the last message, complete the current group
                     if (!shouldContinueGroup || i === messages.length - 1) {
@@ -296,24 +299,34 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                         return result;
                     } else {
                         // Multiple messages grouped together
-                        const lastMessage = group[group.length - 1];
 
                         // Check if this group is for presentationHint or noNewline
-                        const isHintGroup = lastMessage.presentationHint
-                            && group.every(msg => msg.presentationHint === lastMessage.presentationHint);
+                        const isHintGroup = firstMessage.presentationHint
+                            && group.every(msg =>
+                                msg.presentationHint === firstMessage.presentationHint
+                                && msg.groupId === firstMessage.groupId
+                            );
 
                         if (isHintGroup) {
                             // Group messages with same presentationHint in a wrapper, but render each on its own line
                             const baseClassName = getMessageClassName(
-                                lastMessage.type,
-                                lastMessage.isHistorical,
+                                firstMessage.type,
+                                firstMessage.isHistorical,
                             );
-                            const wrapperClassName = lastMessage.presentationHint === "inset"
+                            const wrapperClassName = firstMessage.presentationHint === "inset"
                                 ? "presentation_inset"
                                 : "";
 
+                            // Use firstMessage.id for stable key - prevents re-render when group grows
+                            // The stable key ensures React preserves the DOM node and only appends
+                            // new children, so screen readers announce only additions (not the whole group)
                             result.push(
-                                <div key={`group_${groupIndex}_${lastMessage.id}`} className={wrapperClassName}>
+                                <div
+                                    key={`hint_${firstMessage.id}`}
+                                    className={wrapperClassName}
+                                    role="group"
+                                    aria-label="Grouped content"
+                                >
                                     {group.map(msg => (
                                         <div key={msg.id} className={baseClassName}>
                                             {msg.thumbnail && (
@@ -352,10 +365,10 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
 
                             result.push(
                                 <div
-                                    key={`group_${groupIndex}_${lastMessage.id}`}
+                                    key={`noline_${firstMessage.id}`}
                                     className={getMessageClassName(
-                                        lastMessage.type,
-                                        lastMessage.isHistorical,
+                                        firstMessage.type,
+                                        firstMessage.isHistorical,
                                     )}
                                 >
                                     <ContentRenderer

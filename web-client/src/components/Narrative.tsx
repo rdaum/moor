@@ -26,6 +26,7 @@ export interface NarrativeMessage {
     contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback";
     noNewline?: boolean;
     presentationHint?: string;
+    groupId?: string;
     thumbnail?: { contentType: string; data: string };
 }
 
@@ -50,6 +51,7 @@ export interface NarrativeRef {
         contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback",
         noNewline?: boolean,
         presentationHint?: string,
+        groupId?: string,
         thumbnail?: { contentType: string; data: string },
     ) => void;
     addSystemMessage: (content: string | string[]) => void;
@@ -127,6 +129,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback",
         noNewline?: boolean,
         presentationHint?: string,
+        groupId?: string,
         thumbnail?: { contentType: string; data: string },
     ) => {
         const now = Date.now();
@@ -138,6 +141,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             contentType,
             noNewline,
             presentationHint,
+            groupId,
             thumbnail,
         };
 
@@ -191,9 +195,10 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback",
             noNewline?: boolean,
             presentationHint?: string,
+            groupId?: string,
             thumbnail?: { contentType: string; data: string },
         ) => {
-            addMessage(content, "narrative", contentType, noNewline, presentationHint, thumbnail);
+            addMessage(content, "narrative", contentType, noNewline, presentationHint, groupId, thumbnail);
         },
         [addMessage],
     );
@@ -323,7 +328,6 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             ref={narrativeContainerRef}
             className="narrative"
             id="narrative"
-            aria-label="Narrative and input"
         >
             {/* History viewing indicator - TODO: implement */}
             {/* <HistoryIndicator /> */}

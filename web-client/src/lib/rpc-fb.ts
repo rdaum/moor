@@ -739,6 +739,7 @@ function handleTaskError(
         isHistorical?: boolean,
         noNewline?: boolean,
         presentationHint?: string,
+        groupId?: string,
         thumbnail?: { contentType: string; data: string },
     ) => void,
 ): void {
@@ -842,7 +843,16 @@ function handleTaskError(
     if (message && onNarrativeMessage) {
         const fullMessage = description ? `${message}\n${description.join("\n")}` : message;
         // Send to narrative output styled like exception tracebacks (red)
-        onNarrativeMessage(fullMessage, new Date().toISOString(), "text/traceback", false, false, undefined, undefined);
+        onNarrativeMessage(
+            fullMessage,
+            new Date().toISOString(),
+            "text/traceback",
+            false,
+            false,
+            undefined,
+            undefined,
+            undefined,
+        );
     }
 }
 
@@ -861,6 +871,7 @@ export function handleClientEventFlatBuffer(
         isHistorical?: boolean,
         noNewline?: boolean,
         presentationHint?: string,
+        groupId?: string,
         thumbnail?: { contentType: string; data: string },
     ) => void,
     onPresentMessage?: (presentData: any) => void,
@@ -949,8 +960,9 @@ export function handleClientEventFlatBuffer(
 
                         const noNewline = notify.noNewline();
 
-                        // Extract presentation_hint and thumbnail from metadata
+                        // Extract presentation_hint, group_id, and thumbnail from metadata
                         let presentationHint: string | undefined;
+                        let groupId: string | undefined;
                         let thumbnail: { contentType: string; data: string } | undefined;
                         const metadataLength = notify.metadataLength();
                         for (let i = 0; i < metadataLength; i++) {
@@ -970,6 +982,8 @@ export function handleClientEventFlatBuffer(
                                                     const [k, v] = pair;
                                                     if (k === "presentation_hint" && typeof v === "string") {
                                                         presentationHint = v;
+                                                    } else if (k === "group_id" && typeof v === "string") {
+                                                        groupId = v;
                                                     } else if (
                                                         k === "thumbnail" && Array.isArray(v) && v.length === 2
                                                     ) {
@@ -1004,6 +1018,7 @@ export function handleClientEventFlatBuffer(
                                 false,
                                 noNewline,
                                 presentationHint,
+                                groupId,
                                 thumbnail,
                             );
                         }
@@ -1111,6 +1126,7 @@ export function handleClientEventFlatBuffer(
                                 "text/traceback",
                                 false,
                                 false,
+                                undefined,
                                 undefined,
                                 undefined,
                             );

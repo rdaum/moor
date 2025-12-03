@@ -35,6 +35,7 @@ export const useWebSocket = (
         isHistorical?: boolean,
         noNewline?: boolean,
         presentationHint?: string,
+        groupId?: string,
         thumbnail?: { contentType: string; data: string },
     ) => void,
     onPresentMessage?: (presentData: PresentationData) => void,

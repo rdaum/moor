@@ -147,7 +147,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
         setInput("");
         setHistoryOffset(0);
 
-        // Pick a new encouraging placeholder for next input (skip for screen readers)
+        // Pick a new encouraging placeholder for next input (skip if user prefers reduced motion)
         if (!prefersReducedMotion.current) {
             setPlaceholderIndex(Math.floor(Math.random() * ENCOURAGING_PLACEHOLDERS.length));
         }
@@ -260,7 +260,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
     // Default text input
     return (
-        <div className="w-full">
+        <div className="input_area_wrapper">
             <textarea
                 ref={textareaRef}
                 id="input_area"
@@ -270,13 +270,18 @@ export const InputArea: React.FC<InputAreaProps> = ({
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 disabled={disabled}
-                placeholder={ENCOURAGING_PLACEHOLDERS[placeholderIndex]}
                 autoComplete="off"
                 spellCheck={false}
                 aria-label="Command input"
                 aria-describedby="input-help"
                 aria-multiline="true"
             />
+            {/* Visual-only placeholder, hidden from screen readers */}
+            {!input && (
+                <div className="input_area_placeholder" aria-hidden="true">
+                    {ENCOURAGING_PLACEHOLDERS[placeholderIndex]}
+                </div>
+            )}
             <div id="input-help" className="sr-only">
                 Use Shift+Enter for new lines. Arrow keys navigate command history when at start or end of input.
             </div>

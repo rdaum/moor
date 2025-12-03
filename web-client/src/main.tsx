@@ -1299,7 +1299,7 @@ function AppContent({
                             </aside>
 
                             {/* Main narrative interface - takes up full space */}
-                            <section role="main" aria-label="Game narrative and input">
+                            <section aria-label="Game narrative">
                                 <Narrative
                                     ref={narrativeCallbackRef}
                                     visible={hasPlayer}
@@ -1664,6 +1664,7 @@ function AppWrapper() {
             contentType?: string;
             noNewline?: boolean;
             presentationHint?: string;
+            groupId?: string;
             thumbnail?: { contentType: string; data: string };
         }>
     >([]);
@@ -1675,6 +1676,7 @@ function AppWrapper() {
         isHistorical?: boolean,
         noNewline?: boolean,
         presentationHint?: string,
+        groupId?: string,
         thumbnail?: { contentType: string; data: string },
     ) => {
         // Handle array content by processing each line
@@ -1696,6 +1698,7 @@ function AppWrapper() {
                         contentType as "text/plain" | "text/djot" | "text/html",
                         noNewline,
                         presentationHint,
+                        groupId,
                         thumbnail,
                     );
                 } else {
@@ -1705,6 +1708,7 @@ function AppWrapper() {
                             contentType,
                             noNewline,
                             presentationHint,
+                            groupId,
                             thumbnail,
                         }],
                     );
@@ -1720,11 +1724,12 @@ function AppWrapper() {
                         contentType as "text/plain" | "text/djot" | "text/html",
                         noNewline,
                         presentationHint,
+                        groupId,
                         thumbnail,
                     );
                 } else {
                     setPendingMessages(
-                        prev => [...prev, { content, contentType, noNewline, presentationHint, thumbnail }],
+                        prev => [...prev, { content, contentType, noNewline, presentationHint, groupId, thumbnail }],
                     );
                 }
             }
@@ -1742,12 +1747,13 @@ function AppWrapper() {
     // Process pending messages when narrative ref becomes available
     const narrativeCallbackRef = useCallback((node: NarrativeRef | null) => {
         if (node) {
-            pendingMessages.forEach(({ content, contentType, noNewline, presentationHint, thumbnail }) => {
+            pendingMessages.forEach(({ content, contentType, noNewline, presentationHint, groupId, thumbnail }) => {
                 node.addNarrativeContent(
                     content,
                     contentType as "text/plain" | "text/djot" | "text/html",
                     noNewline,
                     presentationHint,
+                    groupId,
                     thumbnail,
                 );
             });

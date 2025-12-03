@@ -22,7 +22,7 @@
 }
 
 /* Ensure the main section (narrative wrapper) takes full available space */
-.middle_section section[role="main"] {
+.middle_section section {
   flex: 1;
   min-width: 0;
   display: flex;
