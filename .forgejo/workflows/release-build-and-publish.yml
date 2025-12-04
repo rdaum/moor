@@ -37,7 +37,7 @@ jobs:
 
       # Build Debian packages
       - name: Build binaries with release profile
-        run: CARGO_BUILD_JOBS=4 cargo build --release -p moor-daemon -p moor-telnet-host -p moor-web-host -p moor-curl-worker -p moorc -p moor-emh -j 4
+        run: CARGO_BUILD_JOBS=4 cargo build --release -p moor-daemon -p moor-telnet-host -p moor-web-host -p moor-curl-worker -p moorc -p moor-emh -p moor-mcp-host -j 4
 
       - name: Check prerequisites for Debian packages
         run: |
@@ -46,14 +46,35 @@ jobs:
           echo "Checking for npm..."
           command -v npm || echo "WARNING: npm not found, skipping web client"
 
-      - name: Build Debian packages
+      - name: Import GPG key for package signing
+        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
         run: |
-          for pkg in moor-daemon moor-telnet-host moor-web-host moor-curl-worker moorc moor-emh; do
+          echo "Importing GPG key for package signing..."
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+          echo "GPG key imported successfully"
+          gpg --list-secret-keys
+
+      - name: Build Debian packages
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+        run: |
+          # Determine if we should sign packages
+          SIGN_FLAG=""
+          if [ -n "$GPG_KEY_ID" ]; then
+            echo "GPG key ID found, packages will be signed with key: $GPG_KEY_ID"
+            SIGN_FLAG="--deb-sign=$GPG_KEY_ID"
+          else
+            echo "No GPG key ID found, packages will not be signed"
+          fi
+
+          for pkg in moor-daemon moor-telnet-host moor-web-host moor-curl-worker moorc moor-emh moor-mcp-host; do
             echo "Building $pkg package..."
-            cargo deb -p "$pkg" --profile release --no-build
+            cargo deb -p "$pkg" --profile release --no-build $SIGN_FLAG
           done
 
       - name: Build web client (if npm available)
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
         run: |
           if command -v npm &> /dev/null; then
             echo "Building web client..."

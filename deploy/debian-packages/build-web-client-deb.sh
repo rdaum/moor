@@ -58,6 +58,20 @@ EOF
 echo "Building debian package..."
 dpkg-deb --root-owner-group --build ${BUILD_DIR} target/debian/${PACKAGE_NAME}_${VERSION}_all.deb
 
+# Sign the package if GPG_KEY_ID is set
+if [ -n "$GPG_KEY_ID" ]; then
+  echo "Signing package with GPG key: $GPG_KEY_ID"
+  # Install dpkg-sig if not available
+  if ! command -v dpkg-sig &> /dev/null; then
+    echo "Installing dpkg-sig..."
+    apt-get update && apt-get install -y dpkg-sig
+  fi
+  dpkg-sig --sign builder -k "$GPG_KEY_ID" target/debian/${PACKAGE_NAME}_${VERSION}_all.deb
+  echo "Package signed successfully"
+else
+  echo "No GPG_KEY_ID set, skipping package signing"
+fi
+
 echo "Package built successfully: target/debian/${PACKAGE_NAME}_${VERSION}_all.deb"
 
 # Clean up

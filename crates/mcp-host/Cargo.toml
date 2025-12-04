@@ -11,6 +11,16 @@ repository.workspace = true
 rust-version.workspace = true
 description = "Model Context Protocol (MCP) host for the mooR system - enables AI assistants to interact with MOO virtual worlds"
 
+[package.metadata.deb]
+depends = "$auto"
+extended-description = "Model Context Protocol (MCP) server that enables AI assistants like Claude to interact with MOO virtual worlds through the mooR system."
+section = "net"
+license-file = ["../../LICENSE", "0"]
+priority = "optional"
+assets = [
+    ["target/release/moor-mcp-host", "/usr/bin/moor-mcp-host", "755"],
+]
+
 [dependencies]
 # Internal Dependencies
 moor-common = { path = "../common" }
