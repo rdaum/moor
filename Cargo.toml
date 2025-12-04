@@ -37,6 +37,7 @@ default-members = [
     "crates/daemon",
     "crates/telnet-host",
     "crates/web-host",
+    "crates/mcp-host",
     "crates/testing/bench-utils",
     "crates/testing/moot",
     "crates/testing/load-tools",
