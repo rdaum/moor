@@ -50,6 +50,55 @@
   background-color: var(--color-bg-secondary);
 }
 
+/* Speech bubble styling for say events */
+.speech_bubble_container {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin: 0.25rem 0;
+  padding: 0.25rem 0;
+}
+
+.speech_bubble_actor {
+  font-size: 1em;
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+}
+
+.speech_bubble {
+  position: relative;
+  max-width: min(400px, 60%);
+  padding: 0.5rem 0.875rem;
+  border-radius: 0.3rem;
+  background-color: var(--color-button-primary);
+  color: #fff;
+  font-size: 0.95em;
+  line-height: 1.25;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.speech_bubble::before {
+  content: "";
+  position: absolute;
+  bottom: calc(0.4rem - 1.5px);
+  left: -6px;
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-right: 8px solid var(--color-button-primary);
+}
+
+/* "From me" speech bubble - different color, same alignment */
+.speech_bubble_me {
+  background-color: var(--color-text-accent);
+}
+
+.speech_bubble_me::before {
+  border-right-color: var(--color-text-accent);
+}
+
 /* Thumbnail image styling */
 .narrative_thumbnail {
   float: right;

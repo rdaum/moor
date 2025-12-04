@@ -12,7 +12,21 @@
 //
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { uuObjIdToString } from "../lib/var";
 import { ContentRenderer } from "./ContentRenderer";
+import { getSpeechBubblesEnabled } from "./SpeechBubbleToggle";
+
+interface EventMetadata {
+    verb?: string;
+    actor?: any;
+    actorName?: string;
+    content?: string;
+    thisObj?: any;
+    thisName?: string;
+    dobj?: any;
+    iobj?: any;
+    timestamp?: number;
+}
 
 interface OutputWindowProps {
     messages: Array<{
@@ -27,13 +41,42 @@ interface OutputWindowProps {
         groupId?: string;
         ttsText?: string;
         thumbnail?: { contentType: string; data: string };
+        eventMetadata?: EventMetadata;
     }>;
     onLoadMoreHistory?: () => void;
     isLoadingHistory?: boolean;
     onLinkClick?: (url: string) => void;
     fontSize?: number;
     shouldShowDisconnectDivider?: boolean;
+    playerOid?: string | null;
 }
+
+// Compare actor from event metadata with playerOid
+const isActorPlayer = (actor: any, playerOid: string | null | undefined): boolean => {
+    if (!actor || !playerOid) return false;
+
+    // Normalize playerOid - strip # prefix and oid:/uuid: prefix
+    let normalizedPlayerOid = playerOid;
+    if (normalizedPlayerOid.startsWith("#")) {
+        normalizedPlayerOid = normalizedPlayerOid.substring(1);
+    }
+    if (normalizedPlayerOid.startsWith("oid:")) {
+        normalizedPlayerOid = normalizedPlayerOid.substring(4);
+    } else if (normalizedPlayerOid.startsWith("uuid:")) {
+        normalizedPlayerOid = normalizedPlayerOid.substring(5);
+    }
+
+    // actor has { oid: number } or { uuid: string (packed bigint) }
+    if (actor.oid !== undefined) {
+        return normalizedPlayerOid === String(actor.oid);
+    }
+    if (actor.uuid !== undefined) {
+        // Convert packed bigint string to formatted UUID for comparison
+        const formattedUuid = uuObjIdToString(BigInt(actor.uuid));
+        return normalizedPlayerOid === formattedUuid;
+    }
+    return false;
+};
 
 export const OutputWindow: React.FC<OutputWindowProps> = ({
     messages,
@@ -42,11 +85,32 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
     onLinkClick,
     fontSize,
     shouldShowDisconnectDivider = false,
+    playerOid,
 }) => {
     const outputRef = useRef<HTMLDivElement>(null);
     const shouldAutoScroll = useRef(true);
     const previousScrollHeight = useRef<number>(0);
     const [isViewingHistory, setIsViewingHistory] = useState(false);
+    const [speechBubblesEnabled, setSpeechBubblesEnabled] = useState(getSpeechBubblesEnabled);
+
+    // Listen for speech bubble setting changes
+    useEffect(() => {
+        const handleChange = (e: Event) => {
+            const customEvent = e as CustomEvent<boolean>;
+            setSpeechBubblesEnabled(customEvent.detail);
+        };
+        const handleStorage = (e: StorageEvent) => {
+            if (e.key === "speechBubblesEnabled") {
+                setSpeechBubblesEnabled(getSpeechBubblesEnabled());
+            }
+        };
+        window.addEventListener("speechBubblesChanged", handleChange);
+        window.addEventListener("storage", handleStorage);
+        return () => {
+            window.removeEventListener("speechBubblesChanged", handleChange);
+            window.removeEventListener("storage", handleStorage);
+        };
+    }, []);
 
     // Render content with optional TTS text for screen readers
     const renderContentWithTts = useCallback((
@@ -175,6 +239,52 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         return baseClass;
     };
 
+    // Render a speech bubble for say events
+    const renderSpeechBubble = (
+        actorName: string,
+        content: string,
+        messageId: string,
+        isHistorical?: boolean,
+        fromMe?: boolean,
+    ) => {
+        const displayName = fromMe ? "You" : actorName;
+        const bubbleClass = fromMe ? "speech_bubble speech_bubble_me" : "speech_bubble";
+        const ariaLabel = fromMe ? `You say: ${content}` : `${actorName} says: ${content}`;
+        return (
+            <div
+                key={messageId}
+                className={`speech_bubble_container${fromMe ? " speech_bubble_container_me" : ""}${
+                    isHistorical ? " historical_narrative" : " live_narrative"
+                }`}
+                role="article"
+                aria-label={ariaLabel}
+            >
+                <span className="speech_bubble_actor" aria-hidden="true">{displayName}</span>
+                <div className={bubbleClass} aria-hidden="true">
+                    {content}
+                </div>
+            </div>
+        );
+    };
+
+    // Check if current theme is a CRT theme (no speech bubbles in retro modes)
+    const isCrtTheme = () => {
+        return document.body.classList.contains("crt-theme")
+            || document.body.classList.contains("crt-amber-theme");
+    };
+
+    // Check if a message should be rendered as a speech bubble
+    const isSpeechBubble = (
+        presentationHint?: string,
+        eventMetadata?: EventMetadata,
+    ): eventMetadata is EventMetadata & { content: string; actorName: string } => {
+        return speechBubblesEnabled
+            && !isCrtTheme()
+            && presentationHint === "speech_bubble"
+            && typeof eventMetadata?.content === "string"
+            && typeof eventMetadata?.actorName === "string";
+    };
+
     const resolvedFontSize = fontSize ?? 14;
 
     return (
@@ -274,8 +384,20 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                         // Single message
                         const message = group[0];
 
-                        // If it has a presentationHint, wrap it like we do for groups
-                        if (message.presentationHint) {
+                        // Check if this should render as a speech bubble
+                        if (isSpeechBubble(message.presentationHint, message.eventMetadata)) {
+                            const fromMe = isActorPlayer(message.eventMetadata.actor, playerOid);
+                            result.push(
+                                renderSpeechBubble(
+                                    message.eventMetadata.actorName,
+                                    message.eventMetadata.content,
+                                    message.id,
+                                    message.isHistorical,
+                                    fromMe,
+                                ),
+                            );
+                        } else if (message.presentationHint) {
+                            // If it has a presentationHint, wrap it like we do for groups
                             const baseClassName = getMessageClassName(message.type, message.isHistorical);
                             const wrapperClassName = message.presentationHint === "inset" ? "presentation_inset" : "";
 
@@ -323,37 +445,60 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                             );
 
                         if (isHintGroup) {
-                            // Group messages with same presentationHint in a wrapper, but render each on its own line
-                            const baseClassName = getMessageClassName(
-                                firstMessage.type,
-                                firstMessage.isHistorical,
-                            );
-                            const wrapperClassName = firstMessage.presentationHint === "inset"
-                                ? "presentation_inset"
-                                : "";
+                            // Check if this is a speech bubble group
+                            if (isSpeechBubble(firstMessage.presentationHint, firstMessage.eventMetadata)) {
+                                // Get actor name from first message (all in group are same speaker)
+                                const actorName = firstMessage.eventMetadata.actorName;
+                                const fromMe = isActorPlayer(firstMessage.eventMetadata.actor, playerOid);
 
-                            // Use firstMessage.id for stable key - prevents re-render when group grows
-                            // The stable key ensures React preserves the DOM node and only appends
-                            // new children, so screen readers announce only additions (not the whole group)
-                            result.push(
-                                <div
-                                    key={`hint_${firstMessage.id}`}
-                                    className={wrapperClassName}
-                                    role="group"
-                                    aria-label="Grouped content"
-                                >
-                                    {group.map(msg => (
-                                        <div key={msg.id} className={baseClassName}>
-                                            {renderContentWithTts(
-                                                msg.content,
-                                                msg.contentType,
-                                                msg.ttsText,
-                                                msg.thumbnail,
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>,
-                            );
+                                // Combine all messages into one bubble with newlines
+                                const combinedContent = group.map(msg =>
+                                    msg.eventMetadata?.content
+                                    || (typeof msg.content === "string" ? msg.content : "")
+                                ).join("\n");
+
+                                result.push(
+                                    renderSpeechBubble(
+                                        actorName,
+                                        combinedContent,
+                                        `speech_group_${firstMessage.id}`,
+                                        firstMessage.isHistorical,
+                                        fromMe,
+                                    ),
+                                );
+                            } else {
+                                // Regular hint group - render each on its own line
+                                const baseClassName = getMessageClassName(
+                                    firstMessage.type,
+                                    firstMessage.isHistorical,
+                                );
+                                const wrapperClassName = firstMessage.presentationHint === "inset"
+                                    ? "presentation_inset"
+                                    : "";
+
+                                // Use firstMessage.id for stable key - prevents re-render when group grows
+                                // The stable key ensures React preserves the DOM node and only appends
+                                // new children, so screen readers announce only additions (not the whole group)
+                                result.push(
+                                    <div
+                                        key={`hint_${firstMessage.id}`}
+                                        className={wrapperClassName}
+                                        role="group"
+                                        aria-label="Grouped content"
+                                    >
+                                        {group.map(msg => (
+                                            <div key={msg.id} className={baseClassName}>
+                                                {renderContentWithTts(
+                                                    msg.content,
+                                                    msg.contentType,
+                                                    msg.ttsText,
+                                                    msg.thumbnail,
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>,
+                                );
+                            }
                         } else {
                             // noNewline group - combine content on same line
                             const combinedHtml = group.map(msg => {

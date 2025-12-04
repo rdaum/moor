@@ -863,6 +863,18 @@ function handleTaskError(
  *
  * Parses the binary ClientEvent and dispatches to appropriate handlers
  */
+export interface EventMetadata {
+    verb?: string;
+    actor?: any;
+    actorName?: string;
+    content?: string;
+    thisObj?: any;
+    thisName?: string;
+    dobj?: any;
+    iobj?: any;
+    timestamp?: number;
+}
+
 export function handleClientEventFlatBuffer(
     bytes: Uint8Array,
     onSystemMessage?: (message: string, duration?: number) => void,
@@ -876,6 +888,7 @@ export function handleClientEventFlatBuffer(
         groupId?: string,
         ttsText?: string,
         thumbnail?: { contentType: string; data: string },
+        eventMetadata?: EventMetadata,
     ) => void,
     onPresentMessage?: (presentData: any) => void,
     onUnpresentMessage?: (id: string) => void,
@@ -963,58 +976,90 @@ export function handleClientEventFlatBuffer(
 
                         const noNewline = notify.noNewline();
 
-                        // Extract presentation_hint, group_id, tts_text, and thumbnail from metadata
+                        // Extract metadata fields directly from top-level entries
                         let presentationHint: string | undefined;
                         let groupId: string | undefined;
                         let ttsText: string | undefined;
                         let thumbnail: { contentType: string; data: string } | undefined;
+                        const eventMeta: EventMetadata = {};
                         const metadataLength = notify.metadataLength();
                         for (let i = 0; i < metadataLength; i++) {
                             const metadata = notify.metadata(i);
                             if (metadata) {
                                 const key = metadata.key();
                                 const keyValue = key ? key.value() : null;
-                                if (keyValue === "metadata") {
-                                    // The metadata value contains a map (as array of pairs) with our actual metadata
-                                    const metadataMapVar = metadata.value();
-                                    if (metadataMapVar) {
-                                        const metadataMap = new MoorVar(metadataMapVar).toJS();
-                                        // MOO maps come through as arrays of [key, value] pairs
-                                        if (Array.isArray(metadataMap)) {
-                                            for (const pair of metadataMap) {
-                                                if (Array.isArray(pair) && pair.length === 2) {
-                                                    const [k, v] = pair;
-                                                    if (k === "presentation_hint" && typeof v === "string") {
-                                                        presentationHint = v;
-                                                    } else if (k === "group_id" && typeof v === "string") {
-                                                        groupId = v;
-                                                    } else if (k === "tts_text" && typeof v === "string") {
-                                                        ttsText = v;
-                                                    } else if (
-                                                        k === "thumbnail" && Array.isArray(v) && v.length === 2
-                                                    ) {
-                                                        // thumbnail is [content_type, binary_data]
-                                                        const [contentType, binaryData] = v;
-                                                        if (
-                                                            typeof contentType === "string"
-                                                            && binaryData instanceof Uint8Array
-                                                        ) {
-                                                            // Convert binary data to base64 data URL
-                                                            const base64 = btoa(String.fromCharCode(...binaryData));
-                                                            thumbnail = {
-                                                                contentType,
-                                                                data: `data:${contentType};base64,${base64}`,
-                                                            };
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
+                                const metaValue = metadata.value();
+                                const value = metaValue ? new MoorVar(metaValue).toJS() : null;
+
+                                if (keyValue === "presentation_hint" && typeof value === "string") {
+                                    presentationHint = value;
+                                } else if (keyValue === "group_id" && typeof value === "string") {
+                                    groupId = value;
+                                } else if (keyValue === "tts_text" && typeof value === "string") {
+                                    ttsText = value;
+                                } else if (keyValue === "thumbnail" && Array.isArray(value) && value.length === 2) {
+                                    // thumbnail is [content_type, binary_data]
+                                    const [thumbContentType, binaryData] = value;
+                                    if (
+                                        typeof thumbContentType === "string"
+                                        && binaryData instanceof Uint8Array
+                                    ) {
+                                        // Convert binary data to base64 data URL
+                                        const base64 = btoa(String.fromCharCode(...binaryData));
+                                        thumbnail = {
+                                            contentType: thumbContentType,
+                                            data: `data:${thumbContentType};base64,${base64}`,
+                                        };
                                     }
-                                    break;
+                                } else if (keyValue === "verb" && typeof value === "string") {
+                                    eventMeta.verb = value;
+                                } else if (keyValue === "actor") {
+                                    eventMeta.actor = value;
+                                } else if (keyValue === "actor_name" && typeof value === "string") {
+                                    eventMeta.actorName = value;
+                                } else if (keyValue === "content" && typeof value === "string") {
+                                    eventMeta.content = value;
+                                } else if (keyValue === "this_obj") {
+                                    eventMeta.thisObj = value;
+                                } else if (keyValue === "this_name" && typeof value === "string") {
+                                    eventMeta.thisName = value;
+                                } else if (keyValue === "dobj") {
+                                    eventMeta.dobj = value;
+                                } else if (keyValue === "iobj") {
+                                    eventMeta.iobj = value;
+                                } else if (keyValue === "timestamp" && typeof value === "number") {
+                                    eventMeta.timestamp = value;
                                 }
                             }
                         }
+
+                        // Log the full parsed NotifyEvent with all metadata
+                        const rawMetadata: Array<{ key: string | null; value: any }> = [];
+                        for (let i = 0; i < metadataLength; i++) {
+                            const md = notify.metadata(i);
+                            if (md) {
+                                const k = md.key();
+                                const v = md.value();
+                                rawMetadata.push({
+                                    key: k ? k.value() : null,
+                                    value: v ? new MoorVar(v).toJS() : null,
+                                });
+                            }
+                        }
+                        console.log("[Narrative Event]", {
+                            eventType: "NotifyEvent",
+                            content,
+                            contentType,
+                            noNewline,
+                            timestamp,
+                            rawMetadata,
+                            parsedMetadata: {
+                                presentationHint,
+                                groupId,
+                                ttsText,
+                                thumbnail: thumbnail ? "(present)" : undefined,
+                            },
+                        });
 
                         if (onNarrativeMessage) {
                             onNarrativeMessage(
@@ -1027,6 +1072,7 @@ export function handleClientEventFlatBuffer(
                                 groupId,
                                 ttsText,
                                 thumbnail,
+                                Object.keys(eventMeta).length > 0 ? eventMeta : undefined,
                             );
                         }
                         break;
@@ -1079,6 +1125,10 @@ export function handleClientEventFlatBuffer(
                                 target: presentation.target(),
                                 attributes,
                             };
+                            console.log("[Narrative Event]", {
+                                eventType: "PresentEvent",
+                                ...presentData,
+                            });
                             onPresentMessage(presentData);
                         }
                         break;
@@ -1092,6 +1142,10 @@ export function handleClientEventFlatBuffer(
                         }
 
                         const presentationId = unpresent.presentationId();
+                        console.log("[Narrative Event]", {
+                            eventType: "UnpresentEvent",
+                            presentationId,
+                        });
                         if (presentationId && onUnpresentMessage) {
                             onUnpresentMessage(presentationId);
                         }
@@ -1125,6 +1179,11 @@ export function handleClientEventFlatBuffer(
                         }
 
                         const tracebackText = tracebackLines.join("\n");
+
+                        console.log("[Narrative Event]", {
+                            eventType: "TracebackEvent",
+                            tracebackLines,
+                        });
 
                         if (onNarrativeMessage) {
                             onNarrativeMessage(

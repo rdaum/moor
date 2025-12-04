@@ -17,6 +17,7 @@ import React from "react";
 import { CommandEchoToggle } from "./CommandEchoToggle";
 import { FontSizeControl } from "./FontSizeControl";
 import { FontToggle } from "./FontToggle";
+import { SpeechBubbleToggle } from "./SpeechBubbleToggle";
 import { ThemeToggle } from "./ThemeToggle";
 
 interface SettingsPanelProps {
@@ -72,6 +73,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     <div className="settings-section">
                         <h3>Interface</h3>
                         <CommandEchoToggle />
+                        <SpeechBubbleToggle />
                     </div>
 
                     <div className="settings-section">

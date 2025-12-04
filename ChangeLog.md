@@ -11,7 +11,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 `mcp-host`:
 
-- **New Model Context Protocol (MCP) server** - enables AI assistants like Claude to interact with MOO worlds
+- **New Model Context Protocol (MCP) server** - enables AI assistants like Claude to interact with
+  MOO worlds
   - Connect as wizard or player with configurable permissions
   - Automatic reconnection support for long-running sessions
   - Rich prompts and function help for AI interaction
@@ -44,16 +45,15 @@ packaging / release:
 `db`:
 
 - Performance optimization: skip conflict checking when no concurrent commits occur
-- Relations now marked as fully loaded at initial import, which then skips later loads, 
-  meaning perf improvements in transaction/database layer that should help avoid gratuitous 
-  disk seeks.
+- Relations now marked as fully loaded at initial import, which then skips later loads, meaning perf
+  improvements in transaction/database layer that should help avoid gratuitous disk seeks.
 
 ### Fixed
 
 `daemon`:
 
-- **CRITICAL**: Fixed garbage collection bug with anonymous objects that could cause 
-  accidental premature collection of objects that still had references
+- **CRITICAL**: Fixed garbage collection bug with anonymous objects that could cause accidental
+  premature collection of objects that still had references
 - Fixed `parse_json` to handle null JSON values like ToastStunt for compatibility
 - Fixed `none` values incorrectly appearing in error stack frames in exception handling
 - Fixed regression in `ftime()` caused by off-by-1 error in argument handling

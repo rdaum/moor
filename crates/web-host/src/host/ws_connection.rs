@@ -13,8 +13,8 @@
 
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, StreamExt};
-use moor_schema::{convert::uuid_from_ref, rpc as moor_rpc};
-use moor_var::{Obj, v_binary, v_str};
+use moor_schema::{convert::uuid_from_ref, convert::var_from_flatbuffer, rpc as moor_rpc, var as moor_var_schema};
+use moor_var::{Obj, v_str, Var};
 use planus::ReadAsRoot;
 use rpc_async_client::{
     pubsub_client::{broadcast_recv, events_recv},
@@ -317,9 +317,32 @@ impl WebSocketConnection {
         message: Message,
         expecting_input: &mut VecDeque<Uuid>,
     ) {
-        let cmd = match message {
-            Message::Text(text) => v_str(&text), // Convert text to Var::Str
-            Message::Binary(bytes) => v_binary(bytes.to_vec()), // Convert binary to Var::Binary
+        let cmd: Var = match message {
+            Message::Text(text) => v_str(&text),
+            Message::Binary(bytes) => {
+                // Parse binary as FlatBuffer-encoded Var
+                let var_ref = match moor_var_schema::VarRef::read_as_root(&bytes) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!("Invalid FlatBuffer in binary input: {}", e);
+                        return;
+                    }
+                };
+                let fb_var = match moor_var_schema::Var::try_from(var_ref) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!("Failed to convert VarRef: {}", e);
+                        return;
+                    }
+                };
+                match var_from_flatbuffer(&fb_var) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!("Failed to decode Var from FlatBuffer: {}", e);
+                        return;
+                    }
+                }
+            }
             _ => {
                 warn!("Received unsupported message type for input");
                 return;

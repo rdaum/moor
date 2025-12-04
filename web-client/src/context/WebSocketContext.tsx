@@ -14,6 +14,7 @@
 import React, { createContext, useContext } from "react";
 import { Player } from "../hooks/useAuth";
 import { useWebSocket, WebSocketState } from "../hooks/useWebSocket";
+import { EventMetadata } from "../lib/rpc-fb";
 import { InputMetadata } from "../types/input";
 import { PresentationData } from "../types/presentation";
 
@@ -44,6 +45,7 @@ interface WebSocketProviderProps {
         groupId?: string,
         ttsText?: string,
         thumbnail?: { contentType: string; data: string },
+        eventMetadata?: EventMetadata,
     ) => void;
     handlePresentMessage: (presentData: PresentationData) => void;
     handleUnpresentMessage: (id: string) => void;

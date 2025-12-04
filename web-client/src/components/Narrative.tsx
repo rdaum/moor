@@ -17,6 +17,18 @@ import { getCommandEchoEnabled } from "./CommandEchoToggle";
 import { InputArea } from "./InputArea";
 import { OutputWindow } from "./OutputWindow";
 
+export interface EventMetadata {
+    verb?: string;
+    actor?: any;
+    actorName?: string;
+    content?: string;
+    thisObj?: any;
+    thisName?: string;
+    dobj?: any;
+    iobj?: any;
+    timestamp?: number;
+}
+
 export interface NarrativeMessage {
     id: string;
     content: string | string[];
@@ -29,6 +41,7 @@ export interface NarrativeMessage {
     groupId?: string;
     ttsText?: string;
     thumbnail?: { contentType: string; data: string };
+    eventMetadata?: EventMetadata;
 }
 
 interface NarrativeProps {
@@ -55,6 +68,7 @@ export interface NarrativeRef {
         groupId?: string,
         ttsText?: string,
         thumbnail?: { contentType: string; data: string },
+        eventMetadata?: EventMetadata,
     ) => void;
     addSystemMessage: (content: string | string[]) => void;
     addErrorMessage: (content: string | string[]) => void;
@@ -134,6 +148,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         groupId?: string,
         ttsText?: string,
         thumbnail?: { contentType: string; data: string },
+        eventMetadata?: EventMetadata,
     ) => {
         const now = Date.now();
         const newMessage: NarrativeMessage = {
@@ -147,6 +162,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             groupId,
             ttsText,
             thumbnail,
+            eventMetadata,
         };
 
         // Track the latest message timestamp (update even for input echo)
@@ -202,8 +218,19 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             groupId?: string,
             ttsText?: string,
             thumbnail?: { contentType: string; data: string },
+            eventMetadata?: EventMetadata,
         ) => {
-            addMessage(content, "narrative", contentType, noNewline, presentationHint, groupId, ttsText, thumbnail);
+            addMessage(
+                content,
+                "narrative",
+                contentType,
+                noNewline,
+                presentationHint,
+                groupId,
+                ttsText,
+                thumbnail,
+                eventMetadata,
+            );
         },
         [addMessage],
     );
@@ -346,6 +373,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
                     onLinkClick={onLinkClick}
                     fontSize={fontSize}
                     shouldShowDisconnectDivider={shouldShowDisconnectDivider}
+                    playerOid={playerOid}
                 />
                 {promptActive && (
                     <>

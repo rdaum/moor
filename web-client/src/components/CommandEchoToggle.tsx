@@ -41,7 +41,12 @@ export const CommandEchoToggle: React.FC = () => {
     );
 
     const toggleEcho = () => {
-        setEchoEnabled(prev => !prev);
+        setEchoEnabled(prev => {
+            const newValue = !prev;
+            // Dispatch custom event for same-tab listeners
+            window.dispatchEvent(new CustomEvent("commandEchoChanged", { detail: newValue }));
+            return newValue;
+        });
     };
 
     return (

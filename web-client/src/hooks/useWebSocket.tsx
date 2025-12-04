@@ -12,7 +12,7 @@
 //
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { handleClientEventFlatBuffer } from "../lib/rpc-fb";
+import { EventMetadata, handleClientEventFlatBuffer } from "../lib/rpc-fb";
 import { InputMetadata } from "../types/input";
 import { PresentationData } from "../types/presentation";
 import { Player } from "./useAuth";
@@ -38,6 +38,7 @@ export const useWebSocket = (
         groupId?: string,
         ttsText?: string,
         thumbnail?: { contentType: string; data: string },
+        eventMetadata?: EventMetadata,
     ) => void,
     onPresentMessage?: (presentData: PresentationData) => void,
     onUnpresentMessage?: (id: string) => void,
