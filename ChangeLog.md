@@ -5,6 +5,80 @@ All notable changes to mooR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta3] - 2025-12-03
+
+### Added
+
+`mcp-host`:
+
+- **New Model Context Protocol (MCP) server** - enables AI assistants like Claude to interact with MOO worlds
+  - Connect as wizard or player with configurable permissions
+  - Automatic reconnection support for long-running sessions
+  - Rich prompts and function help for AI interaction
+  - Object definition dump/diff capabilities
+  - Included in Docker images
+  - Debian package support for distribution through Debian repository
+
+`daemon`:
+
+- New "yes to all" form option for prompts
+- Script for verifying that builtin table changes are stable
+
+packaging / release:
+
+- GPG signing support for all Debian packages built by cargo-deb and dpkg-deb
+  - Workflow now imports GPG key from secrets and signs packages automatically
+  - Users can verify package authenticity with `dpkg-sig --verify`
+
+### Changed
+
+`daemon`:
+
+- `ftime()` builtin now accepts boolean argument (not just int) for better type safety
+
+`web-client`:
+
+- Continued TTS (text-to-speech) improvements
+- Better display and reading of 'inset' content panels
+
+`db`:
+
+- Performance optimization: skip conflict checking when no concurrent commits occur
+- Relations now marked as fully loaded at initial import, which then skips later loads, 
+  meaning perf improvements in transaction/database layer that should help avoid gratuitous 
+  disk seeks.
+
+### Fixed
+
+`daemon`:
+
+- **CRITICAL**: Fixed garbage collection bug with anonymous objects that could cause 
+  accidental premature collection of objects that still had references
+- Fixed `parse_json` to handle null JSON values like ToastStunt for compatibility
+- Fixed `none` values incorrectly appearing in error stack frames in exception handling
+- Fixed regression in `ftime()` caused by off-by-1 error in argument handling
+
+`telnet-host`:
+
+- Better handling of linefeeds from markdown/djot formatted content
+
+`web-client`:
+
+- Improved display of inset content panels
+- General accessibility / TTS improvements
+
+packaging / release:
+
+- Fixed Docker build failures caused by missing `moor-mcp-host` binary in release builds
+- Fixed deployment directory permissions for Docker setups
+- Removed unused .env files from deploy directories
+
+testing:
+
+- Added script to verify builtin table stability
+
+---
+
 ## [1.0.0-beta2] - 2025-11-26
 
 ### Added
