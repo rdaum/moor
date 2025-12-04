@@ -19,7 +19,9 @@ export type InputType =
     | "text_area"
     | "confirmation"
     | "yes_no_alternative"
-    | "yes_no_alternative_all";
+    | "yes_no_alternative_all"
+    | "image"
+    | "file";
 
 export interface InputMetadata {
     input_type?: InputType;
@@ -33,4 +35,7 @@ export interface InputMetadata {
     rows?: number;
     alternative_label?: string;
     alternative_placeholder?: string;
+    // For image/file uploads
+    accept_content_types?: string[];
+    max_file_size?: number;
 }

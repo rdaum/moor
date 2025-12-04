@@ -21,7 +21,7 @@ interface WebSocketContextType {
     wsState: WebSocketState;
     connect: (mode: "connect" | "create") => Promise<void>;
     disconnect: (reason?: string) => void;
-    sendMessage: (message: string) => boolean;
+    sendMessage: (message: string | Uint8Array | ArrayBuffer) => boolean;
     inputMetadata: InputMetadata | null;
     clearInputMetadata: () => void;
 }

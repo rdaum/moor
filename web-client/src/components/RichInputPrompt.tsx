@@ -11,13 +11,44 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+import * as flatbuffers from "flatbuffers";
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Var } from "../generated/moor-var/var";
+import { VarBinary } from "../generated/moor-var/var-binary";
+import { VarList } from "../generated/moor-var/var-list";
+import { VarStr } from "../generated/moor-var/var-str";
+import { VarUnion } from "../generated/moor-var/var-union";
 import { renderDjot, renderPlainText } from "../lib/djot-renderer";
 import { InputMetadata } from "../types/input";
 
+/**
+ * Build a FlatBuffer-encoded Var list containing [content_type, binary_data]
+ */
+function buildFileVar(contentType: string, data: Uint8Array): Uint8Array {
+    const builder = new flatbuffers.Builder(data.length + 256);
+
+    // Build the content-type string Var
+    const contentTypeStrOffset = builder.createString(contentType);
+    const varStrOffset = VarStr.createVarStr(builder, contentTypeStrOffset);
+    const contentTypeVarOffset = Var.createVar(builder, VarUnion.VarStr, varStrOffset);
+
+    // Build the binary data Var
+    const binaryDataOffset = VarBinary.createDataVector(builder, data);
+    const varBinaryOffset = VarBinary.createVarBinary(builder, binaryDataOffset);
+    const binaryVarOffset = Var.createVar(builder, VarUnion.VarBinary, varBinaryOffset);
+
+    // Build the list containing both
+    const elementsVectorOffset = VarList.createElementsVector(builder, [contentTypeVarOffset, binaryVarOffset]);
+    const varListOffset = VarList.createVarList(builder, elementsVectorOffset);
+    const listVarOffset = Var.createVar(builder, VarUnion.VarList, varListOffset);
+
+    builder.finish(listVarOffset);
+    return builder.asUint8Array();
+}
+
 interface RichInputPromptProps {
     metadata: InputMetadata;
-    onSubmit: (value: string) => void;
+    onSubmit: (value: string | Uint8Array) => void;
     disabled?: boolean;
 }
 
@@ -34,6 +65,9 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
     });
 
     const [showAlternative, setShowAlternative] = useState(false);
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [fileError, setFileError] = useState<string | null>(null);
     const baseId = useId();
     const textInputId = `${baseId}-text`;
     const textAreaId = `${baseId}-textarea`;
@@ -42,10 +76,12 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
     const alternativeInputId = `${baseId}-alternative`;
     const alternativeDescriptionId = `${baseId}-alternative-description`;
     const promptStatusId = `${baseId}-prompt-status`;
+    const fileInputId = `${baseId}-file`;
     const trimmedValue = value.trim();
     const primaryButtonRef = useRef<HTMLButtonElement>(null);
     const alternativeButtonRef = useRef<HTMLButtonElement>(null);
     const alternativeTextareaRef = useRef<HTMLTextAreaElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Auto-focus the primary button when the component mounts or when returning from alternative view
     useEffect(() => {
@@ -99,6 +135,86 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
             submitCurrentValue();
         }
     }, [submitCurrentValue]);
+
+    // Handle file selection for image/file input types
+    const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        setFileError(null);
+
+        if (!file) {
+            setSelectedFile(null);
+            setPreviewUrl(null);
+            return;
+        }
+
+        // Validate content type if restrictions are specified
+        if (metadata.accept_content_types && metadata.accept_content_types.length > 0) {
+            const isAccepted = metadata.accept_content_types.some(type => {
+                if (type.endsWith("/*")) {
+                    // Handle wildcards like "image/*"
+                    const prefix = type.slice(0, -1);
+                    return file.type.startsWith(prefix);
+                }
+                return file.type === type;
+            });
+            if (!isAccepted) {
+                setFileError(
+                    `File type ${file.type} is not accepted. Allowed: ${metadata.accept_content_types.join(", ")}`,
+                );
+                return;
+            }
+        }
+
+        // Validate file size
+        if (metadata.max_file_size && file.size > metadata.max_file_size) {
+            const maxSizeMB = (metadata.max_file_size / (1024 * 1024)).toFixed(1);
+            setFileError(`File is too large. Maximum size: ${maxSizeMB} MB`);
+            return;
+        }
+
+        setSelectedFile(file);
+
+        // Create preview URL for images
+        if (file.type.startsWith("image/")) {
+            const url = URL.createObjectURL(file);
+            setPreviewUrl(url);
+        } else {
+            setPreviewUrl(null);
+        }
+    }, [metadata.accept_content_types, metadata.max_file_size]);
+
+    // Submit the selected file
+    const submitFile = useCallback(async () => {
+        if (!selectedFile) {
+            return;
+        }
+
+        try {
+            const arrayBuffer = await selectedFile.arrayBuffer();
+            const data = new Uint8Array(arrayBuffer);
+            const varBytes = buildFileVar(selectedFile.type, data);
+            onSubmit(varBytes);
+
+            // Clean up
+            setSelectedFile(null);
+            if (previewUrl) {
+                URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(null);
+            }
+        } catch (error) {
+            console.error("Failed to read file:", error);
+            setFileError("Failed to read file");
+        }
+    }, [selectedFile, previewUrl, onSubmit]);
+
+    // Clean up preview URL when component unmounts
+    useEffect(() => {
+        return () => {
+            if (previewUrl) {
+                URL.revokeObjectURL(previewUrl);
+            }
+        };
+    }, [previewUrl]);
 
     const promptStatus = useMemo(() => {
         if (!metadata.prompt) {
@@ -626,6 +742,76 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                     >
                         OK
                     </button>
+                </div>
+            </div>
+        );
+    }
+
+    // Image/file upload input type
+    if (metadata.input_type === "image" || metadata.input_type === "file") {
+        const acceptAttr = metadata.accept_content_types?.join(",") || (
+            metadata.input_type === "image" ? "image/*" : "*/*"
+        );
+        const isImage = metadata.input_type === "image";
+
+        return (
+            <div className="rich_input_prompt" role="form" aria-label={isImage ? "Upload an image" : "Upload a file"}>
+                <div className="sr-only" role="status" aria-live="polite">
+                    {isImage ? "Image upload required" : "File upload required"}
+                </div>
+                {promptStatus}
+                <div className="rich_input_file_container">
+                    <input
+                        ref={fileInputRef}
+                        id={fileInputId}
+                        type="file"
+                        accept={acceptAttr}
+                        onChange={handleFileSelect}
+                        disabled={disabled}
+                        className="rich_input_file"
+                        aria-label={metadata.tts_prompt || metadata.prompt
+                            || (isImage ? "Choose an image" : "Choose a file")}
+                    />
+                    <label htmlFor={fileInputId} className="rich_input_file_label">
+                        {selectedFile ? selectedFile.name : (isImage ? "Choose image..." : "Choose file...")}
+                    </label>
+                    {previewUrl && (
+                        <div className="rich_input_image_preview">
+                            <img src={previewUrl} alt="Preview" />
+                        </div>
+                    )}
+                    {selectedFile && !previewUrl && (
+                        <div className="rich_input_file_info">
+                            {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
+                        </div>
+                    )}
+                    {fileError && (
+                        <div className="rich_input_error" role="alert">
+                            {fileError}
+                        </div>
+                    )}
+                    <div className="rich_input_buttons">
+                        <button
+                            ref={primaryButtonRef}
+                            type="button"
+                            className="rich_input_button rich_input_button_primary"
+                            onClick={submitFile}
+                            disabled={disabled || !selectedFile}
+                            aria-label={isImage ? "Upload image" : "Upload file"}
+                        >
+                            Upload
+                        </button>
+                        <button
+                            type="button"
+                            className="rich_input_button"
+                            onClick={() =>
+                                handleSubmit("@abort")}
+                            disabled={disabled}
+                            aria-label="Cancel"
+                        >
+                            Cancel
+                        </button>
+                    </div>
                 </div>
             </div>
         );

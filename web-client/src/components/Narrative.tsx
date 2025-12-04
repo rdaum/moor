@@ -34,7 +34,7 @@ export interface NarrativeMessage {
 interface NarrativeProps {
     visible: boolean;
     connectionStatus: "disconnected" | "connecting" | "connected" | "error";
-    onSendMessage: (message: string) => void;
+    onSendMessage: (message: string | Uint8Array | ArrayBuffer) => void;
     onLoadMoreHistory?: () => void;
     isLoadingHistory?: boolean;
     onLinkClick?: (url: string) => void;
@@ -159,9 +159,9 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     }, [onMessageAppended]);
 
     // Handle sending messages
-    const handleSendMessage = useCallback((message: string) => {
-        // Echo the input to the narrative if setting is enabled
-        if (getCommandEchoEnabled()) {
+    const handleSendMessage = useCallback((message: string | Uint8Array | ArrayBuffer) => {
+        // Echo the input to the narrative if setting is enabled (only for text)
+        if (typeof message === "string" && getCommandEchoEnabled()) {
             addMessage(message, "input_echo");
         }
 

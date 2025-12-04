@@ -18,7 +18,7 @@ import { RichInputPrompt } from "./RichInputPrompt";
 interface InputAreaProps {
     visible: boolean;
     disabled: boolean;
-    onSendMessage: (message: string) => void;
+    onSendMessage: (message: string | Uint8Array | ArrayBuffer) => void;
     commandHistory: string[];
     onAddToHistory: (command: string) => void;
     inputMetadata?: InputMetadata | null;
@@ -235,7 +235,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
     }, [navigateHistory, sendInput, input, historyOffset, commandHistory]);
 
     // Handler for rich input submission
-    const handleRichInputSubmit = useCallback((value: string) => {
+    const handleRichInputSubmit = useCallback((value: string | Uint8Array) => {
         onSendMessage(value);
         if (onClearInputMetadata) {
             onClearInputMetadata();

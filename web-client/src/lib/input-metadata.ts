@@ -146,6 +146,24 @@ export function parseInputMetadata(metadataPairs: MetadataPair[] | null): InputM
                 }
                 break;
             }
+
+            case "accept_content_types": {
+                const listValue = moorVar.asList();
+                if (listValue) {
+                    metadata.accept_content_types = listValue
+                        .map(v => v.asString())
+                        .filter((v): v is string => v !== null);
+                }
+                break;
+            }
+
+            case "max_file_size": {
+                const intValue = moorVar.asInteger();
+                if (intValue !== null) {
+                    metadata.max_file_size = intValue;
+                }
+                break;
+            }
         }
     }
 

@@ -306,8 +306,8 @@ export const useWebSocket = (
         }, 100);
     }, []);
 
-    // Send message
-    const sendMessage = useCallback((message: string) => {
+    // Send message (text string or binary data)
+    const sendMessage = useCallback((message: string | Uint8Array | ArrayBuffer) => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
             socketRef.current.send(message);
             return true;
