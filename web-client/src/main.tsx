@@ -35,7 +35,8 @@ import { VerbEditor } from "./components/VerbEditor";
 import { AuthProvider, useAuthContext } from "./context/AuthContext";
 import { EncryptionProvider, useEncryptionContext } from "./context/EncryptionContext";
 import { PresentationProvider, usePresentationContext } from "./context/PresentationContext";
-import { useWebSocketContext, WebSocketProvider } from "./context/WebSocketContext";
+// WebRTC data channel transport (experimental) - swap to WebSocketContext for WebSocket
+import { useWebSocketContext, WebSocketProvider } from "./context/WebRTCContext";
 import { useHistory } from "./hooks/useHistory";
 import { useMCPHandler } from "./hooks/useMCPHandler";
 import { usePersistentState } from "./hooks/usePersistentState";

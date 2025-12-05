@@ -56,6 +56,7 @@ axum.workspace = true
 hickory-resolver.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 tmq.workspace = true
+webrtc.workspace = true
 
 # Async Runtime & Concurrency
 futures-util.workspace = true

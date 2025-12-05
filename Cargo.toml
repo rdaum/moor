@@ -124,6 +124,7 @@ axum = { version = "0.8", features = ["ws"] }
 hickory-resolver = "0.25"
 reqwest = "0.12"
 tmq = "0.5"
+webrtc = "0.14"
 zmq = "0.10"
 
 # Async Runtime & Concurrency

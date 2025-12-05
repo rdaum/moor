@@ -17,12 +17,14 @@ mod oauth2;
 mod oauth2_handlers;
 mod objects;
 mod props;
+mod rtc_connection;
 mod verbs;
 pub mod web_host;
 mod webhooks;
 mod ws_connection;
 
 pub use auth::{connect_auth_handler, create_auth_handler, logout_handler, validate_auth_handler};
+pub use rtc_connection::rtc_offer_handler;
 pub use event_log::{
     delete_history_handler, dismiss_presentation_handler, get_pubkey_handler, history_handler,
     presentations_handler, set_pubkey_handler,

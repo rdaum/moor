@@ -243,6 +243,18 @@ impl WebHost {
         (Uuid::new_v4(), self.create_rpc_client())
     }
 
+    pub fn pubsub_addr(&self) -> &str {
+        &self.pubsub_addr
+    }
+
+    pub fn curve_keys(&self) -> Option<&(String, String, String)> {
+        self.curve_keys.as_ref()
+    }
+
+    pub fn zmq_context(&self) -> &tmq::Context {
+        &self.zmq_context
+    }
+
     fn build_rpc_client(&self) -> RpcClient {
         let zmq_ctx = self.zmq_context.clone();
         RpcClient::new_with_defaults(
