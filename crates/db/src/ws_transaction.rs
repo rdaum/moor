@@ -1803,14 +1803,23 @@ impl WorldStateTransaction {
                 obj_refs.insert(parent);
             }
 
-            // 3. Check location relationship
+            // 2. Check location relationship
             if let Ok(location) = self.get_object_location(&obj)
                 && location.is_anonymous()
             {
                 obj_refs.insert(location);
             }
 
-            // 2. Check verb definitions for object references
+            // 3. Check contents (objects contained in this object)
+            if let Ok(contents) = self.get_object_contents(&obj) {
+                for contained in contents.iter() {
+                    if contained.is_anonymous() {
+                        obj_refs.insert(contained);
+                    }
+                }
+            }
+
+            // 4. Check verb definitions for object references
             if let Ok(verbdefs) = self.get_verbs(&obj) {
                 for verbdef in verbdefs.iter() {
                     // Check location field
@@ -1824,7 +1833,7 @@ impl WorldStateTransaction {
                 }
             }
 
-            // 3. Check property definitions for object references
+            // 5. Check property definitions for object references
             if let Ok(propdefs) = self.get_properties(&obj) {
                 for propdef in propdefs.iter() {
                     // Check definer field

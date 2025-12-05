@@ -212,7 +212,7 @@ mod tests {
             .find(|(ref_obj, _)| *ref_obj == obj)
             .expect("Should find references from our test object");
 
-        // Should find both anon_parent and anon_location referenced from obj
+        // Should find anon_parent, anon_location, and anon_child referenced from obj
         assert!(
             obj_refs.1.contains(&anon_parent),
             "Should find anonymous parent reference"
@@ -221,9 +221,10 @@ mod tests {
             obj_refs.1.contains(&anon_location),
             "Should find anonymous location reference"
         );
-
-        // We won't find anon_child referenced FROM obj, because anon_child is located IN obj, not referenced by obj
-        // But we might find it if there are reverse indices, but that's not part of this test
+        assert!(
+            obj_refs.1.contains(&anon_child),
+            "Should find anonymous child in contents"
+        );
     }
 
     #[test]
