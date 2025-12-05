@@ -34,7 +34,7 @@ export const SpeechBubbleToggle: React.FC = () => {
     const { isRetroTheme } = useTheme();
     const [enabled, setEnabled] = usePersistentState<boolean>(
         SPEECH_BUBBLE_STORAGE_KEY,
-        true,
+        false,
         {
             serialize: serializeBool,
             deserialize: deserializeBool,
@@ -76,9 +76,9 @@ export const SpeechBubbleToggle: React.FC = () => {
  */
 export const getSpeechBubblesEnabled = (): boolean => {
     if (typeof window === "undefined") {
-        return true;
+        return false;
     }
     const saved = window.localStorage.getItem(SPEECH_BUBBLE_STORAGE_KEY);
     const parsed = saved ? deserializeBool(saved) : null;
-    return parsed ?? true;
+    return parsed ?? false;
 };

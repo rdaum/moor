@@ -346,9 +346,19 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                     // Continue grouping if:
                     // 1. This message has noNewline, OR
                     // 2. This message has a presentationHint and the next message has the same hint AND same groupId
+                    //    AND same actor (for speech bubbles, we don't want to merge different speakers)
+                    const sameActor = () => {
+                        const a1 = message.eventMetadata?.actor;
+                        const a2 = nextMessage?.eventMetadata?.actor;
+                        if (!a1 || !a2) return true; // If no actor info, allow grouping
+                        if (a1.oid !== undefined && a2.oid !== undefined) return a1.oid === a2.oid;
+                        if (a1.uuid !== undefined && a2.uuid !== undefined) return a1.uuid === a2.uuid;
+                        return false; // Different actor representations = different actors
+                    };
                     const sameHintGroup = message.presentationHint
                         && nextMessage?.presentationHint === message.presentationHint
-                        && message.groupId === nextMessage?.groupId;
+                        && message.groupId === nextMessage?.groupId
+                        && sameActor();
                     const shouldContinueGroup = message.noNewline || sameHintGroup;
 
                     // If we shouldn't continue grouping or it's the last message, complete the current group
