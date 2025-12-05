@@ -246,6 +246,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         messageId: string,
         isHistorical?: boolean,
         fromMe?: boolean,
+        contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback",
     ) => {
         const displayName = fromMe ? "You" : actorName;
         const bubbleClass = fromMe ? "speech_bubble speech_bubble_me" : "speech_bubble";
@@ -261,7 +262,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
             >
                 <span className="speech_bubble_actor" aria-hidden="true">{displayName}</span>
                 <div className={bubbleClass} aria-hidden="true">
-                    {content}
+                    <ContentRenderer content={content} contentType={contentType} onLinkClick={onLinkClick} />
                 </div>
             </div>
         );
@@ -394,6 +395,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                     message.id,
                                     message.isHistorical,
                                     fromMe,
+                                    message.contentType,
                                 ),
                             );
                         } else if (message.presentationHint) {
@@ -464,6 +466,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                         `speech_group_${firstMessage.id}`,
                                         firstMessage.isHistorical,
                                         fromMe,
+                                        firstMessage.contentType,
                                     ),
                                 );
                             } else {

@@ -12,11 +12,13 @@
 //
 
 // Ergonomic wrapper around FlatBuffer Var types
-// Provides an API similar to the Rust moor_var::Var
+// Provides reading API similar to Rust moor_var::Var plus static builders for construction
 
+import * as flatbuffers from "flatbuffers";
 import { ErrorCode } from "../generated/moor-common/error-code.js";
 import { ObjId } from "../generated/moor-common/obj-id.js";
 import { ObjUnion } from "../generated/moor-common/obj-union.js";
+import { Symbol as FbSymbol } from "../generated/moor-common/symbol.js";
 import { UuObjId } from "../generated/moor-common/uu-obj-id.js";
 import { VarAnonymous } from "../generated/moor-var/var-anonymous.js";
 import { VarBinary } from "../generated/moor-var/var-binary.js";
@@ -475,5 +477,140 @@ export class MoorVar {
      */
     toString(): string {
         return `MoorVar(${VarUnion[this.typeCode()]}: ${JSON.stringify(this.toJS())})`;
+    }
+
+    // ========== Static Builder Methods ==========
+
+    /**
+     * Build an empty VarList
+     */
+    static buildEmptyList(): Uint8Array {
+        const builder = new flatbuffers.Builder(256);
+        const emptyListOffset = VarList.createVarList(builder, VarList.createElementsVector(builder, []));
+        const listVarOffset = FbVar.createVar(builder, VarUnion.VarList, emptyListOffset);
+        builder.finish(listVarOffset);
+        return builder.asUint8Array();
+    }
+
+    /**
+     * Build a VarList containing strings
+     */
+    static buildStringList(strings: string[]): Uint8Array {
+        const estimatedSize = 256 + strings.reduce((sum, s) => sum + s.length * 2, 0);
+        const builder = new flatbuffers.Builder(estimatedSize);
+
+        const varOffsets: number[] = [];
+        for (const str of strings) {
+            const strOffset = builder.createString(str);
+            const varStrOffset = VarStr.createVarStr(builder, strOffset);
+            const varOffset = FbVar.createVar(builder, VarUnion.VarStr, varStrOffset);
+            varOffsets.push(varOffset);
+        }
+
+        const elementsVectorOffset = VarList.createElementsVector(builder, varOffsets);
+        const varListOffset = VarList.createVarList(builder, elementsVectorOffset);
+        const listVarOffset = FbVar.createVar(builder, VarUnion.VarList, varListOffset);
+
+        builder.finish(listVarOffset);
+        return builder.asUint8Array();
+    }
+
+    /**
+     * Build a VarList containing [content_type_string, binary_data]
+     * Used for file uploads
+     */
+    static buildFileVar(contentType: string, data: Uint8Array): Uint8Array {
+        const builder = new flatbuffers.Builder(data.length + 256);
+
+        const contentTypeStrOffset = builder.createString(contentType);
+        const varStrOffset = VarStr.createVarStr(builder, contentTypeStrOffset);
+        const contentTypeVarOffset = FbVar.createVar(builder, VarUnion.VarStr, varStrOffset);
+
+        const binaryDataOffset = VarBinary.createDataVector(builder, data);
+        const varBinaryOffset = VarBinary.createVarBinary(builder, binaryDataOffset);
+        const binaryVarOffset = FbVar.createVar(builder, VarUnion.VarBinary, varBinaryOffset);
+
+        const elementsVectorOffset = VarList.createElementsVector(builder, [contentTypeVarOffset, binaryVarOffset]);
+        const varListOffset = VarList.createVarList(builder, elementsVectorOffset);
+        const listVarOffset = FbVar.createVar(builder, VarUnion.VarList, varListOffset);
+
+        builder.finish(listVarOffset);
+        return builder.asUint8Array();
+    }
+
+    /**
+     * Build args for text editor save: optional session ID followed by content
+     * Content can be a string or list of strings
+     */
+    static buildTextEditorArgs(sessionId: string | undefined, content: string | string[]): Uint8Array {
+        const contentSize = typeof content === "string" ? content.length : content.reduce((a, b) => a + b.length, 0);
+        const estimatedSize = 512 + contentSize * 2;
+        const builder = new flatbuffers.Builder(estimatedSize);
+
+        // Build content var (string or list of strings)
+        let contentVarOffset: number;
+        if (typeof content === "string") {
+            const contentStrOffset = builder.createString(content);
+            const contentVarStrOffset = VarStr.createVarStr(builder, contentStrOffset);
+            contentVarOffset = FbVar.createVar(builder, VarUnion.VarStr, contentVarStrOffset);
+        } else {
+            const contentVarOffsets: number[] = [];
+            for (const line of content) {
+                const strOffset = builder.createString(line);
+                const varStrOffset = VarStr.createVarStr(builder, strOffset);
+                const varOffset = FbVar.createVar(builder, VarUnion.VarStr, varStrOffset);
+                contentVarOffsets.push(varOffset);
+            }
+            const contentElementsOffset = VarList.createElementsVector(builder, contentVarOffsets);
+            const contentListOffset = VarList.createVarList(builder, contentElementsOffset);
+            contentVarOffset = FbVar.createVar(builder, VarUnion.VarList, contentListOffset);
+        }
+
+        // Build outer list: [sessionId, content] or just [content]
+        const outerVarOffsets: number[] = [];
+        if (sessionId) {
+            const sessionStrOffset = builder.createString(sessionId);
+            const sessionVarStrOffset = VarStr.createVarStr(builder, sessionStrOffset);
+            const sessionVarOffset = FbVar.createVar(builder, VarUnion.VarStr, sessionVarStrOffset);
+            outerVarOffsets.push(sessionVarOffset);
+        }
+        outerVarOffsets.push(contentVarOffset);
+
+        const outerElementsOffset = VarList.createElementsVector(builder, outerVarOffsets);
+        const outerListOffset = VarList.createVarList(builder, outerElementsOffset);
+        const outerListVarOffset = FbVar.createVar(builder, VarUnion.VarList, outerListOffset);
+
+        builder.finish(outerListVarOffset);
+        return builder.asUint8Array();
+    }
+
+    /**
+     * Build args for text editor close: optional session ID followed by 'close symbol
+     */
+    static buildTextEditorCloseArgs(sessionId: string | undefined): Uint8Array {
+        const builder = new flatbuffers.Builder(256);
+
+        // Build 'close symbol: VarSym wraps Symbol which wraps string
+        const closeStrOffset = builder.createString("close");
+        const symbolOffset = FbSymbol.createSymbol(builder, closeStrOffset);
+        const closeSymOffset = VarSym.createVarSym(builder, symbolOffset);
+        const closeVarOffset = FbVar.createVar(builder, VarUnion.VarSym, closeSymOffset);
+
+        // Build outer list: [sessionId, 'close] or just ['close]
+        const outerVarOffsets: number[] = [];
+        if (sessionId) {
+            const sessionStrOffset = builder.createString(sessionId);
+            const sessionVarStrOffset = VarStr.createVarStr(builder, sessionStrOffset);
+            const sessionVarOffset = FbVar.createVar(builder, VarUnion.VarStr, sessionVarStrOffset);
+            outerVarOffsets.push(sessionVarOffset);
+        }
+        outerVarOffsets.push(closeVarOffset);
+
+        const outerElementsOffset = VarList.createElementsVector(builder, outerVarOffsets);
+        const outerListOffset = VarList.createVarList(builder, outerElementsOffset);
+        const outerListVarOffset = FbVar.createVar(builder, VarUnion.VarList, outerListOffset);
+
+        builder.finish(outerListVarOffset);
+        return builder.asUint8Array();
     }
 }

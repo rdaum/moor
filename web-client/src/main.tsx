@@ -28,6 +28,7 @@ import { ObjectBrowser } from "./components/ObjectBrowser";
 import { PropertyEditor } from "./components/PropertyEditor";
 import { PropertyValueEditorWindow } from "./components/PropertyValueEditorWindow";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { TextEditor } from "./components/TextEditor";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { TopNavBar } from "./components/TopNavBar";
 import { VerbEditor } from "./components/VerbEditor";
@@ -40,12 +41,14 @@ import { useMCPHandler } from "./hooks/useMCPHandler";
 import { usePersistentState } from "./hooks/usePersistentState";
 import { usePropertyEditor } from "./hooks/usePropertyEditor";
 import { usePropertyValueEditor } from "./hooks/usePropertyValueEditor";
+import { useTextEditor } from "./hooks/useTextEditor";
 import { useTitle } from "./hooks/useTitle";
 import { useTouchDevice } from "./hooks/useTouchDevice";
 import { useVerbEditor } from "./hooks/useVerbEditor";
+import { MoorVar } from "./lib/MoorVar";
 import { OAuth2UserInfo } from "./lib/oauth2";
 import { MoorRemoteObject } from "./lib/rpc";
-import { fetchServerFeatures } from "./lib/rpc-fb";
+import { fetchServerFeatures, invokeVerbFlatBuffer } from "./lib/rpc-fb";
 import { oidRef, stringToCurie } from "./lib/var";
 import { PresentationData } from "./types/presentation";
 import "./styles/main.css";
@@ -310,6 +313,12 @@ function AppContent({
         closePropertyValueEditor,
     } = usePropertyValueEditor();
 
+    const {
+        textEditorSession,
+        showTextEditor,
+        closeTextEditor,
+    } = useTextEditor();
+
     // Presentation management (needs to be declared before handlers that reference it)
     const {
         getLeftDockPresentations,
@@ -320,6 +329,7 @@ function AppContent({
         getPropertyEditorPresentations,
         getPropertyValueEditorPresentations,
         getObjectBrowserPresentations,
+        getTextEditorPresentations,
         dismissPresentation,
         fetchCurrentPresentations,
         clearAll: clearAllPresentations,
@@ -332,24 +342,33 @@ function AppContent({
     const verbEditorDocked = !!editorSession && (isTouchDevice || forceSplitMode);
     const propertyEditorDocked = !!propertyEditorSession && (isTouchDevice || forceSplitMode);
     const propertyValueEditorDocked = !!propertyValueEditorSession && (isTouchDevice || forceSplitMode);
+    const textEditorDocked = !!textEditorSession && (isTouchDevice || forceSplitMode);
     const objectBrowserDocked = isObjectBrowserOpen && isObjectBrowserDocked;
     const evalPanelDocked = isEvalPanelOpen && isEvalPanelDocked;
     const isSplitMode = isConnected
-        && (verbEditorDocked || propertyEditorDocked || propertyValueEditorDocked || objectBrowserDocked
-            || evalPanelDocked);
+        && (verbEditorDocked || propertyEditorDocked || propertyValueEditorDocked || textEditorDocked
+            || objectBrowserDocked || evalPanelDocked);
 
     const handleOpenObjectBrowser = useCallback(() => {
         if (isTouchDevice) {
             closeEditor();
             closePropertyEditor();
             closePropertyValueEditor();
+            closeTextEditor();
             if (!isObjectBrowserDocked) {
                 setIsObjectBrowserDocked(true);
             }
         }
         setIsObjectBrowserOpen(true);
         setObjectBrowserLinkedToPresentation(false);
-    }, [isTouchDevice, closeEditor, closePropertyEditor, closePropertyValueEditor, isObjectBrowserDocked]);
+    }, [
+        isTouchDevice,
+        closeEditor,
+        closePropertyEditor,
+        closePropertyValueEditor,
+        closeTextEditor,
+        isObjectBrowserDocked,
+    ]);
 
     const handleCloseObjectBrowser = useCallback(() => {
         if (authToken) {
@@ -364,12 +383,13 @@ function AppContent({
             closeEditor();
             closePropertyEditor();
             closePropertyValueEditor();
+            closeTextEditor();
             if (!isEvalPanelDocked) {
                 setIsEvalPanelDocked(true);
             }
         }
         setIsEvalPanelOpen(true);
-    }, [isTouchDevice, closeEditor, closePropertyEditor, closePropertyValueEditor, isEvalPanelDocked]);
+    }, [isTouchDevice, closeEditor, closePropertyEditor, closePropertyValueEditor, closeTextEditor, isEvalPanelDocked]);
 
     useEffect(() => {
         if (!isTouchDevice) {
@@ -379,17 +399,35 @@ function AppContent({
             closeEditor();
             closePropertyEditor();
             closePropertyValueEditor();
+            closeTextEditor();
         }
-    }, [isTouchDevice, isObjectBrowserOpen, closeEditor, closePropertyEditor, closePropertyValueEditor]);
+    }, [
+        isTouchDevice,
+        isObjectBrowserOpen,
+        closeEditor,
+        closePropertyEditor,
+        closePropertyValueEditor,
+        closeTextEditor,
+    ]);
 
     useEffect(() => {
         if (!isTouchDevice) {
             return;
         }
-        if ((editorSession || propertyEditorSession || propertyValueEditorSession) && isObjectBrowserOpen) {
+        if (
+            (editorSession || propertyEditorSession || propertyValueEditorSession || textEditorSession)
+            && isObjectBrowserOpen
+        ) {
             setIsObjectBrowserOpen(false);
         }
-    }, [isTouchDevice, editorSession, propertyEditorSession, propertyValueEditorSession, isObjectBrowserOpen]);
+    }, [
+        isTouchDevice,
+        editorSession,
+        propertyEditorSession,
+        propertyValueEditorSession,
+        textEditorSession,
+        isObjectBrowserOpen,
+    ]);
 
     useEffect(() => {
         if (!isTouchDevice) {
@@ -399,17 +437,28 @@ function AppContent({
             closeEditor();
             closePropertyEditor();
             closePropertyValueEditor();
+            closeTextEditor();
         }
-    }, [isTouchDevice, isEvalPanelOpen, closeEditor, closePropertyEditor, closePropertyValueEditor]);
+    }, [isTouchDevice, isEvalPanelOpen, closeEditor, closePropertyEditor, closePropertyValueEditor, closeTextEditor]);
 
     useEffect(() => {
         if (!isTouchDevice) {
             return;
         }
-        if ((editorSession || propertyEditorSession || propertyValueEditorSession) && isEvalPanelOpen) {
+        if (
+            (editorSession || propertyEditorSession || propertyValueEditorSession || textEditorSession)
+            && isEvalPanelOpen
+        ) {
             setIsEvalPanelOpen(false);
         }
-    }, [isTouchDevice, editorSession, propertyEditorSession, propertyValueEditorSession, isEvalPanelOpen]);
+    }, [
+        isTouchDevice,
+        editorSession,
+        propertyEditorSession,
+        propertyValueEditorSession,
+        textEditorSession,
+        isEvalPanelOpen,
+    ]);
 
     // Notify parent about verb editor availability
     useEffect(() => {
@@ -492,6 +541,32 @@ function AppContent({
         }
         closePropertyValueEditor();
     }, [authToken, closePropertyValueEditor, dismissPresentation, propertyValueEditorPresentationId]);
+
+    const textEditorPresentationId = textEditorSession?.presentationId;
+    const closedTextEditorPresentationsRef = useRef<Set<string>>(new Set());
+
+    const handleTextEditorClose = useCallback(() => {
+        // Track this presentation as closed to prevent the effect from reopening it
+        if (textEditorPresentationId) {
+            closedTextEditorPresentationsRef.current.add(textEditorPresentationId);
+        }
+
+        // Notify the server by calling the verb with 'close symbol
+        if (textEditorSession && authToken) {
+            const closeArgs = MoorVar.buildTextEditorCloseArgs(textEditorSession.sessionId);
+            invokeVerbFlatBuffer(
+                authToken,
+                textEditorSession.objectCurie,
+                textEditorSession.verbName,
+                closeArgs,
+            ).catch(err => console.error("Failed to send close notification:", err));
+        }
+
+        closeTextEditor();
+        if (textEditorPresentationId && authToken) {
+            dismissPresentation(textEditorPresentationId, authToken);
+        }
+    }, [authToken, closeTextEditor, dismissPresentation, textEditorPresentationId, textEditorSession]);
 
     // Handle verb editor presentations from server
     useEffect(() => {
@@ -727,6 +802,94 @@ function AppContent({
         showMessage,
     ]);
 
+    // Handle text editor presentations from server
+    useEffect(() => {
+        if (!authToken) {
+            return;
+        }
+
+        const textPresentations = getTextEditorPresentations();
+
+        for (const presentation of textPresentations) {
+            if (textEditorSession?.presentationId === presentation.id) {
+                continue;
+            }
+
+            // Skip presentations that were recently closed (prevents reopening race)
+            if (closedTextEditorPresentationsRef.current.has(presentation.id)) {
+                // Clean up once we've skipped it
+                closedTextEditorPresentationsRef.current.delete(presentation.id);
+                continue;
+            }
+
+            const rawObjectId = presentation.attrs.object || presentation.attrs.objectCurie;
+            const verbName = presentation.attrs.verb || presentation.attrs.verbName;
+
+            if (!rawObjectId || !verbName) {
+                showMessage("Text editor presentation missing object/verb metadata", 5);
+                dismissPresentation(presentation.id, authToken);
+                continue;
+            }
+
+            const objectCurie = stringToCurie(rawObjectId);
+            if (!objectCurie) {
+                showMessage(`Cannot parse object reference ${rawObjectId} for text editor`, 5);
+                dismissPresentation(presentation.id, authToken);
+                continue;
+            }
+
+            // Get optional session ID
+            const sessionId = presentation.attrs.session_id || undefined;
+
+            // Get content type (default to text/plain)
+            const contentType = presentation.attrs.content_type === "text/djot" ? "text/djot" : "text/plain";
+
+            // Get text mode (default to list)
+            const textMode = presentation.attrs.text_mode === "string" ? "string" : "list";
+
+            // Get description (optional)
+            const description = presentation.attrs.description || "";
+
+            // Convert content to string (may be string or string[])
+            const content = Array.isArray(presentation.content)
+                ? presentation.content.join("\n")
+                : (presentation.content || "");
+
+            // Show the text editor with content from the presentation
+            showTextEditor(
+                presentation.id,
+                presentation.title || "Edit Text",
+                description,
+                objectCurie,
+                verbName,
+                sessionId,
+                content,
+                contentType,
+                textMode,
+                presentation.id,
+            );
+
+            break;
+        }
+
+        if (textEditorSession?.presentationId) {
+            const hasPresentation = textPresentations.some(
+                presentation => presentation.id === textEditorSession.presentationId,
+            );
+            if (!hasPresentation) {
+                closeTextEditor();
+            }
+        }
+    }, [
+        authToken,
+        closeTextEditor,
+        dismissPresentation,
+        getTextEditorPresentations,
+        showTextEditor,
+        showMessage,
+        textEditorSession,
+    ]);
+
     // MCP handler for parsing edit commands - passed from parent
     // (We receive the handler instead of creating it here)
 
@@ -762,6 +925,7 @@ function AppContent({
             closeEditor();
             closePropertyEditor();
             closePropertyValueEditor();
+            closeTextEditor();
 
             // Clear all presentations
             clearAllPresentations();
@@ -784,6 +948,7 @@ function AppContent({
         closeEditor,
         closePropertyEditor,
         closePropertyValueEditor,
+        closeTextEditor,
         disconnectWS,
         narrativeRef,
         playerOid,
@@ -1429,6 +1594,24 @@ function AppContent({
                                     isInSplitMode={true}
                                 />
                             )}
+                            {textEditorDocked && textEditorSession && (
+                                <TextEditor
+                                    visible={true}
+                                    onClose={handleTextEditorClose}
+                                    title={textEditorSession.title}
+                                    description={textEditorSession.description}
+                                    objectCurie={textEditorSession.objectCurie}
+                                    verbName={textEditorSession.verbName}
+                                    sessionId={textEditorSession.sessionId}
+                                    initialContent={textEditorSession.content}
+                                    authToken={authToken}
+                                    contentType={textEditorSession.contentType}
+                                    textMode={textEditorSession.textMode}
+                                    splitMode={true}
+                                    onToggleSplitMode={toggleSplitMode}
+                                    isInSplitMode={true}
+                                />
+                            )}
                             {isObjectBrowserOpen && objectBrowserDocked && canUseObjectBrowser && (
                                 <ObjectBrowser
                                     key="object-browser-instance"
@@ -1505,6 +1688,23 @@ function AppContent({
                     session={propertyValueEditorSession}
                     onClose={handlePropertyValueEditorClose}
                     onRefresh={() => refreshPropertyValueEditor(authToken)}
+                    onToggleSplitMode={toggleSplitMode}
+                    isInSplitMode={false}
+                />
+            )}
+            {textEditorSession && authToken && !textEditorDocked && (
+                <TextEditor
+                    visible={true}
+                    onClose={handleTextEditorClose}
+                    title={textEditorSession.title}
+                    description={textEditorSession.description}
+                    objectCurie={textEditorSession.objectCurie}
+                    verbName={textEditorSession.verbName}
+                    sessionId={textEditorSession.sessionId}
+                    initialContent={textEditorSession.content}
+                    authToken={authToken}
+                    contentType={textEditorSession.contentType}
+                    textMode={textEditorSession.textMode}
                     onToggleSplitMode={toggleSplitMode}
                     isInSplitMode={false}
                 />

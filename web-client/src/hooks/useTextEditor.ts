@@ -22,7 +22,7 @@ export interface TextEditorSession {
     description: string; // Explanatory blurb shown to user
     objectCurie: string;
     verbName: string;
-    curriedArgs: string[]; // Additional args to pass before the content
+    sessionId?: string; // Optional session ID passed as first arg on save
     content: string;
     contentType: "text/plain" | "text/djot";
     textMode: "string" | "list"; // How to send content: single string or list of strings
@@ -39,7 +39,7 @@ export const useTextEditor = () => {
         description: string,
         objectCurie: string,
         verbName: string,
-        curriedArgs: string[],
+        sessionId: string | undefined,
         content: string,
         contentType: "text/plain" | "text/djot",
         textMode: "string" | "list",
@@ -51,7 +51,7 @@ export const useTextEditor = () => {
             description,
             objectCurie,
             verbName,
-            curriedArgs,
+            sessionId,
             content,
             contentType,
             textMode,

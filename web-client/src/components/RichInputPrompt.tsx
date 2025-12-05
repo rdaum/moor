@@ -11,40 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import * as flatbuffers from "flatbuffers";
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { Var } from "../generated/moor-var/var";
-import { VarBinary } from "../generated/moor-var/var-binary";
-import { VarList } from "../generated/moor-var/var-list";
-import { VarStr } from "../generated/moor-var/var-str";
-import { VarUnion } from "../generated/moor-var/var-union";
 import { renderDjot, renderPlainText } from "../lib/djot-renderer";
+import { MoorVar } from "../lib/MoorVar";
 import { InputMetadata } from "../types/input";
-
-/**
- * Build a FlatBuffer-encoded Var list containing [content_type, binary_data]
- */
-function buildFileVar(contentType: string, data: Uint8Array): Uint8Array {
-    const builder = new flatbuffers.Builder(data.length + 256);
-
-    // Build the content-type string Var
-    const contentTypeStrOffset = builder.createString(contentType);
-    const varStrOffset = VarStr.createVarStr(builder, contentTypeStrOffset);
-    const contentTypeVarOffset = Var.createVar(builder, VarUnion.VarStr, varStrOffset);
-
-    // Build the binary data Var
-    const binaryDataOffset = VarBinary.createDataVector(builder, data);
-    const varBinaryOffset = VarBinary.createVarBinary(builder, binaryDataOffset);
-    const binaryVarOffset = Var.createVar(builder, VarUnion.VarBinary, varBinaryOffset);
-
-    // Build the list containing both
-    const elementsVectorOffset = VarList.createElementsVector(builder, [contentTypeVarOffset, binaryVarOffset]);
-    const varListOffset = VarList.createVarList(builder, elementsVectorOffset);
-    const listVarOffset = Var.createVar(builder, VarUnion.VarList, varListOffset);
-
-    builder.finish(listVarOffset);
-    return builder.asUint8Array();
-}
 
 interface RichInputPromptProps {
     metadata: InputMetadata;
@@ -192,7 +162,7 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
         try {
             const arrayBuffer = await selectedFile.arrayBuffer();
             const data = new Uint8Array(arrayBuffer);
-            const varBytes = buildFileVar(selectedFile.type, data);
+            const varBytes = MoorVar.buildFileVar(selectedFile.type, data);
             onSubmit(varBytes);
 
             // Clean up

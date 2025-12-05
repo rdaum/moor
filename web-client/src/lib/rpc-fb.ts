@@ -76,9 +76,6 @@ import {
 } from "../generated/moor-rpc/verb-program-response-union.js";
 import { VerbValue } from "../generated/moor-rpc/verb-value.js";
 import { VerbsReply } from "../generated/moor-rpc/verbs-reply.js";
-import { VarList } from "../generated/moor-var/var-list.js";
-import { VarUnion } from "../generated/moor-var/var-union.js";
-import { Var } from "../generated/moor-var/var.js";
 import { decryptEventBlob } from "./age-decrypt.js";
 import { buildAuthHeaders } from "./authHeaders";
 import { parseInputMetadata } from "./input-metadata.js";
@@ -1457,17 +1454,8 @@ export async function invokeVerbFlatBuffer(
     verbName: string,
     args?: Uint8Array,
 ): Promise<EvalResult | any> {
-    // If no args provided, build an empty list FlatBuffer
-    let argsBytes: Uint8Array;
-    if (!args) {
-        const builder = new flatbuffers.Builder(256);
-        const emptyListOffset = VarList.createVarList(builder, VarList.createElementsVector(builder, []));
-        const listVarOffset = Var.createVar(builder, VarUnion.VarList, emptyListOffset);
-        builder.finish(listVarOffset);
-        argsBytes = builder.asUint8Array();
-    } else {
-        argsBytes = args;
-    }
+    // If no args provided, build an empty list
+    const argsBytes = args ?? MoorVar.buildEmptyList();
 
     // Create a properly sized ArrayBuffer from the Uint8Array
     // Can't use argsBytes.buffer directly as it might be larger than the actual data

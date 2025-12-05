@@ -35,7 +35,8 @@ export type PresentationTarget =
     | "verb-editor"
     | "property-editor"
     | "property-value-editor"
-    | "object-browser";
+    | "object-browser"
+    | "text-editor";
 
 export const TARGET_TYPES = {
     WINDOW: "window" as const,
@@ -49,4 +50,5 @@ export const TARGET_TYPES = {
     PROPERTY_EDITOR: "property-editor" as const,
     PROPERTY_VALUE_EDITOR: "property-value-editor" as const,
     OBJECT_BROWSER: "object-browser" as const,
+    TEXT_EDITOR: "text-editor" as const,
 };

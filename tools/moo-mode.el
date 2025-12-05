@@ -29,7 +29,7 @@
     ;; String quotes
     (modify-syntax-entry ?\" "\"" st)
     ;; Single quotes for symbols
-    (modify-syntax-entry ?' "'" st)
+    (modify-syntax-entry  ?' "'" st)
     ;; Parentheses
     (modify-syntax-entry ?\( "()" st)
     (modify-syntax-entry ?\) ")(" st)

@@ -110,7 +110,8 @@ export const usePresentations = () => {
         || target === TARGET_TYPES.VERB_EDITOR
         || target === TARGET_TYPES.PROPERTY_EDITOR
         || target === TARGET_TYPES.PROPERTY_VALUE_EDITOR
-        || target === TARGET_TYPES.OBJECT_BROWSER;
+        || target === TARGET_TYPES.OBJECT_BROWSER
+        || target === TARGET_TYPES.TEXT_EDITOR;
 
     const getLeftDockPresentations = useCallback((): Presentation[] => {
         return Array.from(presentations.values()).filter(p => {
@@ -171,6 +172,11 @@ export const usePresentations = () => {
         [getPresentationsByTarget],
     );
 
+    const getTextEditorPresentations = useCallback(
+        () => getPresentationsByTarget(TARGET_TYPES.TEXT_EDITOR),
+        [getPresentationsByTarget],
+    );
+
     // Clear all presentations (used on logout)
     const clearAll = useCallback(() => {
         setPresentations(new Map());
@@ -178,6 +184,9 @@ export const usePresentations = () => {
 
     // API call to dismiss a presentation on the server
     const dismissPresentation = useCallback(async (id: string, authToken: string) => {
+        // Remove locally immediately (optimistic update)
+        removePresentation(id);
+
         try {
             const headers = buildAuthHeaders(authToken);
             const response = await fetch(`/api/presentations/${encodeURIComponent(id)}`, {
@@ -187,11 +196,7 @@ export const usePresentations = () => {
 
             if (!response.ok) {
                 console.error(`Failed to dismiss presentation ${id}: ${response.status} ${response.statusText}`);
-                return;
             }
-
-            // Remove locally (server will also send unpresent message)
-            removePresentation(id);
         } catch (error) {
             console.error(`Error dismissing presentation ${id}:`, error);
         }
@@ -279,6 +284,7 @@ export const usePresentations = () => {
         getPropertyEditorPresentations,
         getPropertyValueEditorPresentations,
         getObjectBrowserPresentations,
+        getTextEditorPresentations,
         dismissPresentation,
         fetchCurrentPresentations,
         clearAll,

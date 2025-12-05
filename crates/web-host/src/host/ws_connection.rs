@@ -13,8 +13,10 @@
 
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, StreamExt};
-use moor_schema::{convert::uuid_from_ref, convert::var_from_flatbuffer, rpc as moor_rpc, var as moor_var_schema};
-use moor_var::{Obj, v_str, Var};
+use moor_schema::{
+    convert::uuid_from_ref, convert::var_from_flatbuffer, rpc as moor_rpc, var as moor_var_schema,
+};
+use moor_var::{Obj, Var, v_str};
 use planus::ReadAsRoot;
 use rpc_async_client::{
     pubsub_client::{broadcast_recv, events_recv},

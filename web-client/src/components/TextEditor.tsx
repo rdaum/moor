@@ -20,8 +20,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { usePersistentState } from "../hooks/usePersistentState";
 import { useTouchDevice } from "../hooks/useTouchDevice";
+import { MoorVar } from "../lib/MoorVar";
 import { invokeVerbFlatBuffer } from "../lib/rpc-fb";
-import { buildArgsWithContentVar, buildArgsWithStringContentVar } from "../lib/var-builder";
 import { EditorWindow, useTitleBarDrag } from "./EditorWindow";
 import { useTheme } from "./ThemeProvider";
 import { monacoThemeFor } from "./themeSupport";
@@ -33,7 +33,7 @@ interface TextEditorProps {
     description?: string; // Explanatory blurb shown to user
     objectCurie: string;
     verbName: string;
-    curriedArgs: string[];
+    sessionId?: string; // Optional session ID passed as first arg on save
     initialContent: string;
     authToken: string;
     contentType: "text/plain" | "text/djot";
@@ -61,7 +61,7 @@ export const TextEditor: React.FC<TextEditorProps> = ({
     description,
     objectCurie,
     verbName,
-    curriedArgs,
+    sessionId,
     initialContent,
     authToken,
     contentType,
@@ -167,11 +167,11 @@ export const TextEditor: React.FC<TextEditorProps> = ({
             let argsBuffer: Uint8Array;
             if (textMode === "string") {
                 // Send content as a single string
-                argsBuffer = buildArgsWithStringContentVar(curriedArgs, content);
+                argsBuffer = MoorVar.buildTextEditorArgs(sessionId, content);
             } else {
                 // Send content as a list of strings (one per line)
                 const lines = content.split("\n");
-                argsBuffer = buildArgsWithContentVar(curriedArgs, lines);
+                argsBuffer = MoorVar.buildTextEditorArgs(sessionId, lines);
             }
 
             // Invoke the verb
@@ -196,7 +196,7 @@ export const TextEditor: React.FC<TextEditorProps> = ({
         } finally {
             setIsSaving(false);
         }
-    }, [authToken, content, curriedArgs, isSaving, objectCurie, textMode, verbName]);
+    }, [authToken, content, isSaving, objectCurie, sessionId, textMode, verbName]);
 
     const formatError = (error: SaveError): string => {
         return error.message;
