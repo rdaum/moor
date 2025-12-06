@@ -1,0 +1,17 @@
+[package]
+name = "moor-schema-macros"
+version = "1.0.0-beta2"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Proc macros for reducing FlatBuffer conversion boilerplate"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2.workspace = true
+quote.workspace = true
+syn.workspace = true

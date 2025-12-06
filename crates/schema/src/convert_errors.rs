@@ -21,46 +21,102 @@ use crate::{
     common::CompileErrorUnionRef,
     convert_common::{symbol_from_flatbuffer_struct, symbol_from_ref, symbol_to_flatbuffer_struct},
     convert_var::{var_from_flatbuffer, var_to_flatbuffer},
+    fb_read,
 };
 use moor_common::model::{CompileContext, CompileError, ParseErrorDetails};
 use moor_var::Var;
+
+// ============================================================================
+// Helper functions for reducing boilerplate
+// ============================================================================
+
+/// Convert a FlatBuffer CompileContextRef to CompileContext
+fn compile_context_from_ref(ctx_ref: common::CompileContextRef<'_>) -> Result<CompileContext, String> {
+    let line = fb_read!(ctx_ref, line) as usize;
+    let col = fb_read!(ctx_ref, col) as usize;
+    Ok(CompileContext::new((line, col)))
+}
+
+/// Create a FlatBuffer CompileContext from a CompileContext
+fn compile_context_to_flatbuffer(ctx: &CompileContext) -> common::CompileContext {
+    common::CompileContext {
+        line: ctx.line_col.0 as u64,
+        col: ctx.line_col.1 as u64,
+    }
+}
+
+/// Convert moor_var::ErrorCode to flatbuffer ErrorCode (without custom symbol data)
+fn error_code_to_flatbuffer(err: &moor_var::ErrorCode) -> common::ErrorCode {
+    use moor_var::ErrorCode::*;
+    match err {
+        E_NONE => common::ErrorCode::ENone,
+        E_TYPE => common::ErrorCode::EType,
+        E_DIV => common::ErrorCode::EDiv,
+        E_PERM => common::ErrorCode::EPerm,
+        E_PROPNF => common::ErrorCode::EPropnf,
+        E_VERBNF => common::ErrorCode::EVerbnf,
+        E_VARNF => common::ErrorCode::EVarnf,
+        E_INVIND => common::ErrorCode::EInvind,
+        E_RECMOVE => common::ErrorCode::ERecmove,
+        E_MAXREC => common::ErrorCode::EMaxrec,
+        E_RANGE => common::ErrorCode::ERange,
+        E_ARGS => common::ErrorCode::EArgs,
+        E_NACC => common::ErrorCode::ENacc,
+        E_INVARG => common::ErrorCode::EInvarg,
+        E_QUOTA => common::ErrorCode::EQuota,
+        E_FLOAT => common::ErrorCode::EFloat,
+        E_FILE => common::ErrorCode::EFile,
+        E_EXEC => common::ErrorCode::EExec,
+        E_INTRPT => common::ErrorCode::EIntrpt,
+        ErrCustom(_) => common::ErrorCode::ErrCustom,
+    }
+}
+
+/// Convert flatbuffer ErrorCode to moor_var::ErrorCode.
+/// For ErrCustom, caller must provide the symbol separately.
+fn error_code_from_flatbuffer(
+    code: common::ErrorCode,
+    custom_symbol: Option<moor_var::Symbol>,
+) -> moor_var::ErrorCode {
+    use moor_var::ErrorCode::*;
+    match code {
+        common::ErrorCode::ENone => E_NONE,
+        common::ErrorCode::EType => E_TYPE,
+        common::ErrorCode::EDiv => E_DIV,
+        common::ErrorCode::EPerm => E_PERM,
+        common::ErrorCode::EPropnf => E_PROPNF,
+        common::ErrorCode::EVerbnf => E_VERBNF,
+        common::ErrorCode::EVarnf => E_VARNF,
+        common::ErrorCode::EInvind => E_INVIND,
+        common::ErrorCode::ERecmove => E_RECMOVE,
+        common::ErrorCode::EMaxrec => E_MAXREC,
+        common::ErrorCode::ERange => E_RANGE,
+        common::ErrorCode::EArgs => E_ARGS,
+        common::ErrorCode::ENacc => E_NACC,
+        common::ErrorCode::EInvarg => E_INVARG,
+        common::ErrorCode::EQuota => E_QUOTA,
+        common::ErrorCode::EFloat => E_FLOAT,
+        common::ErrorCode::EFile => E_FILE,
+        common::ErrorCode::EExec => E_EXEC,
+        common::ErrorCode::EIntrpt => E_INTRPT,
+        common::ErrorCode::ErrCustom => {
+            ErrCustom(custom_symbol.expect("ErrCustom requires custom_symbol"))
+        }
+    }
+}
 
 /// Convert from moor_var::Error to flatbuffer Error struct
 pub fn error_to_flatbuffer_struct(
     error: &moor_var::Error,
 ) -> Result<common::Error, Box<dyn std::error::Error>> {
-    use moor_var::ErrorCode as VarErrorCode;
-
-    let err_code = match error.err_type {
-        VarErrorCode::E_NONE => common::ErrorCode::ENone,
-        VarErrorCode::E_TYPE => common::ErrorCode::EType,
-        VarErrorCode::E_DIV => common::ErrorCode::EDiv,
-        VarErrorCode::E_PERM => common::ErrorCode::EPerm,
-        VarErrorCode::E_PROPNF => common::ErrorCode::EPropnf,
-        VarErrorCode::E_VERBNF => common::ErrorCode::EVerbnf,
-        VarErrorCode::E_VARNF => common::ErrorCode::EVarnf,
-        VarErrorCode::E_INVIND => common::ErrorCode::EInvind,
-        VarErrorCode::E_RECMOVE => common::ErrorCode::ERecmove,
-        VarErrorCode::E_MAXREC => common::ErrorCode::EMaxrec,
-        VarErrorCode::E_RANGE => common::ErrorCode::ERange,
-        VarErrorCode::E_ARGS => common::ErrorCode::EArgs,
-        VarErrorCode::E_NACC => common::ErrorCode::ENacc,
-        VarErrorCode::E_INVARG => common::ErrorCode::EInvarg,
-        VarErrorCode::E_QUOTA => common::ErrorCode::EQuota,
-        VarErrorCode::E_FLOAT => common::ErrorCode::EFloat,
-        VarErrorCode::E_FILE => common::ErrorCode::EFile,
-        VarErrorCode::E_EXEC => common::ErrorCode::EExec,
-        VarErrorCode::E_INTRPT => common::ErrorCode::EIntrpt,
-        VarErrorCode::ErrCustom(_) => common::ErrorCode::ErrCustom,
-    };
-
+    let err_code = error_code_to_flatbuffer(&error.err_type);
     let msg = error.msg.as_ref().map(|m| m.as_str().to_string());
     let value = match &error.value {
         Some(v) => Some(Box::new(var_to_flatbuffer(v).map_err(|e| e.to_string())?)),
         None => None,
     };
     let custom_symbol = match &error.err_type {
-        VarErrorCode::ErrCustom(sym) => Some(Box::new(symbol_to_flatbuffer_struct(sym))),
+        moor_var::ErrorCode::ErrCustom(sym) => Some(Box::new(symbol_to_flatbuffer_struct(sym))),
         _ => None,
     };
 
@@ -76,36 +132,16 @@ pub fn error_to_flatbuffer_struct(
 pub fn error_from_flatbuffer_struct(
     fb_error: &common::Error,
 ) -> Result<moor_var::Error, Box<dyn std::error::Error>> {
-    use moor_var::ErrorCode as VarErrorCode;
-
-    let err_type = match fb_error.err_type {
-        common::ErrorCode::ENone => VarErrorCode::E_NONE,
-        common::ErrorCode::EType => VarErrorCode::E_TYPE,
-        common::ErrorCode::EDiv => VarErrorCode::E_DIV,
-        common::ErrorCode::EPerm => VarErrorCode::E_PERM,
-        common::ErrorCode::EPropnf => VarErrorCode::E_PROPNF,
-        common::ErrorCode::EVerbnf => VarErrorCode::E_VERBNF,
-        common::ErrorCode::EVarnf => VarErrorCode::E_VARNF,
-        common::ErrorCode::EInvind => VarErrorCode::E_INVIND,
-        common::ErrorCode::ERecmove => VarErrorCode::E_RECMOVE,
-        common::ErrorCode::EMaxrec => VarErrorCode::E_MAXREC,
-        common::ErrorCode::ERange => VarErrorCode::E_RANGE,
-        common::ErrorCode::EArgs => VarErrorCode::E_ARGS,
-        common::ErrorCode::ENacc => VarErrorCode::E_NACC,
-        common::ErrorCode::EInvarg => VarErrorCode::E_INVARG,
-        common::ErrorCode::EQuota => VarErrorCode::E_QUOTA,
-        common::ErrorCode::EFloat => VarErrorCode::E_FLOAT,
-        common::ErrorCode::EFile => VarErrorCode::E_FILE,
-        common::ErrorCode::EExec => VarErrorCode::E_EXEC,
-        common::ErrorCode::EIntrpt => VarErrorCode::E_INTRPT,
-        common::ErrorCode::ErrCustom => {
-            let custom_symbol = fb_error
-                .custom_symbol
-                .as_ref()
-                .ok_or("ErrCustom missing custom_symbol")?;
-            VarErrorCode::ErrCustom(symbol_from_flatbuffer_struct(custom_symbol))
-        }
+    let custom_symbol = if fb_error.err_type == common::ErrorCode::ErrCustom {
+        let sym_struct = fb_error
+            .custom_symbol
+            .as_ref()
+            .ok_or("ErrCustom missing custom_symbol")?;
+        Some(symbol_from_flatbuffer_struct(sym_struct))
+    } else {
+        None
     };
+    let err_type = error_code_from_flatbuffer(fb_error.err_type, custom_symbol);
 
     let msg = fb_error.msg.clone();
     let value = match &fb_error.value {
@@ -118,40 +154,18 @@ pub fn error_from_flatbuffer_struct(
 
 /// Convert from FlatBuffer ErrorRef to moor_var::Error
 pub fn error_from_ref(error_ref: common::ErrorRef<'_>) -> Result<moor_var::Error, String> {
-    use common::ErrorCode as FbErr;
-    use moor_var::ErrorCode as VarErrorCode;
+    let error_code = fb_read!(error_ref, err_type);
 
-    let error_code = error_ref.err_type().map_err(|_| "Missing err_type")?;
-
-    let err_type = match error_code {
-        FbErr::ENone => VarErrorCode::E_NONE,
-        FbErr::EType => VarErrorCode::E_TYPE,
-        FbErr::EDiv => VarErrorCode::E_DIV,
-        FbErr::EPerm => VarErrorCode::E_PERM,
-        FbErr::EPropnf => VarErrorCode::E_PROPNF,
-        FbErr::EVerbnf => VarErrorCode::E_VERBNF,
-        FbErr::EVarnf => VarErrorCode::E_VARNF,
-        FbErr::EInvind => VarErrorCode::E_INVIND,
-        FbErr::ERecmove => VarErrorCode::E_RECMOVE,
-        FbErr::EMaxrec => VarErrorCode::E_MAXREC,
-        FbErr::ERange => VarErrorCode::E_RANGE,
-        FbErr::EArgs => VarErrorCode::E_ARGS,
-        FbErr::ENacc => VarErrorCode::E_NACC,
-        FbErr::EInvarg => VarErrorCode::E_INVARG,
-        FbErr::EQuota => VarErrorCode::E_QUOTA,
-        FbErr::EFloat => VarErrorCode::E_FLOAT,
-        FbErr::EFile => VarErrorCode::E_FILE,
-        FbErr::EExec => VarErrorCode::E_EXEC,
-        FbErr::EIntrpt => VarErrorCode::E_INTRPT,
-        FbErr::ErrCustom => {
-            let custom_symbol_ref = error_ref
-                .custom_symbol()
-                .map_err(|_| "Failed to access custom_symbol")?
-                .ok_or("ErrCustom missing custom_symbol")?;
-            let custom_symbol = symbol_from_ref(custom_symbol_ref)?;
-            VarErrorCode::ErrCustom(custom_symbol)
-        }
+    let custom_symbol = if error_code == common::ErrorCode::ErrCustom {
+        let custom_symbol_ref = error_ref
+            .custom_symbol()
+            .map_err(|e| format!("Failed to access custom_symbol: {e}"))?
+            .ok_or("ErrCustom missing custom_symbol")?;
+        Some(symbol_from_ref(custom_symbol_ref)?)
+    } else {
+        None
     };
+    let err_type = error_code_from_flatbuffer(error_code, custom_symbol);
 
     let msg = error_ref
         .msg()
@@ -181,10 +195,9 @@ pub fn error_from_ref(error_ref: common::ErrorRef<'_>) -> Result<moor_var::Error
 pub fn exception_from_ref(
     exception_ref: common::ExceptionRef<'_>,
 ) -> Result<moor_common::tasks::Exception, String> {
-    let error_ref = exception_ref.error().map_err(|_| "Missing error")?;
-    let error_value = error_from_ref(error_ref)?;
+    let error_value = error_from_ref(fb_read!(exception_ref, error))?;
 
-    let stack_vec = exception_ref.stack().map_err(|_| "Missing stack")?;
+    let stack_vec = fb_read!(exception_ref, stack);
     let stack: Result<Vec<_>, String> = stack_vec
         .iter()
         .map(|var_ref_result| -> Result<Var, String> {
@@ -196,7 +209,7 @@ pub fn exception_from_ref(
         .collect();
     let stack = stack?;
 
-    let backtrace_vec = exception_ref.backtrace().map_err(|_| "Missing backtrace")?;
+    let backtrace_vec = fb_read!(exception_ref, backtrace);
     let backtrace: Result<Vec<_>, String> = backtrace_vec
         .iter()
         .map(|var_ref_result| -> Result<Var, String> {
@@ -221,57 +234,46 @@ pub fn exception_from_ref(
 pub fn compilation_error_from_ref(
     error_ref: common::CompileErrorRef<'_>,
 ) -> Result<CompileError, String> {
-    let error_union = error_ref.error().map_err(|_| "Missing error union")?;
-
-    match error_union {
+    match fb_read!(error_ref, error) {
         CompileErrorUnionRef::StringLexError(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let msg = e.message().map_err(|_| "Missing message")?.to_string();
+            let ctx = compile_context_from_ref(fb_read!(e, context))?;
+            let msg = fb_read!(e, message).to_string();
             Ok(CompileError::StringLexError(ctx, msg))
         }
         CompileErrorUnionRef::ParseError(e) => {
-            let pos_ref = e.error_position().map_err(|_| "Missing error_position")?;
-            let error_position = CompileContext::new((
-                pos_ref.line().map_err(|_| "Missing line")? as usize,
-                pos_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let context = e.context().map_err(|_| "Missing context")?.to_string();
-            let message = e.message().map_err(|_| "Missing message")?.to_string();
-            let end_line_col = if e.has_end().map_err(|_| "Missing has_end")? {
+            let error_position = compile_context_from_ref(fb_read!(e, error_position))?;
+            let context = fb_read!(e, context).to_string();
+            let message = fb_read!(e, message).to_string();
+            let end_line_col = if fb_read!(e, has_end) {
                 Some((
-                    e.end_line().map_err(|_| "Missing end_line")? as usize,
-                    e.end_col().map_err(|_| "Missing end_col")? as usize,
+                    fb_read!(e, end_line) as usize,
+                    fb_read!(e, end_col) as usize,
                 ))
             } else {
                 None
             };
-            let span = if e.has_span().map_err(|_| "Missing has_span")? {
+            let span = if fb_read!(e, has_span) {
                 Some((
-                    e.span_start().map_err(|_| "Missing span_start")? as usize,
-                    e.span_end().map_err(|_| "Missing span_end")? as usize,
+                    fb_read!(e, span_start) as usize,
+                    fb_read!(e, span_end) as usize,
                 ))
             } else {
                 None
             };
 
-            let expected_tokens =
-                match e.expected_tokens().map_err(|_| "Missing expected_tokens")? {
-                    Some(tokens_vec) => tokens_vec
-                        .iter()
-                        .map(|token_ref| {
-                            token_ref
-                                .map_err(|e| format!("Failed to read expected token: {e}"))
-                                .map(|token| token.to_string())
-                        })
-                        .collect::<Result<Vec<_>, _>>()?,
-                    None => Vec::new(),
-                };
+            let expected_tokens = match fb_read!(e, expected_tokens) {
+                Some(tokens_vec) => tokens_vec
+                    .iter()
+                    .map(|token_ref| {
+                        token_ref
+                            .map_err(|e| format!("Failed to read expected token: {e}"))
+                            .map(|token| token.to_string())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                None => Vec::new(),
+            };
 
-            let notes = match e.notes().map_err(|_| "Missing notes")? {
+            let notes = match fb_read!(e, notes) {
                 Some(notes_vec) => notes_vec
                     .iter()
                     .map(|note_ref| {
@@ -296,89 +298,53 @@ pub fn compilation_error_from_ref(
             })
         }
         CompileErrorUnionRef::UnknownBuiltinFunction(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let name = e.name().map_err(|_| "Missing name")?.to_string();
+            let ctx = compile_context_from_ref(fb_read!(e, context))?;
+            let name = fb_read!(e, name).to_string();
             Ok(CompileError::UnknownBuiltinFunction(ctx, name))
         }
         CompileErrorUnionRef::UnknownTypeConstant(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let name = e.name().map_err(|_| "Missing name")?.to_string();
+            let ctx = compile_context_from_ref(fb_read!(e, context))?;
+            let name = fb_read!(e, name).to_string();
             Ok(CompileError::UnknownTypeConstant(ctx, name))
         }
         CompileErrorUnionRef::UnknownLoopLabel(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let label = e.label().map_err(|_| "Missing label")?.to_string();
+            let ctx = compile_context_from_ref(fb_read!(e, context))?;
+            let label = fb_read!(e, label).to_string();
             Ok(CompileError::UnknownLoopLabel(ctx, label))
         }
         CompileErrorUnionRef::DuplicateVariable(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let var_ref = e.var_name().map_err(|_| "Missing var_name")?;
-            let var_struct =
-                common::Symbol::try_from(var_ref).map_err(|_| "Failed to convert var_name")?;
+            let ctx = compile_context_from_ref(fb_read!(e, context))?;
+            let var_ref = fb_read!(e, var_name);
+            let var_struct = common::Symbol::try_from(var_ref)
+                .map_err(|e| format!("Failed to convert var_name: {e}"))?;
             let var_name = symbol_from_flatbuffer_struct(&var_struct);
             Ok(CompileError::DuplicateVariable(ctx, var_name))
         }
         CompileErrorUnionRef::AssignToConst(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let var_ref = e.var_name().map_err(|_| "Missing var_name")?;
-            let var_struct =
-                common::Symbol::try_from(var_ref).map_err(|_| "Failed to convert var_name")?;
+            let ctx = compile_context_from_ref(fb_read!(e, context))?;
+            let var_ref = fb_read!(e, var_name);
+            let var_struct = common::Symbol::try_from(var_ref)
+                .map_err(|e| format!("Failed to convert var_name: {e}"))?;
             let var_name = symbol_from_flatbuffer_struct(&var_struct);
             Ok(CompileError::AssignToConst(ctx, var_name))
         }
         CompileErrorUnionRef::DisabledFeature(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let feature = e.feature().map_err(|_| "Missing feature")?.to_string();
+            let ctx = compile_context_from_ref(fb_read!(e, context))?;
+            let feature = fb_read!(e, feature).to_string();
             Ok(CompileError::DisabledFeature(ctx, feature))
         }
         CompileErrorUnionRef::BadSlotName(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let slot = e.slot().map_err(|_| "Missing slot")?.to_string();
+            let ctx = compile_context_from_ref(fb_read!(e, context))?;
+            let slot = fb_read!(e, slot).to_string();
             Ok(CompileError::BadSlotName(ctx, slot))
         }
         CompileErrorUnionRef::InvalidAssignment(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
+            let ctx = compile_context_from_ref(fb_read!(e, context))?;
             Ok(CompileError::InvalidAssignmentTarget(ctx))
         }
         CompileErrorUnionRef::InvalidTypeLiteralAssignment(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let literal = e.literal().map_err(|_| "Missing literal")?.to_string();
+            let ctx = compile_context_from_ref(fb_read!(e, context))?;
+            let literal = fb_read!(e, literal).to_string();
             Ok(CompileError::InvalidTypeLiteralAssignment(literal, ctx))
         }
     }
@@ -391,10 +357,7 @@ pub fn compilation_error_to_flatbuffer_struct(
     let error_union = match error {
         CompileError::StringLexError(ctx, msg) => {
             common::CompileErrorUnion::StringLexError(Box::new(common::StringLexError {
-                context: Box::new(common::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
+                context: Box::new(compile_context_to_flatbuffer(ctx)),
                 message: msg.clone(),
             }))
         }
@@ -405,10 +368,7 @@ pub fn compilation_error_to_flatbuffer_struct(
             message,
             details,
         } => common::CompileErrorUnion::ParseError(Box::new(common::ParseError {
-            error_position: Box::new(common::CompileContext {
-                line: error_position.line_col.0 as u64,
-                col: error_position.line_col.1 as u64,
-            }),
+            error_position: Box::new(compile_context_to_flatbuffer(error_position)),
             context: context.clone(),
             end_line: end_line_col.map(|(l, _)| l as u64).unwrap_or(0),
             end_col: end_line_col.map(|(_, c)| c as u64).unwrap_or(0),
@@ -431,83 +391,56 @@ pub fn compilation_error_to_flatbuffer_struct(
         CompileError::UnknownBuiltinFunction(ctx, name) => {
             common::CompileErrorUnion::UnknownBuiltinFunction(Box::new(
                 common::UnknownBuiltinFunction {
-                    context: Box::new(common::CompileContext {
-                        line: ctx.line_col.0 as u64,
-                        col: ctx.line_col.1 as u64,
-                    }),
+                    context: Box::new(compile_context_to_flatbuffer(ctx)),
                     name: name.clone(),
                 },
             ))
         }
         CompileError::UnknownTypeConstant(ctx, name) => {
             common::CompileErrorUnion::UnknownTypeConstant(Box::new(common::UnknownTypeConstant {
-                context: Box::new(common::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
+                context: Box::new(compile_context_to_flatbuffer(ctx)),
                 name: name.clone(),
             }))
         }
         CompileError::UnknownLoopLabel(ctx, label) => {
             common::CompileErrorUnion::UnknownLoopLabel(Box::new(common::UnknownLoopLabel {
-                context: Box::new(common::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
+                context: Box::new(compile_context_to_flatbuffer(ctx)),
                 label: label.clone(),
             }))
         }
         CompileError::DuplicateVariable(ctx, var_name) => {
             common::CompileErrorUnion::DuplicateVariable(Box::new(common::DuplicateVariable {
-                context: Box::new(common::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
+                context: Box::new(compile_context_to_flatbuffer(ctx)),
                 var_name: Box::new(symbol_to_flatbuffer_struct(var_name)),
             }))
         }
         CompileError::AssignToConst(ctx, var_name) => {
             common::CompileErrorUnion::AssignToConst(Box::new(common::AssignToConst {
-                context: Box::new(common::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
+                context: Box::new(compile_context_to_flatbuffer(ctx)),
                 var_name: Box::new(symbol_to_flatbuffer_struct(var_name)),
             }))
         }
         CompileError::DisabledFeature(ctx, feature) => {
             common::CompileErrorUnion::DisabledFeature(Box::new(common::DisabledFeature {
-                context: Box::new(common::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
+                context: Box::new(compile_context_to_flatbuffer(ctx)),
                 feature: feature.clone(),
             }))
         }
         CompileError::BadSlotName(ctx, slot) => {
             common::CompileErrorUnion::BadSlotName(Box::new(common::BadSlotName {
-                context: Box::new(common::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
+                context: Box::new(compile_context_to_flatbuffer(ctx)),
                 slot: slot.clone(),
             }))
         }
         CompileError::InvalidAssignmentTarget(ctx) => {
             common::CompileErrorUnion::InvalidAssignment(Box::new(common::InvalidAssignment {
-                context: Box::new(common::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
+                context: Box::new(compile_context_to_flatbuffer(ctx)),
             }))
         }
         CompileError::InvalidTypeLiteralAssignment(literal, ctx) => {
             common::CompileErrorUnion::InvalidTypeLiteralAssignment(Box::new(
                 common::InvalidTypeLiteralAssignment {
-                    context: Box::new(common::CompileContext {
-                        line: ctx.line_col.0 as u64,
-                        col: ctx.line_col.1 as u64,
-                    }),
+                    context: Box::new(compile_context_to_flatbuffer(ctx)),
                     literal: literal.clone(),
                 },
             ))

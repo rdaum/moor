@@ -21,6 +21,7 @@ use crate::{
     convert_common::{symbol_from_ref, uuid_from_ref, uuid_to_flatbuffer_struct},
     convert_errors::{error_to_flatbuffer_struct, exception_from_ref},
     convert_var::{var_from_flatbuffer, var_to_flatbuffer},
+    fb_read,
 };
 use moor_common::tasks::{Event, NarrativeEvent, Presentation};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -29,14 +30,14 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 pub fn narrative_event_from_ref(
     event_ref: common::NarrativeEventRef<'_>,
 ) -> Result<NarrativeEvent, String> {
-    let event_id = uuid_from_ref(event_ref.event_id().map_err(|_| "Missing event_id")?)?;
-    let timestamp_nanos = event_ref.timestamp().map_err(|_| "Missing timestamp")?;
+    let event_id = uuid_from_ref(fb_read!(event_ref, event_id))?;
+    let timestamp_nanos = fb_read!(event_ref, timestamp);
     let timestamp = UNIX_EPOCH + Duration::from_nanos(timestamp_nanos);
-    let author_ref = event_ref.author().map_err(|_| "Missing author")?;
+    let author_ref = fb_read!(event_ref, author);
     let author_struct =
-        crate::var::Var::try_from(author_ref).map_err(|_| "Failed to convert author")?;
+        crate::var::Var::try_from(author_ref).map_err(|e| format!("Failed to convert author: {e}"))?;
     let author = var_from_flatbuffer(&author_struct).map_err(|e| e.to_string())?;
-    let event = event_from_ref(event_ref.event().map_err(|_| "Missing event")?)?;
+    let event = event_from_ref(fb_read!(event_ref, event))?;
 
     Ok(NarrativeEvent {
         event_id,
@@ -48,37 +49,30 @@ pub fn narrative_event_from_ref(
 
 /// Convert from FlatBuffer EventRef to Event
 pub fn event_from_ref(event_ref: common::EventRef<'_>) -> Result<Event, String> {
-    match event_ref
-        .event()
-        .map_err(|_| "Failed to read Event union")?
-    {
+    match fb_read!(event_ref, event) {
         EventUnionRef::NotifyEvent(notify) => {
-            let value_ref = notify.value().map_err(|_| "Missing value")?;
-            let value_struct =
-                crate::var::Var::try_from(value_ref).map_err(|_| "Failed to convert value")?;
+            let value_ref = fb_read!(notify, value);
+            let value_struct = crate::var::Var::try_from(value_ref)
+                .map_err(|e| format!("Failed to convert value: {e}"))?;
             let value = var_from_flatbuffer(&value_struct).map_err(|e| e.to_string())?;
             let content_type = notify
                 .content_type()
                 .ok()
                 .flatten()
                 .and_then(|ct| symbol_from_ref(ct).ok());
-            let no_flush = notify.no_flush().map_err(|_| "Missing no_flush")?;
-            let no_newline = notify.no_newline().map_err(|_| "Missing no_newline")?;
+            let no_flush = fb_read!(notify, no_flush);
+            let no_newline = fb_read!(notify, no_newline);
 
             let metadata = match notify.metadata().ok().flatten() {
                 Some(metadata_vec) => {
                     let mut metadata_result = Vec::new();
                     for metadata_ref in metadata_vec.iter() {
                         let metadata_item =
-                            metadata_ref.map_err(|_| "Failed to read metadata item")?;
-                        let key = symbol_from_ref(
-                            metadata_item.key().map_err(|_| "Missing metadata key")?,
-                        )?;
-                        let value_ref = metadata_item
-                            .value()
-                            .map_err(|_| "Missing metadata value")?;
+                            metadata_ref.map_err(|e| format!("Failed to read metadata item: {e}"))?;
+                        let key = symbol_from_ref(fb_read!(metadata_item, key))?;
+                        let value_ref = fb_read!(metadata_item, value);
                         let value_struct = crate::var::Var::try_from(value_ref)
-                            .map_err(|_| "Failed to convert metadata value")?;
+                            .map_err(|e| format!("Failed to convert metadata value: {e}"))?;
                         let value =
                             var_from_flatbuffer(&value_struct).map_err(|e| e.to_string())?;
                         metadata_result.push((key, value));
@@ -97,20 +91,15 @@ pub fn event_from_ref(event_ref: common::EventRef<'_>) -> Result<Event, String> 
             })
         }
         EventUnionRef::PresentEvent(present) => {
-            let presentation_ref = present.presentation().map_err(|_| "Missing presentation")?;
-            let presentation = presentation_from_ref(presentation_ref)?;
+            let presentation = presentation_from_ref(fb_read!(present, presentation))?;
             Ok(Event::Present(presentation))
         }
         EventUnionRef::UnpresentEvent(unpresent) => {
-            let presentation_id = unpresent
-                .presentation_id()
-                .map_err(|_| "Missing presentation_id")?
-                .to_string();
+            let presentation_id = fb_read!(unpresent, presentation_id).to_string();
             Ok(Event::Unpresent(presentation_id))
         }
         EventUnionRef::TracebackEvent(traceback) => {
-            let exception_ref = traceback.exception().map_err(|_| "Missing exception")?;
-            let exception = exception_from_ref(exception_ref)?;
+            let exception = exception_from_ref(fb_read!(traceback, exception))?;
             Ok(Event::Traceback(exception))
         }
     }
@@ -120,26 +109,17 @@ pub fn event_from_ref(event_ref: common::EventRef<'_>) -> Result<Event, String> 
 pub fn presentation_from_ref(
     pres_ref: common::PresentationRef<'_>,
 ) -> Result<Presentation, String> {
-    let id = pres_ref.id().map_err(|_| "Missing id")?.to_string();
-    let content_type = pres_ref
-        .content_type()
-        .map_err(|_| "Missing content_type")?
-        .to_string();
-    let content = pres_ref
-        .content()
-        .map_err(|_| "Missing content")?
-        .to_string();
-    let target = pres_ref.target().map_err(|_| "Missing target")?.to_string();
+    let id = fb_read!(pres_ref, id).to_string();
+    let content_type = fb_read!(pres_ref, content_type).to_string();
+    let content = fb_read!(pres_ref, content).to_string();
+    let target = fb_read!(pres_ref, target).to_string();
 
-    let attrs_vec = pres_ref.attributes().map_err(|_| "Missing attributes")?;
+    let attrs_vec = fb_read!(pres_ref, attributes);
     let mut attributes = Vec::new();
     for attr in attrs_vec.iter() {
-        let attr = attr.map_err(|_| "Failed to read attribute")?;
-        let key = attr.key().map_err(|_| "Missing attribute key")?.to_string();
-        let value = attr
-            .value()
-            .map_err(|_| "Missing attribute value")?
-            .to_string();
+        let attr = attr.map_err(|e| format!("Failed to read attribute: {e}"))?;
+        let key = fb_read!(attr, key).to_string();
+        let value = fb_read!(attr, value).to_string();
         attributes.push((key, value));
     }
 

@@ -15,7 +15,7 @@ use ed25519_dalek::{
     SigningKey, VerifyingKey,
     pkcs8::{DecodePrivateKey, DecodePublicKey},
 };
-use moor_schema::rpc;
+use moor_schema::{fb_read, rpc};
 use rusty_paseto::core::Key;
 use std::path::Path;
 use thiserror::Error;
@@ -73,14 +73,10 @@ pub fn load_keypair(public_key: &Path, private_key: &Path) -> Result<(Key<64>, K
 pub fn client_token_from_ref(
     token_ref: rpc::ClientTokenRef<'_>,
 ) -> Result<crate::ClientToken, String> {
-    let token_string = token_ref
-        .token()
-        .map_err(|_| "Missing client token string")?;
-    Ok(crate::ClientToken(token_string.to_string()))
+    Ok(crate::ClientToken(fb_read!(token_ref, token).to_string()))
 }
 
 /// Convert from FlatBuffer AuthTokenRef to AuthToken
 pub fn auth_token_from_ref(token_ref: rpc::AuthTokenRef<'_>) -> Result<crate::AuthToken, String> {
-    let token_string = token_ref.token().map_err(|_| "Missing auth token string")?;
-    Ok(crate::AuthToken(token_string.to_string()))
+    Ok(crate::AuthToken(fb_read!(token_ref, token).to_string()))
 }

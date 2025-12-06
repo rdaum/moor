@@ -13,6 +13,7 @@ members = [
     "crates/rpc/rpc-async-client",
     "crates/rpc/rpc-common",
     "crates/schema",
+    "crates/schema-macros",
     "crates/telnet-host",
     "crates/testing/bench-utils",
     "crates/testing/load-tools",
@@ -171,6 +172,9 @@ unicase = "2.8"
 ariadne = "0.6"
 pest = "2.8"
 pest_derive = "2.8"
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "parsing"] }
 
 # Collections & Data Structures
 ahash = "0.8"

@@ -23,7 +23,7 @@ use moor_schema::{
         obj_to_flatbuffer_struct, objectref_to_flatbuffer_struct, symbol_from_flatbuffer_struct,
         symbol_to_flatbuffer_struct, uuid_from_ref, var_to_flatbuffer,
     },
-    rpc,
+    fb_read, rpc,
 };
 use std::time::Duration;
 
@@ -255,10 +255,7 @@ pub fn world_state_error_to_flatbuffer_struct(
 fn verb_program_error_from_ref(
     error_ref: rpc::VerbProgramErrorRef<'_>,
 ) -> Result<VerbProgramError, String> {
-    match error_ref
-        .error()
-        .map_err(|_| "Failed to read VerbProgramError union")?
-    {
+    match fb_read!(error_ref, error) {
         rpc::VerbProgramErrorUnionRef::NoVerbToProgram(_) => Ok(VerbProgramError::NoVerbToProgram),
         rpc::VerbProgramErrorUnionRef::VerbPermissionDenied(_) => {
             Ok(VerbProgramError::PermissionDenied)
@@ -275,23 +272,16 @@ fn verb_program_error_from_ref(
 pub fn scheduler_error_from_ref(
     error_ref: rpc::SchedulerErrorRef<'_>,
 ) -> Result<SchedulerError, String> {
-    match error_ref
-        .error()
-        .map_err(|_| "Failed to read SchedulerError union")?
-    {
+    match fb_read!(error_ref, error) {
         rpc::SchedulerErrorUnionRef::SchedulerNotResponding(_) => {
             Ok(SchedulerError::SchedulerNotResponding)
         }
         rpc::SchedulerErrorUnionRef::TaskNotFound(task_not_found) => {
-            let task_id = task_not_found.task_id().map_err(|_| "Missing task_id")? as usize;
+            let task_id = fb_read!(task_not_found, task_id) as usize;
             Ok(SchedulerError::TaskNotFound(task_id))
         }
         rpc::SchedulerErrorUnionRef::InputRequestNotFound(input_not_found) => {
-            let request_id = uuid_from_ref(
-                input_not_found
-                    .request_id()
-                    .map_err(|_| "Missing request_id")?,
-            )?;
+            let request_id = uuid_from_ref(fb_read!(input_not_found, request_id))?;
             Ok(SchedulerError::InputRequestNotFound(request_id.as_u128()))
         }
         rpc::SchedulerErrorUnionRef::CouldNotStartTask(_) => Ok(SchedulerError::CouldNotStartTask),
@@ -301,20 +291,19 @@ pub fn scheduler_error_from_ref(
             Err("CompilationError deserialization not yet fully implemented".to_string())
         }
         rpc::SchedulerErrorUnionRef::CommandExecutionError(cmd_error) => {
-            let command_error =
-                command_error_from_ref(cmd_error.error().map_err(|_| "Missing command error")?)?;
+            let command_error = command_error_from_ref(fb_read!(cmd_error, error))?;
             Ok(SchedulerError::CommandExecutionError(command_error))
         }
         rpc::SchedulerErrorUnionRef::TaskAbortedLimit(task_aborted) => {
-            let limit_ref = task_aborted.limit().map_err(|_| "Missing limit")?;
-            let reason_enum = limit_ref.reason().map_err(|_| "Missing reason")?;
+            let limit_ref = fb_read!(task_aborted, limit);
+            let reason_enum = fb_read!(limit_ref, reason);
             let abort_reason = match reason_enum {
                 rpc::AbortLimitReason::Ticks => {
-                    let ticks = limit_ref.ticks().map_err(|_| "Missing ticks")? as usize;
+                    let ticks = fb_read!(limit_ref, ticks) as usize;
                     AbortLimitReason::Ticks(ticks)
                 }
                 rpc::AbortLimitReason::Time => {
-                    let time_nanos = limit_ref.time_nanos().map_err(|_| "Missing time_nanos")?;
+                    let time_nanos = fb_read!(limit_ref, time_nanos);
                     AbortLimitReason::Time(Duration::from_nanos(time_nanos))
                 }
             };
@@ -322,24 +311,21 @@ pub fn scheduler_error_from_ref(
         }
         rpc::SchedulerErrorUnionRef::TaskAbortedError(_) => Ok(SchedulerError::TaskAbortedError),
         rpc::SchedulerErrorUnionRef::TaskAbortedVerbNotFound(verbnf) => {
-            let where_ = var_from_ref(verbnf.where_().map_err(|_| "Missing verb `where`")?)
-                .map_err(|_| "Missing verb `where`")?;
-            let what = symbol_from_ref(verbnf.what().map_err(|_| "Missing verb `what`")?)
-                .map_err(|_| "Missing verb `where`")?;
+            let where_ = var_from_ref(fb_read!(verbnf, where_))
+                .map_err(|e| format!("Failed to decode verb `where`: {e}"))?;
+            let what = symbol_from_ref(fb_read!(verbnf, what))
+                .map_err(|e| format!("Failed to decode verb `what`: {e}"))?;
             Ok(SchedulerError::TaskAbortedVerbNotFound(where_, what))
         }
         rpc::SchedulerErrorUnionRef::TaskAbortedException(task_aborted) => {
-            let exception_ref = task_aborted.exception().map_err(|_| "Missing exception")?;
-            let exception = exception_from_ref(exception_ref)?;
+            let exception = exception_from_ref(fb_read!(task_aborted, exception))?;
             Ok(SchedulerError::TaskAbortedException(exception))
         }
         rpc::SchedulerErrorUnionRef::TaskAbortedCancelled(_) => {
             Ok(SchedulerError::TaskAbortedCancelled)
         }
         rpc::SchedulerErrorUnionRef::VerbProgramFailed(verb_failed) => {
-            let verb_error = verb_program_error_from_ref(
-                verb_failed.error().map_err(|_| "Missing verb_error")?,
-            )?;
+            let verb_error = verb_program_error_from_ref(fb_read!(verb_failed, error))?;
             Ok(SchedulerError::VerbProgramFailed(verb_error))
         }
         rpc::SchedulerErrorUnionRef::PropertyRetrievalFailed(_prop_failed) => {
@@ -355,10 +341,7 @@ pub fn scheduler_error_from_ref(
             Err("ObjectResolutionFailed deserialization not yet fully implemented".to_string())
         }
         rpc::SchedulerErrorUnionRef::GarbageCollectionFailed(gc_failed) => {
-            let message = gc_failed
-                .message()
-                .map_err(|_| "Missing message")?
-                .to_string();
+            let message = fb_read!(gc_failed, message).to_string();
             Ok(SchedulerError::GarbageCollectionFailed(message))
         }
     }
@@ -366,10 +349,7 @@ pub fn scheduler_error_from_ref(
 
 /// Convert from FlatBuffer CommandErrorRef to CommandError
 fn command_error_from_ref(error_ref: rpc::CommandErrorRef<'_>) -> Result<CommandError, String> {
-    match error_ref
-        .error()
-        .map_err(|_| "Failed to read CommandError union")?
-    {
+    match fb_read!(error_ref, error) {
         rpc::CommandErrorUnionRef::CouldNotParseCommand(_) => {
             Ok(CommandError::CouldNotParseCommand)
         }

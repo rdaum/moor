@@ -3435,6 +3435,7 @@ dependencies = [
  "byteview",
  "eyre",
  "moor-common",
+ "moor-schema-macros",
  "moor-var",
  "planus",
  "serde",
@@ -3442,6 +3443,15 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid 1.18.1",
+]
+
+[[package]]
+name = "moor-schema-macros"
+version = "1.0.0-beta2"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.111",
 ]
 
 [[package]]

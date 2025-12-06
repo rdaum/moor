@@ -13,7 +13,7 @@
 
 //! Conversion between moor model types (VerbDef, PropDef, etc.) and FlatBuffers representation
 
-use crate::{common, convert_common};
+use crate::{common, convert_common, define_enum_mapping};
 use moor_common::{
     matching::Preposition,
     model::{
@@ -40,19 +40,12 @@ pub enum DefConversionError {
 // VerbArgsSpec Conversion
 // ============================================================================
 
-fn argspec_to_flatbuffer(arg: ModelArgSpec) -> common::ArgSpec {
-    match arg {
-        ModelArgSpec::None => common::ArgSpec::None,
-        ModelArgSpec::Any => common::ArgSpec::Any,
-        ModelArgSpec::This => common::ArgSpec::This,
-    }
-}
-
-fn argspec_from_flatbuffer(fb: common::ArgSpec) -> ModelArgSpec {
-    match fb {
-        common::ArgSpec::None => ModelArgSpec::None,
-        common::ArgSpec::Any => ModelArgSpec::Any,
-        common::ArgSpec::This => ModelArgSpec::This,
+// Use macro to generate bidirectional ArgSpec conversion
+define_enum_mapping! {
+    ModelArgSpec <=> common::ArgSpec {
+        None <=> None,
+        Any <=> Any,
+        This <=> This,
     }
 }
 
@@ -81,17 +74,17 @@ fn prepspec_from_i16(value: i16) -> ModelPrepSpec {
 
 fn verb_args_spec_to_flatbuffer(args: &ModelVerbArgsSpec) -> common::VerbArgsSpec {
     common::VerbArgsSpec {
-        dobj: argspec_to_flatbuffer(args.dobj),
+        dobj: args.dobj.into(),
         prep: prepspec_to_i16(args.prep),
-        iobj: argspec_to_flatbuffer(args.iobj),
+        iobj: args.iobj.into(),
     }
 }
 
 fn verb_args_spec_from_flatbuffer(fb: &common::VerbArgsSpec) -> ModelVerbArgsSpec {
     ModelVerbArgsSpec {
-        dobj: argspec_from_flatbuffer(fb.dobj),
+        dobj: fb.dobj.into(),
         prep: prepspec_from_i16(fb.prep),
-        iobj: argspec_from_flatbuffer(fb.iobj),
+        iobj: fb.iobj.into(),
     }
 }
 

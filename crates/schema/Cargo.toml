@@ -13,6 +13,7 @@ description = "FlatBuffer entities used for RPC and persistence, and conversions
 [dependencies]
 # Internal Dependencies
 moor-common = { path = "../common" }
+moor-schema-macros = { path = "../schema-macros" }
 moor-var = { path = "../var" }
 
 # Serialization & Data Formats & Util

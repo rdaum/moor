@@ -17,6 +17,9 @@
 //! The actual generated code is kept private and accessed through these
 //! domain-specific submodules.
 
+// Re-export proc macros
+pub use moor_schema_macros::{define_enum_mapping, EnumFlatbuffer};
+
 pub mod common;
 pub mod event_log;
 pub mod program;
@@ -29,6 +32,11 @@ pub mod convert {
         convert_program::*, convert_var::*,
     };
 }
+
+// Helper macros and utilities
+#[macro_use]
+pub mod macros;
+pub mod packed_id;
 
 // Generated schemas
 mod convert_common;

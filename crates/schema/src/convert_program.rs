@@ -15,9 +15,25 @@
 
 use crate::{
     convert_var::{ConversionContext, var_from_flatbuffer_internal, var_to_flatbuffer_internal},
+    define_enum_mapping,
     opcode_stream::{OpStream, error_code_from_discriminant, error_code_to_discriminant},
     program as fb,
 };
+
+// Generate bidirectional DeclType conversion
+define_enum_mapping! {
+    moor_var::program::DeclType <=> fb::StoredDeclType {
+        Global <=> Global,
+        Let <=> Let,
+        Assign <=> Assign,
+        For <=> For,
+        Unknown <=> Unknown,
+        Register <=> Register,
+        Except <=> Except,
+        WhileLabel <=> WhileLabel,
+        ForkLabel <=> ForkLabel,
+    }
+}
 use byteview::ByteView;
 use moor_var::program::{
     labels::{JumpLabel, Label, Offset},
@@ -101,18 +117,7 @@ fn encode_moor_program(program: &Program) -> Result<fb::StoredMooRProgram, Encod
         .decls
         .iter()
         .map(|(name, decl)| {
-            // Encode DeclType
-            let decl_type = match decl.decl_type {
-                moor_var::program::DeclType::Global => fb::StoredDeclType::Global,
-                moor_var::program::DeclType::Let => fb::StoredDeclType::Let,
-                moor_var::program::DeclType::Assign => fb::StoredDeclType::Assign,
-                moor_var::program::DeclType::For => fb::StoredDeclType::For,
-                moor_var::program::DeclType::Unknown => fb::StoredDeclType::Unknown,
-                moor_var::program::DeclType::Register => fb::StoredDeclType::Register,
-                moor_var::program::DeclType::Except => fb::StoredDeclType::Except,
-                moor_var::program::DeclType::WhileLabel => fb::StoredDeclType::WhileLabel,
-                moor_var::program::DeclType::ForkLabel => fb::StoredDeclType::ForkLabel,
-            };
+            let decl_type: fb::StoredDeclType = (&decl.decl_type).into();
 
             // Encode VarName
             let var_name_union = match decl.identifier.nr {
@@ -395,15 +400,9 @@ pub fn stored_to_program(stored: &StoredProgram) -> Result<Program, DecodeError>
 
 fn decode_stored_name(name_ref: fb::StoredNameRef) -> Result<Name, DecodeError> {
     Ok(Name(
-        name_ref
-            .offset()
-            .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read name offset: {e}")))?,
-        name_ref
-            .scope_depth()
-            .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read scope_depth: {e}")))?,
-        name_ref
-            .scope_id()
-            .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read scope_id: {e}")))?,
+        fb_decode!(name_ref, offset),
+        fb_decode!(name_ref, scope_depth),
+        fb_decode!(name_ref, scope_id),
     ))
 }
 
@@ -411,14 +410,8 @@ fn decode_names_from_fb(
     fb_var_names: fb::StoredNamesRef,
     error_prefix: &str,
 ) -> Result<moor_var::program::names::Names, DecodeError> {
-    let global_width = fb_var_names
-        .global_width()
-        .map_err(|e| DecodeError::DecodeFailed(format!("{error_prefix} global_width: {e}")))?
-        as usize;
-
-    let decls_vec = fb_var_names
-        .decls()
-        .map_err(|e| DecodeError::DecodeFailed(format!("{error_prefix} decls: {e}")))?;
+    let global_width = fb_decode_ctx!(fb_var_names, global_width, error_prefix) as usize;
+    let decls_vec = fb_decode_ctx!(fb_var_names, decls, error_prefix);
 
     let mut decls = std::collections::HashMap::new();
     for pair_result in decls_vec {
@@ -426,78 +419,39 @@ fn decode_names_from_fb(
             DecodeError::DecodeFailed(format!("{error_prefix} name-decl pair: {e}"))
         })?;
 
-        let name_ref = pair
-            .name()
-            .map_err(|e| DecodeError::DecodeFailed(format!("{error_prefix} pair name: {e}")))?;
+        let name_ref = fb_decode_ctx!(pair, name, error_prefix);
         let name = decode_stored_name(name_ref)?;
 
-        let decl_ref = pair
-            .decl()
-            .map_err(|e| DecodeError::DecodeFailed(format!("{error_prefix} pair decl: {e}")))?;
+        let decl_ref = fb_decode_ctx!(pair, decl, error_prefix);
+        let fb_decl_type = fb_decode_ctx!(decl_ref, decl_type, error_prefix);
+        let decl_type: moor_var::program::DeclType = fb_decl_type.into();
 
-        let decl_type = match decl_ref
-            .decl_type()
-            .map_err(|e| DecodeError::DecodeFailed(format!("{error_prefix} decl_type: {e}")))?
-        {
-            fb::StoredDeclType::Global => moor_var::program::DeclType::Global,
-            fb::StoredDeclType::Let => moor_var::program::DeclType::Let,
-            fb::StoredDeclType::Assign => moor_var::program::DeclType::Assign,
-            fb::StoredDeclType::For => moor_var::program::DeclType::For,
-            fb::StoredDeclType::Unknown => moor_var::program::DeclType::Unknown,
-            fb::StoredDeclType::Register => moor_var::program::DeclType::Register,
-            fb::StoredDeclType::Except => moor_var::program::DeclType::Except,
-            fb::StoredDeclType::WhileLabel => moor_var::program::DeclType::WhileLabel,
-            fb::StoredDeclType::ForkLabel => moor_var::program::DeclType::ForkLabel,
-        };
-
-        let identifier_ref = decl_ref
-            .identifier()
-            .map_err(|e| DecodeError::DecodeFailed(format!("{error_prefix} identifier: {e}")))?;
-        let var_name_union = identifier_ref
-            .var_name()
-            .map_err(|e| DecodeError::DecodeFailed(format!("{error_prefix} var_name: {e}")))?;
+        let identifier_ref = fb_decode_ctx!(decl_ref, identifier, error_prefix);
+        let var_name_union = fb_decode_ctx!(identifier_ref, var_name, error_prefix);
 
         let var_name = match var_name_union {
             fb::StoredVarNameUnionRef::StoredNamedVar(named) => {
-                let symbol_ref = named.symbol().map_err(|e| {
-                    DecodeError::DecodeFailed(format!("{error_prefix} symbol: {e}"))
-                })?;
-                let symbol_str = symbol_ref.value().map_err(|e| {
-                    DecodeError::DecodeFailed(format!("{error_prefix} symbol value: {e}"))
-                })?;
+                let symbol_ref = fb_decode_ctx!(named, symbol, error_prefix);
+                let symbol_str = fb_decode_ctx!(symbol_ref, value, error_prefix);
                 VarName::Named(moor_var::Symbol::mk(symbol_str))
             }
             fb::StoredVarNameUnionRef::StoredRegisterVar(reg) => {
-                let reg_num = reg.register_num().map_err(|e| {
-                    DecodeError::DecodeFailed(format!("{error_prefix} register_num: {e}"))
-                })?;
-                VarName::Register(reg_num)
+                VarName::Register(fb_decode_ctx!(reg, register_num, error_prefix))
             }
         };
 
         let identifier = moor_var::program::names::Variable {
-            id: identifier_ref.id().map_err(|e| {
-                DecodeError::DecodeFailed(format!("{error_prefix} variable id: {e}"))
-            })?,
-            scope_id: identifier_ref.scope_id().map_err(|e| {
-                DecodeError::DecodeFailed(format!("{error_prefix} variable scope_id: {e}"))
-            })?,
+            id: fb_decode_ctx!(identifier_ref, id, error_prefix),
+            scope_id: fb_decode_ctx!(identifier_ref, scope_id, error_prefix),
             nr: var_name,
         };
 
         let decl = moor_var::program::Decl {
             decl_type,
             identifier,
-            depth: decl_ref
-                .depth()
-                .map_err(|e| DecodeError::DecodeFailed(format!("{error_prefix} depth: {e}")))?
-                as usize,
-            constant: decl_ref
-                .constant()
-                .map_err(|e| DecodeError::DecodeFailed(format!("{error_prefix} constant: {e}")))?,
-            scope_id: decl_ref.scope_id().map_err(|e| {
-                DecodeError::DecodeFailed(format!("{error_prefix} decl scope_id: {e}"))
-            })?,
+            depth: fb_decode_ctx!(decl_ref, depth, error_prefix) as usize,
+            constant: fb_decode_ctx!(decl_ref, constant, error_prefix),
+            scope_id: fb_decode_ctx!(decl_ref, scope_id, error_prefix),
         };
 
         decls.insert(name, decl);
@@ -510,15 +464,10 @@ fn decode_names_from_fb(
 }
 
 pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Program, DecodeError> {
-    // Decode a StoredMooRProgramRef (for lambda programs and recursive decoding)
     // Decode main_vector
-    let main_words = fb_prog_ref
-        .main_vector()
-        .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read lambda main_vector: {e}")))?
+    let main_words = fb_decode!(fb_prog_ref, main_vector)
         .to_vec()
-        .map_err(|e| {
-            DecodeError::DecodeFailed(format!("Failed to convert lambda main_vector to vec: {e}"))
-        })?;
+        .map_err(|e| decode_err!("Failed to convert main_vector to vec: {}", e))?;
     let main_stream = OpStream::from_words(main_words);
     let mut main_vector = Vec::new();
     let mut pc = 0;
@@ -530,9 +479,7 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
     }
 
     // Decode fork_vectors
-    let fb_fork_vectors = fb_prog_ref.fork_vectors().map_err(|e| {
-        DecodeError::DecodeFailed(format!("Failed to read lambda fork_vectors: {e}"))
-    })?;
+    let fb_fork_vectors = fb_decode!(fb_prog_ref, fork_vectors);
     let fork_vectors: Result<Vec<(usize, Vec<moor_var::program::opcode::Op>)>, DecodeError> =
         fb_fork_vectors
             .iter()
@@ -574,9 +521,7 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
 
     // Decode literals
     use crate::var as fb_var;
-    let fb_literals = fb_prog_ref
-        .literals()
-        .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read lambda literals: {e}")))?;
+    let fb_literals = fb_decode!(fb_prog_ref, literals);
     let literals: Result<Vec<moor_var::Var>, DecodeError> = fb_literals
         .iter()
         .map(|lit_result| {
@@ -595,9 +540,7 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
     let literals = literals?;
 
     // Decode jump labels
-    let fb_jump_labels = fb_prog_ref.jump_labels().map_err(|e| {
-        DecodeError::DecodeFailed(format!("Failed to read lambda jump_labels: {e}"))
-    })?;
+    let fb_jump_labels = fb_decode!(fb_prog_ref, jump_labels);
     let jump_labels: Result<Vec<moor_var::program::labels::JumpLabel>, DecodeError> =
         fb_jump_labels
             .iter()
@@ -628,9 +571,7 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
     let jump_labels = jump_labels?;
 
     // Decode variable names (full Names structure with decls HashMap)
-    let fb_var_names = fb_prog_ref
-        .var_names()
-        .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read lambda var_names: {e}")))?;
+    let fb_var_names = fb_decode!(fb_prog_ref, var_names);
     let var_names = decode_names_from_fb(fb_var_names, "Failed to read lambda")?;
 
     // Decode operand tables
@@ -641,9 +582,7 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
     let list_comprehensions = decode_list_comprehensions(&fb_prog_ref)?;
 
     // Decode error operands - require new format with full error information
-    let fb_error_operands_full = fb_prog_ref
-        .error_operands_full()
-        .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read error_operands_full: {e}")))?
+    let fb_error_operands_full = fb_decode!(fb_prog_ref, error_operands_full)
         .expect("error_operands_full field is missing - database migration to v3.0.0 required");
 
     let error_operands = fb_error_operands_full
@@ -681,9 +620,7 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
         .collect::<Result<Vec<_>, DecodeError>>()?;
 
     // Decode lambda programs (recursive)
-    let fb_lambda_programs = fb_prog_ref.lambda_programs().map_err(|e| {
-        DecodeError::DecodeFailed(format!("Failed to read nested lambda_programs: {e}"))
-    })?;
+    let fb_lambda_programs = fb_decode!(fb_prog_ref, lambda_programs);
     let lambda_programs: Result<Vec<Program>, DecodeError> = fb_lambda_programs
         .iter()
         .map(|lp_result| {
@@ -696,9 +633,7 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
     let lambda_programs = lambda_programs?;
 
     // Decode line number spans
-    let fb_line_spans = fb_prog_ref.line_number_spans().map_err(|e| {
-        DecodeError::DecodeFailed(format!("Failed to read lambda line_number_spans: {e}"))
-    })?;
+    let fb_line_spans = fb_decode!(fb_prog_ref, line_number_spans);
     let line_number_spans: Result<Vec<(usize, usize)>, DecodeError> = fb_line_spans
         .iter()
         .map(|ls_result| {
@@ -720,9 +655,7 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
     let line_number_spans = line_number_spans?;
 
     // Decode fork line number spans
-    let fb_fork_line_spans = fb_prog_ref.fork_line_number_spans().map_err(|e| {
-        DecodeError::DecodeFailed(format!("Failed to read lambda fork_line_number_spans: {e}"))
-    })?;
+    let fb_fork_line_spans = fb_decode!(fb_prog_ref, fork_line_number_spans);
     let fork_line_number_spans: Result<Vec<Vec<(usize, usize)>>, DecodeError> = fb_fork_line_spans
         .iter()
         .map(|fls_result| {
@@ -781,46 +714,26 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
 fn decode_one_scatter_label(
     sl_result: Result<fb::StoredScatterLabelRef, planus::Error>,
 ) -> Result<ScatterLabel, DecodeError> {
-    let sl = sl_result
-        .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read scatter label: {e}")))?;
-    let fb_label = sl.label().map_err(|e| {
-        DecodeError::DecodeFailed(format!("Failed to read scatter label union: {e}"))
-    })?;
+    let sl = sl_result.map_err(|e| decode_err!("Failed to read scatter label: {}", e))?;
+    let fb_label = fb_decode!(sl, label);
 
     match fb_label {
         fb::StoredScatterLabelUnionRef::StoredScatterRequired(req) => {
-            let name_ref = req.name().map_err(|e| {
-                DecodeError::DecodeFailed(format!("Failed to read required name: {e}"))
-            })?;
-            let name = decode_stored_name(name_ref)?;
+            let name = decode_stored_name(fb_decode!(req, name))?;
             Ok(ScatterLabel::Required(name))
         }
         fb::StoredScatterLabelUnionRef::StoredScatterOptional(opt) => {
-            let name_ref = opt.name().map_err(|e| {
-                DecodeError::DecodeFailed(format!("Failed to read optional name: {e}"))
-            })?;
-            let name = decode_stored_name(name_ref)?;
-
-            let has_default = opt.has_default().map_err(|e| {
-                DecodeError::DecodeFailed(format!("Failed to read has_default: {e}"))
-            })?;
-
+            let name = decode_stored_name(fb_decode!(opt, name))?;
+            let has_default = fb_decode!(opt, has_default);
             let default_label = if has_default {
-                let label_val = opt.default_label().map_err(|e| {
-                    DecodeError::DecodeFailed(format!("Failed to read default_label: {e}"))
-                })?;
-                Some(Label(label_val))
+                Some(Label(fb_decode!(opt, default_label)))
             } else {
                 None
             };
-
             Ok(ScatterLabel::Optional(name, default_label))
         }
         fb::StoredScatterLabelUnionRef::StoredScatterRest(rest) => {
-            let name_ref = rest
-                .name()
-                .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read rest name: {e}")))?;
-            let name = decode_stored_name(name_ref)?;
+            let name = decode_stored_name(fb_decode!(rest, name))?;
             Ok(ScatterLabel::Rest(name))
         }
     }
@@ -829,9 +742,7 @@ fn decode_one_scatter_label(
 fn decode_scatter_tables(
     fb_program: &fb::StoredMooRProgramRef,
 ) -> Result<Vec<ScatterArgs>, DecodeError> {
-    let fb_scatter_tables = fb_program
-        .scatter_tables()
-        .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read scatter_tables: {e}")))?;
+    let fb_scatter_tables = fb_decode!(fb_program, scatter_tables);
 
     fb_scatter_tables
         .iter()
@@ -861,9 +772,7 @@ fn decode_scatter_tables(
 fn decode_for_sequence_operands(
     fb_program: &fb::StoredMooRProgramRef,
 ) -> Result<Vec<moor_var::program::opcode::ForSequenceOperand>, DecodeError> {
-    let fb_operands = fb_program.for_sequence_operands().map_err(|e| {
-        DecodeError::DecodeFailed(format!("Failed to read for_sequence_operands: {e}"))
-    })?;
+    let fb_operands = fb_decode!(fb_program, for_sequence_operands);
 
     fb_operands
         .iter()
@@ -897,9 +806,7 @@ fn decode_for_range_operands(
 ) -> Result<Vec<moor_var::program::opcode::ForRangeOperand>, DecodeError> {
     use moor_var::program::{labels::Label, opcode::ForRangeOperand};
 
-    let fb_operands = fb_program.for_range_operands().map_err(|e| {
-        DecodeError::DecodeFailed(format!("Failed to read for_range_operands: {e}"))
-    })?;
+    let fb_operands = fb_decode!(fb_program, for_range_operands);
 
     fb_operands
         .iter()
@@ -927,9 +834,7 @@ fn decode_range_comprehensions(
 ) -> Result<Vec<moor_var::program::opcode::RangeComprehend>, DecodeError> {
     use moor_var::program::{labels::Label, opcode::RangeComprehend};
 
-    let fb_comprehensions = fb_program.range_comprehensions().map_err(|e| {
-        DecodeError::DecodeFailed(format!("Failed to read range_comprehensions: {e}"))
-    })?;
+    let fb_comprehensions = fb_decode!(fb_program, range_comprehensions);
 
     fb_comprehensions
         .iter()
@@ -961,9 +866,7 @@ fn decode_list_comprehensions(
 ) -> Result<Vec<moor_var::program::opcode::ListComprehend>, DecodeError> {
     use moor_var::program::{labels::Label, opcode::ListComprehend};
 
-    let fb_comprehensions = fb_program.list_comprehensions().map_err(|e| {
-        DecodeError::DecodeFailed(format!("Failed to read list_comprehensions: {e}"))
-    })?;
+    let fb_comprehensions = fb_decode!(fb_program, list_comprehensions);
 
     fb_comprehensions
         .iter()
