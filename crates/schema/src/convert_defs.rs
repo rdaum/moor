@@ -88,6 +88,26 @@ fn verb_args_spec_from_flatbuffer(fb: &common::VerbArgsSpec) -> ModelVerbArgsSpe
     }
 }
 
+fn verb_args_spec_from_ref(
+    fb: common::VerbArgsSpecRef<'_>,
+) -> Result<ModelVerbArgsSpec, DefConversionError> {
+    let dobj = fb
+        .dobj()
+        .map_err(|e| DefConversionError::DecodingError(format!("dobj: {e}")))?;
+    let prep = fb
+        .prep()
+        .map_err(|e| DefConversionError::DecodingError(format!("prep: {e}")))?;
+    let iobj = fb
+        .iobj()
+        .map_err(|e| DefConversionError::DecodingError(format!("iobj: {e}")))?;
+
+    Ok(ModelVerbArgsSpec {
+        dobj: dobj.into(),
+        prep: prepspec_from_i16(prep),
+        iobj: iobj.into(),
+    })
+}
+
 // ============================================================================
 // VerbDef Conversion
 // ============================================================================
@@ -137,6 +157,53 @@ pub fn verbdef_from_flatbuffer(fb: &common::VerbDef) -> Result<ModelVerbDef, Def
 
     let flags = BitEnum::from_u16(fb.flags);
     let args = verb_args_spec_from_flatbuffer(&fb.args);
+
+    Ok(ModelVerbDef::new(
+        uuid, location, owner, &names, flags, args,
+    ))
+}
+
+pub fn verbdef_from_ref(fb: common::VerbDefRef<'_>) -> Result<ModelVerbDef, DefConversionError> {
+    let uuid_ref = fb
+        .uuid()
+        .map_err(|e| DefConversionError::DecodingError(format!("uuid: {e}")))?;
+    let uuid =
+        convert_common::uuid_from_ref(uuid_ref).map_err(DefConversionError::DecodingError)?;
+
+    let location_ref = fb
+        .location()
+        .map_err(|e| DefConversionError::DecodingError(format!("location: {e}")))?;
+    let location =
+        convert_common::obj_from_ref(location_ref).map_err(DefConversionError::DecodingError)?;
+
+    let owner_ref = fb
+        .owner()
+        .map_err(|e| DefConversionError::DecodingError(format!("owner: {e}")))?;
+    let owner =
+        convert_common::obj_from_ref(owner_ref).map_err(DefConversionError::DecodingError)?;
+
+    let names_vec = fb
+        .names()
+        .map_err(|e| DefConversionError::DecodingError(format!("names: {e}")))?;
+    let names: Result<Vec<Symbol>, DefConversionError> = names_vec
+        .iter()
+        .map(|name_result| {
+            let name_ref =
+                name_result.map_err(|e| DefConversionError::DecodingError(format!("name: {e}")))?;
+            convert_common::symbol_from_ref(name_ref).map_err(DefConversionError::DecodingError)
+        })
+        .collect();
+    let names = names?;
+
+    let flags = fb
+        .flags()
+        .map_err(|e| DefConversionError::DecodingError(format!("flags: {e}")))?;
+    let flags = BitEnum::from_u16(flags);
+
+    let args_ref = fb
+        .args()
+        .map_err(|e| DefConversionError::DecodingError(format!("args: {e}")))?;
+    let args = verb_args_spec_from_ref(args_ref)?;
 
     Ok(ModelVerbDef::new(
         uuid, location, owner, &names, flags, args,

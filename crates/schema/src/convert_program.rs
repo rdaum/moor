@@ -14,7 +14,7 @@
 //! Conversion between Program (runtime) and StoredProgram (FlatBuffer wire format).
 
 use crate::{
-    convert_var::{ConversionContext, var_from_flatbuffer_internal, var_to_flatbuffer_internal},
+    convert_var::{ConversionContext, var_to_flatbuffer_internal},
     define_enum_mapping,
     opcode_stream::{OpStream, error_code_from_discriminant, error_code_to_discriminant},
     program as fb,
@@ -34,6 +34,7 @@ define_enum_mapping! {
         ForkLabel <=> ForkLabel,
     }
 }
+use crate::convert::var_from_db_flatbuffer_ref;
 use byteview::ByteView;
 use moor_var::program::{
     labels::{JumpLabel, Label, Offset},
@@ -366,6 +367,18 @@ pub fn decode_stored_program_struct(stored: &fb::StoredProgram) -> Result<Progra
     }
 }
 
+/// Convert a FlatBuffer StoredProgramRef directly to a Program (runtime format).
+/// Avoids the intermediate owned struct allocation that decode_stored_program_struct does.
+pub fn decode_stored_program_ref(fb_ref: fb::StoredProgramRef<'_>) -> Result<Program, DecodeError> {
+    let language = fb_ref
+        .language()
+        .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read language union: {e}")))?;
+
+    match language {
+        fb::StoredProgramLanguageRef::StoredMooRProgram(moor_ref) => decode_fb_program(moor_ref),
+    }
+}
+
 /// Convert a Program to a StoredProgram (FlatBuffer format)
 pub fn program_to_stored(program: &Program) -> Result<StoredProgram, EncodeError> {
     let mut builder = planus::Builder::new();
@@ -520,7 +533,6 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
     let fork_vectors = fork_vectors?;
 
     // Decode literals
-    use crate::var as fb_var;
     let fb_literals = fb_decode!(fb_prog_ref, literals);
     let literals: Result<Vec<moor_var::Var>, DecodeError> = fb_literals
         .iter()
@@ -528,11 +540,7 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
             let lit_ref = lit_result.map_err(|e| {
                 DecodeError::DecodeFailed(format!("Failed to read lambda literal: {e}"))
             })?;
-            // Convert VarRef to owned Var using TryFrom
-            let lit_owned: fb_var::Var = lit_ref.try_into().map_err(|e| {
-                DecodeError::DecodeFailed(format!("Failed to convert lambda VarRef: {e}"))
-            })?;
-            var_from_flatbuffer_internal(&lit_owned, ConversionContext::Database).map_err(|e| {
+            var_from_db_flatbuffer_ref(lit_ref).map_err(|e| {
                 DecodeError::DecodeFailed(format!("Failed to decode lambda literal: {e}"))
             })
         })

@@ -17,7 +17,9 @@ use crate::RpcMessageError;
 use moor_common::model::ObjectRef;
 use moor_schema::{
     StrErr,
-    convert::{obj_from_ref, objectref_from_ref, symbol_from_ref, uuid_from_ref, var_from_flatbuffer_ref},
+    convert::{
+        obj_from_ref, objectref_from_ref, symbol_from_ref, uuid_from_ref, var_from_flatbuffer_ref,
+    },
     rpc, var,
 };
 use moor_var::{Obj, Symbol, Var};
@@ -127,7 +129,10 @@ pub fn extract_var_list<T>(
         opt.map(|items| {
             items
                 .iter()
-                .filter_map(|item| item.ok().and_then(|var_ref| var_from_flatbuffer_ref(var_ref).ok()))
+                .filter_map(|item| {
+                    item.ok()
+                        .and_then(|var_ref| var_from_flatbuffer_ref(var_ref).ok())
+                })
                 .collect()
         })
     })

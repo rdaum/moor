@@ -60,9 +60,19 @@ fn name_to_flatbuffer(name: &Name) -> fb_program::StoredName {
     }
 }
 
-/// Convert a FlatBuffer StoredName to Name
-fn name_from_flatbuffer(stored: &fb_program::StoredName) -> Name {
-    Name(stored.offset, stored.scope_depth, stored.scope_id)
+/// Convert a FlatBuffer StoredNameRef to Name
+fn name_from_ref(stored: fb_program::StoredNameRef<'_>) -> Result<Name, VarConversionError> {
+    Ok(Name(
+        stored
+            .offset()
+            .map_err(|e| VarConversionError::DecodingError(format!("name offset: {e}")))?,
+        stored
+            .scope_depth()
+            .map_err(|e| VarConversionError::DecodingError(format!("name scope_depth: {e}")))?,
+        stored
+            .scope_id()
+            .map_err(|e| VarConversionError::DecodingError(format!("name scope_id: {e}")))?,
+    ))
 }
 
 /// Convert Program to FlatBuffer StoredProgram struct
@@ -92,26 +102,13 @@ fn program_to_flatbuffer(
     })
 }
 
-/// Convert FlatBuffer StoredProgram struct to Program
-fn program_from_flatbuffer(
-    stored: fb_program::StoredProgram,
+/// Convert FlatBuffer StoredProgramRef directly to Program
+fn program_from_ref(
+    stored: fb_program::StoredProgramRef<'_>,
 ) -> Result<Program, VarConversionError> {
-    use crate::convert_program::stored_to_program;
-    use byteview::ByteView;
-    use moor_var::program::stored_program::StoredProgram;
-    use planus::WriteAs;
+    use crate::convert_program::decode_stored_program_ref;
 
-    // Serialize the FlatBuffer struct to bytes
-    let mut builder = planus::Builder::new();
-    let offset = stored.prepare(&mut builder);
-    let bytes = builder.finish(offset, None);
-
-    // Wrap in StoredProgram
-    let stored_wrapper = StoredProgram::from(ByteView::from(bytes));
-
-    // Convert to Program
-    // TODO: This still uses bincode for Var literals - we'll update convert_program next
-    stored_to_program(&stored_wrapper)
+    decode_stored_program_ref(stored)
         .map_err(|e| VarConversionError::DecodingError(format!("Failed to decode program: {e}")))
 }
 
@@ -154,39 +151,67 @@ fn scatter_args_to_flatbuffer(args: &ScatterArgs) -> fb_program::StoredScatterAr
     }
 }
 
-/// Convert FlatBuffer StoredScatterArgs to ScatterArgs
-fn scatter_args_from_flatbuffer(
-    stored: &fb_program::StoredScatterArgs,
+/// Convert FlatBuffer StoredScatterArgsRef to ScatterArgs
+fn scatter_args_from_ref(
+    stored: fb_program::StoredScatterArgsRef<'_>,
 ) -> Result<ScatterArgs, VarConversionError> {
     use moor_var::program::labels::Label;
 
-    let labels: Result<Vec<_>, _> = stored
-        .labels
+    let labels_vec = stored
+        .labels()
+        .map_err(|e| VarConversionError::DecodingError(format!("scatter labels: {e}")))?;
+
+    let labels: Result<Vec<_>, VarConversionError> = labels_vec
         .iter()
-        .map(|stored_label| {
-            let label = match &stored_label.label {
-                fb_program::StoredScatterLabelUnion::StoredScatterRequired(req) => {
-                    ScatterLabel::Required(name_from_flatbuffer(&req.name))
+        .map(|label_result| {
+            let stored_label = label_result
+                .map_err(|e| VarConversionError::DecodingError(format!("scatter label: {e}")))?;
+            let label_union = stored_label
+                .label()
+                .map_err(|e| VarConversionError::DecodingError(format!("label union: {e}")))?;
+
+            let label = match label_union {
+                fb_program::StoredScatterLabelUnionRef::StoredScatterRequired(req) => {
+                    let name_ref = req
+                        .name()
+                        .map_err(|e| VarConversionError::DecodingError(format!("req name: {e}")))?;
+                    ScatterLabel::Required(name_from_ref(name_ref)?)
                 }
-                fb_program::StoredScatterLabelUnion::StoredScatterOptional(opt) => {
-                    let default_label = if opt.has_default {
-                        Some(Label(opt.default_label))
+                fb_program::StoredScatterLabelUnionRef::StoredScatterOptional(opt) => {
+                    let name_ref = opt
+                        .name()
+                        .map_err(|e| VarConversionError::DecodingError(format!("opt name: {e}")))?;
+                    let has_default = opt.has_default().map_err(|e| {
+                        VarConversionError::DecodingError(format!("has_default: {e}"))
+                    })?;
+                    let default_label = if has_default {
+                        let dl = opt.default_label().map_err(|e| {
+                            VarConversionError::DecodingError(format!("default_label: {e}"))
+                        })?;
+                        Some(Label(dl))
                     } else {
                         None
                     };
-                    ScatterLabel::Optional(name_from_flatbuffer(&opt.name), default_label)
+                    ScatterLabel::Optional(name_from_ref(name_ref)?, default_label)
                 }
-                fb_program::StoredScatterLabelUnion::StoredScatterRest(rest) => {
-                    ScatterLabel::Rest(name_from_flatbuffer(&rest.name))
+                fb_program::StoredScatterLabelUnionRef::StoredScatterRest(rest) => {
+                    let name_ref = rest.name().map_err(|e| {
+                        VarConversionError::DecodingError(format!("rest name: {e}"))
+                    })?;
+                    ScatterLabel::Rest(name_from_ref(name_ref)?)
                 }
             };
             Ok(label)
         })
         .collect();
 
+    let done = stored
+        .done()
+        .map_err(|e| VarConversionError::DecodingError(format!("scatter done: {e}")))?;
+
     Ok(ScatterArgs {
         labels: labels?,
-        done: Label(stored.done),
+        done: Label(done),
     })
 }
 
@@ -361,155 +386,6 @@ pub fn var_to_flatbuffer_internal(
     })
 }
 
-/// Convert from FlatBuffer Var struct to moor_var::Var for RPC transmission.
-/// Rejects lambdas and anonymous object references.
-pub fn var_from_flatbuffer(fb_var: &var::Var) -> Result<Var, VarConversionError> {
-    var_from_flatbuffer_internal(fb_var, ConversionContext::Rpc)
-}
-
-/// Convert from FlatBuffer Var struct to moor_var::Var for database storage.
-/// Allows lambdas and anonymous object references.
-pub fn var_from_db_flatbuffer(fb_var: &var::Var) -> Result<Var, VarConversionError> {
-    var_from_flatbuffer_internal(fb_var, ConversionContext::Database)
-}
-
-/// Internal conversion function with context
-/// Exposed as pub(crate) so program_convert can use it for literals
-pub fn var_from_flatbuffer_internal(
-    fb_var: &var::Var,
-    context: ConversionContext,
-) -> Result<Var, VarConversionError> {
-    match &fb_var.variant {
-        VarUnion::VarNone(_) => Ok(v_none()),
-
-        VarUnion::VarBool(b) => Ok(v_bool(b.value)),
-
-        VarUnion::VarInt(i) => Ok(v_int(i.value)),
-
-        VarUnion::VarFloat(f) => Ok(v_float(f.value)),
-
-        VarUnion::VarStr(s) => Ok(v_str(&s.value)),
-
-        VarUnion::VarObj(o) => {
-            let obj = convert_common::obj_from_flatbuffer_struct(&o.obj)
-                .map_err(|e| VarConversionError::DecodingError(e.to_string()))?;
-            Ok(v_obj(obj))
-        }
-
-        VarUnion::VarErr(e) => {
-            let error = convert_errors::error_from_flatbuffer_struct(&e.error)
-                .map_err(|e| VarConversionError::DecodingError(e.to_string()))?;
-            Ok(v_error(error))
-        }
-
-        VarUnion::VarSym(s) => {
-            let sym = convert_common::symbol_from_flatbuffer_struct(&s.symbol);
-            Ok(v_sym(sym))
-        }
-
-        VarUnion::VarBinary(b) => Ok(v_binary(b.data.clone())),
-
-        VarUnion::VarList(l) => {
-            if l.elements.is_empty() {
-                return Ok(v_empty_list());
-            }
-            let elements: Result<Vec<_>, _> = l
-                .elements
-                .iter()
-                .map(|e| var_from_flatbuffer_internal(e, context))
-                .collect();
-            Ok(v_list(&elements?))
-        }
-
-        VarUnion::VarMap(m) => {
-            let pairs: Result<Vec<_>, _> = m
-                .pairs
-                .iter()
-                .map(|pair| {
-                    Ok((
-                        var_from_flatbuffer_internal(&pair.key, context)?,
-                        var_from_flatbuffer_internal(&pair.value, context)?,
-                    ))
-                })
-                .collect();
-            Ok(v_map(&pairs?))
-        }
-
-        VarUnion::VarFlyweight(f) => {
-            let delegate = convert_common::obj_from_flatbuffer_struct(&f.delegate)
-                .map_err(|e| VarConversionError::DecodingError(e.to_string()))?;
-
-            let slots: Result<Vec<_>, _> = f
-                .slots
-                .iter()
-                .map(|slot| {
-                    Ok((
-                        convert_common::symbol_from_flatbuffer_struct(&slot.name),
-                        var_from_flatbuffer_internal(&slot.value, context)?,
-                    ))
-                })
-                .collect();
-
-            let contents_elements: Result<Vec<_>, _> = f
-                .contents
-                .elements
-                .iter()
-                .map(|e| var_from_flatbuffer_internal(e, context))
-                .collect();
-
-            let contents_var = v_list(&contents_elements?);
-            let contents = contents_var.as_list().ok_or_else(|| {
-                VarConversionError::DecodingError("Failed to convert list".to_string())
-            })?;
-
-            Ok(v_flyweight(delegate, &slots?, contents.clone()))
-        }
-
-        VarUnion::VarLambda(lambda) => {
-            // Lambdas should never appear in RPC context
-            if context == ConversionContext::Rpc {
-                return Err(VarConversionError::DecodingError(
-                    "Unexpected lambda in RPC context".to_string(),
-                ));
-            }
-
-            // Convert params
-            let params = scatter_args_from_flatbuffer(&lambda.params)?;
-
-            // Convert body (clone and deref Box)
-            let body = program_from_flatbuffer((*lambda.body).clone())?;
-
-            // Convert captured_env: [VarList] -> Vec<Vec<Var>>
-            let captured_env: Result<Vec<Vec<Var>>, _> = lambda
-                .captured_env
-                .iter()
-                .map(|frame| {
-                    frame
-                        .elements
-                        .iter()
-                        .map(|v| var_from_flatbuffer_internal(v, context))
-                        .collect()
-                })
-                .collect();
-
-            // Convert optional self_var
-            let self_var = lambda.self_var.as_ref().map(|n| name_from_flatbuffer(n));
-
-            // Create lambda using Var::mk_lambda
-            use moor_var::Var;
-            Ok(Var::mk_lambda(params, body, captured_env?, self_var))
-        }
-
-        VarUnion::VarAnonymous(anon) => {
-            // Anonymous objects are sigils that preserve identity but cannot be used for operations.
-            // Reconstruct as a regular object (operations will be blocked client-side based on metadata).
-            let obj = convert_common::obj_from_flatbuffer_struct(&anon.obj)
-                .map_err(|e| VarConversionError::DecodingError(e.to_string()))?;
-            Ok(v_obj(obj))
-        }
-    }
-}
-
 // ============================================================================
 // Ref-based conversion functions (avoid intermediate owned struct copy)
 // ============================================================================
@@ -560,8 +436,8 @@ fn var_from_flatbuffer_ref_internal(
 
         VarUnionRef::VarObj(o) => {
             let obj_ref = o.obj().map_err(|e| fb_err(format!("obj: {e}")))?;
-            let obj = convert_common::obj_from_ref(obj_ref)
-                .map_err(VarConversionError::DecodingError)?;
+            let obj =
+                convert_common::obj_from_ref(obj_ref).map_err(VarConversionError::DecodingError)?;
             Ok(v_obj(obj))
         }
 
@@ -609,7 +485,9 @@ fn var_from_flatbuffer_ref_internal(
                 .map(|pair_result| {
                     let pair = pair_result.map_err(|e| fb_err(format!("map pair: {e}")))?;
                     let key_ref = pair.key().map_err(|e| fb_err(format!("map key: {e}")))?;
-                    let val_ref = pair.value().map_err(|e| fb_err(format!("map value: {e}")))?;
+                    let val_ref = pair
+                        .value()
+                        .map_err(|e| fb_err(format!("map value: {e}")))?;
                     let key = var_from_flatbuffer_ref_internal(key_ref, context)?;
                     let value = var_from_flatbuffer_ref_internal(val_ref, context)?;
                     Ok((key, value))
@@ -625,7 +503,9 @@ fn var_from_flatbuffer_ref_internal(
             let delegate = convert_common::obj_from_ref(delegate_ref)
                 .map_err(VarConversionError::DecodingError)?;
 
-            let slots_ref = f.slots().map_err(|e| fb_err(format!("flyweight slots: {e}")))?;
+            let slots_ref = f
+                .slots()
+                .map_err(|e| fb_err(format!("flyweight slots: {e}")))?;
             let slots: Result<Vec<_>, _> = slots_ref
                 .iter()
                 .map(|slot_result| {
@@ -633,8 +513,9 @@ fn var_from_flatbuffer_ref_internal(
                     let name_ref = slot.name().map_err(|e| fb_err(format!("slot name: {e}")))?;
                     let name = convert_common::symbol_from_ref(name_ref)
                         .map_err(VarConversionError::DecodingError)?;
-                    let value_ref =
-                        slot.value().map_err(|e| fb_err(format!("slot value: {e}")))?;
+                    let value_ref = slot
+                        .value()
+                        .map_err(|e| fb_err(format!("slot value: {e}")))?;
                     let value = var_from_flatbuffer_ref_internal(value_ref, context)?;
                     Ok((name, value))
                 })
@@ -670,43 +551,58 @@ fn var_from_flatbuffer_ref_internal(
                 ));
             }
 
-            // Lambda conversion is complex - convert to owned and use existing function
-            let lambda_owned: var::VarLambda = lambda_ref.try_into().map_err(|e| {
-                VarConversionError::DecodingError(format!("Failed to convert lambda ref: {e}"))
-            })?;
+            // Convert params directly from ref
+            let params_ref = lambda_ref
+                .params()
+                .map_err(|e| VarConversionError::DecodingError(format!("lambda params: {e}")))?;
+            let params = scatter_args_from_ref(params_ref)?;
 
-            // Convert params
-            let params = scatter_args_from_flatbuffer(&lambda_owned.params)?;
-
-            // Convert body
-            let body = program_from_flatbuffer((*lambda_owned.body).clone())?;
+            // Convert body directly from ref
+            let body_ref = lambda_ref
+                .body()
+                .map_err(|e| VarConversionError::DecodingError(format!("lambda body: {e}")))?;
+            let body = program_from_ref(body_ref)?;
 
             // Convert captured_env
-            let captured_env: Result<Vec<Vec<Var>>, _> = lambda_owned
-                .captured_env
+            let captured_env_ref = lambda_ref
+                .captured_env()
+                .map_err(|e| VarConversionError::DecodingError(format!("captured_env: {e}")))?;
+            let captured_env: Result<Vec<Vec<Var>>, _> = captured_env_ref
                 .iter()
-                .map(|frame| {
-                    frame
-                        .elements
+                .map(|frame_result| {
+                    let frame = frame_result.map_err(|e| {
+                        VarConversionError::DecodingError(format!("captured frame: {e}"))
+                    })?;
+                    let elements = frame.elements().map_err(|e| {
+                        VarConversionError::DecodingError(format!("frame elements: {e}"))
+                    })?;
+                    elements
                         .iter()
-                        .map(|v| var_from_flatbuffer_internal(v, context))
+                        .map(|v_result| {
+                            let v = v_result.map_err(|e| {
+                                VarConversionError::DecodingError(format!("frame var: {e}"))
+                            })?;
+                            var_from_flatbuffer_ref_internal(v, context)
+                        })
                         .collect()
                 })
                 .collect();
 
-            // Convert optional self_var
-            let self_var = lambda_owned
-                .self_var
-                .as_ref()
-                .map(|n| name_from_flatbuffer(n));
+            // Convert optional self_var directly from ref
+            let self_var_opt = lambda_ref
+                .self_var()
+                .map_err(|e| VarConversionError::DecodingError(format!("self_var: {e}")))?;
+            let self_var = self_var_opt.map(|n| name_from_ref(n)).transpose()?;
 
             Ok(Var::mk_lambda(params, body, captured_env?, self_var))
         }
 
         VarUnionRef::VarAnonymous(anon) => {
-            let obj_ref = anon.obj().map_err(|e| fb_err(format!("anonymous obj: {e}")))?;
-            let obj = convert_common::obj_from_ref(obj_ref)
-                .map_err(VarConversionError::DecodingError)?;
+            let obj_ref = anon
+                .obj()
+                .map_err(|e| fb_err(format!("anonymous obj: {e}")))?;
+            let obj =
+                convert_common::obj_from_ref(obj_ref).map_err(VarConversionError::DecodingError)?;
             Ok(v_obj(obj))
         }
     }
@@ -720,192 +616,11 @@ mod tests {
     };
 
     #[test]
-    fn test_none_roundtrip() {
-        let var = v_none();
-        let fb = var_to_flatbuffer(&var).unwrap();
-        let decoded = var_from_flatbuffer(&fb).unwrap();
-        assert_eq!(var, decoded);
-    }
-
-    #[test]
-    fn test_bool_roundtrip() {
-        let var = v_bool(true);
-        let fb = var_to_flatbuffer(&var).unwrap();
-        let decoded = var_from_flatbuffer(&fb).unwrap();
-        assert_eq!(var, decoded);
-    }
-
-    #[test]
-    fn test_int_roundtrip() {
-        let var = v_int(42);
-        let fb = var_to_flatbuffer(&var).unwrap();
-        let decoded = var_from_flatbuffer(&fb).unwrap();
-        assert_eq!(var, decoded);
-    }
-
-    #[test]
-    fn test_float_roundtrip() {
-        let var = v_float(42.5);
-        let fb = var_to_flatbuffer(&var).unwrap();
-        let decoded = var_from_flatbuffer(&fb).unwrap();
-        assert_eq!(var, decoded);
-    }
-
-    #[test]
-    fn test_string_roundtrip() {
-        let var = v_str("hello world");
-        let fb = var_to_flatbuffer(&var).unwrap();
-        let decoded = var_from_flatbuffer(&fb).unwrap();
-        assert_eq!(var, decoded);
-    }
-
-    #[test]
-    fn test_empty_string_roundtrip() {
-        let var = v_empty_str();
-        let fb = var_to_flatbuffer(&var).unwrap();
-        let decoded = var_from_flatbuffer(&fb).unwrap();
-        assert_eq!(var, decoded);
-    }
-
-    #[test]
-    fn test_obj_roundtrip() {
-        let var = v_obj(Obj::mk_id(123));
-        let fb = var_to_flatbuffer(&var).unwrap();
-        let decoded = var_from_flatbuffer(&fb).unwrap();
-        assert_eq!(var, decoded);
-    }
-
-    #[test]
-    fn test_error_roundtrip() {
-        let var = v_err(E_PERM);
-        let fb = var_to_flatbuffer(&var).unwrap();
-        let decoded = var_from_flatbuffer(&fb).unwrap();
-        assert_eq!(var, decoded);
-    }
-
-    #[test]
-    fn test_empty_list_roundtrip() {
-        let var = v_empty_list();
-        let fb = var_to_flatbuffer(&var).unwrap();
-        let decoded = var_from_flatbuffer(&fb).unwrap();
-        assert_eq!(var, decoded);
-    }
-
-    #[test]
-    fn test_symbol_roundtrip() {
-        use moor_var::{Symbol, v_sym};
-        let var = v_sym(Symbol::mk("test_symbol"));
-        let fb = var_to_flatbuffer(&var).unwrap();
-        let decoded = var_from_flatbuffer(&fb).unwrap();
-        assert_eq!(var, decoded);
-    }
-
-    #[test]
-    fn test_binary_roundtrip() {
-        use moor_var::v_binary;
-        let var = v_binary(vec![1, 2, 3, 4, 5]);
-        let fb = var_to_flatbuffer(&var).unwrap();
-        let decoded = var_from_flatbuffer(&fb).unwrap();
-        assert_eq!(var, decoded);
-    }
-
-    #[test]
-    fn test_nested_list_roundtrip() {
-        use moor_var::v_list;
-        let inner = v_list(&[v_int(1), v_int(2), v_int(3)]);
-        let outer = v_list(&[inner.clone(), v_str("test"), inner]);
-        let fb = var_to_flatbuffer(&outer).unwrap();
-        let decoded = var_from_flatbuffer(&fb).unwrap();
-        assert_eq!(outer, decoded);
-    }
-
-    #[test]
-    fn test_map_roundtrip() {
-        use moor_var::v_map;
-        let map = v_map(&[
-            (v_str("key1"), v_int(42)),
-            (v_str("key2"), v_str("value2")),
-            (v_int(3), v_bool(true)),
-        ]);
-        let fb = var_to_flatbuffer(&map).unwrap();
-        let decoded = var_from_flatbuffer(&fb).unwrap();
-        assert_eq!(map, decoded);
-    }
-
-    #[test]
-    fn test_complex_nested_structure() {
-        use moor_var::{v_list, v_map};
-        let inner_list = v_list(&[v_int(1), v_int(2), v_int(3)]);
-        let inner_map = v_map(&[(v_str("a"), v_int(1)), (v_str("b"), v_int(2))]);
-        let outer = v_list(&[inner_list, inner_map, v_str("test")]);
-        let fb = var_to_flatbuffer(&outer).unwrap();
-        let decoded = var_from_flatbuffer(&fb).unwrap();
-        assert_eq!(outer, decoded);
-    }
-
-    #[test]
-    fn test_uuobjid_roundtrip() {
-        let obj = Obj::mk_uuobjid_generated();
-        let var = v_obj(obj);
-        let fb = var_to_flatbuffer(&var).unwrap();
-        let decoded = var_from_flatbuffer(&fb).unwrap();
-        assert_eq!(var, decoded);
-    }
-
-    #[test]
     fn test_lambda_rejected() {
         // TODO: Need to construct a lambda Var to test rejection
         // let var = Var::mk_lambda(...);
         // let result = var_to_flatbuffer(&var);
         // assert!(matches!(result, Err(VarConversionError::LambdaNotTransmittable)));
-    }
-
-    #[test]
-    fn test_anonymous_object_as_sigil() {
-        let obj = Obj::mk_anonymous_generated();
-        let var = v_obj(obj);
-        let fb = var_to_flatbuffer(&var).expect("Should serialize as sigil");
-        // The result should be a VarAnonymous in the FlatBuffer
-        match &fb.variant {
-            var::VarUnion::VarAnonymous(_) => {
-                // Correct - anonymous objects become sigils in RPC context
-            }
-            _ => panic!("Expected VarAnonymous variant"),
-        }
-        // Should roundtrip to same object
-        let decoded = var_from_flatbuffer(&fb).expect("Should deserialize");
-        assert_eq!(var, decoded);
-    }
-
-    #[test]
-    fn test_anonymous_object_in_list_as_sigil() {
-        use moor_var::v_list;
-        let obj = Obj::mk_anonymous_generated();
-        let list = v_list(&[v_int(1), v_obj(obj), v_str("test")]);
-        let fb = var_to_flatbuffer(&list).expect("Should serialize as sigil");
-        // Should roundtrip to same list
-        let decoded = var_from_flatbuffer(&fb).expect("Should deserialize");
-        assert_eq!(list, decoded);
-    }
-
-    #[test]
-    fn test_anonymous_object_db_roundtrip() {
-        // Anonymous objects should roundtrip successfully in DB context
-        let obj = Obj::mk_anonymous_generated();
-        let var = v_obj(obj);
-        let fb = var_to_db_flatbuffer(&var).unwrap();
-        let decoded = var_from_db_flatbuffer(&fb).unwrap();
-        assert_eq!(var, decoded);
-    }
-
-    #[test]
-    fn test_anonymous_object_in_list_db_roundtrip() {
-        use moor_var::v_list;
-        let obj = Obj::mk_anonymous_generated();
-        let list = v_list(&[v_int(1), v_obj(obj), v_str("test")]);
-        let fb = var_to_db_flatbuffer(&list).unwrap();
-        let decoded = var_from_db_flatbuffer(&fb).unwrap();
-        assert_eq!(list, decoded);
     }
 
     #[test]

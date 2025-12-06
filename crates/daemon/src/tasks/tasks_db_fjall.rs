@@ -17,7 +17,7 @@ use moor_kernel::{
     SuspendedTask,
     tasks::{
         TasksDb, TasksDbError,
-        convert_task::{suspended_task_from_flatbuffer, suspended_task_to_flatbuffer},
+        convert_task::{suspended_task_from_ref, suspended_task_to_flatbuffer},
     },
 };
 use planus::{ReadAsRoot, WriteAsOffset};
@@ -58,20 +58,14 @@ impl TasksDb for FjallTasksDB {
             })?);
             let tasks_bytes = entry.1.as_ref();
 
-            // Deserialize FlatBuffer
+            // Deserialize FlatBuffer directly from ref to avoid copying
             let fb_task =
                 moor_schema::task::SuspendedTaskRef::read_as_root(tasks_bytes).map_err(|e| {
                     error!("Failed to read FlatBuffer: {:?}", e);
                     TasksDbError::CouldNotLoadTasks
                 })?;
 
-            // Convert owned struct to bytes for conversion (inefficient but works with current API)
-            let owned_fb: moor_schema::task::SuspendedTask = fb_task.try_into().map_err(|e| {
-                error!("Failed to convert FlatBuffer ref to owned: {:?}", e);
-                TasksDbError::CouldNotLoadTasks
-            })?;
-
-            let task = suspended_task_from_flatbuffer(&owned_fb).map_err(|e| {
+            let task = suspended_task_from_ref(fb_task).map_err(|e| {
                 error!("Failed to convert FlatBuffer to SuspendedTask: {:?}", e);
                 TasksDbError::CouldNotLoadTasks
             })?;

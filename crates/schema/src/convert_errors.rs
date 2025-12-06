@@ -21,7 +21,7 @@ use crate::{
     StrErr, common,
     common::CompileErrorUnionRef,
     convert_common::{symbol_from_flatbuffer_struct, symbol_from_ref, symbol_to_flatbuffer_struct},
-    convert_var::{var_from_flatbuffer, var_to_flatbuffer},
+    convert_var::var_to_flatbuffer,
     fb_read,
 };
 use moor_common::model::{CompileContext, CompileError, ParseErrorDetails};
@@ -128,30 +128,6 @@ pub fn error_to_flatbuffer_struct(
         value,
         custom_symbol,
     })
-}
-
-/// Convert from flatbuffer Error struct to moor_var::Error
-pub fn error_from_flatbuffer_struct(
-    fb_error: &common::Error,
-) -> Result<moor_var::Error, Box<dyn std::error::Error>> {
-    let custom_symbol = if fb_error.err_type == common::ErrorCode::ErrCustom {
-        let sym_struct = fb_error
-            .custom_symbol
-            .as_ref()
-            .ok_or("ErrCustom missing custom_symbol")?;
-        Some(symbol_from_flatbuffer_struct(sym_struct))
-    } else {
-        None
-    };
-    let err_type = error_code_from_flatbuffer(fb_error.err_type, custom_symbol);
-
-    let msg = fb_error.msg.clone();
-    let value = match &fb_error.value {
-        Some(v) => Some(var_from_flatbuffer(v).str_err()?),
-        None => None,
-    };
-
-    Ok(moor_var::Error::new(err_type, msg, value))
 }
 
 /// Convert from FlatBuffer ErrorRef to moor_var::Error
