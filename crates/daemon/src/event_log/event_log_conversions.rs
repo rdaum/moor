@@ -21,6 +21,7 @@ use moor_schema::{
     event_log::LoggedNarrativeEvent,
 };
 use moor_var::Obj;
+use rpc_common::StrErr;
 use std::time::SystemTime;
 use uuid::Uuid;
 
@@ -82,13 +83,13 @@ pub fn presentation_from_flatbuffer(
     pres: &moor_schema::common::PresentationRef,
 ) -> Result<Presentation, String> {
     Ok(Presentation {
-        id: pres.id().map_err(|e| e.to_string())?.to_string(),
-        content_type: pres.content_type().map_err(|e| e.to_string())?.to_string(),
-        content: pres.content().map_err(|e| e.to_string())?.to_string(),
-        target: pres.target().map_err(|e| e.to_string())?.to_string(),
+        id: pres.id().str_err()?.to_string(),
+        content_type: pres.content_type().str_err()?.to_string(),
+        content: pres.content().str_err()?.to_string(),
+        target: pres.target().str_err()?.to_string(),
         attributes: pres
             .attributes()
-            .map_err(|e| e.to_string())?
+            .str_err()?
             .iter()
             .filter_map(|attr_result| {
                 attr_result.ok().and_then(|attr| {

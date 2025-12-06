@@ -132,6 +132,26 @@ pub enum RpcError {
     UnexpectedReply(String),
 }
 
+// Re-export from moor-schema
+pub use moor_schema::StrErr;
+
+/// Extension trait to convert errors to RpcMessageError
+pub trait RpcErr<T> {
+    fn rpc_err(self) -> Result<T, RpcMessageError>;
+}
+
+impl<T> RpcErr<T> for Result<T, planus::Error> {
+    fn rpc_err(self) -> Result<T, RpcMessageError> {
+        self.map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
+    }
+}
+
+impl<T> RpcErr<T> for Result<T, String> {
+    fn rpc_err(self) -> Result<T, RpcMessageError> {
+        self.map_err(RpcMessageError::InvalidRequest)
+    }
+}
+
 /// Errors at the message passing level.
 /// Note: This is an internal Rust error type, converted to FlatBuffer format for serialization.
 #[derive(Debug, PartialEq, Error, Clone)]

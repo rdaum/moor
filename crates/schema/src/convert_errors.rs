@@ -17,7 +17,7 @@
 //! CompileError, CommandError, VerbProgramError, and WorldStateError.
 
 use crate::{
-    common,
+    StrErr, common,
     common::CompileErrorUnionRef,
     convert_common::{symbol_from_flatbuffer_struct, symbol_from_ref, symbol_to_flatbuffer_struct},
     convert_var::{var_from_flatbuffer, var_to_flatbuffer},
@@ -31,7 +31,9 @@ use moor_var::Var;
 // ============================================================================
 
 /// Convert a FlatBuffer CompileContextRef to CompileContext
-fn compile_context_from_ref(ctx_ref: common::CompileContextRef<'_>) -> Result<CompileContext, String> {
+fn compile_context_from_ref(
+    ctx_ref: common::CompileContextRef<'_>,
+) -> Result<CompileContext, String> {
     let line = fb_read!(ctx_ref, line) as usize;
     let col = fb_read!(ctx_ref, col) as usize;
     Ok(CompileContext::new((line, col)))
@@ -112,7 +114,7 @@ pub fn error_to_flatbuffer_struct(
     let err_code = error_code_to_flatbuffer(&error.err_type);
     let msg = error.msg.as_ref().map(|m| m.as_str().to_string());
     let value = match &error.value {
-        Some(v) => Some(Box::new(var_to_flatbuffer(v).map_err(|e| e.to_string())?)),
+        Some(v) => Some(Box::new(var_to_flatbuffer(v).str_err()?)),
         None => None,
     };
     let custom_symbol = match &error.err_type {
@@ -145,7 +147,7 @@ pub fn error_from_flatbuffer_struct(
 
     let msg = fb_error.msg.clone();
     let value = match &fb_error.value {
-        Some(v) => Some(var_from_flatbuffer(v).map_err(|e| e.to_string())?),
+        Some(v) => Some(var_from_flatbuffer(v).str_err()?),
         None => None,
     };
 

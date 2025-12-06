@@ -24,9 +24,9 @@ use moor_kernel::tasks::workers::{WorkerRequest, WorkerResponse};
 use moor_var::{Obj, Symbol, Var};
 use planus::Builder;
 use rpc_common::{
-    WORKER_BROADCAST_TOPIC, mk_ping_workers_msg, mk_worker_ack_reply, mk_worker_attached_reply,
-    mk_worker_invalid_payload_reply, mk_worker_not_registered_reply, mk_worker_request_msg,
-    mk_worker_unknown_request_reply, worker_error_from_flatbuffer_struct,
+    StrErr, WORKER_BROADCAST_TOPIC, mk_ping_workers_msg, mk_worker_ack_reply,
+    mk_worker_attached_reply, mk_worker_invalid_payload_reply, mk_worker_not_registered_reply,
+    mk_worker_request_msg, mk_worker_unknown_request_reply, worker_error_from_flatbuffer_struct,
 };
 use std::{
     collections::HashMap,
@@ -343,10 +343,7 @@ impl WorkersMessageHandlerImpl {
         worker_id: Uuid,
         attach: moor_rpc::AttachWorkerRef,
     ) -> Result<moor_rpc::DaemonToWorkerReply, String> {
-        let worker_type = attach
-            .worker_type()
-            .map_err(|e| e.to_string())
-            .and_then(symbol_from_ref)?;
+        let worker_type = attach.worker_type().str_err().and_then(symbol_from_ref)?;
 
         let mut workers = self.workers.write().unwrap();
         workers.insert(
@@ -369,10 +366,7 @@ impl WorkersMessageHandlerImpl {
         worker_id: Uuid,
         pong: moor_rpc::WorkerPongRef,
     ) -> Result<moor_rpc::DaemonToWorkerReply, String> {
-        let worker_type = pong
-            .worker_type()
-            .map_err(|e| e.to_string())
-            .and_then(symbol_from_ref)?;
+        let worker_type = pong.worker_type().str_err().and_then(symbol_from_ref)?;
 
         let mut workers = self.workers.write().unwrap();
         if let Some(worker) = workers.get_mut(&worker_id) {
@@ -426,15 +420,9 @@ impl WorkersMessageHandlerImpl {
         worker_id: Uuid,
         result: moor_rpc::RequestResultRef,
     ) -> Result<moor_rpc::DaemonToWorkerReply, String> {
-        let request_id = result
-            .request_id()
-            .map_err(|e| e.to_string())
-            .and_then(uuid_from_ref)?;
+        let request_id = result.request_id().str_err().and_then(uuid_from_ref)?;
 
-        let result_var = result
-            .result()
-            .map_err(|e| e.to_string())
-            .and_then(var_from_ref)?;
+        let result_var = result.result().str_err().and_then(var_from_ref)?;
 
         let mut workers = self.workers.write().unwrap();
         let Some(worker) = workers.get_mut(&worker_id) else {
@@ -473,10 +461,7 @@ impl WorkersMessageHandlerImpl {
         worker_id: Uuid,
         error: moor_rpc::RequestErrorRef,
     ) -> Result<moor_rpc::DaemonToWorkerReply, String> {
-        let request_id = error
-            .request_id()
-            .map_err(|e| e.to_string())
-            .and_then(uuid_from_ref)?;
+        let request_id = error.request_id().str_err().and_then(uuid_from_ref)?;
         let worker_error = extract_worker_error(error.error())?;
 
         let mut workers = self.workers.write().unwrap();

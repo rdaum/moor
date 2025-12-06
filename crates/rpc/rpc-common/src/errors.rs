@@ -20,11 +20,12 @@ use moor_schema::{
     common,
     convert::{
         compilation_error_to_flatbuffer_struct, error_to_flatbuffer_struct, exception_from_ref,
-        obj_to_flatbuffer_struct, objectref_to_flatbuffer_struct, symbol_from_flatbuffer_struct,
-        symbol_to_flatbuffer_struct, uuid_from_ref, var_to_flatbuffer,
+        symbol_from_flatbuffer_struct, uuid_from_ref, var_to_flatbuffer,
     },
     fb_read, rpc,
 };
+
+use crate::helpers::{obj_fb, objectref_fb, symbol_fb};
 use std::time::Duration;
 
 /// Convert from WorkerError to flatbuffer WorkerError struct
@@ -61,9 +62,8 @@ pub fn worker_error_to_flatbuffer_struct(error: &WorkerError) -> rpc::WorkerErro
             }))
         }
         WorkerError::NoWorkerAvailable(worker_type) => {
-            let worker_type_struct = symbol_to_flatbuffer_struct(worker_type);
             rpc::WorkerErrorUnion::NoWorkerAvailable(Box::new(rpc::NoWorkerAvailable {
-                worker_type: Box::new(worker_type_struct),
+                worker_type: symbol_fb(worker_type),
             }))
         }
     };
@@ -133,20 +133,18 @@ pub fn world_state_error_to_flatbuffer_struct(
     let error_union = match error {
         WorldStateError::ObjectNotFound(objref) => {
             common::WorldStateErrorUnion::ObjectNotFound(Box::new(common::ObjectNotFound {
-                object_ref: Box::new(objectref_to_flatbuffer_struct(objref)),
+                object_ref: objectref_fb(objref),
             }))
         }
         WorldStateError::ObjectAlreadyExists(obj) => {
             common::WorldStateErrorUnion::ObjectAlreadyExists(Box::new(
-                common::ObjectAlreadyExists {
-                    obj: Box::new(obj_to_flatbuffer_struct(obj)),
-                },
+                common::ObjectAlreadyExists { obj: obj_fb(obj) },
             ))
         }
         WorldStateError::RecursiveMove(from_obj, to_obj) => {
             common::WorldStateErrorUnion::RecursiveMove(Box::new(common::RecursiveMove {
-                from_obj: Box::new(obj_to_flatbuffer_struct(from_obj)),
-                to_obj: Box::new(obj_to_flatbuffer_struct(to_obj)),
+                from_obj: obj_fb(from_obj),
+                to_obj: obj_fb(to_obj),
             }))
         }
         WorldStateError::ObjectPermissionDenied => {
@@ -156,7 +154,7 @@ pub fn world_state_error_to_flatbuffer_struct(
         }
         WorldStateError::PropertyNotFound(obj, property) => {
             common::WorldStateErrorUnion::PropertyNotFound(Box::new(common::PropertyNotFound {
-                obj: Box::new(obj_to_flatbuffer_struct(obj)),
+                obj: obj_fb(obj),
                 property: property.clone(),
             }))
         }
@@ -168,7 +166,7 @@ pub fn world_state_error_to_flatbuffer_struct(
         WorldStateError::PropertyDefinitionNotFound(obj, property) => {
             common::WorldStateErrorUnion::PropertyDefinitionNotFound(Box::new(
                 common::PropertyDefinitionNotFound {
-                    obj: Box::new(obj_to_flatbuffer_struct(obj)),
+                    obj: obj_fb(obj),
                     property: property.clone(),
                 },
             ))
@@ -176,7 +174,7 @@ pub fn world_state_error_to_flatbuffer_struct(
         WorldStateError::DuplicatePropertyDefinition(obj, property) => {
             common::WorldStateErrorUnion::DuplicatePropertyDefinition(Box::new(
                 common::DuplicatePropertyDefinition {
-                    obj: Box::new(obj_to_flatbuffer_struct(obj)),
+                    obj: obj_fb(obj),
                     property: property.clone(),
                 },
             ))
@@ -184,8 +182,8 @@ pub fn world_state_error_to_flatbuffer_struct(
         WorldStateError::ChparentPropertyNameConflict(descendant, ancestor, property) => {
             common::WorldStateErrorUnion::ChparentPropertyNameConflict(Box::new(
                 common::ChparentPropertyNameConflict {
-                    descendant: Box::new(obj_to_flatbuffer_struct(descendant)),
-                    ancestor: Box::new(obj_to_flatbuffer_struct(ancestor)),
+                    descendant: obj_fb(descendant),
+                    ancestor: obj_fb(ancestor),
                     property: property.clone(),
                 },
             ))
@@ -197,7 +195,7 @@ pub fn world_state_error_to_flatbuffer_struct(
         }
         WorldStateError::VerbNotFound(obj, verb) => {
             common::WorldStateErrorUnion::VerbNotFound(Box::new(common::VerbNotFound {
-                obj: Box::new(obj_to_flatbuffer_struct(obj)),
+                obj: obj_fb(obj),
                 verb: verb.clone(),
             }))
         }
@@ -206,8 +204,8 @@ pub fn world_state_error_to_flatbuffer_struct(
         }
         WorldStateError::VerbDecodeError(obj, verb) => {
             common::WorldStateErrorUnion::VerbDecodeError(Box::new(common::VerbDecodeError {
-                obj: Box::new(obj_to_flatbuffer_struct(obj)),
-                verb: Box::new(symbol_to_flatbuffer_struct(verb)),
+                obj: obj_fb(obj),
+                verb: symbol_fb(verb),
             }))
         }
         WorldStateError::VerbPermissionDenied => {
@@ -217,8 +215,8 @@ pub fn world_state_error_to_flatbuffer_struct(
         }
         WorldStateError::DuplicateVerb(obj, verb) => {
             common::WorldStateErrorUnion::DuplicateVerb(Box::new(common::DuplicateVerb {
-                obj: Box::new(obj_to_flatbuffer_struct(obj)),
-                verb: Box::new(symbol_to_flatbuffer_struct(verb)),
+                obj: obj_fb(obj),
+                verb: symbol_fb(verb),
             }))
         }
         WorldStateError::FailedMatch(match_string) => {
@@ -497,11 +495,10 @@ pub fn scheduler_error_to_flatbuffer_struct(
                     "Failed to encode verbnf `where`: {e}"
                 ))
             })?;
-            let what = symbol_to_flatbuffer_struct(what);
             rpc::SchedulerErrorUnion::TaskAbortedVerbNotFound(Box::new(
                 rpc::TaskAbortedVerbNotFound {
                     where_: Box::new(where_),
-                    what: Box::new(what),
+                    what: symbol_fb(what),
                 },
             ))
         }

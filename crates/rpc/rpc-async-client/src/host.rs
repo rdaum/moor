@@ -12,12 +12,9 @@
 //
 
 use crate::{ListenersClient, pubsub_client::hosts_events_recv, rpc_client::RpcClient};
-use moor_schema::{
-    convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct},
-    rpc as moor_rpc,
-};
+use moor_schema::{convert::obj_from_flatbuffer_struct, rpc as moor_rpc};
 use rpc_common::{
-    HOST_BROADCAST_TOPIC, HostType, RpcError, mk_host_pong_msg, mk_register_host_msg,
+    HOST_BROADCAST_TOPIC, HostType, RpcError, mk_host_pong_msg, mk_register_host_msg, obj_fb,
 };
 use std::{
     net::SocketAddr,
@@ -82,7 +79,7 @@ pub async fn start_host_session(
         let listeners_fb: Vec<moor_rpc::Listener> = listener_list
             .iter()
             .map(|(obj, addr)| moor_rpc::Listener {
-                handler_object: Box::new(obj_to_flatbuffer_struct(obj)),
+                handler_object: obj_fb(obj),
                 socket_addr: addr.to_string(),
             })
             .collect();
@@ -241,7 +238,7 @@ pub async fn process_hosts_events(
                 let listeners_fb: Vec<moor_rpc::Listener> = listener_list
                     .iter()
                     .map(|(obj, addr)| moor_rpc::Listener {
-                        handler_object: Box::new(obj_to_flatbuffer_struct(obj)),
+                        handler_object: obj_fb(obj),
                         socket_addr: addr.to_string(),
                     })
                     .collect();

@@ -60,19 +60,18 @@ use moor_kernel::{
 };
 
 use moor_schema::convert::{
-    narrative_event_to_flatbuffer_struct, obj_from_ref, obj_to_flatbuffer_struct,
-    presentation_to_flatbuffer_struct, symbol_to_flatbuffer_struct, uuid_to_flatbuffer_struct,
+    narrative_event_to_flatbuffer_struct, obj_from_ref, presentation_to_flatbuffer_struct,
     var_from_ref, var_to_flatbuffer,
 };
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var};
 use rpc_common::{
-    AuthToken, ClientToken, HostType, RpcMessageError, auth_token_from_ref, client_token_from_ref,
-    extract_field_rpc, extract_host_type, extract_obj_rpc, extract_object_ref_rpc,
-    extract_string_list_rpc, extract_string_rpc, extract_symbol_rpc, extract_uuid_rpc,
-    extract_var_rpc, mk_client_attribute_set_reply, mk_daemon_to_host_ack, mk_disconnected_reply,
-    mk_new_connection_reply, mk_presentation_dismissed_reply, mk_thanks_pong_reply,
-    scheduler_error_to_flatbuffer_struct, var_to_flatbuffer_rpc,
-    verb_program_error_to_flatbuffer_struct,
+    AuthToken, ClientToken, HostType, RpcErr, RpcMessageError, auth_token_from_ref,
+    client_token_from_ref, extract_field_rpc, extract_host_type, extract_obj_rpc,
+    extract_object_ref_rpc, extract_string_list_rpc, extract_string_rpc, extract_symbol_rpc,
+    extract_uuid_rpc, extract_var_rpc, mk_client_attribute_set_reply, mk_daemon_to_host_ack,
+    mk_disconnected_reply, mk_new_connection_reply, mk_presentation_dismissed_reply,
+    mk_thanks_pong_reply, obj_fb, scheduler_error_to_flatbuffer_struct, symbol_fb, uuid_fb,
+    var_to_flatbuffer_rpc, verb_program_error_to_flatbuffer_struct,
 };
 use rusty_paseto::prelude::Key;
 use tracing::{debug, error, info, warn};
@@ -442,7 +441,7 @@ impl MessageHandler for RpcMessageHandler {
         let event = moor_rpc::HostBroadcastEvent {
             event: moor_rpc::HostBroadcastEventUnion::HostBroadcastListen(Box::new(
                 moor_rpc::HostBroadcastListen {
-                    handler_object: Box::new(obj_to_flatbuffer_struct(&handler_object)),
+                    handler_object: obj_fb(&handler_object),
                     host_type: host_type_enum,
                     port,
                     print_messages,
@@ -694,7 +693,7 @@ impl MessageHandler for RpcMessageHandler {
             let event = ClientEvent {
                 event: ClientEventUnion::PlayerSwitchedEvent(Box::new(
                     moor_rpc::PlayerSwitchedEvent {
-                        new_player: Box::new(obj_to_flatbuffer_struct(&new_player)),
+                        new_player: obj_fb(&new_player),
                         new_auth_token: Box::new(moor_rpc::AuthToken {
                             token: new_auth_token.0.clone(),
                         }),
@@ -774,14 +773,14 @@ impl RpcMessageHandler {
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         let client_token = reattach
             .client_token()
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
-            .and_then(|r| client_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
+            .rpc_err()
+            .and_then(|r| client_token_from_ref(r).rpc_err())?;
         let connection = self.client_auth(client_token.clone(), client_id)?;
 
         let auth_token = reattach
             .auth_token()
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
-            .and_then(|r| auth_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
+            .rpc_err()
+            .and_then(|r| auth_token_from_ref(r).rpc_err())?;
         let player = self.validate_auth_token(auth_token, None)?;
 
         let Some(current_player) = self.connections.player_object_for_client(client_id) else {
@@ -807,7 +806,7 @@ impl RpcMessageHandler {
                 client_token: Some(Box::new(moor_rpc::ClientToken {
                     token: client_token.0,
                 })),
-                player: Some(Box::new(obj_to_flatbuffer_struct(&player))),
+                player: Some(obj_fb(&player)),
                 player_flags,
             })),
         })
@@ -825,8 +824,8 @@ impl RpcMessageHandler {
 
         let token = pong
             .client_token()
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
-            .and_then(|r| client_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
+            .rpc_err()
+            .and_then(|r| client_token_from_ref(r).rpc_err())?;
 
         let connection = self.client_auth(token, client_id)?;
 
@@ -848,8 +847,7 @@ impl RpcMessageHandler {
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         let player = match req.auth_token() {
             Ok(Some(auth_ref)) => {
-                let auth_token =
-                    auth_token_from_ref(auth_ref).map_err(RpcMessageError::InvalidRequest)?;
+                let auth_token = auth_token_from_ref(auth_ref).rpc_err()?;
                 self.validate_auth_token(auth_token, None)?
             }
             _ => SYSTEM_OBJECT,
@@ -890,8 +888,8 @@ impl RpcMessageHandler {
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         let auth_token = attach_msg
             .auth_token()
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
-            .and_then(|r| auth_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
+            .rpc_err()
+            .and_then(|r| auth_token_from_ref(r).rpc_err())?;
         let player = self.validate_auth_token(auth_token, None)?;
 
         let handler_object =
@@ -907,9 +905,7 @@ impl RpcMessageHandler {
         let acceptable_content_types =
             self.extract_acceptable_content_types(&attach_msg, |a| a.acceptable_content_types());
 
-        let connect_type = attach_msg
-            .connect_type()
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let connect_type = attach_msg.connect_type().rpc_err()?;
 
         self.connections.new_connection(NewConnectionParams {
             client_id,
@@ -952,7 +948,7 @@ impl RpcMessageHandler {
                 client_token: Some(Box::new(moor_rpc::ClientToken {
                     token: client_token.0.clone(),
                 })),
-                player: Some(Box::new(obj_to_flatbuffer_struct(&player))),
+                player: Some(obj_fb(&player)),
                 player_flags,
             })),
         })
@@ -991,9 +987,7 @@ impl RpcMessageHandler {
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         let connection = self.extract_client_token(&detach, client_id, |d| d.client_token())?;
 
-        let disconnected = detach
-            .disconnected()
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let disconnected = detach.disconnected().rpc_err()?;
 
         if disconnected {
             // Get player before removing connection
@@ -1126,9 +1120,7 @@ impl RpcMessageHandler {
         let object = extract_object_ref_rpc(&invoke, "object", |i| i.object())?;
         let verb = extract_symbol_rpc(&invoke, "verb", |i| i.verb())?;
 
-        let args_vec = invoke
-            .args()
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let args_vec = invoke.args().rpc_err()?;
         let args: Vec<Var> = args_vec
             .iter()
             .filter_map(|v| v.ok().and_then(|v| var_from_ref(v).ok()))
@@ -1164,12 +1156,12 @@ impl RpcMessageHandler {
                     reply: DaemonToClientReplyUnion::PropertyValue(Box::new(
                         moor_rpc::PropertyValue {
                             prop_info: Box::new(common::PropInfo {
-                                definer: Box::new(obj_to_flatbuffer_struct(&propdef.definer())),
-                                location: Box::new(obj_to_flatbuffer_struct(&propdef.location())),
+                                definer: obj_fb(&propdef.definer()),
+                                location: obj_fb(&propdef.location()),
                                 name: Box::new(moor_rpc::Symbol {
                                     value: propdef.name().as_string(),
                                 }),
-                                owner: Box::new(obj_to_flatbuffer_struct(&propperms.owner())),
+                                owner: obj_fb(&propperms.owner()),
                                 r: propperms.flags().contains(PropFlag::Read),
                                 w: propperms.flags().contains(PropFlag::Write),
                                 chown: propperms.flags().contains(PropFlag::Chown),
@@ -1208,8 +1200,8 @@ impl RpcMessageHandler {
                 Ok(DaemonToClientReply {
                     reply: DaemonToClientReplyUnion::VerbValue(Box::new(moor_rpc::VerbValue {
                         verb_info: Box::new(common::VerbInfo {
-                            location: Box::new(obj_to_flatbuffer_struct(&verbdef.location())),
-                            owner: Box::new(obj_to_flatbuffer_struct(&verbdef.owner())),
+                            location: obj_fb(&verbdef.location()),
+                            owner: obj_fb(&verbdef.owner()),
                             names,
                             r: verbdef.flags().contains(VerbFlag::Read),
                             w: verbdef.flags().contains(VerbFlag::Write),
@@ -1259,9 +1251,7 @@ impl RpcMessageHandler {
 
         let obj = extract_object_ref_rpc(&props, "object", |p| p.object())?;
 
-        let inherited = props
-            .inherited()
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let inherited = props.inherited().rpc_err()?;
 
         let prop_list = scheduler_client
             .request_properties(&player, &player, &obj, inherited)
@@ -1273,12 +1263,12 @@ impl RpcMessageHandler {
         let props = prop_list
             .iter()
             .map(|(propdef, propperms)| common::PropInfo {
-                definer: Box::new(obj_to_flatbuffer_struct(&propdef.definer())),
-                location: Box::new(obj_to_flatbuffer_struct(&propdef.location())),
+                definer: obj_fb(&propdef.definer()),
+                location: obj_fb(&propdef.location()),
                 name: Box::new(moor_rpc::Symbol {
                     value: propdef.name().as_string(),
                 }),
-                owner: Box::new(obj_to_flatbuffer_struct(&propperms.owner())),
+                owner: obj_fb(&propperms.owner()),
                 r: propperms.flags().contains(PropFlag::Read),
                 w: propperms.flags().contains(PropFlag::Write),
                 chown: propperms.flags().contains(PropFlag::Chown),
@@ -1302,9 +1292,7 @@ impl RpcMessageHandler {
 
         let obj = extract_object_ref_rpc(&verbs, "object", |v| v.object())?;
 
-        let inherited = verbs
-            .inherited()
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let inherited = verbs.inherited().rpc_err()?;
 
         let verb_list = scheduler_client
             .request_verbs(&player, &player, &obj, inherited)
@@ -1335,8 +1323,8 @@ impl RpcMessageHandler {
                     },
                 ];
                 common::VerbInfo {
-                    location: Box::new(obj_to_flatbuffer_struct(&v.location())),
-                    owner: Box::new(obj_to_flatbuffer_struct(&v.owner())),
+                    location: obj_fb(&v.location()),
+                    owner: obj_fb(&v.owner()),
                     names,
                     r: v.flags().contains(VerbFlag::Read),
                     w: v.flags().contains(VerbFlag::Write),
@@ -1358,9 +1346,7 @@ impl RpcMessageHandler {
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         let player = self.extract_auth_token(&hist, |h| h.auth_token())?;
 
-        let history_recall = hist
-            .history_recall()
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let history_recall = hist.history_recall().rpc_err()?;
         let history_response = self.build_history_response(player, history_recall)?;
 
         Ok(DaemonToClientReply {
@@ -1401,10 +1387,7 @@ impl RpcMessageHandler {
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         let player = self.extract_auth_token(&dismiss, |d| d.auth_token())?;
 
-        let presentation_id = dismiss
-            .presentation_id()
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?
-            .to_string();
+        let presentation_id = dismiss.presentation_id().rpc_err()?.to_string();
 
         self.event_log.dismiss_presentation(player, presentation_id);
 
@@ -1453,9 +1436,7 @@ impl RpcMessageHandler {
 
         let verb = extract_symbol_rpc(&prog, "verb", |p| p.verb())?;
 
-        let code_vec = prog
-            .code()
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let code_vec = prog.code().rpc_err()?;
         let code: Vec<String> = code_vec
             .iter()
             .filter_map(|s| s.ok().map(|s| s.to_string()))
@@ -1525,7 +1506,7 @@ impl RpcMessageHandler {
             meta.iter()
                 .filter_map(|(key, value)| match var_to_flatbuffer(value) {
                     Ok(value_fb) => Some(moor_rpc::MetadataPair {
-                        key: Box::new(symbol_to_flatbuffer_struct(key)),
+                        key: symbol_fb(key),
                         value: Box::new(value_fb),
                     }),
                     Err(e) => {
@@ -1538,7 +1519,7 @@ impl RpcMessageHandler {
 
         let event = ClientEvent {
             event: ClientEventUnion::RequestInputEvent(Box::new(moor_rpc::RequestInputEvent {
-                request_id: Box::new(uuid_to_flatbuffer_struct(&input_request_id)),
+                request_id: uuid_fb(input_request_id),
                 metadata: metadata_fb,
             })),
         };
@@ -1553,7 +1534,7 @@ impl RpcMessageHandler {
     ) -> Result<(), Error> {
         let event = ClientEvent {
             event: ClientEventUnion::SystemMessageEvent(Box::new(moor_rpc::SystemMessageEvent {
-                player: Box::new(obj_to_flatbuffer_struct(&player)),
+                player: obj_fb(&player),
                 message,
             })),
         };
@@ -1712,7 +1693,7 @@ impl RpcMessageHandler {
             ClientEvent {
                 event: ClientEventUnion::SetConnectionOptionEvent(Box::new(
                     moor_rpc::SetConnectionOptionEvent {
-                        connection_obj: Box::new(obj_to_flatbuffer_struct(&connection_obj)),
+                        connection_obj: obj_fb(&connection_obj),
                         option_name: Box::new(moor_rpc::Symbol {
                             value: key.as_string(),
                         }),
@@ -1747,7 +1728,7 @@ impl RpcMessageHandler {
                         response: Box::new(moor_rpc::VerbProgramResponse {
                             response: VerbProgramResponseUnion::VerbProgramSuccess(Box::new(
                                 moor_rpc::VerbProgramSuccess {
-                                    obj: Box::new(obj_to_flatbuffer_struct(&obj)),
+                                    obj: obj_fb(&obj),
                                     verb_name: verb.to_string(),
                                 },
                             )),
@@ -1928,18 +1909,14 @@ impl RpcMessageHandler {
                 let contents_count = 0;
 
                 Ok(moor_rpc::ObjectInfo {
-                    obj: Box::new(obj_to_flatbuffer_struct(obj)),
+                    obj: obj_fb(obj),
                     name: attrs
                         .name()
                         .map(|n| Box::new(moor_rpc::Symbol { value: n })),
-                    parent: attrs
-                        .parent()
-                        .map(|p| Box::new(obj_to_flatbuffer_struct(&p))),
-                    owner: Box::new(obj_to_flatbuffer_struct(&attrs.owner().unwrap_or(*obj))),
+                    parent: attrs.parent().map(|p| obj_fb(&p)),
+                    owner: obj_fb(&attrs.owner().unwrap_or(*obj)),
                     flags: attrs.flags().to_u16(),
-                    location: attrs
-                        .location()
-                        .map(|l| Box::new(obj_to_flatbuffer_struct(&l))),
+                    location: attrs.location().map(|l| obj_fb(&l)),
                     contents_count,
                     verbs_count: *verbs_count as u32,
                     properties_count: *props_count as u32,
@@ -1971,9 +1948,7 @@ impl RpcMessageHandler {
         let handler_type = extract_string_rpc(&invoke, "handler_type", |i| i.handler_type())?;
 
         // Extract args for passing to the handler
-        let args_vec = invoke
-            .args()
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let args_vec = invoke.args().rpc_err()?;
         let args: Vec<Var> = args_vec
             .iter()
             .filter_map(|v| v.ok().and_then(|v| var_from_ref(v).ok()))
@@ -1983,8 +1958,7 @@ impl RpcMessageHandler {
         let player = match invoke.auth_token() {
             Ok(Some(auth_token_ref)) => {
                 // If auth token is provided, validate it and use that player
-                let auth_token = auth_token_from_ref(auth_token_ref)
-                    .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+                let auth_token = auth_token_from_ref(auth_token_ref).rpc_err()?;
                 self.validate_auth_token(auth_token, None)?
             }
             Ok(None) | Err(_) => {
@@ -2038,17 +2012,14 @@ impl RpcMessageHandler {
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         let player = match call.auth_token() {
             Ok(Some(auth_token_ref)) => {
-                let auth_token = auth_token_from_ref(auth_token_ref)
-                    .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+                let auth_token = auth_token_from_ref(auth_token_ref).rpc_err()?;
                 self.validate_auth_token(auth_token, None)?
             }
             _ => SYSTEM_OBJECT,
         };
         let verb = extract_symbol_rpc(&call, "verb", |c| c.verb())?;
 
-        let args_vec = call
-            .args()
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let args_vec = call.args().rpc_err()?;
         let args: Vec<Var> = args_vec
             .iter()
             .filter_map(|v| v.ok().and_then(|v| var_from_ref(v).ok()))

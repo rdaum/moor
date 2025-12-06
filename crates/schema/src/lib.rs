@@ -18,7 +18,18 @@
 //! domain-specific submodules.
 
 // Re-export proc macros
-pub use moor_schema_macros::{define_enum_mapping, EnumFlatbuffer};
+pub use moor_schema_macros::{EnumFlatbuffer, define_enum_mapping};
+
+/// Extension trait to convert any Display error to String
+pub trait StrErr<T> {
+    fn str_err(self) -> Result<T, String>;
+}
+
+impl<T, E: std::fmt::Display> StrErr<T> for Result<T, E> {
+    fn str_err(self) -> Result<T, String> {
+        self.map_err(|e| e.to_string())
+    }
+}
 
 pub mod common;
 pub mod event_log;

@@ -16,7 +16,7 @@
 //! This module handles conversion of narrative events, presentations, and related types.
 
 use crate::{
-    common,
+    StrErr, common,
     common::EventUnionRef,
     convert_common::{symbol_from_ref, uuid_from_ref, uuid_to_flatbuffer_struct},
     convert_errors::{error_to_flatbuffer_struct, exception_from_ref},
@@ -34,9 +34,9 @@ pub fn narrative_event_from_ref(
     let timestamp_nanos = fb_read!(event_ref, timestamp);
     let timestamp = UNIX_EPOCH + Duration::from_nanos(timestamp_nanos);
     let author_ref = fb_read!(event_ref, author);
-    let author_struct =
-        crate::var::Var::try_from(author_ref).map_err(|e| format!("Failed to convert author: {e}"))?;
-    let author = var_from_flatbuffer(&author_struct).map_err(|e| e.to_string())?;
+    let author_struct = crate::var::Var::try_from(author_ref)
+        .map_err(|e| format!("Failed to convert author: {e}"))?;
+    let author = var_from_flatbuffer(&author_struct).str_err()?;
     let event = event_from_ref(fb_read!(event_ref, event))?;
 
     Ok(NarrativeEvent {
@@ -54,7 +54,7 @@ pub fn event_from_ref(event_ref: common::EventRef<'_>) -> Result<Event, String> 
             let value_ref = fb_read!(notify, value);
             let value_struct = crate::var::Var::try_from(value_ref)
                 .map_err(|e| format!("Failed to convert value: {e}"))?;
-            let value = var_from_flatbuffer(&value_struct).map_err(|e| e.to_string())?;
+            let value = var_from_flatbuffer(&value_struct).str_err()?;
             let content_type = notify
                 .content_type()
                 .ok()
@@ -67,14 +67,13 @@ pub fn event_from_ref(event_ref: common::EventRef<'_>) -> Result<Event, String> 
                 Some(metadata_vec) => {
                     let mut metadata_result = Vec::new();
                     for metadata_ref in metadata_vec.iter() {
-                        let metadata_item =
-                            metadata_ref.map_err(|e| format!("Failed to read metadata item: {e}"))?;
+                        let metadata_item = metadata_ref
+                            .map_err(|e| format!("Failed to read metadata item: {e}"))?;
                         let key = symbol_from_ref(fb_read!(metadata_item, key))?;
                         let value_ref = fb_read!(metadata_item, value);
                         let value_struct = crate::var::Var::try_from(value_ref)
                             .map_err(|e| format!("Failed to convert metadata value: {e}"))?;
-                        let value =
-                            var_from_flatbuffer(&value_struct).map_err(|e| e.to_string())?;
+                        let value = var_from_flatbuffer(&value_struct).str_err()?;
                         metadata_result.push((key, value));
                     }
                     Some(metadata_result)

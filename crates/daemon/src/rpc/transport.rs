@@ -30,13 +30,10 @@ use super::message_handler::MessageHandler;
 use moor_common::tasks::NarrativeEvent;
 use moor_kernel::SchedulerClient;
 use moor_rpc::{HostToDaemonMessageRef, MessageTypeRef};
-use moor_schema::{
-    convert::{narrative_event_to_flatbuffer_struct, obj_to_flatbuffer_struct},
-    rpc as moor_rpc,
-};
+use moor_schema::{convert::narrative_event_to_flatbuffer_struct, rpc as moor_rpc};
 use moor_var::Obj;
 use rpc_common::{
-    CLIENT_BROADCAST_TOPIC, HOST_BROADCAST_TOPIC, RpcMessageError,
+    CLIENT_BROADCAST_TOPIC, HOST_BROADCAST_TOPIC, RpcMessageError, obj_fb,
     scheduler_error_to_flatbuffer_struct,
 };
 /// Trait for the transport layer that handles communication between hosts and the daemon
@@ -563,7 +560,7 @@ impl Transport for RpcTransport {
             let client_event = moor_rpc::ClientEvent {
                 event: moor_rpc::ClientEventUnion::NarrativeEventMessage(Box::new(
                     moor_rpc::NarrativeEventMessage {
-                        player: Box::new(obj_to_flatbuffer_struct(player)),
+                        player: obj_fb(player),
                         event: Box::new(narrative_fb),
                     },
                 )),

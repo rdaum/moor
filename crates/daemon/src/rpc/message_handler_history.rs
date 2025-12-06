@@ -12,12 +12,9 @@
 //
 
 use crate::rpc::message_handler::RpcMessageHandler;
-use moor_schema::{
-    convert::{uuid_from_ref, uuid_to_flatbuffer_struct},
-    rpc as moor_rpc,
-};
+use moor_schema::{convert::uuid_from_ref, rpc as moor_rpc};
 use moor_var::Obj;
-use rpc_common::RpcMessageError;
+use rpc_common::{RpcErr, RpcMessageError, uuid_fb};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::debug;
 use uuid::Uuid;
@@ -36,8 +33,7 @@ impl RpcMessageHandler {
                 let event_id_ref = since
                     .event_id()
                     .map_err(|_| RpcMessageError::InvalidRequest("Missing event_id".to_string()))?;
-                let since_id = uuid_from_ref(event_id_ref)
-                    .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+                let since_id = uuid_from_ref(event_id_ref).rpc_err()?;
                 let limit_val = since
                     .limit()
                     .map_err(|_| RpcMessageError::InvalidRequest("Missing limit".to_string()))?;
@@ -63,8 +59,7 @@ impl RpcMessageHandler {
                 let event_id_ref = until
                     .event_id()
                     .map_err(|_| RpcMessageError::InvalidRequest("Missing event_id".to_string()))?;
-                let until_id = uuid_from_ref(event_id_ref)
-                    .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+                let until_id = uuid_from_ref(event_id_ref).rpc_err()?;
                 let limit_val = until
                     .limit()
                     .map_err(|_| RpcMessageError::InvalidRequest("Missing limit".to_string()))?;
@@ -200,8 +195,8 @@ impl RpcMessageHandler {
             time_range_end,
             total_events: total_events_available as u64,
             has_more_before,
-            earliest_event_id: earliest_event_id.map(|id| Box::new(uuid_to_flatbuffer_struct(&id))),
-            latest_event_id: latest_event_id.map(|id| Box::new(uuid_to_flatbuffer_struct(&id))),
+            earliest_event_id: earliest_event_id.map(uuid_fb),
+            latest_event_id: latest_event_id.map(uuid_fb),
         })
     }
 }

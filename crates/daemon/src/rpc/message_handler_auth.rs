@@ -15,14 +15,14 @@ use crate::rpc::{message_handler::RpcMessageHandler, session::RpcSession};
 use moor_common::model::ObjectRef;
 use moor_kernel::{SchedulerClient, tasks::TaskNotification};
 use moor_schema::{
-    convert::{obj_to_flatbuffer_struct, symbol_from_ref, var_from_ref},
+    convert::{symbol_from_ref, var_from_ref},
     rpc as moor_rpc,
     rpc::DaemonToClientReply,
 };
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var, Variant, v_str};
 use rpc_common::{
-    AuthToken, ClientToken, MOOR_AUTH_TOKEN_FOOTER, MOOR_SESSION_TOKEN_FOOTER, RpcMessageError,
-    auth_token_from_ref, client_token_from_ref,
+    AuthToken, ClientToken, MOOR_AUTH_TOKEN_FOOTER, MOOR_SESSION_TOKEN_FOOTER, RpcErr,
+    RpcMessageError, auth_token_from_ref, client_token_from_ref, obj_fb,
 };
 use rusty_paseto::core::{
     Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
@@ -257,7 +257,7 @@ impl RpcMessageHandler {
                         token: auth_token.0.clone(),
                     })),
                     connect_type,
-                    player: Some(Box::new(obj_to_flatbuffer_struct(&player))),
+                    player: Some(obj_fb(&player)),
                     player_flags,
                 },
             )),
@@ -334,8 +334,8 @@ impl RpcMessageHandler {
         get_token: impl FnOnce(&T) -> Result<moor_rpc::ClientTokenRef, planus::Error>,
     ) -> Result<Obj, RpcMessageError> {
         let token = get_token(msg)
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
-            .and_then(|r| client_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
+            .rpc_err()
+            .and_then(|r| client_token_from_ref(r).rpc_err())?;
         self.client_auth(token, client_id)
     }
 
@@ -351,14 +351,14 @@ impl RpcMessageHandler {
     ) -> Result<(Obj, Obj), RpcMessageError> {
         // Extract and validate client token
         let client_token = get_client_token(msg)
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
-            .and_then(|r| client_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
+            .rpc_err()
+            .and_then(|r| client_token_from_ref(r).rpc_err())?;
         let connection = self.client_auth(client_token, client_id)?;
 
         // Extract and validate auth token
         let auth_token = get_auth_token(msg)
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
-            .and_then(|r| auth_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
+            .rpc_err()
+            .and_then(|r| auth_token_from_ref(r).rpc_err())?;
         let player = self.validate_auth_token(auth_token, None)?;
 
         // Verify player matches logged-in player
@@ -380,8 +380,8 @@ impl RpcMessageHandler {
         get_token: impl FnOnce(&T) -> Result<moor_rpc::AuthTokenRef, planus::Error>,
     ) -> Result<Obj, RpcMessageError> {
         let auth_token = get_token(msg)
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
-            .and_then(|r| auth_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
+            .rpc_err()
+            .and_then(|r| auth_token_from_ref(r).rpc_err())?;
         self.validate_auth_token(auth_token, None)
     }
 
@@ -402,13 +402,9 @@ impl RpcMessageHandler {
         get_local_port: impl FnOnce(&T) -> Result<u16, planus::Error>,
         get_remote_port: impl FnOnce(&T) -> Result<u16, planus::Error>,
     ) -> Result<(String, u16, u16), RpcMessageError> {
-        let hostname = get_peer_addr(msg)
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?
-            .to_string();
-        let local_port =
-            get_local_port(msg).map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
-        let remote_port =
-            get_remote_port(msg).map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let hostname = get_peer_addr(msg).rpc_err()?.to_string();
+        let local_port = get_local_port(msg).rpc_err()?;
+        let remote_port = get_remote_port(msg).rpc_err()?;
         Ok((hostname, local_port, remote_port))
     }
 

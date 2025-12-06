@@ -16,9 +16,9 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
+    Attribute, Data, DeriveInput, Error, Fields, Ident, Meta, Path, Result, Token,
     parse::{Parse, ParseStream},
     spanned::Spanned,
-    Attribute, Data, DeriveInput, Error, Fields, Ident, Meta, Path, Result, Token,
 };
 
 /// Extract the FlatBuffer type path from `#[flatbuffer(path::to::Type)]`

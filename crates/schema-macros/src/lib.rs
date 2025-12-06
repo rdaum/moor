@@ -17,7 +17,7 @@
 //! Rust domain types and FlatBuffer schema types.
 
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, DeriveInput};
+use syn::{DeriveInput, parse_macro_input};
 
 mod enum_convert;
 

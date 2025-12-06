@@ -30,6 +30,7 @@ use moor_schema::{
     event_log::{LoggedNarrativeEvent, PlayerPresentations},
 };
 use moor_var::Obj;
+use rpc_common::StrErr;
 use tracing::{debug, error, info};
 
 /// Trait abstracting event log operations for testing
@@ -1066,7 +1067,7 @@ impl EventLogOps for EventLog {
         let mut persistence = self.persistence.lock().unwrap();
         persistence
             .delete_all_events_for_player(&player_fb)
-            .map_err(|e| e.to_string())
+            .str_err()
     }
 
     fn player_event_log_stats(
@@ -1083,7 +1084,7 @@ impl EventLogOps for EventLog {
                 opt_system_time_to_nanos(since),
                 opt_system_time_to_nanos(until),
             )
-            .map_err(|e| e.to_string())
+            .str_err()
     }
 
     fn purge_player_event_log(
@@ -1096,21 +1097,19 @@ impl EventLogOps for EventLog {
         let mut persistence = self.persistence.lock().unwrap();
         let deleted_events = persistence
             .purge_events_for_player(&player_fb, opt_system_time_to_nanos(before))
-            .map_err(|e| e.to_string())?;
+            .str_err()?;
 
         if before.is_none() {
             let player_key = EventPersistence::obj_to_key(&player_fb);
             persistence
                 .presentations_partition
                 .remove(player_key.as_bytes())
-                .map_err(|e| e.to_string())?;
+                .str_err()?;
         }
 
         let mut pubkey_deleted = false;
         if drop_pubkey {
-            pubkey_deleted = persistence
-                .delete_pubkey(&player_fb)
-                .map_err(|e| e.to_string())?;
+            pubkey_deleted = persistence.delete_pubkey(&player_fb).str_err()?;
         }
 
         Ok(EventLogPurgeResult {

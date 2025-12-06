@@ -126,9 +126,7 @@ pub fn var_from_ref(var_ref: var::VarRef<'_>) -> Result<Var, String> {
 /// Convert from FlatBuffer ObjRef to moor_var::Obj
 pub fn obj_from_ref(obj_ref: common::ObjRef<'_>) -> Result<Obj, String> {
     match fb_read!(obj_ref, obj) {
-        common::ObjUnionRef::ObjId(obj_id) => {
-            Ok(Obj::mk_id(fb_read!(obj_id, id)))
-        }
+        common::ObjUnionRef::ObjId(obj_id) => Ok(Obj::mk_id(fb_read!(obj_id, id))),
         common::ObjUnionRef::UuObjId(uuobj_id) => {
             let packed_value = fb_read!(uuobj_id, packed_value);
             let (autoincrement, rng, epoch_ms) = packed_id::unpack_time_id(packed_value);
