@@ -17,7 +17,7 @@ use tmq::subscribe::Subscribe;
 use uuid::Uuid;
 
 use moor_schema::{
-    convert::{obj_from_flatbuffer_struct, var_from_flatbuffer_ref},
+    convert::{obj_from_ref, var_from_flatbuffer_ref},
     rpc,
 };
 use moor_var::{Obj, Var};
@@ -75,10 +75,7 @@ impl WorkerMessage {
                 let perms_ref = req
                     .perms()
                     .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get perms: {e}")))?;
-                let perms_obj = rpc::Obj::try_from(perms_ref).map_err(|e| {
-                    RpcError::CouldNotDecode(format!("Failed to convert perms ref: {e}"))
-                })?;
-                let perms = obj_from_flatbuffer_struct(&perms_obj).map_err(|e| {
+                let perms = obj_from_ref(perms_ref).map_err(|e| {
                     RpcError::CouldNotDecode(format!("Failed to decode perms: {e}"))
                 })?;
 

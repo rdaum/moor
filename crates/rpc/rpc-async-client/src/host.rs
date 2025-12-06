@@ -12,7 +12,7 @@
 //
 
 use crate::{ListenersClient, pubsub_client::hosts_events_recv, rpc_client::RpcClient};
-use moor_schema::{convert::obj_from_flatbuffer_struct, rpc as moor_rpc};
+use moor_schema::{convert::obj_from_ref, rpc as moor_rpc};
 use rpc_common::{
     HOST_BROADCAST_TOPIC, HostType, RpcError, mk_host_pong_msg, mk_register_host_msg, obj_fb,
 };
@@ -319,14 +319,9 @@ pub async fn process_hosts_events(
                 let handler_object_ref = listen.handler_object().map_err(|e| {
                     RpcError::CouldNotDecode(format!("Missing handler_object: {e}"))
                 })?;
-                let handler_object_struct =
-                    moor_rpc::Obj::try_from(handler_object_ref).map_err(|e| {
-                        RpcError::CouldNotDecode(format!("Failed to convert handler_object: {e}"))
-                    })?;
-                let handler_object =
-                    obj_from_flatbuffer_struct(&handler_object_struct).map_err(|e| {
-                        RpcError::CouldNotDecode(format!("Failed to decode handler_object: {e}"))
-                    })?;
+                let handler_object = obj_from_ref(handler_object_ref).map_err(|e| {
+                    RpcError::CouldNotDecode(format!("Failed to decode handler_object: {e}"))
+                })?;
 
                 let host_type_fb = listen
                     .host_type()

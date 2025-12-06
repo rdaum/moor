@@ -20,7 +20,7 @@ use crate::convert_var::var_from_flatbuffer_ref;
 use crate::{
     StrErr, common,
     common::CompileErrorUnionRef,
-    convert_common::{symbol_from_flatbuffer_struct, symbol_from_ref, symbol_to_flatbuffer_struct},
+    convert_common::{symbol_from_ref, symbol_to_flatbuffer_struct},
     convert_var::var_to_flatbuffer,
     fb_read,
 };
@@ -287,17 +287,13 @@ pub fn compilation_error_from_ref(
         CompileErrorUnionRef::DuplicateVariable(e) => {
             let ctx = compile_context_from_ref(fb_read!(e, context))?;
             let var_ref = fb_read!(e, var_name);
-            let var_struct = common::Symbol::try_from(var_ref)
-                .map_err(|e| format!("Failed to convert var_name: {e}"))?;
-            let var_name = symbol_from_flatbuffer_struct(&var_struct);
+            let var_name = symbol_from_ref(var_ref)?;
             Ok(CompileError::DuplicateVariable(ctx, var_name))
         }
         CompileErrorUnionRef::AssignToConst(e) => {
             let ctx = compile_context_from_ref(fb_read!(e, context))?;
             let var_ref = fb_read!(e, var_name);
-            let var_struct = common::Symbol::try_from(var_ref)
-                .map_err(|e| format!("Failed to convert var_name: {e}"))?;
-            let var_name = symbol_from_flatbuffer_struct(&var_struct);
+            let var_name = symbol_from_ref(var_ref)?;
             Ok(CompileError::AssignToConst(ctx, var_name))
         }
         CompileErrorUnionRef::DisabledFeature(e) => {

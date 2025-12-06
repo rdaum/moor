@@ -243,13 +243,7 @@ pub async fn oauth2_callback_handler(
             return Redirect::to("/?error=internal_error").into_response();
         };
 
-        let Ok(player_struct) = moor_rpc::Obj::try_from(player_ref) else {
-            error!("Failed to convert player");
-            return Redirect::to("/?error=internal_error").into_response();
-        };
-
-        let Ok(player_obj) = moor_schema::convert::obj_from_flatbuffer_struct(&player_struct)
-        else {
+        let Ok(player_obj) = moor_schema::convert::obj_from_ref(player_ref) else {
             error!("Failed to decode player");
             return Redirect::to("/?error=internal_error").into_response();
         };
@@ -478,17 +472,7 @@ pub async fn oauth2_account_choice_handler(
                 .into_response();
         };
 
-        let Ok(player_struct) = moor_rpc::Obj::try_from(player_ref) else {
-            error!("Failed to convert player");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Internal error"})),
-            )
-                .into_response();
-        };
-
-        let Ok(player_obj) = moor_schema::convert::obj_from_flatbuffer_struct(&player_struct)
-        else {
+        let Ok(player_obj) = moor_schema::convert::obj_from_ref(player_ref) else {
             error!("Failed to decode player");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,

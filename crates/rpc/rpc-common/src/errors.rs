@@ -20,7 +20,7 @@ use moor_schema::{
     common,
     convert::{
         compilation_error_to_flatbuffer_struct, error_to_flatbuffer_struct, exception_from_ref,
-        symbol_from_flatbuffer_struct, uuid_from_ref, var_to_flatbuffer,
+        uuid_from_ref, var_to_flatbuffer,
     },
     fb_read, rpc,
 };
@@ -71,31 +71,30 @@ pub fn worker_error_to_flatbuffer_struct(error: &WorkerError) -> rpc::WorkerErro
     rpc::WorkerError { error: error_union }
 }
 
-/// Convert from flatbuffer WorkerError struct to WorkerError
-pub fn worker_error_from_flatbuffer_struct(
-    fb_error: &rpc::WorkerError,
-) -> Result<WorkerError, Box<dyn std::error::Error>> {
-    match &fb_error.error {
-        rpc::WorkerErrorUnion::WorkerPermissionDenied(perm_denied) => {
-            Ok(WorkerError::PermissionDenied(perm_denied.message.clone()))
-        }
-        rpc::WorkerErrorUnion::WorkerInvalidRequest(invalid_req) => {
-            Ok(WorkerError::InvalidRequest(invalid_req.message.clone()))
-        }
-        rpc::WorkerErrorUnion::WorkerInternalError(internal_err) => {
-            Ok(WorkerError::InternalError(internal_err.message.clone()))
-        }
-        rpc::WorkerErrorUnion::WorkerRequestTimedOut(timeout) => {
-            Ok(WorkerError::RequestTimedOut(timeout.message.clone()))
-        }
-        rpc::WorkerErrorUnion::WorkerRequestError(req_err) => {
-            Ok(WorkerError::RequestError(req_err.message.clone()))
-        }
-        rpc::WorkerErrorUnion::WorkerDetached(detached) => {
-            Ok(WorkerError::WorkerDetached(detached.message.clone()))
-        }
-        rpc::WorkerErrorUnion::NoWorkerAvailable(no_worker) => {
-            let worker_type = symbol_from_flatbuffer_struct(&no_worker.worker_type);
+/// Convert from flatbuffer WorkerErrorRef to WorkerError
+pub fn worker_error_from_ref(fb_error: rpc::WorkerErrorRef<'_>) -> Result<WorkerError, String> {
+    match fb_read!(fb_error, error) {
+        rpc::WorkerErrorUnionRef::WorkerPermissionDenied(perm_denied) => Ok(
+            WorkerError::PermissionDenied(fb_read!(perm_denied, message).to_string()),
+        ),
+        rpc::WorkerErrorUnionRef::WorkerInvalidRequest(invalid_req) => Ok(
+            WorkerError::InvalidRequest(fb_read!(invalid_req, message).to_string()),
+        ),
+        rpc::WorkerErrorUnionRef::WorkerInternalError(internal_err) => Ok(
+            WorkerError::InternalError(fb_read!(internal_err, message).to_string()),
+        ),
+        rpc::WorkerErrorUnionRef::WorkerRequestTimedOut(timeout) => Ok(
+            WorkerError::RequestTimedOut(fb_read!(timeout, message).to_string()),
+        ),
+        rpc::WorkerErrorUnionRef::WorkerRequestError(req_err) => Ok(WorkerError::RequestError(
+            fb_read!(req_err, message).to_string(),
+        )),
+        rpc::WorkerErrorUnionRef::WorkerDetached(detached) => Ok(WorkerError::WorkerDetached(
+            fb_read!(detached, message).to_string(),
+        )),
+        rpc::WorkerErrorUnionRef::NoWorkerAvailable(no_worker) => {
+            let worker_type_ref = fb_read!(no_worker, worker_type);
+            let worker_type = symbol_from_ref(worker_type_ref)?;
             Ok(WorkerError::NoWorkerAvailable(worker_type))
         }
     }

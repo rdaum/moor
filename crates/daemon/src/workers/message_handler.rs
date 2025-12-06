@@ -26,7 +26,7 @@ use planus::Builder;
 use rpc_common::{
     StrErr, WORKER_BROADCAST_TOPIC, mk_ping_workers_msg, mk_worker_ack_reply,
     mk_worker_attached_reply, mk_worker_invalid_payload_reply, mk_worker_not_registered_reply,
-    mk_worker_request_msg, mk_worker_unknown_request_reply, worker_error_from_flatbuffer_struct,
+    mk_worker_request_msg, mk_worker_unknown_request_reply, worker_error_from_ref,
 };
 use std::{
     collections::HashMap,
@@ -330,10 +330,7 @@ fn extract_worker_error(
     error_ref: Result<moor_rpc::WorkerErrorRef, planus::Error>,
 ) -> Result<WorkerError, String> {
     let error = error_ref.map_err(|_| "Failed to read error field".to_string())?;
-    let error_obj = moor_rpc::WorkerError::try_from(error)
-        .map_err(|_| "Failed to convert error reference".to_string())?;
-    worker_error_from_flatbuffer_struct(&error_obj)
-        .map_err(|e| format!("Failed to deserialize error: {e}"))
+    worker_error_from_ref(error).map_err(|e| format!("Failed to deserialize error: {e}"))
 }
 
 impl WorkersMessageHandlerImpl {

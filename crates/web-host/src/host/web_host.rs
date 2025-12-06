@@ -23,7 +23,7 @@ use axum::{
 use eyre::eyre;
 use hickory_resolver::TokioResolver;
 use moor_common::model::ObjectRef;
-use moor_schema::{convert::obj_from_flatbuffer_struct, rpc as moor_rpc};
+use moor_schema::{convert::obj_from_ref, rpc as moor_rpc};
 use moor_var::{Obj, Symbol};
 use planus::ReadAsRoot;
 use rpc_async_client::{rpc_client::RpcClient, zmq};
@@ -346,10 +346,7 @@ impl WebHost {
                                 .player()
                                 .expect("Missing player")
                                 .expect("Player is None");
-                            let player_struct = moor_rpc::Obj::try_from(player_ref)
-                                .expect("Failed to convert player");
-                            let player = obj_from_flatbuffer_struct(&player_struct)
-                                .expect("Failed to decode player");
+                            let player = obj_from_ref(player_ref).expect("Failed to decode player");
                             debug!("Connection authenticated, player: {}", player);
                             (client_token, player)
                         } else {
@@ -470,10 +467,7 @@ impl WebHost {
                                 .player()
                                 .expect("Missing player")
                                 .expect("Player is None");
-                            let player_struct = moor_rpc::Obj::try_from(player_ref)
-                                .expect("Failed to convert player");
-                            let player = obj_from_flatbuffer_struct(&player_struct)
-                                .expect("Failed to decode player");
+                            let player = obj_from_ref(player_ref).expect("Failed to decode player");
                             (confirmed_client_token, player)
                         } else {
                             warn!("Connection reattach failed from {}", peer_addr);
@@ -694,10 +688,8 @@ impl WebHost {
                             client_token_ref.token().expect("Missing token").to_string(),
                         );
                         let objid_ref = new_conn.connection_obj().expect("Missing connection_obj");
-                        let objid_struct = moor_rpc::Obj::try_from(objid_ref)
-                            .expect("Failed to convert connection_obj");
-                        let objid = obj_from_flatbuffer_struct(&objid_struct)
-                            .expect("Failed to decode connection_obj");
+                        let objid =
+                            obj_from_ref(objid_ref).expect("Failed to decode connection_obj");
                         info!("Connection established, connection ID: {}", objid);
                         client_token
                     }

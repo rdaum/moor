@@ -17,7 +17,7 @@ use crate::{
 };
 use moor_common::tasks::WorkerError;
 use moor_schema::{
-    convert::{obj_from_flatbuffer_struct, var_from_flatbuffer_ref},
+    convert::{obj_from_ref, var_from_flatbuffer_ref},
     rpc as moor_rpc,
 };
 
@@ -260,14 +260,7 @@ async fn process_fb<ProcessFunc, Fut>(
                     return;
                 }
             };
-            let perms_obj = match moor_rpc::Obj::try_from(perms_ref) {
-                Ok(obj) => obj,
-                Err(e) => {
-                    info!("Failed to convert perms ref: {}", e);
-                    return;
-                }
-            };
-            let perms = match obj_from_flatbuffer_struct(&perms_obj) {
+            let perms = match obj_from_ref(perms_ref) {
                 Ok(obj) => obj,
                 Err(e) => {
                     info!("Failed to decode perms: {}", e);

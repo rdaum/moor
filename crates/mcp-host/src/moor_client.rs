@@ -238,13 +238,9 @@ impl MoorClient {
                                 ));
                             }
                             if let Ok(Some(player_ref)) = login_result.player() {
-                                let player_struct = moor_rpc::Obj::try_from(player_ref)
-                                    .map_err(|e| eyre!("Failed to convert player: {}", e))?;
                                 self.player = Some(
-                                    moor_schema::convert::obj_from_flatbuffer_struct(
-                                        &player_struct,
-                                    )
-                                    .map_err(|e| eyre!("Failed to decode player: {}", e))?,
+                                    moor_schema::convert::obj_from_ref(player_ref)
+                                        .map_err(|e| eyre!("Failed to decode player: {}", e))?,
                                 );
                             }
                             info!("Logged in as {:?}", self.player);
@@ -395,13 +391,9 @@ impl MoorClient {
                                 ));
                             }
                             if let Ok(Some(player_ref)) = login_result.player() {
-                                let player_struct = moor_rpc::Obj::try_from(player_ref)
-                                    .map_err(|e| eyre!("Failed to convert player: {}", e))?;
                                 self.player = Some(
-                                    moor_schema::convert::obj_from_flatbuffer_struct(
-                                        &player_struct,
-                                    )
-                                    .map_err(|e| eyre!("Failed to decode player: {}", e))?,
+                                    moor_schema::convert::obj_from_ref(player_ref)
+                                        .map_err(|e| eyre!("Failed to decode player: {}", e))?,
                                 );
                             }
                             Ok(())
