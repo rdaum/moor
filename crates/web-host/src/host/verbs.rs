@@ -19,7 +19,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use moor_common::model::ObjectRef;
-use moor_schema::{convert::var_from_flatbuffer, rpc as moor_rpc, var as moor_var_schema};
+use moor_schema::{convert::var_from_flatbuffer_ref, rpc as moor_rpc, var as moor_var_schema};
 use moor_var::Symbol;
 use planus::ReadAsRoot;
 use rpc_async_client::pubsub_client::events_recv;
@@ -214,9 +214,7 @@ pub async fn invoke_verb_handler(
 
     // Parse the FlatBuffer request body containing args as a Var (list)
     let args_var = match moor_var_schema::VarRef::read_as_root(&body) {
-        Ok(var_ref) => match var_from_flatbuffer(
-            &moor_var_schema::Var::try_from(var_ref).expect("Failed to convert"),
-        ) {
+        Ok(var_ref) => match var_from_flatbuffer_ref(var_ref) {
             Ok(v) => {
                 tracing::info!("Successfully parsed args var: {:?}", v);
                 v

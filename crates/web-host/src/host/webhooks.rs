@@ -20,7 +20,7 @@ use axum::{
 };
 use moor_common::tasks::SchedulerError;
 use moor_schema::rpc::ReplyResultRef;
-use moor_schema::{convert::var_from_flatbuffer, rpc as moor_rpc};
+use moor_schema::{convert::var_from_flatbuffer_ref, rpc as moor_rpc};
 use moor_var::{List, SYSTEM_OBJECT, Var, Variant};
 use planus::ReadAsRoot;
 use rpc_common::{mk_detach_msg, mk_invoke_system_handler_msg, scheduler_error_from_ref};
@@ -312,16 +312,7 @@ fn handle_system_handler_response(reply: moor_rpc::SystemHandlerResponseReplyRef
                 Err(response) => return *response,
             };
 
-            let converted_var = match moor_schema::var::Var::try_from(result_ref) {
-                Ok(var) => var,
-                Err(e) => {
-                    return internal_server_error(&format!(
-                        "Failed to convert FlatBuffer reference: {e}"
-                    ));
-                }
-            };
-
-            let result_var = match var_from_flatbuffer(&converted_var) {
+            let result_var = match var_from_flatbuffer_ref(result_ref) {
                 Ok(var) => var,
                 Err(e) => {
                     return internal_server_error(&format!(

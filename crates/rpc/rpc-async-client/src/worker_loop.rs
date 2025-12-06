@@ -17,8 +17,8 @@ use crate::{
 };
 use moor_common::tasks::WorkerError;
 use moor_schema::{
-    convert::{obj_from_flatbuffer_struct, var_from_flatbuffer},
-    rpc as moor_rpc, var as moor_var_schema,
+    convert::{obj_from_flatbuffer_struct, var_from_flatbuffer_ref},
+    rpc as moor_rpc,
 };
 
 use moor_var::{Obj, Symbol, Var};
@@ -288,12 +288,7 @@ async fn process_fb<ProcessFunc, Fut>(
                     let var_ref = var_ref_result.map_err(|e| {
                         rpc_common::RpcError::CouldNotDecode(format!("Failed to get var: {e}"))
                     })?;
-                    let var_struct = moor_var_schema::Var::try_from(var_ref).map_err(|e| {
-                        rpc_common::RpcError::CouldNotDecode(format!(
-                            "Failed to convert var ref: {e}"
-                        ))
-                    })?;
-                    var_from_flatbuffer(&var_struct).map_err(|e| {
+                    var_from_flatbuffer_ref(var_ref).map_err(|e| {
                         rpc_common::RpcError::CouldNotDecode(format!("Failed to decode var: {e}"))
                     })
                 })

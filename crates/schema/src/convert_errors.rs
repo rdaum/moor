@@ -16,6 +16,7 @@
 //! This module handles conversion of error types like Error, WorkerError, SchedulerError,
 //! CompileError, CommandError, VerbProgramError, and WorldStateError.
 
+use crate::convert_var::var_from_flatbuffer_ref;
 use crate::{
     StrErr, common,
     common::CompileErrorUnionRef,
@@ -25,7 +26,6 @@ use crate::{
 };
 use moor_common::model::{CompileContext, CompileError, ParseErrorDetails};
 use moor_var::Var;
-
 // ============================================================================
 // Helper functions for reducing boilerplate
 // ============================================================================
@@ -176,10 +176,8 @@ pub fn error_from_ref(error_ref: common::ErrorRef<'_>) -> Result<moor_var::Error
         .map(|s| Box::new(s.to_string()));
 
     let value = if let Ok(Some(value_var_ref)) = error_ref.value() {
-        let var_struct = crate::var::Var::try_from(value_var_ref)
-            .map_err(|e| format!("Failed to convert value ref: {e}"))?;
         Some(Box::new(
-            var_from_flatbuffer(&var_struct)
+            var_from_flatbuffer_ref(value_var_ref)
                 .map_err(|e| format!("Failed to decode error value: {e}"))?,
         ))
     } else {
@@ -204,9 +202,7 @@ pub fn exception_from_ref(
         .iter()
         .map(|var_ref_result| -> Result<Var, String> {
             let var_ref = var_ref_result.map_err(|e| format!("Failed to get stack item: {e}"))?;
-            let var_struct = crate::var::Var::try_from(var_ref)
-                .map_err(|e| format!("Failed to convert stack item: {e}"))?;
-            var_from_flatbuffer(&var_struct).map_err(|e| format!("Failed to decode stack var: {e}"))
+            var_from_flatbuffer_ref(var_ref).map_err(|e| format!("Failed to decode stack var: {e}"))
         })
         .collect();
     let stack = stack?;
@@ -217,9 +213,7 @@ pub fn exception_from_ref(
         .map(|var_ref_result| -> Result<Var, String> {
             let var_ref =
                 var_ref_result.map_err(|e| format!("Failed to get backtrace item: {e}"))?;
-            let var_struct = crate::var::Var::try_from(var_ref)
-                .map_err(|e| format!("Failed to convert backtrace item: {e}"))?;
-            var_from_flatbuffer(&var_struct)
+            var_from_flatbuffer_ref(var_ref)
                 .map_err(|e| format!("Failed to decode backtrace var: {e}"))
         })
         .collect();

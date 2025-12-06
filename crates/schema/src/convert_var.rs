@@ -25,7 +25,7 @@ use moor_var::{
     v_obj, v_str, v_sym,
 };
 use thiserror::Error;
-use var::VarUnion;
+use var::{VarUnion, VarUnionRef};
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum VarConversionError {
@@ -40,6 +40,11 @@ pub enum VarConversionError {
 
     #[error("Failed to encode Var to FlatBuffer: {0}")]
     EncodingError(String),
+}
+
+/// Helper to convert fb_read! String errors to VarConversionError
+fn fb_err(s: String) -> VarConversionError {
+    VarConversionError::DecodingError(s)
 }
 
 // ============================================================================
@@ -500,6 +505,208 @@ pub fn var_from_flatbuffer_internal(
             // Reconstruct as a regular object (operations will be blocked client-side based on metadata).
             let obj = convert_common::obj_from_flatbuffer_struct(&anon.obj)
                 .map_err(|e| VarConversionError::DecodingError(e.to_string()))?;
+            Ok(v_obj(obj))
+        }
+    }
+}
+
+// ============================================================================
+// Ref-based conversion functions (avoid intermediate owned struct copy)
+// ============================================================================
+
+/// Convert from FlatBuffer VarRef directly to moor_var::Var for database storage.
+/// Skips the intermediate owned struct conversion, saving one copy for binary/string data.
+pub fn var_from_db_flatbuffer_ref(fb_ref: var::VarRef<'_>) -> Result<Var, VarConversionError> {
+    var_from_flatbuffer_ref_internal(fb_ref, ConversionContext::Database)
+}
+
+/// Convert from FlatBuffer VarRef directly to moor_var::Var for RPC.
+/// Skips the intermediate owned struct conversion, saving one copy for binary/string data.
+pub fn var_from_flatbuffer_ref(fb_ref: var::VarRef<'_>) -> Result<Var, VarConversionError> {
+    var_from_flatbuffer_ref_internal(fb_ref, ConversionContext::Rpc)
+}
+
+/// Internal ref-based conversion with context
+fn var_from_flatbuffer_ref_internal(
+    fb_ref: var::VarRef<'_>,
+    context: ConversionContext,
+) -> Result<Var, VarConversionError> {
+    let variant = fb_ref
+        .variant()
+        .map_err(|e| fb_err(format!("Failed to read variant: {e}")))?;
+
+    match variant {
+        VarUnionRef::VarNone(_) => Ok(v_none()),
+
+        VarUnionRef::VarBool(b) => {
+            let value = b.value().map_err(|e| fb_err(format!("bool value: {e}")))?;
+            Ok(v_bool(value))
+        }
+
+        VarUnionRef::VarInt(i) => {
+            let value = i.value().map_err(|e| fb_err(format!("int value: {e}")))?;
+            Ok(v_int(value))
+        }
+
+        VarUnionRef::VarFloat(f) => {
+            let value = f.value().map_err(|e| fb_err(format!("float value: {e}")))?;
+            Ok(v_float(value))
+        }
+
+        VarUnionRef::VarStr(s) => {
+            let value = s.value().map_err(|e| fb_err(format!("str value: {e}")))?;
+            Ok(v_str(value))
+        }
+
+        VarUnionRef::VarObj(o) => {
+            let obj_ref = o.obj().map_err(|e| fb_err(format!("obj: {e}")))?;
+            let obj = convert_common::obj_from_ref(obj_ref)
+                .map_err(VarConversionError::DecodingError)?;
+            Ok(v_obj(obj))
+        }
+
+        VarUnionRef::VarErr(e) => {
+            let err_ref = e.error().map_err(|e| fb_err(format!("error: {e}")))?;
+            let error = convert_errors::error_from_ref(err_ref)
+                .map_err(VarConversionError::DecodingError)?;
+            Ok(v_error(error))
+        }
+
+        VarUnionRef::VarSym(s) => {
+            let sym_ref = s.symbol().map_err(|e| fb_err(format!("symbol: {e}")))?;
+            let sym = convert_common::symbol_from_ref(sym_ref)
+                .map_err(VarConversionError::DecodingError)?;
+            Ok(v_sym(sym))
+        }
+
+        VarUnionRef::VarBinary(b) => {
+            // Direct slice access - one copy instead of two
+            let data = b.data().map_err(|e| fb_err(format!("binary data: {e}")))?;
+            Ok(v_binary(data.to_vec()))
+        }
+
+        VarUnionRef::VarList(l) => {
+            let elements_ref = l
+                .elements()
+                .map_err(|e| fb_err(format!("list elements: {e}")))?;
+            if elements_ref.is_empty() {
+                return Ok(v_empty_list());
+            }
+            let elements: Result<Vec<_>, _> = elements_ref
+                .iter()
+                .map(|e_result| {
+                    let e = e_result.map_err(|e| fb_err(format!("list element: {e}")))?;
+                    var_from_flatbuffer_ref_internal(e, context)
+                })
+                .collect();
+            Ok(v_list(&elements?))
+        }
+
+        VarUnionRef::VarMap(m) => {
+            let pairs_ref = m.pairs().map_err(|e| fb_err(format!("map pairs: {e}")))?;
+            let pairs: Result<Vec<_>, _> = pairs_ref
+                .iter()
+                .map(|pair_result| {
+                    let pair = pair_result.map_err(|e| fb_err(format!("map pair: {e}")))?;
+                    let key_ref = pair.key().map_err(|e| fb_err(format!("map key: {e}")))?;
+                    let val_ref = pair.value().map_err(|e| fb_err(format!("map value: {e}")))?;
+                    let key = var_from_flatbuffer_ref_internal(key_ref, context)?;
+                    let value = var_from_flatbuffer_ref_internal(val_ref, context)?;
+                    Ok((key, value))
+                })
+                .collect();
+            Ok(v_map(&pairs?))
+        }
+
+        VarUnionRef::VarFlyweight(f) => {
+            let delegate_ref = f
+                .delegate()
+                .map_err(|e| fb_err(format!("flyweight delegate: {e}")))?;
+            let delegate = convert_common::obj_from_ref(delegate_ref)
+                .map_err(VarConversionError::DecodingError)?;
+
+            let slots_ref = f.slots().map_err(|e| fb_err(format!("flyweight slots: {e}")))?;
+            let slots: Result<Vec<_>, _> = slots_ref
+                .iter()
+                .map(|slot_result| {
+                    let slot = slot_result.map_err(|e| fb_err(format!("slot: {e}")))?;
+                    let name_ref = slot.name().map_err(|e| fb_err(format!("slot name: {e}")))?;
+                    let name = convert_common::symbol_from_ref(name_ref)
+                        .map_err(VarConversionError::DecodingError)?;
+                    let value_ref =
+                        slot.value().map_err(|e| fb_err(format!("slot value: {e}")))?;
+                    let value = var_from_flatbuffer_ref_internal(value_ref, context)?;
+                    Ok((name, value))
+                })
+                .collect();
+
+            let contents_ref = f
+                .contents()
+                .map_err(|e| fb_err(format!("flyweight contents: {e}")))?;
+            let contents_elements_ref = contents_ref
+                .elements()
+                .map_err(|e| fb_err(format!("contents elements: {e}")))?;
+            let contents_elements: Result<Vec<_>, _> = contents_elements_ref
+                .iter()
+                .map(|e_result| {
+                    let e = e_result.map_err(|e| fb_err(format!("contents element: {e}")))?;
+                    var_from_flatbuffer_ref_internal(e, context)
+                })
+                .collect();
+
+            let contents_var = v_list(&contents_elements?);
+            let contents = contents_var.as_list().ok_or_else(|| {
+                VarConversionError::DecodingError("Failed to convert list".to_string())
+            })?;
+
+            Ok(v_flyweight(delegate, &slots?, contents.clone()))
+        }
+
+        VarUnionRef::VarLambda(lambda_ref) => {
+            // Lambdas should never appear in RPC context
+            if context == ConversionContext::Rpc {
+                return Err(VarConversionError::DecodingError(
+                    "Unexpected lambda in RPC context".to_string(),
+                ));
+            }
+
+            // Lambda conversion is complex - convert to owned and use existing function
+            let lambda_owned: var::VarLambda = lambda_ref.try_into().map_err(|e| {
+                VarConversionError::DecodingError(format!("Failed to convert lambda ref: {e}"))
+            })?;
+
+            // Convert params
+            let params = scatter_args_from_flatbuffer(&lambda_owned.params)?;
+
+            // Convert body
+            let body = program_from_flatbuffer((*lambda_owned.body).clone())?;
+
+            // Convert captured_env
+            let captured_env: Result<Vec<Vec<Var>>, _> = lambda_owned
+                .captured_env
+                .iter()
+                .map(|frame| {
+                    frame
+                        .elements
+                        .iter()
+                        .map(|v| var_from_flatbuffer_internal(v, context))
+                        .collect()
+                })
+                .collect();
+
+            // Convert optional self_var
+            let self_var = lambda_owned
+                .self_var
+                .as_ref()
+                .map(|n| name_from_flatbuffer(n));
+
+            Ok(Var::mk_lambda(params, body, captured_env?, self_var))
+        }
+
+        VarUnionRef::VarAnonymous(anon) => {
+            let obj_ref = anon.obj().map_err(|e| fb_err(format!("anonymous obj: {e}")))?;
+            let obj = convert_common::obj_from_ref(obj_ref)
+                .map_err(VarConversionError::DecodingError)?;
             Ok(v_obj(obj))
         }
     }

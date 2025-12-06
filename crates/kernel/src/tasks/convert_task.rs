@@ -89,18 +89,14 @@ fn exception_to_flatbuffer(
     let fb_error = convert_schema::error_to_flatbuffer_struct(&exception.error)
         .map_err(|e| TaskConversionError::EncodingError(format!("Error encoding error: {e}")))?;
 
-    let fb_stack: Result<Vec<_>, _> = exception
-        .stack
-        .iter()
-        .map(convert_schema::var_to_db_flatbuffer)
-        .collect();
+    let fb_stack: Result<Vec<_>, _> = exception.stack.iter().map(var_to_db_flatbuffer).collect();
     let fb_stack = fb_stack
         .map_err(|e| TaskConversionError::VarError(format!("Error encoding stack: {e}")))?;
 
     let fb_backtrace: Result<Vec<_>, _> = exception
         .backtrace
         .iter()
-        .map(convert_schema::var_to_db_flatbuffer)
+        .map(var_to_db_flatbuffer)
         .collect();
     let fb_backtrace = fb_backtrace
         .map_err(|e| TaskConversionError::VarError(format!("Error encoding backtrace: {e}")))?;
@@ -118,19 +114,11 @@ fn exception_from_flatbuffer(
     let error = convert_schema::error_from_flatbuffer_struct(&fb.error)
         .map_err(|e| TaskConversionError::DecodingError(format!("Error decoding error: {e}")))?;
 
-    let stack: Result<Vec<_>, _> = fb
-        .stack
-        .iter()
-        .map(convert_schema::var_from_db_flatbuffer)
-        .collect();
+    let stack: Result<Vec<_>, _> = fb.stack.iter().map(var_from_db_flatbuffer).collect();
     let stack =
         stack.map_err(|e| TaskConversionError::VarError(format!("Error decoding stack: {e}")))?;
 
-    let backtrace: Result<Vec<_>, _> = fb
-        .backtrace
-        .iter()
-        .map(convert_schema::var_from_db_flatbuffer)
-        .collect();
+    let backtrace: Result<Vec<_>, _> = fb.backtrace.iter().map(var_from_db_flatbuffer).collect();
     let backtrace = backtrace
         .map_err(|e| TaskConversionError::VarError(format!("Error decoding backtrace: {e}")))?;
 
@@ -373,7 +361,7 @@ pub(crate) fn finally_reason_to_flatbuffer(
             }))
         }
         KernelFinallyReason::Return(var) => {
-            let fb_var = convert_schema::var_to_db_flatbuffer(var)
+            let fb_var = var_to_db_flatbuffer(var)
                 .map_err(|e| TaskConversionError::VarError(format!("Error encoding var: {e}")))?;
             FinallyReasonUnion::FinallyReturn(Box::new(FinallyReturn {
                 value: Box::new(fb_var),
@@ -407,7 +395,7 @@ pub(crate) fn finally_reason_from_flatbuffer(
             Ok(KernelFinallyReason::Raise(Box::new(exception)))
         }
         FinallyReasonUnion::FinallyReturn(fr) => {
-            let var = convert_schema::var_from_db_flatbuffer(&fr.value)
+            let var = var_from_db_flatbuffer(&fr.value)
                 .map_err(|e| TaskConversionError::VarError(format!("Error decoding var: {e}")))?;
             Ok(KernelFinallyReason::Return(var))
         }
@@ -470,7 +458,7 @@ pub(crate) fn scope_type_to_flatbuffer(
             key_bind,
             end_label,
         } => {
-            let fb_seq = convert_schema::var_to_db_flatbuffer(sequence).map_err(|e| {
+            let fb_seq = var_to_db_flatbuffer(sequence).map_err(|e| {
                 TaskConversionError::VarError(format!("Error encoding sequence: {e}"))
             })?;
             let fb_value_bind = name_to_stored(value_bind).map_err(|e| {
@@ -485,7 +473,7 @@ pub(crate) fn scope_type_to_flatbuffer(
                 })?;
             let fb_current_key = current_key
                 .as_ref()
-                .map(convert_schema::var_to_db_flatbuffer)
+                .map(var_to_db_flatbuffer)
                 .transpose()
                 .map_err(|e| {
                     TaskConversionError::VarError(format!("Error encoding current_key: {e}"))
@@ -506,10 +494,10 @@ pub(crate) fn scope_type_to_flatbuffer(
             loop_variable,
             end_label,
         } => {
-            let fb_current = convert_schema::var_to_db_flatbuffer(current_value).map_err(|e| {
+            let fb_current = var_to_db_flatbuffer(current_value).map_err(|e| {
                 TaskConversionError::VarError(format!("Error encoding current_value: {e}"))
             })?;
-            let fb_end = convert_schema::var_to_db_flatbuffer(end_value).map_err(|e| {
+            let fb_end = var_to_db_flatbuffer(end_value).map_err(|e| {
                 TaskConversionError::VarError(format!("Error encoding end_value: {e}"))
             })?;
             let fb_loop_var = name_to_stored(loop_variable).map_err(|e| {
@@ -552,7 +540,7 @@ pub(crate) fn scope_type_from_flatbuffer(
         ScopeTypeUnion::ScopeWhile(_) => Ok(KernelScopeType::While),
         ScopeTypeUnion::ScopeFor(_) => Ok(KernelScopeType::For),
         ScopeTypeUnion::ScopeForSequence(sfs) => {
-            let sequence = convert_schema::var_from_db_flatbuffer(&sfs.sequence).map_err(|e| {
+            let sequence = var_from_db_flatbuffer(&sfs.sequence).map_err(|e| {
                 TaskConversionError::VarError(format!("Error decoding sequence: {e}"))
             })?;
             let value_bind = name_from_stored(&sfs.value_bind).map_err(|e| {
@@ -570,7 +558,7 @@ pub(crate) fn scope_type_from_flatbuffer(
             let current_key = sfs
                 .current_key
                 .as_ref()
-                .map(|ck| convert_schema::var_from_db_flatbuffer(ck))
+                .map(|ck| var_from_db_flatbuffer(ck))
                 .transpose()
                 .map_err(|e| {
                     TaskConversionError::VarError(format!("Error decoding current_key: {e}"))
@@ -586,14 +574,12 @@ pub(crate) fn scope_type_from_flatbuffer(
             })
         }
         ScopeTypeUnion::ScopeForRange(sfr) => {
-            let current_value = convert_schema::var_from_db_flatbuffer(&sfr.current_value)
-                .map_err(|e| {
-                    TaskConversionError::VarError(format!("Error decoding current_value: {e}"))
-                })?;
-            let end_value =
-                convert_schema::var_from_db_flatbuffer(&sfr.end_value).map_err(|e| {
-                    TaskConversionError::VarError(format!("Error decoding end_value: {e}"))
-                })?;
+            let current_value = var_from_db_flatbuffer(&sfr.current_value).map_err(|e| {
+                TaskConversionError::VarError(format!("Error decoding current_value: {e}"))
+            })?;
+            let end_value = var_from_db_flatbuffer(&sfr.end_value).map_err(|e| {
+                TaskConversionError::VarError(format!("Error decoding end_value: {e}"))
+            })?;
             let loop_variable = name_from_stored(&sfr.loop_variable).map_err(|e| {
                 TaskConversionError::ProgramError(format!("Error decoding loop_variable: {e}"))
             })?;
@@ -656,9 +642,9 @@ pub(crate) fn moo_stack_frame_to_flatbuffer(
                 .iter()
                 .map(|opt_var| {
                     match opt_var {
-                        Some(v) => convert_schema::var_to_db_flatbuffer(v),
+                        Some(v) => var_to_db_flatbuffer(v),
                         // Use empty/None marker - we'll need to represent this as an empty Var
-                        None => Ok(convert_schema::var_to_db_flatbuffer(&moor_var::v_none())?),
+                        None => Ok(var_to_db_flatbuffer(&moor_var::v_none())?),
                     }
                 })
                 .collect();
@@ -670,11 +656,7 @@ pub(crate) fn moo_stack_frame_to_flatbuffer(
             TaskConversionError::VarError(format!("Error encoding environment: {e}"))
         })?;
 
-    let fb_valstack: Result<Vec<_>, _> = frame
-        .valstack
-        .iter()
-        .map(convert_schema::var_to_db_flatbuffer)
-        .collect();
+    let fb_valstack: Result<Vec<_>, _> = frame.valstack.iter().map(var_to_db_flatbuffer).collect();
     let fb_valstack = fb_valstack
         .map_err(|e| TaskConversionError::VarError(format!("Error encoding valstack: {e}")))?;
 
@@ -682,7 +664,7 @@ pub(crate) fn moo_stack_frame_to_flatbuffer(
         frame.scope_stack.iter().map(scope_to_flatbuffer).collect();
     let fb_scope_stack = fb_scope_stack?;
 
-    let fb_temp = convert_schema::var_to_db_flatbuffer(&frame.temp)
+    let fb_temp = var_to_db_flatbuffer(&frame.temp)
         .map_err(|e| TaskConversionError::VarError(format!("Error encoding temp: {e}")))?;
 
     let fb_catch_stack: Result<Vec<_>, _> = frame
@@ -705,7 +687,7 @@ pub(crate) fn moo_stack_frame_to_flatbuffer(
         .map(|(name, var)| {
             Ok(fb::CapturedVar {
                 name: Box::new(name_to_stored(name)?),
-                value: Box::new(convert_schema::var_to_db_flatbuffer(var).map_err(|e| {
+                value: Box::new(var_to_db_flatbuffer(var).map_err(|e| {
                     TaskConversionError::VarError(format!("Error encoding captured var: {e}"))
                 })?),
             })
@@ -744,7 +726,7 @@ pub(crate) fn moo_stack_frame_from_flatbuffer(
                 .vars
                 .iter()
                 .map(|v| {
-                    let var = convert_schema::var_from_db_flatbuffer(v).map_err(|e| {
+                    let var = var_from_db_flatbuffer(v).map_err(|e| {
                         TaskConversionError::VarError(format!("Error decoding var: {e}"))
                     })?;
                     // Check if this is our None marker
@@ -760,7 +742,7 @@ pub(crate) fn moo_stack_frame_from_flatbuffer(
         .valstack
         .iter()
         .map(|v| {
-            convert_schema::var_from_db_flatbuffer(v)
+            var_from_db_flatbuffer(v)
                 .map_err(|e| TaskConversionError::VarError(format!("Error decoding valstack: {e}")))
         })
         .collect();
@@ -769,7 +751,7 @@ pub(crate) fn moo_stack_frame_from_flatbuffer(
     let scope_stack: Result<Vec<_>, _> = fb.scope_stack.iter().map(scope_from_flatbuffer).collect();
     let scope_stack = scope_stack?;
 
-    let temp = convert_schema::var_from_db_flatbuffer(&fb.temp)
+    let temp = var_from_db_flatbuffer(&fb.temp)
         .map_err(|e| TaskConversionError::VarError(format!("Error decoding temp: {e}")))?;
 
     let catch_stack: Result<Vec<_>, _> = fb
@@ -792,7 +774,7 @@ pub(crate) fn moo_stack_frame_from_flatbuffer(
         .map(|c| {
             Ok((
                 name_from_stored(&c.name)?,
-                convert_schema::var_from_db_flatbuffer(&c.value).map_err(|e| {
+                var_from_db_flatbuffer(&c.value).map_err(|e| {
                     TaskConversionError::VarError(format!("Error decoding captured var: {e}"))
                 })?,
             ))
@@ -824,7 +806,7 @@ pub(crate) fn bf_frame_to_flatbuffer(
     let fb_trampoline_arg = frame
         .bf_trampoline_arg
         .as_ref()
-        .map(convert_schema::var_to_db_flatbuffer)
+        .map(var_to_db_flatbuffer)
         .transpose()
         .map_err(|e| {
             TaskConversionError::VarError(format!("Error encoding bf_trampoline_arg: {e}"))
@@ -833,7 +815,7 @@ pub(crate) fn bf_frame_to_flatbuffer(
     let fb_return_value = frame
         .return_value
         .as_ref()
-        .map(convert_schema::var_to_db_flatbuffer)
+        .map(var_to_db_flatbuffer)
         .transpose()
         .map_err(|e| TaskConversionError::VarError(format!("Error encoding return_value: {e}")))?;
 
@@ -858,7 +840,7 @@ pub(crate) fn bf_frame_from_flatbuffer(
     let bf_trampoline_arg = fb
         .bf_trampoline_arg
         .as_ref()
-        .map(|v| convert_schema::var_from_db_flatbuffer(v))
+        .map(|v| var_from_db_flatbuffer(v))
         .transpose()
         .map_err(|e| {
             TaskConversionError::VarError(format!("Error decoding bf_trampoline_arg: {e}"))
@@ -867,7 +849,7 @@ pub(crate) fn bf_frame_from_flatbuffer(
     let return_value = fb
         .return_value
         .as_ref()
-        .map(|v| convert_schema::var_from_db_flatbuffer(v))
+        .map(|v| var_from_db_flatbuffer(v))
         .transpose()
         .map_err(|e| TaskConversionError::VarError(format!("Error decoding return_value: {e}")))?;
 
@@ -927,7 +909,7 @@ pub(crate) fn activation_to_flatbuffer(
 ) -> Result<fb::Activation, TaskConversionError> {
     let fb_frame = frame_to_flatbuffer(&activation.frame)?;
 
-    let fb_this = convert_schema::var_to_db_flatbuffer(&activation.this)
+    let fb_this = var_to_db_flatbuffer(&activation.this)
         .map_err(|e| TaskConversionError::VarError(format!("Error encoding this: {e}")))?;
 
     let fb_player = convert_schema::obj_to_flatbuffer_struct(&activation.player);
@@ -935,7 +917,7 @@ pub(crate) fn activation_to_flatbuffer(
     let fb_args: Result<Vec<_>, _> = activation
         .args
         .iter()
-        .map(|v| convert_schema::var_to_db_flatbuffer(&v))
+        .map(|v| var_to_db_flatbuffer(&v))
         .collect();
     let fb_args =
         fb_args.map_err(|e| TaskConversionError::VarError(format!("Error encoding args: {e}")))?;
@@ -963,7 +945,7 @@ pub(crate) fn activation_from_flatbuffer(
 ) -> Result<KernelActivation, TaskConversionError> {
     let frame = frame_from_flatbuffer(&fb.frame)?;
 
-    let this = convert_schema::var_from_db_flatbuffer(&fb.this)
+    let this = var_from_db_flatbuffer(&fb.this)
         .map_err(|e| TaskConversionError::VarError(format!("Error decoding this: {e}")))?;
 
     let player = convert_schema::obj_from_flatbuffer_struct(&fb.player)
@@ -973,7 +955,7 @@ pub(crate) fn activation_from_flatbuffer(
         .args
         .iter()
         .map(|v| {
-            convert_schema::var_from_db_flatbuffer(v)
+            var_from_db_flatbuffer(v)
                 .map_err(|e| TaskConversionError::VarError(format!("Error decoding args: {e}")))
         })
         .collect();
@@ -1163,12 +1145,10 @@ pub(crate) fn task_start_to_flatbuffer(
             args,
             argstr,
         } => {
-            let fb_vloc = convert_schema::var_to_db_flatbuffer(vloc)
+            let fb_vloc = var_to_db_flatbuffer(vloc)
                 .map_err(|e| TaskConversionError::VarError(format!("Error encoding vloc: {e}")))?;
-            let fb_args: Result<Vec<_>, _> = args
-                .iter()
-                .map(|v| convert_schema::var_to_db_flatbuffer(&v))
-                .collect();
+            let fb_args: Result<Vec<_>, _> =
+                args.iter().map(|v| var_to_db_flatbuffer(&v)).collect();
             let fb_args = fb_args
                 .map_err(|e| TaskConversionError::VarError(format!("Error encoding args: {e}")))?;
 
@@ -1254,13 +1234,13 @@ pub(crate) fn task_start_from_flatbuffer_union(
         }
         TaskStartUnion::StartVerb(sv) => {
             let sv = sv.as_ref();
-            let vloc = convert_schema::var_from_db_flatbuffer(&sv.vloc)
+            let vloc = var_from_db_flatbuffer(&sv.vloc)
                 .map_err(|e| TaskConversionError::VarError(format!("Error decoding vloc: {e}")))?;
             let args: Result<Vec<_>, _> = sv
                 .args
                 .iter()
                 .map(|v| {
-                    convert_schema::var_from_db_flatbuffer(v).map_err(|e| {
+                    var_from_db_flatbuffer(v).map_err(|e| {
                         TaskConversionError::VarError(format!("Error decoding args: {e}"))
                     })
                 })

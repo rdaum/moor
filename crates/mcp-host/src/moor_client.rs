@@ -19,7 +19,7 @@
 use eyre::{Result, eyre};
 use moor_common::model::ObjectRef;
 use moor_common::tasks::Event;
-use moor_schema::convert::{narrative_event_from_ref, var_from_flatbuffer};
+use moor_schema::convert::{narrative_event_from_ref, var_from_flatbuffer_ref};
 use moor_schema::rpc as moor_rpc;
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
 use planus::ReadAsRoot;
@@ -657,8 +657,7 @@ impl MoorClient {
                         let result = success
                             .result()
                             .ok()
-                            .and_then(|result_ref| moor_schema::var::Var::try_from(result_ref).ok())
-                            .and_then(|result_struct| var_from_flatbuffer(&result_struct).ok())
+                            .and_then(|result_ref| var_from_flatbuffer_ref(result_ref).ok())
                             .unwrap_or(moor_var::v_none());
                         return Ok(TaskResult {
                             success: true,
@@ -1062,9 +1061,7 @@ impl MoorClient {
                         let value_ref = prop_value
                             .value()
                             .map_err(|e| eyre!("Missing value: {}", e))?;
-                        let value_struct = moor_schema::var::Var::try_from(value_ref)
-                            .map_err(|e| eyre!("Failed to convert value: {}", e))?;
-                        var_from_flatbuffer(&value_struct)
+                        var_from_flatbuffer_ref(value_ref)
                             .map_err(|e| eyre!("Failed to decode value: {}", e))
                     }
                     _ => Err(eyre!("Unexpected property response")),
@@ -1243,9 +1240,7 @@ impl MoorClient {
                         let result_ref = resolve_result
                             .result()
                             .map_err(|e| eyre!("Missing result: {}", e))?;
-                        let result_struct = moor_schema::var::Var::try_from(result_ref)
-                            .map_err(|e| eyre!("Failed to convert result: {}", e))?;
-                        var_from_flatbuffer(&result_struct)
+                        var_from_flatbuffer_ref(result_ref)
                             .map_err(|e| eyre!("Failed to decode result: {}", e))
                     }
                     _ => Err(eyre!("Unexpected resolve response")),
@@ -1298,9 +1293,7 @@ impl MoorClient {
                         let result_ref = eval_result
                             .result()
                             .map_err(|e| eyre!("Missing result: {}", e))?;
-                        let result_struct = moor_schema::var::Var::try_from(result_ref)
-                            .map_err(|e| eyre!("Failed to convert result: {}", e))?;
-                        let var = var_from_flatbuffer(&result_struct)
+                        let var = var_from_flatbuffer_ref(result_ref)
                             .map_err(|e| eyre!("Failed to decode result: {}", e))?;
                         Ok(MoorResult::Success(var))
                     }

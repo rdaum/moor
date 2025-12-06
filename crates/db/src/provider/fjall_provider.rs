@@ -541,7 +541,9 @@ use moor_common::{
     model::{ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs},
     util::BitEnum,
 };
-use moor_schema::convert::{program_to_stored, stored_to_program, var_to_db_flatbuffer};
+use moor_schema::convert::{
+    program_to_stored, stored_to_program, var_from_db_flatbuffer_ref, var_to_db_flatbuffer,
+};
 use moor_var::{Obj, Var, program::ProgramType};
 // Per-type encoding implementations
 // Each type can be encoded regardless of whether it's used as Domain or Codomain
@@ -619,16 +621,10 @@ impl EncodeFor<Var> for FjallCodec {
     }
 
     fn decode(&self, stored: Self::Stored) -> Result<Var, Error> {
-        // Parse FlatBuffer
+        // Parse FlatBuffer and convert directly from ref (avoids intermediate owned struct copy)
         let fb_ref =
             moor_schema::var::VarRef::read_as_root(&stored).map_err(|_| Error::EncodingFailure)?;
-
-        // Convert to owned struct
-        let fb_var: moor_schema::var::Var =
-            fb_ref.try_into().map_err(|_| Error::EncodingFailure)?;
-
-        // Decode to Var
-        moor_schema::convert::var_from_db_flatbuffer(&fb_var).map_err(|_| Error::EncodingFailure)
+        var_from_db_flatbuffer_ref(fb_ref).map_err(|_| Error::EncodingFailure)
     }
 }
 

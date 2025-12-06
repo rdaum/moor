@@ -17,8 +17,8 @@ use tmq::subscribe::Subscribe;
 use uuid::Uuid;
 
 use moor_schema::{
-    convert::{obj_from_flatbuffer_struct, var_from_flatbuffer},
-    rpc, var as moor_var_schema,
+    convert::{obj_from_flatbuffer_struct, var_from_flatbuffer_ref},
+    rpc,
 };
 use moor_var::{Obj, Var};
 use planus::ReadAsRoot;
@@ -91,10 +91,7 @@ impl WorkerMessage {
                         let var_ref = var_ref_result.map_err(|e| {
                             RpcError::CouldNotDecode(format!("Failed to get var: {e}"))
                         })?;
-                        let var_struct = moor_var_schema::Var::try_from(var_ref).map_err(|e| {
-                            RpcError::CouldNotDecode(format!("Failed to convert var ref: {e}"))
-                        })?;
-                        var_from_flatbuffer(&var_struct).map_err(|e| {
+                        var_from_flatbuffer_ref(var_ref).map_err(|e| {
                             RpcError::CouldNotDecode(format!("Failed to decode var: {e}"))
                         })
                     })

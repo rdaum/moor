@@ -19,6 +19,7 @@
 use moor_common::model::ObjectRef;
 use moor_var::{Obj, Symbol, Var};
 
+use crate::convert_var::var_from_flatbuffer_ref;
 use crate::{common, fb_read, packed_id, var};
 
 /// Convert from moor_var::Symbol to flatbuffer Symbol
@@ -116,11 +117,9 @@ pub fn symbol_from_ref(symbol_ref: common::SymbolRef<'_>) -> Result<Symbol, Stri
     Ok(Symbol::mk(fb_read!(symbol_ref, value)))
 }
 
-/// Convert from FlatBuffer VarBytesRef to moor_var::Var
+/// Convert from FlatBuffer VarRef to moor_var::Var
 pub fn var_from_ref(var_ref: var::VarRef<'_>) -> Result<Var, String> {
-    let var_struct = var::Var::try_from(var_ref).map_err(|_| "Failed to convert var ref")?;
-    crate::convert_var::var_from_flatbuffer(&var_struct)
-        .map_err(|e| format!("Failed to decode var: {e}"))
+    var_from_flatbuffer_ref(var_ref).map_err(|e| format!("Failed to decode var: {e}"))
 }
 
 /// Convert from FlatBuffer ObjRef to moor_var::Obj

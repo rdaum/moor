@@ -16,8 +16,8 @@
 use eyre::{anyhow, bail};
 use moor_common::model::ObjectRef;
 use moor_schema::{
-    convert::{obj_from_ref, var_from_flatbuffer},
-    rpc as moor_rpc, var as moor_var_schema,
+    convert::{obj_from_ref, var_from_flatbuffer_ref},
+    rpc as moor_rpc,
 };
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
 use planus::ReadAsRoot;
@@ -458,10 +458,8 @@ pub async fn listen_responses(
                         moor_rpc::ClientEventUnionRef::TaskSuccessEvent(task_success) => {
                             let tid = task_success.task_id().expect("Missing task_id") as usize;
                             let value_ref = task_success.result().expect("Missing result");
-                            let value_struct = moor_var_schema::Var::try_from(value_ref)
-                                .expect("Failed to convert value");
                             let v =
-                                var_from_flatbuffer(&value_struct).expect("Failed to decode value");
+                                var_from_flatbuffer_ref(value_ref).expect("Failed to decode value");
 
                             let mut tasks = event_listen_task_results.lock().await;
                             if let Some((_, notify)) = tasks.get(&tid) {

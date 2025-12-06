@@ -17,9 +17,7 @@ use crate::RpcMessageError;
 use moor_common::model::ObjectRef;
 use moor_schema::{
     StrErr,
-    convert::{
-        obj_from_ref, objectref_from_ref, symbol_from_ref, uuid_from_ref, var_from_flatbuffer,
-    },
+    convert::{obj_from_ref, objectref_from_ref, symbol_from_ref, uuid_from_ref, var_from_flatbuffer_ref},
     rpc, var,
 };
 use moor_var::{Obj, Symbol, Var};
@@ -62,9 +60,7 @@ pub fn extract_var<T>(
     get_field: impl FnOnce(&T) -> Result<var::VarRef, planus::Error>,
 ) -> Result<Var, String> {
     let field_ref = get_field(msg).map_err(|_| format!("Missing {field_name}"))?;
-    let var_struct =
-        var::Var::try_from(field_ref).map_err(|_| format!("Invalid {field_name} conversion"))?;
-    var_from_flatbuffer(&var_struct).str_err()
+    var_from_flatbuffer_ref(field_ref).str_err()
 }
 
 /// Extract a required UUID field
@@ -131,12 +127,7 @@ pub fn extract_var_list<T>(
         opt.map(|items| {
             items
                 .iter()
-                .filter_map(|item| {
-                    item.ok().and_then(|var_ref| {
-                        let var_struct = var::Var::try_from(var_ref).ok()?;
-                        var_from_flatbuffer(&var_struct).ok()
-                    })
-                })
+                .filter_map(|item| item.ok().and_then(|var_ref| var_from_flatbuffer_ref(var_ref).ok()))
                 .collect()
         })
     })
