@@ -88,27 +88,6 @@ struct Args {
     loop_iterations: usize,
 }
 
-fn calculate_percentiles(mut latencies: Vec<Duration>) -> (Duration, Duration, Duration, Duration) {
-    if latencies.is_empty() {
-        return (
-            Duration::ZERO,
-            Duration::ZERO,
-            Duration::ZERO,
-            Duration::ZERO,
-        );
-    }
-
-    latencies.sort();
-    let len = latencies.len();
-
-    let p50 = latencies[len / 2];
-    let p95 = latencies[(len * 95) / 100];
-    let p99 = latencies[(len * 99) / 100];
-    let max = latencies[len - 1];
-
-    (p50, p95, p99, max)
-}
-
 #[derive(Tabled)]
 struct BenchmarkRow {
     #[tabled(rename = "Conc")]
@@ -138,75 +117,27 @@ const PREP_NONE: i32 = -1;
 
 /// Compile a MOO program from source lines
 unsafe fn compile_verb(code_lines: &[&str]) -> Result<*mut ffi::Program, Box<dyn std::error::Error>> {
-    let mut code_list = ffi::new_list(0);
-    for line in code_lines {
-        let code_cstr = CString::new(*line)?;
-        let code_str = ffi::str_dup(code_cstr.as_ptr());
-        let mut str_var: ffi::Var = std::mem::zeroed();
-        str_var.v.str_val = code_str;
-        str_var.var_type = ffi::TYPE_STR;
-        code_list = ffi::listappend(code_list, str_var);
-    }
-
-    let mut errors: ffi::Var = std::mem::zeroed();
-    let program = ffi::parse_list_as_program(code_list, &mut errors);
-    ffi::harness_free_var(code_list);
-    if program.is_null() {
-        ffi::harness_free_var(errors);
-        return Err("Failed to compile verb".into());
-    }
-    ffi::harness_free_var(errors);
-    Ok(program)
-}
-
-/// Set up server_options with high tick limits for benchmarking.
-fn setup_server_options(player_id: i32) -> Result<(), Box<dyn std::error::Error>> {
-    const SYSTEM_OBJECT: i32 = 0;
-    const HIGH_TICKS: i32 = 100_000_000;
-
     unsafe {
-        // Create server_options object
-        let opts_oid = ffi::db_create_object();
-        if opts_oid < 0 {
-            return Err("Failed to create server_options object".into());
+        let mut code_list = ffi::new_list(0);
+        for line in code_lines {
+            let code_cstr = CString::new(*line)?;
+            let code_str = ffi::str_dup(code_cstr.as_ptr());
+            let mut str_var: ffi::Var = std::mem::zeroed();
+            str_var.v.str_val = code_str;
+            str_var.var_type = ffi::TYPE_STR;
+            code_list = ffi::listappend(code_list, str_var);
         }
 
-        let name = CString::new("server_options")?;
-        ffi::db_set_object_name(opts_oid, name.as_ptr());
-        ffi::db_set_object_owner(opts_oid, player_id);
-
-        // Add fg_ticks and bg_ticks properties to the options object
-        let fg_ticks_name = CString::new("fg_ticks")?;
-        let bg_ticks_name = CString::new("bg_ticks")?;
-
-        let mut tick_val: ffi::Var = std::mem::zeroed();
-        tick_val.var_type = ffi::TYPE_INT;
-        tick_val.v.num = HIGH_TICKS;
-
-        // PF_READ | PF_WRITE = 0o3
-        if ffi::db_add_propdef(opts_oid, fg_ticks_name.as_ptr(), tick_val, player_id, 0o3) == 0 {
-            return Err("Failed to add fg_ticks property".into());
+        let mut errors: ffi::Var = std::mem::zeroed();
+        let program = ffi::parse_list_as_program(code_list, &mut errors);
+        ffi::harness_free_var(code_list);
+        if program.is_null() {
+            ffi::harness_free_var(errors);
+            return Err("Failed to compile verb".into());
         }
-        if ffi::db_add_propdef(opts_oid, bg_ticks_name.as_ptr(), tick_val, player_id, 0o3) == 0 {
-            return Err("Failed to add bg_ticks property".into());
-        }
-
-        // Now set #0.server_options = opts_oid
-        let server_options_name = CString::new("server_options")?;
-
-        let mut obj_val: ffi::Var = std::mem::zeroed();
-        obj_val.var_type = 1; // TYPE_OBJ
-        obj_val.v.obj = opts_oid;
-
-        // Add server_options property to #0
-        if ffi::db_add_propdef(SYSTEM_OBJECT, server_options_name.as_ptr(), obj_val, player_id, 0o3) == 0 {
-            return Err("Failed to add server_options property to #0".into());
-        }
-
-        info!("Created server_options object #{} with fg_ticks={}, bg_ticks={}", opts_oid, HIGH_TICKS, HIGH_TICKS);
+        ffi::harness_free_var(errors);
+        Ok(program)
     }
-
-    Ok(())
 }
 
 /// Set up for opcode mode - a single verb that does a tight loop of arithmetic ops.
@@ -222,7 +153,7 @@ fn setup_opcode_environment(
     let mut bytecode_size: usize = 0;
 
     // Build the opcode_test verb code - tight loop doing arithmetic
-    let opcode_code = vec![
+    let opcode_code = [
         "x = 0;".to_string(),
         format!("for i in [1..{}]", loop_iterations),
         "x = x + i;".to_string(),
@@ -358,7 +289,7 @@ fn setup_test_environment(
             .collect::<Vec<_>>()
             .join(", ");
 
-        let invoke_code = vec![
+        let invoke_code = [
             format!("for i in [1..{}]", num_verb_iterations),
             format!("for o in ({{{}}})", obj_list),
             "if (o:load_test() != 1)".to_string(),
@@ -601,18 +532,22 @@ fn run_opcode_workload(
                 }
             } else {
                 // Record first value for consistency check
-                if first_value.is_none() {
-                    first_value = Some(result.return_value);
-                    eprintln!("First return value: {} (expected wrapped: {})",
-                              result.return_value, expected_sum_wrapped);
-                } else if result.return_value != first_value.unwrap() {
-                    value_errors += 1;
-                    if value_errors <= 3 {
-                        eprintln!(
-                            "Inconsistent return value! First was {}, got {}",
-                            first_value.unwrap(), result.return_value
-                        );
+                match first_value {
+                    None => {
+                        first_value = Some(result.return_value);
+                        eprintln!("First return value: {} (expected wrapped: {})",
+                                  result.return_value, expected_sum_wrapped);
                     }
+                    Some(expected) if result.return_value != expected => {
+                        value_errors += 1;
+                        if value_errors <= 3 {
+                            eprintln!(
+                                "Inconsistent return value! First was {}, got {}",
+                                expected, result.return_value
+                            );
+                        }
+                    }
+                    Some(_) => {}
                 }
             }
         }

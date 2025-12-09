@@ -612,7 +612,7 @@ fn var_from_flatbuffer_ref_internal(
 mod tests {
     use super::*;
     use moor_var::{
-        E_PERM, Obj, v_bool, v_empty_list, v_empty_str, v_err, v_float, v_int, v_none, v_obj, v_str,
+        Obj, v_obj,
     };
 
     #[test]

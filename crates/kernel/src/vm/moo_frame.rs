@@ -204,11 +204,6 @@ impl MooStackFrame {
         self.environment.set(0, pos, value);
     }
 
-    pub fn get_gvar(&self, gname: GlobalName) -> Option<&Var> {
-        let pos = gname as usize;
-        self.environment.get(0, pos)
-    }
-
     pub fn set_variable(&mut self, id: &Name, v: Var) {
         // This is a "trust us we know what we're doing" use of the explicit offset without check
         // into the names list like we did before. If the compiler produces garbage, it gets what
@@ -478,34 +473,6 @@ impl MooStackFrameBuilder {
         self.environment.set(0, GlobalName::verb as usize, verb);
         self.environment.set(0, GlobalName::args as usize, args);
         self
-    }
-
-    /// Initialize a global variable by inheriting from an activation or using a fallback.
-    /// The fallback closure is only called if the value isn't found in the source activation.
-    /// This avoids unnecessary clones when inheriting values.
-    pub(crate) fn with_global_or(
-        mut self,
-        gname: GlobalName,
-        from: Option<&crate::vm::activation::Activation>,
-        fallback: impl FnOnce() -> Var,
-    ) -> Self {
-        let pos = gname as usize;
-        let value = from
-            .and_then(|a| a.frame.get_global_variable(gname))
-            .cloned()
-            .unwrap_or_else(fallback);
-        self.environment.set(0, pos, value);
-        self
-    }
-
-    /// Initialize a global variable by inheriting from an activation or using a default value.
-    pub(crate) fn with_global_or_default(
-        self,
-        gname: GlobalName,
-        from: Option<&crate::vm::activation::Activation>,
-        default: Var,
-    ) -> Self {
-        self.with_global_or(gname, from, || default)
     }
 
     /// Bulk initialize all parsing-related globals (argstr, dobj, dobjstr, prepstr, iobj, iobjstr).

@@ -143,13 +143,6 @@ impl Frame {
         }
     }
 
-    pub fn get_global_variable(&self, gname: GlobalName) -> Option<&Var> {
-        match self {
-            Frame::Moo(frame) => frame.get_gvar(gname),
-            Frame::Bf(_) => None,
-        }
-    }
-
     pub fn set_return_value(&mut self, value: Var) {
         match self {
             Frame::Moo(frame) => {
@@ -223,7 +216,6 @@ impl Activation {
             unimplemented!("Only MOO programs are supported")
         };
 
-        // Use builder pattern for safe, ergonomic initialization
         let moo_frame = MooStackFrame::builder(program)
             .with_core_globals(
                 this.clone(),
