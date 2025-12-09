@@ -166,7 +166,7 @@ impl<W: io::Write> TextdumpWriter<W> {
                 self.writer,
                 "{}\n{}",
                 VarType::TYPE_SYMBOL as i64,
-                s.as_arc_string()
+                s.as_arc_str()
             )?,
             Variant::Obj(o) => {
                 if o.is_anonymous() {

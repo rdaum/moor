@@ -16,7 +16,7 @@
 use std::sync::Arc;
 use tracing::warn;
 
-use moor_var::{ErrorCode, Symbol, Var, Variant, v_arc_string, v_int, v_sym};
+use moor_var::{ErrorCode, Symbol, Var, Variant, v_arc_str, v_int, v_sym};
 
 use crate::{
     Op::{
@@ -665,7 +665,7 @@ impl CodegenState {
                 self.generate_expr(delegate.as_ref())?;
                 for (k, v) in slots {
                     self.generate_expr(v)?;
-                    self.generate_expr(&Expr::Value(v_arc_string(k.as_arc_string())))?;
+                    self.generate_expr(&Expr::Value(v_arc_str(k.as_arc_str())))?;
                 }
                 match contents {
                     Some(expr) => self.generate_expr(expr.as_ref())?,

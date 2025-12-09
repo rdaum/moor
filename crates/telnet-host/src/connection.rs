@@ -485,7 +485,7 @@ impl TelnetConnection {
         option_name: Symbol,
         value: Option<Var>,
     ) -> Result<(), eyre::Error> {
-        let option_str = option_name.as_arc_string();
+        let option_str = option_name.as_arc_str();
 
         match option_str.as_str() {
             "binary" => {
@@ -1913,7 +1913,7 @@ fn output_format(
 ) -> Result<FormattedOutput, eyre::Error> {
     match content.variant() {
         Variant::Str(s) => output_str_format(s.as_str(), content_type, width),
-        Variant::Sym(s) => output_str_format(&s.as_arc_string(), content_type, width),
+        Variant::Sym(s) => output_str_format(&s.as_arc_str(), content_type, width),
         Variant::List(l) => {
             // If the content is a list, it must be a list of strings.
             let mut output = String::new();
@@ -1940,7 +1940,7 @@ fn output_str_format(
     let Some(content_type) = content_type else {
         return Ok(FormattedOutput::Plain(content.to_string()));
     };
-    let content_type = content_type.as_arc_string();
+    let content_type = content_type.as_arc_str();
     Ok(match content_type.as_str() {
         CONTENT_TYPE_MARKDOWN | CONTENT_TYPE_MARKDOWN_SLASH => {
             FormattedOutput::Rich(markdown_to_ansi_with_width(content, width))

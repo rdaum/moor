@@ -52,7 +52,7 @@ impl ObjectRef {
             ObjectRef::SysObj(symbols) => {
                 let mut s = String::new();
                 for sym in symbols {
-                    s.push_str(&sym.as_arc_string());
+                    s.push_str(&sym.as_arc_str());
                     s.push('.');
                 }
                 format!("sysobj:{s}")

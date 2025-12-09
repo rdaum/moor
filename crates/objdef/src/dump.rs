@@ -20,7 +20,7 @@ use moor_compiler::{
     ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition, program_to_tree, to_literal,
     to_literal_objsub, unparse,
 };
-use moor_var::{NOTHING, Obj, Symbol, program::ProgramType, v_arc_string, v_str, v_string};
+use moor_var::{NOTHING, Obj, Symbol, program::ProgramType, v_arc_str, v_str, v_string};
 use std::{collections::HashMap, io::Write, path::Path};
 use thiserror::Error;
 use tracing::info;
@@ -154,9 +154,9 @@ pub fn collect_object(
 
     // Alphabetize properties. Verbs should remain in their original order.
     od.property_definitions
-        .sort_by(|a, b| a.name.as_arc_string().cmp(&b.name.as_arc_string()));
+        .sort_by(|a, b| a.name.as_arc_str().cmp(&b.name.as_arc_str()));
     od.property_overrides
-        .sort_by(|a, b| a.name.as_arc_string().cmp(&b.name.as_arc_string()));
+        .sort_by(|a, b| a.name.as_arc_str().cmp(&b.name.as_arc_str()));
     Ok((num_verbdefs, num_propdefs, num_propoverrides, od))
 }
 
@@ -180,15 +180,15 @@ fn canon_name(oid: &Obj, index_names: &HashMap<Obj, String>) -> String {
 }
 
 fn propname(pname: Symbol) -> String {
-    if !pname.as_arc_string().is_empty()
+    if !pname.as_arc_str().is_empty()
         && pname
             .to_string()
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '_')
     {
-        (*pname.as_arc_string()).clone()
+        pname.as_arc_str().to_string()
     } else {
-        let name = v_arc_string(pname.as_arc_string());
+        let name = v_arc_str(pname.as_arc_str());
         to_literal(&name)
     }
 }
@@ -227,7 +227,7 @@ fn extract_object_constants(
             let id_str = if let Some(s) = id_value.as_string() {
                 s.to_string()
             } else if let Ok(sym) = id_value.as_symbol() {
-                sym.as_arc_string().to_string()
+                sym.as_arc_str().to_string()
             } else {
                 continue;
             };
@@ -270,7 +270,7 @@ fn extract_hierarchy_path(od: &ObjectDefinition) -> Vec<String> {
                     if let Some(s) = v.as_string() {
                         Some(s.to_string())
                     } else if let Ok(sym) = v.as_symbol() {
-                        Some(sym.as_arc_string().to_string())
+                        Some(sym.as_arc_str().to_string())
                     } else {
                         None
                     }
@@ -282,7 +282,7 @@ fn extract_hierarchy_path(od: &ObjectDefinition) -> Vec<String> {
             return vec![s.to_string()];
         }
         if let Ok(sym) = value.as_symbol() {
-            return vec![sym.as_arc_string().to_string()];
+            return vec![sym.as_arc_str().to_string()];
         }
     }
 
@@ -557,7 +557,7 @@ fn dump_verb(
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '_')
     {
-        (*v.names[0].as_arc_string()).clone()
+        v.names[0].as_arc_str().to_string()
     } else {
         let names = v
             .names

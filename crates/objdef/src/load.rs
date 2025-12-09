@@ -673,7 +673,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         ObjdefLoaderError::CouldNotDefineProperty(
                             path.to_string_lossy().to_string(),
                             *obj,
-                            (*pd.name.as_arc_string()).clone(),
+                            pd.name.as_arc_str().to_string(),
                             wse,
                         )
                     })?;
@@ -738,7 +738,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     ObjdefLoaderError::CouldNotDefineProperty(
                         path.to_string_lossy().to_string(),
                         obj,
-                        (*prop_def.name.as_arc_string()).clone(),
+                        prop_def.name.as_arc_str().to_string(),
                         wse,
                     )
                 })?;
@@ -758,7 +758,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     ObjdefLoaderError::CouldNotDefineProperty(
                         path.to_string_lossy().to_string(),
                         obj,
-                        (*prop_def.name.as_arc_string()).clone(),
+                        prop_def.name.as_arc_str().to_string(),
                         wse,
                     )
                 })?;
@@ -781,7 +781,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         ObjdefLoaderError::CouldNotOverrideProperty(
                             path.to_string_lossy().to_string(),
                             *obj,
-                            (*pv.name.as_arc_string()).clone(),
+                            pv.name.as_arc_str().to_string(),
                             wse,
                         )
                     })?;
@@ -843,7 +843,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     ObjdefLoaderError::CouldNotOverrideProperty(
                         path.to_string_lossy().to_string(),
                         obj,
-                        (*prop_override.name.as_arc_string()).clone(),
+                        prop_override.name.as_arc_str().to_string(),
                         wse,
                     )
                 })?;
@@ -1142,7 +1142,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                             ObjdefLoaderError::CouldNotDefineProperty(
                                 source_name.clone(),
                                 target_oid,
-                                (*prop_def.name().as_arc_string()).clone(),
+                                prop_def.name().as_arc_str().to_string(),
                                 e,
                             )
                         })?;

@@ -153,7 +153,7 @@ pub fn make_textdump(tx: &dyn SnapshotInterface, version: String) -> Textdump {
                 let name = db_verbdef
                     .names()
                     .iter()
-                    .map(|s| (*s.as_arc_string()).clone())
+                    .map(|s| s.as_arc_str().to_string())
                     .collect::<Vec<_>>()
                     .join(" ");
                 let owner = db_verbdef.owner();

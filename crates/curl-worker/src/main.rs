@@ -315,11 +315,11 @@ async fn perform_http_request(
     };
 
     info!(
-        method = method.as_arc_string().as_str(),
+        method = method.as_arc_str().as_str(),
         url = url.as_str(),
         "HTTP request"
     );
-    let response = match method.as_arc_string().to_lowercase().as_str() {
+    let response = match method.as_arc_str().to_lowercase().as_str() {
         "get" => {
             let client = client.get(url);
             let client = if let Some(headers) = headers {
@@ -371,7 +371,7 @@ async fn perform_http_request(
         _ => {
             return Err(WorkerError::RequestError(format!(
                 "Unsupported HTTP method ({})",
-                method.as_arc_string()
+                method.as_arc_str()
             )));
         }
     };

@@ -27,7 +27,7 @@ use moor_common::{
 };
 use moor_compiler::{BUILTINS, Label, Offset, to_literal};
 use moor_var::{
-    Error, NOTHING, Var, v_arc_string, v_bool, v_err, v_error, v_int, v_list, v_none, v_obj, v_str,
+    Error, NOTHING, Var, v_arc_str, v_bool, v_err, v_error, v_int, v_list, v_none, v_obj, v_str,
     v_string,
 };
 use tracing::warn;
@@ -78,7 +78,7 @@ impl VMExecState {
                     let bf_name = BUILTINS.name_of(bf_frame.bf_id).unwrap();
                     vec![
                         a.this.clone(),
-                        v_arc_string(bf_name.as_arc_string()),
+                        v_arc_str(bf_name.as_arc_str()),
                         v_obj(a.permissions),
                         v_obj(NOTHING),
                         v_obj(a.player),
@@ -157,7 +157,7 @@ impl VMExecState {
             format!(
                 "{}:{} line: {:?}",
                 to_literal(&a.this),
-                a.verb_name.as_arc_string(),
+                a.verb_name.as_arc_str(),
                 a.frame.find_line_no()
             )
         });

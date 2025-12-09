@@ -48,7 +48,7 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Variant::List(_) => result.push_str("{list}"),
             Variant::Map(_) => result.push_str("[map]"),
             Variant::Sym(s) => result.push_str(&s.to_string()),
-            Variant::Err(e) => result.push_str(&e.name().as_arc_string()),
+            Variant::Err(e) => result.push_str(&e.name().as_arc_str()),
             Variant::Flyweight(_) => result.push_str("<flyweight>"),
             Variant::Lambda(l) => {
                 use moor_var::program::opcode::ScatterLabel;

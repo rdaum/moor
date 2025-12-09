@@ -25,7 +25,7 @@ use lazy_static::lazy_static;
 use moor_compiler::{Op, to_literal};
 use moor_var::{
     E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, Error, IndexMode, Obj, Symbol,
-    TypeClass, Var, VarType, program::names::Name, v_arc_string, v_bool, v_bool_int, v_empty_list,
+    TypeClass, Var, VarType, program::names::Name, v_arc_str, v_bool, v_bool_int, v_empty_list,
     v_empty_map, v_err, v_error, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_sym,
 };
 use std::time::Duration;
@@ -329,11 +329,12 @@ pub fn moo_frame_execute(
                 // For object ranges, only numeric OIDs can be iterated (not UUIDs or anonymous)
                 if let (Some(start_obj), Some(end_obj)) =
                     (start_val.as_object(), end_val.as_object())
-                    && (!start_obj.is_oid() || !end_obj.is_oid()) {
-                        return ExecutionResult::RaiseError(
-                            E_TYPE.msg("for-range requires numeric object IDs, not UUIDs"),
-                        );
-                    }
+                    && (!start_obj.is_oid() || !end_obj.is_oid())
+                {
+                    return ExecutionResult::RaiseError(
+                        E_TYPE.msg("for-range requires numeric object IDs, not UUIDs"),
+                    );
+                }
 
                 // If start > end, jump to end immediately (empty range)
                 if start_val > end_val {
@@ -381,9 +382,10 @@ pub fn moo_frame_execute(
                     if i == i64::MAX {
                         // Decrement end_value instead to avoid overflow
                         if let Some(e) = end_value.as_integer()
-                            && e > i64::MIN {
-                                *end_value = v_int(e - 1);
-                            }
+                            && e > i64::MIN
+                        {
+                            *end_value = v_int(e - 1);
+                        }
                         current_val.clone()
                     } else {
                         v_int(i + 1)
@@ -401,9 +403,11 @@ pub fn moo_frame_execute(
                     if obj_id == i32::MAX {
                         // Decrement end_value instead to avoid overflow
                         if let Some(e) = end_value.as_object()
-                            && e.is_oid() && e.id().0 > i32::MIN {
-                                *end_value = v_obj(Obj::mk_id(e.id().0 - 1));
-                            }
+                            && e.is_oid()
+                            && e.id().0 > i32::MIN
+                        {
+                            *end_value = v_obj(Obj::mk_id(e.id().0 - 1));
+                        }
                         current_val.clone()
                     } else {
                         v_obj(Obj::mk_id(obj_id + 1))
@@ -1306,7 +1310,7 @@ fn get_property(
                         if features_config.use_symbols_in_builtins {
                             v_sym(*k)
                         } else {
-                            v_arc_string(k.as_arc_string())
+                            v_arc_str(k.as_arc_str())
                         },
                         v.clone(),
                     )

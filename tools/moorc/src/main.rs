@@ -413,7 +413,7 @@ fn main() -> Result<(), eyre::Report> {
             if let Ok(verbs) = tx.verbs(&wizard, &o) {
                 for verb in verbs.iter() {
                     for name in verb.names() {
-                        if name.as_arc_string().starts_with("test_") {
+                        if name.as_arc_str().starts_with("test_") {
                             unit_tests.push((o, *name));
                         }
                     }

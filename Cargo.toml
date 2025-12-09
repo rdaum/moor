@@ -163,6 +163,7 @@ chrono-tz = "0.10"
 iana-time-zone = "0.1"
 
 # Text Processing & Regex
+arcstr = "1.2"
 encoding_rs = "0.8"
 natord = "1.0"
 onig = { version = "6.5", default-features = false }

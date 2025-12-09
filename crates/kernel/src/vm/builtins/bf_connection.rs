@@ -24,7 +24,7 @@ use moor_common::tasks::Event::{Present, Unpresent};
 use moor_common::tasks::{NarrativeEvent, Presentation, SessionError};
 use moor_var::VarType::TYPE_STR;
 use moor_var::{
-    E_ARGS, E_INVARG, E_PERM, E_TYPE, Sequence, Symbol, Var, Variant, v_arc_string, v_float, v_int,
+    E_ARGS, E_INVARG, E_PERM, E_TYPE, Sequence, Symbol, Var, Variant, v_arc_str, v_float, v_int,
     v_list, v_list_iter, v_obj, v_str, v_string, v_sym,
 };
 use std::time::{Duration, SystemTime};
@@ -182,7 +182,7 @@ fn bf_connections(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 detail
                     .acceptable_content_types
                     .iter()
-                    .map(|ct| v_arc_string(ct.as_arc_string())),
+                    .map(|ct| v_arc_str(ct.as_arc_str())),
             )
         };
 
@@ -350,7 +350,7 @@ fn bf_workers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let worker_type = if bf_args.config.symbol_type {
             v_sym(worker_info.worker_type)
         } else {
-            v_arc_string(worker_info.worker_type.as_arc_string())
+            v_arc_str(worker_info.worker_type.as_arc_str())
         };
 
         v_list(&[

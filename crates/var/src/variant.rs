@@ -1248,7 +1248,7 @@ impl ByteSized for Var {
     fn size_bytes(&self) -> usize {
         match self.variant() {
             Variant::List(l) => l.iter().map(|e| e.size_bytes()).sum::<usize>(),
-            Variant::Str(s) => s.as_arc_string().len(),
+            Variant::Str(s) => s.as_arc_str().len(),
             Variant::Map(m) => m
                 .iter()
                 .map(|(k, v)| k.size_bytes() + v.size_bytes())
@@ -1338,7 +1338,7 @@ pub fn v_string(s: String) -> Var {
     Var::mk_str(&s)
 }
 
-pub fn v_arc_string(s: Arc<String>) -> Var {
+pub fn v_arc_str(s: arcstr::ArcStr) -> Var {
     let str_val = crate::string::Str::mk_arc_str(s);
     Var::from_str_type(str_val)
 }

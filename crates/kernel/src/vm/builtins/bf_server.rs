@@ -55,8 +55,8 @@ use moor_db::{
 };
 use moor_var::{
     E_ARGS, E_INTRPT, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Sequence, Var,
-    VarType::TYPE_NONE, v_arc_string, v_bool_int, v_float, v_int, v_list, v_list_iter, v_map,
-    v_none, v_obj, v_str, v_string, v_sym,
+    VarType::TYPE_NONE, v_arc_str, v_bool_int, v_float, v_int, v_list, v_list_iter, v_map, v_none,
+    v_obj, v_str, v_string, v_sym,
 };
 
 /// Placeholder function for unimplemented builtins.
@@ -67,7 +67,7 @@ pub(crate) fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     );
     Err(BfErr::Raise(E_INVIND.with_msg_and_value(
         || format!("Builtin {} is not implemented", bf_args.name),
-        v_arc_string(bf_args.name.as_arc_string()),
+        v_arc_str(bf_args.name.as_arc_str()),
     )))
 }
 
@@ -471,7 +471,7 @@ fn bf_function_info_to_list(bf: &Builtin) -> Var {
     });
 
     v_list(&[
-        v_arc_string(bf.name.as_arc_string()),
+        v_arc_str(bf.name.as_arc_str()),
         min_args,
         max_args,
         v_list_iter(types),
@@ -776,7 +776,7 @@ fn counter_map(counters: &[&PerfCounter], use_symbols: bool) -> Var {
         let op_name = if use_symbols {
             v_sym(c.operation)
         } else {
-            v_arc_string(c.operation.as_arc_string())
+            v_arc_str(c.operation.as_arc_str())
         };
 
         result.push((

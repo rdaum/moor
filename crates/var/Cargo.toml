@@ -38,6 +38,7 @@ ahash.workspace = true
 imbl.workspace = true
 
 # Text Processing & Regex
+arcstr.workspace = true
 unicase.workspace = true
 
 # Error Handling

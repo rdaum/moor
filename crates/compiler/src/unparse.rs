@@ -216,7 +216,7 @@ impl<'a> Unparse<'a> {
                 let mut buffer = String::new();
                 match function {
                     crate::ast::CallTarget::Builtin(symbol) => {
-                        buffer.push_str(&symbol.as_arc_string());
+                        buffer.push_str(&symbol.as_arc_str());
                     }
                     crate::ast::CallTarget::Expr(expr) => {
                         buffer.push_str(self.unparse_expr(expr)?.as_str());
@@ -317,7 +317,7 @@ impl<'a> Unparse<'a> {
                         }
                     }
                     let name = self.unparse_variable(&var.id);
-                    buffer.push_str(&name.as_arc_string());
+                    buffer.push_str(&name.as_arc_str());
                     if let Some(expr) = &var.expr {
                         buffer.push_str(" = ");
                         buffer.push_str(self.unparse_expr(expr)?.as_str());
@@ -352,7 +352,7 @@ impl<'a> Unparse<'a> {
                 if !slots.is_empty() {
                     for (slot, value) in slots.iter() {
                         buffer.push_str(", .");
-                        buffer.push_str(&slot.as_arc_string());
+                        buffer.push_str(&slot.as_arc_str());
                         buffer.push_str(" = ");
                         buffer.push_str(self.unparse_expr(value)?.as_str());
                     }
@@ -377,7 +377,7 @@ impl<'a> Unparse<'a> {
                 buffer.push_str(&self.unparse_expr(producer_expr)?);
                 buffer.push_str(" for ");
                 let name = self.unparse_variable(variable);
-                buffer.push_str(&name.as_arc_string());
+                buffer.push_str(&name.as_arc_str());
                 buffer.push_str(" in [");
                 buffer.push_str(&self.unparse_expr(from)?);
                 buffer.push_str("..");
@@ -399,7 +399,7 @@ impl<'a> Unparse<'a> {
                 buffer.push_str(&self.unparse_expr(producer_expr)?);
                 buffer.push_str(" for ");
                 let name = self.unparse_variable(variable);
-                buffer.push_str(&name.as_arc_string());
+                buffer.push_str(&name.as_arc_str());
                 buffer.push_str(" in (");
                 buffer.push_str(&self.unparse_expr(list)?);
                 buffer.push_str(") }");
@@ -428,7 +428,7 @@ impl<'a> Unparse<'a> {
                         }
                     }
                     let name = self.unparse_variable(&param.id);
-                    buffer.push_str(&name.as_arc_string());
+                    buffer.push_str(&name.as_arc_str());
                     if let Some(expr) = &param.expr {
                         buffer.push_str(" = ");
                         buffer.push_str(self.unparse_expr(expr)?.as_str());
@@ -538,7 +538,7 @@ impl<'a> Unparse<'a> {
                 let mut base_str = "while ".to_string();
                 if let Some(id) = id {
                     let id = self.unparse_variable(id);
-                    base_str.push_str(&id.as_arc_string());
+                    base_str.push_str(&id.as_arc_str());
                 }
                 writeln!(writer, "{indent_str}{base_str}({cond_frag})")?;
                 self.unparse_stmts(body, writer, indent + 1)?;
@@ -552,7 +552,7 @@ impl<'a> Unparse<'a> {
                 if let Some(id) = id {
                     base_str.push(' ');
                     let id = self.unparse_variable(id);
-                    base_str.push_str(&id.as_arc_string());
+                    base_str.push_str(&id.as_arc_str());
                 }
                 writeln!(writer, "{indent_str}{base_str} ({delay_frag})")?;
                 self.unparse_stmts(body, writer, indent + 1)?;
@@ -571,7 +571,7 @@ impl<'a> Unparse<'a> {
                     let mut base_str = "except ".to_string();
                     if let Some(id) = &except.id {
                         let id = self.unparse_variable(id);
-                        base_str.push_str(&id.as_arc_string());
+                        base_str.push_str(&id.as_arc_str());
                         base_str.push(' ');
                     }
                     let catch_codes = self.unparse_catch_codes(&except.codes)?.to_uppercase();
@@ -599,7 +599,7 @@ impl<'a> Unparse<'a> {
                 write!(writer, "{indent_str}break")?;
                 if let Some(exit) = &exit {
                     let exit_name = self.unparse_variable(exit);
-                    write!(writer, " {}", exit_name.as_arc_string())?;
+                    write!(writer, " {}", exit_name.as_arc_str())?;
                 }
                 writeln!(writer, ";")?;
                 Ok(())
@@ -608,7 +608,7 @@ impl<'a> Unparse<'a> {
                 write!(writer, "{indent_str}continue")?;
                 if let Some(exit) = &exit {
                     let exit_name = self.unparse_variable(exit);
-                    write!(writer, " {}", exit_name.as_arc_string())?;
+                    write!(writer, " {}", exit_name.as_arc_str())?;
                 }
                 writeln!(writer, ";")?;
                 Ok(())
@@ -944,7 +944,7 @@ pub fn to_literal(v: &Var) -> String {
             if !fl.slots().is_empty() {
                 for (k, v) in fl.slots().iter() {
                     result.push_str(", .");
-                    result.push_str(&k.as_arc_string());
+                    result.push_str(&k.as_arc_str());
                     result.push_str(" = ");
                     result.push_str(to_literal(v).as_str());
                 }
@@ -965,7 +965,7 @@ pub fn to_literal(v: &Var) -> String {
             result
         }
         Variant::Sym(s) => {
-            format!("'{}", s.as_arc_string())
+            format!("'{}", s.as_arc_str())
         }
         Variant::Binary(b) => {
             let encoded = general_purpose::URL_SAFE.encode(b.as_bytes());
@@ -984,21 +984,21 @@ pub fn to_literal(v: &Var) -> String {
                         ScatterLabel::Required(name) => {
                             // Find the variable in lambda body's var_names and get its symbol
                             if let Some(var) = l.0.body.var_names().find_variable(name) {
-                                var.to_symbol().as_arc_string().to_string()
+                                var.to_symbol().as_arc_str().to_string()
                             } else {
                                 format!("param_{}", name.0) // Fallback if name not found
                             }
                         }
                         ScatterLabel::Optional(name, _) => {
                             if let Some(var) = l.0.body.var_names().find_variable(name) {
-                                format!("?{}", var.to_symbol().as_arc_string())
+                                format!("?{}", var.to_symbol().as_arc_str())
                             } else {
                                 format!("?param_{}", name.0)
                             }
                         }
                         ScatterLabel::Rest(name) => {
                             if let Some(var) = l.0.body.var_names().find_variable(name) {
-                                format!("@{}", var.to_symbol().as_arc_string())
+                                format!("@{}", var.to_symbol().as_arc_str())
                             } else {
                                 format!("@param_{}", name.0)
                             }
@@ -1054,7 +1054,7 @@ pub fn to_literal(v: &Var) -> String {
                                 // Include both variable name and value for clarity
                                 captured_vars.push(format!(
                                     "{}: {}",
-                                    symbol.as_arc_string(),
+                                    symbol.as_arc_str(),
                                     to_literal(var_value)
                                 ));
                             }
@@ -1196,7 +1196,7 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
             if !fl.slots().is_empty() {
                 for (k, v) in fl.slots().iter() {
                     result.push_str(", .");
-                    result.push_str(&k.as_arc_string());
+                    result.push_str(&k.as_arc_str());
                     result.push_str(" = ");
                     result.push_str(
                         to_literal_objsub(v, name_subs, indent_depth + INDENT_LEVEL).as_str(),
@@ -1238,7 +1238,7 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
                             l.0.body
                                 .var_names()
                                 .ident_for_name(name)
-                                .map(|s| s.as_arc_string().to_string())
+                                .map(|s| s.as_arc_str().to_string())
                                 .unwrap_or_else(|| "x".to_string())
                         }
                         ScatterLabel::Optional(name, _) => {
@@ -1246,7 +1246,7 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
                                 l.0.body
                                     .var_names()
                                     .ident_for_name(name)
-                                    .map(|s| s.as_arc_string().to_string())
+                                    .map(|s| s.as_arc_str().to_string())
                                     .unwrap_or_else(|| "x".to_string());
                             format!("?{var_name}")
                         }
@@ -1255,7 +1255,7 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
                                 l.0.body
                                     .var_names()
                                     .ident_for_name(name)
-                                    .map(|s| s.as_arc_string().to_string())
+                                    .map(|s| s.as_arc_str().to_string())
                                     .unwrap_or_else(|| "x".to_string());
                             format!("@{var_name}")
                         }
@@ -1297,7 +1297,7 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
                         if let Some(symbol) = maybe_name {
                             captured_vars.push(format!(
                                 "{}: {}",
-                                symbol.as_arc_string(),
+                                symbol.as_arc_str(),
                                 to_literal_objsub(
                                     var_value,
                                     name_subs,

@@ -501,7 +501,7 @@ fn handle_webhook_result(result: &Var) -> Result<Response, Box<dyn std::error::E
                     };
 
                     response_builder =
-                        response_builder.header(key.as_arc_string().as_str(), value_str.as_str());
+                        response_builder.header(key.as_arc_str().as_str(), value_str.as_str());
                 }
             }
 
