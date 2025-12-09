@@ -16,10 +16,15 @@
 
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
-use std::{path::PathBuf, sync::Arc, time::{Duration, Instant}};
+use std::{
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use clap::Parser;
 use clap_derive::Parser;
+use moor_common::model::ObjectRef;
 use moor_common::{
     model::{CommitResult, ObjAttrs, ObjFlag, ObjectKind, PropFlag, VerbArgsSpec, VerbFlag},
     util::BitEnum,
@@ -31,10 +36,9 @@ use moor_kernel::{
     config::{Config, FeaturesConfig},
     tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
 };
-use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
 use moor_model_checker::bench_common::{clear_screen, setup_db_path};
+use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
 use moor_var::{List, NOTHING, Obj, Symbol, Variant, program::ProgramType, v_int, v_obj};
-use moor_common::model::ObjectRef;
 use tabled::{Table, Tabled};
 use tracing::info;
 
@@ -246,23 +250,30 @@ async fn run_workload(
                             if actual != val {
                                 return Err(eyre::eyre!(
                                     "Warm-up {}: Inconsistent return value! First was {}, got {}",
-                                    i, val, actual
+                                    i,
+                                    val,
+                                    actual
                                 ));
                             }
                         } else {
                             first_value = Some(actual);
-                            info!("First return value: {} (expected: {})", actual, expected_sum);
+                            info!(
+                                "First return value: {} (expected: {})",
+                                actual, expected_sum
+                            );
                             if actual != expected_sum {
                                 return Err(eyre::eyre!(
                                     "Wrong return value! Expected {}, got {}. Task may have exited early or hit tick limit.",
-                                    expected_sum, actual
+                                    expected_sum,
+                                    actual
                                 ));
                             }
                         }
                     } else {
                         return Err(eyre::eyre!(
                             "Warm-up {}: Expected integer return value, got {:?}",
-                            i, result
+                            i,
+                            result
                         ));
                     }
                     break;
@@ -304,7 +315,10 @@ async fn run_workload(
     let total = args.num_invocations;
     let mut completed = 0;
 
-    eprint!("  {} Running opcode workload... 0/{} rounds", SPINNER[0], total);
+    eprint!(
+        "  {} Running opcode workload... 0/{} rounds",
+        SPINNER[0], total
+    );
     std::io::Write::flush(&mut std::io::stderr()).ok();
 
     // Wait for all tasks and validate results
@@ -350,7 +364,9 @@ async fn run_workload(
     if value_errors > 0 {
         return Err(eyre::eyre!(
             "{} tasks returned inconsistent values! Expected {} for {} iterations",
-            value_errors, expected, args.loop_iterations
+            value_errors,
+            expected,
+            args.loop_iterations
         ));
     }
 
@@ -409,7 +425,8 @@ async fn main() -> Result<(), eyre::Error> {
     let (db_path, _temp_dir) = setup_db_path(&args.db_path, "opcode_test_db")?;
 
     let (database, _) = TxDB::open(Some(&db_path), Default::default());
-    let (player, opcodes_per_invocation) = setup_database(&database, args.loop_iterations, args.max_ticks)?;
+    let (player, opcodes_per_invocation) =
+        setup_database(&database, args.loop_iterations, args.max_ticks)?;
 
     let database = Box::new(database);
 

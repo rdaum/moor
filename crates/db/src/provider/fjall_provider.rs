@@ -756,3 +756,88 @@ where
         FjallCodec.decode(stored)
     }
 }
+
+// ============================================================================
+// SequenceWriter - Background writer for sequence persistence
+// ============================================================================
+
+/// Background writer for sequence values.
+///
+/// Similar to FjallProvider but specialized for the fixed-size sequence array.
+/// Writes are sent to a background thread to avoid blocking the commit path.
+pub struct SequenceWriter {
+    ops: Sender<[i64; 16]>,
+    kill_switch: Arc<AtomicBool>,
+    jh: Arc<Mutex<Option<JoinHandle<()>>>>,
+}
+
+impl SequenceWriter {
+    /// Create a new sequence writer with a background thread.
+    pub fn new(partition: fjall::PartitionHandle) -> Self {
+        let kill_switch = Arc::new(AtomicBool::new(false));
+        let (ops_tx, ops_rx) = flume::unbounded::<[i64; 16]>();
+
+        let ks = kill_switch.clone();
+        let jh = std::thread::Builder::new()
+            .name("moor-seq-writer".to_string())
+            .spawn(move || {
+                gdt_cpus::set_thread_priority(ThreadPriority::Background).ok();
+                loop {
+                    if ks.load(std::sync::atomic::Ordering::Relaxed) {
+                        // Drain remaining writes before exiting
+                        while let Ok(seq_values) = ops_rx.try_recv() {
+                            Self::write_sequences(&partition, &seq_values);
+                        }
+                        break;
+                    }
+
+                    match ops_rx.recv_timeout(Duration::from_millis(100)) {
+                        Ok(seq_values) => {
+                            Self::write_sequences(&partition, &seq_values);
+                        }
+                        Err(flume::RecvTimeoutError::Timeout) => continue,
+                        Err(flume::RecvTimeoutError::Disconnected) => break,
+                    }
+                }
+            })
+            .expect("failed to spawn sequence writer thread");
+
+        Self {
+            ops: ops_tx,
+            kill_switch,
+            jh: Arc::new(Mutex::new(Some(jh))),
+        }
+    }
+
+    fn write_sequences(partition: &fjall::PartitionHandle, seq_values: &[i64; 16]) {
+        for (i, val) in seq_values.iter().enumerate() {
+            if let Err(e) = partition.insert(i.to_le_bytes(), val.to_le_bytes()) {
+                error!("Failed to persist sequence {}: {}", i, e);
+            }
+        }
+    }
+
+    /// Queue sequence values for background persistence.
+    pub fn write(&self, seq_values: [i64; 16]) {
+        if let Err(e) = self.ops.send(seq_values) {
+            error!("Failed to queue sequence write: {}", e);
+        }
+    }
+
+    /// Stop the background writer thread.
+    pub fn stop(&self) {
+        self.kill_switch
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+
+        let mut jh = self.jh.lock().unwrap();
+        if let Some(jh) = jh.take() {
+            jh.join().unwrap();
+        }
+    }
+}
+
+impl Drop for SequenceWriter {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}

@@ -514,6 +514,9 @@ pub struct WorldStatePerf {
     pub commit_apply_phase: PerfCounter,
     pub commit_write_phase: PerfCounter,
 
+    pub apply_source_put: PerfCounter,
+    pub apply_index_insert: PerfCounter,
+
     pub tx_commit_mk_working_set_phase: PerfCounter,
     pub tx_commit_send_working_set_phase: PerfCounter,
     pub tx_commit_wait_result_phase: PerfCounter,
@@ -566,6 +569,8 @@ impl WorldStatePerf {
             commit_check_phase: PerfCounter::new("commit_check_phase"),
             commit_apply_phase: PerfCounter::new("commit_apply_phase"),
             commit_write_phase: PerfCounter::new("commit_write_phase"),
+            apply_source_put: PerfCounter::new("apply_source_put"),
+            apply_index_insert: PerfCounter::new("apply_index_insert"),
             tx_commit_mk_working_set_phase: PerfCounter::new("tx_commit_mk_working_set_phase"),
             tx_commit_send_working_set_phase: PerfCounter::new("tx_commit_send_working_set_phase"),
             tx_commit_wait_result_phase: PerfCounter::new("tx_commit_wait_result_phase"),
@@ -612,6 +617,8 @@ impl WorldStatePerf {
             &self.commit_check_phase,
             &self.commit_apply_phase,
             &self.commit_write_phase,
+            &self.apply_source_put,
+            &self.apply_index_insert,
             &self.tx_commit_mk_working_set_phase,
             &self.tx_commit_send_working_set_phase,
             &self.tx_commit_wait_result_phase,

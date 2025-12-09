@@ -36,8 +36,8 @@ use moor_kernel::{
     config::{Config, FeaturesConfig},
     tasks::{NoopTasksDb, TaskNotification, sched_counters, scheduler::Scheduler},
 };
-use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
 use moor_model_checker::bench_common::calculate_percentiles;
+use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
 use moor_var::{List, NOTHING, Obj, Symbol, program::ProgramType, v_int, v_list, v_obj};
 use std::{
     path::PathBuf,

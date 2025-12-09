@@ -23,9 +23,12 @@ use crate::{
 };
 use arc_swap::ArcSwap;
 use minstant::Instant;
+use moor_common::util::PerfTimerGuard;
 use moor_var::Symbol;
 use std::{hash::Hash, sync::Arc, time::Duration};
 use tracing::warn;
+
+use crate::db_worldstate::db_counters;
 
 /// Represents the current "canonical" state of a relation.
 pub struct Relation<Domain, Codomain, Source>
@@ -208,16 +211,29 @@ where
         }
 
         // Apply phase.
+        let counters = db_counters();
         for (domain, op) in working_set.tuples().into_iter() {
             match op.operation {
                 OpType::Insert(codomain) | OpType::Update(codomain) => {
-                    self.source.put(op.write_ts, &domain, &codomain).ok();
-                    self.index
-                        .insert_entry(op.write_ts, domain.clone(), codomain);
+                    {
+                        let _t = PerfTimerGuard::new(&counters.apply_source_put);
+                        self.source.put(op.write_ts, &domain, &codomain).ok();
+                    }
+                    {
+                        let _t = PerfTimerGuard::new(&counters.apply_index_insert);
+                        self.index
+                            .insert_entry(op.write_ts, domain.clone(), codomain);
+                    }
                 }
                 OpType::Delete => {
-                    self.index.insert_tombstone(op.write_ts, domain.clone());
-                    self.source.del(op.write_ts, &domain).unwrap();
+                    {
+                        let _t = PerfTimerGuard::new(&counters.apply_index_insert);
+                        self.index.insert_tombstone(op.write_ts, domain.clone());
+                    }
+                    {
+                        let _t = PerfTimerGuard::new(&counters.apply_source_put);
+                        self.source.del(op.write_ts, &domain).unwrap();
+                    }
                 }
             }
         }

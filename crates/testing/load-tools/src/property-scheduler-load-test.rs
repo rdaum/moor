@@ -17,13 +17,19 @@
 
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
-use std::{path::PathBuf, sync::Arc, time::{Duration, Instant}};
+use std::{
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use clap::Parser;
 use clap_derive::Parser;
 use futures::{StreamExt, stream::FuturesUnordered};
 use moor_common::{
-    model::{CommitResult, ObjAttrs, ObjFlag, ObjectKind, ObjectRef, PropFlag, VerbArgsSpec, VerbFlag},
+    model::{
+        CommitResult, ObjAttrs, ObjFlag, ObjectKind, ObjectRef, PropFlag, VerbArgsSpec, VerbFlag,
+    },
     util::BitEnum,
 };
 use moor_compiler::compile;
@@ -33,8 +39,8 @@ use moor_kernel::{
     config::{Config, FeaturesConfig},
     tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
 };
-use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
 use moor_model_checker::bench_common::{calculate_percentiles, clear_screen, setup_db_path};
+use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
 use moor_var::{List, NOTHING, Obj, Symbol, program::ProgramType, v_int, v_obj};
 use tabled::{Table, Tabled};
 use tracing::info;
@@ -50,7 +56,11 @@ struct Args {
     #[arg(long, help = "Max number of concurrent players", default_value = "32")]
     max_concurrency: usize,
 
-    #[arg(long, help = "Number of properties per test object", default_value = "10")]
+    #[arg(
+        long,
+        help = "Number of properties per test object",
+        default_value = "10"
+    )]
     num_properties: usize,
 
     #[arg(
@@ -74,11 +84,7 @@ struct Args {
     )]
     read_ratio: f64,
 
-    #[arg(
-        long,
-        help = "Maximum ticks per task",
-        default_value = "1000000000"
-    )]
+    #[arg(long, help = "Maximum ticks per task", default_value = "1000000000")]
     max_ticks: i64,
 
     #[arg(long, help = "CSV output file for benchmark data")]
@@ -302,7 +308,9 @@ fn setup_database(
         CommitResult::Success { .. } => {
             info!(
                 "Initialized property scheduler test database: {} properties, {} iterations, {:.0}% reads",
-                num_properties, num_iterations, read_ratio * 100.0
+                num_properties,
+                num_iterations,
+                read_ratio * 100.0
             );
             Ok(player)
         }
@@ -479,7 +487,9 @@ async fn run_benchmark(
 
         eprintln!(
             "\r  ✓ Completed {}/{} workloads in {:?}",
-            num_concurrent, num_concurrent, start_time.elapsed()
+            num_concurrent,
+            num_concurrent,
+            start_time.elapsed()
         );
 
         let wall_time = start_time.elapsed();
@@ -515,7 +525,9 @@ async fn run_benchmark(
         clear_screen();
         eprintln!(
             "Property Scheduler Load Test\nProperties: {}, Iterations: {}, Read ratio: {:.0}%\n",
-            args.num_properties, args.num_prop_iterations, args.read_ratio * 100.0
+            args.num_properties,
+            args.num_prop_iterations,
+            args.read_ratio * 100.0
         );
         eprintln!("{}", Table::new(&table_rows));
 
@@ -573,7 +585,9 @@ async fn run_swamp_mode(
     clear_screen();
     eprintln!(
         "Property Scheduler Load Test - Swamp Mode\nProperties: {}, Iterations: {}, Read ratio: {:.0}%\n",
-        args.num_properties, args.num_prop_iterations, args.read_ratio * 100.0
+        args.num_properties,
+        args.num_prop_iterations,
+        args.read_ratio * 100.0
     );
     eprintln!(
         "Concurrency: {}, Duration: {:?}\n\
@@ -585,7 +599,10 @@ async fn run_swamp_mode(
         total_requests,
         total_prop_ops,
         throughput / 1_000_000.0,
-        p50, p95, p99, max
+        p50,
+        p95,
+        p99,
+        max
     );
 
     Ok(vec![Results {

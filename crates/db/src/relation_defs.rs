@@ -124,10 +124,13 @@ macro_rules! define_relations {
                 ///
                 /// Consumes the working sets and applies them to the relations.
                 /// Returns `Ok(self)` if all applications succeed, `Err(())` if any fail.
+                /// Skips empty working sets to avoid overhead of calling apply() on empty relations.
                 fn apply_all(mut self, ws: RelationWorkingSets) -> Result<Self, ()> {
                     $(
-                        if self.$field.apply(ws.$field).is_err() {
-                            return Err(());
+                        if !ws.$field.is_empty() {
+                            if self.$field.apply(ws.$field).is_err() {
+                                return Err(());
+                            }
                         }
                     )*
                     Ok(self)

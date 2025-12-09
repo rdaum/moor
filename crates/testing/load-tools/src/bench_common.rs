@@ -17,7 +17,9 @@ use std::time::Duration;
 
 /// Calculate percentiles from a list of latencies.
 /// Returns (p50, p95, p99, max).
-pub fn calculate_percentiles(mut latencies: Vec<Duration>) -> (Duration, Duration, Duration, Duration) {
+pub fn calculate_percentiles(
+    mut latencies: Vec<Duration>,
+) -> (Duration, Duration, Duration, Duration) {
     if latencies.is_empty() {
         return (
             Duration::ZERO,

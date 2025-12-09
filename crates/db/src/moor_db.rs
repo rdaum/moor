@@ -107,6 +107,8 @@ pub struct MoorDB {
     relations: Relations,
     sequences: [Arc<CachePadded<AtomicI64>>; 16],
     sequences_partition: PartitionHandle,
+    /// Background writer for sequence persistence
+    sequence_writer: crate::provider::fjall_provider::SequenceWriter,
     kill_switch: Arc<AtomicBool>,
     commit_channel: Sender<CommitSet>,
     usage_send: Sender<oneshot::Sender<usize>>,
@@ -311,6 +313,8 @@ impl MoorDB {
             }
         }
 
+        // Stop sequence writer first to ensure all sequences are flushed
+        self.sequence_writer.stop();
         self.relations.stop_all();
         if let Err(e) = self.keyspace.persist(PersistMode::SyncAll) {
             error!("Failed to persist keyspace: {}", e);
@@ -373,12 +377,18 @@ impl MoorDB {
         let (usage_send, usage_recv) = flume::unbounded();
         let kill_switch = Arc::new(AtomicBool::new(false));
         let caches = ArcSwap::new(Arc::new(Caches::new()));
+
+        // Create background sequence writer
+        let sequence_writer =
+            crate::provider::fjall_provider::SequenceWriter::new(sequences_partition.clone());
+
         let s = Arc::new(Self {
             monotonic: CachePadded::new(AtomicU64::new(start_tx_num)),
             commit_version: CachePadded::new(AtomicU64::new(0)),
             relations,
             sequences,
             sequences_partition,
+            sequence_writer,
             commit_channel,
             usage_send,
             kill_switch: kill_switch.clone(),
@@ -576,26 +586,19 @@ impl MoorDB {
                         drop(_t);
                     }
 
-                    // Now persist sequences to disk
+                    // Queue sequence persistence to background thread
                     // (Caches were already updated inside commit_all before seqlock was marked stable)
-                    let _t = PerfTimerGuard::new(&counters.commit_write_phase);
-
-                    // Now write out the current state of the sequences to the seq partition.
-                    // Start by making sure that the monotonic sequence is written out.
+                    // Store monotonic counter in sequence slot 15
                     this.sequences[15].store(
                         this.monotonic.load(std::sync::atomic::Ordering::Relaxed) as i64,
                         std::sync::atomic::Ordering::Relaxed,
                     );
+                    // Collect current sequence values and send to background writer
+                    let mut seq_values = [0i64; 16];
                     for (i, seq) in this.sequences.iter().enumerate() {
-                        this.sequences_partition
-                            .insert(
-                                i.to_le_bytes(),
-                                seq.load(std::sync::atomic::Ordering::SeqCst).to_le_bytes(),
-                            )
-                            .unwrap_or_else(|e| {
-                                error!("Failed to persist sequence {}: {}", i, e);
-                            });
+                        seq_values[i] = seq.load(std::sync::atomic::Ordering::Relaxed);
                     }
+                    this.sequence_writer.write(seq_values);
                 }
             })
             .expect("failed to start DB processing thread");
