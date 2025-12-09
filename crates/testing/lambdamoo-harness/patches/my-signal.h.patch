@@ -1,0 +1,24 @@
+diff --git a/my-signal.h b/my-signal.h
+index 9309543..3e5688b 100644
+--- a/my-signal.h
++++ b/my-signal.h
+@@ -30,16 +30,16 @@
+ extern int kill(pid_t, int);
+ #endif
+ 
+-#if NDECL_SIGEMPTYSET && HAVE_SIGEMPTYSET
++#if NDECL_SIGEMPTYSET && HAVE_SIGEMPTYSET && !defined(__GLIBC__)
+ extern int sigemptyset(sigset_t *);
+ extern int sigaddset(sigset_t *, int);
+ #endif
+ 
+-#if NDECL_SIGPROCMASK && HAVE_SIGPROCMASK
++#if NDECL_SIGPROCMASK && HAVE_SIGPROCMASK && !defined(__GLIBC__)
+ extern int sigprocmask(int, sigset_t *, sigset_t *);
+ #endif
+ 
+-#if NDECL_SIGRELSE && HAVE_SIGRELSE
++#if NDECL_SIGRELSE && HAVE_SIGRELSE && !defined(__GLIBC__)
+ extern int sigrelse(int);
+ #endif
+ 

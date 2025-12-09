@@ -2739,6 +2739,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "lambdamoo-harness"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "clap",
+ "clap_derive",
+ "libc",
+ "tabled",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "lazy-regex"
 version = "3.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

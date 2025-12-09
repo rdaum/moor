@@ -1,0 +1,13 @@
+diff --git a/my-string.h b/my-string.h
+index a825f26..512d897 100644
+--- a/my-string.h
++++ b/my-string.h
+@@ -73,6 +73,8 @@ extern const char *sys_errlist[];
+ #if NDECL_BZERO && !defined(bzero)
+ #  if BZERO_IN_STDLIB_H
+ #    include "my-stdlib.h"
++#  elif defined(__GLIBC__)
++/* glibc declares bzero in <strings.h> with (void*, size_t) signature. */
+ #  else
+ extern void bzero(char *, int);
+ #  endif

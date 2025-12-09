@@ -1,0 +1,15 @@
+--- a/options.h
++++ b/options.h
+@@ -91,8 +91,12 @@
+
+ #define DEFAULT_MAX_STACK_DEPTH	50
+
++#ifndef DEFAULT_FG_TICKS
+ #define DEFAULT_FG_TICKS	30000
++#endif
++#ifndef DEFAULT_BG_TICKS
+ #define DEFAULT_BG_TICKS	15000
++#endif
+
+ #define DEFAULT_FG_SECONDS	5
+ #define DEFAULT_BG_SECONDS	3

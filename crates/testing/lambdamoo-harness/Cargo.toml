@@ -1,0 +1,39 @@
+# Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+# software: you can redistribute it and/or modify it under the terms of the GNU
+# General Public License as published by the Free Software Foundation, version
+# 3.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program. If not, see <https://www.gnu.org/licenses/>.
+
+[package]
+name = "lambdamoo-harness"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Test harness wrapping LambdaMOO for comparative testing"
+
+[build-dependencies]
+cc = "1.2"
+
+[dependencies]
+libc.workspace = true
+thiserror.workspace = true
+clap.workspace = true
+clap_derive.workspace = true
+tabled.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[bin]]
+name = "lambdamoo-load-test"
+path = "src/lambdamoo-load-test.rs"

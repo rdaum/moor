@@ -1,0 +1,13 @@
+diff --git a/my-time.h b/my-time.h
+index 6db883b..c539e74 100644
+--- a/my-time.h
++++ b/my-time.h
+@@ -45,7 +45,7 @@ extern size_t strftime(char *s, size_t smax, const char *fmt,
+ 		       const struct tm *tp);
+ #endif
+ 
+-#if HAVE_TZNAME && NDECL_TZNAME
++#if HAVE_TZNAME && NDECL_TZNAME && !defined(__GLIBC__)
+ extern char *tzname;
+ #endif
+ 

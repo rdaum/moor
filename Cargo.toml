@@ -16,6 +16,7 @@ members = [
     "crates/schema-macros",
     "crates/telnet-host",
     "crates/testing/bench-utils",
+    "crates/testing/lambdamoo-harness",
     "crates/testing/load-tools",
     "crates/testing/moot",
     "crates/textdump",

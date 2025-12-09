@@ -1,0 +1,18 @@
+diff --git a/my-stdlib.h b/my-stdlib.h
+index a8837cc..714410e 100644
+--- a/my-stdlib.h
++++ b/my-stdlib.h
+@@ -59,11 +59,11 @@ extern unsigned long strtoul(const char *, char **, int);
+ # define strtoul		strtol
+ #endif
+ 
+-#if NDECL_RANDOM
++#if NDECL_RANDOM && !defined(__GLIBC__)
+ extern int random(void);
+ #endif
+ 
+-#if NDECL_SRANDOM
++#if NDECL_SRANDOM && !defined(__GLIBC__)
+ extern int srandom(unsigned);
+ #endif
+ 
