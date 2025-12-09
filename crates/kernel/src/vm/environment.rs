@@ -50,22 +50,39 @@ impl Environment {
 
     /// Set a variable in the given scope.
     /// Scope 0 is the outermost (first pushed) scope.
+    /// Panics if indices are out of bounds (indicates compiler bug).
+    #[inline]
     pub fn set(&mut self, scope_index: usize, var_index: usize, value: Var) {
-        if let Some(scope) = self.scopes.get_mut(scope_index)
-            && var_index < scope.len()
-        {
-            scope[var_index] = Some(value);
-        }
+        // SAFETY: Indices come from compiler, should always be valid.
+        // Panics on out-of-bounds rather than silently failing.
+        self.scopes[scope_index][var_index] = Some(value);
     }
 
     /// Get a variable from the given scope.
     /// Scope 0 is the outermost (first pushed) scope.
+    /// Panics if indices are out of bounds (indicates compiler bug).
+    #[inline]
     pub fn get(&self, scope_index: usize, var_index: usize) -> Option<&Var> {
-        self.scopes
-            .get(scope_index)
-            .and_then(|scope| scope.get(var_index))
-            .and_then(|v| v.as_ref())
+        // SAFETY: Indices come from compiler, should always be valid.
+        self.scopes[scope_index][var_index].as_ref()
     }
+
+    /// Bulk copy a contiguous range of variables from another environment.
+    /// Both environments must have the specified scope, and the range must be valid.
+    /// Panics if indices are out of bounds.
+    #[inline]
+    pub fn copy_range_from(
+        &mut self,
+        source: &Environment,
+        scope_index: usize,
+        start: usize,
+        end: usize,
+    ) {
+        let src_scope = &source.scopes[scope_index];
+        let dst_scope = &mut self.scopes[scope_index];
+        dst_scope[start..=end].clone_from_slice(&src_scope[start..=end]);
+    }
+
     /// Convert the environment to a Vec of scopes for serialization.
     pub fn to_vec(&self) -> Vec<Vec<Option<Var>>> {
         self.scopes.clone()

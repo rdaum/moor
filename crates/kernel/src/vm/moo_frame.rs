@@ -21,7 +21,7 @@ use moor_var::{
         labels::Offset,
         names::{GlobalName, Name},
     },
-    v_none,
+    v_none, v_obj, v_str, v_string, NOTHING,
 };
 use std::cmp::max;
 use strum::EnumCount;
@@ -461,6 +461,25 @@ impl MooStackFrameBuilder {
         self
     }
 
+    /// Bulk initialize the core globals (this, player, caller, verb, args).
+    /// More efficient than 5 separate with_global calls.
+    #[inline]
+    pub(crate) fn with_core_globals(
+        mut self,
+        this: Var,
+        player: Var,
+        caller: Var,
+        verb: Var,
+        args: Var,
+    ) -> Self {
+        self.environment.set(0, GlobalName::this as usize, this);
+        self.environment.set(0, GlobalName::player as usize, player);
+        self.environment.set(0, GlobalName::caller as usize, caller);
+        self.environment.set(0, GlobalName::verb as usize, verb);
+        self.environment.set(0, GlobalName::args as usize, args);
+        self
+    }
+
     /// Initialize a global variable by inheriting from an activation or using a fallback.
     /// The fallback closure is only called if the value isn't found in the source activation.
     /// This avoids unnecessary clones when inheriting values.
@@ -487,6 +506,48 @@ impl MooStackFrameBuilder {
         default: Var,
     ) -> Self {
         self.with_global_or(gname, from, || default)
+    }
+
+    /// Bulk initialize all parsing-related globals (argstr, dobj, dobjstr, prepstr, iobj, iobjstr).
+    /// Uses a single slice copy when inheriting from a source frame.
+    #[inline]
+    pub(crate) fn with_parsing_globals(
+        mut self,
+        current_activation: Option<&crate::vm::activation::Activation>,
+        argstr: String,
+    ) -> Self {
+        use crate::vm::activation::Frame;
+
+        // Check once if we have a Moo frame to inherit from
+        let source_frame = current_activation.and_then(|a| match &a.frame {
+            Frame::Moo(frame) => Some(frame),
+            Frame::Bf(_) => None,
+        });
+
+        if let Some(frame) = source_frame {
+            // Bulk copy parsing globals (indices 5-10) in one slice operation
+            self.environment.copy_range_from(
+                &frame.environment,
+                0,
+                GlobalName::argstr as usize,
+                GlobalName::iobjstr as usize,
+            );
+        } else {
+            // No source frame - set all defaults directly
+            self.environment
+                .set(0, GlobalName::argstr as usize, v_string(argstr));
+            self.environment
+                .set(0, GlobalName::dobj as usize, v_obj(NOTHING));
+            self.environment
+                .set(0, GlobalName::dobjstr as usize, v_str(""));
+            self.environment
+                .set(0, GlobalName::prepstr as usize, v_str(""));
+            self.environment
+                .set(0, GlobalName::iobj as usize, v_obj(NOTHING));
+            self.environment
+                .set(0, GlobalName::iobjstr as usize, v_str(""));
+        }
+        self
     }
 
     /// Consume the builder and produce the final MooStackFrame.

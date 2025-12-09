@@ -22,7 +22,7 @@ use moor_common::{
 use moor_compiler::{BuiltinId, Program, ScatterLabel};
 use moor_var::{
     Error, Lambda, List, NOTHING, Obj, Symbol, Var, v_arc_string, v_empty_list, v_empty_str,
-    v_list, v_obj, v_str, v_string,
+    v_list, v_obj, v_str,
 };
 
 use crate::vm::{moo_frame::MooStackFrame, scatter_assign::scatter_assign};
@@ -225,18 +225,15 @@ impl Activation {
 
         // Use builder pattern for safe, ergonomic initialization
         let moo_frame = MooStackFrame::builder(program)
-            .with_global(GlobalName::this, this.clone())
-            .with_global(GlobalName::player, v_obj(player))
-            .with_global(GlobalName::caller, caller)
-            .with_global(GlobalName::verb, v_arc_string(verb_name.as_arc_string()))
-            .with_global(GlobalName::args, args.clone().into())
-            // Inherit parsing variables from the current activation, or use defaults
-            .with_global_or(GlobalName::argstr, current_activation, || v_string(argstr))
-            .with_global_or_default(GlobalName::dobj, current_activation, v_obj(NOTHING))
-            .with_global_or_default(GlobalName::dobjstr, current_activation, v_str(""))
-            .with_global_or_default(GlobalName::prepstr, current_activation, v_str(""))
-            .with_global_or_default(GlobalName::iobj, current_activation, v_obj(NOTHING))
-            .with_global_or_default(GlobalName::iobjstr, current_activation, v_str(""))
+            .with_core_globals(
+                this.clone(),
+                v_obj(player),
+                caller,
+                v_arc_string(verb_name.as_arc_string()),
+                args.clone().into(),
+            )
+            // Bulk inherit parsing variables (argstr, dobj, dobjstr, prepstr, iobj, iobjstr)
+            .with_parsing_globals(current_activation, argstr)
             .build();
         let frame = Frame::Moo(moo_frame);
 
