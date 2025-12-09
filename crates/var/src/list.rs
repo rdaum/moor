@@ -11,10 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// Clippy warns about Arc<im::Vector<Var>> not being Send/Sync due to circular type dependency,
-// but this is a false positive - Var is Send/Sync and imbl::Vector is thread-safe.
-#![allow(clippy::arc_with_non_send_sync)]
-
 use crate::{
     Error, Sequence, Var,
     error::ErrorCode::{E_RANGE, E_TYPE},
@@ -26,22 +22,24 @@ use std::{
     fmt::{Debug, Formatter},
     hash::Hash,
     ops::Index,
-    sync::Arc,
 };
 
+/// List type wrapping imbl::Vector.
+/// We use Box rather than Arc because imbl::Vector already does its own
+/// structural sharing internally - Arc would be redundant reference counting.
 #[derive(Clone)]
 #[repr(transparent)]
-pub struct List(Arc<imbl::Vector<Var>>);
+pub struct List(Box<imbl::Vector<Var>>);
 
 impl List {
     pub fn build(values: &[Var]) -> Var {
         let l = imbl::Vector::from(values.to_vec());
-        Var::from_list(List(Arc::new(l)))
+        Var::from_list(List(Box::new(l)))
     }
 
     pub fn mk_list(values: &[Var]) -> List {
         let l = imbl::Vector::from(values.to_vec());
-        List(Arc::new(l))
+        List(Box::new(l))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = Var> + '_ {
@@ -54,7 +52,7 @@ impl List {
         let result = if let Some(idx) = idx {
             let mut new = (*self.0).clone();
             new.remove(idx);
-            List(Arc::new(new))
+            List(Box::new(new))
         } else {
             self.clone()
         };
@@ -69,7 +67,7 @@ impl List {
         }
         let mut l = (*self.0).clone();
         l.push_back(item.clone());
-        Ok(Var::from_list(List(Arc::new(l))))
+        Ok(Var::from_list(List(Box::new(l))))
     }
 
     pub fn pop_front(&self) -> Result<(Var, Var), Error> {
@@ -78,7 +76,7 @@ impl List {
         }
         let mut l = (*self.0).clone();
         let first = l.pop_front().unwrap();
-        Ok((first, Var::from_list(List(Arc::new(l)))))
+        Ok((first, Var::from_list(List(Box::new(l)))))
     }
 }
 
@@ -149,20 +147,20 @@ impl Sequence for List {
             }));
         }
         let new = self.0.update(index, value.clone());
-        Ok(Var::from_list(List(Arc::new(new))))
+        Ok(Var::from_list(List(Box::new(new))))
     }
 
     fn push(&self, value: &Var) -> Result<Var, Error> {
         let mut new = (*self.0).clone();
         new.push_back(value.clone());
-        Ok(Var::from_list(List(Arc::new(new))))
+        Ok(Var::from_list(List(Box::new(new))))
     }
 
     fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
         let index = min(index, self.len());
         let mut result = (*self.0).clone();
         result.insert(index, value.clone());
-        Ok(Var::from_list(List(Arc::new(result))))
+        Ok(Var::from_list(List(Box::new(result))))
     }
 
     fn range(&self, from: isize, to: isize) -> Result<Var, Error> {
@@ -248,7 +246,7 @@ impl Sequence for List {
 
         let mut result = (*self.0).clone();
         result.append(other.0.as_ref().clone());
-        Ok(Var::from_list(List(Arc::new(result))))
+        Ok(Var::from_list(List(Box::new(result))))
     }
 
     fn remove_at(&self, index: usize) -> Result<Var, Error> {
@@ -264,7 +262,7 @@ impl Sequence for List {
 
         let mut new = (*self.0).clone();
         new.remove(index);
-        Ok(Var::from_list(List(Arc::new(new))))
+        Ok(Var::from_list(List(Box::new(new))))
     }
 }
 
@@ -339,14 +337,14 @@ impl Hash for List {
 impl FromIterator<Var> for Var {
     fn from_iter<T: IntoIterator<Item = Var>>(iter: T) -> Self {
         let l: imbl::Vector<Var> = imbl::Vector::from_iter(iter);
-        Var::from_list(List(Arc::new(l)))
+        Var::from_list(List(Box::new(l)))
     }
 }
 
 impl std::iter::FromIterator<Var> for List {
     fn from_iter<T: IntoIterator<Item = Var>>(iter: T) -> Self {
         let l: imbl::Vector<Var> = imbl::Vector::from_iter(iter);
-        List(Arc::new(l))
+        List(Box::new(l))
     }
 }
 

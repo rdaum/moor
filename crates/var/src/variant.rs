@@ -181,7 +181,7 @@ impl Var {
 
     /// Create a Var from a List directly
     pub fn from_list(list: List) -> Self {
-        // SAFETY: List is #[repr(transparent)] around Arc<Vector>, exactly 8 bytes
+        // SAFETY: List is #[repr(transparent)] around Box<Vector>, exactly 8 bytes
         let data: u64 = unsafe { std::mem::transmute(list) };
         Self {
             tag: TAG_LIST,
@@ -200,7 +200,7 @@ impl Var {
 
     /// Create a Var from a Map directly
     pub fn from_map(m: map::Map) -> Self {
-        // SAFETY: Map is #[repr(transparent)] around Arc<OrdMap>, exactly 8 bytes
+        // SAFETY: Map is #[repr(transparent)] around Box<OrdMap>, exactly 8 bytes
         let data: u64 = unsafe { std::mem::transmute(m) };
         Self {
             tag: TAG_MAP,

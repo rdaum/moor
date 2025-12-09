@@ -16,11 +16,14 @@ use crate::{
     error::ErrorCode::{E_RANGE, E_TYPE},
     variant::Var,
 };
-use std::{cmp::Ordering, hash::Hash, sync::Arc};
+use std::{cmp::Ordering, hash::Hash};
 
+/// Map type wrapping imbl::OrdMap.
+/// We use Box rather than Arc because imbl::OrdMap already does its own
+/// structural sharing internally - Arc would be redundant reference counting.
 #[derive(Clone, Debug)]
 #[repr(transparent)]
-pub struct Map(Arc<imbl::OrdMap<Var, Var>>);
+pub struct Map(Box<imbl::OrdMap<Var, Var>>);
 
 impl Map {
     // Construct from an Iterator of pairs
@@ -28,7 +31,7 @@ impl Map {
         let map = pairs
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect::<imbl::OrdMap<Var, Var>>();
-        let m = Map(Arc::new(map));
+        let m = Map(Box::new(map));
         Var::from_map(m)
     }
 
@@ -102,7 +105,7 @@ impl Associative for Map {
 
         // With OrdMap, this is an efficient O(log n) structural operation
         let new_map = self.0.update(key.clone(), value.clone());
-        let m = Map(Arc::new(new_map));
+        let m = Map(Box::new(new_map));
         Ok(Var::from_map(m))
     }
 
@@ -173,18 +176,17 @@ impl Associative for Map {
                 if existing_key.cmp_case_sensitive(key) == Ordering::Equal {
                     let removed_value = self.0.get(existing_key).cloned();
                     let new_map = self.0.without(existing_key);
-                    let m = Map(Arc::new(new_map));
+                    let m = Map(Box::new(new_map));
                     return (Var::from_map(m), removed_value);
                 }
             }
-            // Key not found
-            let m = Map(self.0.clone());
-            (Var::from_map(m), None)
+            // Key not found - clone the map (cheap due to imbl's structural sharing)
+            (Var::from_map(self.clone()), None)
         } else {
             // Use OrdMap's efficient removal
             let removed_value = self.0.get(key).cloned();
             let new_map = self.0.without(key);
-            let m = Map(Arc::new(new_map));
+            let m = Map(Box::new(new_map));
             (Var::from_map(m), removed_value)
         }
     }
