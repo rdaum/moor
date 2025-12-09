@@ -98,7 +98,7 @@ impl Sequence for Binary {
         let search_bytes = match value.variant() {
             Variant::Binary(b) => b.as_bytes(),
             Variant::Int(i) => {
-                if i < 0 || i > 255 {
+                if !(0..=255).contains(&i) {
                     return Err(
                         E_INVARG.with_msg(|| format!("Byte value {i} out of range (0-255)"))
                     );
@@ -168,7 +168,7 @@ impl Sequence for Binary {
         // Value must be an integer between 0-255
         let byte_value = match value.variant() {
             Variant::Int(i) => {
-                if i < 0 || i > 255 {
+                if !(0..=255).contains(&i) {
                     return Err(
                         E_INVARG.with_msg(|| format!("Byte value {i} out of range (0-255)"))
                     );
@@ -195,7 +195,7 @@ impl Sequence for Binary {
         // Value must be an integer between 0-255 or another binary
         match value.variant() {
             Variant::Int(i) => {
-                if i < 0 || i > 255 {
+                if !(0..=255).contains(&i) {
                     return Err(
                         E_INVARG.with_msg(|| format!("Byte value {i} out of range (0-255)"))
                     );
@@ -225,7 +225,7 @@ impl Sequence for Binary {
         // Value must be an integer between 0-255
         let byte_value = match value.variant() {
             Variant::Int(i) => {
-                if i < 0 || i > 255 {
+                if !(0..=255).contains(&i) {
                     return Err(
                         E_INVARG.with_msg(|| format!("Byte value {i} out of range (0-255)"))
                     );

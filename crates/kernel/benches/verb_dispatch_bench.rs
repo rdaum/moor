@@ -155,7 +155,8 @@ fn verb_dispatch_benchmarks(c: &mut Criterion) {
             let mut tx = db.new_world_state().unwrap();
             let mut vm_host = prepare_call_verb(tx.as_mut(), "outer", max_ticks);
             let _tx_guard = setup_task_context(tx);
-            black_box(execute_to_completion(session.clone(), &mut vm_host));
+            execute_to_completion(session.clone(), &mut vm_host);
+            black_box(());
         });
     });
 
@@ -172,7 +173,8 @@ fn verb_dispatch_benchmarks(c: &mut Criterion) {
             let mut tx = db.new_world_state().unwrap();
             let mut vm_host = prepare_call_verb(tx.as_mut(), "outer", max_ticks);
             let _tx_guard = setup_task_context(tx);
-            black_box(execute_to_completion(session.clone(), &mut vm_host));
+            execute_to_completion(session.clone(), &mut vm_host);
+            black_box(());
         });
     });
 
@@ -189,7 +191,8 @@ fn verb_dispatch_benchmarks(c: &mut Criterion) {
             let mut tx = db.new_world_state().unwrap();
             let mut vm_host = prepare_call_verb(tx.as_mut(), "outer", max_ticks);
             let _tx_guard = setup_task_context(tx);
-            black_box(execute_to_completion(session.clone(), &mut vm_host));
+            execute_to_completion(session.clone(), &mut vm_host);
+            black_box(());
         });
     });
 
@@ -220,7 +223,8 @@ fn baseline_benchmarks(c: &mut Criterion) {
             let mut tx = db.new_world_state().unwrap();
             let mut vm_host = prepare_call_verb(tx.as_mut(), "outer", max_ticks);
             let _tx_guard = setup_task_context(tx);
-            black_box(execute_to_completion(session.clone(), &mut vm_host));
+            execute_to_completion(session.clone(), &mut vm_host);
+            black_box(());
         });
     });
 

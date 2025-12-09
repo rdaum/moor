@@ -175,7 +175,7 @@ impl Var {
                 )
             })));
         };
-        if r < 0 || r > 63 {
+        if !(0..=63).contains(&r) {
             return Ok(v_error(E_INVARG.msg("Invalid shift amount")));
         }
         l.checked_shl(r as u32)
@@ -193,7 +193,7 @@ impl Var {
                 )
             })));
         };
-        if r < 0 || r > 63 {
+        if !(0..=63).contains(&r) {
             return Ok(v_error(E_INVARG.msg("Invalid shift amount")));
         }
         l.checked_shr(r as u32)
@@ -211,7 +211,7 @@ impl Var {
                 )
             })));
         };
-        if r < 0 || r > 63 {
+        if !(0..=63).contains(&r) {
             return Ok(v_error(E_INVARG.msg("Invalid shift amount")));
         }
         // Logical (unsigned) right shift: cast to u64, shift, cast back to i64
