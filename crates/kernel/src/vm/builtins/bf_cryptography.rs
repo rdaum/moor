@@ -827,8 +827,8 @@ fn parse_symmetric_key(var: &Var) -> Result<[u8; 32], BfErr> {
 fn var_to_json(var: &Var) -> Result<JsonValue, BfErr> {
     match var.variant() {
         Variant::None => Ok(JsonValue::Null),
-        Variant::Int(i) => Ok(JsonValue::Number((*i).into())),
-        Variant::Float(f) => serde_json::Number::from_f64(*f)
+        Variant::Int(i) => Ok(JsonValue::Number((i).into())),
+        Variant::Float(f) => serde_json::Number::from_f64(f)
             .map(JsonValue::Number)
             .ok_or_else(|| BfErr::ErrValue(E_INVARG.msg("Invalid float value"))),
         Variant::Str(s) => Ok(JsonValue::String(s.as_str().to_string())),

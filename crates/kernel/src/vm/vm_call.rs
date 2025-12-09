@@ -122,7 +122,7 @@ impl VMExecState {
         args: List,
     ) -> Result<ExecutionResult, Error> {
         let (args, this, location) = match target.variant() {
-            Variant::Obj(o) => (args, target.clone(), *o),
+            Variant::Obj(o) => (args, target.clone(), o),
             Variant::Flyweight(f) => (args, target.clone(), *f.delegate()),
             non_obj => {
                 if !exec_params.config.type_dispatch {

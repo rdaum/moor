@@ -62,10 +62,10 @@ fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let verb_info = match bf_args.args[1].variant() {
         Variant::Int(verb_index) => {
-            if *verb_index < 1 {
+            if verb_index < 1 {
                 return Err(BfErr::Code(E_INVARG));
             }
-            let verb_index = (*verb_index as usize) - 1;
+            let verb_index = (verb_index as usize) - 1;
             with_current_transaction(|world_state| {
                 world_state.get_verb_at_index(&bf_args.task_perms_who(), &obj, verb_index)
             })
@@ -103,10 +103,10 @@ fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 fn get_verbdef(obj: &Obj, verbspec: Var, bf_args: &BfCallState<'_>) -> Result<VerbDef, BfErr> {
     let verbspec_result = match verbspec.variant() {
         Variant::Int(verb_index) => {
-            if *verb_index < 1 {
+            if verb_index < 1 {
                 return Err(BfErr::Code(E_INVARG));
             }
-            let verb_index = (*verb_index as usize) - 1;
+            let verb_index = (verb_index as usize) - 1;
             with_current_transaction(|world_state| {
                 world_state.get_verb_at_index(&bf_args.task_perms_who(), obj, verb_index)
             })
@@ -165,7 +165,7 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
 
             Ok(VerbAttrs {
                 definer: None,
-                owner: Some(*owner),
+                owner: Some(owner),
                 names: Some(name_strings),
                 flags: Some(perms),
                 args_spec: None,
@@ -201,10 +201,10 @@ fn bf_set_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     match bf_args.args[1].variant() {
         Variant::Int(verb_index) => {
-            if *verb_index < 1 {
+            if verb_index < 1 {
                 return Err(BfErr::Code(E_INVARG));
             }
-            let verb_index = (*verb_index as usize) - 1;
+            let verb_index = (verb_index as usize) - 1;
             with_current_transaction_mut(|world_state| {
                 world_state.update_verb_at_index(
                     &bf_args.task_perms_who(),
@@ -312,10 +312,10 @@ fn bf_set_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     match bf_args.args[1].variant() {
         Variant::Int(verb_index) => {
-            if *verb_index < 1 {
+            if verb_index < 1 {
                 return Err(BfErr::Code(E_ARGS));
             }
-            let verb_index = (*verb_index as usize) - 1;
+            let verb_index = (verb_index as usize) - 1;
             with_current_transaction_mut(|world_state| {
                 world_state.update_verb_at_index(
                     &bf_args.task_perms_who(),

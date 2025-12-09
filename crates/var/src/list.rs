@@ -31,12 +31,13 @@ use std::{
 };
 
 #[derive(Clone)]
+#[repr(transparent)]
 pub struct List(Arc<imbl::Vector<Var>>);
 
 impl List {
     pub fn build(values: &[Var]) -> Var {
         let l = imbl::Vector::from(values.to_vec());
-        Var::from_variant(Variant::List(List(Arc::new(l))))
+        Var::from_list(List(Arc::new(l)))
     }
 
     pub fn mk_list(values: &[Var]) -> List {
@@ -58,18 +59,18 @@ impl List {
         } else {
             self.clone()
         };
-        Ok(Var::from_variant(Variant::List(result)))
+        Ok(Var::from_list(result))
     }
 
     /// Add `item` to the list but only if it's not already there.
     pub fn set_add(&self, item: &Var) -> Result<Var, Error> {
         // Is the item already in the list? If so, just clone self
         if self.iter().any(|v| v == *item) {
-            return Ok(Var::from_variant(Variant::List(self.clone())));
+            return Ok(Var::from_list(self.clone()));
         }
         let mut l = (*self.0).clone();
         l.push_back(item.clone());
-        Ok(Var::from_variant(Variant::List(List(Arc::new(l)))))
+        Ok(Var::from_list(List(Arc::new(l))))
     }
 
     pub fn pop_front(&self) -> Result<(Var, Var), Error> {
@@ -78,7 +79,7 @@ impl List {
         }
         let mut l = (*self.0).clone();
         let first = l.pop_front().unwrap();
-        Ok((first, Var::from_variant(Variant::List(List(Arc::new(l))))))
+        Ok((first, Var::from_list(List(Arc::new(l)))))
     }
 }
 
@@ -149,20 +150,20 @@ impl Sequence for List {
             }));
         }
         let new = self.0.update(index, value.clone());
-        Ok(Var::from_variant(Variant::List(List(Arc::new(new)))))
+        Ok(Var::from_list(List(Arc::new(new))))
     }
 
     fn push(&self, value: &Var) -> Result<Var, Error> {
         let mut new = (*self.0).clone();
         new.push_back(value.clone());
-        Ok(Var::from_variant(Variant::List(List(Arc::new(new)))))
+        Ok(Var::from_list(List(Arc::new(new))))
     }
 
     fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
         let index = min(index, self.len());
         let mut result = (*self.0).clone();
         result.insert(index, value.clone());
-        Ok(Var::from_variant(Variant::List(List(Arc::new(result)))))
+        Ok(Var::from_list(List(Arc::new(result))))
     }
 
     fn range(&self, from: isize, to: isize) -> Result<Var, Error> {
@@ -250,7 +251,7 @@ impl Sequence for List {
 
         let mut result = (*self.0).clone();
         result.append(other.0.as_ref().clone());
-        Ok(Var::from_variant(Variant::List(List(Arc::new(result)))))
+        Ok(Var::from_list(List(Arc::new(result))))
     }
 
     fn remove_at(&self, index: usize) -> Result<Var, Error> {
@@ -266,13 +267,13 @@ impl Sequence for List {
 
         let mut new = (*self.0).clone();
         new.remove(index);
-        Ok(Var::from_variant(Variant::List(List(Arc::new(new)))))
+        Ok(Var::from_list(List(Arc::new(new))))
     }
 }
 
 impl From<List> for Var {
     fn from(val: List) -> Self {
-        Var::from_variant(Variant::List(val))
+        Var::from_list(val)
     }
 }
 
@@ -341,7 +342,7 @@ impl Hash for List {
 impl FromIterator<Var> for Var {
     fn from_iter<T: IntoIterator<Item = Var>>(iter: T) -> Self {
         let l: imbl::Vector<Var> = imbl::Vector::from_iter(iter);
-        Var::from_variant(Variant::List(List(Arc::new(l))))
+        Var::from_list(List(Arc::new(l)))
     }
 }
 
@@ -358,7 +359,7 @@ mod tests {
         Error, IndexMode, Sequence,
         error::ErrorCode::{E_RANGE, E_TYPE},
         v_bool_int,
-        var::{Var, v_empty_list, v_int, v_list, v_str},
+        variant::{Var, v_empty_list, v_int, v_list, v_str},
         variant::Variant,
     };
 
@@ -376,7 +377,7 @@ mod tests {
         let r = l.index(&Var::mk_integer(1), IndexMode::ZeroBased).unwrap();
         let r = r.variant();
         match r {
-            Variant::Int(i) => assert_eq!(*i, 2),
+            Variant::Int(i) => assert_eq!(i, 2),
             _ => panic!("Expected integer, got {r:?}"),
         }
     }
@@ -425,7 +426,7 @@ mod tests {
         let r = l.index(&Var::mk_integer(1), IndexMode::ZeroBased).unwrap();
         let r = r.variant();
         match r {
-            Variant::Int(i) => assert_eq!(*i, 2),
+            Variant::Int(i) => assert_eq!(i, 2),
             _ => panic!("Expected integer, got {r:?}"),
         }
     }
@@ -446,7 +447,7 @@ mod tests {
                 let r = l.index(1).unwrap();
                 let r = r.variant();
                 match r {
-                    Variant::Int(i) => assert_eq!(*i, 42),
+                    Variant::Int(i) => assert_eq!(i, 42),
                     _ => panic!("Expected integer, got {r:?}"),
                 }
             }

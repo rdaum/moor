@@ -1220,7 +1220,7 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
             result.push('>');
         }
         Variant::Obj(oid) => {
-            result.push_str(&f(oid));
+            result.push_str(&f(&oid));
         }
         Variant::Lambda(l) => {
             // Special objdef formatting for lambdas - needs to match the grammar:

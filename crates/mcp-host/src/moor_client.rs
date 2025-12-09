@@ -1403,7 +1403,7 @@ fn format_var_for_narrative(var: &Var) -> String {
         Variant::Sym(s) => format!("'{}", s.as_string()),
         Variant::Binary(b) => format!("~<{} bytes>~", b.as_bytes().len()),
         Variant::Lambda(_) => "*lambda*".to_string(),
-        Variant::Bool(b) => if *b { "true" } else { "false" }.to_string(),
+        Variant::Bool(b) => if b { "true" } else { "false" }.to_string(),
         Variant::Flyweight(f) => format!("{:?}", f),
     }
 }

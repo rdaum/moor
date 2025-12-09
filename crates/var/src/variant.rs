@@ -11,66 +11,1053 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! MOO variable type with C-like representation optimized for fast clone operations.
+//! Uses a type tag with COMPLEX_FLAG bit to enable single-branch clone for simple types.
+
 use crate::{
-    Associative, ByteSized, Error, ErrorCode, Obj, Sequence, Symbol, binary::Binary,
-    flyweight::Flyweight, lambda::Lambda, list::List, map, string,
+    Associative, ByteSized, Error, Flyweight, IndexMode, NOTHING, Obj, Sequence, Symbol, TypeClass,
+    VarType,
+    binary::Binary,
+    error::{
+        ErrorCode,
+        ErrorCode::{E_INVARG, E_RANGE, E_TYPE},
+    },
+    lambda::Lambda,
+    list::List,
+    map, string,
+    string::Str,
 };
+use once_cell::sync::Lazy;
 use std::{
-    cmp::Ordering,
+    cmp::{Ordering, min},
     fmt::{Debug, Formatter},
     hash::{Hash, Hasher},
     sync::Arc,
 };
 
-/// Our series of types
-#[derive(Clone)]
-pub enum Variant {
-    None,
-    Bool(bool),
-    Obj(Obj),
-    Int(i64),
-    Float(f64),
-    List(List),
-    Str(string::Str),
-    Map(map::Map),
-    Err(Arc<Error>),
-    Flyweight(Flyweight),
-    Sym(Symbol),
-    Binary(Box<Binary>),
-    Lambda(Box<Lambda>),
+// Type tags - simple types have low values, complex types have COMPLEX_FLAG set
+const TAG_NONE: u8 = 0;
+const TAG_BOOL_FALSE: u8 = 1;
+const TAG_BOOL_TRUE: u8 = 2;
+const TAG_INT: u8 = 3;
+const TAG_FLOAT: u8 = 4;
+const TAG_OBJ: u8 = 5;
+const TAG_SYM: u8 = 6;
+
+const COMPLEX_FLAG: u8 = 0x80;
+const TAG_STR: u8 = COMPLEX_FLAG | 1;
+const TAG_LIST: u8 = COMPLEX_FLAG | 2;
+const TAG_MAP: u8 = COMPLEX_FLAG | 3;
+const TAG_ERR: u8 = COMPLEX_FLAG | 4;
+const TAG_FLYWEIGHT: u8 = COMPLEX_FLAG | 5;
+const TAG_BINARY: u8 = COMPLEX_FLAG | 6;
+const TAG_LAMBDA: u8 = COMPLEX_FLAG | 7;
+
+/// Cached empty string Var.
+static EMPTY_STR_VAR: Lazy<Var> = Lazy::new(|| Var::from_str_type(Str::mk_str("")));
+
+/// Cached NOTHING object Var.
+static NOTHING_VAR: Lazy<Var> = Lazy::new(|| Var::mk_object(NOTHING));
+
+/// MOO variable - C-like representation optimized for fast clone.
+/// 16 bytes total - tag + padding + data pointer/value.
+#[repr(C)]
+pub struct Var {
+    /// Type tag with COMPLEX_FLAG for refcounted types
+    tag: u8,
+    _pad: [u8; 7],
+    /// Union of all possible values (inline for simple types, pointer for complex)
+    data: u64,
 }
 
-impl Drop for Variant {
+/// View type for pattern matching - constructed on demand from Var.
+/// References point into the Var's data, so lifetime is tied to Var.
+#[derive(Debug)]
+pub enum Variant<'a> {
+    None,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Obj(Obj),
+    Sym(Symbol),
+    Str(&'a string::Str),
+    List(&'a List),
+    Map(&'a map::Map),
+    Err(&'a Error),
+    Flyweight(&'a Flyweight),
+    Binary(&'a Binary),
+    Lambda(&'a Lambda),
+}
+
+impl Var {
+    // === Constructors for simple types ===
+
     #[inline(always)]
-    fn drop(&mut self) {
-        // Force inlining of the discriminant check and field drops
-        // This should eliminate the 61% function call overhead we see in perf
-        match self {
-            Variant::None
-            | Variant::Bool(_)
-            | Variant::Obj(_)
-            | Variant::Int(_)
-            | Variant::Float(_)
-            | Variant::Sym(_) => {
-                // These types have trivial drops - no work needed
+    pub const fn mk_none() -> Self {
+        Self {
+            tag: TAG_NONE,
+            _pad: [0; 7],
+            data: 0,
+        }
+    }
+
+    #[inline(always)]
+    pub const fn mk_bool(b: bool) -> Self {
+        Self {
+            tag: if b { TAG_BOOL_TRUE } else { TAG_BOOL_FALSE },
+            _pad: [0; 7],
+            data: 0,
+        }
+    }
+
+    #[inline(always)]
+    pub const fn mk_integer(i: i64) -> Self {
+        Self {
+            tag: TAG_INT,
+            _pad: [0; 7],
+            data: i as u64,
+        }
+    }
+
+    #[inline(always)]
+    pub fn mk_float(f: f64) -> Self {
+        Self {
+            tag: TAG_FLOAT,
+            _pad: [0; 7],
+            data: f.to_bits(),
+        }
+    }
+
+    #[inline(always)]
+    pub fn mk_object(o: Obj) -> Self {
+        Self {
+            tag: TAG_OBJ,
+            _pad: [0; 7],
+            data: o.as_u64(),
+        }
+    }
+
+    #[inline(always)]
+    pub fn mk_symbol(s: Symbol) -> Self {
+        // SAFETY: Symbol is repr(C) with two u32s = 8 bytes = u64
+        let data: u64 = unsafe { std::mem::transmute(s) };
+        Self {
+            tag: TAG_SYM,
+            _pad: [0; 7],
+            data,
+        }
+    }
+
+    // === Constructors for complex types ===
+    // Str, List, Map, Lambda are #[repr(transparent)] Arc wrappers (8 bytes)
+    // We store them directly via transmute - no Box needed!
+
+    pub fn mk_str(s: &str) -> Self {
+        Self::from_str_type(Str::mk_str(s))
+    }
+
+    pub fn mk_string(s: String) -> Self {
+        Self::from_str_type(Str::from(s))
+    }
+
+    /// Create a Var from a Str type directly
+    pub fn from_str_type(s: string::Str) -> Self {
+        // SAFETY: Str is #[repr(transparent)] around Arc<String>, exactly 8 bytes
+        let data: u64 = unsafe { std::mem::transmute(s) };
+        Self {
+            tag: TAG_STR,
+            _pad: [0; 7],
+            data,
+        }
+    }
+
+    pub fn mk_list(values: &[Var]) -> Self {
+        List::build(values)
+    }
+
+    pub fn mk_list_iter<IT: IntoIterator<Item = Var>>(values: IT) -> Self {
+        Var::from_iter(values)
+    }
+
+    /// Create a Var from a List directly
+    pub fn from_list(list: List) -> Self {
+        // SAFETY: List is #[repr(transparent)] around Arc<Vector>, exactly 8 bytes
+        let data: u64 = unsafe { std::mem::transmute(list) };
+        Self {
+            tag: TAG_LIST,
+            _pad: [0; 7],
+            data,
+        }
+    }
+
+    pub fn mk_map(pairs: &[(Var, Var)]) -> Self {
+        map::Map::build(pairs.iter())
+    }
+
+    pub fn mk_map_iter<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Self {
+        map::Map::build(pairs)
+    }
+
+    /// Create a Var from a Map directly
+    pub fn from_map(m: map::Map) -> Self {
+        // SAFETY: Map is #[repr(transparent)] around Arc<OrdMap>, exactly 8 bytes
+        let data: u64 = unsafe { std::mem::transmute(m) };
+        Self {
+            tag: TAG_MAP,
+            _pad: [0; 7],
+            data,
+        }
+    }
+
+    pub fn mk_error(e: Error) -> Self {
+        let arced = Arc::new(e);
+        Self {
+            tag: TAG_ERR,
+            _pad: [0; 7],
+            data: Arc::into_raw(arced) as u64,
+        }
+    }
+
+    pub fn mk_error_arc(e: Arc<Error>) -> Self {
+        Self {
+            tag: TAG_ERR,
+            _pad: [0; 7],
+            data: Arc::into_raw(e) as u64,
+        }
+    }
+
+    pub fn mk_binary(bytes: Vec<u8>) -> Self {
+        let boxed = Box::new(Binary::from_bytes(bytes));
+        Self {
+            tag: TAG_BINARY,
+            _pad: [0; 7],
+            data: Box::into_raw(boxed) as u64,
+        }
+    }
+
+    /// Create a Var from a Flyweight directly
+    pub fn from_flyweight(f: Flyweight) -> Self {
+        let boxed = Box::new(f);
+        Self {
+            tag: TAG_FLYWEIGHT,
+            _pad: [0; 7],
+            data: Box::into_raw(boxed) as u64,
+        }
+    }
+
+    pub fn mk_lambda(
+        params: crate::program::opcode::ScatterArgs,
+        body: crate::program::program::Program,
+        captured_env: Vec<Vec<Var>>,
+        self_var: Option<crate::program::names::Name>,
+    ) -> Self {
+        let lambda = Lambda::new(params, body, captured_env, self_var);
+        // SAFETY: Lambda is #[repr(transparent)] around Arc<LambdaInner>, exactly 8 bytes
+        let data: u64 = unsafe { std::mem::transmute(lambda) };
+        Self {
+            tag: TAG_LAMBDA,
+            _pad: [0; 7],
+            data,
+        }
+    }
+
+    /// Create from Lambda directly
+    pub fn from_lambda(l: Lambda) -> Self {
+        // SAFETY: Lambda is #[repr(transparent)] around Arc<LambdaInner>, exactly 8 bytes
+        let data: u64 = unsafe { std::mem::transmute(l) };
+        Self {
+            tag: TAG_LAMBDA,
+            _pad: [0; 7],
+            data,
+        }
+    }
+
+    // === View for pattern matching ===
+
+    #[inline]
+    pub fn variant(&self) -> Variant<'_> {
+        match self.tag {
+            TAG_NONE => Variant::None,
+            TAG_BOOL_FALSE => Variant::Bool(false),
+            TAG_BOOL_TRUE => Variant::Bool(true),
+            TAG_INT => Variant::Int(self.data as i64),
+            TAG_FLOAT => Variant::Float(f64::from_bits(self.data)),
+            TAG_OBJ => {
+                let obj: Obj = unsafe { std::mem::transmute(self.data) };
+                Variant::Obj(obj)
             }
-            Variant::List(_)
-            | Variant::Str(_)
-            | Variant::Map(_)
-            | Variant::Err(_)
-            | Variant::Flyweight(_)
-            | Variant::Binary(_)
-            | Variant::Lambda(_) => {
-                // Let the compiler generate the appropriate drop code for these
-                // The fields will be dropped automatically when this function returns
+            TAG_SYM => {
+                let sym: Symbol = unsafe { std::mem::transmute(self.data) };
+                Variant::Sym(sym)
+            }
+            // Str, List, Map, Lambda: data contains transmuted value, reinterpret &data as &Type
+            TAG_STR => Variant::Str(unsafe { &*(&self.data as *const u64 as *const string::Str) }),
+            TAG_LIST => Variant::List(unsafe { &*(&self.data as *const u64 as *const List) }),
+            TAG_MAP => Variant::Map(unsafe { &*(&self.data as *const u64 as *const map::Map) }),
+            TAG_LAMBDA => Variant::Lambda(unsafe { &*(&self.data as *const u64 as *const Lambda) }),
+            // Err, Flyweight, Binary: data is a pointer (Arc or Box)
+            TAG_ERR => Variant::Err(unsafe { &*(self.data as *const Error) }),
+            TAG_FLYWEIGHT => Variant::Flyweight(unsafe { &*(self.data as *const Flyweight) }),
+            TAG_BINARY => Variant::Binary(unsafe { &*(self.data as *const Binary) }),
+            _ => unreachable!("invalid tag"),
+        }
+    }
+
+    #[inline(always)]
+    fn is_simple(&self) -> bool {
+        self.tag & COMPLEX_FLAG == 0
+    }
+
+    // === Direct accessor methods ===
+
+    #[inline(always)]
+    pub fn as_integer(&self) -> Option<i64> {
+        if self.tag == TAG_INT {
+            Some(self.data as i64)
+        } else {
+            None
+        }
+    }
+
+    #[inline(always)]
+    pub fn as_float(&self) -> Option<f64> {
+        if self.tag == TAG_FLOAT {
+            Some(f64::from_bits(self.data))
+        } else {
+            None
+        }
+    }
+
+    #[inline(always)]
+    pub fn as_bool(&self) -> Option<bool> {
+        match self.tag {
+            TAG_BOOL_TRUE => Some(true),
+            TAG_BOOL_FALSE => Some(false),
+            _ => None,
+        }
+    }
+
+    #[inline(always)]
+    pub fn as_object(&self) -> Option<Obj> {
+        if self.tag == TAG_OBJ {
+            Some(unsafe { std::mem::transmute::<u64, Obj>(self.data) })
+        } else {
+            None
+        }
+    }
+
+    #[inline(always)]
+    pub fn as_sym(&self) -> Option<Symbol> {
+        if self.tag == TAG_SYM {
+            Some(unsafe { std::mem::transmute::<u64, Symbol>(self.data) })
+        } else {
+            None
+        }
+    }
+
+    #[inline(always)]
+    pub fn is_none(&self) -> bool {
+        self.tag == TAG_NONE
+    }
+
+    // Str, List, Map, Lambda: data contains transmuted value
+    #[inline(always)]
+    pub fn as_str(&self) -> Option<&string::Str> {
+        if self.tag == TAG_STR {
+            Some(unsafe { &*(&self.data as *const u64 as *const string::Str) })
+        } else {
+            None
+        }
+    }
+
+    /// Extract the string value if this is a string, otherwise None.
+    #[inline]
+    pub fn as_string(&self) -> Option<&str> {
+        self.as_str().map(|s| s.as_str())
+    }
+
+    #[inline(always)]
+    pub fn as_list(&self) -> Option<&List> {
+        if self.tag == TAG_LIST {
+            Some(unsafe { &*(&self.data as *const u64 as *const List) })
+        } else {
+            None
+        }
+    }
+
+    #[inline(always)]
+    pub fn as_map(&self) -> Option<&map::Map> {
+        if self.tag == TAG_MAP {
+            Some(unsafe { &*(&self.data as *const u64 as *const map::Map) })
+        } else {
+            None
+        }
+    }
+
+    #[inline(always)]
+    pub fn as_lambda(&self) -> Option<&Lambda> {
+        if self.tag == TAG_LAMBDA {
+            Some(unsafe { &*(&self.data as *const u64 as *const Lambda) })
+        } else {
+            None
+        }
+    }
+
+    // Err, Flyweight, Binary: data is a pointer
+    #[inline(always)]
+    pub fn as_error(&self) -> Option<&Error> {
+        if self.tag == TAG_ERR {
+            Some(unsafe { &*(self.data as *const Error) })
+        } else {
+            None
+        }
+    }
+
+    #[inline(always)]
+    pub fn as_flyweight(&self) -> Option<&Flyweight> {
+        if self.tag == TAG_FLYWEIGHT {
+            Some(unsafe { &*(self.data as *const Flyweight) })
+        } else {
+            None
+        }
+    }
+
+    #[inline(always)]
+    pub fn as_binary(&self) -> Option<&Binary> {
+        if self.tag == TAG_BINARY {
+            Some(unsafe { &*(self.data as *const Binary) })
+        } else {
+            None
+        }
+    }
+
+    // === Type information ===
+
+    pub fn type_code(&self) -> VarType {
+        match self.variant() {
+            Variant::Bool(_) => VarType::TYPE_BOOL,
+            Variant::Int(_) => VarType::TYPE_INT,
+            Variant::Obj(_) => VarType::TYPE_OBJ,
+            Variant::Str(_) => VarType::TYPE_STR,
+            Variant::Err(_) => VarType::TYPE_ERR,
+            Variant::List(_) => VarType::TYPE_LIST,
+            Variant::None => VarType::TYPE_NONE,
+            Variant::Float(_) => VarType::TYPE_FLOAT,
+            Variant::Map(_) => VarType::TYPE_MAP,
+            Variant::Flyweight(_) => VarType::TYPE_FLYWEIGHT,
+            Variant::Sym(_) => VarType::TYPE_SYMBOL,
+            Variant::Binary(_) => VarType::TYPE_BINARY,
+            Variant::Lambda(_) => VarType::TYPE_LAMBDA,
+        }
+    }
+
+    /// If a string, turn into symbol, or if already a symbol, return that.
+    /// Otherwise, E_TYPE
+    pub fn as_symbol(&self) -> Result<Symbol, Error> {
+        match self.variant() {
+            Variant::Str(s) => Ok(Symbol::mk(s.as_str())),
+            Variant::Sym(s) => Ok(s),
+            Variant::Err(e) => Ok(e.name()),
+            _ => Err(E_TYPE.with_msg(|| {
+                format!("Cannot convert {} to symbol", self.type_code().to_literal())
+            })),
+        }
+    }
+
+    pub fn is_true(&self) -> bool {
+        match self.variant() {
+            Variant::None => false,
+            Variant::Bool(b) => b,
+            Variant::Obj(_) => false,
+            Variant::Int(i) => i != 0,
+            Variant::Float(f) => f != 0.0,
+            Variant::List(l) => !l.is_empty(),
+            Variant::Str(s) => !s.is_empty(),
+            Variant::Map(m) => !m.is_empty(),
+            Variant::Err(_) => false,
+            Variant::Flyweight(f) => !f.is_contents_empty(),
+            Variant::Sym(_) => true,
+            Variant::Binary(b) => !b.is_empty(),
+            Variant::Lambda(_) => true,
+        }
+    }
+
+    pub fn type_class(&self) -> TypeClass<'_> {
+        match self.variant() {
+            Variant::List(s) => TypeClass::Sequence(s),
+            Variant::Flyweight(_) => TypeClass::Scalar,
+            Variant::Str(s) => TypeClass::Sequence(s),
+            Variant::Binary(b) => TypeClass::Sequence(b),
+            Variant::Map(m) => TypeClass::Associative(m),
+            _ => TypeClass::Scalar,
+        }
+    }
+
+    pub fn is_sequence(&self) -> bool {
+        self.type_class().is_sequence()
+    }
+
+    pub fn is_associative(&self) -> bool {
+        self.type_class().is_associative()
+    }
+
+    pub fn is_scalar(&self) -> bool {
+        self.type_class().is_scalar()
+    }
+
+    pub fn is_string(&self) -> bool {
+        matches!(self.variant(), Variant::Str(_))
+    }
+
+    // === Collection operations ===
+
+    /// Index into a sequence type, or get Nth element of an association set
+    pub fn index(&self, index: &Var, index_mode: IndexMode) -> Result<Self, Error> {
+        let tc = self.type_class();
+        if tc.is_scalar() {
+            return Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot index into scalar value {}",
+                    self.type_code().to_literal()
+                )
+            }));
+        }
+        let idx = match index.variant() {
+            Variant::Int(i) => {
+                let i = index_mode.adjust_i64(i);
+                if i < 0 {
+                    return Err(E_RANGE.with_msg(|| {
+                        format!("Cannot index into sequence with negative index {i}")
+                    }));
+                }
+                i as usize
+            }
+            _ => {
+                return Err(E_TYPE.with_msg(|| {
+                    format!(
+                        "Cannot index into sequence with non-integer index {}",
+                        index.type_code().to_literal()
+                    )
+                }));
+            }
+        };
+
+        match tc {
+            TypeClass::Sequence(s) => Ok(s.index(idx)?),
+            TypeClass::Associative(a) => Ok(a.index(idx)?.1),
+            _ => Err(E_TYPE
+                .with_msg(|| format!("Cannot index into type {}", self.type_code().to_literal()))),
+        }
+    }
+
+    /// Return the associative key at `key`, or the Nth element of a sequence.
+    pub fn get(&self, key: &Var, index_mode: IndexMode) -> Result<Self, Error> {
+        match self.type_class() {
+            TypeClass::Sequence(_) => self.index(key, index_mode),
+            TypeClass::Associative(a) => a.get(key),
+            _ => Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot index value from type {}",
+                    self.type_code().to_literal()
+                )
+            })),
+        }
+    }
+
+    /// Update the associative key at `key` to `value` and return the modification.
+    pub fn set(&self, key: &Var, value: &Var, index_mode: IndexMode) -> Result<Self, Error> {
+        match self.type_class() {
+            TypeClass::Sequence(_) => self.index_set(key, value, index_mode),
+            TypeClass::Associative(s) => s.set(key, value),
+            _ => Err(E_TYPE.with_msg(|| {
+                format!("Cannot set value in type {}", self.type_code().to_literal())
+            })),
+        }
+    }
+
+    /// Assign a new value to `index`nth element of the sequence, or to a key in an associative type.
+    pub fn index_set(
+        &self,
+        idx: &Self,
+        value: &Self,
+        index_mode: IndexMode,
+    ) -> Result<Self, Error> {
+        match self.type_class() {
+            TypeClass::Sequence(s) => {
+                let idx = match idx.variant() {
+                    Variant::Int(i) => {
+                        let i = index_mode.adjust_i64(i);
+                        if i < 0 {
+                            return Err(E_RANGE.with_msg(|| {
+                                format!("Cannot index into sequence with negative index {i}")
+                            }));
+                        }
+                        i as usize
+                    }
+                    _ => {
+                        return Err(E_INVARG.with_msg(|| {
+                            format!(
+                                "Cannot index into sequence with non-integer index {}",
+                                idx.type_code().to_literal()
+                            )
+                        }));
+                    }
+                };
+                s.index_set(idx, value)
+            }
+            _ => Err(E_TYPE.with_msg(|| {
+                format!("Cannot set value in type {}", self.type_code().to_literal())
+            })),
+        }
+    }
+
+    /// Insert a new value at `index` in a sequence only.
+    pub fn insert(&self, index: &Var, value: &Var, index_mode: IndexMode) -> Result<Var, Error> {
+        match self.type_class() {
+            TypeClass::Sequence(s) => {
+                let index = match index.variant() {
+                    Variant::Int(i) => index_mode.adjust_i64(i),
+                    _ => {
+                        return Err(E_INVARG.with_msg(|| {
+                            format!(
+                                "Cannot insert into sequence with non-integer index {}",
+                                index.type_code().to_literal()
+                            )
+                        }));
+                    }
+                };
+                let index = if index < 0 {
+                    0
+                } else {
+                    min(index as usize, s.len())
+                };
+
+                if index > s.len() {
+                    return Err(E_RANGE.with_msg(|| {
+                        format!(
+                            "Cannot insert into sequence with index {} greater than length {}",
+                            index,
+                            s.len()
+                        )
+                    }));
+                }
+
+                s.insert(index, value)
+            }
+            _ => Err(E_TYPE
+                .with_msg(|| format!("Cannot insert into type {}", self.type_code().to_literal()))),
+        }
+    }
+
+    pub fn range(&self, from: &Var, to: &Var, index_mode: IndexMode) -> Result<Var, Error> {
+        match self.type_class() {
+            TypeClass::Sequence(s) => {
+                let from = match from.variant() {
+                    Variant::Int(i) => index_mode.adjust_i64(i),
+                    _ => {
+                        return Err(E_INVARG.with_msg(|| {
+                            format!(
+                                "Cannot index into sequence with non-integer index {}",
+                                from.type_code().to_literal()
+                            )
+                        }));
+                    }
+                };
+                let to = match to.variant() {
+                    Variant::Int(i) => index_mode.adjust_i64(i),
+                    _ => {
+                        return Err(E_INVARG.with_msg(|| {
+                            format!(
+                                "Cannot index into sequence with non-integer index {}",
+                                to.type_code().to_literal()
+                            )
+                        }));
+                    }
+                };
+                s.range(from, to)
+            }
+            TypeClass::Associative(a) => a.range(from, to),
+            TypeClass::Scalar => Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot index into scalar value {}",
+                    self.type_code().to_literal()
+                )
+            })),
+        }
+    }
+
+    pub fn range_set(
+        &self,
+        from: &Var,
+        to: &Var,
+        with: &Var,
+        index_mode: IndexMode,
+    ) -> Result<Var, Error> {
+        match self.type_class() {
+            TypeClass::Sequence(s) => {
+                let from = match from.variant() {
+                    Variant::Int(i) => index_mode.adjust_i64(i),
+                    _ => {
+                        return Err(E_INVARG.with_msg(|| {
+                            format!(
+                                "Cannot index into sequence with non-integer index {}",
+                                from.type_code().to_literal()
+                            )
+                        }));
+                    }
+                };
+                let to = match to.variant() {
+                    Variant::Int(i) => index_mode.adjust_i64(i),
+                    _ => {
+                        return Err(E_INVARG.with_msg(|| {
+                            format!(
+                                "Cannot index into sequence with non-integer index {}",
+                                to.type_code().to_literal()
+                            )
+                        }));
+                    }
+                };
+                s.range_set(from, to, with)
+            }
+            TypeClass::Associative(a) => a.range_set(from, to, with),
+            TypeClass::Scalar => Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot index into scalar value {}",
+                    self.type_code().to_literal()
+                )
+            })),
+        }
+    }
+
+    pub fn append(&self, other: &Var) -> Result<Var, Error> {
+        match self.type_class() {
+            TypeClass::Sequence(s) => s.append(other),
+            _ => Err(E_TYPE
+                .with_msg(|| format!("Cannot append to type {}", self.type_code().to_literal()))),
+        }
+    }
+
+    pub fn push(&self, value: &Var) -> Result<Var, Error> {
+        match self.type_class() {
+            TypeClass::Sequence(s) => s.push(value),
+            _ => Err(E_TYPE
+                .with_msg(|| format!("Cannot push to type {}", self.type_code().to_literal()))),
+        }
+    }
+
+    pub fn contains(&self, value: &Var, case_sensitive: bool) -> Result<Var, Error> {
+        match self.type_class() {
+            TypeClass::Sequence(s) => {
+                let c = s.contains(value, case_sensitive)?;
+                Ok(v_bool_int(c))
+            }
+            TypeClass::Associative(a) => {
+                let c = a.contains_key(value, case_sensitive)?;
+                Ok(v_bool_int(c))
+            }
+            TypeClass::Scalar => Err(E_INVARG.with_msg(|| {
+                format!(
+                    "Cannot check for membership in scalar value {}",
+                    self.type_code().to_literal()
+                )
+            })),
+        }
+    }
+
+    pub fn index_in(
+        &self,
+        value: &Var,
+        case_sensitive: bool,
+        index_mode: IndexMode,
+    ) -> Result<Var, Error> {
+        match self.type_class() {
+            TypeClass::Sequence(s) => {
+                let idx = s
+                    .index_in(value, case_sensitive)?
+                    .map(|i| i as i64)
+                    .unwrap_or(-1);
+                Ok(v_int(index_mode.reverse_adjust_isize(idx as isize) as i64))
+            }
+            TypeClass::Associative(a) => {
+                let idx = a
+                    .index_in(value, case_sensitive)?
+                    .map(|i| i as i64)
+                    .unwrap_or(-1);
+                Ok(v_int(index_mode.reverse_adjust_isize(idx as isize) as i64))
+            }
+            _ => Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot check for membership in type {}",
+                    self.type_code().to_literal()
+                )
+            })),
+        }
+    }
+
+    pub fn remove_at(&self, index: &Var, index_mode: IndexMode) -> Result<Var, Error> {
+        match self.type_class() {
+            TypeClass::Sequence(s) => {
+                let index = match index.variant() {
+                    Variant::Int(i) => index_mode.adjust_i64(i),
+                    _ => {
+                        return Err(E_INVARG.with_msg(|| {
+                            format!(
+                                "Cannot index into sequence with non-integer index {}",
+                                index.type_code().to_literal()
+                            )
+                        }));
+                    }
+                };
+
+                if index < 0 {
+                    return Err(E_RANGE.with_msg(|| {
+                        format!("Cannot index into sequence with negative index {index}")
+                    }));
+                }
+
+                s.remove_at(index as usize)
+            }
+            _ => Err(E_TYPE
+                .with_msg(|| format!("Cannot remove from type {}", self.type_code().to_literal()))),
+        }
+    }
+
+    pub fn remove(&self, value: &Var, case_sensitive: bool) -> Result<(Var, Option<Var>), Error> {
+        match self.type_class() {
+            TypeClass::Associative(a) => Ok(a.remove(value, case_sensitive)),
+            _ => Err(E_INVARG
+                .with_msg(|| format!("Cannot remove from type {}", self.type_code().to_literal()))),
+        }
+    }
+
+    pub fn is_empty(&self) -> Result<bool, Error> {
+        match self.type_class() {
+            TypeClass::Sequence(s) => Ok(s.is_empty()),
+            TypeClass::Associative(a) => Ok(a.is_empty()),
+            TypeClass::Scalar => Err(E_INVARG.with_msg(|| {
+                format!(
+                    "Cannot check if scalar value {} is empty",
+                    self.type_code().to_literal()
+                )
+            })),
+        }
+    }
+
+    pub fn len(&self) -> Result<usize, Error> {
+        match self.type_class() {
+            TypeClass::Sequence(s) => Ok(s.len()),
+            TypeClass::Associative(a) => Ok(a.len()),
+            TypeClass::Scalar => Err(E_INVARG.with_msg(|| {
+                format!(
+                    "Cannot get length of scalar value {}",
+                    self.type_code().to_literal()
+                )
+            })),
+        }
+    }
+
+    // === Comparison helpers ===
+
+    pub fn eq_case_sensitive(&self, other: &Var) -> bool {
+        match (self.variant(), other.variant()) {
+            (Variant::Str(s1), Variant::Str(s2)) => s1.as_str() == s2.as_str(),
+            (Variant::List(l1), Variant::List(l2)) => {
+                if l1.len() != l2.len() {
+                    return false;
+                }
+                for (left, right) in l1.iter().zip(l2.iter()) {
+                    if !left.eq_case_sensitive(&right) {
+                        return false;
+                    }
+                }
+                true
+            }
+            (Variant::Map(m1), Variant::Map(m2)) => {
+                if m1.len() != m2.len() {
+                    return false;
+                }
+                for (left, right) in m1.iter().zip(m2.iter()) {
+                    if !left.0.eq_case_sensitive(&right.0) || !left.1.eq_case_sensitive(&right.1) {
+                        return false;
+                    }
+                }
+                true
+            }
+            (Variant::Flyweight(f1), Variant::Flyweight(f2)) => {
+                if f1.delegate() != f2.delegate() {
+                    return false;
+                }
+                let slots1 = f1.slots();
+                let slots2 = f2.slots();
+                if slots1.len() != slots2.len() {
+                    return false;
+                }
+                for ((k1, v1), (k2, v2)) in slots1.iter().zip(slots2.iter()) {
+                    if k1 != k2 || !v1.eq_case_sensitive(v2) {
+                        return false;
+                    }
+                }
+                let contents1 = Var::from_list(f1.contents().clone());
+                let contents2 = Var::from_list(f2.contents().clone());
+                contents1.eq_case_sensitive(&contents2)
+            }
+            _ => self.eq(other),
+        }
+    }
+
+    pub fn cmp_case_sensitive(&self, other: &Var) -> Ordering {
+        match (self.variant(), other.variant()) {
+            (Variant::Str(s1), Variant::Str(s2)) => s1.as_str().cmp(s2.as_str()),
+            _ => self.cmp(other),
+        }
+    }
+
+    // === Internal clone helper ===
+
+    #[cold]
+    #[inline(never)]
+    fn clone_complex(&self) -> Self {
+        match self.tag {
+            // Str, List, Map, Lambda: data contains transmuted value, clone = Arc bump
+            TAG_STR => {
+                let s = unsafe { &*(&self.data as *const u64 as *const string::Str) };
+                Self::from_str_type(s.clone())
+            }
+            TAG_LIST => {
+                let l = unsafe { &*(&self.data as *const u64 as *const List) };
+                Self::from_list(l.clone())
+            }
+            TAG_MAP => {
+                let m = unsafe { &*(&self.data as *const u64 as *const map::Map) };
+                Self::from_map(m.clone())
+            }
+            TAG_LAMBDA => {
+                let l = unsafe { &*(&self.data as *const u64 as *const Lambda) };
+                Self::from_lambda(l.clone())
+            }
+            // Err: data is Arc pointer
+            TAG_ERR => {
+                let arc = unsafe { Arc::from_raw(self.data as *const Error) };
+                let cloned = Arc::clone(&arc);
+                std::mem::forget(arc);
+                Self {
+                    tag: TAG_ERR,
+                    _pad: [0; 7],
+                    data: Arc::into_raw(cloned) as u64,
+                }
+            }
+            // Flyweight, Binary: data is Box pointer
+            TAG_FLYWEIGHT => {
+                let f = unsafe { &*(self.data as *const Flyweight) };
+                Self::from_flyweight(f.clone())
+            }
+            TAG_BINARY => {
+                let b = unsafe { &*(self.data as *const Binary) };
+                let boxed = Box::new(b.clone());
+                Self {
+                    tag: TAG_BINARY,
+                    _pad: [0; 7],
+                    data: Box::into_raw(boxed) as u64,
+                }
+            }
+            _ => unreachable!("clone_complex called on simple type"),
+        }
+    }
+}
+
+// === Clone, Drop, and standard traits ===
+
+impl Clone for Var {
+    #[inline]
+    fn clone(&self) -> Self {
+        if self.is_simple() {
+            // SAFETY: For simple types (no heap allocation), we can just copy the bytes
+            unsafe { std::ptr::read(self) }
+        } else {
+            self.clone_complex()
+        }
+    }
+}
+
+impl Drop for Var {
+    fn drop(&mut self) {
+        if self.is_simple() {
+            return;
+        }
+        match self.tag {
+            // Str, List, Map, Lambda: data contains transmuted value, drop by transmuting back
+            TAG_STR => {
+                let _ = unsafe { std::mem::transmute::<u64, string::Str>(self.data) };
+            }
+            TAG_LIST => {
+                let _ = unsafe { std::mem::transmute::<u64, List>(self.data) };
+            }
+            TAG_MAP => {
+                let _ = unsafe { std::mem::transmute::<u64, map::Map>(self.data) };
+            }
+            TAG_LAMBDA => {
+                let _ = unsafe { std::mem::transmute::<u64, Lambda>(self.data) };
+            }
+            // Err: data is Arc pointer
+            TAG_ERR => {
+                let _ = unsafe { Arc::from_raw(self.data as *const Error) };
+            }
+            // Flyweight, Binary: data is Box pointer
+            TAG_FLYWEIGHT => {
+                let _ = unsafe { Box::from_raw(self.data as *mut Flyweight) };
+            }
+            TAG_BINARY => {
+                let _ = unsafe { Box::from_raw(self.data as *mut Binary) };
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Debug for Var {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.variant() {
+            Variant::None => write!(f, "None"),
+            Variant::Bool(b) => write!(f, "{b}"),
+            Variant::Obj(o) => write!(f, "Object({o})"),
+            Variant::Int(i) => write!(f, "Integer({i})"),
+            Variant::Float(fl) => write!(f, "Float({fl})"),
+            Variant::List(l) => {
+                let items: Vec<_> = l.iter().collect();
+                write!(f, "List([size = {}, items = {items:?}])", l.len())
+            }
+            Variant::Str(s) => write!(f, "String({:?})", s.as_str()),
+            Variant::Map(m) => {
+                let items: Vec<_> = m.iter().collect();
+                write!(f, "Map([size = {}, items = {items:?}])", m.len())
+            }
+            Variant::Err(e) => write!(f, "Error({e:?})"),
+            Variant::Flyweight(fl) => write!(f, "Flyweight({fl:?})"),
+            Variant::Sym(s) => write!(f, "Symbol({s})"),
+            Variant::Binary(b) => write!(f, "Binary({} bytes)", b.len()),
+            Variant::Lambda(l) => {
+                use crate::program::opcode::ScatterLabel;
+                let param_str = l
+                    .0
+                    .params
+                    .labels
+                    .iter()
+                    .map(|label| match label {
+                        ScatterLabel::Required(_) => "x",
+                        ScatterLabel::Optional(_, _) => "?x",
+                        ScatterLabel::Rest(_) => "@x",
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "Lambda(({param_str}))")
             }
         }
     }
 }
 
-impl Hash for Variant {
+impl Hash for Var {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        match self {
+        match self.variant() {
             Variant::None => 0.hash(state),
             Variant::Bool(b) => b.hash(state),
             Variant::Obj(o) => o.hash(state),
@@ -88,20 +1075,45 @@ impl Hash for Variant {
     }
 }
 
-impl Ord for Variant {
+impl PartialEq for Var {
+    fn eq(&self, other: &Self) -> bool {
+        if self.tag != other.tag {
+            return false;
+        }
+        match self.variant() {
+            Variant::None => true,
+            Variant::Bool(b) => other.as_bool() == Some(b),
+            Variant::Int(i) => other.as_integer() == Some(i),
+            Variant::Float(f) => other.as_float() == Some(f),
+            Variant::Obj(o) => other.as_object() == Some(o),
+            Variant::Sym(s) => other.as_sym() == Some(s),
+            Variant::Str(s) => other.as_str() == Some(s),
+            Variant::List(l) => other.as_list() == Some(l),
+            Variant::Map(m) => other.as_map() == Some(m),
+            Variant::Err(e) => other.as_error() == Some(e),
+            Variant::Flyweight(f) => other.as_flyweight() == Some(f),
+            Variant::Binary(b) => other.as_binary() == Some(b),
+            Variant::Lambda(l) => other.as_lambda() == Some(l),
+        }
+    }
+}
+
+impl Eq for Var {}
+
+impl Ord for Var {
     fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
+        match (self.variant(), other.variant()) {
             (Variant::None, Variant::None) => Ordering::Equal,
-            (Variant::Bool(l), Variant::Bool(r)) => l.cmp(r),
-            (Variant::Obj(l), Variant::Obj(r)) => l.cmp(r),
-            (Variant::Int(l), Variant::Int(r)) => l.cmp(r),
-            (Variant::Float(l), Variant::Float(r)) => l.total_cmp(r),
+            (Variant::Bool(l), Variant::Bool(r)) => l.cmp(&r),
+            (Variant::Obj(l), Variant::Obj(r)) => l.cmp(&r),
+            (Variant::Int(l), Variant::Int(r)) => l.cmp(&r),
+            (Variant::Float(l), Variant::Float(r)) => l.total_cmp(&r),
             (Variant::List(l), Variant::List(r)) => l.cmp(r),
             (Variant::Str(l), Variant::Str(r)) => l.cmp(r),
             (Variant::Map(l), Variant::Map(r)) => l.cmp(r),
             (Variant::Err(l), Variant::Err(r)) => l.cmp(r),
             (Variant::Flyweight(l), Variant::Flyweight(r)) => l.cmp(r),
-            (Variant::Sym(l), Variant::Sym(r)) => l.cmp(r),
+            (Variant::Sym(l), Variant::Sym(r)) => l.cmp(&r),
             (Variant::Binary(l), Variant::Binary(r)) => l.cmp(r),
             (Variant::Lambda(l), Variant::Lambda(r)) => {
                 use crate::program::program::PrgInner;
@@ -109,10 +1121,8 @@ impl Ord for Variant {
                 let r_ptr = &*r.0.body.0 as *const PrgInner;
                 l_ptr.cmp(&r_ptr)
             }
-
-            (Variant::Int(l), Variant::Float(r)) => (*l as f64).total_cmp(r),
-            (Variant::Float(l), Variant::Int(r)) => l.total_cmp(&(*r as f64)),
-
+            (Variant::Int(l), Variant::Float(r)) => (l as f64).total_cmp(&r),
+            (Variant::Float(l), Variant::Int(r)) => l.total_cmp(&(r as f64)),
             (Variant::None, _) => Ordering::Less,
             (_, Variant::None) => Ordering::Greater,
             (Variant::Bool(_), _) => Ordering::Less,
@@ -141,81 +1151,15 @@ impl Ord for Variant {
     }
 }
 
-impl PartialOrd for Variant {
+impl PartialOrd for Var {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Debug for Variant {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Variant::None => write!(f, "None"),
-            Variant::Bool(b) => write!(f, "{}", *b),
-            Variant::Obj(o) => write!(f, "Object({o})"),
-            Variant::Int(i) => write!(f, "Integer({i})"),
-            Variant::Float(fl) => write!(f, "Float({fl})"),
-            Variant::List(l) => {
-                // Items...
-                let r = l.iter();
-                let i: Vec<_> = r.collect();
-                write!(f, "List([size = {}, items = {:?}])", l.len(), i)
-            }
-            Variant::Str(s) => write!(f, "String({:?})", s.as_str()),
-            Variant::Map(m) => {
-                // Items...
-                let r = m.iter();
-                let i: Vec<_> = r.collect();
-                write!(f, "Map([size = {}, items = {:?}])", m.len(), i)
-            }
-            Variant::Err(e) => write!(f, "Error({e:?})"),
-            Variant::Flyweight(fl) => write!(f, "Flyweight({fl:?})"),
-            Variant::Sym(s) => write!(f, "Symbol({s})"),
-            Variant::Binary(b) => write!(f, "Binary({} bytes)", b.len()),
-            Variant::Lambda(l) => {
-                use crate::program::opcode::ScatterLabel;
-                let param_str =
-                    l.0.params
-                        .labels
-                        .iter()
-                        .map(|label| match label {
-                            ScatterLabel::Required(_) => "x",
-                            ScatterLabel::Optional(_, _) => "?x",
-                            ScatterLabel::Rest(_) => "@x",
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                write!(f, "Lambda(({param_str}))")
-            }
-        }
-    }
-}
-
-impl PartialEq<Self> for Variant {
-    fn eq(&self, other: &Self) -> bool {
-        // If the types are different, they're not equal.
-        match (self, other) {
-            (Variant::Bool(s), Variant::Bool(o)) => s == o,
-            (Variant::Str(s), Variant::Str(o)) => s == o,
-            (Variant::Sym(s), Variant::Sym(o)) => s == o,
-            (Variant::Int(s), Variant::Int(o)) => s == o,
-            (Variant::Float(s), Variant::Float(o)) => s == o,
-            (Variant::Obj(s), Variant::Obj(o)) => s == o,
-            (Variant::List(s), Variant::List(o)) => s == o,
-            (Variant::Map(s), Variant::Map(o)) => s == o,
-            (Variant::Err(s), Variant::Err(o)) => s == o,
-            (Variant::Flyweight(s), Variant::Flyweight(o)) => s == o,
-            (Variant::Binary(s), Variant::Binary(o)) => s == o,
-            (Variant::Lambda(s), Variant::Lambda(o)) => s == o,
-            (Variant::None, Variant::None) => true,
-            _ => false,
-        }
-    }
-}
-
-impl ByteSized for Variant {
+impl ByteSized for Var {
     fn size_bytes(&self) -> usize {
-        match self {
+        match self.variant() {
             Variant::List(l) => l.iter().map(|e| e.size_bytes()).sum::<usize>(),
             Variant::Str(s) => s.as_arc_string().len(),
             Variant::Map(m) => m
@@ -225,7 +1169,7 @@ impl ByteSized for Variant {
             Variant::Err(e) => {
                 e.msg.as_ref().map(|s| s.len()).unwrap_or(0)
                     + e.value.as_ref().map(|s| s.size_bytes()).unwrap_or(0)
-                    + size_of::<ErrorCode>()
+                    + size_of::<crate::ErrorCode>()
             }
             Variant::Flyweight(f) => {
                 size_of::<Obj>()
@@ -237,8 +1181,231 @@ impl ByteSized for Variant {
             }
             Variant::Binary(b) => b.as_byte_view().len(),
             Variant::Lambda(l) => size_of_val(l),
-            _ => size_of::<Variant>(),
+            _ => size_of::<Var>(),
         }
     }
 }
-impl Eq for Variant {}
+
+// === From implementations ===
+
+impl From<i64> for Var {
+    fn from(i: i64) -> Self {
+        Var::mk_integer(i)
+    }
+}
+
+impl From<&str> for Var {
+    fn from(s: &str) -> Self {
+        Var::mk_str(s)
+    }
+}
+
+impl From<String> for Var {
+    fn from(s: String) -> Self {
+        Var::mk_str(&s)
+    }
+}
+
+impl From<Obj> for Var {
+    fn from(o: Obj) -> Self {
+        Var::mk_object(o)
+    }
+}
+
+impl From<Error> for Var {
+    fn from(e: Error) -> Self {
+        Var::mk_error(e)
+    }
+}
+
+impl From<Vec<u8>> for Var {
+    fn from(bytes: Vec<u8>) -> Self {
+        Var::mk_binary(bytes)
+    }
+}
+
+// === Constructor functions ===
+
+pub fn v_int(i: i64) -> Var {
+    Var::mk_integer(i)
+}
+
+/// Produces a truthy integer, not a boolean, for LambdaMOO compatibility.
+pub fn v_bool_int(b: bool) -> Var {
+    if b { v_int(1) } else { v_int(0) }
+}
+
+pub fn v_bool(b: bool) -> Var {
+    Var::mk_bool(b)
+}
+
+pub fn v_none() -> Var {
+    Var::mk_none()
+}
+
+pub fn v_str(s: &str) -> Var {
+    Var::mk_str(s)
+}
+
+pub fn v_string(s: String) -> Var {
+    Var::mk_str(&s)
+}
+
+pub fn v_arc_string(s: Arc<String>) -> Var {
+    let str_val = crate::string::Str::mk_arc_str(s);
+    Var::from_str_type(str_val)
+}
+
+pub fn v_list(values: &[Var]) -> Var {
+    Var::mk_list(values)
+}
+
+pub fn v_list_iter<IT: IntoIterator<Item = Var>>(values: IT) -> Var {
+    Var::mk_list_iter(values)
+}
+
+pub fn v_map(pairs: &[(Var, Var)]) -> Var {
+    Var::mk_map(pairs)
+}
+
+pub fn v_map_iter<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Var {
+    Var::mk_map_iter(pairs)
+}
+
+pub fn v_float(f: f64) -> Var {
+    Var::mk_float(f)
+}
+
+pub fn v_err(e: ErrorCode) -> Var {
+    Var::mk_error(e.into())
+}
+
+pub fn v_error(e: Error) -> Var {
+    Var::mk_error(e)
+}
+
+pub fn v_objid(o: i32) -> Var {
+    Var::mk_object(Obj::mk_id(o))
+}
+
+pub fn v_obj(o: Obj) -> Var {
+    Var::mk_object(o)
+}
+
+pub fn v_sym(s: impl Into<Symbol>) -> Var {
+    Var::mk_symbol(s.into())
+}
+
+pub fn v_binary(bytes: Vec<u8>) -> Var {
+    Var::mk_binary(bytes)
+}
+
+pub fn v_flyweight(delegate: Obj, slots: &[(Symbol, Var)], contents: List) -> Var {
+    let fl = Flyweight::mk_flyweight(delegate, slots, contents);
+    Var::from_flyweight(fl)
+}
+
+pub fn v_empty_list() -> Var {
+    v_list(&[])
+}
+
+pub fn v_empty_str() -> Var {
+    EMPTY_STR_VAR.clone()
+}
+
+/// Return cached NOTHING object Var.
+pub fn v_nothing() -> Var {
+    NOTHING_VAR.clone()
+}
+
+pub fn v_empty_map() -> Var {
+    v_map(&[])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_size() {
+        assert_eq!(std::mem::size_of::<Var>(), 16);
+    }
+
+    #[test]
+    fn test_simple_clone() {
+        let v = Var::mk_integer(42);
+        let c = v.clone();
+        match c.variant() {
+            Variant::Int(i) => assert_eq!(i, 42),
+            _ => panic!("wrong type"),
+        }
+    }
+
+    #[test]
+    fn test_bool() {
+        let t = Var::mk_bool(true);
+        let f = Var::mk_bool(false);
+        match t.variant() {
+            Variant::Bool(b) => assert!(b),
+            _ => panic!("wrong type"),
+        }
+        match f.variant() {
+            Variant::Bool(b) => assert!(!b),
+            _ => panic!("wrong type"),
+        }
+    }
+
+    #[test]
+    fn test_equality() {
+        assert_eq!(Var::mk_integer(42), Var::mk_integer(42));
+        assert_ne!(Var::mk_integer(42), Var::mk_integer(43));
+        assert_eq!(Var::mk_bool(true), Var::mk_bool(true));
+        assert_ne!(Var::mk_bool(true), Var::mk_bool(false));
+    }
+
+    #[test]
+    fn test_ordering() {
+        assert!(Var::mk_integer(1) < Var::mk_integer(2));
+        assert!(Var::mk_none() < Var::mk_integer(0));
+    }
+
+    #[test]
+    fn test_int_pack_unpack() {
+        let i = Var::mk_integer(42);
+        match i.variant() {
+            Variant::Int(i) => assert_eq!(i, 42),
+            _ => panic!("Expected integer"),
+        }
+    }
+
+    #[test]
+    fn test_float_pack_unpack() {
+        let f = Var::mk_float(42.0);
+        match f.variant() {
+            Variant::Float(f) => assert_eq!(f, 42.0),
+            _ => panic!("Expected float"),
+        }
+    }
+
+    #[test]
+    fn test_alpha_numeric_sort_order() {
+        let six = Var::mk_integer(6);
+        let a = Var::mk_str("a");
+        assert_eq!(six.cmp(&a), std::cmp::Ordering::Less);
+
+        let nine = Var::mk_integer(9);
+        assert_eq!(nine.cmp(&a), std::cmp::Ordering::Less);
+
+        assert_eq!(a.cmp(&six), std::cmp::Ordering::Greater);
+        assert_eq!(a.cmp(&nine), std::cmp::Ordering::Greater);
+    }
+
+    #[test]
+    fn test_var_size() {
+        assert!(
+            size_of::<Var>() <= 16,
+            "Var size exceeds 128 bits: {}",
+            size_of::<Var>()
+        );
+    }
+}

@@ -252,7 +252,7 @@ fn parse_object_kind_spec(
         Variant::Int(_) => Err(BfErr::ErrValue(E_INVARG.msg(
             "load_object() object_spec must be 0 (NextObjid), 1 (Anonymous), 2 (UuObjId), or an object ID",
         ))),
-        Variant::Obj(obj) => Ok(Some(ObjectKind::Objid(*obj))),
+        Variant::Obj(obj) => Ok(Some(ObjectKind::Objid(obj))),
         _ => Err(BfErr::ErrValue(E_TYPE.msg(
             "load_object() third argument must be an integer (0, 1, 2) or an object ID",
         ))),

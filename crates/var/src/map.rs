@@ -14,12 +14,12 @@
 use crate::{
     Associative, Error,
     error::ErrorCode::{E_RANGE, E_TYPE},
-    var::Var,
-    variant::Variant,
+    variant::Var,
 };
 use std::{cmp::Ordering, hash::Hash, sync::Arc};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
+#[repr(transparent)]
 pub struct Map(Arc<imbl::OrdMap<Var, Var>>);
 
 impl Map {
@@ -29,7 +29,7 @@ impl Map {
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect::<imbl::OrdMap<Var, Var>>();
         let m = Map(Arc::new(map));
-        Var::from_variant(Variant::Map(m))
+        Var::from_map(m)
     }
 
     pub(crate) fn build_presorted<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Var {
@@ -103,7 +103,7 @@ impl Associative for Map {
         // With OrdMap, this is an efficient O(log n) structural operation
         let new_map = self.0.update(key.clone(), value.clone());
         let m = Map(Arc::new(new_map));
-        Ok(Var::from_variant(Variant::Map(m)))
+        Ok(Var::from_map(m))
     }
 
     fn index(&self, index: usize) -> Result<(Var, Var), Error> {
@@ -174,18 +174,18 @@ impl Associative for Map {
                     let removed_value = self.0.get(existing_key).cloned();
                     let new_map = self.0.without(existing_key);
                     let m = Map(Arc::new(new_map));
-                    return (Var::from_variant(Variant::Map(m)), removed_value);
+                    return (Var::from_map(m), removed_value);
                 }
             }
             // Key not found
             let m = Map(self.0.clone());
-            (Var::from_variant(Variant::Map(m)), None)
+            (Var::from_map(m), None)
         } else {
             // Use OrdMap's efficient removal
             let removed_value = self.0.get(key).cloned();
             let new_map = self.0.without(key);
             let m = Map(Arc::new(new_map));
-            (Var::from_variant(Variant::Map(m)), removed_value)
+            (Var::from_map(m), removed_value)
         }
     }
 
@@ -262,7 +262,7 @@ impl Hash for Map {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Associative, IndexMode, v_bool_int, v_int, v_str, var::Var, variant::Variant};
+    use crate::{Associative, IndexMode, v_bool_int, v_int, v_str, variant::{Var, Variant}};
 
     #[test]
     fn test_map_pack_unpack_index() {
@@ -282,7 +282,7 @@ mod tests {
         let key = Var::mk_str("a");
         let value = m.get(&key, IndexMode::ZeroBased).unwrap();
         match value.variant() {
-            Variant::Int(i) => assert_eq!(*i, 1),
+            Variant::Int(i) => assert_eq!(i, 1),
             _ => panic!("Expected integer"),
         }
     }
@@ -360,7 +360,7 @@ mod tests {
         let key = Var::mk_str("b");
         let value = m.get(&key, IndexMode::OneBased).unwrap();
         match value.variant() {
-            Variant::Int(i) => assert_eq!(*i, 2),
+            Variant::Int(i) => assert_eq!(i, 2),
             _ => panic!("Expected integer"),
         }
     }
@@ -381,7 +381,7 @@ mod tests {
             Variant::Map(m) => {
                 let r = m.get(&Var::mk_str("b")).unwrap();
                 match r.variant() {
-                    Variant::Int(i) => assert_eq!(*i, 42),
+                    Variant::Int(i) => assert_eq!(i, 42),
                     _ => panic!("Expected integer, got {r:?}"),
                 }
             }
@@ -397,7 +397,7 @@ mod tests {
             Variant::Map(m) => {
                 let r = m.get(&Var::mk_str("d")).unwrap();
                 match r.variant() {
-                    Variant::Int(i) => assert_eq!(*i, 42),
+                    Variant::Int(i) => assert_eq!(i, 42),
                     _ => panic!("Expected integer, got {r:?}"),
                 }
             }

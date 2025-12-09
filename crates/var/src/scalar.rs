@@ -14,7 +14,7 @@
 use crate::{
     Error,
     error::ErrorCode::{E_INVARG, E_TYPE},
-    var::{Var, v_err, v_error, v_float, v_int},
+    variant::{Var, v_err, v_error, v_float, v_int},
     variant::Variant,
 };
 use num_traits::ToPrimitive;
@@ -29,13 +29,13 @@ macro_rules! binary_numeric_coercion_op {
                     Ok(v_float(l.to_f64().unwrap().$op(r.to_f64().unwrap())))
                 }
                 (Variant::Int(l), Variant::Int(r)) => {
-                    paste! { l.[<checked_ $op>](*r).map(v_int).ok_or_else( || E_INVARG.into()) }
+                    paste! { l.[<checked_ $op>](r).map(v_int).ok_or_else( || E_INVARG.into()) }
                 }
                 (Variant::Float(l), Variant::Int(r)) => {
-                    Ok(v_float(l.to_f64().unwrap().$op(*r as f64)))
+                    Ok(v_float(l.to_f64().unwrap().$op(r as f64)))
                 }
                 (Variant::Int(l), Variant::Float(r)) => {
-                    Ok(v_float((*l as f64).$op(r.to_f64().unwrap())))
+                    Ok(v_float((l as f64).$op(r.to_f64().unwrap())))
                 }
                 (_, _) => Ok(v_error(E_TYPE.with_msg(|| {
                     format!(
@@ -61,11 +61,11 @@ impl Var {
                 Ok(v_float(l.to_f64().unwrap() + r.to_f64().unwrap()))
             }
             (Variant::Int(l), Variant::Int(r)) => l
-                .checked_add(*r)
+                .checked_add(r)
                 .map(v_int)
                 .ok_or_else(|| E_INVARG.msg("Integer overflow")),
-            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.to_f64().unwrap() + (*r as f64))),
-            (Variant::Int(l), Variant::Float(r)) => Ok(v_float(*l as f64 + r.to_f64().unwrap())),
+            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.to_f64().unwrap() + (r as f64))),
+            (Variant::Int(l), Variant::Float(r)) => Ok(v_float(l as f64 + r.to_f64().unwrap())),
             (Variant::Str(s), Variant::Str(r)) => Ok(s.str_append(r)),
             (_, _) => Ok(v_error(E_TYPE.with_msg(|| {
                 format!(
@@ -94,11 +94,11 @@ impl Var {
         match (self.variant(), v.variant()) {
             (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l % r)),
             (Variant::Int(l), Variant::Int(r)) => l
-                .checked_rem(*r)
+                .checked_rem(r)
                 .map(v_int)
                 .ok_or_else(|| E_INVARG.with_msg(|| "Integer division by zero".to_string())),
-            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.to_f64().unwrap() % (*r as f64))),
-            (Variant::Int(l), Variant::Float(r)) => Ok(v_float(*l as f64 % (r.to_f64().unwrap()))),
+            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.to_f64().unwrap() % (r as f64))),
+            (Variant::Int(l), Variant::Float(r)) => Ok(v_float(l as f64 % (r.to_f64().unwrap()))),
             (_, _) => Ok(v_error(E_TYPE.with_msg(|| {
                 format!(
                     "Cannot modulus type {} and {}",
@@ -111,13 +111,13 @@ impl Var {
 
     pub fn pow(&self, v: &Self) -> Result<Self, Error> {
         match (self.variant(), v.variant()) {
-            (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l.powf(*r))),
+            (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l.powf(r))),
             (Variant::Int(l), Variant::Int(r)) => {
-                let r = u32::try_from(*r).map_err(|_| E_INVARG.msg("Invalid argument for pow"))?;
+                let r = u32::try_from(r).map_err(|_| E_INVARG.msg("Invalid argument for pow"))?;
                 l.checked_pow(r).map(v_int).ok_or_else(|| E_INVARG.into())
             }
-            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.powi(*r as i32))),
-            (Variant::Int(l), Variant::Float(r)) => Ok(v_float((*l as f64).powf(*r))),
+            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.powi(r as i32))),
+            (Variant::Int(l), Variant::Float(r)) => Ok(v_float((l as f64).powf(r))),
             (_, _) => Ok(v_err(E_TYPE)),
         }
     }
@@ -175,10 +175,10 @@ impl Var {
                 )
             })));
         };
-        if *r < 0 || *r > 63 {
+        if r < 0 || r > 63 {
             return Ok(v_error(E_INVARG.msg("Invalid shift amount")));
         }
-        l.checked_shl(*r as u32)
+        l.checked_shl(r as u32)
             .map(v_int)
             .ok_or_else(|| E_INVARG.msg("Integer overflow in left shift"))
     }
@@ -193,10 +193,10 @@ impl Var {
                 )
             })));
         };
-        if *r < 0 || *r > 63 {
+        if r < 0 || r > 63 {
             return Ok(v_error(E_INVARG.msg("Invalid shift amount")));
         }
-        l.checked_shr(*r as u32)
+        l.checked_shr(r as u32)
             .map(v_int)
             .ok_or_else(|| E_INVARG.msg("Integer overflow in right shift"))
     }
@@ -211,11 +211,11 @@ impl Var {
                 )
             })));
         };
-        if *r < 0 || *r > 63 {
+        if r < 0 || r > 63 {
             return Ok(v_error(E_INVARG.msg("Invalid shift amount")));
         }
         // Logical (unsigned) right shift: cast to u64, shift, cast back to i64
-        Ok(v_int(((*l as u64) >> (*r as u32)) as i64))
+        Ok(v_int(((l as u64) >> (r as u32)) as i64))
     }
 
     pub fn bitnot(&self) -> Result<Self, Error> {
@@ -236,7 +236,7 @@ mod tests {
     use crate::{
         Error,
         error::ErrorCode::{E_RANGE, E_TYPE},
-        var::{v_err, v_float, v_int, v_list, v_objid, v_str},
+        variant::{v_err, v_float, v_int, v_list, v_objid, v_str},
     };
 
     #[test]

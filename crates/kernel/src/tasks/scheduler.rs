@@ -153,7 +153,7 @@ fn load_int_sysprop(server_options_obj: &Obj, name: Symbol, tx: &dyn WorldState)
         return None;
     };
     match value.variant() {
-        Variant::Int(i) if *i >= 0 => Some(*i as u64),
+        Variant::Int(i) if i >= 0 => Some(i as u64),
         _ => {
             warn!("$bg_seconds is not a positive integer");
             None

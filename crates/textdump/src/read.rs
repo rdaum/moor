@@ -529,7 +529,7 @@ impl<R: Read> TextdumpReader<R> {
                 };
                 let parents = self.read_var()?;
                 let parent = match parents.variant() {
-                    Variant::Obj(parent) => *parent,
+                    Variant::Obj(parent) => parent,
                     Variant::List(parents) => {
                         if parents.is_empty() {
                             NOTHING

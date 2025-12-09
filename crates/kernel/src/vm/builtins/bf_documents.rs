@@ -712,9 +712,9 @@ fn bf_generate_json(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// Convert a MOO value to a JSON value
 fn moo_value_to_json(value: &moor_var::Var) -> Result<JsonValue, BfErr> {
     match value.variant() {
-        Variant::Int(i) => Ok(JsonValue::Number((*i).into())),
+        Variant::Int(i) => Ok(JsonValue::Number((i).into())),
         Variant::Float(f) => {
-            let num = serde_json::Number::from_f64(*f).ok_or_else(|| BfErr::Code(E_INVARG))?;
+            let num = serde_json::Number::from_f64(f).ok_or_else(|| BfErr::Code(E_INVARG))?;
             Ok(JsonValue::Number(num))
         }
         Variant::Str(s) => Ok(JsonValue::String(s.as_str().to_string())),
@@ -748,7 +748,7 @@ fn moo_value_to_json(value: &moor_var::Var) -> Result<JsonValue, BfErr> {
             }
             Ok(JsonValue::Object(json_obj))
         }
-        Variant::Bool(b) => Ok(JsonValue::Bool(*b)),
+        Variant::Bool(b) => Ok(JsonValue::Bool(b)),
         _ => Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
             format!(
                 "Cannot translate values of type {} to JSON",

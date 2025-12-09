@@ -14,7 +14,7 @@
 use crate::{
     Error, Sequence,
     error::ErrorCode::{E_INVARG, E_RANGE, E_TYPE},
-    var::Var,
+    variant::Var,
     variant::Variant,
 };
 use num_traits::ToPrimitive;
@@ -25,7 +25,8 @@ use std::{
     sync::Arc,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
+#[repr(transparent)]
 pub struct Str(Arc<String>);
 
 impl Str {
@@ -53,8 +54,7 @@ impl Str {
         let mut s = self.0.as_ref().clone();
         s.push_str(other.as_str());
         let s = Str(Arc::new(s));
-        let v = Variant::Str(s);
-        Var::from_variant(v)
+        Var::from_str_type(s)
     }
 }
 
@@ -128,7 +128,7 @@ impl Sequence for Str {
         }
         let c = self.as_str().chars().nth(index).unwrap();
         let c_str = c.to_string();
-        Ok(Var::from_variant(Variant::Str(Str(Arc::new(c_str)))))
+        Ok(Var::from_str_type(Str(Arc::new(c_str))))
     }
 
     fn index_set(&self, index: usize, value: &Var) -> Result<Var, Error> {
@@ -169,7 +169,7 @@ impl Sequence for Str {
 
         let mut s = self.as_str().to_string();
         s.replace_range(start_byte..end_byte, value.as_str());
-        Ok(Var::from_variant(Variant::Str(Str(Arc::new(s)))))
+        Ok(Var::from_str_type(Str(Arc::new(s))))
     }
 
     fn push(&self, value: &Var) -> Result<Var, Error> {
@@ -184,7 +184,7 @@ impl Sequence for Str {
 
         let mut new_copy = self.as_str().to_string();
         new_copy.push_str(value.as_str());
-        Ok(Var::from_variant(Variant::Str(Str(Arc::new(new_copy)))))
+        Ok(Var::from_str_type(Str(Arc::new(new_copy))))
     }
 
     fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
@@ -216,7 +216,7 @@ impl Sequence for Str {
 
         let mut new_copy = self.as_str().to_string();
         new_copy.insert_str(byte_index, value.as_str());
-        Ok(Var::from_variant(Variant::Str(Str(Arc::new(new_copy)))))
+        Ok(Var::from_str_type(Str(Arc::new(new_copy))))
     }
 
     fn range(&self, from: isize, to: isize) -> Result<Var, Error> {
@@ -270,7 +270,7 @@ impl Sequence for Str {
             }
         }
 
-        Ok(Var::from_variant(Variant::Str(Str(Arc::new(result_str)))))
+        Ok(Var::from_str_type(Str(Arc::new(result_str))))
     }
 
     fn append(&self, other: &Var) -> Result<Var, Error> {
@@ -285,7 +285,7 @@ impl Sequence for Str {
 
         let mut new_copy = self.as_str().to_string();
         new_copy.push_str(other.as_str());
-        Ok(Var::from_variant(Variant::Str(Str(Arc::new(new_copy)))))
+        Ok(Var::from_str_type(Str(Arc::new(new_copy))))
     }
 
     fn remove_at(&self, index: usize) -> Result<Var, Error> {
@@ -306,7 +306,7 @@ impl Sequence for Str {
 
         let mut new_copy = self.as_str().to_string();
         new_copy.replace_range(start_byte..end_byte, "");
-        Ok(Var::from_variant(Variant::Str(Str(Arc::new(new_copy)))))
+        Ok(Var::from_str_type(Str(Arc::new(new_copy))))
     }
 }
 
@@ -363,7 +363,7 @@ mod tests {
         IndexMode,
         error::ErrorCode::E_RANGE,
         v_bool_int,
-        var::{Var, v_int, v_str},
+        variant::{Var, v_int, v_str},
         variant::Variant,
     };
 

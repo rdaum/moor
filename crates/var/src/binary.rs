@@ -26,7 +26,7 @@
 use crate::{
     Error, Sequence,
     error::ErrorCode::{E_INVARG, E_RANGE, E_TYPE},
-    var::Var,
+    variant::Var,
     variant::Variant,
 };
 use byteview::ByteView;
@@ -71,8 +71,7 @@ impl Binary {
         let mut new_bytes = Vec::with_capacity(self.len() + other.len());
         new_bytes.extend_from_slice(self.as_bytes());
         new_bytes.extend_from_slice(other.as_bytes());
-        let binary = Binary::from_bytes(new_bytes);
-        Var::from_variant(Variant::Binary(Box::new(binary)))
+        Var::mk_binary(new_bytes)
     }
 
     /// Get the length in bytes
@@ -99,12 +98,12 @@ impl Sequence for Binary {
         let search_bytes = match value.variant() {
             Variant::Binary(b) => b.as_bytes(),
             Variant::Int(i) => {
-                if *i < 0 || *i > 255 {
+                if i < 0 || i > 255 {
                     return Err(
                         E_INVARG.with_msg(|| format!("Byte value {i} out of range (0-255)"))
                     );
                 }
-                let byte = *i as u8;
+                let byte = i as u8;
                 return Ok(self.as_bytes().iter().position(|&b| b == byte));
             }
             _ => {
@@ -152,7 +151,7 @@ impl Sequence for Binary {
             }));
         }
         let byte = self.as_bytes()[index];
-        Ok(Var::from_variant(Variant::Int(byte as i64)))
+        Ok(Var::mk_integer(byte as i64))
     }
 
     fn index_set(&self, index: usize, value: &Var) -> Result<Var, Error> {
@@ -169,12 +168,12 @@ impl Sequence for Binary {
         // Value must be an integer between 0-255
         let byte_value = match value.variant() {
             Variant::Int(i) => {
-                if *i < 0 || *i > 255 {
+                if i < 0 || i > 255 {
                     return Err(
                         E_INVARG.with_msg(|| format!("Byte value {i} out of range (0-255)"))
                     );
                 }
-                *i as u8
+                i as u8
             }
             _ => {
                 return Err(E_TYPE.with_msg(|| {
@@ -189,23 +188,21 @@ impl Sequence for Binary {
 
         let mut new_bytes = self.as_bytes().to_vec();
         new_bytes[index] = byte_value;
-        let binary = Binary::from_bytes(new_bytes);
-        Ok(Var::from_variant(Variant::Binary(Box::new(binary))))
+        Ok(Var::mk_binary(new_bytes))
     }
 
     fn push(&self, value: &Var) -> Result<Var, Error> {
         // Value must be an integer between 0-255 or another binary
         match value.variant() {
             Variant::Int(i) => {
-                if *i < 0 || *i > 255 {
+                if i < 0 || i > 255 {
                     return Err(
                         E_INVARG.with_msg(|| format!("Byte value {i} out of range (0-255)"))
                     );
                 }
                 let mut new_bytes = self.as_bytes().to_vec();
-                new_bytes.push(*i as u8);
-                let binary = Binary::from_bytes(new_bytes);
-                Ok(Var::from_variant(Variant::Binary(Box::new(binary))))
+                new_bytes.push(i as u8);
+                Ok(Var::mk_binary(new_bytes))
             }
             Variant::Binary(other) => Ok(self.append(other)),
             _ => Err(E_TYPE.with_msg(|| {
@@ -228,12 +225,12 @@ impl Sequence for Binary {
         // Value must be an integer between 0-255
         let byte_value = match value.variant() {
             Variant::Int(i) => {
-                if *i < 0 || *i > 255 {
+                if i < 0 || i > 255 {
                     return Err(
                         E_INVARG.with_msg(|| format!("Byte value {i} out of range (0-255)"))
                     );
                 }
-                *i as u8
+                i as u8
             }
             _ => {
                 return Err(E_TYPE.with_msg(|| {
@@ -247,8 +244,7 @@ impl Sequence for Binary {
 
         let mut new_bytes = self.as_bytes().to_vec();
         new_bytes.insert(index, byte_value);
-        let binary = Binary::from_bytes(new_bytes);
-        Ok(Var::from_variant(Variant::Binary(Box::new(binary))))
+        Ok(Var::mk_binary(new_bytes))
     }
 
     fn range(&self, from: isize, to: isize) -> Result<Var, Error> {
@@ -264,14 +260,11 @@ impl Sequence for Binary {
 
         if from > to {
             // Return empty binary
-            return Ok(Var::from_variant(Variant::Binary(Box::new(
-                Binary::from_bytes(Vec::new()),
-            ))));
+            return Ok(Var::mk_binary(Vec::new()));
         }
 
         let slice = &self.as_bytes()[from..=to.min(self.len().saturating_sub(1))];
-        let binary = Binary::from_slice(slice);
-        Ok(Var::from_variant(Variant::Binary(Box::new(binary))))
+        Ok(Var::mk_binary(slice.to_vec()))
     }
 
     fn range_set(&self, from: isize, to: isize, with: &Var) -> Result<Var, Error> {
@@ -309,8 +302,7 @@ impl Sequence for Binary {
             new_bytes.extend_from_slice(&self.as_bytes()[to + 1..]);
         }
 
-        let binary = Binary::from_bytes(new_bytes);
-        Ok(Var::from_variant(Variant::Binary(Box::new(binary))))
+        Ok(Var::mk_binary(new_bytes))
     }
 
     fn append(&self, other: &Var) -> Result<Var, Error> {
@@ -335,8 +327,7 @@ impl Sequence for Binary {
 
         let mut new_bytes = self.as_bytes().to_vec();
         new_bytes.remove(index);
-        let binary = Binary::from_bytes(new_bytes);
-        Ok(Var::from_variant(Variant::Binary(Box::new(binary))))
+        Ok(Var::mk_binary(new_bytes))
     }
 }
 

@@ -13,9 +13,11 @@
 
 //! Contiguous environment storage for MOO stack frames.
 //! Uses a single Vec for all scopes to reduce allocations and improve cache locality.
+//! Uninitialized slots use v_none() (all zeros) as a sentinel, enabling fast zero-fill.
 
 use moor_var::Var;
 use smallvec::SmallVec;
+use std::ptr;
 
 /// Inline capacity for environment values.
 /// Covers 11 globals + ~13 local variables without heap allocation.
@@ -25,11 +27,12 @@ const INLINE_VALUES: usize = 24;
 /// Environment storage for variables in a single MOO stack frame.
 /// All scopes are stored contiguously, with metadata tracking scope boundaries.
 /// Uses SmallVec to avoid heap allocation for simple verbs.
+/// Uninitialized slots contain v_none() which is all zeros.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
     /// Single contiguous storage for all variables across all scopes.
-    /// None values represent uninitialized slots.
-    values: SmallVec<[Option<Var>; INLINE_VALUES]>,
+    /// v_none() values represent uninitialized slots (E_VARNF).
+    values: SmallVec<[Var; INLINE_VALUES]>,
     /// Starting offset of each scope within values
     scope_offsets: SmallVec<[u16; 8]>,
     /// Width (number of variables) of each scope
@@ -49,8 +52,13 @@ impl Environment {
     /// Create environment with initial scope pre-allocated.
     #[inline]
     pub fn with_initial_scope(width: usize) -> Self {
-        let mut values: SmallVec<[Option<Var>; INLINE_VALUES]> = SmallVec::new();
-        values.resize(width, None);
+        let mut values: SmallVec<[Var; INLINE_VALUES]> = SmallVec::new();
+        values.reserve(width);
+        // SAFETY: v_none() is all zeros, so we can zero-fill
+        unsafe {
+            ptr::write_bytes(values.as_mut_ptr(), 0, width);
+            values.set_len(width);
+        }
         Self {
             values,
             scope_offsets: smallvec::smallvec![0],
@@ -59,15 +67,26 @@ impl Environment {
     }
 
     /// Create environment with initial values directly, avoiding double-write.
-    /// First N slots get the provided values (wrapped in Some), remaining slots get None.
+    /// First N slots get the provided values, remaining slots get v_none().
     #[inline]
     pub fn with_initial_values<const N: usize>(values_arr: [Var; N], total_width: usize) -> Self {
-        let mut values: SmallVec<[Option<Var>; INLINE_VALUES]> = SmallVec::new();
+        let mut values: SmallVec<[Var; INLINE_VALUES]> = SmallVec::new();
         values.reserve(total_width);
-        for v in values_arr {
-            values.push(Some(v));
+
+        // SAFETY: We reserved total_width, write N values then zero-fill the rest
+        unsafe {
+            let ptr = values.as_mut_ptr();
+            // Write initial values
+            for (i, v) in values_arr.into_iter().enumerate() {
+                ptr.add(i).write(v);
+            }
+            // Zero-fill remaining slots (v_none() is all zeros)
+            if total_width > N {
+                ptr::write_bytes(ptr.add(N), 0, total_width - N);
+            }
+            values.set_len(total_width);
         }
-        values.resize(total_width, None);
+
         Self {
             values,
             scope_offsets: smallvec::smallvec![0],
@@ -81,7 +100,15 @@ impl Environment {
         let offset = self.values.len() as u16;
         self.scope_offsets.push(offset);
         self.scope_widths.push(width as u16);
-        self.values.resize(self.values.len() + width, None);
+
+        let old_len = self.values.len();
+        let new_len = old_len + width;
+        self.values.reserve(width);
+        // SAFETY: v_none() is all zeros, so we can zero-fill
+        unsafe {
+            ptr::write_bytes(self.values.as_mut_ptr().add(old_len), 0, width);
+            self.values.set_len(new_len);
+        }
     }
 
     /// Pop the top scope from the stack.
@@ -110,16 +137,17 @@ impl Environment {
     #[inline]
     pub fn set(&mut self, scope_index: usize, var_index: usize, value: Var) {
         let idx = self.absolute_index(scope_index, var_index);
-        self.values[idx] = Some(value);
+        self.values[idx] = value;
     }
 
     /// Get a variable from the given scope.
-    /// Returns None if the slot is uninitialized.
+    /// Returns None if the slot is uninitialized (contains v_none()).
     /// Scope 0 is the outermost (first pushed) scope.
     #[inline]
     pub fn get(&self, scope_index: usize, var_index: usize) -> Option<&Var> {
         let idx = self.absolute_index(scope_index, var_index);
-        self.values[idx].as_ref()
+        let v = &self.values[idx];
+        if v.is_none() { None } else { Some(v) }
     }
 
     /// Create environment with initial values and copy remaining from source.
@@ -133,23 +161,34 @@ impl Environment {
         copy_end: usize,
         total_width: usize,
     ) -> Self {
-        let mut values: SmallVec<[Option<Var>; INLINE_VALUES]> = SmallVec::new();
+        let mut values: SmallVec<[Var; INLINE_VALUES]> = SmallVec::new();
         values.reserve(total_width);
 
-        // Push initial values directly
-        for v in values_arr {
-            values.push(Some(v));
-        }
-
-        // Clone values from source for the copy range
-        let src_base = source.scope_offsets[0] as usize + copy_start;
         let copy_len = copy_end - copy_start + 1;
-        for i in 0..copy_len {
-            values.push(source.values[src_base + i].clone());
-        }
+        let src_base = source.scope_offsets[0] as usize + copy_start;
 
-        // Fill remaining slots with None
-        values.resize(total_width, None);
+        // SAFETY: We reserved total_width
+        unsafe {
+            let ptr = values.as_mut_ptr();
+
+            // Write initial values
+            for (i, v) in values_arr.into_iter().enumerate() {
+                ptr.add(i).write(v);
+            }
+
+            // Clone values from source
+            for i in 0..copy_len {
+                ptr.add(N + i).write(source.values[src_base + i].clone());
+            }
+
+            // Zero-fill remaining slots
+            let filled = N + copy_len;
+            if total_width > filled {
+                ptr::write_bytes(ptr.add(filled), 0, total_width - filled);
+            }
+
+            values.set_len(total_width);
+        }
 
         Self {
             values,
@@ -159,6 +198,7 @@ impl Environment {
     }
 
     /// Convert the environment to nested Vecs for serialization.
+    /// Uninitialized slots (v_none()) are converted to None.
     pub fn to_vec(&self) -> Vec<Vec<Option<Var>>> {
         self.scope_offsets
             .iter()
@@ -166,13 +206,16 @@ impl Environment {
             .map(|(&offset, &width)| {
                 let start = offset as usize;
                 let end = start + width as usize;
-                self.values[start..end].to_vec()
+                self.values[start..end]
+                    .iter()
+                    .map(|v| if v.is_none() { None } else { Some(v.clone()) })
+                    .collect()
             })
             .collect()
     }
 
     /// Iterate over scopes, yielding slices of variables.
-    pub fn iter_scopes(&self) -> impl Iterator<Item = &[Option<Var>]> {
+    pub fn iter_scopes(&self) -> impl Iterator<Item = &[Var]> {
         self.scope_offsets
             .iter()
             .zip(self.scope_widths.iter())
@@ -193,7 +236,7 @@ impl Default for Environment {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use moor_var::v_int;
+    use moor_var::{v_int, v_none};
 
     #[test]
     fn test_push_pop_scope() {
@@ -220,6 +263,16 @@ mod tests {
 
         let retrieved = env.get(0, 2);
         assert_eq!(retrieved, Some(&value));
+    }
+
+    #[test]
+    fn test_uninitialized_is_none() {
+        let mut env = Environment::new();
+        env.push_scope(5);
+
+        // Uninitialized slots should return None
+        assert_eq!(env.get(0, 0), None);
+        assert_eq!(env.get(0, 4), None);
     }
 
     #[test]
@@ -261,7 +314,9 @@ mod tests {
         let scopes = env.to_vec();
         assert_eq!(scopes.len(), 1);
         assert_eq!(scopes[0].len(), 3);
+        assert_eq!(scopes[0][0], None); // Uninitialized
         assert_eq!(scopes[0][1], Some(v_int(42)));
+        assert_eq!(scopes[0][2], None); // Uninitialized
     }
 
     #[test]
@@ -273,5 +328,13 @@ mod tests {
         let cloned = env.clone();
         assert_eq!(cloned.get(0, 1), Some(&v_int(42)));
         assert_eq!(cloned.len(), 1);
+    }
+
+    #[test]
+    fn test_v_none_is_all_zeros() {
+        // Verify our assumption that v_none() is all zeros
+        let none = v_none();
+        let bytes: [u8; 16] = unsafe { std::mem::transmute(none) };
+        assert!(bytes.iter().all(|&b| b == 0), "v_none() must be all zeros for zero-fill to work");
     }
 }

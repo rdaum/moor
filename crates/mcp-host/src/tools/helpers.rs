@@ -46,7 +46,7 @@ pub fn format_var(var: &Var) -> String {
             format!("[{}]", pairs.join(", "))
         }
         Variant::Err(e) => format!("{:?}", e),
-        Variant::Bool(b) => if *b { "true" } else { "false" }.to_string(),
+        Variant::Bool(b) => if b { "true" } else { "false" }.to_string(),
         Variant::Binary(b) => format!("~{}~", base64_encode(b.as_bytes())),
         Variant::Flyweight(f) => format!("<flyweight {:?}>", f),
         Variant::Sym(s) => format!("'{}", s.as_string()),
@@ -94,7 +94,7 @@ pub fn format_var_as_literal(var: &Var) -> String {
             format!("[{}]", pairs.join(", "))
         }
         Variant::Err(e) => format!("{}", e), // Error codes like E_PERM
-        Variant::Bool(b) => if *b { "1" } else { "0" }.to_string(), // MOO uses 1/0 for bools
+        Variant::Bool(b) => if b { "1" } else { "0" }.to_string(), // MOO uses 1/0 for bools
         Variant::Sym(s) => format!("'{}", s.as_string()),
         // These don't have simple literals, fall back to something reasonable
         Variant::Binary(_) => "\"\"".to_string(),

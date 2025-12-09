@@ -143,7 +143,7 @@ fn extract_anonymous_refs_recursive(var: &Var, refs: &mut HashSet<Obj>) {
     match var.variant() {
         moor_var::Variant::Obj(obj) => {
             if obj.is_anonymous() {
-                refs.insert(*obj);
+                refs.insert(obj);
             }
         }
         moor_var::Variant::List(list) => {

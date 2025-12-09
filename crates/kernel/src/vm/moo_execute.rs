@@ -377,10 +377,10 @@ pub fn moo_frame_execute(
                 let next_value = match current_val.variant() {
                     Variant::Int(i) => {
                         // Check for integer overflow
-                        if *i == i64::MAX {
+                        if i == i64::MAX {
                             // Decrement end_value instead to avoid overflow
                             *end_value = match end_value.variant() {
-                                Variant::Int(e) if *e > i64::MIN => v_int(e - 1),
+                                Variant::Int(e) if e > i64::MIN => v_int(e - 1),
                                 _ => end_value.clone(),
                             };
                             current_val.clone()
@@ -868,8 +868,8 @@ pub fn moo_frame_execute(
                 let time = f.pop();
 
                 let time = match time.variant() {
-                    Variant::Int(time) => *time as f64,
-                    Variant::Float(time) => *time,
+                    Variant::Int(time) => time as f64,
+                    Variant::Float(time) => time,
                     _ => {
                         return ExecutionResult::PushError(
                             E_TYPE.msg("invalid value for delay time in fork"),
@@ -1284,7 +1284,7 @@ fn get_property(
     match obj.variant() {
         Variant::Obj(obj) => {
             let result = with_current_transaction_mut(|world_state| {
-                world_state.retrieve_property(permissions, obj, propname)
+                world_state.retrieve_property(permissions, &obj, propname)
             });
             match result {
                 Ok(v) => Ok(v),

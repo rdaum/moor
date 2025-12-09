@@ -118,7 +118,7 @@ impl<M: MatchEnvironment> ObjectNameMatcher for ComplexObjectNameMatcher<M> {
                     });
                 };
                 Ok(MatchResult {
-                    result: Some(*obj),
+                    result: Some(obj),
                     candidates: Vec::new(),
                 })
             }
@@ -138,7 +138,7 @@ impl<M: MatchEnvironment> ObjectNameMatcher for ComplexObjectNameMatcher<M> {
                         });
                     };
                     Ok(MatchResult {
-                        result: Some(*obj),
+                        result: Some(obj),
                         candidates: Vec::new(),
                     })
                 } else {
@@ -146,7 +146,7 @@ impl<M: MatchEnvironment> ObjectNameMatcher for ComplexObjectNameMatcher<M> {
                     let mut candidates = Vec::new();
                     for match_var in matches {
                         if let moor_var::Variant::Obj(obj) = match_var.variant() {
-                            candidates.push(*obj);
+                            candidates.push(obj);
                         }
                     }
                     Ok(MatchResult {

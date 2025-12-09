@@ -434,9 +434,9 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let arg = &bf_args.args[2];
 
         let obj_type = match arg.variant() {
-            Variant::Int(i) => *i,
+            Variant::Int(i) => i,
             Variant::Bool(b) => {
-                if *b {
+                if b {
                     1
                 } else {
                     0
@@ -1091,7 +1091,7 @@ fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         )));
     };
 
-    let f = *f == 1;
+    let f = f == 1;
 
     // User must be a wizard.
     bf_args
@@ -1101,7 +1101,7 @@ fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
 
     // Get and set object flags
-    let mut flags = with_current_transaction(|world_state| world_state.flags_of(obj))
+    let mut flags = with_current_transaction(|world_state| world_state.flags_of(&obj))
         .map_err(world_state_bf_err)?;
 
     if f {
@@ -1111,13 +1111,13 @@ fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     with_current_transaction_mut(|world_state| {
-        world_state.set_flags_of(&bf_args.task_perms_who(), obj, flags)
+        world_state.set_flags_of(&bf_args.task_perms_who(), &obj, flags)
     })
     .map_err(world_state_bf_err)?;
 
     // If the object was player, update the VM's copy of the perms.
     if obj.eq(&bf_args.task_perms().map_err(world_state_bf_err)?.who) {
-        bf_args.exec_state.set_task_perms(*obj);
+        bf_args.exec_state.set_task_perms(obj);
     }
 
     Ok(RetNil)

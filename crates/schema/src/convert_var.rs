@@ -250,11 +250,11 @@ pub fn var_to_flatbuffer_internal(
     let variant_union = match v.variant() {
         Variant::None => VarUnion::VarNone(Box::new(var::VarNone {})),
 
-        Variant::Bool(b) => VarUnion::VarBool(Box::new(var::VarBool { value: *b })),
+        Variant::Bool(b) => VarUnion::VarBool(Box::new(var::VarBool { value: b })),
 
-        Variant::Int(i) => VarUnion::VarInt(Box::new(var::VarInt { value: *i })),
+        Variant::Int(i) => VarUnion::VarInt(Box::new(var::VarInt { value: i })),
 
-        Variant::Float(f) => VarUnion::VarFloat(Box::new(var::VarFloat { value: *f })),
+        Variant::Float(f) => VarUnion::VarFloat(Box::new(var::VarFloat { value: f })),
 
         Variant::Str(s) => VarUnion::VarStr(Box::new(var::VarStr {
             value: s.as_str().to_string(),
@@ -265,11 +265,11 @@ pub fn var_to_flatbuffer_internal(
             // but signals that operations on this object are not permitted
             if obj.is_anonymous() && context == ConversionContext::Rpc {
                 VarUnion::VarAnonymous(Box::new(var::VarAnonymous {
-                    obj: Box::new(convert_common::obj_to_flatbuffer_struct(obj)),
+                    obj: Box::new(convert_common::obj_to_flatbuffer_struct(&obj)),
                 }))
             } else {
                 VarUnion::VarObj(Box::new(var::VarObj {
-                    obj: Box::new(convert_common::obj_to_flatbuffer_struct(obj)),
+                    obj: Box::new(convert_common::obj_to_flatbuffer_struct(&obj)),
                 }))
             }
         }
@@ -283,7 +283,7 @@ pub fn var_to_flatbuffer_internal(
         }
 
         Variant::Sym(sym) => VarUnion::VarSym(Box::new(var::VarSym {
-            symbol: Box::new(convert_common::symbol_to_flatbuffer_struct(sym)),
+            symbol: Box::new(convert_common::symbol_to_flatbuffer_struct(&sym)),
         })),
 
         Variant::Binary(b) => VarUnion::VarBinary(Box::new(var::VarBinary {
@@ -611,9 +611,7 @@ fn var_from_flatbuffer_ref_internal(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use moor_var::{
-        Obj, v_obj,
-    };
+    use moor_var::{Obj, v_obj};
 
     #[test]
     fn test_lambda_rejected() {

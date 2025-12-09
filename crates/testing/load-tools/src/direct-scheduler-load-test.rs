@@ -1009,16 +1009,16 @@ async fn opcode_workload(
                     // Validate the return value
                     if let Variant::Int(actual) = result.variant() {
                         if let Some(val) = first_value {
-                            if *actual != val {
+                            if actual != val {
                                 return Err(eyre::eyre!(
                                     "Warm-up {}: Inconsistent return value! First was {}, got {}",
                                     i, val, actual
                                 ));
                             }
                         } else {
-                            first_value = Some(*actual);
+                            first_value = Some(actual);
                             info!("First return value: {} (expected: {})", actual, expected_sum);
-                            if *actual != expected_sum {
+                            if actual != expected_sum {
                                 return Err(eyre::eyre!(
                                     "Wrong return value! Expected {}, got {}. Task may have exited early or hit tick limit.",
                                     expected_sum, actual
@@ -1087,7 +1087,7 @@ async fn opcode_workload(
                 Ok((_, Ok(TaskNotification::Result(result)))) => {
                     // Validate return value consistency
                     if let Variant::Int(actual) = result.variant() {
-                        if *actual != expected {
+                        if actual != expected {
                             value_errors += 1;
                             if value_errors <= 3 {
                                 eprintln!(

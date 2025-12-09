@@ -425,13 +425,13 @@ impl CodegenState {
                         self.emit(Op::ImmNone);
                     }
                     Variant::Obj(oid) => {
-                        self.emit(Op::ImmObjid(*oid));
+                        self.emit(Op::ImmObjid(oid));
                     }
-                    Variant::Int(i) => match i32::try_from(*i) {
+                    Variant::Int(i) => match i32::try_from(i) {
                         Ok(n) => self.emit(Op::ImmInt(n)),
-                        Err(_) => self.emit(Op::ImmBigInt(*i)),
+                        Err(_) => self.emit(Op::ImmBigInt(i)),
                     },
-                    Variant::Float(f) => self.emit(Op::ImmFloat(*f)),
+                    Variant::Float(f) => self.emit(Op::ImmFloat(f)),
                     _ => {
                         let literal = self.add_literal(v);
                         self.emit(Op::Imm(literal));

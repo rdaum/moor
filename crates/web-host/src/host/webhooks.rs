@@ -461,7 +461,7 @@ fn handle_webhook_result(result: &Var) -> Result<Response, Box<dyn std::error::E
 
             // Build response builder
             let mut response_builder = axum::response::Response::builder().status(
-                StatusCode::from_u16(*response_code as u16)
+                StatusCode::from_u16(response_code as u16)
                     .map_err(|e| format!("Invalid status code {response_code}: {e}"))?,
             );
 

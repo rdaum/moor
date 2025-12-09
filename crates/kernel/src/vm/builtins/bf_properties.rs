@@ -196,8 +196,8 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     with_current_transaction_mut(|world_state| {
         world_state.define_property(
             &bf_args.task_perms_who(),
-            location,
-            location,
+            &location,
+            &location,
             prop_name,
             &attrs.owner.unwrap(),
             attrs.flags.unwrap(),

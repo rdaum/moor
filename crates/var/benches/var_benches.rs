@@ -126,6 +126,14 @@ fn var_construct_nested_lists(_ctx: &mut NoContext, chunk_size: usize, _chunk_nu
 // CLONE BENCHMARKS ===
 // These measure cloning costs which are relevant for scope operations
 
+// Context for int clone benchmarks (simple Copy-like types)
+struct IntCloneContext(Var, Var);
+impl BenchContext for IntCloneContext {
+    fn prepare(_num_chunks: usize) -> Self {
+        IntCloneContext(v_int(42), v_none())
+    }
+}
+
 // Context for string clone benchmarks
 struct StringCloneContext(Var, Var);
 impl BenchContext for StringCloneContext {
@@ -145,6 +153,12 @@ impl BenchContext for ListCloneContext {
     }
 }
 
+fn var_clone_ints(ctx: &mut IntCloneContext, chunk_size: usize, _chunk_num: usize) {
+    for _ in 0..chunk_size {
+        ctx.1 = ctx.0.clone();
+    }
+}
+
 fn var_clone_strings(ctx: &mut StringCloneContext, chunk_size: usize, _chunk_num: usize) {
     for _ in 0..chunk_size {
         ctx.1 = ctx.0.clone();
@@ -154,6 +168,15 @@ fn var_clone_strings(ctx: &mut StringCloneContext, chunk_size: usize, _chunk_num
 fn var_clone_lists(ctx: &mut ListCloneContext, chunk_size: usize, _chunk_num: usize) {
     for _ in 0..chunk_size {
         ctx.1 = ctx.0.clone();
+    }
+}
+
+// === AS_INTEGER BENCHMARKS ===
+
+fn var_as_integer(ctx: &mut IntCloneContext, chunk_size: usize, _chunk_num: usize) {
+    let v = &ctx.0;
+    for _ in 0..chunk_size {
+        let _ = black_box(v.as_integer());
     }
 }
 
@@ -335,6 +358,12 @@ pub fn main() {
         },
     ];
 
+    let clone_int_benchmarks = [BenchmarkDef {
+        name: "var_clone_ints",
+        group: "clone",
+        func: var_clone_ints,
+    }];
+
     let clone_string_benchmarks = [BenchmarkDef {
         name: "var_clone_strings",
         group: "clone",
@@ -362,6 +391,11 @@ pub fn main() {
     run_benchmark_group::<NoContext>(&construct_benchmarks, "Var Construction Benchmarks", filter);
     run_benchmark_group::<DropContext>(&drop_benchmarks, "Var Drop Benchmarks", filter);
 
+    run_benchmark_group::<IntCloneContext>(
+        &clone_int_benchmarks,
+        "Var Clone (Int) Benchmarks",
+        filter,
+    );
     run_benchmark_group::<StringCloneContext>(
         &clone_string_benchmarks,
         "Var Clone (String) Benchmarks",
@@ -370,6 +404,18 @@ pub fn main() {
     run_benchmark_group::<ListCloneContext>(
         &clone_list_benchmarks,
         "Var Clone (List) Benchmarks",
+        filter,
+    );
+
+    // as_integer() benchmarks
+    let var_as_int_benchmarks = [BenchmarkDef {
+        name: "var_as_integer",
+        group: "accessor",
+        func: var_as_integer,
+    }];
+    run_benchmark_group::<IntCloneContext>(
+        &var_as_int_benchmarks,
+        "Var.as_integer() Benchmarks",
         filter,
     );
 

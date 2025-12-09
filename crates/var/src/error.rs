@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::{Symbol, var::Var};
+use crate::{Symbol, variant::Var};
 use ErrorCode::*;
 use std::{
     fmt::{Debug, Display, Formatter},

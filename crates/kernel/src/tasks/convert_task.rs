@@ -881,11 +881,11 @@ pub(crate) fn moo_stack_frame_from_ref(
         .pc()
         .map_err(|e| TaskConversionError::DecodingError(format!("pc: {e}")))?;
 
-    // Convert environment
+    // Convert environment - v_none() is used as sentinel for uninitialized slots
     let environment_vec = fb
         .environment()
         .map_err(|e| TaskConversionError::DecodingError(format!("environment: {e}")))?;
-    let environment: Result<Vec<Vec<Option<moor_var::Var>>>, TaskConversionError> = environment_vec
+    let environment: Result<Vec<Vec<moor_var::Var>>, TaskConversionError> = environment_vec
         .iter()
         .map(|scope_result| {
             let scope = scope_result
@@ -900,7 +900,7 @@ pub(crate) fn moo_stack_frame_from_ref(
                         .map_err(|e| TaskConversionError::DecodingError(format!("var: {e}")))?;
                     let var = var_from_db_flatbuffer_ref(v)
                         .map_err(|e| TaskConversionError::VarError(format!("{e}")))?;
-                    Ok((!var.is_none()).then_some(var))
+                    Ok(var)
                 })
                 .collect();
             vars

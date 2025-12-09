@@ -13,6 +13,8 @@
 
 use lazy_static::lazy_static;
 use moor_compiler::BUILTINS;
+use std::cmp::max;
+use strum::EnumCount;
 use uuid::Uuid;
 
 use moor_common::{
@@ -35,12 +37,13 @@ lazy_static! {
     static ref EVAL_SYMBOL: Symbol = Symbol::mk("eval");
 }
 
-/// Helper function to perform scatter assignment for lambda parameter binding
-/// Uses the shared scatter assignment logic and handles lambda-specific defaults
+/// Helper function to perform scatter assignment for lambda parameter binding.
+/// Uses the shared scatter assignment logic and handles lambda-specific defaults.
+/// Environment uses v_none() as sentinel for uninitialized slots.
 fn lambda_scatter_assign(
     scatter_args: &moor_var::program::opcode::ScatterArgs,
     args: &[Var],
-    environment: &mut [Option<Var>],
+    environment: &mut [Var],
 ) -> Result<(), Error> {
     use moor_var::v_int;
     use std::collections::HashSet;
@@ -52,7 +55,7 @@ fn lambda_scatter_assign(
     let result = scatter_assign(scatter_args, args, |name, value| {
         let name_idx = name.0 as usize;
         if name_idx < environment.len() {
-            environment[name_idx] = Some(value);
+            environment[name_idx] = value;
             assigned_params.insert(name_idx);
         }
     });
@@ -73,7 +76,7 @@ fn lambda_scatter_assign(
                         let name_idx = id.0 as usize;
                         if name_idx < environment.len() && !assigned_params.contains(&name_idx) {
                             // Set to 0 as sentinel - lambda program will check this and evaluate default
-                            environment[name_idx] = Some(v_int(0));
+                            environment[name_idx] = v_int(0);
                         }
                     }
                 }
@@ -107,6 +110,9 @@ pub(crate) struct Activation {
     pub(crate) permissions: Obj,
 }
 
+// Boxing MooStackFrame would add pointer indirection on every opcode dispatch,
+// which is unacceptable for performance. The size difference is intentional.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 pub enum Frame {
     Moo(MooStackFrame),
@@ -258,20 +264,19 @@ impl Activation {
         }
     }
 
-    /// Create an activation for lambda execution
-    /// Inherits context from current activation but uses lambda's program
+    /// Create an activation for lambda execution.
+    /// Inherits context from current activation but uses lambda's program.
+    /// Uses v_none() as sentinel for uninitialized slots.
     pub fn for_lambda_call(
         lambda: &Lambda,
         current_activation: &Activation,
         args: Vec<Var>,
     ) -> Result<Self, Error> {
-        // Build environment as Vec first (hybrid approach for lambda initialization)
-        use moor_var::program::names::GlobalName;
-        use std::cmp::max;
-        use strum::EnumCount;
+        use moor_var::v_none;
 
+        // Build environment with v_none() as sentinel for uninitialized slots
         let width = max(lambda.0.body.var_names().global_width(), GlobalName::COUNT);
-        let mut temp_env: Vec<Vec<Option<Var>>> = vec![vec![None; width]];
+        let mut temp_env: Vec<Vec<Var>> = vec![vec![v_none(); width]];
 
         // Merge captured variables into the environment
         if !lambda.0.captured_env.is_empty() {
@@ -287,12 +292,12 @@ impl Activation {
 
                     // Ensure target scope has enough slots
                     if target_scope.len() < captured_scope.len() {
-                        target_scope.resize(captured_scope.len(), None);
+                        target_scope.resize(captured_scope.len(), v_none());
                     }
 
                     for (var_idx, captured_var) in captured_scope.iter().enumerate() {
                         if var_idx < target_scope.len() && !captured_var.is_none() {
-                            target_scope[var_idx] = Some(captured_var.clone());
+                            target_scope[var_idx] = captured_var.clone();
                         }
                     }
                 }
@@ -354,7 +359,7 @@ impl Activation {
 
             // Ensure the scope has enough space
             if temp_env[scope_depth].len() <= max_offset {
-                temp_env[scope_depth].resize(max_offset + 1, None);
+                temp_env[scope_depth].resize(max_offset + 1, v_none());
             }
 
             // Create a ScatterArgs for just this scope
@@ -373,20 +378,11 @@ impl Activation {
 
             // Create a deep copy of the lambda to avoid cycles
             let self_lambda = lambda.for_self_reference();
-            // Convert Option<Var> environment to Var environment for lambda creation
-            let converted_env: Vec<Vec<Var>> = temp_env
-                .iter()
-                .map(|scope| {
-                    scope
-                        .iter()
-                        .map(|opt_var| opt_var.clone().unwrap_or_else(moor_var::v_none))
-                        .collect()
-                })
-                .collect();
+            // Environment already uses Var with v_none() as sentinel
             let lambda_var = moor_var::Var::mk_lambda(
                 self_lambda.0.params.clone(),
                 self_lambda.0.body.clone(),
-                converted_env,
+                temp_env.clone(),
                 self_lambda.0.self_var,
             );
 
@@ -394,7 +390,7 @@ impl Activation {
             if let Some(env) = temp_env.last_mut()
                 && var_idx < env.len()
             {
-                env[var_idx] = Some(lambda_var);
+                env[var_idx] = lambda_var;
             }
         }
 
@@ -447,12 +443,12 @@ impl Activation {
 
         let moo_frame = MooStackFrame::new_with_all_globals(
             program,
-            v_obj(*player),      // player
-            v_obj(NOTHING),      // this
-            v_obj(*player),      // caller
-            v_empty_str(),       // verb
-            v_empty_list().into(), // args
-            v_empty_str(),       // argstr
+            v_obj(*player),        // player
+            v_obj(NOTHING),        // this
+            v_obj(*player),        // caller
+            v_empty_str(),         // verb
+            v_empty_list(), // args
+            v_empty_str(),         // argstr
         );
         let frame = Frame::Moo(moo_frame);
 

@@ -172,10 +172,10 @@ impl<W: io::Write> TextdumpWriter<W> {
                 if o.is_anonymous() {
                     // Write anonymous objects using textdump-specific type code
                     writeln!(self.writer, "{TYPE_ANON}")?;
-                    self.write_anonymous_obj(o)?;
+                    self.write_anonymous_obj(&o)?;
                 } else {
                     writeln!(self.writer, "{}", VarType::TYPE_OBJ as u64)?;
-                    self.write_obj(o)?;
+                    self.write_obj(&o)?;
                 }
             }
             Variant::Str(s) => {

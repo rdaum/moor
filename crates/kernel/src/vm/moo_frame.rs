@@ -208,8 +208,9 @@ impl MooStackFrame {
         }
     }
 
-    /// Create a new frame with a pre-built environment (for lambdas)
-    pub(crate) fn with_environment(program: Program, environment: Vec<Vec<Option<Var>>>) -> Self {
+    /// Create a new frame with a pre-built environment (for lambdas).
+    /// Uses v_none() as sentinel for uninitialized slots.
+    pub(crate) fn with_environment(program: Program, environment: Vec<Vec<Var>>) -> Self {
         // Ensure global scope exists with proper width for global variables
         let global_width = max(program.var_names().global_width(), GlobalName::COUNT);
         let env = if environment.is_empty() {
@@ -226,8 +227,8 @@ impl MooStackFrame {
                 };
                 env.push_scope(width);
                 for (i, var) in scope.into_iter().enumerate() {
-                    if let Some(v) = var {
-                        env.set(env.len() - 1, i, v);
+                    if !var.is_none() {
+                        env.set(env.len() - 1, i, var);
                     }
                 }
             }

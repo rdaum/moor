@@ -189,7 +189,7 @@ impl RpcMessageHandler {
                     // with its new player objid and login result.
                     // If it's not an objid, that's considered an auth failure.
                     match v.variant() {
-                        Variant::Obj(o) => break *o,
+                        Variant::Obj(o) => break o,
                         _ => {
                             return Ok(DaemonToClientReply {
                                 reply: moor_rpc::DaemonToClientReplyUnion::LoginResult(Box::new(

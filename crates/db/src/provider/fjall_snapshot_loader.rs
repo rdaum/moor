@@ -362,7 +362,7 @@ impl FjallSnapshotLoader {
         match var.variant() {
             moor_var::Variant::Obj(obj) => {
                 if obj.is_anonymous() {
-                    refs.push(*obj);
+                    refs.push(obj);
                 }
             }
             moor_var::Variant::List(list) => {

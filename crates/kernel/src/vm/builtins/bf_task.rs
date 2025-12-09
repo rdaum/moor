@@ -39,8 +39,8 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         TaskSuspend::Never
     } else {
         let seconds = match bf_args.args[0].variant() {
-            Variant::Float(seconds) => *seconds,
-            Variant::Int(seconds) => *seconds as f64,
+            Variant::Float(seconds) => seconds,
+            Variant::Int(seconds) => seconds as f64,
             _ => {
                 return Err(ErrValue(
                     E_TYPE.msg("suspend() requires a number as the first argument"),
@@ -76,8 +76,8 @@ fn bf_suspend_if_needed(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         4000
     } else {
         match bf_args.args[0].variant() {
-            Variant::Float(threshold) => *threshold as i64,
-            Variant::Int(threshold) => *threshold,
+            Variant::Float(threshold) => threshold as i64,
+            Variant::Int(threshold) => threshold,
             _ => {
                 return Err(ErrValue(E_TYPE.msg(
                     "suspend_if_needed() requires a number as the first argument",

@@ -624,7 +624,7 @@ fn bf_pcre_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Ok(result) => result,
         Err(err) => return Err(BfErr::ErrValue(err)),
     };
-    Ok(Ret(Var::from_variant(Variant::List(result))))
+    Ok(Ret(Var::from_list(result)))
 }
 
 fn substitute(template: &str, subs: &[(isize, isize)], source: &str) -> Result<String, Error> {
@@ -805,7 +805,7 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 // For each sublist in the input list, extract the element at position 'idx'
                 // and return a list of these elements
                 Variant::Int(idx) => {
-                    let idx = *idx as usize;
+                    let idx = idx as usize;
                     let mut result = Vec::with_capacity(list.len());
 
                     for item in list.iter() {
@@ -948,8 +948,8 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         };
 
         match fuzzy_arg.variant() {
-            Variant::Float(f) => *f,
-            Variant::Int(i) => *i as f64,
+            Variant::Float(f) => f,
+            Variant::Int(i) => i as f64,
             _ => {
                 // Backward compatibility: treat as boolean
                 if fuzzy_arg.is_true() { 0.5 } else { 0.0 }
@@ -1009,7 +1009,7 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
         // Get the object's name using name_of
         let name_result = with_current_transaction(|world_state| {
-            world_state.name_of(&bf_args.task_perms_who(), obj)
+            world_state.name_of(&bf_args.task_perms_who(), &obj)
         });
         let Ok(name_str) = name_result else {
             continue; // Skip objects without valid name
@@ -1146,7 +1146,7 @@ fn bf_sort(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let elem_b = sort_by.index(b).unwrap();
 
         let ordering = match (elem_a.variant(), elem_b.variant()) {
-            (Variant::Int(a), Variant::Int(b)) => a.cmp(b),
+            (Variant::Int(a), Variant::Int(b)) => a.cmp(&b),
             (Variant::Float(a), Variant::Float(b)) => {
                 // Handle NaN: NaN is considered equal to itself and less than any other value
                 if a.is_nan() && b.is_nan() {
@@ -1156,10 +1156,10 @@ fn bf_sort(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 } else if b.is_nan() {
                     std::cmp::Ordering::Greater
                 } else {
-                    a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                    a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal)
                 }
             }
-            (Variant::Obj(a), Variant::Obj(b)) => a.cmp(b),
+            (Variant::Obj(a), Variant::Obj(b)) => a.cmp(&b),
             (Variant::Err(a), Variant::Err(b)) => a.name().cmp(&b.name()),
             (Variant::Str(a), Variant::Str(b)) => {
                 if natural {
@@ -1243,7 +1243,7 @@ mod tests {
         perform_pcre_match, perform_pcre_replace, perform_regex_match, substitute,
     };
     use moor_compiler::to_literal;
-    use moor_var::{Var, Variant, v_int, v_list, v_map, v_str};
+    use moor_var::{Var, v_int, v_list, v_map, v_str};
 
     #[test]
     fn test_match_substitute() {
@@ -1362,7 +1362,7 @@ mod tests {
         let regex = "([0-9]{2})/([0-9]{2})/([0-9]{4})";
         let target = "09/12/1999 other random text 01/21/1952";
         let result = perform_pcre_match(true, false, regex, target, false).unwrap();
-        let v = Var::from_variant(Variant::List(result));
+        let v = Var::from_list(result);
         let expected = v_list(&[v_map(&[
             (
                 v_str("0"),

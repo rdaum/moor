@@ -106,7 +106,7 @@ fn extract_anonymous_refs_from_var(var: &Var, refs: &mut std::collections::HashS
     match var.variant() {
         moor_var::Variant::Obj(obj) => {
             if obj.is_anonymous() {
-                refs.insert(*obj);
+                refs.insert(obj);
             }
         }
         moor_var::Variant::List(list) => {
@@ -162,7 +162,7 @@ fn extract_anonymous_refs_from_moo_frame(
 ) {
     // 1. Scan all variables in the environment stack
     for scope in frame.environment.iter_scopes() {
-        for var in scope.iter().flatten() {
+        for var in scope.iter().filter(|v| !v.is_none()) {
             extract_anonymous_refs_from_var(var, refs);
         }
     }

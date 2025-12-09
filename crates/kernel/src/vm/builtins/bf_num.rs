@@ -137,8 +137,8 @@ fn bf_floatstr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// Internal helper to extract numeric value from Var.
 fn numeric_arg(arg: &Var) -> Result<f64, BfErr> {
     let x = match arg.variant() {
-        Variant::Int(i) => *i as f64,
-        Variant::Float(f) => *f,
+        Variant::Int(i) => i as f64,
+        Variant::Float(f) => f,
         _ => return Err(BfErr::ErrValue(E_TYPE.msg("non-numeric argument"))),
     };
 

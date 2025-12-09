@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 /// Lambda function value containing parameter specification, compiled body, and captured environment
 #[derive(Clone, Debug, PartialEq)]
+#[repr(transparent)]
 pub struct Lambda(pub Arc<LambdaInner>);
 
 #[derive(Clone, Debug, PartialEq)]

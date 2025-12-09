@@ -497,7 +497,6 @@ mod tests {
         let _harness_get_output: unsafe extern "C" fn(*mut usize) -> *const i8 = harness_get_output;
 
         // If this compiles and links, the symbols are available
-        assert!(true);
     }
 
     #[test]

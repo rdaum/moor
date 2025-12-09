@@ -87,7 +87,7 @@ fn bf_tosym(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
         Variant::Str(s) => Ok(Ret(v_sym(s.as_str()))),
         Variant::Err(e) => Ok(Ret(v_sym(e.name()))),
-        Variant::Sym(s) => Ok(Ret(v_sym(*s))),
+        Variant::Sym(s) => Ok(Ret(v_sym(s))),
         _ => Err(BfErr::ErrValue(E_TYPE.msg(
             "tosym() requires a string, boolean, error, or symbol argument",
         ))),
@@ -125,8 +125,8 @@ fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     }
     match bf_args.args[0].variant() {
-        Variant::Int(i) => Ok(Ret(v_int(*i))),
-        Variant::Float(f) => Ok(Ret(v_int(*f as i64))),
+        Variant::Int(i) => Ok(Ret(v_int(i))),
+        Variant::Float(f) => Ok(Ret(v_int(f as i64))),
         Variant::Obj(o) => {
             if o.is_uuobjid() {
                 Err(BfErr::ErrValue(
@@ -168,22 +168,22 @@ fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     match bf_args.args[0].variant() {
         Variant::Int(i) => {
-            let i = if *i < i32::MIN as i64 || *i > i32::MAX as i64 {
+            let i = if i < i32::MIN as i64 || i > i32::MAX as i64 {
                 return Err(BfErr::ErrValue(
                     E_RANGE.msg("integer value outside valid object ID range"),
                 ));
             } else {
-                *i as i32
+                i as i32
             };
             Ok(Ret(v_objid(i)))
         }
         Variant::Float(f) => {
-            let f = if *f < i32::MIN as f64 || *f > i32::MAX as f64 {
+            let f = if f < i32::MIN as f64 || f > i32::MAX as f64 {
                 return Err(BfErr::ErrValue(
                     E_RANGE.msg("float value outside valid object ID range"),
                 ));
             } else {
-                *f as i32
+                f as i32
             };
             Ok(Ret(v_objid(f)))
         }
@@ -200,7 +200,7 @@ fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 Err(_) => Ok(Ret(v_objid(0))),
             }
         }
-        Variant::Obj(o) => Ok(Ret(v_obj(*o))),
+        Variant::Obj(o) => Ok(Ret(v_obj(o))),
         _ => Err(BfErr::ErrValue(
             E_INVARG.msg("cannot convert this type to object"),
         )),
@@ -216,8 +216,8 @@ fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     }
     match bf_args.args[0].variant() {
-        Variant::Int(i) => Ok(Ret(v_float(*i as f64))),
-        Variant::Float(f) => Ok(Ret(v_float(*f))),
+        Variant::Int(i) => Ok(Ret(v_float(i as f64))),
+        Variant::Float(f) => Ok(Ret(v_float(f))),
         Variant::Str(s) => {
             let f = s.as_str().trim().parse::<f64>();
             match f {

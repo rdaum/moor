@@ -15,9 +15,7 @@
 
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction};
 use moor_compiler::offset_for_builtin;
-use moor_var::{
-    E_ARGS, E_PERM, E_TYPE, Flyweight, List, Sequence, Symbol, Var, Variant, v_map, v_sym,
-};
+use moor_var::{E_ARGS, E_PERM, E_TYPE, Flyweight, List, Sequence, Symbol, Var, v_map, v_sym};
 
 fn ensure_enabled(bf_args: &BfCallState<'_>) -> Result<(), BfErr> {
     if !bf_args.config.flyweight_type {
@@ -36,7 +34,7 @@ fn contents_list_from_var(var: &Var) -> Result<List, BfErr> {
 }
 
 fn flyweight_to_var(f: Flyweight) -> Var {
-    Var::from_variant(Variant::Flyweight(f))
+    Var::from_flyweight(f)
 }
 
 /// MOO: `toflyweight(delegate [, slots_map [, contents_list]])`
@@ -119,7 +117,7 @@ fn bf_flycontents(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     };
 
-    Ok(Ret(Var::from_variant(Variant::List(f.contents().clone()))))
+    Ok(Ret(Var::from_list(f.contents().clone())))
 }
 
 /// MOO: `flyslotset(flyweight f, symbol key, any value)`
