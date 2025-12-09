@@ -14,58 +14,33 @@
 use crate::{
     Error,
     error::ErrorCode::{E_INVARG, E_TYPE},
-    variant::{Var, v_err, v_error, v_float, v_int},
     variant::Variant,
+    variant::{Var, v_err, v_error, v_float, v_int},
 };
-use num_traits::ToPrimitive;
-use paste::paste;
-use std::ops::{Div, Mul, Neg, Sub};
-
-macro_rules! binary_numeric_coercion_op {
-    ($op:tt ) => {
-        pub fn $op(&self, v: &Var) -> Result<Var, Error> {
-            match (self.variant(), v.variant()) {
-                (Variant::Float(l), Variant::Float(r)) => {
-                    Ok(v_float(l.to_f64().unwrap().$op(r.to_f64().unwrap())))
-                }
-                (Variant::Int(l), Variant::Int(r)) => {
-                    paste! { l.[<checked_ $op>](r).map(v_int).ok_or_else( || E_INVARG.into()) }
-                }
-                (Variant::Float(l), Variant::Int(r)) => {
-                    Ok(v_float(l.to_f64().unwrap().$op(r as f64)))
-                }
-                (Variant::Int(l), Variant::Float(r)) => {
-                    Ok(v_float((l as f64).$op(r.to_f64().unwrap())))
-                }
-                (_, _) => Ok(v_error(E_TYPE.with_msg(|| {
-                    format!(
-                        "Cannot {} type {} and {}",
-                        stringify!($op),
-                        self.type_code().to_literal(),
-                        v.type_code().to_literal()
-                    )
-                }))),
-            }
-        }
-    };
-}
+use std::ops::Neg;
 
 impl Var {
-    binary_numeric_coercion_op!(mul);
-    binary_numeric_coercion_op!(div);
-    binary_numeric_coercion_op!(sub);
-
     pub fn add(&self, v: &Self) -> Result<Self, Error> {
-        match (self.variant(), v.variant()) {
-            (Variant::Float(l), Variant::Float(r)) => {
-                Ok(v_float(l.to_f64().unwrap() + r.to_f64().unwrap()))
-            }
-            (Variant::Int(l), Variant::Int(r)) => l
+        // Fast path: int + int (most common in MOO code)
+        if let (Some(l), Some(r)) = (self.as_integer(), v.as_integer()) {
+            return l
                 .checked_add(r)
                 .map(v_int)
-                .ok_or_else(|| E_INVARG.msg("Integer overflow")),
-            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.to_f64().unwrap() + (r as f64))),
-            (Variant::Int(l), Variant::Float(r)) => Ok(v_float(l as f64 + r.to_f64().unwrap())),
+                .ok_or_else(|| E_INVARG.msg("Integer overflow"));
+        }
+        // Fast path: float + float
+        if let (Some(l), Some(r)) = (self.as_float(), v.as_float()) {
+            return Ok(v_float(l + r));
+        }
+        self.add_slow(v)
+    }
+
+    #[inline(never)]
+    fn add_slow(&self, v: &Self) -> Result<Self, Error> {
+        match (self.variant(), v.variant()) {
+            (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l + r)),
+            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l + (r as f64))),
+            (Variant::Int(l), Variant::Float(r)) => Ok(v_float(l as f64 + r)),
             (Variant::Str(s), Variant::Str(r)) => Ok(s.str_append(r)),
             (_, _) => Ok(v_error(E_TYPE.with_msg(|| {
                 format!(
@@ -77,28 +52,112 @@ impl Var {
         }
     }
 
-    pub fn negative(&self) -> Result<Self, Error> {
-        match self.variant() {
-            Variant::Int(l) => l
-                .checked_neg()
+    pub fn sub(&self, v: &Self) -> Result<Self, Error> {
+        if let (Some(l), Some(r)) = (self.as_integer(), v.as_integer()) {
+            return l
+                .checked_sub(r)
                 .map(v_int)
-                .ok_or_else(|| E_INVARG.msg("Integer underflow")),
-            Variant::Float(f) => Ok(v_float(f.neg())),
-            _ => Ok(v_error(E_TYPE.with_msg(|| {
-                format!("Cannot negate type {}", self.type_code().to_literal())
+                .ok_or_else(|| E_INVARG.msg("Integer underflow"));
+        }
+        if let (Some(l), Some(r)) = (self.as_float(), v.as_float()) {
+            return Ok(v_float(l - r));
+        }
+        self.sub_slow(v)
+    }
+
+    #[inline(never)]
+    fn sub_slow(&self, v: &Self) -> Result<Self, Error> {
+        match (self.variant(), v.variant()) {
+            (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l - r)),
+            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l - (r as f64))),
+            (Variant::Int(l), Variant::Float(r)) => Ok(v_float(l as f64 - r)),
+            (_, _) => Ok(v_error(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot sub type {} and {}",
+                    self.type_code().to_literal(),
+                    v.type_code().to_literal()
+                )
+            }))),
+        }
+    }
+
+    pub fn mul(&self, v: &Self) -> Result<Self, Error> {
+        if let (Some(l), Some(r)) = (self.as_integer(), v.as_integer()) {
+            return l
+                .checked_mul(r)
+                .map(v_int)
+                .ok_or_else(|| E_INVARG.msg("Integer overflow"));
+        }
+        if let (Some(l), Some(r)) = (self.as_float(), v.as_float()) {
+            return Ok(v_float(l * r));
+        }
+        self.mul_slow(v)
+    }
+
+    #[inline(never)]
+    fn mul_slow(&self, v: &Self) -> Result<Self, Error> {
+        match (self.variant(), v.variant()) {
+            (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l * r)),
+            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l * (r as f64))),
+            (Variant::Int(l), Variant::Float(r)) => Ok(v_float(l as f64 * r)),
+            (_, _) => Ok(v_error(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot mul type {} and {}",
+                    self.type_code().to_literal(),
+                    v.type_code().to_literal()
+                )
+            }))),
+        }
+    }
+
+    pub fn div(&self, v: &Self) -> Result<Self, Error> {
+        if let (Some(l), Some(r)) = (self.as_integer(), v.as_integer()) {
+            return l
+                .checked_div(r)
+                .map(v_int)
+                .ok_or_else(|| E_INVARG.msg("Integer division by zero"));
+        }
+        if let (Some(l), Some(r)) = (self.as_float(), v.as_float()) {
+            return Ok(v_float(l / r));
+        }
+        self.div_slow(v)
+    }
+
+    #[inline(never)]
+    fn div_slow(&self, v: &Self) -> Result<Self, Error> {
+        match (self.variant(), v.variant()) {
+            (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l / r)),
+            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l / (r as f64))),
+            (Variant::Int(l), Variant::Float(r)) => Ok(v_float(l as f64 / r)),
+            (_, _) => Ok(v_error(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot div type {} and {}",
+                    self.type_code().to_literal(),
+                    v.type_code().to_literal()
+                )
             }))),
         }
     }
 
     pub fn modulus(&self, v: &Self) -> Result<Self, Error> {
-        match (self.variant(), v.variant()) {
-            (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l % r)),
-            (Variant::Int(l), Variant::Int(r)) => l
+        if let (Some(l), Some(r)) = (self.as_integer(), v.as_integer()) {
+            return l
                 .checked_rem(r)
                 .map(v_int)
-                .ok_or_else(|| E_INVARG.with_msg(|| "Integer division by zero".to_string())),
-            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.to_f64().unwrap() % (r as f64))),
-            (Variant::Int(l), Variant::Float(r)) => Ok(v_float(l as f64 % (r.to_f64().unwrap()))),
+                .ok_or_else(|| E_INVARG.msg("Integer division by zero"));
+        }
+        if let (Some(l), Some(r)) = (self.as_float(), v.as_float()) {
+            return Ok(v_float(l % r));
+        }
+        self.modulus_slow(v)
+    }
+
+    #[inline(never)]
+    fn modulus_slow(&self, v: &Self) -> Result<Self, Error> {
+        match (self.variant(), v.variant()) {
+            (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l % r)),
+            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l % (r as f64))),
+            (Variant::Int(l), Variant::Float(r)) => Ok(v_float(l as f64 % r)),
             (_, _) => Ok(v_error(E_TYPE.with_msg(|| {
                 format!(
                     "Cannot modulus type {} and {}",
@@ -110,24 +169,48 @@ impl Var {
     }
 
     pub fn pow(&self, v: &Self) -> Result<Self, Error> {
+        if let (Some(l), Some(r)) = (self.as_integer(), v.as_integer()) {
+            let r = u32::try_from(r).map_err(|_| E_INVARG.msg("Invalid argument for pow"))?;
+            return l
+                .checked_pow(r)
+                .map(v_int)
+                .ok_or_else(|| E_INVARG.msg("Integer overflow"));
+        }
+        if let (Some(l), Some(r)) = (self.as_float(), v.as_float()) {
+            return Ok(v_float(l.powf(r)));
+        }
+        self.pow_slow(v)
+    }
+
+    #[inline(never)]
+    fn pow_slow(&self, v: &Self) -> Result<Self, Error> {
         match (self.variant(), v.variant()) {
             (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l.powf(r))),
-            (Variant::Int(l), Variant::Int(r)) => {
-                let r = u32::try_from(r).map_err(|_| E_INVARG.msg("Invalid argument for pow"))?;
-                l.checked_pow(r).map(v_int).ok_or_else(|| E_INVARG.into())
-            }
             (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.powi(r as i32))),
             (Variant::Int(l), Variant::Float(r)) => Ok(v_float((l as f64).powf(r))),
             (_, _) => Ok(v_err(E_TYPE)),
         }
     }
 
-    pub fn is_sysobj(&self) -> bool {
-        matches!(self.variant(), Variant::Obj(o) if o.is_sysobj())
+    pub fn negative(&self) -> Result<Self, Error> {
+        if let Some(i) = self.as_integer() {
+            return i
+                .checked_neg()
+                .map(v_int)
+                .ok_or_else(|| E_INVARG.msg("Integer underflow"));
+        }
+        if let Some(f) = self.as_float() {
+            return Ok(v_float(f.neg()));
+        }
+        Ok(v_error(E_TYPE.with_msg(|| {
+            format!("Cannot negate type {}", self.type_code().to_literal())
+        })))
     }
 
+    // === Integer-only operations (use direct accessors) ===
+
     pub fn bitand(&self, v: &Self) -> Result<Self, Error> {
-        let (Variant::Int(l), Variant::Int(r)) = (self.variant(), v.variant()) else {
+        let (Some(l), Some(r)) = (self.as_integer(), v.as_integer()) else {
             return Ok(v_error(E_TYPE.with_msg(|| {
                 format!(
                     "Cannot bitwise AND type {} and {}",
@@ -140,7 +223,7 @@ impl Var {
     }
 
     pub fn bitor(&self, v: &Self) -> Result<Self, Error> {
-        let (Variant::Int(l), Variant::Int(r)) = (self.variant(), v.variant()) else {
+        let (Some(l), Some(r)) = (self.as_integer(), v.as_integer()) else {
             return Ok(v_error(E_TYPE.with_msg(|| {
                 format!(
                     "Cannot bitwise OR type {} and {}",
@@ -153,7 +236,7 @@ impl Var {
     }
 
     pub fn bitxor(&self, v: &Self) -> Result<Self, Error> {
-        let (Variant::Int(l), Variant::Int(r)) = (self.variant(), v.variant()) else {
+        let (Some(l), Some(r)) = (self.as_integer(), v.as_integer()) else {
             return Ok(v_error(E_TYPE.with_msg(|| {
                 format!(
                     "Cannot bitwise XOR type {} and {}",
@@ -165,8 +248,12 @@ impl Var {
         Ok(v_int(l ^ r))
     }
 
+    pub fn is_sysobj(&self) -> bool {
+        self.as_object().map(|o| o.is_sysobj()).unwrap_or(false)
+    }
+
     pub fn bitshl(&self, v: &Self) -> Result<Self, Error> {
-        let (Variant::Int(l), Variant::Int(r)) = (self.variant(), v.variant()) else {
+        let (Some(l), Some(r)) = (self.as_integer(), v.as_integer()) else {
             return Ok(v_error(E_TYPE.with_msg(|| {
                 format!(
                     "Cannot left shift type {} by {}",
@@ -184,7 +271,7 @@ impl Var {
     }
 
     pub fn bitshr(&self, v: &Self) -> Result<Self, Error> {
-        let (Variant::Int(l), Variant::Int(r)) = (self.variant(), v.variant()) else {
+        let (Some(l), Some(r)) = (self.as_integer(), v.as_integer()) else {
             return Ok(v_error(E_TYPE.with_msg(|| {
                 format!(
                     "Cannot right shift type {} by {}",
@@ -202,7 +289,7 @@ impl Var {
     }
 
     pub fn bitlshr(&self, v: &Self) -> Result<Self, Error> {
-        let (Variant::Int(l), Variant::Int(r)) = (self.variant(), v.variant()) else {
+        let (Some(l), Some(r)) = (self.as_integer(), v.as_integer()) else {
             return Ok(v_error(E_TYPE.with_msg(|| {
                 format!(
                     "Cannot logical right shift type {} by {}",
@@ -219,7 +306,7 @@ impl Var {
     }
 
     pub fn bitnot(&self) -> Result<Self, Error> {
-        let Variant::Int(l) = self.variant() else {
+        let Some(l) = self.as_integer() else {
             return Ok(v_error(E_TYPE.with_msg(|| {
                 format!(
                     "Cannot bitwise complement type {}",

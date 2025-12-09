@@ -248,6 +248,11 @@ impl Obj {
         Objid(self.decode_as_objid())
     }
 
+    /// Returns true if this is a numeric object ID (not UUID or anonymous)
+    pub fn is_oid(&self) -> bool {
+        self.object_type_code() == OBJID_TYPE_CODE
+    }
+
     /// Creates a new Obj with a UuObjid
     pub fn mk_uuobjid(uuid: UuObjid) -> Self {
         Self::encode_as_uuobjid(uuid)

@@ -45,15 +45,14 @@ use moor_var::{
 };
 
 lazy_static! {
-    static ref LIST_SYM: Symbol = Symbol::mk("list_proto");
-    static ref MAP_SYM: Symbol = Symbol::mk("map_proto");
-    static ref STRING_SYM: Symbol = Symbol::mk("str_proto");
-    static ref INTEGER_SYM: Symbol = Symbol::mk("int_proto");
-    static ref FLOAT_SYM: Symbol = Symbol::mk("float_proto");
-    static ref ERROR_SYM: Symbol = Symbol::mk("err_proto");
-    static ref BOOL_SYM: Symbol = Symbol::mk("bool_proto");
-    static ref SYM_SYM: Symbol = Symbol::mk("sym_proto");
-    static ref FLYWEIGHT_SYM: Symbol = Symbol::mk("flyweight_proto");
+    static ref LIST_PROTO_SYM: Symbol = Symbol::mk("list_proto");
+    static ref MAP_PROTO_SYM: Symbol = Symbol::mk("map_proto");
+    static ref STRING_PROTO_SYM: Symbol = Symbol::mk("str_proto");
+    static ref INTEGER_PROTO_SYM: Symbol = Symbol::mk("int_proto");
+    static ref FLOAT_PROTO_SYM: Symbol = Symbol::mk("float_proto");
+    static ref ERROR_PROTO_SYM: Symbol = Symbol::mk("err_proto");
+    static ref BOOL_PROTO_SYM: Symbol = Symbol::mk("bool_proto");
+    static ref SYM_PROTO_SYM: Symbol = Symbol::mk("sym_proto");
 }
 
 /// The set of parameters for a scheduler-requested *resolved* verb method dispatch.
@@ -121,69 +120,78 @@ impl VMExecState {
         verb: Symbol,
         args: List,
     ) -> Result<ExecutionResult, Error> {
-        let (args, this, location) = match target.variant() {
-            Variant::Obj(o) => (args, target.clone(), o),
-            Variant::Flyweight(f) => (args, target.clone(), *f.delegate()),
-            non_obj => {
-                if !exec_params.config.type_dispatch {
-                    return Err(E_TYPE.with_msg(|| {
-                        format!("Invalid target {:?} for verb dispatch", target.type_code())
-                    }));
-                }
-                // If the object is not an object or frob, it's a primitive.
-                // For primitives, we look at its type, and look for a
-                // sysprop that corresponds, then dispatch to that, with the object as the
-                // first argument.
-                // e.g. "blah":reverse() becomes $string:reverse("blah")
-                let sysprop_sym = match non_obj {
-                    Variant::Int(_) => *INTEGER_SYM,
-                    Variant::Float(_) => *FLOAT_SYM,
-                    Variant::Str(_) => *STRING_SYM,
-                    Variant::List(_) => *LIST_SYM,
-                    Variant::Map(_) => *MAP_SYM,
-                    Variant::Err(_) => *ERROR_SYM,
-                    Variant::Flyweight(_) => *FLYWEIGHT_SYM,
-                    Variant::Sym(_) => *SYM_SYM,
-                    Variant::Bool(_) => *BOOL_SYM,
-                    _ => {
-                        return Err(E_TYPE.with_msg(|| {
-                            format!(
-                                "Invalid target for verb dispatch: {}",
-                                target.type_code().to_literal()
-                            )
-                        }));
-                    }
-                };
-                let perms = self.top().permissions;
-                let prop_val = with_current_transaction_mut(|world_state| {
-                    match world_state.retrieve_property(&perms, &SYSTEM_OBJECT, sysprop_sym) {
-                        Ok(prop_val) => Ok(prop_val),
-                        Err(e) => Err(e.to_error()),
-                    }
-                })?;
-                let Some(prop_val) = prop_val.as_object() else {
+        // Fast path: Obj is by far the most common case for verb dispatch
+        if let Some(o) = target.as_object() {
+            return Ok(self.prepare_call_verb(o, target, verb, args));
+        }
+
+        // Flyweight dispatches to its delegate
+        if let Some(f) = target.as_flyweight() {
+            return Ok(self.prepare_call_verb(*f.delegate(), target, verb, args));
+        }
+
+        // Primitive dispatch (int, string, float are most common)
+        if !exec_params.config.type_dispatch {
+            return Err(E_TYPE.with_msg(|| {
+                format!("Invalid target {:?} for verb dispatch", target.type_code())
+            }));
+        }
+
+        // For primitives, look at type and dispatch to corresponding sysprop
+        // e.g. "blah":reverse() becomes $string:reverse("blah")
+        // Check common types first with direct accessors
+        let sysprop_sym = if target.is_int() {
+            *INTEGER_PROTO_SYM
+        } else if target.is_string() {
+            *STRING_PROTO_SYM
+        } else if target.is_float() {
+            *FLOAT_PROTO_SYM
+        } else if target.is_list() {
+            *LIST_PROTO_SYM
+        } else {
+            // Less common types - use variant()
+            match target.variant() {
+                Variant::Map(_) => *MAP_PROTO_SYM,
+                Variant::Err(_) => *ERROR_PROTO_SYM,
+                Variant::Sym(_) => *SYM_PROTO_SYM,
+                Variant::Bool(_) => *BOOL_PROTO_SYM,
+                _ => {
                     return Err(E_TYPE.with_msg(|| {
                         format!(
                             "Invalid target for verb dispatch: {}",
-                            prop_val.type_code().to_literal()
+                            target.type_code().to_literal()
                         )
                     }));
-                };
-                let arguments = args
-                    .insert(0, &target)
-                    .expect("Failed to insert object for dispatch");
-                let Some(arguments) = arguments.as_list() else {
-                    return Err(E_TYPE.with_msg(|| {
-                        format!(
-                            "Invalid arguments for verb dispatch: {}",
-                            arguments.type_code().to_literal()
-                        )
-                    }));
-                };
-                (arguments.clone(), v_obj(prop_val), prop_val)
+                }
             }
         };
-        Ok(self.prepare_call_verb(location, this, verb, args))
+        let perms = self.top().permissions;
+        let prop_val = with_current_transaction_mut(|world_state| {
+            match world_state.retrieve_property(&perms, &SYSTEM_OBJECT, sysprop_sym) {
+                Ok(prop_val) => Ok(prop_val),
+                Err(e) => Err(e.to_error()),
+            }
+        })?;
+        let Some(prop_val) = prop_val.as_object() else {
+            return Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Invalid target for verb dispatch: {}",
+                    prop_val.type_code().to_literal()
+                )
+            }));
+        };
+        let arguments = args
+            .insert(0, &target)
+            .expect("Failed to insert object for dispatch");
+        let Some(arguments) = arguments.as_list() else {
+            return Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Invalid arguments for verb dispatch: {}",
+                    arguments.type_code().to_literal()
+                )
+            }));
+        };
+        Ok(self.prepare_call_verb(prop_val, v_obj(prop_val), verb, arguments.clone()))
     }
 
     fn prepare_call_verb(

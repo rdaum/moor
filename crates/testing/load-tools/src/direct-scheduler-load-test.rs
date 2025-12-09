@@ -57,9 +57,7 @@ use moor_kernel::{
     tasks::{NoopTasksDb, TaskNotification, sched_counters, scheduler::Scheduler},
 };
 use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
-use moor_var::{
-    List, NOTHING, Obj, Symbol, Variant, program::ProgramType, v_int, v_list, v_obj,
-};
+use moor_var::{List, NOTHING, Obj, Symbol, Variant, program::ProgramType, v_int, v_list, v_obj};
 use std::{
     path::PathBuf,
     sync::Arc,
@@ -72,25 +70,13 @@ struct Args {
     #[arg(long, help = "Database path", default_value = "test_db")]
     db_path: PathBuf,
 
-    #[arg(
-        long,
-        help = "Min number of concurrent players",
-        default_value = "1"
-    )]
+    #[arg(long, help = "Min number of concurrent players", default_value = "1")]
     min_concurrency: usize,
 
-    #[arg(
-        long,
-        help = "Max number of concurrent players",
-        default_value = "32"
-    )]
+    #[arg(long, help = "Max number of concurrent players", default_value = "32")]
     max_concurrency: usize,
 
-    #[arg(
-        long,
-        help = "Number of test objects to create",
-        default_value = "1"
-    )]
+    #[arg(long, help = "Number of test objects to create", default_value = "1")]
     num_objects: usize,
 
     #[arg(
@@ -672,9 +658,7 @@ async fn swamp_mode_workload(
         total_verb_calls,
         wall_time: total_time,
         cumulative_time,
-        per_verb_call: Duration::from_secs_f64(
-            total_time.as_secs_f64() / total_verb_calls as f64,
-        ),
+        per_verb_call: Duration::from_secs_f64(total_time.as_secs_f64() / total_verb_calls as f64),
         throughput: total_verb_calls as f64 / total_time.as_secs_f64(),
     };
 
@@ -929,9 +913,8 @@ async fn load_test_workload(
 
         let per_thread_throughput = r.throughput / r.concurrency as f64;
         // Per-Verb = cumulative CPU time / verb calls (actual processing time)
-        let cpu_per_verb = Duration::from_secs_f64(
-            r.cumulative_time.as_secs_f64() / r.total_verb_calls as f64,
-        );
+        let cpu_per_verb =
+            Duration::from_secs_f64(r.cumulative_time.as_secs_f64() / r.total_verb_calls as f64);
         table_rows.push(BenchmarkRow {
             concurrency: r.concurrency,
             tasks: r.total_invocations,
@@ -986,7 +969,10 @@ async fn opcode_workload(
     // mooR uses 64-bit integers, so no overflow for reasonable N
     let n = args.loop_iterations as i64;
     let expected_sum = n * (n + 1) / 2;
-    info!("Expected return value for {} iterations: {}", n, expected_sum);
+    info!(
+        "Expected return value for {} iterations: {}",
+        n, expected_sum
+    );
 
     // Warm-up run with validation - record first value for consistency
     info!("Running warm-up...");
@@ -1012,23 +998,30 @@ async fn opcode_workload(
                             if actual != val {
                                 return Err(eyre::eyre!(
                                     "Warm-up {}: Inconsistent return value! First was {}, got {}",
-                                    i, val, actual
+                                    i,
+                                    val,
+                                    actual
                                 ));
                             }
                         } else {
                             first_value = Some(actual);
-                            info!("First return value: {} (expected: {})", actual, expected_sum);
+                            info!(
+                                "First return value: {} (expected: {})",
+                                actual, expected_sum
+                            );
                             if actual != expected_sum {
                                 return Err(eyre::eyre!(
                                     "Wrong return value! Expected {}, got {}. Task may have exited early or hit tick limit.",
-                                    expected_sum, actual
+                                    expected_sum,
+                                    actual
                                 ));
                             }
                         }
                     } else {
                         return Err(eyre::eyre!(
                             "Warm-up {}: Expected integer return value, got {:?}",
-                            i, result
+                            i,
+                            result
                         ));
                     }
                     break;
@@ -1121,7 +1114,9 @@ async fn opcode_workload(
     if value_errors > 0 {
         return Err(eyre::eyre!(
             "{} tasks returned inconsistent values! Expected {} for {} iterations",
-            value_errors, expected, args.loop_iterations
+            value_errors,
+            expected,
+            args.loop_iterations
         ));
     }
 
@@ -1139,8 +1134,13 @@ async fn opcode_workload(
 
     eprintln!(
         "\r  ✓ Concurrency 1: {:?} for {} opcodes ({:.1}ns/op, {:.1}M op/s) | {} iterations ({:.1}ns/iter, {:.1}M iter/s)",
-        wall_time, total_opcodes, per_opcode.as_nanos(), op_throughput / 1_000_000.0,
-        total_iterations, per_iteration.as_nanos(), iter_throughput / 1_000_000.0
+        wall_time,
+        total_opcodes,
+        per_opcode.as_nanos(),
+        op_throughput / 1_000_000.0,
+        total_iterations,
+        per_iteration.as_nanos(),
+        iter_throughput / 1_000_000.0
     );
 
     table_rows.push(OpcodeBenchmarkRow {
@@ -1194,7 +1194,10 @@ async fn main() -> Result<(), eyre::Error> {
     let (player, opcodes_per_invocation) = if args.opcode_mode {
         setup_opcode_database(&database, args.loop_iterations, args.max_ticks)?
     } else {
-        (setup_test_database(&database, args.num_objects, args.max_ticks)?, 0)
+        (
+            setup_test_database(&database, args.num_objects, args.max_ticks)?,
+            0,
+        )
     };
 
     let database = Box::new(database);

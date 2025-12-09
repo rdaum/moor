@@ -45,6 +45,29 @@ fn int_add(ctx: &mut IntContext, chunk_size: usize, _chunk_num: usize) {
     }
 }
 
+// Context for float benchmarks
+struct FloatContext(Var);
+impl BenchContext for FloatContext {
+    fn prepare(_num_chunks: usize) -> Self {
+        FloatContext(v_float(0.0))
+    }
+}
+
+fn float_add(ctx: &mut FloatContext, chunk_size: usize, _chunk_num: usize) {
+    let mut v = ctx.0.clone();
+    for _ in 0..chunk_size {
+        v = v.add(&v_float(1.0)).unwrap();
+    }
+}
+
+// Mixed type: int + float (tests the slow path)
+fn mixed_add(ctx: &mut IntContext, chunk_size: usize, _chunk_num: usize) {
+    let mut v = ctx.0.clone();
+    for _ in 0..chunk_size {
+        v = v.add(&v_float(1.0)).unwrap();
+    }
+}
+
 fn int_eq(ctx: &mut IntContext, chunk_size: usize, _chunk_num: usize) {
     let v = ctx.0.clone();
     for _ in 0..chunk_size {
@@ -282,6 +305,11 @@ pub fn main() {
             func: int_add,
         },
         BenchmarkDef {
+            name: "mixed_add",
+            group: "int",
+            func: mixed_add,
+        },
+        BenchmarkDef {
             name: "int_eq",
             group: "int",
             func: int_eq,
@@ -292,6 +320,12 @@ pub fn main() {
             func: int_cmp,
         },
     ];
+
+    let float_benchmarks = [BenchmarkDef {
+        name: "float_add",
+        group: "float",
+        func: float_add,
+    }];
 
     let small_list_benchmarks = [BenchmarkDef {
         name: "list_push",
@@ -378,6 +412,7 @@ pub fn main() {
 
     // Run benchmark groups
     run_benchmark_group::<IntContext>(&int_benchmarks, "Integer Operations", filter);
+    run_benchmark_group::<FloatContext>(&float_benchmarks, "Float Operations", filter);
     run_benchmark_group::<SmallListContext>(
         &small_list_benchmarks,
         "Small List Operations",

@@ -31,11 +31,7 @@ struct Args {
     #[arg(long, help = "Path to LambdaMOO database file")]
     db_path: PathBuf,
 
-    #[arg(
-        long,
-        help = "Number of test objects to create",
-        default_value = "1"
-    )]
+    #[arg(long, help = "Number of test objects to create", default_value = "1")]
     num_objects: usize,
 
     #[arg(
@@ -52,25 +48,13 @@ struct Args {
     )]
     num_invocations: usize,
 
-    #[arg(
-        long,
-        help = "Min number of concurrent players",
-        default_value = "1"
-    )]
+    #[arg(long, help = "Min number of concurrent players", default_value = "1")]
     min_concurrency: usize,
 
-    #[arg(
-        long,
-        help = "Max number of concurrent players",
-        default_value = "32"
-    )]
+    #[arg(long, help = "Max number of concurrent players", default_value = "32")]
     max_concurrency: usize,
 
-    #[arg(
-        long,
-        help = "Base player object ID",
-        default_value = "3"
-    )]
+    #[arg(long, help = "Base player object ID", default_value = "3")]
     player_id: i32,
 
     #[arg(
@@ -116,7 +100,9 @@ const ASPEC_THIS: i32 = 2;
 const PREP_NONE: i32 = -1;
 
 /// Compile a MOO program from source lines
-unsafe fn compile_verb(code_lines: &[&str]) -> Result<*mut ffi::Program, Box<dyn std::error::Error>> {
+unsafe fn compile_verb(
+    code_lines: &[&str],
+) -> Result<*mut ffi::Program, Box<dyn std::error::Error>> {
     unsafe {
         let mut code_list = ffi::new_list(0);
         for line in code_lines {
@@ -147,7 +133,10 @@ fn setup_opcode_environment(
     loop_iterations: usize,
     concurrency: usize,
 ) -> Result<(Vec<i32>, usize), Box<dyn std::error::Error>> {
-    info!("Setting up opcode test environment with {} loop iterations per invocation, {} concurrent players...", loop_iterations, concurrency);
+    info!(
+        "Setting up opcode test environment with {} loop iterations per invocation, {} concurrent players...",
+        loop_iterations, concurrency
+    );
 
     let mut player_ids = Vec::with_capacity(concurrency);
     let mut bytecode_size: usize = 0;
@@ -193,19 +182,26 @@ fn setup_opcode_environment(
                 ASPEC_THIS,
             );
             if verb_idx < 0 {
-                return Err(format!("Failed to add opcode_test verb to player #{}", player_id).into());
+                return Err(
+                    format!("Failed to add opcode_test verb to player #{}", player_id).into(),
+                );
             }
 
             let h = ffi::db_find_defined_verb(player_id, verb_name.as_ptr(), 0);
             if h.ptr.is_null() {
-                return Err(format!("Failed to find opcode_test verb on player #{}", player_id).into());
+                return Err(
+                    format!("Failed to find opcode_test verb on player #{}", player_id).into(),
+                );
             }
             let program = compile_verb(&opcode_code_refs)?;
 
             // Get the actual bytecode size from the compiled program (only need to do this once)
             if p == 0 {
                 bytecode_size = ffi::harness_get_program_bytecode_size(program) as usize;
-                info!("Compiled opcode_test verb: {} bytecode bytes", bytecode_size);
+                info!(
+                    "Compiled opcode_test verb: {} bytecode bytes",
+                    bytecode_size
+                );
             }
 
             ffi::db_set_verb_program(h, program);
@@ -214,7 +210,11 @@ fn setup_opcode_environment(
         }
     }
 
-    info!("Created {} players with opcode_test verbs: {:?}", player_ids.len(), player_ids);
+    info!(
+        "Created {} players with opcode_test verbs: {:?}",
+        player_ids.len(),
+        player_ids
+    );
 
     // Verify verbs are callable
     unsafe {
@@ -222,7 +222,9 @@ fn setup_opcode_environment(
             let verb_name = CString::new("opcode_test").unwrap();
             let h = ffi::db_find_callable_verb(player_id, verb_name.as_ptr());
             if h.ptr.is_null() {
-                return Err(format!("Verb opcode_test not callable on player #{}", player_id).into());
+                return Err(
+                    format!("Verb opcode_test not callable on player #{}", player_id).into(),
+                );
             }
         }
     }
@@ -239,7 +241,10 @@ fn setup_test_environment(
     num_verb_iterations: usize,
     concurrency: usize,
 ) -> Result<(Vec<i32>, Vec<i32>), Box<dyn std::error::Error>> {
-    info!("Setting up test environment with {} objects, {} concurrent players...", num_objects, concurrency);
+    info!(
+        "Setting up test environment with {} objects, {} concurrent players...",
+        num_objects, concurrency
+    );
 
     let mut test_objects = Vec::with_capacity(num_objects);
     let mut player_ids = Vec::with_capacity(concurrency);
@@ -284,7 +289,8 @@ fn setup_test_environment(
         }
 
         // Build the invoke_load_test verb code (shared by all players)
-        let obj_list: String = test_objects.iter()
+        let obj_list: String = test_objects
+            .iter()
             .map(|oid| format!("#{}", oid))
             .collect::<Vec<_>>()
             .join(", ");
@@ -332,12 +338,20 @@ fn setup_test_environment(
                 ASPEC_THIS,
             );
             if verb_idx < 0 {
-                return Err(format!("Failed to add invoke_load_test verb to player #{}", player_id).into());
+                return Err(format!(
+                    "Failed to add invoke_load_test verb to player #{}",
+                    player_id
+                )
+                .into());
             }
 
             let h = ffi::db_find_defined_verb(player_id, invoke_verb_name.as_ptr(), 0);
             if h.ptr.is_null() {
-                return Err(format!("Failed to find invoke_load_test verb on player #{}", player_id).into());
+                return Err(format!(
+                    "Failed to find invoke_load_test verb on player #{}",
+                    player_id
+                )
+                .into());
             }
             let program = compile_verb(&invoke_code_refs)?;
             ffi::db_set_verb_program(h, program);
@@ -346,8 +360,15 @@ fn setup_test_environment(
         }
     }
 
-    info!("Created {} test objects with load_test verbs", test_objects.len());
-    info!("Created {} players with invoke_load_test verbs: {:?}", player_ids.len(), player_ids);
+    info!(
+        "Created {} test objects with load_test verbs",
+        test_objects.len()
+    );
+    info!(
+        "Created {} players with invoke_load_test verbs: {:?}",
+        player_ids.len(),
+        player_ids
+    );
 
     // Verify verbs are callable
     unsafe {
@@ -362,7 +383,11 @@ fn setup_test_environment(
             let invoke_verb_name = CString::new("invoke_load_test").unwrap();
             let h = ffi::db_find_callable_verb(player_id, invoke_verb_name.as_ptr());
             if h.ptr.is_null() {
-                return Err(format!("Verb invoke_load_test not callable on player #{}", player_id).into());
+                return Err(format!(
+                    "Verb invoke_load_test not callable on player #{}",
+                    player_id
+                )
+                .into());
             }
         }
     }
@@ -446,7 +471,8 @@ fn run_workload(
     let total_invocations = num_invocations * concurrency;
     // Count actual verb dispatches: invoke_load_test calls + (iterations * objects) load_test calls
     // This matches mooR's counting: (invocations * iterations * concurrency) + total_invocations
-    let total_verb_calls = (num_verb_iterations * num_objects * total_invocations) + total_invocations;
+    let total_verb_calls =
+        (num_verb_iterations * num_objects * total_invocations) + total_invocations;
 
     let mut outcome_errors: usize = 0;
     let mut value_errors: usize = 0;
@@ -460,22 +486,30 @@ fn run_workload(
             if result.outcome != 0 {
                 outcome_errors += 1;
                 if outcome_errors <= 3 {
-                    eprintln!("invoke_load_test returned unexpected outcome: {}", result.outcome);
+                    eprintln!(
+                        "invoke_load_test returned unexpected outcome: {}",
+                        result.outcome
+                    );
                 }
             } else if result.return_type != ffi::TYPE_INT || result.return_value != 1 {
                 value_errors += 1;
                 if value_errors <= 3 {
-                    eprintln!("invoke_load_test returned unexpected value: type={}, value={}",
-                              result.return_type, result.return_value);
+                    eprintln!(
+                        "invoke_load_test returned unexpected value: type={}, value={}",
+                        result.return_type, result.return_value
+                    );
                 }
             }
         }
 
         // Progress update every 10%
         if (invocation + 1) % (num_invocations / 10).max(1) == 0 {
-            eprint!("\r  {} Running workload... {}/{} rounds",
-                    ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'][(invocation / 10) % 10],
-                    invocation + 1, num_invocations);
+            eprint!(
+                "\r  {} Running workload... {}/{} rounds",
+                ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'][(invocation / 10) % 10],
+                invocation + 1,
+                num_invocations
+            );
             std::io::Write::flush(&mut std::io::stderr()).ok();
         }
     }
@@ -523,20 +557,28 @@ fn run_opcode_workload(
             if result.outcome != 0 {
                 outcome_errors += 1;
                 if outcome_errors <= 3 {
-                    eprintln!("opcode_test returned unexpected outcome: {}", result.outcome);
+                    eprintln!(
+                        "opcode_test returned unexpected outcome: {}",
+                        result.outcome
+                    );
                 }
             } else if result.return_type != ffi::TYPE_INT {
                 value_errors += 1;
                 if value_errors <= 3 {
-                    eprintln!("opcode_test returned non-integer type: {}", result.return_type);
+                    eprintln!(
+                        "opcode_test returned non-integer type: {}",
+                        result.return_type
+                    );
                 }
             } else {
                 // Record first value for consistency check
                 match first_value {
                     None => {
                         first_value = Some(result.return_value);
-                        eprintln!("First return value: {} (expected wrapped: {})",
-                                  result.return_value, expected_sum_wrapped);
+                        eprintln!(
+                            "First return value: {} (expected wrapped: {})",
+                            result.return_value, expected_sum_wrapped
+                        );
                     }
                     Some(expected) if result.return_value != expected => {
                         value_errors += 1;
@@ -554,9 +596,12 @@ fn run_opcode_workload(
 
         // Progress update every 10%
         if (invocation + 1) % (num_invocations / 10).max(1) == 0 {
-            eprint!("\r  {} Running opcode workload... {}/{} rounds",
-                    ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'][(invocation / 10) % 10],
-                    invocation + 1, num_invocations);
+            eprint!(
+                "\r  {} Running opcode workload... {}/{} rounds",
+                ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'][(invocation / 10) % 10],
+                invocation + 1,
+                num_invocations
+            );
             std::io::Write::flush(&mut std::io::stderr()).ok();
         }
     }
@@ -564,7 +609,11 @@ fn run_opcode_workload(
     let total_time = start_time.elapsed();
 
     if outcome_errors > 0 {
-        return Err(format!("{} task errors in {} invocations", outcome_errors, total_invocations).into());
+        return Err(format!(
+            "{} task errors in {} invocations",
+            outcome_errors, total_invocations
+        )
+        .into());
     }
     if value_errors > 0 {
         return Err(format!(
@@ -573,7 +622,12 @@ fn run_opcode_workload(
         ).into());
     }
 
-    Ok((total_time, total_invocations, total_bytecode_bytes, total_loop_iterations))
+    Ok((
+        total_time,
+        total_invocations,
+        total_bytecode_bytes,
+        total_loop_iterations,
+    ))
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -584,22 +638,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args: Args = Args::parse();
 
-    info!("Initializing LambdaMOO harness with database: {}", args.db_path.display());
+    info!(
+        "Initializing LambdaMOO harness with database: {}",
+        args.db_path.display()
+    );
 
     // Initialize LambdaMOO with the database
     let _harness = LambdaMooHarness::new(&args.db_path)?;
 
     if args.opcode_mode {
         // Opcode mode - measure raw interpreter throughput
-        let (all_player_ids, bytecode_size) = setup_opcode_environment(
-            args.player_id,
-            args.loop_iterations,
-            args.max_concurrency,
-        )?;
+        let (all_player_ids, bytecode_size) =
+            setup_opcode_environment(args.player_id, args.loop_iterations, args.max_concurrency)?;
 
         info!(
             "Starting OPCODE test: {} to {} concurrent, {} invocations each, {} loop iterations, {} bytecode bytes per invocation",
-            args.min_concurrency, args.max_concurrency, args.num_invocations, args.loop_iterations, bytecode_size
+            args.min_concurrency,
+            args.max_concurrency,
+            args.num_invocations,
+            args.loop_iterations,
+            bytecode_size
         );
 
         let ctx = VerbCallContext::new_opcode();
@@ -645,33 +703,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let num_concurrent = concurrency as usize;
             let player_ids = &all_player_ids[0..num_concurrent];
 
-            eprint!("  Running concurrency {} opcode workload...", num_concurrent);
+            eprint!(
+                "  Running concurrency {} opcode workload...",
+                num_concurrent
+            );
             std::io::Write::flush(&mut std::io::stderr()).ok();
 
-            let (total_time, total_invocations, total_bytecode_bytes, total_loop_iterations) = run_opcode_workload(
-                &ctx,
-                player_ids,
-                args.num_invocations,
-                args.loop_iterations,
-                bytecode_size,
-            )?;
+            let (total_time, total_invocations, total_bytecode_bytes, total_loop_iterations) =
+                run_opcode_workload(
+                    &ctx,
+                    player_ids,
+                    args.num_invocations,
+                    args.loop_iterations,
+                    bytecode_size,
+                )?;
 
             // Bytecode-based metrics
-            let per_byte = Duration::from_secs_f64(
-                total_time.as_secs_f64() / total_bytecode_bytes as f64
-            );
+            let per_byte =
+                Duration::from_secs_f64(total_time.as_secs_f64() / total_bytecode_bytes as f64);
             let byte_throughput = total_bytecode_bytes as f64 / total_time.as_secs_f64();
 
             // Loop iteration metrics (work-equivalent comparison)
-            let per_iteration = Duration::from_secs_f64(
-                total_time.as_secs_f64() / total_loop_iterations as f64
-            );
+            let per_iteration =
+                Duration::from_secs_f64(total_time.as_secs_f64() / total_loop_iterations as f64);
             let iter_throughput = total_loop_iterations as f64 / total_time.as_secs_f64();
 
-            eprintln!("\r  ✓ Concurrency {}: {:?} for {} bytes ({:.1}ns/byte, {:.1}M bytes/s) | {} iterations ({:.1}ns/iter, {:.1}M iter/s)",
-                      num_concurrent, total_time, total_bytecode_bytes,
-                      per_byte.as_nanos(), byte_throughput / 1_000_000.0,
-                      total_loop_iterations, per_iteration.as_nanos(), iter_throughput / 1_000_000.0);
+            eprintln!(
+                "\r  ✓ Concurrency {}: {:?} for {} bytes ({:.1}ns/byte, {:.1}M bytes/s) | {} iterations ({:.1}ns/iter, {:.1}M iter/s)",
+                num_concurrent,
+                total_time,
+                total_bytecode_bytes,
+                per_byte.as_nanos(),
+                byte_throughput / 1_000_000.0,
+                total_loop_iterations,
+                per_iteration.as_nanos(),
+                iter_throughput / 1_000_000.0
+            );
 
             table_rows.push(OpcodeRow {
                 concurrency: num_concurrent,
@@ -698,7 +765,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\nLambdaMOO Opcode Throughput Test Complete");
         println!("Note: Measures raw interpreter loop speed without verb dispatch overhead.");
         println!("Bytecode column shows actual bytecode bytes from compiled program.");
-
     } else {
         // Verb dispatch mode (original behavior)
         let (_test_objects, all_player_ids) = setup_test_environment(
@@ -710,7 +776,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         info!(
             "Starting VERB DISPATCH test: {} to {} concurrent, {} invocations each, {} iterations x {} objects per invocation",
-            args.min_concurrency, args.max_concurrency, args.num_invocations, args.num_verb_iterations, args.num_objects
+            args.min_concurrency,
+            args.max_concurrency,
+            args.num_invocations,
+            args.num_verb_iterations,
+            args.num_objects
         );
 
         let ctx = VerbCallContext::new();
@@ -744,13 +814,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 args.num_objects,
             )?;
 
-            let per_verb_call = Duration::from_secs_f64(
-                total_time.as_secs_f64() / total_verb_calls as f64
-            );
+            let per_verb_call =
+                Duration::from_secs_f64(total_time.as_secs_f64() / total_verb_calls as f64);
 
-            eprintln!("\r  ✓ Concurrency {}: {:?} for {} verb calls ({:?}/verb, {:.0} verb/s)",
-                      num_concurrent, total_time, total_verb_calls,
-                      per_verb_call, total_verb_calls as f64 / total_time.as_secs_f64());
+            eprintln!(
+                "\r  ✓ Concurrency {}: {:?} for {} verb calls ({:?}/verb, {:.0} verb/s)",
+                num_concurrent,
+                total_time,
+                total_verb_calls,
+                per_verb_call,
+                total_verb_calls as f64 / total_time.as_secs_f64()
+            );
 
             let throughput = total_verb_calls as f64 / total_time.as_secs_f64();
             let per_thread_throughput = throughput / num_concurrent as f64;
@@ -775,7 +849,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         println!("\nLambdaMOO Verb Dispatch Test Complete");
-        println!("Note: LambdaMOO is single-threaded - all tasks serialize regardless of 'concurrency'");
+        println!(
+            "Note: LambdaMOO is single-threaded - all tasks serialize regardless of 'concurrency'"
+        );
     }
 
     Ok(())

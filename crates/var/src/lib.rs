@@ -155,15 +155,7 @@ pub enum TypeClass<'a> {
 }
 
 impl TypeClass<'_> {
-    fn is_sequence(&self) -> bool {
-        matches!(self, TypeClass::Sequence(_))
-    }
-
-    fn is_associative(&self) -> bool {
-        matches!(self, TypeClass::Associative(_))
-    }
-
-    fn is_scalar(&self) -> bool {
+    pub fn is_scalar(&self) -> bool {
         matches!(self, TypeClass::Scalar)
     }
 }

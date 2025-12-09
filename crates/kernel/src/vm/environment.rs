@@ -335,6 +335,9 @@ mod tests {
         // Verify our assumption that v_none() is all zeros
         let none = v_none();
         let bytes: [u8; 16] = unsafe { std::mem::transmute(none) };
-        assert!(bytes.iter().all(|&b| b == 0), "v_none() must be all zeros for zero-fill to work");
+        assert!(
+            bytes.iter().all(|&b| b == 0),
+            "v_none() must be all zeros for zero-fill to work"
+        );
     }
 }

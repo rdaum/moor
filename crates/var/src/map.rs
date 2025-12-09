@@ -262,7 +262,10 @@ impl Hash for Map {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Associative, IndexMode, v_bool_int, v_int, v_str, variant::{Var, Variant}};
+    use crate::{
+        Associative, IndexMode, v_bool_int, v_int, v_str,
+        variant::{Var, Variant},
+    };
 
     #[test]
     fn test_map_pack_unpack_index() {

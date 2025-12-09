@@ -15,7 +15,6 @@ use crate::{
     Error, Sequence,
     error::ErrorCode::{E_INVARG, E_RANGE, E_TYPE},
     variant::Var,
-    variant::Variant,
 };
 use num_traits::ToPrimitive;
 use std::{
@@ -68,16 +67,13 @@ impl Sequence for Str {
     }
 
     fn index_in(&self, value: &Var, case_sensitive: bool) -> Result<Option<usize>, Error> {
-        let value = match value.variant() {
-            Variant::Str(s) => s,
-            _ => {
-                return Err(E_TYPE.with_msg(|| {
-                    format!(
-                        "Cannot index string with {}",
-                        value.type_code().to_literal()
-                    )
-                }));
-            }
+        let Some(value) = value.as_str() else {
+            return Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot index string with {}",
+                    value.type_code().to_literal()
+                )
+            }));
         };
 
         let s = self.as_str();
@@ -93,16 +89,13 @@ impl Sequence for Str {
     }
 
     fn contains(&self, value: &Var, case_sensitive: bool) -> Result<bool, Error> {
-        let value = match value.variant() {
-            Variant::Str(s) => s,
-            _ => {
-                return Err(E_TYPE.with_msg(|| {
-                    format!(
-                        "Cannot check if string contains {}",
-                        value.type_code().to_literal()
-                    )
-                }));
-            }
+        let Some(value) = value.as_str() else {
+            return Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot check if string contains {}",
+                    value.type_code().to_literal()
+                )
+            }));
         };
 
         let s = self.as_str();
@@ -145,17 +138,14 @@ impl Sequence for Str {
         // Index set for strings requires that the `value` being set is a string, otherwise it's.
         // E_TYPE.
         // And it must be a single character character, otherwise, E_INVARG is returned.
-        let value = match value.variant() {
-            Variant::Str(s) => s,
-            _ => {
-                return Err(E_TYPE.with_msg(|| {
-                    format!(
-                        "Cannot set string index {} with {}",
-                        index,
-                        value.type_code().to_literal()
-                    )
-                }));
-            }
+        let Some(value) = value.as_str() else {
+            return Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot set string index {} with {}",
+                    index,
+                    value.type_code().to_literal()
+                )
+            }));
         };
 
         if value.as_str().chars().count() != 1 {
@@ -173,13 +163,9 @@ impl Sequence for Str {
     }
 
     fn push(&self, value: &Var) -> Result<Var, Error> {
-        let value = match value.variant() {
-            Variant::Str(s) => s,
-            _ => {
-                return Err(E_TYPE.with_msg(|| {
-                    format!("Cannot push {} to string", value.type_code().to_literal())
-                }));
-            }
+        let Some(value) = value.as_str() else {
+            return Err(E_TYPE
+                .with_msg(|| format!("Cannot push {} to string", value.type_code().to_literal())));
         };
 
         let mut new_copy = self.as_str().to_string();
@@ -189,16 +175,13 @@ impl Sequence for Str {
 
     fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
         // If value is not a string, return E_TYPE.
-        let value = match value.variant() {
-            Variant::Str(s) => s,
-            _ => {
-                return Err(E_TYPE.with_msg(|| {
-                    format!(
-                        "Cannot insert {} into string",
-                        value.type_code().to_literal()
-                    )
-                }));
-            }
+        let Some(value) = value.as_str() else {
+            return Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot insert {} into string",
+                    value.type_code().to_literal()
+                )
+            }));
         };
 
         // Convert character index to byte index
@@ -239,16 +222,13 @@ impl Sequence for Str {
     }
 
     fn range_set(&self, from: isize, to: isize, with: &Var) -> Result<Var, Error> {
-        let with_val = match with.variant() {
-            Variant::Str(s) => s,
-            _ => {
-                return Err(E_TYPE.with_msg(|| {
-                    format!(
-                        "Cannot set string range with {}",
-                        with.type_code().to_literal()
-                    )
-                }));
-            }
+        let Some(with_val) = with.as_str() else {
+            return Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot set string range with {}",
+                    with.type_code().to_literal()
+                )
+            }));
         };
 
         let base_str = self.as_str();
@@ -274,13 +254,10 @@ impl Sequence for Str {
     }
 
     fn append(&self, other: &Var) -> Result<Var, Error> {
-        let other = match other.variant() {
-            Variant::Str(s) => s,
-            _ => {
-                return Err(E_TYPE.with_msg(|| {
-                    format!("Cannot append {} to string", other.type_code().to_literal())
-                }));
-            }
+        let Some(other) = other.as_str() else {
+            return Err(E_TYPE.with_msg(|| {
+                format!("Cannot append {} to string", other.type_code().to_literal())
+            }));
         };
 
         let mut new_copy = self.as_str().to_string();
@@ -363,8 +340,8 @@ mod tests {
         IndexMode,
         error::ErrorCode::E_RANGE,
         v_bool_int,
-        variant::{Var, v_int, v_str},
         variant::Variant,
+        variant::{Var, v_int, v_str},
     };
 
     #[test]

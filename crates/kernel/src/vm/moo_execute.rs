@@ -25,9 +25,8 @@ use lazy_static::lazy_static;
 use moor_compiler::{Op, to_literal};
 use moor_var::{
     E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, Error, IndexMode, Obj, Symbol,
-    TypeClass, Var, VarType, Variant, program::names::Name, v_arc_string, v_bool, v_bool_int,
-    v_empty_list, v_empty_map, v_err, v_error, v_float, v_flyweight, v_int, v_list, v_map, v_none,
-    v_obj, v_sym,
+    TypeClass, Var, VarType, program::names::Name, v_arc_string, v_bool, v_bool_int, v_empty_list,
+    v_empty_map, v_err, v_error, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_sym,
 };
 use std::time::Duration;
 
@@ -321,18 +320,20 @@ pub fn moo_frame_execute(
                 let start_val = f.pop();
 
                 // Validate range values are integers, floats, or objects
-                let valid_types = matches!(
-                    (start_val.variant(), end_val.variant()),
-                    (Variant::Int(_), Variant::Int(_))
-                        | (Variant::Float(_), Variant::Float(_))
-                        | (Variant::Obj(_), Variant::Obj(_))
-                );
-
-                if !valid_types {
+                if !start_val.same_numeric_type(&end_val) {
                     return ExecutionResult::RaiseError(E_TYPE.msg(
                         "for-range requires matching types (both INT, both FLOAT, or both OBJ)",
                     ));
                 }
+
+                // For object ranges, only numeric OIDs can be iterated (not UUIDs or anonymous)
+                if let (Some(start_obj), Some(end_obj)) =
+                    (start_val.as_object(), end_val.as_object())
+                    && (!start_obj.is_oid() || !end_obj.is_oid()) {
+                        return ExecutionResult::RaiseError(
+                            E_TYPE.msg("for-range requires numeric object IDs, not UUIDs"),
+                        );
+                    }
 
                 // If start > end, jump to end immediately (empty range)
                 if start_val > end_val {
@@ -374,43 +375,44 @@ pub fn moo_frame_execute(
                 let loop_var = *loop_variable;
 
                 // Increment for next iteration with type-specific logic and overflow protection
-                let next_value = match current_val.variant() {
-                    Variant::Int(i) => {
-                        // Check for integer overflow
-                        if i == i64::MAX {
-                            // Decrement end_value instead to avoid overflow
-                            *end_value = match end_value.variant() {
-                                Variant::Int(e) if e > i64::MIN => v_int(e - 1),
-                                _ => end_value.clone(),
-                            };
-                            current_val.clone()
-                        } else {
-                            v_int(i + 1)
-                        }
+                // Use direct accessors to avoid variant() overhead on the hot path
+                let next_value = if let Some(i) = current_val.as_integer() {
+                    // Integer case (most common)
+                    if i == i64::MAX {
+                        // Decrement end_value instead to avoid overflow
+                        if let Some(e) = end_value.as_integer()
+                            && e > i64::MIN {
+                                *end_value = v_int(e - 1);
+                            }
+                        current_val.clone()
+                    } else {
+                        v_int(i + 1)
                     }
-                    Variant::Float(f_val) => v_float(f_val + 1.0),
-                    Variant::Obj(o) => {
-                        // Check for object ID overflow (32-bit signed)
-                        let obj_id = o.id().0;
-                        if obj_id == i32::MAX {
-                            // Decrement end_value instead to avoid overflow
-                            *end_value = match end_value.variant() {
-                                Variant::Obj(e) if e.id().0 > i32::MIN => {
-                                    v_obj(Obj::mk_id(e.id().0 - 1))
-                                }
-                                _ => end_value.clone(),
-                            };
-                            current_val.clone()
-                        } else {
-                            v_obj(Obj::mk_id(obj_id + 1))
-                        }
-                    }
-                    _ => {
-                        // This shouldn't happen due to validation in BeginForRange
+                } else if let Some(f_val) = current_val.as_float() {
+                    v_float(f_val + 1.0)
+                } else if let Some(o) = current_val.as_object() {
+                    // Only numeric object IDs can be iterated - not UUIDs or anonymous
+                    if !o.is_oid() {
                         return ExecutionResult::RaiseError(
-                            E_TYPE.msg("invalid type in for-range iteration"),
+                            E_TYPE.msg("cannot iterate over non-numeric object IDs"),
                         );
                     }
+                    let obj_id = o.id().0;
+                    if obj_id == i32::MAX {
+                        // Decrement end_value instead to avoid overflow
+                        if let Some(e) = end_value.as_object()
+                            && e.is_oid() && e.id().0 > i32::MIN {
+                                *end_value = v_obj(Obj::mk_id(e.id().0 - 1));
+                            }
+                        current_val.clone()
+                    } else {
+                        v_obj(Obj::mk_id(obj_id + 1))
+                    }
+                } else {
+                    // This shouldn't happen due to validation in BeginForRange
+                    return ExecutionResult::RaiseError(
+                        E_TYPE.msg("invalid type in for-range iteration"),
+                    );
                 };
                 *current_value = next_value;
 
@@ -642,7 +644,7 @@ pub fn moo_frame_execute(
                 // Note that LambdaMOO consider 1/0.0 to be E_DIV, but Rust permits it, creating
                 // `inf`.
                 let divargs = f.peek_range(2);
-                if matches!(divargs[1].variant(), Variant::Int(0) | Variant::Float(0.0)) {
+                if divargs[1].is_zero() {
                     return ExecutionResult::PushError(E_DIV.msg("division by zero"));
                 };
                 binary_var_op!(self, f, state, div);
@@ -655,7 +657,7 @@ pub fn moo_frame_execute(
             }
             Op::Mod => {
                 let divargs = f.peek_range(2);
-                if matches!(divargs[1].variant(), Variant::Int(0) | Variant::Float(0.0)) {
+                if divargs[1].is_zero() {
                     return ExecutionResult::PushError(E_DIV.msg("division by zero"));
                 };
                 binary_var_op!(self, f, state, modulus);
@@ -867,14 +869,14 @@ pub fn moo_frame_execute(
                 // Delay time should be on stack
                 let time = f.pop();
 
-                let time = match time.variant() {
-                    Variant::Int(time) => time as f64,
-                    Variant::Float(time) => time,
-                    _ => {
-                        return ExecutionResult::PushError(
-                            E_TYPE.msg("invalid value for delay time in fork"),
-                        );
-                    }
+                let time = if let Some(i) = time.as_integer() {
+                    i as f64
+                } else if let Some(f) = time.as_float() {
+                    f
+                } else {
+                    return ExecutionResult::PushError(
+                        E_TYPE.msg("invalid value for delay time in fork"),
+                    );
                 };
 
                 if time < 0.0 {
@@ -944,23 +946,19 @@ pub fn moo_frame_execute(
 
                 // The scope above us has to be a TryCatch, and we need to push into that scope
                 // the code list that we're going to execute.
-                match error_codes.variant() {
-                    Variant::List(error_codes) => {
-                        let error_codes = error_codes.iter().map(|v| {
-                            let Some(e) = v.as_error() else {
-                                panic!("Error codes list contains non-error code");
-                            };
-                            e.clone()
-                        });
-                        f.catch_stack
-                            .push((CatchType::Errors(error_codes.into_iter().collect()), label));
-                    }
-                    Variant::Int(0) => {
-                        f.catch_stack.push((CatchType::Any, label));
-                    }
-                    _ => {
-                        panic!("Invalid error codes list");
-                    }
+                if let Some(error_codes) = error_codes.as_list() {
+                    let error_codes = error_codes.iter().map(|v| {
+                        let Some(e) = v.as_error() else {
+                            panic!("Error codes list contains non-error code");
+                        };
+                        e.clone()
+                    });
+                    f.catch_stack
+                        .push((CatchType::Errors(error_codes.into_iter().collect()), label));
+                } else if error_codes.as_integer() == Some(0) {
+                    f.catch_stack.push((CatchType::Any, label));
+                } else {
+                    panic!("Invalid error codes list");
                 }
             }
             Op::TryFinally {
@@ -1256,10 +1254,10 @@ pub fn moo_frame_execute(
                 };
 
                 // Convert args list to List type for dispatch
-                let args = match args_list.variant() {
-                    Variant::List(args) => args.clone(),
-                    _ => return ExecutionResult::PushError(E_ARGS.msg("expected argument list")),
+                let Some(args) = args_list.as_list() else {
+                    return ExecutionResult::PushError(E_ARGS.msg("expected argument list"));
                 };
+                let args = args.clone();
 
                 // Request lambda dispatch - this will create a new activation
                 return ExecutionResult::DispatchLambda {
@@ -1281,56 +1279,56 @@ fn get_property(
     propname: Symbol,
     features_config: &FeaturesConfig,
 ) -> Result<Var, Error> {
-    match obj.variant() {
-        Variant::Obj(obj) => {
+    // Fast path: Obj is by far the most common case for property access
+    if let Some(obj_ref) = obj.as_object() {
+        let result = with_current_transaction_mut(|world_state| {
+            world_state.retrieve_property(permissions, &obj_ref, propname)
+        });
+        return match result {
+            Ok(v) => Ok(v),
+            Err(e) => Err(e.to_error()),
+        };
+    }
+
+    // Flyweight case
+    if let Some(flyweight) = obj.as_flyweight() {
+        // If propname is `delegate`, return the delegate object.
+        // If the propname is `slots`, return the slots list.
+        // Otherwise, return the value from the slots list.
+        let value = if propname == *DELEGATE_SYM {
+            v_obj(*flyweight.delegate())
+        } else if propname == *SLOTS_SYM {
+            let slots: Vec<_> = flyweight
+                .slots()
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        if features_config.use_symbols_in_builtins {
+                            v_sym(*k)
+                        } else {
+                            v_arc_string(k.as_arc_string())
+                        },
+                        v.clone(),
+                    )
+                })
+                .collect();
+            v_map(&slots)
+        } else if let Some(result) = flyweight.get_slot(&propname) {
+            result.clone()
+        } else {
+            // Now check the delegate
+            let delegate = flyweight.delegate();
             let result = with_current_transaction_mut(|world_state| {
-                world_state.retrieve_property(permissions, &obj, propname)
+                world_state.retrieve_property(permissions, delegate, propname)
             });
             match result {
-                Ok(v) => Ok(v),
-                Err(e) => Err(e.to_error()),
+                Ok(v) => v,
+                Err(e) => return Err(e.to_error()),
             }
-        }
-        Variant::Flyweight(flyweight) => {
-            // If propname is `delegate`, return the delegate object.
-            // If the propname is `slots`, return the slots list.
-            // Otherwise, return the value from the slots list.
-            let value = if propname == *DELEGATE_SYM {
-                v_obj(*flyweight.delegate())
-            } else if propname == *SLOTS_SYM {
-                let slots: Vec<_> = flyweight
-                    .slots()
-                    .iter()
-                    .map(|(k, v)| {
-                        (
-                            if features_config.use_symbols_in_builtins {
-                                v_sym(*k)
-                            } else {
-                                v_arc_string(k.as_arc_string())
-                            },
-                            v.clone(),
-                        )
-                    })
-                    .collect();
-                v_map(&slots)
-            } else if let Some(result) = flyweight.get_slot(&propname) {
-                result.clone()
-            } else {
-                // Now check the delegate
-                let delegate = flyweight.delegate();
-                let result = with_current_transaction_mut(|world_state| {
-                    world_state.retrieve_property(permissions, delegate, propname)
-                });
-                match result {
-                    Ok(v) => v,
-                    Err(e) => return Err(e.to_error()),
-                }
-            };
-            Ok(value)
-        }
-        _ => {
-            Err(E_INVIND
-                .with_msg(|| format!("Invalid value for property access: {}", to_literal(obj))))
-        }
+        };
+        return Ok(value);
     }
+
+    // Invalid target for property access
+    Err(E_INVIND.with_msg(|| format!("Invalid value for property access: {}", to_literal(obj))))
 }

@@ -360,6 +360,60 @@ impl Var {
         self.tag == TAG_NONE
     }
 
+    #[inline(always)]
+    pub fn is_int(&self) -> bool {
+        self.tag == TAG_INT
+    }
+
+    #[inline(always)]
+    pub fn is_float(&self) -> bool {
+        self.tag == TAG_FLOAT
+    }
+
+    #[inline(always)]
+    pub fn is_obj(&self) -> bool {
+        self.tag == TAG_OBJ
+    }
+
+    #[inline(always)]
+    pub fn is_list(&self) -> bool {
+        self.tag == TAG_LIST
+    }
+
+    /// Check if this is a numeric zero (int 0 or float 0.0).
+    #[inline(always)]
+    pub fn is_zero(&self) -> bool {
+        match self.tag {
+            TAG_INT => self.data == 0,
+            TAG_FLOAT => f64::from_bits(self.data) == 0.0,
+            _ => false,
+        }
+    }
+
+    /// Check if both self and other are integers.
+    #[inline(always)]
+    pub fn both_int(&self, other: &Self) -> bool {
+        self.tag == TAG_INT && other.tag == TAG_INT
+    }
+
+    /// Check if both self and other are floats.
+    #[inline(always)]
+    pub fn both_float(&self, other: &Self) -> bool {
+        self.tag == TAG_FLOAT && other.tag == TAG_FLOAT
+    }
+
+    /// Check if both self and other are objects.
+    #[inline(always)]
+    pub fn both_obj(&self, other: &Self) -> bool {
+        self.tag == TAG_OBJ && other.tag == TAG_OBJ
+    }
+
+    /// Check if both are the same simple numeric type (int, float, or obj).
+    #[inline(always)]
+    pub fn same_numeric_type(&self, other: &Self) -> bool {
+        self.tag == other.tag && matches!(self.tag, TAG_INT | TAG_FLOAT | TAG_OBJ)
+    }
+
     // Str, List, Map, Lambda: data contains transmuted value
     #[inline(always)]
     pub fn as_str(&self) -> Option<&string::Str> {
@@ -434,20 +488,22 @@ impl Var {
     // === Type information ===
 
     pub fn type_code(&self) -> VarType {
-        match self.variant() {
-            Variant::Bool(_) => VarType::TYPE_BOOL,
-            Variant::Int(_) => VarType::TYPE_INT,
-            Variant::Obj(_) => VarType::TYPE_OBJ,
-            Variant::Str(_) => VarType::TYPE_STR,
-            Variant::Err(_) => VarType::TYPE_ERR,
-            Variant::List(_) => VarType::TYPE_LIST,
-            Variant::None => VarType::TYPE_NONE,
-            Variant::Float(_) => VarType::TYPE_FLOAT,
-            Variant::Map(_) => VarType::TYPE_MAP,
-            Variant::Flyweight(_) => VarType::TYPE_FLYWEIGHT,
-            Variant::Sym(_) => VarType::TYPE_SYMBOL,
-            Variant::Binary(_) => VarType::TYPE_BINARY,
-            Variant::Lambda(_) => VarType::TYPE_LAMBDA,
+        // Direct tag lookup avoids constructing Variant enum
+        match self.tag {
+            TAG_NONE => VarType::TYPE_NONE,
+            TAG_BOOL_FALSE | TAG_BOOL_TRUE => VarType::TYPE_BOOL,
+            TAG_INT => VarType::TYPE_INT,
+            TAG_FLOAT => VarType::TYPE_FLOAT,
+            TAG_OBJ => VarType::TYPE_OBJ,
+            TAG_SYM => VarType::TYPE_SYMBOL,
+            TAG_STR => VarType::TYPE_STR,
+            TAG_LIST => VarType::TYPE_LIST,
+            TAG_MAP => VarType::TYPE_MAP,
+            TAG_ERR => VarType::TYPE_ERR,
+            TAG_FLYWEIGHT => VarType::TYPE_FLYWEIGHT,
+            TAG_BINARY => VarType::TYPE_BINARY,
+            TAG_LAMBDA => VarType::TYPE_LAMBDA,
+            _ => unreachable!("invalid tag"),
         }
     }
 
@@ -465,48 +521,48 @@ impl Var {
     }
 
     pub fn is_true(&self) -> bool {
-        match self.variant() {
-            Variant::None => false,
-            Variant::Bool(b) => b,
-            Variant::Obj(_) => false,
-            Variant::Int(i) => i != 0,
-            Variant::Float(f) => f != 0.0,
-            Variant::List(l) => !l.is_empty(),
-            Variant::Str(s) => !s.is_empty(),
-            Variant::Map(m) => !m.is_empty(),
-            Variant::Err(_) => false,
-            Variant::Flyweight(f) => !f.is_contents_empty(),
-            Variant::Sym(_) => true,
-            Variant::Binary(b) => !b.is_empty(),
-            Variant::Lambda(_) => true,
+        match self.tag {
+            // Simple types - check directly without constructing Variant
+            TAG_NONE | TAG_OBJ | TAG_ERR => false,
+            TAG_BOOL_FALSE => false,
+            TAG_BOOL_TRUE => true,
+            TAG_INT => self.data != 0,
+            TAG_FLOAT => f64::from_bits(self.data) != 0.0,
+            TAG_SYM | TAG_LAMBDA => true,
+            // Complex types - need to access the data
+            TAG_STR => !self.as_str().unwrap().is_empty(),
+            TAG_LIST => !self.as_list().unwrap().is_empty(),
+            TAG_MAP => !self.as_map().unwrap().is_empty(),
+            TAG_FLYWEIGHT => !self.as_flyweight().unwrap().is_contents_empty(),
+            TAG_BINARY => !self.as_binary().unwrap().is_empty(),
+            _ => unreachable!("invalid tag"),
         }
     }
 
     pub fn type_class(&self) -> TypeClass<'_> {
-        match self.variant() {
-            Variant::List(s) => TypeClass::Sequence(s),
-            Variant::Flyweight(_) => TypeClass::Scalar,
-            Variant::Str(s) => TypeClass::Sequence(s),
-            Variant::Binary(b) => TypeClass::Sequence(b),
-            Variant::Map(m) => TypeClass::Associative(m),
+        match self.tag {
+            TAG_LIST => TypeClass::Sequence(self.as_list().unwrap()),
+            TAG_STR => TypeClass::Sequence(self.as_str().unwrap()),
+            TAG_BINARY => TypeClass::Sequence(self.as_binary().unwrap()),
+            TAG_MAP => TypeClass::Associative(self.as_map().unwrap()),
             _ => TypeClass::Scalar,
         }
     }
 
     pub fn is_sequence(&self) -> bool {
-        self.type_class().is_sequence()
+        matches!(self.tag, TAG_LIST | TAG_STR | TAG_BINARY)
     }
 
     pub fn is_associative(&self) -> bool {
-        self.type_class().is_associative()
+        self.tag == TAG_MAP
     }
 
     pub fn is_scalar(&self) -> bool {
-        self.type_class().is_scalar()
+        !self.is_sequence() && !self.is_associative()
     }
 
     pub fn is_string(&self) -> bool {
-        matches!(self.variant(), Variant::Str(_))
+        self.tag == TAG_STR
     }
 
     // === Collection operations ===
@@ -1037,18 +1093,17 @@ impl Debug for Var {
             Variant::Binary(b) => write!(f, "Binary({} bytes)", b.len()),
             Variant::Lambda(l) => {
                 use crate::program::opcode::ScatterLabel;
-                let param_str = l
-                    .0
-                    .params
-                    .labels
-                    .iter()
-                    .map(|label| match label {
-                        ScatterLabel::Required(_) => "x",
-                        ScatterLabel::Optional(_, _) => "?x",
-                        ScatterLabel::Rest(_) => "@x",
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
+                let param_str =
+                    l.0.params
+                        .labels
+                        .iter()
+                        .map(|label| match label {
+                            ScatterLabel::Required(_) => "x",
+                            ScatterLabel::Optional(_, _) => "?x",
+                            ScatterLabel::Rest(_) => "@x",
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
                 write!(f, "Lambda(({param_str}))")
             }
         }
@@ -1080,20 +1135,26 @@ impl PartialEq for Var {
         if self.tag != other.tag {
             return false;
         }
-        match self.variant() {
-            Variant::None => true,
-            Variant::Bool(b) => other.as_bool() == Some(b),
-            Variant::Int(i) => other.as_integer() == Some(i),
-            Variant::Float(f) => other.as_float() == Some(f),
-            Variant::Obj(o) => other.as_object() == Some(o),
-            Variant::Sym(s) => other.as_sym() == Some(s),
-            Variant::Str(s) => other.as_str() == Some(s),
-            Variant::List(l) => other.as_list() == Some(l),
-            Variant::Map(m) => other.as_map() == Some(m),
-            Variant::Err(e) => other.as_error() == Some(e),
-            Variant::Flyweight(f) => other.as_flyweight() == Some(f),
-            Variant::Binary(b) => other.as_binary() == Some(b),
-            Variant::Lambda(l) => other.as_lambda() == Some(l),
+        // Tags match, compare data directly based on tag
+        match self.tag {
+            TAG_NONE => true,
+            TAG_BOOL_FALSE | TAG_BOOL_TRUE => true, // tags already match
+            TAG_INT | TAG_OBJ | TAG_SYM => self.data == other.data,
+            TAG_FLOAT => {
+                // Float comparison needs special handling for NaN
+                let l = f64::from_bits(self.data);
+                let r = f64::from_bits(other.data);
+                l == r
+            }
+            // Complex types - delegate to their PartialEq
+            TAG_STR => self.as_str().unwrap() == other.as_str().unwrap(),
+            TAG_LIST => self.as_list().unwrap() == other.as_list().unwrap(),
+            TAG_MAP => self.as_map().unwrap() == other.as_map().unwrap(),
+            TAG_ERR => self.as_error().unwrap() == other.as_error().unwrap(),
+            TAG_FLYWEIGHT => self.as_flyweight().unwrap() == other.as_flyweight().unwrap(),
+            TAG_BINARY => self.as_binary().unwrap() == other.as_binary().unwrap(),
+            TAG_LAMBDA => self.as_lambda().unwrap() == other.as_lambda().unwrap(),
+            _ => unreachable!("invalid tag"),
         }
     }
 }
@@ -1102,6 +1163,32 @@ impl Eq for Var {}
 
 impl Ord for Var {
     fn cmp(&self, other: &Self) -> Ordering {
+        // Fast path: int cmp int (most common)
+        if self.tag == TAG_INT && other.tag == TAG_INT {
+            return (self.data as i64).cmp(&(other.data as i64));
+        }
+
+        // Fast path: float cmp float
+        if self.tag == TAG_FLOAT && other.tag == TAG_FLOAT {
+            return f64::from_bits(self.data).total_cmp(&f64::from_bits(other.data));
+        }
+
+        // Fast path: int cmp float / float cmp int
+        if self.tag == TAG_INT && other.tag == TAG_FLOAT {
+            return (self.data as i64 as f64).total_cmp(&f64::from_bits(other.data));
+        }
+        if self.tag == TAG_FLOAT && other.tag == TAG_INT {
+            return f64::from_bits(self.data).total_cmp(&(other.data as i64 as f64));
+        }
+
+        // Slow path for other types
+        self.cmp_slow(other)
+    }
+}
+
+impl Var {
+    #[inline(never)]
+    fn cmp_slow(&self, other: &Self) -> Ordering {
         match (self.variant(), other.variant()) {
             (Variant::None, Variant::None) => Ordering::Equal,
             (Variant::Bool(l), Variant::Bool(r)) => l.cmp(&r),

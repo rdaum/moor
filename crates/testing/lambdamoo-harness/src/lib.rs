@@ -36,7 +36,7 @@ pub mod ffi {
     pub enum VarType {
         Int = 0,
         Obj = 1,
-        Str = 2,  // _TYPE_STR, but with COMPLEX_FLAG this becomes 0x82
+        Str = 2, // _TYPE_STR, but with COMPLEX_FLAG this becomes 0x82
         Err = 3,
         List = 4, // _TYPE_LIST, but with COMPLEX_FLAG this becomes 0x84
         Clear = 5,
@@ -107,11 +107,7 @@ pub mod ffi {
         pub fn db_shutdown();
 
         // Network functions
-        pub fn network_initialize(
-            argc: c_int,
-            argv: *mut *mut c_char,
-            desc: *mut Var,
-        ) -> c_int;
+        pub fn network_initialize(argc: c_int, argv: *mut *mut c_char, desc: *mut Var) -> c_int;
         pub fn network_shutdown();
         pub fn network_process_io(timeout: c_int) -> c_int;
 
@@ -154,7 +150,11 @@ pub mod ffi {
         ) -> c_int;
 
         // Find a verb handle for programming
-        pub fn db_find_defined_verb(oid: i32, vname: *const c_char, allow_numbers: c_int) -> VerbHandle;
+        pub fn db_find_defined_verb(
+            oid: i32,
+            vname: *const c_char,
+            allow_numbers: c_int,
+        ) -> VerbHandle;
 
         // Find a callable verb (requires VF_EXEC flag)
         pub fn db_find_callable_verb(oid: i32, vname: *const c_char) -> VerbHandle;
@@ -199,11 +199,7 @@ pub mod ffi {
             flags: c_uint,
         ) -> c_int;
 
-        pub fn db_find_property(
-            oid: i32,
-            name: *const c_char,
-            value: *mut Var,
-        ) -> PropHandle;
+        pub fn db_find_property(oid: i32, name: *const c_char, value: *mut Var) -> PropHandle;
 
         pub fn db_set_property_value(h: PropHandle, value: Var);
     }
@@ -256,7 +252,9 @@ pub enum HarnessError {
     #[error("Harness not initialized")]
     NotInitialized,
 
-    #[error("LambdaMOO sources not available. Run: ./crates/testing/lambdamoo-harness/setup-lambdamoo.sh")]
+    #[error(
+        "LambdaMOO sources not available. Run: ./crates/testing/lambdamoo-harness/setup-lambdamoo.sh"
+    )]
     SourcesNotAvailable,
 }
 
@@ -332,9 +330,7 @@ impl LambdaMooHarness {
             // Load the database
             if ffi::db_load() == 0 {
                 ffi::harness_cleanup();
-                return Err(HarnessError::DbLoadFailed(
-                    "db_load returned 0".to_string(),
-                ));
+                return Err(HarnessError::DbLoadFailed("db_load returned 0".to_string()));
             }
 
             // Load server options from $server_options
@@ -363,13 +359,16 @@ impl LambdaMooHarness {
     /// Send a command and run until tasks complete, returning output.
     ///
     /// This queues the command, pumps the task loop, and returns captured output.
-    pub fn execute_command(&self, conn: &Connection, command: &str) -> Result<String, HarnessError> {
+    pub fn execute_command(
+        &self,
+        conn: &Connection,
+        command: &str,
+    ) -> Result<String, HarnessError> {
         if !self.initialized {
             return Err(HarnessError::NotInitialized);
         }
 
-        let command_cstring =
-            CString::new(command).map_err(|_| HarnessError::InputQueueFailed)?;
+        let command_cstring = CString::new(command).map_err(|_| HarnessError::InputQueueFailed)?;
 
         unsafe {
             // Clear any previous output
@@ -400,9 +399,7 @@ impl LambdaMooHarness {
                 return Ok(String::new());
             }
 
-            let output = CStr::from_ptr(output_ptr)
-                .to_string_lossy()
-                .into_owned();
+            let output = CStr::from_ptr(output_ptr).to_string_lossy().into_owned();
             Ok(output)
         }
     }
@@ -436,9 +433,7 @@ impl LambdaMooHarness {
                 return String::new();
             }
 
-            CStr::from_ptr(output_ptr)
-                .to_string_lossy()
-                .into_owned()
+            CStr::from_ptr(output_ptr).to_string_lossy().into_owned()
         }
     }
 

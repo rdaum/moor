@@ -19,7 +19,6 @@ use crate::{
     Error, Sequence, Var,
     error::ErrorCode::{E_RANGE, E_TYPE},
     v_list_iter,
-    variant::Variant,
 };
 use num_traits::ToPrimitive;
 use std::{
@@ -185,9 +184,8 @@ impl Sequence for List {
     }
 
     fn range_set(&self, from: isize, to: isize, with: &Var) -> Result<Var, Error> {
-        let with_val = match with.variant() {
-            Variant::List(s) => s,
-            _ => return Err(E_TYPE.msg("attempt to set range with non-list")),
+        let Some(with_val) = with.as_list() else {
+            return Err(E_TYPE.msg("attempt to set range with non-list"));
         };
 
         let base_len = self.len();
@@ -244,9 +242,8 @@ impl Sequence for List {
     }
 
     fn append(&self, other: &Var) -> Result<Var, Error> {
-        let other = match other.variant() {
-            Variant::List(l) => l,
-            _ => return Err(E_TYPE.msg("attempt to append non-list")),
+        let Some(other) = other.as_list() else {
+            return Err(E_TYPE.msg("attempt to append non-list"));
         };
 
         let mut result = (*self.0).clone();
@@ -359,8 +356,8 @@ mod tests {
         Error, IndexMode, Sequence,
         error::ErrorCode::{E_RANGE, E_TYPE},
         v_bool_int,
-        variant::{Var, v_empty_list, v_int, v_list, v_str},
         variant::Variant,
+        variant::{Var, v_empty_list, v_int, v_list, v_str},
     };
 
     #[test]

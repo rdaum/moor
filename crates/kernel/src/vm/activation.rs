@@ -443,12 +443,12 @@ impl Activation {
 
         let moo_frame = MooStackFrame::new_with_all_globals(
             program,
-            v_obj(*player),        // player
-            v_obj(NOTHING),        // this
-            v_obj(*player),        // caller
-            v_empty_str(),         // verb
+            v_obj(*player), // player
+            v_obj(NOTHING), // this
+            v_obj(*player), // caller
+            v_empty_str(),  // verb
             v_empty_list(), // args
-            v_empty_str(),         // argstr
+            v_empty_str(),  // argstr
         );
         let frame = Frame::Moo(moo_frame);
 
