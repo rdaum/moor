@@ -47,6 +47,18 @@ path = "src/anonymous-object-load-test.rs"
 name = "suspend-resume-bench"
 path = "src/suspend-resume-bench.rs"
 
+[[bin]]
+name = "property-update-load-test"
+path = "src/property-update-load-test.rs"
+
+[[bin]]
+name = "opcode-load-test"
+path = "src/opcode-load-test.rs"
+
+[[bin]]
+name = "property-scheduler-load-test"
+path = "src/property-scheduler-load-test.rs"
+
 [dependencies]
 # Internal Dependencies - Direct DB access only
 moor-common = { path = "../../common" }

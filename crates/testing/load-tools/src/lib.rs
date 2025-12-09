@@ -22,6 +22,7 @@ use moor_common::tasks::{
 use moor_var::{Error, Obj, Symbol, Var};
 use std::sync::Arc;
 
+pub mod bench_common;
 pub mod elle_common;
 
 /// Simple session implementation for direct scheduler testing.
