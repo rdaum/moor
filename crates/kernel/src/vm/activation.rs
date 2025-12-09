@@ -216,6 +216,7 @@ impl Activation {
             unimplemented!("Only MOO programs are supported")
         };
 
+        // Use builder pattern for safe, ergonomic initialization
         let moo_frame = MooStackFrame::builder(program)
             .with_core_globals(
                 this.clone(),
@@ -224,7 +225,6 @@ impl Activation {
                 v_arc_string(verb_name.as_arc_string()),
                 args.clone().into(),
             )
-            // Bulk inherit parsing variables (argstr, dobj, dobjstr, prepstr, iobj, iobjstr)
             .with_parsing_globals(current_activation, argstr)
             .build();
         let frame = Frame::Moo(moo_frame);
@@ -283,7 +283,7 @@ impl Activation {
 
         // Lambda parameters go into their designated scopes
         // Group parameters by scope depth using a Vec (scope depths are sequential from 0)
-        let max_scope_depth = lambda
+        let param_depths: Vec<usize> = lambda
             .0
             .params
             .labels
@@ -296,8 +296,8 @@ impl Activation {
                 };
                 name.1 as usize
             })
-            .max()
-            .unwrap_or(0);
+            .collect();
+        let max_scope_depth = param_depths.iter().copied().max().unwrap_or(0);
 
         let mut scope_params: Vec<Vec<moor_var::program::opcode::ScatterLabel>> =
             vec![Vec::new(); max_scope_depth + 1];

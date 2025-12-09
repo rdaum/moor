@@ -83,6 +83,21 @@ impl Environment {
         dst_scope[start..=end].clone_from_slice(&src_scope[start..=end]);
     }
 
+    /// Set a contiguous range of variables from an array.
+    /// Panics if indices are out of bounds.
+    #[inline]
+    pub fn set_range<const N: usize>(
+        &mut self,
+        scope_index: usize,
+        start: usize,
+        values: [Var; N],
+    ) {
+        let dst_scope = &mut self.scopes[scope_index];
+        for (i, value) in values.into_iter().enumerate() {
+            dst_scope[start + i] = Some(value);
+        }
+    }
+
     /// Convert the environment to a Vec of scopes for serialization.
     pub fn to_vec(&self) -> Vec<Vec<Option<Var>>> {
         self.scopes.clone()

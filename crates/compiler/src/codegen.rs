@@ -1442,6 +1442,9 @@ struct CaptureAnalyzer<'a> {
     captures: HashSet<Symbol>,
     param_names: HashSet<Symbol>,
     outer_names: &'a Names,
+    /// The scope level at which the lambda is defined (parameter scope level).
+    /// Only variables at this scope level or lower can be captured.
+    outer_scope_level: u8,
 }
 
 impl<'a> CaptureAnalyzer<'a> {
@@ -1451,10 +1454,18 @@ impl<'a> CaptureAnalyzer<'a> {
             .map(|param| param.id.to_symbol())
             .collect();
 
+        // Determine the outer scope level from the parameter scope_id.
+        // Parameters are at the lambda's scope, so anything at higher scopes is local to the body.
+        let outer_scope_level = lambda_params
+            .first()
+            .map(|p| p.id.scope_id as u8)
+            .unwrap_or(0);
+
         Self {
             captures: HashSet::new(),
             param_names,
             outer_names,
+            outer_scope_level,
         }
     }
 
@@ -1465,7 +1476,13 @@ impl<'a> CaptureAnalyzer<'a> {
         }
 
         // Check if this variable exists in the outer names
-        self.outer_names.name_for_ident(*var_symbol).is_some()
+        let Some(name) = self.outer_names.name_for_ident(*var_symbol) else {
+            return false;
+        };
+
+        // Only capture if the variable is at the outer scope level or lower.
+        // Variables at higher scope levels are local to the lambda body.
+        name.1 <= self.outer_scope_level
     }
 }
 
@@ -1501,6 +1518,15 @@ impl<'a> AstVisitor for CaptureAnalyzer<'a> {
                 }
                 // Continue walking for the expression part
                 self.walk_expr(expr);
+            }
+            Expr::Lambda { params, .. } => {
+                // Nested lambdas are compiled separately with their own capture analysis.
+                // Only visit parameter default expressions, not the lambda body.
+                for param in params {
+                    if let Some(default_expr) = &param.expr {
+                        self.visit_expr(default_expr);
+                    }
+                }
             }
             _ => {
                 // For all other expressions, use the default walking behavior

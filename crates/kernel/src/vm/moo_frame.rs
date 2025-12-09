@@ -15,13 +15,13 @@ use crate::vm::FinallyReason;
 use crate::vm::environment::Environment;
 use moor_compiler::{Label, Op, Program};
 use moor_var::{
-    Error, Var,
+    Error, NOTHING, Var,
     VarType::TYPE_NONE,
     program::{
         labels::Offset,
         names::{GlobalName, Name},
     },
-    v_none, v_obj, v_str, v_string, NOTHING,
+    v_none, v_obj, v_str, v_string,
 };
 use std::cmp::max;
 use strum::EnumCount;
@@ -152,11 +152,25 @@ impl MooStackFrame {
     /// Create a new frame with a pre-built environment (for lambdas)
     pub(crate) fn with_environment(program: Program, environment: Vec<Vec<Option<Var>>>) -> Self {
         let mut env = Environment::new();
-        for scope in environment {
-            env.push_scope(scope.len());
-            for (i, var) in scope.into_iter().enumerate() {
-                if let Some(v) = var {
-                    env.set(env.len() - 1, i, v);
+
+        // Ensure global scope exists with proper width for global variables
+        let global_width = max(program.var_names().global_width(), GlobalName::COUNT);
+        if environment.is_empty() {
+            // No captured environment - just create global scope
+            env.push_scope(global_width);
+        } else {
+            // Merge captured environment, ensuring scope 0 has enough room for globals
+            for (scope_idx, scope) in environment.into_iter().enumerate() {
+                let width = if scope_idx == 0 {
+                    max(scope.len(), global_width)
+                } else {
+                    scope.len()
+                };
+                env.push_scope(width);
+                for (i, var) in scope.into_iter().enumerate() {
+                    if let Some(v) = var {
+                        env.set(env.len() - 1, i, v);
+                    }
                 }
             }
         }
@@ -456,8 +470,8 @@ impl MooStackFrameBuilder {
         self
     }
 
-    /// Bulk initialize the core globals (this, player, caller, verb, args).
-    /// More efficient than 5 separate with_global calls.
+    /// Bulk initialize the core globals (player, this, caller, verb, args).
+    /// Order matches GlobalName enum: player=0, this=1, caller=2, verb=3, args=4.
     #[inline]
     pub(crate) fn with_core_globals(
         mut self,
@@ -467,11 +481,11 @@ impl MooStackFrameBuilder {
         verb: Var,
         args: Var,
     ) -> Self {
-        self.environment.set(0, GlobalName::this as usize, this);
-        self.environment.set(0, GlobalName::player as usize, player);
-        self.environment.set(0, GlobalName::caller as usize, caller);
-        self.environment.set(0, GlobalName::verb as usize, verb);
-        self.environment.set(0, GlobalName::args as usize, args);
+        self.environment.set_range(
+            0,
+            GlobalName::player as usize,
+            [player, this, caller, verb, args],
+        );
         self
     }
 
@@ -500,19 +514,20 @@ impl MooStackFrameBuilder {
                 GlobalName::iobjstr as usize,
             );
         } else {
-            // No source frame - set all defaults directly
-            self.environment
-                .set(0, GlobalName::argstr as usize, v_string(argstr));
-            self.environment
-                .set(0, GlobalName::dobj as usize, v_obj(NOTHING));
-            self.environment
-                .set(0, GlobalName::dobjstr as usize, v_str(""));
-            self.environment
-                .set(0, GlobalName::prepstr as usize, v_str(""));
-            self.environment
-                .set(0, GlobalName::iobj as usize, v_obj(NOTHING));
-            self.environment
-                .set(0, GlobalName::iobjstr as usize, v_str(""));
+            // No source frame - set all defaults with a single range operation
+            // Order matches GlobalName enum: argstr=5, dobj=6, dobjstr=7, prepstr=8, iobj=9, iobjstr=10
+            self.environment.set_range(
+                0,
+                GlobalName::argstr as usize,
+                [
+                    v_string(argstr),
+                    v_obj(NOTHING),
+                    v_str(""),
+                    v_str(""),
+                    v_obj(NOTHING),
+                    v_str(""),
+                ],
+            );
         }
         self
     }

@@ -1008,7 +1008,14 @@ async fn opcode_workload(
                 Ok((_, Ok(TaskNotification::Result(result)))) => {
                     // Validate the return value
                     if let Variant::Int(actual) = result.variant() {
-                        if first_value.is_none() {
+                        if let Some(val) = first_value {
+                            if *actual != val {
+                                return Err(eyre::eyre!(
+                                    "Warm-up {}: Inconsistent return value! First was {}, got {}",
+                                    i, val, actual
+                                ));
+                            }
+                        } else {
                             first_value = Some(*actual);
                             info!("First return value: {} (expected: {})", actual, expected_sum);
                             if *actual != expected_sum {
@@ -1017,11 +1024,6 @@ async fn opcode_workload(
                                     expected_sum, actual
                                 ));
                             }
-                        } else if *actual != first_value.unwrap() {
-                            return Err(eyre::eyre!(
-                                "Warm-up {}: Inconsistent return value! First was {}, got {}",
-                                i, first_value.unwrap(), actual
-                            ));
                         }
                     } else {
                         return Err(eyre::eyre!(
@@ -1034,7 +1036,6 @@ async fn opcode_workload(
                 Ok((_, Ok(TaskNotification::Suspended))) => continue,
                 Ok((_, Err(e))) => return Err(eyre::eyre!("Warm-up task failed: {:?}", e)),
                 Err(e) => return Err(eyre::eyre!("Failed to receive warm-up result: {:?}", e)),
-                _ => return Err(eyre::eyre!("Unexpected task result type")),
             }
         }
     }
@@ -1106,7 +1107,6 @@ async fn opcode_workload(
                 Ok((_, Ok(TaskNotification::Suspended))) => continue,
                 Ok((_, Err(e))) => return Err(eyre::eyre!("Task failed: {:?}", e)),
                 Err(e) => return Err(eyre::eyre!("Failed to receive result: {:?}", e)),
-                _ => return Err(eyre::eyre!("Unexpected task result type")),
             }
         }
         completed += 1;
