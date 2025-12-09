@@ -15,13 +15,13 @@ use crate::vm::FinallyReason;
 use crate::vm::environment::Environment;
 use moor_compiler::{Label, Op, Program};
 use moor_var::{
-    Error, NOTHING, Var,
+    Error, Var,
     VarType::TYPE_NONE,
     program::{
         labels::Offset,
         names::{GlobalName, Name},
     },
-    v_none, v_obj, v_str, v_string,
+    v_empty_str, v_none, v_nothing,
 };
 use std::cmp::max;
 use strum::EnumCount;
@@ -84,19 +84,19 @@ pub(crate) enum ScopeType {
     /// For sequences: current_index tracks position, current_key is None
     /// For maps: current_key tracks the current key for efficient iteration
     ForSequence {
-        sequence: moor_var::Var,
+        sequence: Var,
         current_index: usize,
-        current_key: Option<moor_var::Var>,
-        value_bind: moor_var::program::names::Name,
-        key_bind: Option<moor_var::program::names::Name>,
-        end_label: moor_compiler::Label,
+        current_key: Option<Var>,
+        value_bind: Name,
+        key_bind: Option<Name>,
+        end_label: Label,
     },
     /// For-range iteration state stored in scope instead of on stack
     ForRange {
         current_value: Var,
         end_value: Var,
-        loop_variable: moor_var::program::names::Name,
-        end_label: moor_compiler::Label,
+        loop_variable: Name,
+        end_label: Label,
     },
     Block,
     Comprehension,
@@ -117,48 +117,106 @@ pub(crate) struct Scope {
 }
 
 impl MooStackFrame {
-    /// Create a builder for constructing a new MOO stack frame.
-    /// This is the preferred way to create frames as it provides type-safe initialization.
-    pub(crate) fn builder(program: Program) -> MooStackFrameBuilder {
-        MooStackFrameBuilder::new(program)
-    }
-
-    /// Create a new MOO stack frame.
-    /// Consider using `builder()` instead for safer initialization.
+    /// Create a new MOO stack frame with default environment.
     #[allow(dead_code)]
     pub(crate) fn new(program: Program) -> Self {
         let width = max(program.var_names().global_width(), GlobalName::COUNT);
-
-        // Create environment
-        let mut environment = Environment::new();
-        environment.push_scope(width);
-
-        let valstack = Vec::with_capacity(16);
-        let scope_stack = Vec::with_capacity(8);
         Self {
             program,
-            environment,
+            environment: Environment::with_initial_scope(width),
             pc: 0,
             pc_type: PcType::Main,
             temp: v_none(),
-            valstack,
-            scope_stack,
-            catch_stack: Default::default(),
-            finally_stack: Default::default(),
-            capture_stack: Default::default(),
+            valstack: Vec::new(),
+            scope_stack: Vec::new(),
+            catch_stack: Vec::new(),
+            finally_stack: Vec::new(),
+            capture_stack: Vec::new(),
+        }
+    }
+
+    /// Create frame with all globals pre-populated (for top-level verb calls).
+    #[inline]
+    pub(crate) fn new_with_all_globals(
+        program: Program,
+        player: Var,
+        this: Var,
+        caller: Var,
+        verb: Var,
+        args: Var,
+        argstr: Var,
+    ) -> Self {
+        let width = max(program.var_names().global_width(), GlobalName::COUNT);
+        Self {
+            program,
+            environment: Environment::with_initial_values(
+                [
+                    player,
+                    this,
+                    caller,
+                    verb,
+                    args,
+                    argstr,
+                    v_nothing(),
+                    v_empty_str(),
+                    v_empty_str(),
+                    v_nothing(),
+                    v_empty_str(),
+                ],
+                width,
+            ),
+            pc: 0,
+            pc_type: PcType::Main,
+            temp: v_none(),
+            valstack: Vec::new(),
+            scope_stack: Vec::new(),
+            catch_stack: Vec::new(),
+            finally_stack: Vec::new(),
+            capture_stack: Vec::new(),
+        }
+    }
+
+    /// Create frame with core globals and parsing globals copied from source (for nested calls).
+    #[inline]
+    pub(crate) fn new_with_globals_from_source(
+        program: Program,
+        player: Var,
+        this: Var,
+        caller: Var,
+        verb: Var,
+        args: Var,
+        source_frame: &MooStackFrame,
+    ) -> Self {
+        let width = max(program.var_names().global_width(), GlobalName::COUNT);
+        Self {
+            program,
+            environment: Environment::with_values_and_copy(
+                [player, this, caller, verb, args],
+                &source_frame.environment,
+                GlobalName::argstr as usize,
+                GlobalName::iobjstr as usize,
+                width,
+            ),
+            pc: 0,
+            pc_type: PcType::Main,
+            temp: v_none(),
+            valstack: Vec::new(),
+            scope_stack: Vec::new(),
+            catch_stack: Vec::new(),
+            finally_stack: Vec::new(),
+            capture_stack: Vec::new(),
         }
     }
 
     /// Create a new frame with a pre-built environment (for lambdas)
     pub(crate) fn with_environment(program: Program, environment: Vec<Vec<Option<Var>>>) -> Self {
-        let mut env = Environment::new();
-
         // Ensure global scope exists with proper width for global variables
         let global_width = max(program.var_names().global_width(), GlobalName::COUNT);
-        if environment.is_empty() {
+        let env = if environment.is_empty() {
             // No captured environment - just create global scope
-            env.push_scope(global_width);
+            Environment::with_initial_scope(global_width)
         } else {
+            let mut env = Environment::new();
             // Merge captured environment, ensuring scope 0 has enough room for globals
             for (scope_idx, scope) in environment.into_iter().enumerate() {
                 let width = if scope_idx == 0 {
@@ -173,10 +231,11 @@ impl MooStackFrame {
                     }
                 }
             }
-        }
+            env
+        };
 
-        let valstack = Vec::with_capacity(16);
-        let scope_stack = Vec::with_capacity(8);
+        let valstack = Vec::new();
+        let scope_stack = Vec::new();
         Self {
             program,
             environment: env,
@@ -359,10 +418,10 @@ impl MooStackFrame {
     /// Enter a ForSequence scope that holds iteration state
     pub fn push_for_sequence_scope(
         &mut self,
-        sequence: moor_var::Var,
-        value_bind: moor_var::program::names::Name,
-        key_bind: Option<moor_var::program::names::Name>,
-        end_label: &moor_compiler::Label,
+        sequence: Var,
+        value_bind: Name,
+        key_bind: Option<Name>,
+        end_label: &Label,
         environment_width: u16,
     ) {
         let end_pos = self.program.jump_label(*end_label).position.0 as usize;
@@ -401,8 +460,8 @@ impl MooStackFrame {
         &mut self,
         start_value: &Var,
         end_value: &Var,
-        loop_variable: moor_var::program::names::Name,
-        end_label: &moor_compiler::Label,
+        loop_variable: Name,
+        end_label: &Label,
         environment_width: u16,
     ) {
         let end_pos = self.program.jump_label(*end_label).position.0 as usize;
@@ -432,119 +491,5 @@ impl MooStackFrame {
             }
         }
         None
-    }
-}
-
-/// Builder for constructing MooStackFrame with safe, ergonomic initialization.
-/// Ensures global variables are initialized during construction, avoiding the window
-/// where slots contain uninitialized None values.
-pub(crate) struct MooStackFrameBuilder {
-    program: Program,
-    environment: Environment,
-    valstack: Vec<Var>,
-    scope_stack: Vec<Scope>,
-}
-
-impl MooStackFrameBuilder {
-    /// Create a new builder with an allocated scope.
-    pub(crate) fn new(program: Program) -> Self {
-        let width = max(program.var_names().global_width(), GlobalName::COUNT);
-
-        // Create environment
-        let mut environment = Environment::new();
-        environment.push_scope(width);
-
-        Self {
-            program,
-            environment,
-            valstack: Vec::with_capacity(16),
-            scope_stack: Vec::with_capacity(8),
-        }
-    }
-
-    /// Initialize a global variable by moving the value directly into the environment.
-    /// This avoids copying and ensures the slot is initialized exactly once.
-    pub(crate) fn with_global(mut self, gname: GlobalName, value: Var) -> Self {
-        let pos = gname as usize;
-        self.environment.set(0, pos, value);
-        self
-    }
-
-    /// Bulk initialize the core globals (player, this, caller, verb, args).
-    /// Order matches GlobalName enum: player=0, this=1, caller=2, verb=3, args=4.
-    #[inline]
-    pub(crate) fn with_core_globals(
-        mut self,
-        this: Var,
-        player: Var,
-        caller: Var,
-        verb: Var,
-        args: Var,
-    ) -> Self {
-        self.environment.set_range(
-            0,
-            GlobalName::player as usize,
-            [player, this, caller, verb, args],
-        );
-        self
-    }
-
-    /// Bulk initialize all parsing-related globals (argstr, dobj, dobjstr, prepstr, iobj, iobjstr).
-    /// Uses a single slice copy when inheriting from a source frame.
-    #[inline]
-    pub(crate) fn with_parsing_globals(
-        mut self,
-        current_activation: Option<&crate::vm::activation::Activation>,
-        argstr: String,
-    ) -> Self {
-        use crate::vm::activation::Frame;
-
-        // Check once if we have a Moo frame to inherit from
-        let source_frame = current_activation.and_then(|a| match &a.frame {
-            Frame::Moo(frame) => Some(frame),
-            Frame::Bf(_) => None,
-        });
-
-        if let Some(frame) = source_frame {
-            // Bulk copy parsing globals (indices 5-10) in one slice operation
-            self.environment.copy_range_from(
-                &frame.environment,
-                0,
-                GlobalName::argstr as usize,
-                GlobalName::iobjstr as usize,
-            );
-        } else {
-            // No source frame - set all defaults with a single range operation
-            // Order matches GlobalName enum: argstr=5, dobj=6, dobjstr=7, prepstr=8, iobj=9, iobjstr=10
-            self.environment.set_range(
-                0,
-                GlobalName::argstr as usize,
-                [
-                    v_string(argstr),
-                    v_obj(NOTHING),
-                    v_str(""),
-                    v_str(""),
-                    v_obj(NOTHING),
-                    v_str(""),
-                ],
-            );
-        }
-        self
-    }
-
-    /// Consume the builder and produce the final MooStackFrame.
-    pub(crate) fn build(self) -> MooStackFrame {
-        MooStackFrame {
-            program: self.program,
-            environment: self.environment,
-            pc: 0,
-            pc_type: PcType::Main,
-            temp: v_none(),
-            valstack: self.valstack,
-            scope_stack: self.scope_stack,
-            catch_stack: Default::default(),
-            finally_stack: Default::default(),
-            capture_stack: Default::default(),
-        }
     }
 }

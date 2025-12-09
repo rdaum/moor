@@ -27,7 +27,7 @@ use moor_kernel::{
     testing::vm_test_utils::setup_task_context,
     vm::{VMHostResponse, builtins::BuiltinRegistry, vm_host::VmHost},
 };
-use moor_var::{List, NOTHING, SYSTEM_OBJECT, Symbol, v_obj};
+use moor_var::{List, NOTHING, SYSTEM_OBJECT, Symbol, v_empty_str, v_obj};
 use std::{sync::Arc, time::Duration};
 
 const MAX_TICKS: usize = 100_000_000;
@@ -70,7 +70,7 @@ fn prepare_call_verb(
         SYSTEM_OBJECT,
         args,
         v_obj(SYSTEM_OBJECT),
-        "".to_string(),
+        v_empty_str(),
         program,
     );
     vm_host

@@ -32,7 +32,7 @@ use moor_kernel::{
     testing::vm_test_utils::setup_task_context,
     vm::{VMHostResponse, builtins::BuiltinRegistry, vm_host::VmHost},
 };
-use moor_var::{List, NOTHING, SYSTEM_OBJECT, Symbol, program::ProgramType, v_obj};
+use moor_var::{List, NOTHING, SYSTEM_OBJECT, Symbol, program::ProgramType, v_empty_str, v_obj};
 
 fn create_db() -> TxDB {
     let (ws_source, _) = TxDB::open(None, DatabaseConfig::default());
@@ -71,7 +71,7 @@ pub fn prepare_call_verb(
         SYSTEM_OBJECT,
         args,
         v_obj(SYSTEM_OBJECT),
-        "".to_string(),
+        v_empty_str(),
         program,
     );
     vm_host

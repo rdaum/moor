@@ -358,7 +358,7 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 vloc.clone(),
                 sym_or_str(*verb),
                 v_list_iter(args.iter()),
-                v_str(argstr),
+                argstr.clone(),
             ]),
             TaskStart::StartFork {
                 fork_request,

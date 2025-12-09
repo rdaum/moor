@@ -261,18 +261,11 @@ pub fn moo_frame_execute(
                     );
                 };
 
-                // Get current element
+                // Get current element - check bounds first to avoid expensive error construction
                 let tc = sequence.type_class();
-                let next = match tc {
-                    TypeClass::Sequence(s) => s
-                        .index(*current_index)
-                        .map(|v| (v_int(*current_index as i64 + 1), v.clone())),
-                    TypeClass::Associative(a) => match current_key {
-                        // Use case_sensitive=false because OrdMap is organized case-insensitively
-                        // (the default Str::cmp uses lowercase comparison)
-                        Some(current_key) => a.next_after(current_key, false),
-                        None => a.first(),
-                    },
+                let len = match &tc {
+                    TypeClass::Sequence(s) => s.len(),
+                    TypeClass::Associative(a) => a.len(),
                     TypeClass::Scalar => {
                         return ExecutionResult::RaiseError(
                             E_TYPE.msg("invalid sequence type in for loop"),
@@ -280,20 +273,27 @@ pub fn moo_frame_execute(
                     }
                 };
 
+                // Bounds check before iteration (avoids E_RANGE error construction)
+                if *current_index >= len {
+                    let end_lbl = *end_label;
+                    f.jump(&end_lbl);
+                    continue;
+                }
+
+                let next = match tc {
+                    TypeClass::Sequence(s) => s
+                        .index(*current_index)
+                        .map(|v| (v_int(*current_index as i64 + 1), v.clone())),
+                    TypeClass::Associative(a) => match current_key {
+                        Some(current_key) => a.next_after(current_key, false),
+                        None => a.first(),
+                    },
+                    TypeClass::Scalar => unreachable!(),
+                };
+
                 let k_v = match next {
                     Ok(k_v) => k_v,
-                    // Range is exhausted
-                    Err(e) if e == E_RANGE => {
-                        let end_lbl = *end_label;
-                        f.jump(&end_lbl);
-                        continue;
-                    }
-                    // Something else... 'splode
-                    Err(e) => {
-                        let end_lbl = *end_label;
-                        f.jump(&end_lbl);
-                        return ExecutionResult::RaiseError(e);
-                    }
+                    Err(e) => return ExecutionResult::RaiseError(e),
                 };
 
                 // Extract values we need for variable setting
@@ -301,16 +301,9 @@ pub fn moo_frame_execute(
                 let key_bind = *key_bind;
 
                 // Increment index for next iteration
-                match tc {
-                    TypeClass::Sequence(_) => {
-                        *current_index += 1;
-                    }
-                    TypeClass::Associative(_) => {
-                        *current_key = Some(k_v.0.clone());
-                    }
-                    _ => {
-                        unreachable!()
-                    }
+                *current_index += 1;
+                if let TypeClass::Associative(_) = tc {
+                    *current_key = Some(k_v.0.clone());
                 }
 
                 // Set loop variables (separate borrow)

@@ -308,7 +308,7 @@ pub enum TaskStart {
         vloc: Var,
         verb: Symbol,
         args: List,
-        argstr: String,
+        argstr: Var,
     },
     /// The scheduler is telling the task to run a task that was forked from another task.
     /// ForkRequest contains the information on the fork vector and other information needed to

@@ -53,6 +53,14 @@ harness = false
 name = "vm_micro_benches"
 harness = false
 
+[[bench]]
+name = "activation_bench"
+harness = false
+
+[[bench]]
+name = "verb_dispatch_bench"
+harness = false
+
 [dependencies]
 # Internal Dependencies
 moor-builtin-docs-macro = { path = "../builtin-docs-macro" }
@@ -103,7 +111,9 @@ onig.workspace = true
 
 # Collections & Data Structures
 ahash.workspace = true
+arrayvec.workspace = true
 hierarchical_hash_wheel_timer.workspace = true
+smallvec.workspace = true
 
 # Error Handling & Logging
 thiserror.workspace = true

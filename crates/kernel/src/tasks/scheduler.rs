@@ -72,7 +72,7 @@ use moor_common::{
 use moor_objdef::{collect_object, collect_object_definitions, dump_object, extract_index_names};
 use moor_var::{
     E_EXEC, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, List, NOTHING, Obj, SYSTEM_OBJECT,
-    Symbol, Var, Variant, v_bool_int, v_err, v_int, v_obj, v_str, v_string,
+    Symbol, Var, Variant, v_bool_int, v_empty_str, v_err, v_int, v_obj, v_str, v_string,
 };
 use std::collections::HashMap;
 
@@ -701,7 +701,7 @@ impl Scheduler {
                     vloc: v_obj(handler_object),
                     verb: *DO_OUT_OF_BAND_COMMAND,
                     args,
-                    argstr,
+                    argstr: v_string(argstr),
                 };
 
                 let result = task_q.submit_new_task(
@@ -893,7 +893,7 @@ impl Scheduler {
                     vloc: v_obj(SYSTEM_OBJECT),
                     verb: invoke_handler_sym,
                     args: List::mk_list(&handler_args),
-                    argstr: "".to_string(),
+                    argstr: v_empty_str(),
                 };
 
                 let result = task_q.submit_new_task(
@@ -1105,7 +1105,7 @@ impl Scheduler {
                     vloc: v_obj(SYSTEM_OBJECT),
                     verb: Symbol::mk("handle_task_timeout"),
                     args: handler_args,
-                    argstr: "".to_string(),
+                    argstr: v_empty_str(),
                 };
 
                 let handler_task_id = self.next_task_id;

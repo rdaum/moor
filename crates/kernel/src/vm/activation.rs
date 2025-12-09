@@ -206,7 +206,7 @@ impl Activation {
         player: Obj,
         args: List,
         caller: Var,
-        argstr: String,
+        argstr: Var,
         current_activation: Option<&Activation>,
         program: ProgramType,
     ) -> Self {
@@ -216,17 +216,35 @@ impl Activation {
             unimplemented!("Only MOO programs are supported")
         };
 
-        // Use builder pattern for safe, ergonomic initialization
-        let moo_frame = MooStackFrame::builder(program)
-            .with_core_globals(
-                this.clone(),
+        // Check if we have a Moo frame to inherit parsing globals from
+        let source_frame = current_activation.and_then(|a| match &a.frame {
+            Frame::Moo(frame) => Some(frame),
+            Frame::Bf(_) => None,
+        });
+
+        let moo_frame = if let Some(source) = source_frame {
+            // Direct construction for nested calls
+            MooStackFrame::new_with_globals_from_source(
+                program,
                 v_obj(player),
+                this.clone(),
                 caller,
                 v_arc_string(verb_name.as_arc_string()),
                 args.clone().into(),
+                source,
             )
-            .with_parsing_globals(current_activation, argstr)
-            .build();
+        } else {
+            // Direct construction for top-level calls
+            MooStackFrame::new_with_all_globals(
+                program,
+                v_obj(player),
+                this.clone(),
+                caller,
+                v_arc_string(verb_name.as_arc_string()),
+                args.clone().into(),
+                argstr,
+            )
+        };
         let frame = Frame::Moo(moo_frame);
 
         Self {
@@ -427,19 +445,15 @@ impl Activation {
             VerbArgsSpec::this_none_this(),
         );
 
-        let moo_frame = MooStackFrame::builder(program)
-            .with_global(GlobalName::this, v_obj(NOTHING))
-            .with_global(GlobalName::player, v_obj(*player))
-            .with_global(GlobalName::caller, v_obj(*player))
-            .with_global(GlobalName::verb, v_empty_str())
-            .with_global(GlobalName::args, v_empty_list())
-            .with_global(GlobalName::argstr, v_empty_str())
-            .with_global(GlobalName::dobj, v_obj(NOTHING))
-            .with_global(GlobalName::dobjstr, v_empty_str())
-            .with_global(GlobalName::prepstr, v_empty_str())
-            .with_global(GlobalName::iobj, v_obj(NOTHING))
-            .with_global(GlobalName::iobjstr, v_empty_str())
-            .build();
+        let moo_frame = MooStackFrame::new_with_all_globals(
+            program,
+            v_obj(*player),      // player
+            v_obj(NOTHING),      // this
+            v_obj(*player),      // caller
+            v_empty_str(),       // verb
+            v_empty_list().into(), // args
+            v_empty_str(),       // argstr
+        );
         let frame = Frame::Moo(moo_frame);
 
         Self {

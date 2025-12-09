@@ -74,7 +74,7 @@ pub struct VerbExecutionRequest {
     /// Caller
     pub caller: Var,
     /// Argument string
-    pub argstr: String,
+    pub argstr: Var,
     /// The decoded MOO Binary that contains the verb to be executed.
     pub program: ProgramType,
 }
@@ -97,7 +97,7 @@ pub struct CommandVerbExecutionRequest {
     /// Caller
     pub caller: Var,
     /// Argument string
-    pub argstr: String,
+    pub argstr: Var,
     /// The parsed command with dobj, iobj, prep, etc.
     pub command: ParsedCommand,
     /// The decoded MOO Binary that contains the verb to be executed.
@@ -243,7 +243,7 @@ impl VMExecState {
             player,
             args,
             caller,
-            "".to_string(),
+            v_empty_str(),
             program,
         );
         ExecutionResult::More
@@ -301,7 +301,7 @@ impl VMExecState {
             player,
             args: args_list,
             caller,
-            argstr: "".to_string(),
+            argstr: v_empty_str(),
             program,
         }))
     }
@@ -318,7 +318,7 @@ impl VMExecState {
         player: Obj,
         args: List,
         caller: Var,
-        argstr: String,
+        argstr: Var,
         command: &ParsedCommand,
         program: ProgramType,
     ) {
@@ -395,7 +395,7 @@ impl VMExecState {
         player: Obj,
         args: List,
         caller: Var,
-        argstr: String,
+        argstr: Var,
         program: ProgramType,
     ) {
         // Get current activation to inherit global variables from, if any.
@@ -573,7 +573,7 @@ impl VMExecState {
                 player,
                 args: args_list,
                 caller,
-                argstr: "".to_string(),
+                argstr: v_empty_str(),
                 program,
             },
         )))

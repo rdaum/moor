@@ -12,21 +12,30 @@
 //
 
 use crate::{
-    Associative, ByteSized, Error, Flyweight, IndexMode, Obj, Sequence, Symbol, TypeClass, VarType,
-    error::{
+    Associative, ByteSized, Error, Flyweight, IndexMode, NOTHING, Obj, Sequence, Symbol, TypeClass,
+    VarType, error::{
         ErrorCode,
         ErrorCode::{E_INVARG, E_RANGE, E_TYPE},
     },
     list::List,
     map,
+    string::Str,
     variant::Variant,
 };
+use once_cell::sync::Lazy;
 use std::{
     cmp::{Ordering, min},
     fmt::{Debug, Formatter},
     hash::Hash,
     sync::Arc,
 };
+
+/// Cached empty string Var to avoid repeated allocations and wrapping.
+static EMPTY_STR_VAR: Lazy<Var> =
+    Lazy::new(|| Var::from_variant(Variant::Str(Str::mk_str(""))));
+
+/// Cached NOTHING object Var.
+static NOTHING_VAR: Lazy<Var> = Lazy::new(|| Var::from_variant(Variant::Obj(NOTHING)));
 
 #[derive(Clone)]
 #[repr(transparent)]
@@ -841,7 +850,12 @@ pub fn v_empty_list() -> Var {
 }
 
 pub fn v_empty_str() -> Var {
-    v_str("")
+    EMPTY_STR_VAR.clone()
+}
+
+/// Return cached NOTHING object Var.
+pub fn v_nothing() -> Var {
+    NOTHING_VAR.clone()
 }
 
 pub fn v_empty_map() -> Var {

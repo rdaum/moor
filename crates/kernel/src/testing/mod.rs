@@ -20,4 +20,7 @@ pub mod vm_test_utils;
 
 pub use mock_scheduler::{MockScenario, MockScheduler};
 pub use scheduler_test_utils::{ExecResult as SchedulerExecResult, call_command, call_eval};
-pub use vm_test_utils::{ExecResult as VmExecResult, call_eval_builtin, call_fork, call_verb};
+pub use vm_test_utils::{
+    ActivationBenchResult, ExecResult as VmExecResult, call_eval_builtin, call_fork, call_verb,
+    create_activation_for_bench, create_nested_activation_for_bench,
+};

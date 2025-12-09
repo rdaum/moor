@@ -17,7 +17,7 @@ use std::{sync::Arc, time::Duration};
 
 use moor_common::model::WorldState;
 use moor_compiler::Program;
-use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, v_obj};
+use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, v_empty_str, v_obj};
 
 use crate::{
     config::FeaturesConfig,
@@ -184,7 +184,7 @@ pub fn call_verb(
             SYSTEM_OBJECT,
             args,
             v_obj(SYSTEM_OBJECT),
-            "".to_string(),
+            v_empty_str(),
             program,
         );
     })
@@ -208,4 +208,76 @@ pub fn call_fork(
     fork_request: crate::vm::Fork,
 ) -> ExecResult {
     execute_fork(session, &builtins, fork_request, 0)
+}
+
+/// Opaque wrapper for benchmarking Activation creation without exposing internals.
+/// Holds the result of creating an activation frame.
+pub struct ActivationBenchResult {
+    inner: crate::vm::activation::Activation,
+}
+
+impl ActivationBenchResult {
+    /// Get a reference to the inner activation for use as a parent frame.
+    pub(crate) fn as_ref(&self) -> &crate::vm::activation::Activation {
+        &self.inner
+    }
+}
+
+/// Create an Activation for benchmarking purposes.
+/// This exposes `Activation::for_call` for micro-benchmarking frame creation costs.
+#[allow(clippy::too_many_arguments)]
+pub fn create_activation_for_bench(
+    permissions: Obj,
+    verbdef: moor_common::model::VerbDef,
+    verb_name: Symbol,
+    this: Var,
+    player: Obj,
+    args: List,
+    caller: Var,
+    argstr: Var,
+    program: moor_var::program::ProgramType,
+) -> ActivationBenchResult {
+    let activation = crate::vm::activation::Activation::for_call(
+        permissions,
+        verbdef,
+        verb_name,
+        this,
+        player,
+        args,
+        caller,
+        argstr,
+        None, // No parent activation for top-level calls
+        program,
+    );
+    ActivationBenchResult { inner: activation }
+}
+
+/// Create an Activation with a parent frame for benchmarking nested verb calls.
+/// This exercises the `with_globals_from_source` path which copies parsing globals.
+#[allow(clippy::too_many_arguments)]
+pub fn create_nested_activation_for_bench(
+    permissions: Obj,
+    verbdef: moor_common::model::VerbDef,
+    verb_name: Symbol,
+    this: Var,
+    player: Obj,
+    args: List,
+    caller: Var,
+    argstr: Var,
+    parent: &ActivationBenchResult,
+    program: moor_var::program::ProgramType,
+) -> ActivationBenchResult {
+    let activation = crate::vm::activation::Activation::for_call(
+        permissions,
+        verbdef,
+        verb_name,
+        this,
+        player,
+        args,
+        caller,
+        argstr,
+        Some(parent.as_ref()),
+        program,
+    );
+    ActivationBenchResult { inner: activation }
 }

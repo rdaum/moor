@@ -41,6 +41,7 @@ use moor_schema::{
     program as fb_program, task as fb,
 };
 use moor_var::program::names::Name;
+use moor_var::v_str;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
@@ -1408,7 +1409,10 @@ pub(crate) fn task_start_to_flatbuffer(
                 vloc: Box::new(fb_vloc),
                 verb: Box::new(convert_schema::symbol_to_flatbuffer_struct(verb)),
                 args: fb_args,
-                argstr: argstr.clone(),
+                argstr: argstr
+                    .as_string()
+                    .map(|x| x.to_string())
+                    .unwrap_or("".to_string()),
             }))
         }
         KernelTaskStart::StartFork {
@@ -1541,7 +1545,7 @@ pub(crate) fn task_start_from_ref_union(
                 vloc,
                 verb,
                 args,
-                argstr: argstr.to_string(),
+                argstr: v_str(argstr),
             })
         }
         TaskStartUnionRef::StartFork(sf) => {

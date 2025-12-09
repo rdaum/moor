@@ -172,7 +172,7 @@ impl VmHost {
         player: Obj,
         args: List,
         caller: Var,
-        argstr: String,
+        argstr: Var,
         command: ParsedCommand,
         permissions: Obj,
         program: ProgramType,
@@ -208,7 +208,7 @@ impl VmHost {
         player: Obj,
         args: List,
         caller: Var,
-        argstr: String,
+        argstr: Var,
         program: ProgramType,
     ) {
         self.vm_exec_state.start_time = Some(SystemTime::now());

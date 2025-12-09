@@ -28,8 +28,8 @@ use moor_common::{
 use moor_compiler::offset_for_builtin;
 use moor_var::{
     Associative, E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, E_VERBNF, List, NOTHING, Obj, Sequence,
-    Symbol, Variant, v_arc_string, v_bool, v_int, v_list, v_list_iter, v_map_iter, v_obj, v_str,
-    v_string, v_sym,
+    Symbol, Variant, v_arc_string, v_bool, v_empty_str, v_int, v_list, v_list_iter, v_map_iter,
+    v_obj, v_str, v_string, v_sym,
 };
 
 use crate::{
@@ -99,7 +99,7 @@ fn create_object_with_initialize(
         player: bf_args.exec_state.top().player,
         args: initialize_args,
         caller: bf_args.exec_state.top().this.clone(),
-        argstr: "".to_string(),
+        argstr: v_empty_str(),
         program,
     };
     Ok(VmInstr(DispatchVerb(Box::new(ve))))
@@ -703,7 +703,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             player: bf_args.exec_state.top().player,
                             args: List::mk_list(&[]),
                             caller: bf_args.exec_state.top().this.clone(),
-                            argstr: "".to_string(),
+                            argstr: v_empty_str(),
                             program,
                         }))));
                     }
@@ -771,7 +771,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         player: bf_args.exec_state.top().player,
                         args: List::mk_list(&[v_obj(obj)]),
                         caller: bf_args.exec_state.top().this.clone(),
-                        argstr: "".to_string(),
+                        argstr: v_empty_str(),
                         program,
                     }))));
                 }
@@ -878,7 +878,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             player: bf_args.exec_state.top().player,
                             args: List::mk_list(&[v_obj(what)]),
                             caller: bf_args.exec_state.top().this.clone(),
-                            argstr: "".to_string(),
+                            argstr: v_empty_str(),
                             program,
                         }))));
                     }
@@ -952,7 +952,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             player: bf_args.exec_state.top().player,
                             args: List::mk_list(&[v_obj(what)]),
                             caller: bf_args.exec_state.top().this.clone(),
-                            argstr: "".to_string(),
+                            argstr: v_empty_str(),
                             program,
                         }));
                         return Ok(VmInstr(continuation));
@@ -997,7 +997,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             player: bf_args.exec_state.top().player,
                             args: List::mk_list(&[v_obj(what)]),
                             caller: bf_args.exec_state.top().this.clone(),
-                            argstr: "".to_string(),
+                            argstr: v_empty_str(),
                             program,
                         }))));
                     }
@@ -1917,7 +1917,7 @@ fn bf_dispatch_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
                 args: args.clone(),
                 // Caller needs to be the player in order for downstream caller perms checks to function correctly
                 caller: v_obj(bf_args.exec_state.top().player),
-                argstr,
+                argstr: v_string(argstr),
                 command: parsed_command,
                 program,
             });

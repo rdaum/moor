@@ -56,7 +56,8 @@ use moor_common::{
     util::{PerfTimerGuard, parse_into_words},
 };
 use moor_var::{
-    List, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant, v_err, v_int, v_obj, v_str, v_string,
+    List, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant, v_empty_str, v_err, v_int, v_obj, v_str,
+    v_string,
 };
 
 use crate::{
@@ -549,7 +550,7 @@ impl Task {
                             self.player,
                             args,
                             v_obj(self.player),
-                            String::new(),
+                            v_empty_str(),
                             program,
                         );
 
@@ -832,7 +833,7 @@ impl Task {
                             *player,
                             args.clone(),
                             v_obj(*player),
-                            String::new(),
+                            v_empty_str(),
                             program,
                         );
                     }
@@ -886,7 +887,7 @@ impl Task {
                     *player,
                     args,
                     v_obj(*handler_object),
-                    command.to_string(),
+                    v_str(command),
                     program,
                 );
                 self.state = TaskState::Prepared(TaskStart::StartDoCommand {
@@ -975,7 +976,7 @@ impl Task {
             *player,
             List::mk_list(&parsed_command.args),
             v_obj(*player),
-            parsed_command.argstr.clone(),
+            v_string(parsed_command.argstr.clone()),
             parsed_command,
             verb_owner,
             program,
