@@ -109,9 +109,29 @@ npm run build
 
 ## Installing Packages
 
-### Install Order
+### Option 1: Install from APT Repository (Recommended)
 
-Install packages in this order to satisfy dependencies:
+The easiest way to install mooR is from the Codeberg package repository:
+
+```bash
+# Add the repository signing key
+sudo curl https://codeberg.org/api/packages/timbran/debian/repository.key \
+    -o /etc/apt/keyrings/timbran-moor.asc
+
+# Add the repository (for Debian Bookworm / Ubuntu 22.04+)
+echo "deb [signed-by=/etc/apt/keyrings/timbran-moor.asc] https://codeberg.org/api/packages/timbran/debian bookworm main" \
+    | sudo tee /etc/apt/sources.list.d/moor.list
+
+# Update and install
+sudo apt update
+sudo apt install moor-daemon moor-telnet-host moor-web-host moor-web-client
+```
+
+This handles dependencies automatically and makes future upgrades simple with `apt upgrade`.
+
+### Option 2: Install from Release Downloads
+
+Download `.deb` packages from the [releases page](https://codeberg.org/timbran/moor/releases) and install manually:
 
 ```bash
 # 1. Install daemon first (core service)
@@ -123,14 +143,18 @@ sudo dpkg -i moor-web-host_*.deb
 
 # 3. Install web client (optional, needs nginx or similar)
 sudo dpkg -i moor-web-client_*.deb
+
+# Fix any missing dependencies
+sudo apt-get install -f
 ```
 
-### Fix Missing Dependencies
+### Option 3: Install Locally-Built Packages
 
-If dpkg reports missing dependencies:
+If you built packages yourself (see Building Packages above):
 
 ```bash
-sudo apt-get install -f
+sudo dpkg -i ../../target/debian/moor-*.deb
+sudo apt-get install -f  # Fix any missing dependencies
 ```
 
 ## Post-Installation Configuration
@@ -362,7 +386,19 @@ sudo systemctl start moor-daemon
 
 ## Upgrading
 
-To upgrade to a newer version:
+### If Using APT Repository (Recommended)
+
+```bash
+# Backup your database first (see Backup and Restore above)
+
+# Upgrade all mooR packages
+sudo apt update
+sudo apt upgrade
+
+# Services will be automatically restarted
+```
+
+### If Using Manual Package Installation
 
 1. **Backup your database** (see above)
 

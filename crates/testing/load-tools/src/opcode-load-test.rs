@@ -106,8 +106,8 @@ return x;
     )
 }
 
-/// Returns (player, opcodes_per_invocation) where opcodes_per_invocation is read from the
-/// compiled program's main_vector length.
+/// Returns (player, opcodes_per_iteration) where opcodes_per_iteration is an estimate of
+/// opcodes executed per loop iteration (loop body + control flow).
 fn setup_database(
     database: &TxDB,
     loop_iterations: usize,

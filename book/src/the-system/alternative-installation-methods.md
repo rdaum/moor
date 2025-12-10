@@ -20,7 +20,34 @@ All packages integrate with systemd, create necessary users and directories, and
 
 ### Installation Options
 
-**Option 1: Build Locally**
+**Option 1: Install from APT Repository (Recommended)**
+
+Add the Codeberg package repository to install and update mooR packages with `apt`:
+
+```bash
+# Add the repository signing key
+sudo curl https://codeberg.org/api/packages/timbran/debian/repository.key \
+    -o /etc/apt/keyrings/timbran-moor.asc
+
+# Add the repository (for Debian Bookworm / Ubuntu 22.04+)
+echo "deb [signed-by=/etc/apt/keyrings/timbran-moor.asc] https://codeberg.org/api/packages/timbran/debian bookworm main" \
+    | sudo tee /etc/apt/sources.list.d/moor.list
+
+# Update and install
+sudo apt update
+sudo apt install moor-daemon moor-telnet-host moor-web-host moor-web-client
+```
+
+**Option 2: Download from Releases**
+
+Download pre-built `.deb` packages from the [mooR Codeberg releases page](https://codeberg.org/timbran/moor/releases):
+
+```bash
+sudo dpkg -i moor-*.deb
+sudo apt-get install -f  # Install any missing dependencies
+```
+
+**Option 3: Build Locally**
 
 Build packages yourself using the provided scripts in `deploy/debian-packages/`:
 
@@ -28,15 +55,6 @@ Build packages yourself using the provided scripts in `deploy/debian-packages/`:
 cd deploy/debian-packages
 ./build-all-packages.sh
 sudo dpkg -i ../../target/debian/moor-*.deb
-```
-
-**Option 2: Download from Releases**
-
-Download pre-built packages from the [mooR Codeberg releases page](https://codeberg.org/timbran/moor/releases):
-
-```bash
-sudo dpkg -i moor-*.deb
-sudo apt-get install -f  # Install any missing dependencies
 ```
 
 ### Comprehensive Documentation
