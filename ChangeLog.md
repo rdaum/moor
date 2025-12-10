@@ -5,6 +5,50 @@ All notable changes to mooR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-rc1] - 2025-12-10
+
+This is our first "release candidate" version. What this means vs beta, I'm not sure that I have strong opinions about,
+but I am aiming for a full 1.0.0 sometime in the next few weeks and this is my effort to try and nail that down.
+
+### Added
+
+`web-client`:
+
+- **Generic text editor component** - presentable editor for editing descriptions, mail, notes, etc.
+- **Speech bubbles** for `say` events (optional, disabled by default) for cores that tag their events right
+- **Upload prompt** for image uploads (thumbnails, etc.) allows uploading of images to cores that support it.
+
+testing:
+
+- LambdaMOO compatibility test harness for comparative testing against the reference implementation
+
+### Changed
+
+`daemon`:
+
+- **Major performance improvements** to the core `Var` type and VM execution:
+    - Restructured core value type from Rust enum to tagged union for faster cloning
+    - Optimized type dispatch logic throughout the VM
+    - Switched string storage to use `arcstr` for more efficient string handling
+    - Refactored VM environment and activation construction for reduced overhead
+    - Reduced copies in FlatBuffers serialization for RPC layer
+- Sequence updates moved off the main thread for improved concurrency
+
+### Fixed
+
+`daemon`:
+
+- **CRITICAL**: Fixed garbage collection bug where anonymous objects located inside other objects
+  were incorrectly collected (objects whose only reference was their container were being lost)
+- Fixed lambda capture analysis to correctly handle nested scopes (was incorrectly capturing
+  variables from nested lambdas and inner scopes)
+
+packaging / release:
+
+- Fixed deb package signing in workflow and instructions
+
+---
+
 ## [1.0.0-beta3] - 2025-12-03
 
 ### Added
@@ -13,12 +57,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **New Model Context Protocol (MCP) server** - enables AI assistants like Claude to interact with
   MOO worlds
-  - Connect as wizard or player with configurable permissions
-  - Automatic reconnection support for long-running sessions
-  - Rich prompts and function help for AI interaction
-  - Object definition dump/diff capabilities
-  - Included in Docker images
-  - Debian package support for distribution through Debian repository
+    - Connect as wizard or player with configurable permissions
+    - Automatic reconnection support for long-running sessions
+    - Rich prompts and function help for AI interaction
+    - Object definition dump/diff capabilities
+    - Included in Docker images
+    - Debian package support for distribution through Debian repository
 
 `daemon`:
 
@@ -28,8 +72,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 packaging / release:
 
 - GPG signing support for all Debian packages built by cargo-deb and dpkg-deb
-  - Workflow now imports GPG key from secrets and signs packages automatically
-  - Users can verify package authenticity with `dpkg-sig --verify`
+    - Workflow now imports GPG key from secrets and signs packages automatically
+    - Users can verify package authenticity with `dpkg-sig --verify`
 
 ### Changed
 
@@ -136,13 +180,13 @@ performance optimization leading up to the 1.0 stable release.
 ### Added
 
 - Official pre-built Docker images available on Codeberg Container Registry
-  - `codeberg.org/timbran/moor:latest-x86_64` and `latest-aarch64` for backend services
-  - `codeberg.org/timbran/moor-frontend:latest-x86_64` and `latest-aarch64` for frontend
+    - `codeberg.org/timbran/moor:latest-x86_64` and `latest-aarch64` for backend services
+    - `codeberg.org/timbran/moor-frontend:latest-x86_64` and `latest-aarch64` for frontend
 - Debian packages published to Codeberg Debian package repository
 - Production deployment configurations in `deploy/` directory:
-  - `telnet-only/` - Minimal telnet-only setup
-  - `web-basic/` - Web-enabled HTTP deployment
-  - `web-ssl/` - Production HTTPS with Let's Encrypt
+    - `telnet-only/` - Minimal telnet-only setup
+    - `web-basic/` - Web-enabled HTTP deployment
+    - `web-ssl/` - Production HTTPS with Let's Encrypt
 - Comprehensive deployment documentation in README files
 - Formal ChangeLog documenting release history and stability commitments
 
@@ -150,10 +194,10 @@ performance optimization leading up to the 1.0 stable release.
 
 - **Database format is now stable**: Database format version `release-1.0.0` is locked for the beta
   period
-  - Pre-beta version 3.0.0 databases are automatically migrated to `release-1.0.0` on first startup
-  - Migration is a simple version marker update (no data format changes)
-  - No breaking format changes expected before stable 1.0 release
-  - LambdaMOO 1.8.x textdump databases continue to be fully supported
+    - Pre-beta version 3.0.0 databases are automatically migrated to `release-1.0.0` on first startup
+    - Migration is a simple version marker update (no data format changes)
+    - No breaking format changes expected before stable 1.0 release
+    - LambdaMOO 1.8.x textdump databases continue to be fully supported
 - Simplified database migration: Older pre-beta formats (1.0.0, 2.0.0) no longer supported for
   direct migration
 - Docker Compose examples now default to pre-built images from Codeberg
