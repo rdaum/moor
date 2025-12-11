@@ -872,6 +872,14 @@ export interface EventMetadata {
     timestamp?: number;
 }
 
+export interface LinkPreview {
+    url: string;
+    title?: string;
+    description?: string;
+    image?: string;
+    site_name?: string;
+}
+
 export function handleClientEventFlatBuffer(
     bytes: Uint8Array,
     onSystemMessage?: (message: string, duration?: number) => void,
@@ -885,6 +893,7 @@ export function handleClientEventFlatBuffer(
         groupId?: string,
         ttsText?: string,
         thumbnail?: { contentType: string; data: string },
+        linkPreview?: LinkPreview,
         eventMetadata?: EventMetadata,
     ) => void,
     onPresentMessage?: (presentData: any) => void,
@@ -978,6 +987,7 @@ export function handleClientEventFlatBuffer(
                         let groupId: string | undefined;
                         let ttsText: string | undefined;
                         let thumbnail: { contentType: string; data: string } | undefined;
+                        let linkPreview: LinkPreview | undefined;
                         const eventMeta: EventMetadata = {};
                         const metadataLength = notify.metadataLength();
                         for (let i = 0; i < metadataLength; i++) {
@@ -1026,6 +1036,15 @@ export function handleClientEventFlatBuffer(
                                     eventMeta.iobj = value;
                                 } else if (keyValue === "timestamp" && typeof value === "number") {
                                     eventMeta.timestamp = value;
+                                } else if (keyValue === "link_preview" && typeof value === "object" && value !== null) {
+                                    // link_preview is a map with url, title, description, image, site_name
+                                    linkPreview = {
+                                        url: value.url || "",
+                                        title: value.title || undefined,
+                                        description: value.description || undefined,
+                                        image: value.image || undefined,
+                                        site_name: value.site_name || undefined,
+                                    };
                                 }
                             }
                         }
@@ -1069,6 +1088,7 @@ export function handleClientEventFlatBuffer(
                                 groupId,
                                 ttsText,
                                 thumbnail,
+                                linkPreview,
                                 Object.keys(eventMeta).length > 0 ? eventMeta : undefined,
                             );
                         }
@@ -1189,6 +1209,8 @@ export function handleClientEventFlatBuffer(
                                 "text/traceback",
                                 false,
                                 false,
+                                undefined,
+                                undefined,
                                 undefined,
                                 undefined,
                                 undefined,
@@ -1875,6 +1897,8 @@ function narrativeEventToJS(narrativeEvent: any): any {
                 contentType = "text/djot";
             } else if (contentType === "text_html" || contentType === "text/html") {
                 contentType = "text/html";
+            } else if (contentType === "text_x_uri" || contentType === "text/x-uri") {
+                contentType = "text/x-uri";
             } else {
                 contentType = "text/plain";
             }
@@ -1922,12 +1946,15 @@ function narrativeEventToJS(narrativeEvent: any): any {
 /**
  * Invoke the welcome message system verb using FlatBuffer protocol
  *
- * This calls #0:do_login_command and returns the narrative event output
+ * This calls #0:do_login_command and returns the narrative event output.
+ * If the content type is "text/x-uri", the content is a URL that should be
+ * displayed in an iframe by the client.
+ *
  * @returns Promise resolving to object with welcome message and content type
  */
 export async function invokeWelcomeMessageFlatBuffer(): Promise<{
     welcomeMessage: string;
-    contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback";
+    contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback" | "text/x-uri";
 }> {
     try {
         const response = await fetch(`/fb/invoke_welcome_message`, {
@@ -2014,7 +2041,7 @@ export async function invokeWelcomeMessageFlatBuffer(): Promise<{
 
         // Extract welcome message from narrative events
         let welcomeMessage = "";
-        let contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback" = "text/plain";
+        let contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback" | "text/x-uri" = "text/plain";
 
         for (let i = 0; i < outputCount; i++) {
             const narrativeEvent = systemVerbSuccess.output(i, new NarrativeEvent());
@@ -2038,7 +2065,7 @@ export async function invokeWelcomeMessageFlatBuffer(): Promise<{
                             const ct = notifyEvent.contentType;
                             if (
                                 ct === "text/html" || ct === "text/djot" || ct === "text/plain"
-                                || ct === "text/traceback"
+                                || ct === "text/traceback" || ct === "text/x-uri"
                             ) {
                                 contentType = ct;
                             }

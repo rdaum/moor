@@ -1867,6 +1867,7 @@ function AppWrapper() {
             groupId?: string;
             ttsText?: string;
             thumbnail?: { contentType: string; data: string };
+            linkPreview?: import("./lib/rpc-fb").LinkPreview;
             eventMetadata?: import("./lib/rpc-fb").EventMetadata;
         }>
     >([]);
@@ -1881,6 +1882,7 @@ function AppWrapper() {
         groupId?: string,
         ttsText?: string,
         thumbnail?: { contentType: string; data: string },
+        linkPreview?: import("./lib/rpc-fb").LinkPreview,
         eventMetadata?: import("./lib/rpc-fb").EventMetadata,
     ) => {
         // Handle array content by processing each line
@@ -1905,6 +1907,7 @@ function AppWrapper() {
                         groupId,
                         ttsText,
                         thumbnail,
+                        linkPreview,
                         eventMetadata,
                     );
                 } else {
@@ -1917,6 +1920,7 @@ function AppWrapper() {
                             groupId,
                             ttsText,
                             thumbnail,
+                            linkPreview,
                             eventMetadata,
                         }],
                     );
@@ -1935,6 +1939,7 @@ function AppWrapper() {
                         groupId,
                         ttsText,
                         thumbnail,
+                        linkPreview,
                         eventMetadata,
                     );
                 } else {
@@ -1947,6 +1952,7 @@ function AppWrapper() {
                             groupId,
                             ttsText,
                             thumbnail,
+                            linkPreview,
                             eventMetadata,
                         }],
                     );
@@ -1967,7 +1973,19 @@ function AppWrapper() {
     const narrativeCallbackRef = useCallback((node: NarrativeRef | null) => {
         if (node) {
             pendingMessages.forEach(
-                ({ content, contentType, noNewline, presentationHint, groupId, ttsText, thumbnail, eventMetadata }) => {
+                (
+                    {
+                        content,
+                        contentType,
+                        noNewline,
+                        presentationHint,
+                        groupId,
+                        ttsText,
+                        thumbnail,
+                        linkPreview,
+                        eventMetadata,
+                    },
+                ) => {
                     node.addNarrativeContent(
                         content,
                         contentType as "text/plain" | "text/djot" | "text/html",
@@ -1976,6 +1994,7 @@ function AppWrapper() {
                         groupId,
                         ttsText,
                         thumbnail,
+                        linkPreview,
                         eventMetadata,
                     );
                 },

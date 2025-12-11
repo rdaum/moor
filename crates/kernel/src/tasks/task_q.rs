@@ -14,7 +14,7 @@
 use ahash::AHasher;
 use flume::{Receiver, Sender};
 use hierarchical_hash_wheel_timer::wheels::{
-    TimerEntryWithDelay,
+    Skip, TimerEntryWithDelay,
     quad_wheel::{PruneDecision, QuadWheelWithOverflow},
 };
 use minstant::Instant;
@@ -117,13 +117,14 @@ impl TaskQ {
 
         // 1. Advance timer wheel based on elapsed time and collect expired timers
         // (Always advance the timer wheel to maintain accurate timing, even when no tasks are suspended)
-        let expired_timers = self.suspended.advance_timer_wheel();
+        if let Some(expired_timers) = self.suspended.advance_timer_wheel() {
+            for timer_entry in expired_timers {
+                none_or_push(&mut to_wake, timer_entry.task_id);
+            }
+        }
 
         if self.suspended.tasks.is_empty() {
             return None;
-        }
-        for timer_entry in expired_timers {
-            none_or_push(&mut to_wake, timer_entry.task_id);
         }
 
         // 2. Check for task dependencies that should wake (O(1) per dependency check)
@@ -284,28 +285,43 @@ impl SuspensionQ {
     }
 
     /// Advance the timer wheel based on elapsed time and return expired entries.
-    /// This follows the pattern from thread_timer.rs - call tick() once per millisecond elapsed.
-    fn advance_timer_wheel(&mut self) -> Vec<TimerEntry> {
+    fn advance_timer_wheel(&mut self) -> Option<Vec<TimerEntry>> {
         let now = Instant::now();
         let last_advance = self.last_timer_advance.unwrap_or(now);
 
         if now <= last_advance {
-            return Vec::new();
+            return None;
         }
 
         let elapsed = now.duration_since(last_advance);
-        let millis_elapsed = elapsed.as_millis() as u64;
+        let mut millis_remaining = elapsed.as_millis() as u32;
 
-        let mut expired_entries = Vec::new();
+        let mut expired_entries = None;
 
-        // Call tick() once per millisecond elapsed, just like thread_timer does
-        for _tick in 0..millis_elapsed {
-            let expired = self.timer_wheel.tick();
-            expired_entries.extend(expired);
+        while millis_remaining > 0 {
+            match self.timer_wheel.can_skip() {
+                Skip::Empty => {
+                    // Wheel is empty - no timers, nothing to tick
+                    self.timer_wheel.skip(millis_remaining);
+                    break;
+                }
+                Skip::Millis(skippable) => {
+                    let to_skip = skippable.min(millis_remaining);
+                    self.timer_wheel.skip(to_skip);
+                    millis_remaining -= to_skip;
+                }
+                Skip::None => {
+                    // Next tick has expiring timers, must tick
+                    expired_entries
+                        .get_or_insert_with(Vec::new)
+                        .extend(self.timer_wheel.tick());
+                    millis_remaining -= 1;
+                }
+            }
         }
 
-        // Update last advance time by the actual milliseconds we processed
-        self.last_timer_advance = Some(last_advance + Duration::from_millis(millis_elapsed));
+        self.last_timer_advance =
+            Some(last_advance + Duration::from_millis(elapsed.as_millis() as u64));
 
         expired_entries
     }

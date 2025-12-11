@@ -153,10 +153,13 @@ export const InputArea: React.FC<InputAreaProps> = ({
         if (historyIndex >= 0 && historyIndex < commandHistory.length) {
             const historyValue = commandHistory[historyIndex];
             setInput(historyValue ? historyValue.trimEnd() : "");
+            // Deactivate say pill when restoring from history - the command was typed as-is
+            setSayPillActive(false);
         } else {
             setInput("");
+            setSayPillActive(sayModeEnabled);
         }
-    }, [input, historyOffset, commandHistory]);
+    }, [input, historyOffset, commandHistory, sayModeEnabled]);
 
     // Determine if we should apply say prefix to a line
     const shouldApplySayPrefix = useCallback((line: string): boolean => {
@@ -180,6 +183,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
         // Split by lines and send each non-empty line
         const lines = trimmedInput ? input.split("\n") : [""];
+        const commandsSent: string[] = [];
         for (const line of lines) {
             const trimmedLine = line.trim();
             // Build the command
@@ -194,12 +198,13 @@ export const InputArea: React.FC<InputAreaProps> = ({
             }
             if (messageToSend) {
                 onSendMessage(messageToSend);
+                commandsSent.push(messageToSend);
             }
         }
 
-        // Add original input to command history (not the transformed version)
-        if (trimmedInput) {
-            onAddToHistory(trimmedInput);
+        // Add the actual command(s) sent to history
+        for (const cmd of commandsSent) {
+            onAddToHistory(cmd);
         }
 
         // Clear input and reset state

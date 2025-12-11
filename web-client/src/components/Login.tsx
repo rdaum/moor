@@ -37,7 +37,7 @@ const LoadingSpinner: React.FC<{ message?: string }> = ({ message = "Connecting 
 interface LoginProps {
     visible: boolean;
     welcomeMessage: string;
-    contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback";
+    contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback" | "text/x-uri";
     isServerReady: boolean;
     onConnect: (mode: "connect" | "create", username: string, password: string) => void;
     oauth2UserInfo?: OAuth2UserInfo | null;
@@ -60,9 +60,9 @@ interface LoginProps {
  */
 export const useWelcomeMessage = () => {
     const [welcomeMessage, setWelcomeMessage] = useState<string>("");
-    const [contentType, setContentType] = useState<"text/plain" | "text/djot" | "text/html" | "text/traceback">(
-        "text/plain",
-    );
+    const [contentType, setContentType] = useState<
+        "text/plain" | "text/djot" | "text/html" | "text/traceback" | "text/x-uri"
+    >("text/plain");
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [isServerReady, setIsServerReady] = useState<boolean>(false);
 

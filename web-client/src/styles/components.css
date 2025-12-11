@@ -111,6 +111,79 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+/* Link preview card styling */
+.link-preview-card {
+  margin-top: 8px;
+  max-width: 500px;
+  border: 1px solid var(--color-border-primary);
+  border-radius: 8px;
+  background: var(--color-bg-secondary);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.link-preview-card:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-medium);
+}
+
+.link-preview-card a {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  padding: 12px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.link-preview-image {
+  flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.link-preview-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.link-preview-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.link-preview-title {
+  font-weight: 600;
+  font-size: 0.95em;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-preview-description {
+  font-size: 0.85em;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.4;
+}
+
+.link-preview-hostname {
+  font-size: 0.8em;
+  color: var(--color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .system_message_narrative {
   font-family: var(--font-mono);
   font-size: 1em;
@@ -181,6 +254,22 @@
   word-wrap: break-word;
   tab-size: 4;
   -moz-tab-size: 4;
+}
+
+/* For iframe content (text/x-uri) */
+.content-iframe {
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+  border: none;
+  border-radius: var(--radius-md);
+  background-color: var(--color-background-primary);
+}
+
+/* When iframe is in welcome_box, fill the container */
+.welcome_box .content-iframe {
+  min-height: 40vh;
+  max-height: 55vh;
 }
 
 /* ====== DOCK CONTAINERS ====== */

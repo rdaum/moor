@@ -15,6 +15,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { InputMetadata } from "../types/input";
 import { getCommandEchoEnabled } from "./CommandEchoToggle";
 import { InputArea } from "./InputArea";
+import { LinkPreview } from "./LinkPreviewCard";
 import { OutputWindow } from "./OutputWindow";
 
 export interface EventMetadata {
@@ -41,6 +42,7 @@ export interface NarrativeMessage {
     groupId?: string;
     ttsText?: string;
     thumbnail?: { contentType: string; data: string };
+    linkPreview?: LinkPreview;
     eventMetadata?: EventMetadata;
 }
 
@@ -68,6 +70,7 @@ export interface NarrativeRef {
         groupId?: string,
         ttsText?: string,
         thumbnail?: { contentType: string; data: string },
+        linkPreview?: LinkPreview,
         eventMetadata?: EventMetadata,
     ) => void;
     addSystemMessage: (content: string | string[]) => void;
@@ -148,6 +151,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         groupId?: string,
         ttsText?: string,
         thumbnail?: { contentType: string; data: string },
+        linkPreview?: LinkPreview,
         eventMetadata?: EventMetadata,
     ) => {
         const now = Date.now();
@@ -162,6 +166,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             groupId,
             ttsText,
             thumbnail,
+            linkPreview,
             eventMetadata,
         };
 
@@ -218,6 +223,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             groupId?: string,
             ttsText?: string,
             thumbnail?: { contentType: string; data: string },
+            linkPreview?: LinkPreview,
             eventMetadata?: EventMetadata,
         ) => {
             addMessage(
@@ -229,6 +235,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
                 groupId,
                 ttsText,
                 thumbnail,
+                linkPreview,
                 eventMetadata,
             );
         },

@@ -14,6 +14,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { uuObjIdToString } from "../lib/var";
 import { ContentRenderer } from "./ContentRenderer";
+import { LinkPreview, LinkPreviewCard } from "./LinkPreviewCard";
 import { getSpeechBubblesEnabled } from "./SpeechBubbleToggle";
 
 interface EventMetadata {
@@ -41,6 +42,7 @@ interface OutputWindowProps {
         groupId?: string;
         ttsText?: string;
         thumbnail?: { contentType: string; data: string };
+        linkPreview?: LinkPreview;
         eventMetadata?: EventMetadata;
     }>;
     onLoadMoreHistory?: () => void;
@@ -118,6 +120,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback" | undefined,
         ttsText: string | undefined,
         thumbnail?: { contentType: string; data: string },
+        linkPreview?: LinkPreview,
     ) => {
         if (ttsText) {
             return (
@@ -127,6 +130,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                     <span aria-hidden="true">
                         <ContentRenderer content={content} contentType={contentType} onLinkClick={onLinkClick} />
                     </span>
+                    {linkPreview && <LinkPreviewCard preview={linkPreview} />}
                 </>
             );
         }
@@ -134,6 +138,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
             <>
                 {thumbnail && <img src={thumbnail.data} alt="thumbnail" className="narrative_thumbnail" />}
                 <ContentRenderer content={content} contentType={contentType} onLinkClick={onLinkClick} />
+                {linkPreview && <LinkPreviewCard preview={linkPreview} />}
             </>
         );
     }, [onLinkClick]);
@@ -421,6 +426,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                             message.contentType,
                                             message.ttsText,
                                             message.thumbnail,
+                                            message.linkPreview,
                                         )}
                                     </div>
                                 </div>,
@@ -440,6 +446,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                         message.contentType,
                                         message.ttsText,
                                         message.thumbnail,
+                                        message.linkPreview,
                                     )}
                                 </div>,
                             );
@@ -506,6 +513,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                     msg.contentType,
                                                     msg.ttsText,
                                                     msg.thumbnail,
+                                                    msg.linkPreview,
                                                 )}
                                             </div>
                                         ))}
@@ -536,6 +544,9 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                 .map(msg => msg.ttsText)
                                 .join(" ");
 
+                            // Get linkPreview from the last message in the group (if any)
+                            const lastLinkPreview = group.find(msg => msg.linkPreview)?.linkPreview;
+
                             result.push(
                                 <div
                                     key={`noline_${firstMessage.id}`}
@@ -548,6 +559,8 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                         combinedHtml,
                                         "text/html",
                                         combinedTtsText || undefined,
+                                        undefined,
+                                        lastLinkPreview,
                                     )}
                                 </div>,
                             );

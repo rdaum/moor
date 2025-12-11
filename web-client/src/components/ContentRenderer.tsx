@@ -16,7 +16,7 @@ import { renderDjot, renderHtmlContent, renderPlainText } from "../lib/djot-rend
 
 interface ContentRendererProps {
     content: string | string[];
-    contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback";
+    contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback" | "text/x-uri";
     onLinkClick?: (url: string) => void;
 }
 
@@ -94,6 +94,18 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                     <pre className="traceback_narrative">
                         {tracebackContent}
                     </pre>
+                );
+            }
+
+            case "text/x-uri": {
+                const uri = getContentString("").trim();
+                return (
+                    <iframe
+                        src={uri}
+                        className="content-iframe"
+                        title="Welcome content"
+                        sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                    />
                 );
             }
 
