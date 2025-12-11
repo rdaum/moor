@@ -13,8 +13,8 @@
 [package]
 name = "lambdamoo-harness"
 version = "0.1.0"
-edition.workspace = true
 authors.workspace = true
+edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Test harness wrapping LambdaMOO for comparative testing"
@@ -23,11 +23,11 @@ description = "Test harness wrapping LambdaMOO for comparative testing"
 cc = "1.2"
 
 [dependencies]
-libc.workspace = true
-thiserror.workspace = true
 clap.workspace = true
 clap_derive.workspace = true
+libc.workspace = true
 tabled.workspace = true
+thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 

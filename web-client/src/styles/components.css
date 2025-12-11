@@ -451,14 +451,9 @@
   box-sizing: border-box;
 }
 
-.input_area_placeholder {
-  position: absolute;
-  top: 0;
-  left: 0;
-  padding: var(--space-md);
+.input_area::placeholder {
   color: var(--color-text-secondary);
   font-family: var(--font-sans);
-  pointer-events: none;
   opacity: 0.6;
 }
 
@@ -2115,4 +2110,215 @@ button:disabled {
   padding: 4px 8px;
   background: rgba(255, 107, 107, 0.1);
   border-radius: 4px;
+}
+
+/* ====== INPUT AREA CONTAINER ====== */
+.input_area_container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* The box that looks like an input field, contains pill + textarea */
+.input_area_box {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  background-color: var(--color-bg-input);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  min-height: 3rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.input_area_box:focus-within {
+  border-color: var(--color-text-accent);
+  outline: none;
+}
+
+/* The actual textarea inside the box */
+.input_area_inner {
+  background-color: transparent;
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 1em;
+  line-height: 1.4;
+  padding: 0;
+  margin: 0;
+  border: none;
+  resize: none;
+  overflow: auto;
+  min-height: 1.4em;
+  height: auto;
+  max-height: 6rem;
+  flex: 1;
+  outline: none;
+}
+
+.input_area_inner::placeholder {
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  opacity: 0.6;
+}
+
+/* ====== VERB PALETTE ====== */
+.verb-palette-container {
+  position: relative;
+  width: 100%;
+}
+
+.verb-palette {
+  display: flex;
+  gap: 6px;
+  padding: 4px 0 8px 0;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.verb-chip {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-pill);
+  padding: 4px 12px;
+  font-family: var(--font-ui);
+  font-size: 0.85em;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.verb-chip:hover {
+  background-color: var(--color-bg-hover);
+  border-color: var(--color-border-dark);
+}
+
+.verb-chip:active {
+  transform: scale(0.95);
+}
+
+/* ====== SAY MODE PILL ====== */
+/* Styled like verb-chip but inside the input box, baseline-aligned with text */
+.say-mode-pill {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+  font-family: var(--font-sans);
+  font-size: 1em;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.say-mode-pill:hover {
+  background-color: var(--color-bg-hover);
+  border-color: var(--color-border-dark);
+}
+
+.say-mode-pill:active {
+  transform: scale(0.95);
+}
+
+/* Mobile-friendly verb palette */
+@media (max-width: 768px) {
+  .verb-palette-container {
+    /* Fade gradient on the right edge to indicate more content */
+    mask-image: linear-gradient(
+      to right,
+      black 0%,
+      black calc(100% - 32px),
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to right,
+      black 0%,
+      black calc(100% - 32px),
+      transparent 100%
+    );
+  }
+
+  /* When scrolled, show fade on both sides */
+  .verb-palette-container.scrolled-start {
+    mask-image: linear-gradient(
+      to right,
+      black 0%,
+      black calc(100% - 32px),
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to right,
+      black 0%,
+      black calc(100% - 32px),
+      transparent 100%
+    );
+  }
+
+  .verb-palette-container.scrolled-middle {
+    mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      black 32px,
+      black calc(100% - 32px),
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      black 32px,
+      black calc(100% - 32px),
+      transparent 100%
+    );
+  }
+
+  .verb-palette-container.scrolled-end {
+    mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      black 32px,
+      black 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      black 32px,
+      black 100%
+    );
+  }
+
+  .verb-palette-container.no-overflow {
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+
+  .verb-palette {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding: 4px 24px 4px 4px; /* Extra right padding for fade area */
+    scroll-snap-type: x proximity;
+  }
+
+  .verb-palette::-webkit-scrollbar {
+    display: none;
+  }
+
+  .verb-chip {
+    padding: 8px 16px;
+    font-size: 0.9em;
+    scroll-snap-align: start;
+    flex-shrink: 0;
+    touch-action: pan-x; /* Allow horizontal scroll, capture vertical gestures */
+  }
+
+  .say-mode-pill {
+    padding: 6px 12px;
+  }
 }

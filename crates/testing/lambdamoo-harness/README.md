@@ -1,10 +1,10 @@
 # lambdamoo-harness
 
-Test harness that embeds the original LambdaMOO C implementation for comparative
-testing and benchmarking against mooR.
+Test harness that embeds the original LambdaMOO C implementation for comparative testing and
+benchmarking against mooR.
 
-This crate is **not built by default**. It requires fetching external LambdaMOO
-sources before it can be compiled.
+This crate is **not built by default**. It requires fetching external LambdaMOO sources before it
+can be compiled.
 
 ## Setup
 
@@ -67,9 +67,9 @@ let output = harness.execute_command(&conn, "look")?;
 ## License Note
 
 **LambdaMOO is NOT GPL.** It is licensed under the
-[Xerox License](https://spdx.org/licenses/Xerox.html), which is permissive but
-requires compliance with US export control laws. This makes it GPL-incompatible.
+[Xerox License](https://spdx.org/licenses/Xerox.html), which is permissive but requires compliance
+with US export control laws. This makes it GPL-incompatible.
 
-This harness is a development/testing tool kept separate from the main mooR
-distribution. The LambdaMOO sources are not included in the moor repository and
-must be fetched separately using the setup script.
+This harness is a development/testing tool kept separate from the main mooR distribution. The
+LambdaMOO sources are not included in the moor repository and must be fetched separately using the
+setup script.

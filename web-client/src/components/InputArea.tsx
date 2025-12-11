@@ -12,8 +12,12 @@
 //
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { getVerbPlaceholder, startsWithKnownVerb } from "../lib/known-verbs";
 import { InputMetadata } from "../types/input";
 import { RichInputPrompt } from "./RichInputPrompt";
+import { getSayModeEnabled } from "./SayModeToggle";
+import { VerbPalette } from "./VerbPalette";
+import { getVerbPaletteEnabled } from "./VerbPaletteToggle";
 
 interface InputAreaProps {
     visible: boolean;
@@ -52,10 +56,39 @@ export const InputArea: React.FC<InputAreaProps> = ({
     );
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+    // Say mode and verb palette settings
+    const [sayModeEnabled, setSayModeEnabled] = useState(getSayModeEnabled);
+    const [verbPaletteEnabled, setVerbPaletteEnabled] = useState(getVerbPaletteEnabled);
+    // Whether the say pill is active for current input (can be toggled off per-input)
+    const [sayPillActive, setSayPillActive] = useState(true);
+    // Verb pill from palette selection (overrides say pill when set)
+    const [verbPill, setVerbPill] = useState<string | null>(null);
+    // Accessibility: announcement for screen readers
+    const [srAnnouncement, setSrAnnouncement] = useState<string>("");
+
     // Detect if user prefers reduced motion (common for screen reader users)
     const prefersReducedMotion = useRef(
         typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     );
+
+    // Listen for settings changes
+    useEffect(() => {
+        const handleSayModeChange = (e: CustomEvent<boolean>) => {
+            setSayModeEnabled(e.detail);
+            setSayPillActive(e.detail);
+        };
+        const handleVerbPaletteChange = (e: CustomEvent<boolean>) => {
+            setVerbPaletteEnabled(e.detail);
+        };
+
+        window.addEventListener("sayModeChanged", handleSayModeChange as EventListener);
+        window.addEventListener("verbPaletteChanged", handleVerbPaletteChange as EventListener);
+
+        return () => {
+            window.removeEventListener("sayModeChanged", handleSayModeChange as EventListener);
+            window.removeEventListener("verbPaletteChanged", handleVerbPaletteChange as EventListener);
+        };
+    }, []);
 
     // Focus input area when it becomes visible and enabled, or when returning from rich input prompt
     useEffect(() => {
@@ -123,36 +156,79 @@ export const InputArea: React.FC<InputAreaProps> = ({
         }
     }, [input, historyOffset, commandHistory]);
 
+    // Determine if we should apply say prefix to a line
+    const shouldApplySayPrefix = useCallback((line: string): boolean => {
+        // No prefix if there's a verb pill (it takes precedence)
+        if (verbPill) return false;
+        // No prefix if say mode is disabled or pill is inactive
+        if (!sayModeEnabled || !sayPillActive) return false;
+        // No prefix if line already starts with a known verb
+        if (startsWithKnownVerb(line)) return false;
+        return true;
+    }, [sayModeEnabled, sayPillActive, verbPill]);
+
     // Send input to server
     const sendInput = useCallback(() => {
         const trimmedInput = input.trim();
 
-        if (!trimmedInput) {
+        // Allow sending verb pill alone (e.g., "look" with no args)
+        if (!trimmedInput && !verbPill) {
             return;
         }
 
         // Split by lines and send each non-empty line
-        const lines = input.split("\n");
+        const lines = trimmedInput ? input.split("\n") : [""];
         for (const line of lines) {
-            if (line.trim()) {
-                onSendMessage(line.trim());
+            const trimmedLine = line.trim();
+            // Build the command
+            let messageToSend: string;
+            if (verbPill) {
+                // Verb pill takes precedence
+                messageToSend = trimmedLine ? `${verbPill} ${trimmedLine}` : verbPill;
+            } else if (shouldApplySayPrefix(trimmedLine)) {
+                messageToSend = `say ${trimmedLine}`;
+            } else {
+                messageToSend = trimmedLine;
+            }
+            if (messageToSend) {
+                onSendMessage(messageToSend);
             }
         }
 
-        // Add to command history and reset
+        // Add original input to command history (not the transformed version)
         if (trimmedInput) {
             onAddToHistory(trimmedInput);
         }
 
-        // Clear input and reset history offset
+        // Clear input and reset state
         setInput("");
         setHistoryOffset(0);
+        setVerbPill(null);
+        // Reset say pill to active for next input
+        setSayPillActive(sayModeEnabled);
 
         // Pick a new encouraging placeholder for next input (skip if user prefers reduced motion)
         if (!prefersReducedMotion.current) {
             setPlaceholderIndex(Math.floor(Math.random() * ENCOURAGING_PLACEHOLDERS.length));
         }
-    }, [input, onSendMessage, onAddToHistory]);
+    }, [input, onSendMessage, onAddToHistory, shouldApplySayPrefix, sayModeEnabled, verbPill]);
+
+    // Announce to screen readers
+    const announce = useCallback((message: string) => {
+        setSrAnnouncement(message);
+        // Clear after a delay so the same message can be announced again
+        setTimeout(() => setSrAnnouncement(""), 1000);
+    }, []);
+
+    // Handle verb selection from palette
+    const handleVerbSelect = useCallback((verb: string) => {
+        // Set verb pill and disable say mode for this input
+        setVerbPill(verb);
+        setSayPillActive(false);
+        announce(`${verb} command selected`);
+        // Focus the textarea
+        textareaRef.current?.focus();
+    }, [announce]);
 
     // Handle paste events
     const handlePaste = useCallback((e: React.ClipboardEvent) => {
@@ -191,6 +267,28 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
     // Handle key events
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+        // Handle backspace to remove verb pill or say pill when input is empty
+        if (e.key === "Backspace" && input === "") {
+            if (verbPill) {
+                e.preventDefault();
+                setVerbPill(null);
+                // Restore say pill if say mode is enabled
+                if (sayModeEnabled) {
+                    setSayPillActive(true);
+                    announce("say mode restored");
+                } else {
+                    announce("command mode");
+                }
+                return;
+            }
+            if (sayPillActive && sayModeEnabled) {
+                e.preventDefault();
+                setSayPillActive(false);
+                announce("command mode");
+                return;
+            }
+        }
+
         if (e.key === "ArrowUp") {
             const isMultiline = input.includes("\n");
             const textarea = textareaRef.current;
@@ -232,7 +330,17 @@ export const InputArea: React.FC<InputAreaProps> = ({
             e.preventDefault();
             sendInput();
         }
-    }, [navigateHistory, sendInput, input, historyOffset, commandHistory]);
+    }, [
+        navigateHistory,
+        sendInput,
+        input,
+        historyOffset,
+        commandHistory,
+        sayPillActive,
+        sayModeEnabled,
+        verbPill,
+        announce,
+    ]);
 
     // Handler for rich input submission
     const handleRichInputSubmit = useCallback((value: string | Uint8Array) => {
@@ -259,34 +367,89 @@ export const InputArea: React.FC<InputAreaProps> = ({
         );
     }
 
+    // Determine which pill to show (verb pill takes precedence over say pill)
+    const showSayPill = !verbPill && sayModeEnabled && sayPillActive;
+    const activePill = verbPill || (showSayPill ? "say" : null);
+
+    // Get context-sensitive placeholder
+    const getPlaceholder = (): string => {
+        if (activePill === "say") {
+            return "What would you like to say?";
+        }
+        if (verbPill) {
+            const verbPlaceholder = getVerbPlaceholder(verbPill);
+            if (verbPlaceholder) return verbPlaceholder;
+        }
+        return ENCOURAGING_PLACEHOLDERS[placeholderIndex];
+    };
+
     // Default text input
     return (
-        <div className="input_area_wrapper">
-            <textarea
-                ref={textareaRef}
-                id="input_area"
-                className="input_area"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onPaste={handlePaste}
-                disabled={disabled}
-                autoComplete="off"
-                spellCheck={false}
-                aria-label="Command input"
-                aria-describedby="input-help"
-                aria-multiline="true"
+        <div className="input_area_container">
+            {/* Verb palette above input */}
+            <VerbPalette
+                visible={verbPaletteEnabled}
+                onVerbSelect={handleVerbSelect}
             />
-            {/* Visual-only placeholder, hidden from screen readers */}
-            <div
-                className="input_area_placeholder"
-                aria-hidden="true"
-                style={{ visibility: input ? "hidden" : "visible" }}
-            >
-                {ENCOURAGING_PLACEHOLDERS[placeholderIndex]}
+
+            {/* Input area with pill inside */}
+            <div className="input_area_box">
+                {activePill && (
+                    <button
+                        type="button"
+                        className="say-mode-pill"
+                        onClick={() => {
+                            if (verbPill) {
+                                setVerbPill(null);
+                                if (sayModeEnabled) {
+                                    setSayPillActive(true);
+                                    announce("say mode restored");
+                                } else {
+                                    announce("command mode");
+                                }
+                            } else {
+                                setSayPillActive(false);
+                                announce("command mode");
+                            }
+                        }}
+                        title="Click or press Backspace to remove"
+                        aria-label={`${activePill} command active. Click to remove.`}
+                    >
+                        {activePill}
+                    </button>
+                )}
+                <textarea
+                    ref={textareaRef}
+                    id="input_area"
+                    className="input_area_inner"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
+                    disabled={disabled}
+                    autoComplete="off"
+                    spellCheck={false}
+                    aria-label={activePill ? `${activePill} command` : "Command input"}
+                    aria-describedby="input-help"
+                    aria-multiline="true"
+                    placeholder={getPlaceholder()}
+                />
             </div>
+
             <div id="input-help" className="sr-only">
-                Use Shift+Enter for new lines. Arrow keys navigate command history when at start or end of input.
+                {activePill
+                    ? `${activePill} command active. Press Backspace to remove. Use Shift+Enter for new lines.`
+                    : "Use Shift+Enter for new lines. Arrow keys navigate command history when at start or end of input."}
+            </div>
+
+            {/* Live region for screen reader announcements */}
+            <div
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                className="sr-only"
+            >
+                {srAnnouncement}
             </div>
         </div>
     );

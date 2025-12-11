@@ -131,7 +131,8 @@ This handles dependencies automatically and makes future upgrades simple with `a
 
 ### Option 2: Install from Release Downloads
 
-Download `.deb` packages from the [releases page](https://codeberg.org/timbran/moor/releases) and install manually:
+Download `.deb` packages from the [releases page](https://codeberg.org/timbran/moor/releases) and
+install manually:
 
 ```bash
 # 1. Install daemon first (core service)

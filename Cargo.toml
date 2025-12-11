@@ -182,9 +182,9 @@ syn = { version = "2.0", features = ["full", "parsing"] }
 ahash = "0.8"
 arrayvec = "0.7"
 imbl = { version = "6.1", features = ["triomphe"] }
-smallvec = "1.13"
 indexmap = "2.12"
 itertools = "0.14"
+smallvec = "1.13"
 
 # Error Handling & Logging
 color-eyre = "0.6"
