@@ -16,6 +16,17 @@ html, body {
   transition: background-color var(--transition-normal), color var(--transition-normal);
 }
 
+/* Main app container - uses dvh for mobile browser compatibility */
+.app-root {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Account for mobile browser safe areas (notches, toolbars) */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 .main {
   font-family: var(--font-mono);
 }

@@ -63,6 +63,8 @@ export const InputArea: React.FC<InputAreaProps> = ({
     const [sayPillActive, setSayPillActive] = useState(true);
     // Verb pill from palette selection (overrides say pill when set)
     const [verbPill, setVerbPill] = useState<string | null>(null);
+    // Placeholder text for the current verb pill (from server hint)
+    const [verbPillPlaceholder, setVerbPillPlaceholder] = useState<string | null>(null);
     // Accessibility: announcement for screen readers
     const [srAnnouncement, setSrAnnouncement] = useState<string>("");
 
@@ -204,6 +206,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
         setInput("");
         setHistoryOffset(0);
         setVerbPill(null);
+        setVerbPillPlaceholder(null);
         // Reset say pill to active for next input
         setSayPillActive(sayModeEnabled);
 
@@ -221,9 +224,10 @@ export const InputArea: React.FC<InputAreaProps> = ({
     }, []);
 
     // Handle verb selection from palette
-    const handleVerbSelect = useCallback((verb: string) => {
+    const handleVerbSelect = useCallback((verb: string, placeholder: string | null) => {
         // Set verb pill and disable say mode for this input
         setVerbPill(verb);
+        setVerbPillPlaceholder(placeholder);
         setSayPillActive(false);
         announce(`${verb} command selected`);
         // Focus the textarea
@@ -272,6 +276,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
             if (verbPill) {
                 e.preventDefault();
                 setVerbPill(null);
+                setVerbPillPlaceholder(null);
                 // Restore say pill if say mode is enabled
                 if (sayModeEnabled) {
                     setSayPillActive(true);
@@ -377,8 +382,10 @@ export const InputArea: React.FC<InputAreaProps> = ({
             return "What would you like to say?";
         }
         if (verbPill) {
-            const verbPlaceholder = getVerbPlaceholder(verbPill);
-            if (verbPlaceholder) return verbPlaceholder;
+            // Use placeholder from server, fall back to static lookup
+            if (verbPillPlaceholder) return verbPillPlaceholder;
+            const staticPlaceholder = getVerbPlaceholder(verbPill);
+            if (staticPlaceholder) return staticPlaceholder;
         }
         return ENCOURAGING_PLACEHOLDERS[placeholderIndex];
     };
@@ -401,6 +408,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
                         onClick={() => {
                             if (verbPill) {
                                 setVerbPill(null);
+                                setVerbPillPlaceholder(null);
                                 if (sayModeEnabled) {
                                     setSayPillActive(true);
                                     announce("say mode restored");

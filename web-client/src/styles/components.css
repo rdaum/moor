@@ -1383,6 +1383,7 @@ input[type="text"]:focus {
   left: 0;
   width: 300px;
   height: 100vh;
+  height: 100dvh;
   background: var(--color-bg-primary);
   border-right: 1px solid var(--color-border-medium);
   z-index: 1001;
@@ -1399,6 +1400,7 @@ input[type="text"]:focus {
   right: 0;
   width: 300px;
   height: 100vh;
+  height: 100dvh;
   background: var(--color-bg-primary);
   border-left: 1px solid var(--color-border-medium);
   z-index: 1001;
@@ -2167,14 +2169,73 @@ button:disabled {
 .verb-palette-container {
   position: relative;
   width: 100%;
+  /* Fade gradient on edges to indicate scrollable content */
+  mask-image: linear-gradient(
+    to right,
+    black 0%,
+    black calc(100% - 24px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    black 0%,
+    black calc(100% - 24px),
+    transparent 100%
+  );
+}
+
+.verb-palette-container.scrolled-middle {
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 24px,
+    black calc(100% - 24px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 24px,
+    black calc(100% - 24px),
+    transparent 100%
+  );
+}
+
+.verb-palette-container.scrolled-end {
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 24px,
+    black 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 24px,
+    black 100%
+  );
+}
+
+.verb-palette-container.no-overflow {
+  mask-image: none;
+  -webkit-mask-image: none;
 }
 
 .verb-palette {
   display: flex;
   gap: 6px;
-  padding: 4px 0 8px 0;
-  flex-wrap: wrap;
+  padding: 4px 20px 8px 0;
+  flex-wrap: nowrap;
   align-items: center;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  cursor: grab;
+}
+
+.verb-palette::-webkit-scrollbar {
+  display: none;
 }
 
 .verb-chip {
@@ -2188,6 +2249,7 @@ button:disabled {
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .verb-chip:hover {
@@ -2225,96 +2287,16 @@ button:disabled {
   transform: scale(0.95);
 }
 
-/* Mobile-friendly verb palette */
+/* Mobile touch targets and scroll behavior */
 @media (max-width: 768px) {
-  .verb-palette-container {
-    /* Fade gradient on the right edge to indicate more content */
-    mask-image: linear-gradient(
-      to right,
-      black 0%,
-      black calc(100% - 32px),
-      transparent 100%
-    );
-    -webkit-mask-image: linear-gradient(
-      to right,
-      black 0%,
-      black calc(100% - 32px),
-      transparent 100%
-    );
-  }
-
-  /* When scrolled, show fade on both sides */
-  .verb-palette-container.scrolled-start {
-    mask-image: linear-gradient(
-      to right,
-      black 0%,
-      black calc(100% - 32px),
-      transparent 100%
-    );
-    -webkit-mask-image: linear-gradient(
-      to right,
-      black 0%,
-      black calc(100% - 32px),
-      transparent 100%
-    );
-  }
-
-  .verb-palette-container.scrolled-middle {
-    mask-image: linear-gradient(
-      to right,
-      transparent 0%,
-      black 32px,
-      black calc(100% - 32px),
-      transparent 100%
-    );
-    -webkit-mask-image: linear-gradient(
-      to right,
-      transparent 0%,
-      black 32px,
-      black calc(100% - 32px),
-      transparent 100%
-    );
-  }
-
-  .verb-palette-container.scrolled-end {
-    mask-image: linear-gradient(
-      to right,
-      transparent 0%,
-      black 32px,
-      black 100%
-    );
-    -webkit-mask-image: linear-gradient(
-      to right,
-      transparent 0%,
-      black 32px,
-      black 100%
-    );
-  }
-
-  .verb-palette-container.no-overflow {
-    mask-image: none;
-    -webkit-mask-image: none;
-  }
-
   .verb-palette {
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    padding: 4px 24px 4px 4px; /* Extra right padding for fade area */
     scroll-snap-type: x proximity;
-  }
-
-  .verb-palette::-webkit-scrollbar {
-    display: none;
   }
 
   .verb-chip {
     padding: 8px 16px;
     font-size: 0.9em;
     scroll-snap-align: start;
-    flex-shrink: 0;
     touch-action: pan-x; /* Allow horizontal scroll, capture vertical gestures */
   }
 

@@ -1366,7 +1366,7 @@ function AppContent({
     }, [authToken, eventLogEnabled, fetchMoreHistory, isLoadingHistory, narrativeRef]);
 
     return (
-        <div style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div className="app-root">
             {/* Screen reader heading for main application */}
             <h1 className="sr-only">mooR Web Client</h1>
 

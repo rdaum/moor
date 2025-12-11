@@ -630,6 +630,7 @@
   bottom: 0 !important;
   width: 100vw !important;
   height: 100vh !important;
+  height: 100dvh !important;
   z-index: 1001 !important;
   border: none !important;
   border-radius: 0 !important;
