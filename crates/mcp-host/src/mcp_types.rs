@@ -253,7 +253,25 @@ pub struct ToolCallResult {
 impl ToolCallResult {
     pub fn text(text: impl Into<String>) -> Self {
         Self {
-            content: vec![ToolContent::Text { text: text.into() }],
+            content: vec![ToolContent::Text {
+                text: text.into(),
+                mime_type: None,
+                annotations: None,
+            }],
+            is_error: None,
+        }
+    }
+
+    pub fn markdown(text: impl Into<String>) -> Self {
+        Self {
+            content: vec![ToolContent::Text {
+                text: text.into(),
+                mime_type: Some("text/markdown".to_string()),
+                annotations: Some(ContentAnnotations {
+                    audience: Some(vec!["user".to_string(), "assistant".to_string()]),
+                    priority: Some(1.0),
+                }),
+            }],
             is_error: None,
         }
     }
@@ -262,19 +280,45 @@ impl ToolCallResult {
         Self {
             content: vec![ToolContent::Text {
                 text: message.into(),
+                mime_type: None,
+                annotations: None,
             }],
             is_error: Some(true),
         }
     }
 }
 
+/// Annotations for content items - hints for client display behavior
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ContentAnnotations {
+    /// Intended audience: "user", "assistant", or both
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audience: Option<Vec<String>>,
+    /// Priority from 0.0 (least) to 1.0 (most important)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<f64>,
+}
+
 /// Tool content item
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ToolContent {
-    Text { text: String },
-    Image { data: String, mime_type: String },
-    Resource { resource: ResourceContents },
+    Text {
+        text: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(rename = "mimeType")]
+        mime_type: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        annotations: Option<ContentAnnotations>,
+    },
+    Image {
+        data: String,
+        #[serde(rename = "mimeType")]
+        mime_type: String,
+    },
+    Resource {
+        resource: ResourceContents,
+    },
 }
 
 // ============================================================================

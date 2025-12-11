@@ -18,7 +18,7 @@
 
 use eyre::{Result, eyre};
 use moor_common::model::ObjectRef;
-use moor_common::tasks::Event;
+use moor_common::tasks::{Event, Exception, SchedulerError};
 use moor_schema::convert::{narrative_event_from_ref, var_from_flatbuffer_ref};
 use moor_schema::rpc as moor_rpc;
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
@@ -27,16 +27,19 @@ use rpc_async_client::pubsub_client::events_recv;
 use rpc_async_client::rpc_client::{CurveKeys, RpcClient};
 use rpc_async_client::zmq;
 use rpc_common::{
-    AuthToken, ClientToken, mk_command_msg, mk_connection_establish_msg, mk_detach_msg,
+    AuthToken, ClientToken, RpcError, mk_command_msg, mk_connection_establish_msg, mk_detach_msg,
     mk_eval_msg, mk_invoke_verb_msg, mk_list_objects_msg, mk_program_msg, mk_properties_msg,
-    mk_resolve_msg, mk_retrieve_msg, mk_update_property_msg, mk_verbs_msg,
+    mk_resolve_msg, mk_retrieve_msg, mk_update_property_msg, mk_verbs_msg, scheduler_error_from_ref,
 };
 use std::sync::Arc;
 use std::time::Duration;
 use tmq::subscribe;
 use tokio::time::timeout;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
+
+/// Timeout for RPC operations (connect, login, etc.)
+const RPC_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Configuration for connecting to the mooR daemon
 #[derive(Debug, Clone)]
@@ -121,9 +124,115 @@ impl MoorClient {
         })
     }
 
+    /// Make an RPC call with timeout and improved error handling
+    async fn rpc_call_with_timeout(
+        &self,
+        msg: moor_rpc::HostClientToDaemonMessage,
+        operation: &str,
+    ) -> Result<Vec<u8>> {
+        match timeout(
+            RPC_TIMEOUT,
+            self.rpc_client.make_client_rpc_call(self.client_id, msg),
+        )
+        .await
+        {
+            Ok(Ok(bytes)) => Ok(bytes),
+            Ok(Err(rpc_error)) => {
+                let error_msg =
+                    Self::format_rpc_error(&rpc_error, operation, &self.config.rpc_address);
+                error!("{}", error_msg);
+                Err(eyre!(error_msg))
+            }
+            Err(_elapsed) => {
+                let error_msg = format!(
+                    "{} timed out after {:?}. The mooR daemon at {} may be down or unreachable.",
+                    operation, RPC_TIMEOUT, self.config.rpc_address
+                );
+                error!("{}", error_msg);
+                Err(eyre!(error_msg))
+            }
+        }
+    }
+
+    /// Format an RPC error into a user-friendly message
+    fn format_rpc_error(error: &RpcError, operation: &str, address: &str) -> String {
+        match error {
+            RpcError::CouldNotSend(msg) => {
+                format!(
+                    "{} failed: could not send request to daemon at {}. \
+                     The daemon may be down or the network unreachable. Details: {}",
+                    operation, address, msg
+                )
+            }
+            RpcError::CouldNotReceive(msg) => {
+                format!(
+                    "{} failed: no response from daemon at {}. \
+                     The daemon may have crashed, restarted, or be overloaded. Details: {}",
+                    operation, address, msg
+                )
+            }
+            RpcError::Fatal(msg) => {
+                format!(
+                    "{} failed with fatal error: {}. \
+                     This may indicate a configuration problem.",
+                    operation, msg
+                )
+            }
+            RpcError::ConnectionLost(msg) => {
+                format!(
+                    "{} failed: connection to daemon at {} was lost. \
+                     The daemon may have restarted. Details: {}",
+                    operation, address, msg
+                )
+            }
+            RpcError::Timeout(msg) => {
+                format!(
+                    "{} timed out waiting for daemon at {}. \
+                     The daemon may be overloaded or unresponsive. Details: {}",
+                    operation, address, msg
+                )
+            }
+            RpcError::CouldNotInitiateSession(msg)
+            | RpcError::AuthenticationError(msg)
+            | RpcError::CouldNotDecode(msg)
+            | RpcError::Recoverable(msg)
+            | RpcError::UnexpectedReply(msg) => {
+                format!("{} failed: {}", operation, msg)
+            }
+        }
+    }
+
+    /// Check if the connection to the daemon is healthy
+    ///
+    /// Returns Ok(()) if we can successfully communicate with the daemon,
+    /// or an error describing why the connection failed.
+    pub async fn check_connection(&self) -> Result<()> {
+        if self.client_token.is_none() {
+            return Err(eyre!("Not connected to daemon (no client token)"));
+        }
+
+        // Try a simple eval to verify the connection is working
+        // This is a lightweight operation that should complete quickly
+        let auth_token = match &self.auth_token {
+            Some(token) => token,
+            None => return Err(eyre!("Not authenticated (no auth token)")),
+        };
+
+        let client_token = self.client_token.as_ref().unwrap();
+        let eval_msg = mk_eval_msg(client_token, auth_token, "1".to_string());
+
+        self.rpc_call_with_timeout(eval_msg, "Connection health check")
+            .await?;
+
+        Ok(())
+    }
+
     /// Establish a connection to the mooR daemon
     pub async fn connect(&mut self) -> Result<()> {
-        info!("Establishing connection to mooR daemon...");
+        info!(
+            "Establishing connection to mooR daemon at {}...",
+            self.config.rpc_address
+        );
 
         // Create a connection establish message
         let content_types = vec![moor_rpc::Symbol {
@@ -139,10 +248,8 @@ impl MoorClient {
         );
 
         let reply_bytes = self
-            .rpc_client
-            .make_client_rpc_call(self.client_id, establish_msg)
-            .await
-            .map_err(|e| eyre!("Failed to establish connection: {}", e))?;
+            .rpc_call_with_timeout(establish_msg, "Connection establishment")
+            .await?;
 
         let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
@@ -191,78 +298,7 @@ impl MoorClient {
     pub async fn login(&mut self, username: &str, password: &str) -> Result<()> {
         // Store credentials for reconnection
         self.stored_credentials = Some((username.to_string(), password.to_string()));
-
-        let client_token = self
-            .client_token
-            .as_ref()
-            .ok_or_else(|| eyre!("Not connected - call connect() first"))?;
-
-        // Use login_command to authenticate
-        let login_msg = rpc_common::mk_login_command_msg(
-            client_token,
-            &self.handler_object,
-            vec![
-                "connect".to_string(),
-                username.to_string(),
-                password.to_string(),
-            ],
-            true,
-        );
-
-        let reply_bytes = self
-            .rpc_client
-            .make_client_rpc_call(self.client_id, login_msg)
-            .await
-            .map_err(|e| eyre!("Login failed: {}", e))?;
-
-        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
-            .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
-
-        match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
-            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
-                let daemon_reply = client_success
-                    .reply()
-                    .map_err(|e| eyre!("Missing reply: {}", e))?;
-                match daemon_reply
-                    .reply()
-                    .map_err(|e| eyre!("Missing reply union: {}", e))?
-                {
-                    moor_rpc::DaemonToClientReplyUnionRef::LoginResult(login_result) => {
-                        if login_result.success().unwrap_or(false) {
-                            if let Ok(Some(auth_token_ref)) = login_result.auth_token() {
-                                self.auth_token = Some(AuthToken(
-                                    auth_token_ref
-                                        .token()
-                                        .map_err(|e| eyre!("Missing auth token: {}", e))?
-                                        .to_string(),
-                                ));
-                            }
-                            if let Ok(Some(player_ref)) = login_result.player() {
-                                self.player = Some(
-                                    moor_schema::convert::obj_from_ref(player_ref)
-                                        .map_err(|e| eyre!("Failed to decode player: {}", e))?,
-                                );
-                            }
-                            info!("Logged in as {:?}", self.player);
-                            Ok(())
-                        } else {
-                            Err(eyre!("Login failed"))
-                        }
-                    }
-                    _ => Err(eyre!("Unexpected login response")),
-                }
-            }
-            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error = failure
-                    .error()
-                    .ok()
-                    .and_then(|e| e.message().ok().flatten())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown error".to_string());
-                Err(eyre!("Login failed: {}", error))
-            }
-            _ => Err(eyre!("Unexpected response type")),
-        }
+        self.perform_login(username, password, false).await
     }
 
     /// Check if we're authenticated
@@ -301,7 +337,7 @@ impl MoorClient {
         // Re-authenticate if we have stored credentials
         if let Some((username, password)) = self.stored_credentials.clone() {
             info!("Re-authenticating as {}...", username);
-            self.login_internal(&username, &password).await?;
+            self.perform_login(&username, &password, true).await?;
             info!("Successfully re-authenticated as {}", username);
         }
 
@@ -344,8 +380,13 @@ impl MoorClient {
         unreachable!()
     }
 
-    /// Internal login that doesn't store credentials (for reconnection)
-    async fn login_internal(&mut self, username: &str, password: &str) -> Result<()> {
+    /// Perform login - shared implementation for login() and reconnect
+    async fn perform_login(
+        &mut self,
+        username: &str,
+        password: &str,
+        is_reconnect: bool,
+    ) -> Result<()> {
         let client_token = self
             .client_token
             .as_ref()
@@ -362,11 +403,13 @@ impl MoorClient {
             true,
         );
 
-        let reply_bytes = self
-            .rpc_client
-            .make_client_rpc_call(self.client_id, login_msg)
-            .await
-            .map_err(|e| eyre!("Login failed: {}", e))?;
+        let operation = if is_reconnect {
+            format!("Re-login as '{}'", username)
+        } else {
+            format!("Login as '{}'", username)
+        };
+
+        let reply_bytes = self.rpc_call_with_timeout(login_msg, &operation).await?;
 
         let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
@@ -381,25 +424,27 @@ impl MoorClient {
                     .map_err(|e| eyre!("Missing reply union: {}", e))?
                 {
                     moor_rpc::DaemonToClientReplyUnionRef::LoginResult(login_result) => {
-                        if login_result.success().unwrap_or(false) {
-                            if let Ok(Some(auth_token_ref)) = login_result.auth_token() {
-                                self.auth_token = Some(AuthToken(
-                                    auth_token_ref
-                                        .token()
-                                        .map_err(|e| eyre!("Missing auth token: {}", e))?
-                                        .to_string(),
-                                ));
-                            }
-                            if let Ok(Some(player_ref)) = login_result.player() {
-                                self.player = Some(
-                                    moor_schema::convert::obj_from_ref(player_ref)
-                                        .map_err(|e| eyre!("Failed to decode player: {}", e))?,
-                                );
-                            }
-                            Ok(())
-                        } else {
-                            Err(eyre!("Login failed"))
+                        if !login_result.success().unwrap_or(false) {
+                            return Err(eyre!("Login failed"));
                         }
+                        if let Ok(Some(auth_token_ref)) = login_result.auth_token() {
+                            self.auth_token = Some(AuthToken(
+                                auth_token_ref
+                                    .token()
+                                    .map_err(|e| eyre!("Missing auth token: {}", e))?
+                                    .to_string(),
+                            ));
+                        }
+                        if let Ok(Some(player_ref)) = login_result.player() {
+                            self.player = Some(
+                                moor_schema::convert::obj_from_ref(player_ref)
+                                    .map_err(|e| eyre!("Failed to decode player: {}", e))?,
+                            );
+                        }
+                        if !is_reconnect {
+                            info!("Logged in as {:?}", self.player);
+                        }
+                        Ok(())
                     }
                     _ => Err(eyre!("Unexpected login response")),
                 }
@@ -430,11 +475,7 @@ impl MoorClient {
 
         let eval_msg = mk_eval_msg(client_token, auth_token, expression.to_string());
 
-        let reply_bytes = self
-            .rpc_client
-            .make_client_rpc_call(self.client_id, eval_msg)
-            .await
-            .map_err(|e| eyre!("Eval failed: {}", e))?;
+        let reply_bytes = self.rpc_call_with_timeout(eval_msg, "Eval").await?;
 
         self.parse_eval_result(&reply_bytes)
     }
@@ -466,10 +507,8 @@ impl MoorClient {
         );
 
         let reply_bytes = self
-            .rpc_client
-            .make_client_rpc_call(self.client_id, cmd_msg)
-            .await
-            .map_err(|e| eyre!("Command failed: {}", e))?;
+            .rpc_call_with_timeout(cmd_msg, "Command submission")
+            .await?;
 
         // Extract task_id from TaskSubmitted response
         let task_id = self.extract_task_id(&reply_bytes)?;
@@ -519,10 +558,8 @@ impl MoorClient {
                 .ok_or_else(|| eyre!("Failed to create invoke message"))?;
 
         let reply_bytes = self
-            .rpc_client
-            .make_client_rpc_call(self.client_id, invoke_msg)
-            .await
-            .map_err(|e| eyre!("Invoke failed: {}", e))?;
+            .rpc_call_with_timeout(invoke_msg, "Verb invoke")
+            .await?;
 
         // Extract task_id from TaskSubmitted response
         let task_id = self.extract_task_id(&reply_bytes)?;
@@ -665,10 +702,8 @@ impl MoorClient {
                         let error_msg = error_event
                             .error()
                             .ok()
-                            .and_then(|error_ref| {
-                                rpc_common::scheduler_error_from_ref(error_ref).ok()
-                            })
-                            .map(|e| e.to_string())
+                            .and_then(|error_ref| scheduler_error_from_ref(error_ref).ok())
+                            .map(|e| format_scheduler_error(&e))
                             .unwrap_or_else(|| "Unknown error".to_string());
                         warn!("Task {} failed: {}", task_id, error_msg);
                         return Ok(TaskResult {
@@ -699,11 +734,7 @@ impl MoorClient {
 
         let verbs_msg = mk_verbs_msg(auth_token, object, inherited);
 
-        let reply_bytes = self
-            .rpc_client
-            .make_client_rpc_call(self.client_id, verbs_msg)
-            .await
-            .map_err(|e| eyre!("List verbs failed: {}", e))?;
+        let reply_bytes = self.rpc_call_with_timeout(verbs_msg, "List verbs").await?;
 
         let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
@@ -813,10 +844,8 @@ impl MoorClient {
         );
 
         let reply_bytes = self
-            .rpc_client
-            .make_client_rpc_call(self.client_id, retrieve_msg)
-            .await
-            .map_err(|e| eyre!("Get verb failed: {}", e))?;
+            .rpc_call_with_timeout(retrieve_msg, &format!("Get verb '{}'", verb_name))
+            .await?;
 
         let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
@@ -883,10 +912,8 @@ impl MoorClient {
         );
 
         let reply_bytes = self
-            .rpc_client
-            .make_client_rpc_call(self.client_id, program_msg)
-            .await
-            .map_err(|e| eyre!("Program verb failed: {}", e))?;
+            .rpc_call_with_timeout(program_msg, &format!("Program verb '{}'", verb_name))
+            .await?;
 
         let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
@@ -944,10 +971,8 @@ impl MoorClient {
         let props_msg = mk_properties_msg(auth_token, object, inherited);
 
         let reply_bytes = self
-            .rpc_client
-            .make_client_rpc_call(self.client_id, props_msg)
-            .await
-            .map_err(|e| eyre!("List properties failed: {}", e))?;
+            .rpc_call_with_timeout(props_msg, "List properties")
+            .await?;
 
         let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
@@ -1032,10 +1057,8 @@ impl MoorClient {
         );
 
         let reply_bytes = self
-            .rpc_client
-            .make_client_rpc_call(self.client_id, retrieve_msg)
-            .await
-            .map_err(|e| eyre!("Get property failed: {}", e))?;
+            .rpc_call_with_timeout(retrieve_msg, &format!("Get property '{}'", prop_name))
+            .await?;
 
         let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
@@ -1088,10 +1111,8 @@ impl MoorClient {
             .ok_or_else(|| eyre!("Failed to create update message"))?;
 
         let reply_bytes = self
-            .rpc_client
-            .make_client_rpc_call(self.client_id, update_msg)
-            .await
-            .map_err(|e| eyre!("Set property failed: {}", e))?;
+            .rpc_call_with_timeout(update_msg, &format!("Set property '{}'", prop_name))
+            .await?;
 
         let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
@@ -1120,11 +1141,7 @@ impl MoorClient {
 
         let list_msg = mk_list_objects_msg(auth_token);
 
-        let reply_bytes = self
-            .rpc_client
-            .make_client_rpc_call(self.client_id, list_msg)
-            .await
-            .map_err(|e| eyre!("List objects failed: {}", e))?;
+        let reply_bytes = self.rpc_call_with_timeout(list_msg, "List objects").await?;
 
         let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
@@ -1211,10 +1228,8 @@ impl MoorClient {
         let resolve_msg = mk_resolve_msg(auth_token, objref);
 
         let reply_bytes = self
-            .rpc_client
-            .make_client_rpc_call(self.client_id, resolve_msg)
-            .await
-            .map_err(|e| eyre!("Resolve failed: {}", e))?;
+            .rpc_call_with_timeout(resolve_msg, "Resolve object")
+            .await?;
 
         let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
@@ -1252,7 +1267,6 @@ impl MoorClient {
     }
 
     /// Disconnect from the daemon
-    #[allow(dead_code)]
     pub async fn disconnect(&mut self) -> Result<()> {
         if let Some(client_token) = &self.client_token {
             let detach_msg = mk_detach_msg(client_token, true);
@@ -1301,14 +1315,16 @@ impl MoorClient {
                         .map(|c| format!("{:?}", c))
                         .unwrap_or_else(|| "Unknown".to_string());
                     let message = err.message().ok().flatten().map(|s| s.to_string());
-                    // Check if there's a scheduler error with more details
-                    let sched_err = err.scheduler_error().ok().flatten().and_then(|se| {
-                        // Try to get the error variant name
-                        se.error().ok().map(|e| format!("{:?}", e))
+
+                    // Try to parse and format the scheduler error properly
+                    let sched_err_formatted = err.scheduler_error().ok().flatten().and_then(|se| {
+                        scheduler_error_from_ref(se)
+                            .ok()
+                            .map(|sched_err| format_scheduler_error(&sched_err))
                     });
 
-                    match (message, sched_err) {
-                        (Some(msg), Some(sched)) => format!("{}: {} ({})", code, msg, sched),
+                    match (message, sched_err_formatted) {
+                        (Some(msg), Some(sched)) => format!("{}: {}\n\n{}", code, msg, sched),
                         (Some(msg), None) => format!("{}: {}", code, msg),
                         (None, Some(sched)) => format!("{}: {}", code, sched),
                         (None, None) => code,
@@ -1406,4 +1422,58 @@ fn format_var_for_narrative(var: &Var) -> String {
         Variant::Bool(b) => if b { "true" } else { "false" }.to_string(),
         Variant::Flyweight(f) => format!("{:?}", f),
     }
+}
+
+/// Format a SchedulerError into a human-readable message
+fn format_scheduler_error(error: &SchedulerError) -> String {
+    match error {
+        SchedulerError::TaskAbortedException(exception) => format_exception(exception),
+        SchedulerError::TaskAbortedVerbNotFound(obj, verb) => {
+            format!(
+                "Verb not found: {}:{} - no matching verb on object or its ancestors",
+                format_var_for_narrative(obj),
+                verb.as_string()
+            )
+        }
+        SchedulerError::TaskAbortedLimit(reason) => {
+            use moor_common::tasks::AbortLimitReason;
+            match reason {
+                AbortLimitReason::Ticks(t) => format!("Task exceeded tick limit ({} ticks)", t),
+                AbortLimitReason::Time(d) => format!("Task exceeded time limit ({:?})", d),
+            }
+        }
+        SchedulerError::CompilationError(compile_err) => {
+            format!("Compilation error: {}", compile_err)
+        }
+        SchedulerError::CommandExecutionError(cmd_err) => {
+            format!("Command error: {}", cmd_err)
+        }
+        SchedulerError::VerbProgramFailed(verb_err) => {
+            format!("Verb programming failed: {}", verb_err)
+        }
+        // For other errors, the Display impl provides a reasonable message
+        other => other.to_string(),
+    }
+}
+
+/// Format an Exception into a human-readable message with backtrace
+fn format_exception(exception: &Exception) -> String {
+    let mut output = String::new();
+
+    // Format the error itself
+    let err = &exception.error;
+    output.push_str(&format!("{}", err.err_type));
+    if let Some(msg) = &err.msg {
+        output.push_str(&format!(": {}", msg));
+    }
+
+    // Add backtrace if available
+    if !exception.backtrace.is_empty() {
+        output.push_str("\n\nBacktrace:");
+        for line in &exception.backtrace {
+            output.push_str(&format!("\n  {}", format_var_for_narrative(line)));
+        }
+    }
+
+    output
 }

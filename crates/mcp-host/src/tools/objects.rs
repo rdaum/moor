@@ -186,6 +186,53 @@ pub fn tool_moo_set_parent() -> Tool {
     }
 }
 
+pub fn tool_moo_object_flags() -> Tool {
+    Tool {
+        name: "moo_object_flags".to_string(),
+        description: "Get an object's flags (player, programmer, wizard, fertile, readable). \
+            These flags control permissions and behavior."
+            .to_string(),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "object": {
+                    "type": "string",
+                    "description": "Object reference (e.g., '#123', '$player')"
+                }
+            },
+            "required": ["object"]
+        }),
+    }
+}
+
+pub fn tool_moo_set_object_flag() -> Tool {
+    Tool {
+        name: "moo_set_object_flag".to_string(),
+        description: "Set an object flag (player, programmer, wizard, fertile, readable). \
+            Requires appropriate permissions."
+            .to_string(),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "object": {
+                    "type": "string",
+                    "description": "Object reference (e.g., '#123', '$player')"
+                },
+                "flag": {
+                    "type": "string",
+                    "description": "Flag to set: 'player', 'programmer', 'wizard', 'fertile', or 'readable'",
+                    "enum": ["player", "programmer", "wizard", "fertile", "readable"]
+                },
+                "value": {
+                    "type": "boolean",
+                    "description": "True to set the flag, false to clear it"
+                }
+            },
+            "required": ["object", "flag", "value"]
+        }),
+    }
+}
+
 // ============================================================================
 // Tool Implementations
 // ============================================================================
@@ -600,6 +647,95 @@ pub async fn execute_moo_set_parent(
             object_str,
             new_parent_str,
             format_var(&var)
+        ))),
+        MoorResult::Error(msg) => Ok(ToolCallResult::error(msg)),
+    }
+}
+
+pub async fn execute_moo_object_flags(
+    client: &mut MoorClient,
+    args: &Value,
+) -> Result<ToolCallResult> {
+    let object_str = args
+        .get("object")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'object' parameter"))?;
+
+    // Get object flags via properties
+    let expr = format!(
+        r#"return [
+            "player" -> is_player({}),
+            "programmer" -> {}.programmer,
+            "wizard" -> {}.wizard,
+            "fertile" -> {}.f,
+            "readable" -> {}.r
+        ];"#,
+        object_str, object_str, object_str, object_str, object_str
+    );
+
+    match client.eval(&expr).await? {
+        MoorResult::Success(var) => {
+            let mut output = String::new();
+            output.push_str(&format!("Flags for {}:\n\n", object_str));
+
+            if let Some(map) = var.as_map() {
+                for (k, v) in map.iter() {
+                    if let Some(key) = k.as_string() {
+                        let value = if v.as_integer().unwrap_or(0) != 0 {
+                            "true"
+                        } else {
+                            "false"
+                        };
+                        output.push_str(&format!("  {}: {}\n", key, value));
+                    }
+                }
+            }
+            Ok(ToolCallResult::text(output))
+        }
+        MoorResult::Error(msg) => Ok(ToolCallResult::error(msg)),
+    }
+}
+
+pub async fn execute_moo_set_object_flag(
+    client: &mut MoorClient,
+    args: &Value,
+) -> Result<ToolCallResult> {
+    let object_str = args
+        .get("object")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'object' parameter"))?;
+
+    let flag = args
+        .get("flag")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'flag' parameter"))?;
+
+    let value = args
+        .get("value")
+        .and_then(|v| v.as_bool())
+        .ok_or_else(|| eyre::eyre!("Missing 'value' parameter"))?;
+
+    let value_int = if value { 1 } else { 0 };
+
+    // Map flag name to the appropriate setter
+    let expr = match flag {
+        "player" => format!("set_player_flag({}, {});", object_str, value_int),
+        "programmer" => format!("{}.programmer = {};", object_str, value_int),
+        "wizard" => format!("{}.wizard = {};", object_str, value_int),
+        "fertile" => format!("{}.f = {};", object_str, value_int),
+        "readable" => format!("{}.r = {};", object_str, value_int),
+        _ => {
+            return Ok(ToolCallResult::error(format!(
+                "Unknown flag: {}. Valid flags are: player, programmer, wizard, fertile, readable",
+                flag
+            )));
+        }
+    };
+
+    match client.eval(&expr).await? {
+        MoorResult::Success(_) => Ok(ToolCallResult::text(format!(
+            "Set {} flag on {} to {}",
+            flag, object_str, value
         ))),
         MoorResult::Error(msg) => Ok(ToolCallResult::error(msg)),
     }

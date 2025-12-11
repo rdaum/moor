@@ -31,6 +31,7 @@ const PROTOCOL_VERSION: &str = "2024-11-05";
 pub struct McpServer {
     connections: ConnectionManager,
     initialized: bool,
+    shutdown_requested: bool,
 }
 
 impl McpServer {
@@ -39,6 +40,7 @@ impl McpServer {
         Self {
             connections,
             initialized: false,
+            shutdown_requested: false,
         }
     }
 
@@ -87,7 +89,16 @@ impl McpServer {
                 stdout.write_all(b"\n").await?;
                 stdout.flush().await?;
             }
+
+            // Exit after responding to shutdown request
+            if self.shutdown_requested {
+                info!("Shutdown complete");
+                break;
+            }
         }
+
+        // Gracefully disconnect from daemon
+        self.connections.disconnect_all().await;
 
         Ok(())
     }
@@ -124,6 +135,7 @@ impl McpServer {
             }
             "shutdown" => {
                 info!("Shutdown requested");
+                self.shutdown_requested = true;
                 Ok(json!({}))
             }
 

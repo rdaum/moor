@@ -11,11 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Verb tools: list, get, program, add, delete, find_definition
+//! Verb tools: list, get, program, add, delete, find_definition, set_verb_info, set_verb_args
 
 use crate::mcp_types::{Tool, ToolCallResult};
 use crate::moor_client::{MoorClient, MoorResult};
 use eyre::Result;
+use moor_var::Sequence;
 use serde_json::{Value, json};
 
 use super::helpers::{format_var, parse_object_ref, var_key_eq};
@@ -187,6 +188,76 @@ pub fn tool_moo_find_verb_definition() -> Tool {
     }
 }
 
+pub fn tool_moo_set_verb_info() -> Tool {
+    Tool {
+        name: "moo_set_verb_info".to_string(),
+        description: "Set a verb's metadata (owner, permissions, names) without reprogramming it. \
+            This allows changing verb permissions or adding aliases without modifying the code."
+            .to_string(),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "object": {
+                    "type": "string",
+                    "description": "Object reference (e.g., '#123', '$player')"
+                },
+                "verb": {
+                    "type": "string",
+                    "description": "Current verb name"
+                },
+                "owner": {
+                    "type": "string",
+                    "description": "New owner object reference (optional, keeps current if not specified)"
+                },
+                "permissions": {
+                    "type": "string",
+                    "description": "New permission flags: r=read, w=write, x=execute, d=debug (optional)"
+                },
+                "names": {
+                    "type": "string",
+                    "description": "New verb name(s), space-separated for aliases (optional)"
+                }
+            },
+            "required": ["object", "verb"]
+        }),
+    }
+}
+
+pub fn tool_moo_set_verb_args() -> Tool {
+    Tool {
+        name: "moo_set_verb_args".to_string(),
+        description: "Set a verb's argument specification (dobj, prep, iobj) without reprogramming it. \
+            This controls how the verb matches commands."
+            .to_string(),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "object": {
+                    "type": "string",
+                    "description": "Object reference (e.g., '#123', '$player')"
+                },
+                "verb": {
+                    "type": "string",
+                    "description": "Verb name"
+                },
+                "dobj": {
+                    "type": "string",
+                    "description": "Direct object spec: 'this', 'any', or 'none'"
+                },
+                "prep": {
+                    "type": "string",
+                    "description": "Preposition: 'any', 'none', or specific like 'with/using', 'in/inside', etc."
+                },
+                "iobj": {
+                    "type": "string",
+                    "description": "Indirect object spec: 'this', 'any', or 'none'"
+                }
+            },
+            "required": ["object", "verb", "dobj", "prep", "iobj"]
+        }),
+    }
+}
+
 // ============================================================================
 // Tool Implementations
 // ============================================================================
@@ -245,7 +316,7 @@ pub async fn execute_moo_get_verb(client: &mut MoorClient, args: &Value) -> Resu
     );
 
     let mut output = String::new();
-    output.push_str(&format!("Verb {}:{}\n", object_str, verb.name));
+    output.push_str(&format!("## Verb `{}:{}`\n\n", object_str, verb.name));
 
     // Try to get metadata, but don't fail if we can't
     if let Ok(MoorResult::Success(var)) = client.eval(&expr).await
@@ -267,16 +338,18 @@ pub async fn execute_moo_get_verb(client: &mut MoorClient, args: &Value) -> Resu
             .map(|(_, v)| format_var(&v))
             .unwrap_or_default();
         output.push_str(&format!(
-            "  Owner: {}, Flags: {}, Names: {}\n",
+            "**Owner:** {} | **Flags:** {} | **Names:** {}\n\n",
             owner, flags, names
         ));
     }
 
-    output.push('\n');
-    for (i, line) in verb.code.iter().enumerate() {
-        output.push_str(&format!("{:3}: {}\n", i + 1, line));
+    output.push_str("```moo\n");
+    for line in &verb.code {
+        output.push_str(line);
+        output.push('\n');
     }
-    Ok(ToolCallResult::text(output))
+    output.push_str("```\n");
+    Ok(ToolCallResult::markdown(output))
 }
 
 pub async fn execute_moo_program_verb(
@@ -308,15 +381,17 @@ pub async fn execute_moo_program_verb(
         .program_verb(&object, verb_name, code.clone())
         .await?;
 
-    // Format output with line numbers for review
+    // Format output with markdown
     let mut output = format!(
-        "Successfully programmed {}:{} ({} lines)\n\n",
+        "✓ Successfully programmed `{}:{}` ({} lines)\n\n```moo\n",
         object_str, verb_name, line_count
     );
-    for (i, line) in code.iter().enumerate() {
-        output.push_str(&format!("{:3}: {}\n", i + 1, line));
+    for line in &code {
+        output.push_str(line);
+        output.push('\n');
     }
-    Ok(ToolCallResult::text(output))
+    output.push_str("```\n");
+    Ok(ToolCallResult::markdown(output))
 }
 
 pub async fn execute_moo_add_verb(client: &mut MoorClient, args: &Value) -> Result<ToolCallResult> {
@@ -532,6 +607,125 @@ pub async fn execute_moo_find_verb_definition(
                 Ok(ToolCallResult::text(format_var(&var)))
             }
         }
+        MoorResult::Error(msg) => Ok(ToolCallResult::error(msg)),
+    }
+}
+
+pub async fn execute_moo_set_verb_info(
+    client: &mut MoorClient,
+    args: &Value,
+) -> Result<ToolCallResult> {
+    let object_str = args
+        .get("object")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'object' parameter"))?;
+
+    let verb_name = args
+        .get("verb")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'verb' parameter"))?;
+
+    let escaped_verb = verb_name.replace('\\', "\\\\").replace('"', "\\\"");
+
+    // Get current info first
+    let get_info_expr = format!(
+        r#"return verb_info({}, "{}");"#,
+        object_str, escaped_verb
+    );
+
+    let current_info = match client.eval(&get_info_expr).await? {
+        MoorResult::Success(var) => {
+            if let Some(list) = var.as_list() {
+                if list.len() >= 3 {
+                    (
+                        format_var(&list[0]), // owner
+                        format_var(&list[1]), // perms
+                        format_var(&list[2]), // names
+                    )
+                } else {
+                    return Ok(ToolCallResult::error("Invalid verb_info result"));
+                }
+            } else {
+                return Ok(ToolCallResult::error("verb_info did not return a list"));
+            }
+        }
+        MoorResult::Error(msg) => return Ok(ToolCallResult::error(msg)),
+    };
+
+    // Build new values, using provided or keeping current
+    let new_owner = args
+        .get("owner")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or(current_info.0);
+
+    let new_perms = args
+        .get("permissions")
+        .and_then(|v| v.as_str())
+        .map(|s| format!("\"{}\"", s))
+        .unwrap_or(current_info.1);
+
+    let new_names = args
+        .get("names")
+        .and_then(|v| v.as_str())
+        .map(|s| format!("\"{}\"", s))
+        .unwrap_or(current_info.2);
+
+    let set_info_expr = format!(
+        r#"set_verb_info({}, "{}", {{{}, {}, {}}});"#,
+        object_str, escaped_verb, new_owner, new_perms, new_names
+    );
+
+    match client.eval(&set_info_expr).await? {
+        MoorResult::Success(_) => Ok(ToolCallResult::text(format!(
+            "Successfully updated verb info for {}:{}\n  Owner: {}\n  Permissions: {}\n  Names: {}",
+            object_str, verb_name, new_owner, new_perms, new_names
+        ))),
+        MoorResult::Error(msg) => Ok(ToolCallResult::error(msg)),
+    }
+}
+
+pub async fn execute_moo_set_verb_args(
+    client: &mut MoorClient,
+    args: &Value,
+) -> Result<ToolCallResult> {
+    let object_str = args
+        .get("object")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'object' parameter"))?;
+
+    let verb_name = args
+        .get("verb")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'verb' parameter"))?;
+
+    let dobj = args
+        .get("dobj")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'dobj' parameter"))?;
+
+    let prep = args
+        .get("prep")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'prep' parameter"))?;
+
+    let iobj = args
+        .get("iobj")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'iobj' parameter"))?;
+
+    let escaped_verb = verb_name.replace('\\', "\\\\").replace('"', "\\\"");
+
+    let expr = format!(
+        r#"set_verb_args({}, "{}", {{"{}","{}","{}"}});"#,
+        object_str, escaped_verb, dobj, prep, iobj
+    );
+
+    match client.eval(&expr).await? {
+        MoorResult::Success(_) => Ok(ToolCallResult::text(format!(
+            "Successfully updated verb args for {}:{}\n  dobj: {}\n  prep: {}\n  iobj: {}",
+            object_str, verb_name, dobj, prep, iobj
+        ))),
         MoorResult::Error(msg) => Ok(ToolCallResult::error(msg)),
     }
 }

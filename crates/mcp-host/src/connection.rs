@@ -18,7 +18,7 @@
 
 use crate::moor_client::{MoorClient, MoorClientConfig};
 use eyre::{Result, eyre};
-use tracing::{info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Credentials for connecting to the mooR daemon
 #[derive(Debug, Clone)]
@@ -53,24 +53,25 @@ impl ConnectionManager {
     }
 
     /// Get the programmer (default) client, creating it lazily if needed
+    ///
+    /// If the connection exists but has become stale, automatically reconnects.
     pub async fn programmer(&mut self) -> Result<&mut MoorClient> {
-        if self.programmer_client.is_none() {
-            self.programmer_client = Some(self.create_and_connect(false).await?);
-        }
+        self.ensure_healthy_connection(false).await?;
         Ok(self.programmer_client.as_mut().unwrap())
     }
 
     /// Get the wizard client, creating it lazily if needed
+    ///
+    /// If the connection exists but has become stale, automatically reconnects.
     pub async fn wizard(&mut self) -> Result<&mut MoorClient> {
-        if self.wizard_client.is_none() {
-            self.wizard_client = Some(self.create_and_connect(true).await?);
-        }
+        self.ensure_healthy_connection(true).await?;
         Ok(self.wizard_client.as_mut().unwrap())
     }
 
     /// Get the appropriate client based on whether wizard privileges are requested
     ///
     /// Falls back to programmer connection if wizard is not configured.
+    /// Verifies connection health and auto-reconnects if needed.
     pub async fn get(&mut self, wizard: bool) -> Result<&mut MoorClient> {
         if wizard {
             // Check if wizard credentials are configured
@@ -81,6 +82,91 @@ impl ConnectionManager {
             warn!("Wizard connection requested but not configured, using programmer connection");
         }
         self.programmer().await
+    }
+
+    /// Ensure we have a healthy connection, creating or reconnecting as needed
+    async fn ensure_healthy_connection(&mut self, wizard: bool) -> Result<()> {
+        let role = if wizard { "wizard" } else { "programmer" };
+
+        // Check if client exists
+        let client_exists = if wizard {
+            self.wizard_client.is_some()
+        } else {
+            self.programmer_client.is_some()
+        };
+
+        // If no client exists, create one
+        if !client_exists {
+            debug!("No {} client exists, creating new connection", role);
+            let client = self.create_and_connect(wizard).await?;
+            if wizard {
+                self.wizard_client = Some(client);
+            } else {
+                self.programmer_client = Some(client);
+            }
+            return Ok(());
+        }
+
+        // Client exists, verify it's healthy
+        debug!("Checking {} connection health...", role);
+        let health_result = {
+            let client = if wizard {
+                self.wizard_client.as_ref().unwrap()
+            } else {
+                self.programmer_client.as_ref().unwrap()
+            };
+            client.check_connection().await
+        };
+
+        match health_result {
+            Ok(()) => {
+                debug!("{} connection is healthy", role);
+                Ok(())
+            }
+            Err(e) => {
+                warn!(
+                    "{} connection health check failed: {}. Attempting reconnect...",
+                    role, e
+                );
+
+                // Try to reconnect
+                let reconnect_result = {
+                    let client = if wizard {
+                        self.wizard_client.as_mut().unwrap()
+                    } else {
+                        self.programmer_client.as_mut().unwrap()
+                    };
+                    client.reconnect_with_backoff(3).await
+                };
+
+                match reconnect_result {
+                    Ok(()) => {
+                        info!("{} connection restored", role);
+                        Ok(())
+                    }
+                    Err(reconnect_err) => {
+                        error!(
+                            "Failed to restore {} connection: {}. Recreating client...",
+                            role, reconnect_err
+                        );
+
+                        // Last resort: recreate the client entirely
+                        if wizard {
+                            self.wizard_client = None;
+                        } else {
+                            self.programmer_client = None;
+                        }
+                        let new_client = self.create_and_connect(wizard).await?;
+                        if wizard {
+                            self.wizard_client = Some(new_client);
+                        } else {
+                            self.programmer_client = Some(new_client);
+                        }
+                        Ok(())
+                    }
+                }
+            }
+        }
     }
 
     /// Check if any client is authenticated
@@ -146,6 +232,23 @@ impl ConnectionManager {
         } else {
             Err(eyre!("Programmer connection not established"))
         }
+    }
+
+    /// Gracefully disconnect all active connections
+    pub async fn disconnect_all(&mut self) {
+        if let Some(client) = &mut self.programmer_client
+            && let Err(e) = client.disconnect().await
+        {
+            warn!("Error disconnecting programmer client: {}", e);
+        }
+        if let Some(client) = &mut self.wizard_client
+            && let Err(e) = client.disconnect().await
+        {
+            warn!("Error disconnecting wizard client: {}", e);
+        }
+        self.programmer_client = None;
+        self.wizard_client = None;
+        info!("All connections disconnected");
     }
 
     /// Create and connect a client

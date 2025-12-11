@@ -58,12 +58,15 @@ pub fn get_tools() -> Vec<Tool> {
         with_wizard_param(objects::tool_moo_list_objects()),
         with_wizard_param(objects::tool_moo_resolve()),
         with_wizard_param(objects::tool_moo_object_graph()),
+        with_wizard_param(objects::tool_moo_object_flags()),
         // Verb tools
         with_wizard_param(verbs::tool_moo_list_verbs()),
         with_wizard_param(verbs::tool_moo_get_verb()),
         with_wizard_param(verbs::tool_moo_program_verb()),
         with_wizard_param(verbs::tool_moo_add_verb()),
         with_wizard_param(verbs::tool_moo_delete_verb()),
+        with_wizard_param(verbs::tool_moo_set_verb_info()),
+        with_wizard_param(verbs::tool_moo_set_verb_args()),
         // Property tools
         with_wizard_param(properties::tool_moo_list_properties()),
         with_wizard_param(properties::tool_moo_get_property()),
@@ -73,6 +76,7 @@ pub fn get_tools() -> Vec<Tool> {
         // Object manipulation tools
         with_wizard_param(objects::tool_moo_create_object()),
         with_wizard_param(objects::tool_moo_recycle_object()),
+        with_wizard_param(objects::tool_moo_set_object_flag()),
         // Object definition (objdef) tools - wizard only
         wizard_required(objdef::tool_moo_dump_object()),
         wizard_required(objdef::tool_moo_load_object()),
@@ -88,6 +92,11 @@ pub fn get_tools() -> Vec<Tool> {
         wizard_required(objdef::tool_moo_diff_object()),
         with_wizard_param(util::tool_moo_notify()),
         with_wizard_param(verbs::tool_moo_find_verb_definition()),
+        // Server/session tools
+        with_wizard_param(util::tool_moo_connected_players()),
+        with_wizard_param(util::tool_moo_server_info()),
+        with_wizard_param(util::tool_moo_queued_tasks()),
+        with_wizard_param(util::tool_moo_kill_task()),
         // Connection management (no wizard param needed - it reconnects both)
         util::tool_moo_reconnect(),
     ]
@@ -111,12 +120,15 @@ pub async fn execute_tool(
         "moo_list_objects" => objects::execute_moo_list_objects(client, arguments).await,
         "moo_resolve" => objects::execute_moo_resolve(client, arguments).await,
         "moo_object_graph" => objects::execute_moo_object_graph(client, arguments).await,
+        "moo_object_flags" => objects::execute_moo_object_flags(client, arguments).await,
         // Verb tools
         "moo_list_verbs" => verbs::execute_moo_list_verbs(client, arguments).await,
         "moo_get_verb" => verbs::execute_moo_get_verb(client, arguments).await,
         "moo_program_verb" => verbs::execute_moo_program_verb(client, arguments).await,
         "moo_add_verb" => verbs::execute_moo_add_verb(client, arguments).await,
         "moo_delete_verb" => verbs::execute_moo_delete_verb(client, arguments).await,
+        "moo_set_verb_info" => verbs::execute_moo_set_verb_info(client, arguments).await,
+        "moo_set_verb_args" => verbs::execute_moo_set_verb_args(client, arguments).await,
         // Property tools
         "moo_list_properties" => properties::execute_moo_list_properties(client, arguments).await,
         "moo_get_property" => properties::execute_moo_get_property(client, arguments).await,
@@ -126,6 +138,7 @@ pub async fn execute_tool(
         // Object manipulation tools
         "moo_create_object" => objects::execute_moo_create_object(client, arguments).await,
         "moo_recycle_object" => objects::execute_moo_recycle_object(client, arguments).await,
+        "moo_set_object_flag" => objects::execute_moo_set_object_flag(client, arguments).await,
         // Objdef tools
         "moo_dump_object" => objdef::execute_moo_dump_object(client, arguments).await,
         "moo_load_object" => objdef::execute_moo_load_object(client, arguments).await,
@@ -143,6 +156,11 @@ pub async fn execute_tool(
         "moo_find_verb_definition" => {
             verbs::execute_moo_find_verb_definition(client, arguments).await
         }
+        // Server/session tools
+        "moo_connected_players" => util::execute_moo_connected_players(client, arguments).await,
+        "moo_server_info" => util::execute_moo_server_info(client, arguments).await,
+        "moo_queued_tasks" => util::execute_moo_queued_tasks(client, arguments).await,
+        "moo_kill_task" => util::execute_moo_kill_task(client, arguments).await,
         // Connection management
         "moo_reconnect" => util::execute_moo_reconnect(client, arguments).await,
         _ => Ok(ToolCallResult::error(format!("Unknown tool: {}", name))),
