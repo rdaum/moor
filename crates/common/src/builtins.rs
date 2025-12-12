@@ -193,15 +193,15 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin(
             "index",
             Q(2),
-            Q(3),
-            vec![Typed(TYPE_STR), Typed(TYPE_STR), Any],
+            Q(4),
+            vec![Typed(TYPE_STR), Typed(TYPE_STR), Any, Typed(TYPE_INT)],
             true,
         ),
         mk_builtin(
             "rindex",
             Q(2),
-            Q(3),
-            vec![Typed(TYPE_STR), Typed(TYPE_STR), Any],
+            Q(4),
+            vec![Typed(TYPE_STR), Typed(TYPE_STR), Any, Typed(TYPE_INT)],
             true,
         ),
         mk_builtin(
@@ -225,7 +225,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin("min", Q(1), U, vec![AnyNum], true),
         mk_builtin("max", Q(1), U, vec![AnyNum], true),
         mk_builtin("abs", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin("random", Q(0), Q(1), vec![Typed(TYPE_INT)], true),
+        mk_builtin(
+            "random",
+            Q(0),
+            Q(2),
+            vec![Typed(TYPE_INT), Typed(TYPE_INT)],
+            true,
+        ),
         mk_builtin("time", Q(0), Q(0), vec![], true),
         mk_builtin("ftime", Q(0), Q(1), vec![Typed(TYPE_INT)], true),
         mk_builtin("ctime", Q(0), Q(1), vec![Typed(TYPE_INT)], true),
@@ -458,7 +464,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
         ),
         mk_builtin("eval", Q(1), Q(3), vec![Typed(TYPE_STR), Any, Any], true),
         mk_builtin("mapkeys", Q(1), Q(1), vec![Typed(TYPE_MAP)], true),
-        mk_builtin("mapvalues", Q(1), Q(1), vec![Typed(TYPE_MAP)], true),
+        mk_builtin("mapvalues", Q(1), U, vec![Typed(TYPE_MAP)], true),
         mk_builtin("mapdelete", Q(2), Q(2), vec![Typed(TYPE_MAP), Any], true),
         mk_builtin("maphaskey", Q(2), Q(2), vec![Typed(TYPE_MAP), Any], true),
         mk_builtin(
@@ -764,6 +770,14 @@ fn mk_builtin_table() -> Vec<Builtin> {
             vec![Typed(TYPE_STR), Any, Typed(TYPE_MAP)],
             true,
         ),
+        mk_builtin(
+            "strtr",
+            Q(3),
+            Q(4),
+            vec![Typed(TYPE_STR), Typed(TYPE_STR), Typed(TYPE_STR), Any],
+            true,
+        ),
+        mk_builtin("all_members", Q(2), Q(2), vec![Any, Typed(TYPE_LIST)], true),
     ]
 }
 

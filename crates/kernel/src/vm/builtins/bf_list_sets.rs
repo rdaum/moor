@@ -76,6 +76,28 @@ fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// Usage: `list all_members(any value, list alist)`
+/// Returns a list of all 1-based indices where value appears in alist.
+/// Uses case-sensitive comparison for strings.
+fn bf_all_members(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 2 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+    let (value, list) = (&bf_args.args[0], &bf_args.args[1]);
+    let Variant::List(list) = list.variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let indices: Vec<Var> = list
+        .iter()
+        .enumerate()
+        .filter(|(_, item)| value.eq_case_sensitive(item))
+        .map(|(i, _)| v_int((i + 1) as i64)) // 1-based indexing
+        .collect();
+
+    Ok(Ret(v_list(&indices)))
+}
+
 /// Usage: `list listinsert(list list, any value [, int index])`
 /// Returns a copy of list with value inserted before the element at the given index.
 /// If index is not provided, inserts at the beginning. Raises E_RANGE if index is invalid.
@@ -1232,6 +1254,7 @@ fn bf_reverse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
 pub(crate) fn register_bf_list_sets(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("is_member")] = bf_is_member;
+    builtins[offset_for_builtin("all_members")] = bf_all_members;
     builtins[offset_for_builtin("listinsert")] = bf_listinsert;
     builtins[offset_for_builtin("listappend")] = bf_listappend;
     builtins[offset_for_builtin("listdelete")] = bf_listdelete;

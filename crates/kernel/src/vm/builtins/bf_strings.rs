@@ -73,42 +73,88 @@ fn bf_strsub(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 /// Internal helper for finding first occurrence of substring.
-fn str_index(subject: &str, what: &str, case_matters: bool) -> i64 {
-    if case_matters {
-        subject.find(what).map(|i| i as i64 + 1).unwrap_or(0)
+/// skip: number of characters to skip from the beginning (must be >= 0)
+fn str_index(subject: &str, what: &str, case_matters: bool, skip: usize) -> i64 {
+    // Skip characters from the beginning
+    let search_start: usize = subject
+        .char_indices()
+        .nth(skip)
+        .map(|(i, _)| i)
+        .unwrap_or(subject.len());
+    let search_slice = &subject[search_start..];
+
+    let found_in_slice = if case_matters {
+        search_slice.find(what)
     } else {
-        subject
-            .to_lowercase()
-            .find(&what.to_lowercase())
-            .map(|i| i as i64 + 1)
-            .unwrap_or(0)
-    }
+        search_slice.to_lowercase().find(&what.to_lowercase())
+    };
+
+    // Convert byte offset in slice back to 1-based character index in original
+    found_in_slice
+        .map(|byte_offset| {
+            let byte_pos = search_start + byte_offset;
+            subject[..byte_pos].chars().count() as i64 + 1
+        })
+        .unwrap_or(0)
 }
 
 /// Internal helper for finding last occurrence of substring.
-fn str_rindex(subject: &str, what: &str, case_matters: bool) -> i64 {
-    if case_matters {
-        subject.rfind(what).map(|i| i as i64 + 1).unwrap_or(0)
+/// skip: number of characters to skip from the end (as negative, e.g., -4 means skip last 4)
+fn str_rindex(subject: &str, what: &str, case_matters: bool, skip: i64) -> i64 {
+    // skip is negative for rindex - skip last N characters
+    let chars_to_keep = if skip < 0 {
+        let total_chars = subject.chars().count();
+        total_chars.saturating_sub((-skip) as usize)
     } else {
-        subject
-            .to_lowercase()
-            .rfind(&what.to_lowercase())
-            .map(|i| i as i64 + 1)
-            .unwrap_or(0)
-    }
+        subject.chars().count()
+    };
+
+    // Find byte position after chars_to_keep characters
+    let search_end: usize = subject
+        .char_indices()
+        .nth(chars_to_keep)
+        .map(|(i, _)| i)
+        .unwrap_or(subject.len());
+    let search_slice = &subject[..search_end];
+
+    let found_in_slice = if case_matters {
+        search_slice.rfind(what)
+    } else {
+        search_slice.to_lowercase().rfind(&what.to_lowercase())
+    };
+
+    // Convert byte offset to 1-based character index
+    found_in_slice
+        .map(|byte_offset| subject[..byte_offset].chars().count() as i64 + 1)
+        .unwrap_or(0)
 }
 
-/// Usage: `int index(str subject, str what [, bool case_matters])`
+/// Usage: `int index(str subject, str what [, bool case_matters [, int skip]])`
 /// Returns the index of the first character of the first occurrence of 'what' in 'subject',
 /// or 0 if not found. By default, the search ignores case; if case_matters is true, case
-/// is significant.
+/// is significant. If skip is provided (positive integer), that many characters are skipped
+/// from the beginning before searching.
 fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    let case_matters = if bf_args.args.len() == 2 {
-        false
-    } else if bf_args.args.len() == 3 {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let case_matters = if bf_args.args.len() >= 3 {
         bf_args.args[2].is_true()
     } else {
-        return Err(BfErr::Code(E_ARGS));
+        false
+    };
+
+    let skip = if bf_args.args.len() == 4 {
+        let skip_val = bf_args.args[3].as_integer().ok_or(BfErr::Code(E_TYPE))?;
+        if skip_val < 0 {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("index() skip must be non-negative"),
+            ));
+        }
+        skip_val as usize
+    } else {
+        0
     };
 
     let (subject, what) = (bf_args.args[0].variant(), bf_args.args[1].variant());
@@ -117,22 +163,38 @@ fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             subject.as_str(),
             what.as_str(),
             case_matters,
+            skip,
         )))),
         _ => Err(BfErr::Code(E_TYPE)),
     }
 }
 
-/// Usage: `int rindex(str subject, str what [, bool case_matters])`
+/// Usage: `int rindex(str subject, str what [, bool case_matters [, int skip]])`
 /// Returns the index of the first character of the last occurrence of 'what' in 'subject',
 /// or 0 if not found. By default, the search ignores case; if case_matters is true, case
-/// is significant.
+/// is significant. If skip is provided (negative integer), that many characters are skipped
+/// from the end before searching.
 fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    let case_matters = if bf_args.args.len() == 2 {
-        false
-    } else if bf_args.args.len() == 3 {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let case_matters = if bf_args.args.len() >= 3 {
         bf_args.args[2].is_true()
     } else {
-        return Err(BfErr::Code(E_ARGS));
+        false
+    };
+
+    let skip = if bf_args.args.len() == 4 {
+        let skip_val = bf_args.args[3].as_integer().ok_or(BfErr::Code(E_TYPE))?;
+        if skip_val > 0 {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("rindex() skip must be non-positive"),
+            ));
+        }
+        skip_val
+    } else {
+        0
     };
 
     let (subject, what) = (bf_args.args[0].variant(), bf_args.args[1].variant());
@@ -141,6 +203,7 @@ fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             subject.as_str(),
             what.as_str(),
             case_matters,
+            skip,
         )))),
         _ => Err(BfErr::Code(E_TYPE)),
     }
@@ -353,6 +416,82 @@ fn bf_explode(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&parts)))
 }
 
+/// Internal helper for character translation.
+fn strtr(source: &str, str1: &str, str2: &str, case_matters: bool) -> String {
+    let from_chars: Vec<char> = str1.chars().collect();
+    let to_chars: Vec<char> = str2.chars().collect();
+
+    let mut result = String::with_capacity(source.len());
+
+    for c in source.chars() {
+        let pos = if case_matters {
+            from_chars.iter().position(|&fc| fc == c)
+        } else {
+            from_chars
+                .iter()
+                .position(|&fc| fc.to_lowercase().eq(c.to_lowercase()))
+        };
+
+        match pos {
+            Some(i) if i < to_chars.len() => {
+                // Map to corresponding character in str2
+                let replacement = to_chars[i];
+                if case_matters || !c.is_alphabetic() {
+                    // Case-sensitive mode or non-letter: use replacement as-is
+                    result.push(replacement);
+                } else {
+                    // Case-insensitive with letter: preserve original case
+                    if c.is_uppercase() {
+                        for uc in replacement.to_uppercase() {
+                            result.push(uc);
+                        }
+                    } else {
+                        for lc in replacement.to_lowercase() {
+                            result.push(lc);
+                        }
+                    }
+                }
+            }
+            Some(_) => {
+                // Character found in str1 but no corresponding char in str2 - delete it
+            }
+            None => {
+                // Character not in str1 - keep it unchanged
+                result.push(c);
+            }
+        }
+    }
+
+    result
+}
+
+/// Usage: `str strtr(str source, str str1, str str2 [, bool case_matters])`
+/// Translates characters in source by mapping each character in str1 to the corresponding
+/// character in str2. If str2 is shorter than str1, characters that map beyond str2's length
+/// are deleted. By default the search is case-insensitive (case_matters = false).
+fn bf_strtr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    let case_matters = if bf_args.args.len() == 3 {
+        false
+    } else if bf_args.args.len() == 4 {
+        bf_args.args[3].is_true()
+    } else {
+        return Err(BfErr::Code(E_ARGS));
+    };
+
+    let (source, str1, str2) = (
+        bf_args.args[0].variant(),
+        bf_args.args[1].variant(),
+        bf_args.args[2].variant(),
+    );
+
+    match (source, str1, str2) {
+        (Variant::Str(source), Variant::Str(str1), Variant::Str(str2)) => Ok(Ret(v_str(
+            strtr(source.as_str(), str1.as_str(), str2.as_str(), case_matters).as_str(),
+        ))),
+        _ => Err(BfErr::Code(E_TYPE)),
+    }
+}
+
 pub(crate) fn register_bf_strings(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("strsub")] = bf_strsub;
     builtins[offset_for_builtin("index")] = bf_index;
@@ -365,11 +504,12 @@ pub(crate) fn register_bf_strings(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("binary_to_str")] = bf_binary_to_str;
     builtins[offset_for_builtin("binary_from_str")] = bf_binary_from_str;
     builtins[offset_for_builtin("explode")] = bf_explode;
+    builtins[offset_for_builtin("strtr")] = bf_strtr;
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::vm::builtins::bf_strings::strsub;
+    use crate::vm::builtins::bf_strings::{str_index, str_rindex, strsub, strtr};
 
     #[test]
     fn test_strsub_remove_piece() {
@@ -420,5 +560,97 @@ mod tests {
         let subject = "foo bar baz";
         let expected = "foo bar baz";
         assert_eq!(strsub(subject, "fizz", "buzz", false), expected);
+    }
+
+    #[test]
+    fn test_strtr_simple_replace() {
+        // strtr("foobar", "o", "i") => "fiibar"
+        assert_eq!(strtr("foobar", "o", "i", true), "fiibar");
+    }
+
+    #[test]
+    fn test_strtr_swap_chars() {
+        // strtr("foobar", "ob", "bo") => "fbboar"
+        assert_eq!(strtr("foobar", "ob", "bo", true), "fbboar");
+    }
+
+    #[test]
+    fn test_strtr_delete_chars() {
+        // strtr("foobar", "foba", "") => "r"
+        assert_eq!(strtr("foobar", "foba", "", true), "r");
+    }
+
+    #[test]
+    fn test_strtr_case_insensitive() {
+        // strtr("5xX", "135x", "0aBB", 0) => "BbB"
+        // case-insensitive: x and X both match "x", but output preserves case
+        assert_eq!(strtr("5xX", "135x", "0aBB", false), "BbB");
+    }
+
+    #[test]
+    fn test_strtr_case_sensitive() {
+        // strtr("5xX", "135x", "0aBB", 1) => "BBX"
+        // case-sensitive: only lowercase x matches, X unchanged
+        assert_eq!(strtr("5xX", "135x", "0aBB", true), "BBX");
+    }
+
+    #[test]
+    fn test_strtr_empty_source() {
+        assert_eq!(strtr("", "abc", "xyz", true), "");
+    }
+
+    #[test]
+    fn test_strtr_empty_str1() {
+        assert_eq!(strtr("hello", "", "xyz", true), "hello");
+    }
+
+    #[test]
+    fn test_strtr_utf8() {
+        // UTF-8 character handling
+        assert_eq!(strtr("héllo", "é", "e", true), "hello");
+        assert_eq!(strtr("日本語", "日", "月", true), "月本語");
+    }
+
+    // Tests from the book documentation
+    #[test]
+    fn test_index_basic() {
+        // index("foobar", "o") => 2
+        assert_eq!(str_index("foobar", "o", false, 0), 2);
+    }
+
+    #[test]
+    fn test_index_with_skip() {
+        // index("foobar", "o", 0, 0) => 2
+        assert_eq!(str_index("foobar", "o", false, 0), 2);
+        // index("foobar", "o", 0, 2) => 3 (skip first 2 chars "fo", search in "obar", find "o" at position 3)
+        assert_eq!(str_index("foobar", "o", false, 2), 3);
+    }
+
+    #[test]
+    fn test_index_not_found() {
+        // index("foobar", "x") => 0
+        assert_eq!(str_index("foobar", "x", false, 0), 0);
+    }
+
+    #[test]
+    fn test_index_case_sensitive() {
+        // index("Foobar", "foo", 1) => 0 (case sensitive, "Foo" != "foo")
+        assert_eq!(str_index("Foobar", "foo", true, 0), 0);
+        // But case insensitive should find it
+        assert_eq!(str_index("Foobar", "foo", false, 0), 1);
+    }
+
+    #[test]
+    fn test_rindex_basic() {
+        // rindex("foobar", "o") => 3
+        assert_eq!(str_rindex("foobar", "o", false, 0), 3);
+    }
+
+    #[test]
+    fn test_rindex_with_skip() {
+        // rindex("foobar", "o", 0, 0) => 3
+        assert_eq!(str_rindex("foobar", "o", false, 0), 3);
+        // rindex("foobar", "o", 0, -4) => 2 (skip last 4 chars, search in "fo", find last "o" at position 2)
+        assert_eq!(str_rindex("foobar", "o", false, -4), 2);
     }
 }

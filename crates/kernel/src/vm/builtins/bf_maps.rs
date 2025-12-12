@@ -65,11 +65,15 @@ fn bf_mapkeys(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(BfRet::Ret(v_list(&keys)))
 }
 
-/// Usage: `list mapvalues(map m)`
-/// Returns a list of all values in the map, in the order they appear.
+/// Usage: `list mapvalues(map m [, any key, ...])`
+/// Returns a list of values from the map. If no keys are specified, returns all values
+/// in iteration order. If keys are specified, returns only the values for those keys,
+/// in the order the keys were given.
 fn bf_mapvalues(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("mapvalues() takes 1 argument")));
+    if bf_args.args.is_empty() {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("mapvalues() requires at least 1 argument"),
+        ));
     }
 
     let Some(m) = bf_args.args[0].as_map() else {
@@ -78,7 +82,18 @@ fn bf_mapvalues(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     };
 
-    let values: Vec<Var> = m.iter().map(|kv| kv.1.clone()).collect();
+    let values: Vec<Var> = if bf_args.args.len() == 1 {
+        // No keys specified - return all values
+        m.iter().map(|kv| kv.1.clone()).collect()
+    } else {
+        // Keys specified - return values for those keys in order
+        let mut result = Vec::with_capacity(bf_args.args.len() - 1);
+        for key in bf_args.args.iter().skip(1) {
+            let value = m.get(&key).map_err(BfErr::ErrValue)?;
+            result.push(value);
+        }
+        result
+    };
 
     Ok(BfRet::Ret(v_list(&values)))
 }

@@ -79,25 +79,44 @@ fn bf_max(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(maximum))
 }
 
-/// Usage: `int random([int max])`
-/// Returns a random integer in the range 1 to max (inclusive). If max is not provided,
-/// it defaults to the largest MOO integer (2147483647). Raises E_INVARG if max is not positive.
+/// Usage: `int random([int mod [, int range]])`
+/// Returns a random integer. With no arguments, returns a random integer from 1 to
+/// i64::MAX. With one argument, returns a random integer from 1
+/// to mod (inclusive). With two arguments, returns a random integer from mod to range
+/// (inclusive). Raises E_INVARG if the range is invalid (e.g., mod > range or mod < 1).
 fn bf_random(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() > 1 {
+    if bf_args.args.len() > 2 {
         return Err(BfErr::ErrValue(
-            E_ARGS.msg("random() takes 0 or 1 argument"),
+            E_ARGS.msg("random() takes 0, 1, or 2 arguments"),
         ));
     }
 
     let mut rng = rand::rng();
-    if bf_args.args.is_empty() {
-        Ok(Ret(v_int(rng.random_range(1..=2147483647))))
-    } else {
-        match &bf_args.args[0].variant() {
-            Variant::Int(i) if *i > 0 => Ok(Ret(v_int(rng.random_range(1..=*i)))),
-            Variant::Int(_) => Err(BfErr::Code(E_INVARG)),
-            _ => Err(BfErr::Code(E_TYPE)),
+
+    match bf_args.args.len() {
+        0 => Ok(Ret(v_int(rng.random_range(1..=i64::MAX)))),
+        1 => {
+            let Variant::Int(max) = bf_args.args[0].variant() else {
+                return Err(BfErr::Code(E_TYPE));
+            };
+            if max < 1 {
+                return Err(BfErr::Code(E_INVARG));
+            }
+            Ok(Ret(v_int(rng.random_range(1..=max))))
         }
+        2 => {
+            let Variant::Int(min) = bf_args.args[0].variant() else {
+                return Err(BfErr::Code(E_TYPE));
+            };
+            let Variant::Int(max) = bf_args.args[1].variant() else {
+                return Err(BfErr::Code(E_TYPE));
+            };
+            if min < 1 || max < min {
+                return Err(BfErr::Code(E_INVARG));
+            }
+            Ok(Ret(v_int(rng.random_range(min..=max))))
+        }
+        _ => unreachable!(),
     }
 }
 
@@ -155,7 +174,8 @@ fn numeric_arg(arg: &Var) -> Result<f64, BfErr> {
 /// Macro for creating simple single-argument math functions that take a numeric argument
 /// and return a float result. Used for basic trigonometric and mathematical functions.
 macro_rules! math_fn {
-    ($fn_name:ident, $builtin_name:expr, $math_op:expr) => {
+    ($doc:expr, $fn_name:ident, $builtin_name:expr, $math_op:expr) => {
+        #[doc = $doc]
         fn $fn_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             if bf_args.args.len() != 1 {
                 return Err(BfErr::ErrValue(
@@ -172,7 +192,8 @@ macro_rules! math_fn {
 /// Macro for creating math functions with domain validation (e.g., sqrt, log).
 /// Used for functions that have restricted input domains and need validation.
 macro_rules! math_fn_with_validation {
-    ($fn_name:ident, $builtin_name:expr, $math_op:expr, $validator:expr, $error_msg:expr) => {
+    ($doc:expr, $fn_name:ident, $builtin_name:expr, $math_op:expr, $validator:expr, $error_msg:expr) => {
+        #[doc = $doc]
         fn $fn_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             if bf_args.args.len() != 1 {
                 return Err(BfErr::ErrValue(
@@ -192,32 +213,44 @@ macro_rules! math_fn_with_validation {
 }
 
 // Basic trig functions (angles in radians)
-// Usage: `float sin(num x)` - Returns the sine of x.
-math_fn!(bf_sin, "sin", |x: f64| x.sin());
-// Usage: `float cos(num x)` - Returns the cosine of x.
-math_fn!(bf_cos, "cos", |x: f64| x.cos());
-// Usage: `float tan(num x)` - Returns the tangent of x.
-math_fn!(bf_tan, "tan", |x: f64| x.tan());
+math_fn!(
+    "Usage: `float sin(num x)`\nReturns the sine of x (in radians).",
+    bf_sin,
+    "sin",
+    |x: f64| x.sin()
+);
+math_fn!(
+    "Usage: `float cos(num x)`\nReturns the cosine of x (in radians).",
+    bf_cos,
+    "cos",
+    |x: f64| x.cos()
+);
+math_fn!(
+    "Usage: `float tan(num x)`\nReturns the tangent of x (in radians).",
+    bf_tan,
+    "tan",
+    |x: f64| x.tan()
+);
 
 // Functions with domain validation
-// Usage: `float sqrt(num x)` - Returns the square root of x. Raises E_INVARG if x is negative.
 math_fn_with_validation!(
+    "Usage: `float sqrt(num x)`\nReturns the square root of x. Raises E_INVARG if x is negative.",
     bf_sqrt,
     "sqrt",
     |x: f64| x.sqrt(),
     |x: f64| x >= 0.0,
     "sqrt() takes a non-negative number"
 );
-// Usage: `float asin(num x)` - Returns the arc-sine of x, in the range [-pi/2..pi/2]. Raises E_INVARG if x is outside [-1.0..1.0].
 math_fn_with_validation!(
+    "Usage: `float asin(num x)`\nReturns the arc-sine of x, in the range [-pi/2..pi/2]. Raises E_INVARG if x is outside [-1.0..1.0].",
     bf_asin,
     "asin",
     |x: f64| x.asin(),
     |x: f64| (-1.0..=1.0).contains(&x),
     "asin() takes a number between -1 and 1"
 );
-// Usage: `float acos(num x)` - Returns the arc-cosine of x, in the range [0..pi]. Raises E_INVARG if x is outside [-1.0..1.0].
 math_fn_with_validation!(
+    "Usage: `float acos(num x)`\nReturns the arc-cosine of x, in the range [0..pi]. Raises E_INVARG if x is outside [-1.0..1.0].",
     bf_acos,
     "acos",
     |x: f64| x.acos(),
@@ -246,26 +279,42 @@ fn bf_atan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 // Hyperbolic functions
-// Usage: `float sinh(num x)` - Returns the hyperbolic sine of x.
-math_fn!(bf_sinh, "sinh", |x: f64| x.sinh());
-// Usage: `float cosh(num x)` - Returns the hyperbolic cosine of x.
-math_fn!(bf_cosh, "cosh", |x: f64| x.cosh());
-// Usage: `float tanh(num x)` - Returns the hyperbolic tangent of x.
-math_fn!(bf_tanh, "tanh", |x: f64| x.tanh());
+math_fn!(
+    "Usage: `float sinh(num x)`\nReturns the hyperbolic sine of x.",
+    bf_sinh,
+    "sinh",
+    |x: f64| x.sinh()
+);
+math_fn!(
+    "Usage: `float cosh(num x)`\nReturns the hyperbolic cosine of x.",
+    bf_cosh,
+    "cosh",
+    |x: f64| x.cosh()
+);
+math_fn!(
+    "Usage: `float tanh(num x)`\nReturns the hyperbolic tangent of x.",
+    bf_tanh,
+    "tanh",
+    |x: f64| x.tanh()
+);
 
 // Exponential and logarithmic functions
-// Usage: `float exp(num x)` - Returns e raised to the power of x.
-math_fn!(bf_exp, "exp", |x: f64| x.exp());
-// Usage: `float log(num x)` - Returns the natural logarithm of x. Raises E_INVARG if x is not positive.
+math_fn!(
+    "Usage: `float exp(num x)`\nReturns e raised to the power of x.",
+    bf_exp,
+    "exp",
+    |x: f64| x.exp()
+);
 math_fn_with_validation!(
+    "Usage: `float log(num x)`\nReturns the natural logarithm of x. Raises E_INVARG if x is not positive.",
     bf_log,
     "log",
     |x: f64| x.ln(),
     |x: f64| x > 0.0,
     "log() takes a positive number"
 );
-// Usage: `float log10(num x)` - Returns the base-10 logarithm of x. Raises E_INVARG if x is not positive.
 math_fn_with_validation!(
+    "Usage: `float log10(num x)`\nReturns the base-10 logarithm of x. Raises E_INVARG if x is not positive.",
     bf_log10,
     "log10",
     |x: f64| x.log10(),
@@ -274,12 +323,24 @@ math_fn_with_validation!(
 );
 
 // Rounding functions
-// Usage: `float ceil(num x)` - Returns the smallest integer not less than x, as a float.
-math_fn!(bf_ceil, "ceil", |x: f64| x.ceil());
-// Usage: `float floor(num x)` - Returns the largest integer not greater than x, as a float.
-math_fn!(bf_floor, "floor", |x: f64| x.floor());
-// Usage: `float trunc(num x)` - Returns the integer part of x, as a float. For negative x, equivalent to ceil(); otherwise equivalent to floor().
-math_fn!(bf_trunc, "trunc", |x: f64| x.trunc());
+math_fn!(
+    "Usage: `float ceil(num x)`\nReturns the smallest integer not less than x, as a float.",
+    bf_ceil,
+    "ceil",
+    |x: f64| x.ceil()
+);
+math_fn!(
+    "Usage: `float floor(num x)`\nReturns the largest integer not greater than x, as a float.",
+    bf_floor,
+    "floor",
+    |x: f64| x.floor()
+);
+math_fn!(
+    "Usage: `float trunc(num x)`\nReturns the integer part of x, as a float. For negative x, equivalent to ceil(); otherwise equivalent to floor().",
+    bf_trunc,
+    "trunc",
+    |x: f64| x.trunc()
+);
 
 pub(crate) fn register_bf_num(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("abs")] = bf_abs;
