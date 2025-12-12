@@ -108,6 +108,7 @@ iana-time-zone.workspace = true
 # Text Processing & Regex
 natord.workspace = true
 onig.workspace = true
+scraper.workspace = true
 
 # Collections & Data Structures
 ahash.workspace = true

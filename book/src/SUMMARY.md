@@ -37,7 +37,7 @@
         - [Functions for Properties](./the-moo-programming-language/built-in-functions/properties.md)
         - [Functions for Verbs](./the-moo-programming-language/built-in-functions/verbs.md)
         - [Functions for Maps](./the-moo-programming-language/built-in-functions/maps.md)
-        - [XML and HTML Documents](./the-moo-programming-language/xml-documents.md)
+        - [Document Processing](./the-moo-programming-language/xml-documents.md)
         - [Webhooks](./the-moo-programming-language/webhooks.md)
         - [Server functions](./the-moo-programming-language/built-in-functions/server.md)
         - [Functions which are mooR extensions](./the-moo-programming-language/built-in-functions/extensions.md)

@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Document format builtins: XML and JSON parsing/generation functions
+//! Document format builtins: XML, JSON, and HTML parsing/generation functions
 
 use crate::{
     task_context::with_current_transaction,
@@ -23,6 +23,7 @@ use moor_var::{
     Sequence, Symbol, VarType, Variant, v_bool_int, v_flyweight, v_int, v_list, v_map, v_obj,
     v_str, v_string,
 };
+use scraper::{Html, Selector};
 use serde_json::{self, Value as JsonValue};
 use std::io::{BufReader, BufWriter};
 use tracing::error;
@@ -813,6 +814,123 @@ fn bf_parse_json(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// Build a CSS selector from MOO-style arguments.
+/// Tag can be string or symbol. Attr filter uses glob patterns: "prefix*", "*suffix", "*contains*".
+fn build_css_selector(tag: &str, attrs: Option<&Map>) -> Result<String, BfErr> {
+    let mut selector = tag.to_string();
+
+    let Some(attrs) = attrs else {
+        return Ok(selector);
+    };
+
+    for (key, pattern) in attrs.iter() {
+        let key_str = key
+            .as_symbol()
+            .map(|s| s.to_string())
+            .ok()
+            .or_else(|| key.as_string().map(|s| s.to_string()))
+            .ok_or_else(|| BfErr::ErrValue(E_TYPE.msg("Attribute key must be string or symbol")))?;
+
+        let Some(pattern_str) = pattern.as_string() else {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("Attribute pattern must be a string"),
+            ));
+        };
+
+        let starts_wild = pattern_str.starts_with('*');
+        let ends_wild = pattern_str.ends_with('*');
+
+        let attr_selector = match (starts_wild, ends_wild) {
+            (true, true) if pattern_str.len() > 2 => {
+                // *contains*
+                let value = &pattern_str[1..pattern_str.len() - 1];
+                format!("[{key_str}*=\"{value}\"]")
+            }
+            (false, true) if pattern_str.len() > 1 => {
+                // prefix*
+                let value = &pattern_str[..pattern_str.len() - 1];
+                format!("[{key_str}^=\"{value}\"]")
+            }
+            (true, false) if pattern_str.len() > 1 => {
+                // *suffix
+                let value = &pattern_str[1..];
+                format!("[{key_str}$=\"{value}\"]")
+            }
+            _ => {
+                // exact match
+                format!("[{key_str}=\"{pattern_str}\"]")
+            }
+        };
+        selector.push_str(&attr_selector);
+    }
+
+    Ok(selector)
+}
+
+/// MOO: `list html_query(str html, any tag [, map attr_filter])`
+/// Query HTML for elements matching tag name and optional attribute filters.
+/// Returns list of maps containing attributes for each matching element.
+fn bf_html_query(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
+        return Err(BfErr::ErrValue(E_ARGS.with_msg(|| {
+            format!(
+                "html_query() takes 2-3 arguments, got {}",
+                bf_args.args.len()
+            )
+        })));
+    }
+
+    let Some(html) = bf_args.args[0].as_string() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("html_query() first argument must be a string"),
+        ));
+    };
+
+    let tag = bf_args.args[1]
+        .as_symbol()
+        .map(|s| s.to_string())
+        .ok()
+        .or_else(|| bf_args.args[1].as_string().map(|s| s.to_string()))
+        .ok_or_else(|| {
+            BfErr::ErrValue(E_TYPE.msg("html_query() tag must be a string or symbol"))
+        })?;
+
+    let attr_filter = if bf_args.args.len() == 3 {
+        let Some(m) = bf_args.args[2].as_map() else {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("html_query() third argument must be a map"),
+            ));
+        };
+        Some(m)
+    } else {
+        None
+    };
+
+    let selector_str = build_css_selector(&tag, attr_filter)?;
+
+    let selector = Selector::parse(&selector_str)
+        .map_err(|e| BfErr::ErrValue(E_INVARG.with_msg(|| format!("Invalid selector: {e:?}"))))?;
+
+    let document = Html::parse_document(html);
+
+    let mut results = Vec::new();
+    for element in document.select(&selector) {
+        let mut attrs = Vec::new();
+        for (name, value) in element.value().attrs() {
+            attrs.push((v_str(name), v_str(value)));
+        }
+        // Include inner text as "text" key if present
+        let text: String = element.text().collect();
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            attrs.push((v_str("text"), v_str(trimmed)));
+        }
+        results.push(v_map(&attrs));
+    }
+
+    Ok(Ret(v_list(&results)))
+}
+
 pub(crate) fn register_bf_documents(builtins: &mut [BuiltinFunction]) {
     // XML functions
     builtins[offset_for_builtin("xml_parse")] = bf_xml_parse;
@@ -821,6 +939,9 @@ pub(crate) fn register_bf_documents(builtins: &mut [BuiltinFunction]) {
     // JSON functions
     builtins[offset_for_builtin("generate_json")] = bf_generate_json;
     builtins[offset_for_builtin("parse_json")] = bf_parse_json;
+
+    // HTML functions
+    builtins[offset_for_builtin("html_query")] = bf_html_query;
 }
 
 #[cfg(test)]

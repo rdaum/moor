@@ -153,7 +153,7 @@ Webhooks enable many powerful use cases:
  8:  endif
 ```
 
-For more sophisticated HTML generation using MOO's XML processing capabilities, see [XML Documents](xml-documents.md).
+For more sophisticated HTML generation using MOO's document processing capabilities, see [Document Processing](xml-documents.md).
 
 ### Action Triggers
 

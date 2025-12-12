@@ -757,6 +757,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
         ),
         mk_builtin("suspend_if_needed", Q(0), Q(1), vec![AnyNum], true),
         mk_builtin("prepositions", Q(0), Q(0), vec![], true),
+        mk_builtin(
+            "html_query",
+            Q(2),
+            Q(3),
+            vec![Typed(TYPE_STR), Any, Typed(TYPE_MAP)],
+            true,
+        ),
     ]
 }
 

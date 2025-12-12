@@ -1,195 +1,219 @@
-# Document Creation and XML Processing
+# Document Processing
 
-mooR provides powerful built-in functions for working with structured documents, particularly XML. These functions allow
-you to parse XML (or well-formed HTML) from external sources and generate XML or HTML for web interfaces, APIs, and data
-exchange.
+mooR provides built-in functions for working with structured documents: parsing HTML from the web, processing XML data, and generating markup for web interfaces.
 
-## Overview
+## HTML Parsing with html_query()
 
-The document processing system in mooR supports multiple data formats, but provides special support for XML.
-
-- **List format** - Simple nested lists that mirror XML structure.
-- **Map format** - Same as above, but attributes are stored in a map for easier reading
-- **Flyweight objects** - Uses mooR's flyweight system to represent XML elements as objects, allowing you to call verbs
-  on them.
-
-All formats can represent the same XML structure, but each has different advantages depending on your use case.
-
-## Parsing XML with xml_parse()
-
-The `xml_parse()` function converts XML strings into MOO data structures. The function signature is:
+The `html_query()` function extracts data from HTML using a simple tag-and-attribute query syntax. This is useful for web scraping, processing API responses, and extracting metadata.
 
 ```moo
-xml_parse(xml_string, [result_type, [tag_map]])
+html_query(html_string, tag [, attr_filter])
+```
+
+### Parameters
+
+- **html_string**: The HTML text to search
+- **tag**: Tag name to find (string or symbol)
+- **attr_filter**: Optional map of attribute patterns to filter by
+
+### Return Value
+
+Returns a list of maps, one per matching element. Each map contains:
+- All attributes from the element as key-value pairs
+- A `"text"` key with the element's inner text content (if any)
+
+### Basic Usage
+
+```moo
+let html = "<html><head><title>My Page</title></head><body>...</body></html>";
+
+// Find all title tags
+let titles = html_query(html, "title");
+// => {["text" -> "My Page"]}
+
+// Get the title text
+titles[1]["text"]
+// => "My Page"
+```
+
+### Attribute Filtering
+
+The third argument filters elements by their attributes. Values support glob-style patterns:
+
+| Pattern | Meaning | CSS Equivalent |
+|---------|---------|----------------|
+| `"exact"` | Exact match | `[attr="exact"]` |
+| `"prefix*"` | Starts with | `[attr^="prefix"]` |
+| `"*suffix"` | Ends with | `[attr$="suffix"]` |
+| `"*contains*"` | Contains | `[attr*="contains"]` |
+
+```moo
+// Find all meta tags with property starting with "og:"
+let og_tags = html_query(html, "meta", ['property -> "og:*"]);
+
+// Find links to HTTPS URLs
+let secure_links = html_query(html, "a", ['href -> "https:*"]);
+
+// Find meta description tag
+let desc = html_query(html, "meta", ['name -> "description"]);
+```
+
+### Practical Example: Link Previews
+
+Extract OpenGraph metadata for URL previews:
+
+```moo
+verb fetch_preview(url)
+  response = worker_request('curl, {"GET", url, "", {}});
+  {status, headers, body} = response;
+
+  result = ["url" -> url, "title" -> "", "description" -> "", "image" -> ""];
+
+  // Get OpenGraph tags
+  og_tags = html_query(body, "meta", ['property -> "og:*"]);
+  for tag in (og_tags)
+    prop = tag["property"];
+    if (prop && index(prop, "og:") == 1)
+      key = prop[4..$];
+      if (key in {"title", "description", "image"} && tag["content"])
+        result[key] = tag["content"];
+      endif
+    endif
+  endfor
+
+  // Fallback to <title> if no og:title
+  if (!result["title"])
+    titles = html_query(body, "title");
+    if (length(titles) > 0)
+      result["title"] = titles[1]["text"];
+    endif
+  endif
+
+  return result;
+endverb
+```
+
+## XML Parsing with xml_parse()
+
+The `xml_parse()` function converts XML strings into MOO data structures. Unlike `html_query()`, it requires well-formed XML input.
+
+```moo
+xml_parse(xml_string [, result_type [, tag_map]])
 ```
 
 ### Parameters
 
 - **xml_string**: The XML text to parse
-- **result_type**: The MOO literal type code for the result:
-    - LIST - Returns nested lists
-    - MAP - Lists where attributes are stored in a map
-    - FLYWEIGHT - Returns flyweight objects (requires flyweights enabled)
-- **tag_map**: Optional map for flyweight format only, mapping tag names to object references
+- **result_type**: Output format (LIST, MAP, or FLYWEIGHT)
+- **tag_map**: For flyweight format, maps tag names to delegate objects
 
-### List Format (Type LIST)
+### List Format (default)
 
-List format represents XML as nested lists following the pattern:
-`{"tag_name", {"attr_name", "attr_value"}, ...content...}`
+Returns nested lists: `{"tag", {"attr", "value", ...}, ...content...}`
 
 ```moo
-let xml = "<div class='container' id='main'>Hello <span>World</span></div>";
-let result = xml_parse(xml); // LIST format is the default
+let xml = "<div class='main' id='content'>Hello <b>World</b></div>";
+let result = xml_parse(xml);
 
-// result = {
-//   {"div", {"class", "container"}, {"id", "main"}, "Hello ", {"span", "World"}}
-// }
+// result = {"div", {"class", "main"}, {"id", "content"},
+//           "Hello ", {"b", "World"}}
 ```
 
-### Map Format (Type MAP)
+### Map Format
 
-Map format is the same as list format, but uses a map for attributes:
+Same structure, but attributes are stored in a map:
 
 ```moo
-let xml = "<div class='container'>Hello <span>World</span></div>";
 let result = xml_parse(xml, MAP);
 
-// result = {
-//   "div",
-//   ["class" -> "container"], 
-//   "Hello ", 
-//   {"span", [], "World"}
-// }
+// result = {"div", ["class" -> "main", "id" -> "content"],
+//           "Hello ", {"b", [], "World"}}
 ```
 
-### Flyweight Format (Type FLYWEIGHT)
+### Flyweight Format
 
-Flyweight format uses mooR's special flyweight objects (requires flyweight support enabled):
+Returns flyweight objects that can have verbs called on them:
 
 ```moo
-let xml = "<div class='container'>Hello World</div>";
-let result = xml_parse(xml, 15);
+let tag_map = ["div" -> $html_div, "b" -> $html_bold];
+let result = xml_parse(xml, FLYWEIGHT, tag_map);
 
-// result = {< $tag_div, [class -> "container"], {"Hello World"} >}
+// result is a flyweight with $html_div as delegate
+result:render();  // calls $html_div:render(result)
 ```
 
-**Advantages of flyweight format:**
-
-- Can call verbs on the resulting objects
-- Integrates with mooR's object system
-
-**Tag resolution:**
-Without a tag_map, the parser looks for objects named `$tag_tagname` (e.g., `$tag_div`, `$tag_span`).
-With a tag_map, you can specify custom object mappings:
-
-```moo
-let tag_map = ["div" -> $my_div_handler, "span" -> $my_span_handler];
-let result = xml_parse(xml, 15, tag_map);
-```
+Without a tag_map, the parser looks for system objects named `$tag_<tagname>`.
 
 ## Generating XML with to_xml()
 
 The `to_xml()` function converts MOO data structures into XML strings:
 
 ```moo
-to_xml(data_structure, [tag_map])
+to_xml(structure [, tag_map])
 ```
 
-### Converting List Format to XML
+### From List Format
 
 ```moo
-// Simple element
-let element = {"div", {"class", "container"}, "Hello World"};
+let element = {"div", {"class", "container"},
+               "Hello ", {"span", "World"}};
 let xml = to_xml(element);
-// Returns: "<div class=\"container\">Hello World</div>"
-
-// Nested structure
-let page = {"html", 
-    {"head", {"title", "My Page"}},
-    {"body", {"class", "main"},
-        {"h1", "Welcome"},
-        {"p", "This is a paragraph."},
-        {"div", {"id", "footer"}, "Copyright 2024"}
-    }
-};
-let html = to_xml(page);
+// => "<div class=\"container\">Hello <span>World</span></div>"
 ```
 
-### Converting Map Format to XML
+### From Map Format
 
 ```moo
-// The new map format is a list where the first element is the tag name,
-// the second element is a map of attributes, and remaining elements are content
-let element = {"div", 
-               ["class" -> "container", "id" -> "main"],
-               "Hello ", 
-               {"span", [], "World"}
-              };
+let element = {"div", ["class" -> "container", "id" -> "main"],
+               "Hello ", {"span", [], "World"}};
 let xml = to_xml(element);
-// Returns: "<div class=\"container\" id=\"main\">Hello <span>World</span></div>"
+// => "<div class=\"container\" id=\"main\">Hello <span>World</span></div>"
 ```
 
-### Mixed Formats
-
-You can mix flyweights, lists, and maps in the same structure:
+### Building HTML Programmatically
 
 ```moo
-// A list containing flyweights and other lists
-let mixed = {"div",
-    < $my_header, [title -> "Page Title"] >,
-    {"p", "Regular paragraph"},
-    ["tag" -> "footer", "content" -> {"End of page"}]
-};
-let xml = to_xml(mixed);
-```
-
-## Practical Examples
-
-### Building HTML for Web Interfaces
-
-```moo
-let profile = {"div", {"class", "profile-card"},
-    {"img", {"src", player.avatar_url}, {"alt", "Avatar"}},
-    {"h2", player.name},
-    {"p", {"class", "bio"}, player.description},
-    {"div", {"class", "stats"},
-        {"span", "Level: " + tostr(player.level)},
-        {"span", "Score: " + tostr(player.score)}
-    }
+let profile = {"div", ["class" -> "profile"],
+    {"img", ["src" -> player.avatar, "alt" -> "Avatar"]},
+    {"h2", [], player.name},
+    {"p", ["class" -> "bio"], player.description}
 };
 return to_xml(profile);
 ```
 
-### Processing API Responses
+## JSON Processing
+
+mooR also provides JSON parsing and generation:
+
+### parse_json()
+
+Converts a JSON string into MOO values:
 
 ```moo
-// Parse weather API XML response
-let weather_data = xml_parse(xml_response, 10);
-
-for data in (weather_data)
-    if (data["tag"] == "current")
-        let temp = data["attributes"]["temperature"];
-        let humidity = data["attributes"]["humidity"];
-        
-        player:tell("Current temperature: ", temp, "°F");
-        player:tell("Humidity: ", humidity, "%");
-    endif
-endfor
+let data = parse_json("{\"name\": \"Alice\", \"score\": 42}");
+// => ["name" -> "Alice", "score" -> 42]
 ```
 
-### Form Generation
+JSON types map to MOO as:
+- Objects become maps
+- Arrays become lists
+- Strings, numbers, booleans map directly
+- `null` becomes the string `"null"`
+
+### generate_json()
+
+Converts MOO values to JSON strings:
 
 ```moo
-let form_elements = {"form", {"method", "POST"}};
-
-for field in (fields)
-    let input = {"div", {"class", "field"},
-        {"label", field.label},
-        {"input", {"type", field.type}, {"name", field.name}}
-    };
-    form_elements = {@form_elements, input};
-endfor
-
-form_elements = {@form_elements, {"button", {"type", "submit"}, "Submit"}};
-return to_xml(form_elements);
+let json = generate_json(["name" -> "Alice", "scores" -> {10, 20, 30}]);
+// => "{\"name\":\"Alice\",\"scores\":[10,20,30]}"
 ```
+
+## Choosing the Right Tool
+
+| Task | Function |
+|------|----------|
+| Extract data from web pages | `html_query()` |
+| Parse well-formed XML/XHTML | `xml_parse()` |
+| Generate HTML/XML output | `to_xml()` |
+| Work with JSON APIs | `parse_json()` / `generate_json()` |
