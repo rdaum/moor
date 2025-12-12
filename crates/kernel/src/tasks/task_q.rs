@@ -80,13 +80,6 @@ pub(crate) struct RunningTask {
     pub(crate) result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
 }
 
-fn none_or_push(vec: &mut Option<Vec<TaskId>>, task: TaskId) {
-    if let Some(v) = vec {
-        v.push(task);
-    } else {
-        *vec = Some(vec![task]);
-    }
-}
 
 impl TaskQ {
     pub fn new(suspended: SuspensionQ) -> Self {
@@ -113,14 +106,14 @@ impl TaskQ {
         &mut self,
         gc_in_progress: bool,
     ) -> Option<Vec<SuspendedTask>> {
-        let mut to_wake = None;
+        let mut to_wake: Option<Vec<TaskId>> = None;
 
         // 1. Advance timer wheel based on elapsed time and collect expired timers
         // (Always advance the timer wheel to maintain accurate timing, even when no tasks are suspended)
         if let Some(expired_timers) = self.suspended.advance_timer_wheel() {
-            for timer_entry in expired_timers {
-                none_or_push(&mut to_wake, timer_entry.task_id);
-            }
+            to_wake
+                .get_or_insert_with(Vec::new)
+                .extend(expired_timers.into_iter().map(|e| e.task_id));
         }
 
         if self.suspended.tasks.is_empty() {
@@ -128,34 +121,31 @@ impl TaskQ {
         }
 
         // 2. Check for task dependencies that should wake (O(1) per dependency check)
-        let mut dependency_tasks_to_wake = Vec::new();
         for (dependency_task_id, dependent_task_ids) in &self.suspended.task_dependencies {
             // If the dependency task is no longer running or suspended, wake dependents
             if !self.suspended.tasks.contains_key(dependency_task_id)
                 && !self.active.contains_key(dependency_task_id)
             {
-                dependency_tasks_to_wake.extend(dependent_task_ids.iter().copied());
+                to_wake
+                    .get_or_insert_with(Vec::new)
+                    .extend(dependent_task_ids.iter().copied());
             }
-        }
-        for task_id in dependency_tasks_to_wake {
-            none_or_push(&mut to_wake, task_id);
         }
 
         // 3. Check for GC-waiting tasks when GC is not in progress
-        if !gc_in_progress {
-            for &task_id in &self.suspended.gc_waiting_tasks {
-                none_or_push(&mut to_wake, task_id);
-            }
+        if !gc_in_progress && !self.suspended.gc_waiting_tasks.is_empty() {
+            to_wake
+                .get_or_insert_with(Vec::new)
+                .extend(self.suspended.gc_waiting_tasks.iter().copied());
         }
 
         let to_wake = to_wake?;
-        let mut tasks = vec![];
-        for task_id in to_wake {
-            if let Some(sr) = self.suspended.remove_task(task_id) {
-                tasks.push(sr);
-            }
-        }
-        Some(tasks)
+        let tasks: Vec<_> = to_wake
+            .into_iter()
+            .filter_map(|task_id| self.suspended.remove_task(task_id))
+            .collect();
+
+        if tasks.is_empty() { None } else { Some(tasks) }
     }
 
     /// Collect anonymous object references from all suspended tasks
