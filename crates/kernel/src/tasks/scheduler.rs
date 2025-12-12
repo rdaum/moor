@@ -549,10 +549,56 @@ impl Scheduler {
 }
 
 impl Scheduler {
+    /// Submit a new task and wake it immediately if needed.
+    /// This is the main entry point for starting new tasks.
+    #[allow(clippy::too_many_arguments)]
+    fn submit_task(
+        &mut self,
+        task_id: TaskId,
+        player: &Obj,
+        perms: &Obj,
+        task_start: TaskStart,
+        delay_start: Option<Duration>,
+        session: Arc<dyn Session>,
+    ) -> Result<TaskHandle, SchedulerError> {
+        let gc_in_progress = self.config.features.anonymous_objects
+            && (self.gc_sweep_in_progress || self.gc_force_collect);
+
+        match self.task_q.submit_new_task(
+            task_id,
+            player,
+            perms,
+            task_start,
+            delay_start,
+            session,
+            &self.server_options,
+            gc_in_progress,
+        ) {
+            TaskSubmission::Suspended(handle) => Ok(handle),
+            TaskSubmission::NeedsWake {
+                handle,
+                task,
+                session,
+                result_sender,
+            } => {
+                self.task_q.wake_task_thread(
+                    task,
+                    ResumeAction::Return(v_int(0)),
+                    session,
+                    result_sender,
+                    &self.task_control_sender,
+                    self.database.as_ref(),
+                    self.builtin_registry.clone(),
+                    self.config.clone(),
+                )?;
+                Ok(handle)
+            }
+        }
+    }
+
     fn handle_scheduler_msg(&mut self, msg: SchedulerClientMsg) {
         let counters = sched_counters();
         let _t = PerfTimerGuard::new(&counters.handle_scheduler_msg);
-        let task_q = &mut self.task_q;
         match msg {
             SchedulerClientMsg::SubmitCommandTask {
                 handler_object,
@@ -572,17 +618,7 @@ impl Scheduler {
 
                 trace_task_create_command!(task_id, &player, &command, &handler_object);
 
-                let result = task_q.submit_new_task(
-                    task_id,
-                    &player,
-                    &player,
-                    task_start,
-                    None,
-                    session,
-                    &self.server_options,
-                    self.config.features.anonymous_objects
-                        && (self.gc_sweep_in_progress || self.gc_force_collect),
-                );
+                let result = self.submit_task(task_id, &player, &player, task_start, None, session);
 
                 reply
                     .send(result)
@@ -632,17 +668,7 @@ impl Scheduler {
                     argstr,
                 };
 
-                let result = task_q.submit_new_task(
-                    task_id,
-                    &player,
-                    &perms,
-                    task_start,
-                    None,
-                    session,
-                    &self.server_options,
-                    self.config.features.anonymous_objects
-                        && (self.gc_sweep_in_progress || self.gc_force_collect),
-                );
+                let result = self.submit_task(task_id, &player, &perms, task_start, None, session);
                 reply
                     .send(result)
                     .expect("Could not send task handle reply");
@@ -657,7 +683,8 @@ impl Scheduler {
                 // the given input, clearing the input request out.
 
                 // Find the task that requested this input, if any
-                let Some(sr) = task_q
+                let Some(sr) = self
+                    .task_q
                     .suspended
                     .pull_task_for_input(input_request_id, &player)
                 else {
@@ -669,7 +696,7 @@ impl Scheduler {
                 };
 
                 // Wake and bake.
-                let response = task_q.wake_task_thread(
+                let response = self.task_q.wake_task_thread(
                     sr.task,
                     ResumeAction::Return(input),
                     sr.session,
@@ -704,17 +731,7 @@ impl Scheduler {
                     argstr: v_string(argstr),
                 };
 
-                let result = task_q.submit_new_task(
-                    task_id,
-                    &player,
-                    &player,
-                    task_start,
-                    None,
-                    session,
-                    &self.server_options,
-                    self.config.features.anonymous_objects
-                        && (self.gc_sweep_in_progress || self.gc_force_collect),
-                );
+                let result = self.submit_task(task_id, &player, &player, task_start, None, session);
                 reply
                     .send(result)
                     .expect("Could not send task handle reply");
@@ -733,17 +750,7 @@ impl Scheduler {
 
                 let task_start = TaskStart::StartEval { player, program };
 
-                let result = task_q.submit_new_task(
-                    task_id,
-                    &player,
-                    &perms,
-                    task_start,
-                    None,
-                    sessions,
-                    &self.server_options,
-                    self.config.features.anonymous_objects
-                        && (self.gc_sweep_in_progress || self.gc_force_collect),
-                );
+                let result = self.submit_task(task_id, &player, &perms, task_start, None, sessions);
                 reply
                     .send(result)
                     .expect("Could not send task handle reply");
@@ -896,16 +903,9 @@ impl Scheduler {
                     argstr: v_empty_str(),
                 };
 
-                let result = task_q.submit_new_task(
-                    task_id,
-                    &player,
-                    &player, // Use the same player as permissions object
-                    task_start,
-                    None,
-                    session,
-                    &self.server_options,
-                    self.config.features.anonymous_objects
-                        && (self.gc_sweep_in_progress || self.gc_force_collect),
+                let result = self.submit_task(
+                    task_id, &player, &player, // Use the same player as permissions object
+                    task_start, None, session,
                 );
                 debug!("System handler task submission result: {:?}", result);
                 reply
@@ -973,7 +973,6 @@ impl Scheduler {
         let counters = sched_counters();
         let _t = PerfTimerGuard::new(&counters.handle_task_msg);
 
-        let task_q = &mut self.task_q;
         match msg {
             TaskControlMsg::TaskSuccess(value, mutations_made, timestamp) => {
                 // Record that this is the transaction to have last mutated the world.
@@ -983,15 +982,15 @@ impl Scheduler {
                 }
 
                 // Commit the session.
-                let Some(task) = task_q.active.get_mut(&task_id) else {
+                let Some(task) = self.task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for success");
                     return;
                 };
                 let Ok(()) = task.session.commit() else {
                     warn!("Could not commit session; aborting task");
-                    return task_q.send_task_result(task_id, Err(TaskAbortedError));
+                    return self.task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
-                task_q.send_task_result(task_id, Ok(value))
+                self.task_q.send_task_result(task_id, Ok(value))
             }
             TaskControlMsg::TaskConflictRetry(task) => {
                 let perfc = sched_counters();
@@ -999,7 +998,7 @@ impl Scheduler {
 
                 // Ask the task to restart itself, using its stashed original start info, but with
                 // a brand new transaction.
-                task_q.retry_task(
+                self.task_q.retry_task(
                     task,
                     &self.task_control_sender,
                     self.database.as_ref(),
@@ -1009,14 +1008,15 @@ impl Scheduler {
                 );
             }
             TaskControlMsg::TaskVerbNotFound(who, what) => {
-                task_q.send_task_result(
+                self.task_q.send_task_result(
                     task_id,
                     Err(SchedulerError::TaskAbortedVerbNotFound(who, what)),
                 );
             }
             TaskControlMsg::TaskCommandError(parse_command_error) => {
                 // This is a common occurrence, so we don't want to log it at warn level.
-                task_q.send_task_result(task_id, Err(CommandExecutionError(parse_command_error)));
+                self.task_q
+                    .send_task_result(task_id, Err(CommandExecutionError(parse_command_error)));
             }
             TaskControlMsg::TaskAbortCancelled => {
                 let perfc = sched_counters();
@@ -1025,7 +1025,7 @@ impl Scheduler {
                 warn!(?task_id, "Task cancelled");
 
                 // Rollback the session.
-                let Some(task) = task_q.active.get_mut(&task_id) else {
+                let Some(task) = self.task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for abort");
                     return;
                 };
@@ -1038,15 +1038,16 @@ impl Scheduler {
 
                 let Ok(()) = task.session.commit() else {
                     warn!("Could not commit aborted session; aborting task");
-                    return task_q.send_task_result(task_id, Err(TaskAbortedError));
+                    return self.task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
-                task_q.send_task_result(task_id, Err(TaskAbortedCancelled));
+                self.task_q
+                    .send_task_result(task_id, Err(TaskAbortedCancelled));
             }
             TaskControlMsg::TaskAbortPanicked(panic_msg, _backtrace) => {
                 warn!(?task_id, ?panic_msg, "Task thread panicked");
 
                 // Task already dead, can't access session. Just send error result directly.
-                task_q.send_task_result(task_id, Err(TaskAbortedError));
+                self.task_q.send_task_result(task_id, Err(TaskAbortedError));
             }
             TaskControlMsg::TaskAbortLimitsReached(
                 limit_reason,
@@ -1059,7 +1060,7 @@ impl Scheduler {
                 let _t = PerfTimerGuard::new(&perfc.task_abort_limits);
 
                 // Get the task's session and player for notifications and handler invocation
-                let Some(task) = task_q.active.remove(&task_id) else {
+                let Some(task) = self.task_q.active.remove(&task_id) else {
                     warn!(task_id, "Task not found for abort");
                     return;
                 };
@@ -1116,16 +1117,13 @@ impl Scheduler {
                     handler_task_id, task_id
                 );
 
-                let handler_result = task_q.submit_new_task(
+                let handler_result = self.submit_task(
                     handler_task_id,
                     &player,
                     &player, // Use player as permissions for handler
                     handler_task_start,
                     None,
                     session.clone().fork().unwrap_or_else(|_| session.clone()),
-                    &self.server_options,
-                    self.config.features.anonymous_objects
-                        && (self.gc_sweep_in_progress || self.gc_force_collect),
                 );
 
                 match handler_result {
@@ -1138,13 +1136,14 @@ impl Scheduler {
                 }
 
                 // Report the original task as aborted (handler outcome doesn't affect this)
-                task_q.send_task_result(task_id, Err(TaskAbortedLimit(limit_reason)));
+                self.task_q
+                    .send_task_result(task_id, Err(TaskAbortedLimit(limit_reason)));
             }
             TaskControlMsg::TaskException(exception) => {
                 let perfc = sched_counters();
                 let _t = PerfTimerGuard::new(&perfc.task_exception);
 
-                let Some(task) = task_q.active.get_mut(&task_id) else {
+                let Some(task) = self.task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for abort");
                     return;
                 };
@@ -1164,7 +1163,7 @@ impl Scheduler {
 
                 let _ = task.session.commit();
 
-                task_q.send_task_result(
+                self.task_q.send_task_result(
                     task_id,
                     Err(TaskAbortedException(exception.as_ref().clone())),
                 );
@@ -1177,7 +1176,7 @@ impl Scheduler {
                 // Gotta dump this out til we exit the loop tho, since self.tasks is already
                 // borrowed here.
                 let new_session = {
-                    let Some(task) = task_q.active.get_mut(&task_id) else {
+                    let Some(task) = self.task_q.active.get_mut(&task_id) else {
                         warn!(task_id, "Task not found for fork request");
                         return;
                     };
@@ -1192,7 +1191,7 @@ impl Scheduler {
                 // the scheduler should try to wake us up.
 
                 // Remove from the local task control...
-                let Some(tc) = task_q.active.remove(&task_id) else {
+                let Some(tc) = self.task_q.active.remove(&task_id) else {
                     warn!(task_id, "Task not found for suspend request");
                     return;
                 };
@@ -1200,7 +1199,7 @@ impl Scheduler {
                 // Commit the session.
                 let Ok(()) = tc.session.commit() else {
                     warn!("Could not commit session; aborting task");
-                    return task_q.send_task_result(task_id, Err(TaskAbortedError));
+                    return self.task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
 
                 // And insert into the suspended list.
@@ -1217,7 +1216,7 @@ impl Scheduler {
                         // If we're not set up to do workers, just abort the task.
                         let Some(workers_sender) = self.worker_request_send.as_ref() else {
                             warn!("No workers configured for scheduler; aborting task");
-                            return task_q.send_task_result(task_id, Err(TaskAbortedError));
+                            return self.task_q.send_task_result(task_id, Err(TaskAbortedError));
                         };
 
                         if let Err(e) = workers_sender.send(WorkerRequest::Request {
@@ -1228,7 +1227,7 @@ impl Scheduler {
                             timeout,
                         }) {
                             error!(?e, "Could not send worker request; aborting task");
-                            return task_q.send_task_result(task_id, Err(TaskAbortedError));
+                            return self.task_q.send_task_result(task_id, Err(TaskAbortedError));
                         }
 
                         WakeCondition::Worker(worker_request_id)
@@ -1241,7 +1240,7 @@ impl Scheduler {
                     let _ = sender.send((task_id, Ok(TaskNotification::Suspended)));
                 }
 
-                task_q
+                self.task_q
                     .suspended
                     .add_task(wake_condition, task, tc.session, tc.result_sender);
             }
@@ -1251,7 +1250,7 @@ impl Scheduler {
                 // session receives input.
 
                 let input_request_id = Uuid::new_v4();
-                let Some(tc) = task_q.active.remove(&task_id) else {
+                let Some(tc) = self.task_q.active.remove(&task_id) else {
                     warn!(task_id, "Task not found for input request");
                     return;
                 };
@@ -1259,7 +1258,7 @@ impl Scheduler {
                 // flushed up to the prompt point.
                 let Ok(()) = tc.session.commit() else {
                     warn!("Could not commit session; aborting task");
-                    return task_q.send_task_result(task_id, Err(TaskAbortedError));
+                    return self.task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
 
                 let Ok(()) = tc
@@ -1267,9 +1266,9 @@ impl Scheduler {
                     .request_input(tc.player, input_request_id, metadata)
                 else {
                     warn!("Could not request input from session; aborting task");
-                    return task_q.send_task_result(task_id, Err(TaskAbortedError));
+                    return self.task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
-                task_q.suspended.add_task(
+                self.task_q.suspended.add_task(
                     WakeCondition::Input(input_request_id),
                     task,
                     tc.session,
@@ -1291,7 +1290,7 @@ impl Scheduler {
                 result_sender,
             } => {
                 // Task is asking to kill another task.
-                let kr = task_q.kill_task(victim_task_id, sender_permissions);
+                let kr = self.task_q.kill_task(victim_task_id, sender_permissions);
                 if let Err(e) = result_sender.send(kr) {
                     error!(?e, "Could not send kill task result to requester");
                 }
@@ -1302,7 +1301,7 @@ impl Scheduler {
                 return_value,
                 result_sender,
             } => {
-                let rr = task_q.resume_task(
+                let rr = self.task_q.resume_task(
                     task_id,
                     queued_task_id,
                     sender_permissions,
@@ -1318,17 +1317,17 @@ impl Scheduler {
             }
             TaskControlMsg::BootPlayer { player } => {
                 // Task is asking to boot a player.
-                task_q.disconnect_task(task_id, &player);
+                self.task_q.disconnect_task(task_id, &player);
             }
             TaskControlMsg::Notify { player, event } => {
                 // Task is asking to notify a player of an event.
-                let Some(task) = task_q.active.get_mut(&task_id) else {
+                let Some(task) = self.task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for notify request");
                     return;
                 };
                 let Ok(()) = task.session.send_event(player, event) else {
                     warn!("Could not notify player; aborting task");
-                    return task_q.send_task_result(task_id, Err(TaskAbortedError));
+                    return self.task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
             }
             TaskControlMsg::GetListeners(reply) => {
@@ -1347,7 +1346,7 @@ impl Scheduler {
                 print_messages,
                 reply,
             } => {
-                let Some(_task) = task_q.active.get_mut(&task_id) else {
+                let Some(_task) = self.task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for listen request");
                     return;
                 };
@@ -1362,7 +1361,7 @@ impl Scheduler {
                 port,
                 reply,
             } => {
-                let Some(_task) = task_q.active.get_mut(&task_id) else {
+                let Some(_task) = self.task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for unlisten request");
                     return;
                 };
@@ -1378,32 +1377,24 @@ impl Scheduler {
                     .expect("Could not shutdown scheduler cleanly");
             }
             TaskControlMsg::ForceInput { who, line, reply } => {
-                let Some(task) = task_q.active.get_mut(&task_id) else {
-                    warn!(task_id, "Task not found for force input request");
-
-                    reply.send(Err(E_INVIND.msg("Task not found"))).ok();
-                    return;
+                let new_session = {
+                    let Some(task) = self.task_q.active.get_mut(&task_id) else {
+                        warn!(task_id, "Task not found for force input request");
+                        reply.send(Err(E_INVIND.msg("Task not found"))).ok();
+                        return;
+                    };
+                    task.session.clone().fork().unwrap()
                 };
-                let new_session = task.session.clone().fork().unwrap();
                 let task_start = TaskStart::StartCommandVerb {
                     handler_object: SYSTEM_OBJECT,
                     player: who,
                     command: line,
                 };
 
-                let task_id = self.next_task_id;
+                let new_task_id = self.next_task_id;
                 self.next_task_id += 1;
-                let result = task_q.submit_new_task(
-                    task_id,
-                    &who,
-                    &who,
-                    task_start,
-                    None,
-                    new_session,
-                    &self.server_options,
-                    self.config.features.anonymous_objects
-                        && (self.gc_sweep_in_progress || self.gc_force_collect),
-                );
+                let result =
+                    self.submit_task(new_task_id, &who, &who, task_start, None, new_session);
                 match result {
                     Err(e) => {
                         error!(?e, "Could not start task thread");
@@ -1849,8 +1840,6 @@ impl Scheduler {
         reply: oneshot::Sender<TaskId>,
         session: Arc<dyn Session>,
     ) {
-        let mut to_remove = vec![];
-
         // Fork the session.
         let forked_session = session.fork().unwrap();
 
@@ -1865,27 +1854,15 @@ impl Scheduler {
         };
         let task_id = self.next_task_id;
         self.next_task_id += 1;
-        match self.task_q.submit_new_task(
-            task_id,
-            &player,
-            &progr,
-            task_start,
-            delay,
-            forked_session,
-            &self.server_options,
-            self.gc_collection_in_progress || self.gc_force_collect,
-        ) {
-            Ok(th) => th,
-            Err(e) => {
-                error!(?e, "Could not fork task");
-                return;
-            }
-        };
+        if let Err(e) =
+            self.submit_task(task_id, &player, &progr, task_start, delay, forked_session)
+        {
+            error!(?e, "Could not fork task");
+            return;
+        }
 
-        let reply = reply;
         if let Err(e) = reply.send(task_id) {
-            error!(task = task_id, error = ?e, "Could not send fork reply. Parent task gone?  Remove.");
-            to_remove.push(task_id);
+            error!(task = task_id, error = ?e, "Could not send fork reply. Parent task gone?");
         }
     }
 
@@ -2158,6 +2135,20 @@ impl Scheduler {
     }
 }
 
+/// Result of submitting a new task - either already suspended (delayed/GC-blocked)
+/// or needs immediate wake by the caller.
+enum TaskSubmission {
+    /// Task is suspended with a delay or waiting for GC - no further action needed
+    Suspended(TaskHandle),
+    /// Task should start immediately - caller must wake it
+    NeedsWake {
+        handle: TaskHandle,
+        task: Box<Task>,
+        session: Arc<dyn Session>,
+        result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
+    },
+}
+
 impl TaskQ {
     #[allow(clippy::too_many_arguments)]
     fn submit_new_task(
@@ -2170,7 +2161,7 @@ impl TaskQ {
         session: Arc<dyn Session>,
         server_options: &ServerOptions,
         gc_in_progress: bool,
-    ) -> Result<TaskHandle, SchedulerError> {
+    ) -> TaskSubmission {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.start_task);
         let (sender, receiver) = flume::unbounded();
@@ -2185,19 +2176,33 @@ impl TaskQ {
             kill_switch.clone(),
         );
 
-        let wake_condition = if let Some(delay) = delay_start {
-            WakeCondition::Time(Instant::now() + delay)
-        } else if gc_in_progress {
-            WakeCondition::GCComplete
-        } else {
-            // No delay, wake immediately
-            WakeCondition::Immediate(None)
-        };
+        let handle = TaskHandle(task_id, receiver);
 
-        self.suspended
-            .add_task(wake_condition, task, session, Some(sender));
+        // Delayed tasks go into suspension
+        if let Some(delay) = delay_start {
+            self.suspended.add_task(
+                WakeCondition::Time(Instant::now() + delay),
+                task,
+                session,
+                Some(sender),
+            );
+            return TaskSubmission::Suspended(handle);
+        }
 
-        Ok(TaskHandle(task_id, receiver))
+        // GC-blocked tasks go into suspension
+        if gc_in_progress {
+            self.suspended
+                .add_task(WakeCondition::GCComplete, task, session, Some(sender));
+            return TaskSubmission::Suspended(handle);
+        }
+
+        // Immediate start - return task directly, skip suspension queue entirely
+        TaskSubmission::NeedsWake {
+            handle,
+            task,
+            session,
+            result_sender: Some(sender),
+        }
     }
 
     #[allow(clippy::too_many_arguments)]

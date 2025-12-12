@@ -226,9 +226,10 @@ pub fn tool_moo_set_verb_info() -> Tool {
 pub fn tool_moo_set_verb_args() -> Tool {
     Tool {
         name: "moo_set_verb_args".to_string(),
-        description: "Set a verb's argument specification (dobj, prep, iobj) without reprogramming it. \
+        description:
+            "Set a verb's argument specification (dobj, prep, iobj) without reprogramming it. \
             This controls how the verb matches commands."
-            .to_string(),
+                .to_string(),
         input_schema: json!({
             "type": "object",
             "properties": {
@@ -628,10 +629,7 @@ pub async fn execute_moo_set_verb_info(
     let escaped_verb = verb_name.replace('\\', "\\\\").replace('"', "\\\"");
 
     // Get current info first
-    let get_info_expr = format!(
-        r#"return verb_info({}, "{}");"#,
-        object_str, escaped_verb
-    );
+    let get_info_expr = format!(r#"return verb_info({}, "{}");"#, object_str, escaped_verb);
 
     let current_info = match client.eval(&get_info_expr).await? {
         MoorResult::Success(var) => {

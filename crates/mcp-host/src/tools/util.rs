@@ -120,8 +120,9 @@ pub fn tool_moo_queued_tasks() -> Tool {
 pub fn tool_moo_kill_task() -> Tool {
     Tool {
         name: "moo_kill_task".to_string(),
-        description: "Kill a running or suspended task by its ID. Use queued_tasks to find task IDs."
-            .to_string(),
+        description:
+            "Kill a running or suspended task by its ID. Use queued_tasks to find task IDs."
+                .to_string(),
         input_schema: json!({
             "type": "object",
             "properties": {
@@ -318,16 +319,36 @@ pub async fn execute_moo_server_info(
                     .find(|(k, _)| k.as_string().is_some_and(|s| s == "memory"))
                 {
                     if let Some(mem_list) = mem_var.as_list() {
-                        let block_size = mem_list.index(0).ok().and_then(|v| v.as_integer()).unwrap_or(4096);
-                        let nused = mem_list.index(1).ok().and_then(|v| v.as_integer()).unwrap_or(0);
-                        let nfree = mem_list.index(2).ok().and_then(|v| v.as_integer()).unwrap_or(0);
+                        let block_size = mem_list
+                            .index(0)
+                            .ok()
+                            .and_then(|v| v.as_integer())
+                            .unwrap_or(4096);
+                        let nused = mem_list
+                            .index(1)
+                            .ok()
+                            .and_then(|v| v.as_integer())
+                            .unwrap_or(0);
+                        let nfree = mem_list
+                            .index(2)
+                            .ok()
+                            .and_then(|v| v.as_integer())
+                            .unwrap_or(0);
 
                         let rss_bytes = nused * block_size;
                         let vm_bytes = (nused + nfree) * block_size;
 
                         output.push_str("  Memory:\n");
-                        output.push_str(&format!("    RSS: {} ({} pages)\n", format_bytes(rss_bytes), nused));
-                        output.push_str(&format!("    Virtual: {} ({} pages)\n", format_bytes(vm_bytes), nused + nfree));
+                        output.push_str(&format!(
+                            "    RSS: {} ({} pages)\n",
+                            format_bytes(rss_bytes),
+                            nused
+                        ));
+                        output.push_str(&format!(
+                            "    Virtual: {} ({} pages)\n",
+                            format_bytes(vm_bytes),
+                            nused + nfree
+                        ));
                         output.push_str(&format!("    Page size: {} bytes\n", block_size));
                     } else {
                         output.push_str(&format!("  Memory: {}\n", format_var(&mem_var)));
@@ -374,10 +395,26 @@ pub async fn execute_moo_queued_tasks(
                     // queued_tasks returns list of {task_id, start_time, x, y, programmer, verb_loc, verb_name, line, this}
                     for task in list.iter() {
                         if let Some(task_list) = task.as_list() {
-                            let task_id = task_list.index(0).ok().map(|v| format_var(&v)).unwrap_or_default();
-                            let verb_loc = task_list.index(5).ok().map(|v| format_var(&v)).unwrap_or_default();
-                            let verb_name = task_list.index(6).ok().map(|v| format_var(&v)).unwrap_or_default();
-                            let this_obj = task_list.index(8).ok().map(|v| format_var(&v)).unwrap_or_default();
+                            let task_id = task_list
+                                .index(0)
+                                .ok()
+                                .map(|v| format_var(&v))
+                                .unwrap_or_default();
+                            let verb_loc = task_list
+                                .index(5)
+                                .ok()
+                                .map(|v| format_var(&v))
+                                .unwrap_or_default();
+                            let verb_name = task_list
+                                .index(6)
+                                .ok()
+                                .map(|v| format_var(&v))
+                                .unwrap_or_default();
+                            let this_obj = task_list
+                                .index(8)
+                                .ok()
+                                .map(|v| format_var(&v))
+                                .unwrap_or_default();
 
                             output.push_str(&format!(
                                 "  Task {}: {}:{} (this={})\n",
@@ -405,9 +442,7 @@ pub async fn execute_moo_kill_task(
     let expr = format!("kill_task({});", task_id);
 
     match client.eval(&expr).await? {
-        MoorResult::Success(_) => {
-            Ok(ToolCallResult::text(format!("Task {} killed", task_id)))
-        }
+        MoorResult::Success(_) => Ok(ToolCallResult::text(format!("Task {} killed", task_id))),
         MoorResult::Error(msg) => Ok(ToolCallResult::error(msg)),
     }
 }

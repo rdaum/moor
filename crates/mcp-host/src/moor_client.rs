@@ -29,7 +29,8 @@ use rpc_async_client::zmq;
 use rpc_common::{
     AuthToken, ClientToken, RpcError, mk_command_msg, mk_connection_establish_msg, mk_detach_msg,
     mk_eval_msg, mk_invoke_verb_msg, mk_list_objects_msg, mk_program_msg, mk_properties_msg,
-    mk_resolve_msg, mk_retrieve_msg, mk_update_property_msg, mk_verbs_msg, scheduler_error_from_ref,
+    mk_resolve_msg, mk_retrieve_msg, mk_update_property_msg, mk_verbs_msg,
+    scheduler_error_from_ref,
 };
 use std::sync::Arc;
 use std::time::Duration;

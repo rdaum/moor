@@ -80,7 +80,6 @@ pub(crate) struct RunningTask {
     pub(crate) result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
 }
 
-
 impl TaskQ {
     pub fn new(suspended: SuspensionQ) -> Self {
         let num_threads = std::thread::available_parallelism()
@@ -283,8 +282,8 @@ impl SuspensionQ {
             return None;
         }
 
-        let elapsed = now.duration_since(last_advance);
-        let mut millis_remaining = elapsed.as_millis() as u32;
+        let elapsed_millis = now.duration_since(last_advance).as_millis() as u32;
+        let mut millis_remaining = elapsed_millis;
 
         let mut expired_entries = None;
 
@@ -310,8 +309,7 @@ impl SuspensionQ {
             }
         }
 
-        self.last_timer_advance =
-            Some(last_advance + Duration::from_millis(elapsed.as_millis() as u64));
+        self.last_timer_advance = Some(last_advance + Duration::from_millis(elapsed_millis as u64));
 
         expired_entries
     }
@@ -620,36 +618,19 @@ impl SuspensionQ {
                 }
                 TaskState::Prepared(_) => {
                     // For prepared tasks, vm_host stack MUST be non-empty
-                    // If it's empty, that's a critical bug - log and skip this task
-                    let Some(verb_name) = sr.task.vm_host.verb_name() else {
+                    let Some(((verb_name, verb_definer), (line_number, this))) = sr
+                        .task
+                        .vm_host
+                        .verb_name()
+                        .zip(sr.task.vm_host.verb_definer())
+                        .zip(sr.task.vm_host.line_number().zip(sr.task.vm_host.this()))
+                    else {
                         error!(
                             task_id = sr.task.task_id,
-                            "CRITICAL: Prepared task has empty activation stack - skipping from queued_tasks list"
+                            "Prepared task has empty activation stack - skipping"
                         );
                         continue;
                     };
-                    let Some(verb_definer) = sr.task.vm_host.verb_definer() else {
-                        error!(
-                            task_id = sr.task.task_id,
-                            "CRITICAL: Prepared task has empty activation stack - skipping from queued_tasks list"
-                        );
-                        continue;
-                    };
-                    let Some(line_number) = sr.task.vm_host.line_number() else {
-                        error!(
-                            task_id = sr.task.task_id,
-                            "CRITICAL: Prepared task has empty activation stack - skipping from queued_tasks list"
-                        );
-                        continue;
-                    };
-                    let Some(this) = sr.task.vm_host.this() else {
-                        error!(
-                            task_id = sr.task.task_id,
-                            "CRITICAL: Prepared task has empty activation stack - skipping from queued_tasks list"
-                        );
-                        continue;
-                    };
-
                     (verb_name, verb_definer, line_number, this)
                 }
             };
