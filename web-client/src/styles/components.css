@@ -2254,6 +2254,35 @@ button:disabled {
   opacity: 0.6;
 }
 
+/* Wrapper for textarea */
+.input_area_wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+}
+
+/* Ghosted completion pill */
+.say-mode-pill-ghost {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Typed portion within ghosted pill - normal weight */
+.say-mode-pill-ghost .completion-typed {
+  opacity: 1;
+}
+
+/* Suffix portion within ghosted pill - dimmed */
+.say-mode-pill-ghost .completion-suffix {
+  opacity: 0.5;
+}
+
+/* Hide textarea text and cursor when showing ghosted completion pill */
+.input-completion-active {
+  color: transparent;
+  caret-color: transparent;
+}
+
 /* ====== VERB PALETTE ====== */
 .verb-palette-container {
   position: relative;

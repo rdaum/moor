@@ -11,8 +11,17 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { getVerbPlaceholder, startsWithKnownVerb } from "../lib/known-verbs";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAuthContext } from "../context/AuthContext";
+import { useVerbSuggestions } from "../hooks/useVerbSuggestions";
+import {
+    extractFullVerbName,
+    findCommonPrefix,
+    getCompletionSuffix,
+    getVerbPlaceholder,
+    KNOWN_VERBS,
+    parseVerbNames,
+} from "../lib/known-verbs";
 import { InputMetadata } from "../types/input";
 import { RichInputPrompt } from "./RichInputPrompt";
 import { getSayModeEnabled } from "./SayModeToggle";
@@ -68,6 +77,78 @@ export const InputArea: React.FC<InputAreaProps> = ({
     // Accessibility: announcement for screen readers
     const [srAnnouncement, setSrAnnouncement] = useState<string>("");
 
+    // Completion state
+    const [completionIndex, setCompletionIndex] = useState(0);
+
+    // Get auth context for verb suggestions
+    const { authState } = useAuthContext();
+    const authToken = authState.player?.authToken ?? null;
+    const playerOid = authState.player?.oid ?? null;
+
+    // Fetch verb suggestions from server
+    const { suggestions: serverSuggestions, available: serverAvailable } = useVerbSuggestions(authToken, playerOid);
+
+    // Compute matching verbs for completion using proper verbcasecmp matching
+    const completionMatches = useMemo(() => {
+        // Only complete when: palette enabled, no verb pill, input has content, no spaces (first word only)
+        if (!verbPaletteEnabled || verbPill || !input || input.includes(" ") || input.includes("\n")) {
+            return [];
+        }
+
+        const prefix = input;
+        const matches: Array<{ verb: string; hint: string | null; suffix: string }> = [];
+
+        // Use server suggestions if available, otherwise fall back to KNOWN_VERBS
+        if (serverAvailable && serverSuggestions.length > 0) {
+            for (const suggestion of serverSuggestions) {
+                // Parse space-separated verb names (aliases)
+                const names = parseVerbNames(suggestion.verb);
+                for (const pattern of names) {
+                    const suffix = getCompletionSuffix(pattern, prefix);
+                    if (suffix !== null && suffix !== "") {
+                        // Found a match - use the full verb name
+                        const fullVerb = extractFullVerbName(pattern);
+                        // Avoid duplicates
+                        if (!matches.some(m => m.verb.toLowerCase() === fullVerb.toLowerCase())) {
+                            matches.push({
+                                verb: fullVerb,
+                                hint: suggestion.hint,
+                                suffix,
+                            });
+                        }
+                        break; // Only need one match per suggestion
+                    }
+                }
+            }
+        } else {
+            // Fall back to KNOWN_VERBS (these are simple strings, no patterns)
+            for (const verb of KNOWN_VERBS) {
+                if (
+                    verb.toLowerCase().startsWith(prefix.toLowerCase()) && verb.toLowerCase() !== prefix.toLowerCase()
+                ) {
+                    matches.push({
+                        verb,
+                        hint: getVerbPlaceholder(verb),
+                        suffix: verb.slice(prefix.length),
+                    });
+                }
+            }
+        }
+
+        return matches;
+    }, [input, verbPill, verbPaletteEnabled, serverAvailable, serverSuggestions]);
+
+    // Current completion suggestion (for ghosted display)
+    // completionIndex of -1 means dismissed by user
+    const currentCompletion = completionMatches.length > 0 && completionIndex >= 0
+        ? completionMatches[completionIndex % completionMatches.length]
+        : null;
+
+    // Reset completion index when input changes
+    useEffect(() => {
+        setCompletionIndex(0);
+    }, [input]);
+
     // Detect if user prefers reduced motion (common for screen reader users)
     const prefersReducedMotion = useRef(
         typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -119,58 +200,21 @@ export const InputArea: React.FC<InputAreaProps> = ({
         textarea.style.height = `${newHeight}px`;
     }, [input]);
 
-    // Navigate through command history
+    // Navigate through command history (caller handles cursor/multiline checks)
     const navigateHistory = useCallback((direction: "up" | "down") => {
-        const isMultiline = input.includes("\n");
-        const textarea = textareaRef.current;
-        if (!textarea) return;
-
-        const cursorAtEdge = textarea.selectionStart === 0
-            || (textarea.selectionStart === textarea.selectionEnd
-                && textarea.selectionStart === textarea.value.length);
-
-        // Skip history navigation if in multiline mode with cursor in middle
-        if (isMultiline && !cursorAtEdge) {
-            return; // Let default behavior handle cursor movement
-        }
-
-        let newOffset = historyOffset;
-
-        if (direction === "up" && historyOffset < commandHistory.length) {
-            newOffset = historyOffset + 1;
-        } else if (direction === "down" && historyOffset > 0) {
-            newOffset = historyOffset - 1;
-        } else {
-            return; // Cannot navigate further
-        }
-
+        const newOffset = direction === "up" ? historyOffset + 1 : historyOffset - 1;
         setHistoryOffset(newOffset);
 
-        // Calculate the history index
         const historyIndex = commandHistory.length - newOffset;
-
-        // Set input value from history or clear if nothing available
         if (historyIndex >= 0 && historyIndex < commandHistory.length) {
             const historyValue = commandHistory[historyIndex];
             setInput(historyValue ? historyValue.trimEnd() : "");
-            // Deactivate say pill when restoring from history - the command was typed as-is
             setSayPillActive(false);
         } else {
             setInput("");
             setSayPillActive(sayModeEnabled);
         }
-    }, [input, historyOffset, commandHistory, sayModeEnabled]);
-
-    // Determine if we should apply say prefix to a line
-    const shouldApplySayPrefix = useCallback((line: string): boolean => {
-        // No prefix if there's a verb pill (it takes precedence)
-        if (verbPill) return false;
-        // No prefix if say mode is disabled or pill is inactive
-        if (!sayModeEnabled || !sayPillActive) return false;
-        // No prefix if line already starts with a known verb
-        if (startsWithKnownVerb(line)) return false;
-        return true;
-    }, [sayModeEnabled, sayPillActive, verbPill]);
+    }, [historyOffset, commandHistory, sayModeEnabled]);
 
     // Send input to server
     const sendInput = useCallback(() => {
@@ -189,9 +233,8 @@ export const InputArea: React.FC<InputAreaProps> = ({
             // Build the command
             let messageToSend: string;
             if (verbPill) {
-                // Verb pill takes precedence
                 messageToSend = trimmedLine ? `${verbPill} ${trimmedLine}` : verbPill;
-            } else if (shouldApplySayPrefix(trimmedLine)) {
+            } else if (sayModeEnabled && sayPillActive) {
                 messageToSend = `say ${trimmedLine}`;
             } else {
                 messageToSend = trimmedLine;
@@ -212,14 +255,13 @@ export const InputArea: React.FC<InputAreaProps> = ({
         setHistoryOffset(0);
         setVerbPill(null);
         setVerbPillPlaceholder(null);
-        // Reset say pill to active for next input
         setSayPillActive(sayModeEnabled);
 
-        // Pick a new encouraging placeholder for next input (skip if user prefers reduced motion)
+        // Pick a new encouraging placeholder (skip if user prefers reduced motion)
         if (!prefersReducedMotion.current) {
             setPlaceholderIndex(Math.floor(Math.random() * ENCOURAGING_PLACEHOLDERS.length));
         }
-    }, [input, onSendMessage, onAddToHistory, shouldApplySayPrefix, sayModeEnabled, verbPill]);
+    }, [input, onSendMessage, onAddToHistory, sayModeEnabled, sayPillActive, verbPill]);
 
     // Announce to screen readers
     const announce = useCallback((message: string) => {
@@ -228,14 +270,34 @@ export const InputArea: React.FC<InputAreaProps> = ({
         setTimeout(() => setSrAnnouncement(""), 1000);
     }, []);
 
+    // Accept a completion match - sets verb pill
+    const acceptCompletion = useCallback((match: { verb: string; hint: string | null }) => {
+        setVerbPill(match.verb);
+        setVerbPillPlaceholder(match.hint);
+        setSayPillActive(false);
+        setInput("");
+        setCompletionIndex(0);
+        announce(`${match.verb} command selected`);
+    }, [announce]);
+
+    // Clear verb pill and restore appropriate state
+    const clearVerbPill = useCallback(() => {
+        setVerbPill(null);
+        setVerbPillPlaceholder(null);
+        if (sayModeEnabled) {
+            setSayPillActive(true);
+            announce("say mode restored");
+        } else {
+            announce("command mode");
+        }
+    }, [sayModeEnabled, announce]);
+
     // Handle verb selection from palette
     const handleVerbSelect = useCallback((verb: string, placeholder: string | null) => {
-        // Set verb pill and disable say mode for this input
         setVerbPill(verb);
         setVerbPillPlaceholder(placeholder);
         setSayPillActive(false);
         announce(`${verb} command selected`);
-        // Focus the textarea
         textareaRef.current?.focus();
     }, [announce]);
 
@@ -280,15 +342,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
         if (e.key === "Backspace" && input === "") {
             if (verbPill) {
                 e.preventDefault();
-                setVerbPill(null);
-                setVerbPillPlaceholder(null);
-                // Restore say pill if say mode is enabled
-                if (sayModeEnabled) {
-                    setSayPillActive(true);
-                    announce("say mode restored");
-                } else {
-                    announce("command mode");
-                }
+                clearVerbPill();
                 return;
             }
             if (sayPillActive && sayModeEnabled) {
@@ -299,40 +353,75 @@ export const InputArea: React.FC<InputAreaProps> = ({
             }
         }
 
-        if (e.key === "ArrowUp") {
-            const isMultiline = input.includes("\n");
+        // Escape dismisses completions (restores normal Tab behavior)
+        if (e.key === "Escape" && completionMatches.length > 0) {
+            e.preventDefault();
+            setCompletionIndex(-1); // -1 means dismissed
+            announce("Completions dismissed");
+            return;
+        }
+
+        // Tab completion: single match accepts, multiple matches fills to common prefix or cycles
+        if (e.key === "Tab" && completionMatches.length > 0 && completionIndex >= 0 && !e.shiftKey) {
+            e.preventDefault();
+
+            // Single match - accept it
+            if (completionMatches.length === 1) {
+                acceptCompletion(completionMatches[0]);
+                return;
+            }
+
+            // Multiple matches - find common prefix
+            const commonPrefix = findCommonPrefix(completionMatches.map(m => m.verb));
+
+            // If common prefix is longer than input, fill to it
+            if (commonPrefix.length > input.length) {
+                // Use the casing from the first match
+                const firstVerb = completionMatches[0].verb;
+                setInput(firstVerb.slice(0, commonPrefix.length));
+                announce(`Completed to ${commonPrefix}`);
+                return;
+            }
+
+            // Already at common prefix - cycle through candidates
+            const nextIndex = (completionIndex + 1) % completionMatches.length;
+            setCompletionIndex(nextIndex);
+            const nextCompletion = completionMatches[nextIndex];
+            announce(`${nextCompletion.verb}, ${nextIndex + 1} of ${completionMatches.length}`);
+            return;
+        }
+
+        // Right arrow at end of input accepts completion (fish-style)
+        if (e.key === "ArrowRight" && currentCompletion) {
+            const textarea = textareaRef.current;
+            if (textarea && textarea.selectionStart === textarea.value.length) {
+                e.preventDefault();
+                acceptCompletion(currentCompletion);
+                return;
+            }
+        }
+
+        // Arrow keys for history navigation (when not in multiline or cursor at edge)
+        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
             const textarea = textareaRef.current;
             if (!textarea) return;
 
+            const isMultiline = input.includes("\n");
             const cursorAtEdge = textarea.selectionStart === 0
                 || (textarea.selectionStart === textarea.selectionEnd
                     && textarea.selectionStart === textarea.value.length);
 
-            // Only prevent default and navigate history if conditions are met
             if (!isMultiline || cursorAtEdge) {
-                if (historyOffset < commandHistory.length) {
+                const direction = e.key === "ArrowUp" ? "up" : "down";
+                const canNavigate = direction === "up"
+                    ? historyOffset < commandHistory.length
+                    : historyOffset > 0;
+
+                if (canNavigate) {
                     e.preventDefault();
-                    navigateHistory("up");
+                    navigateHistory(direction);
                 }
             }
-            // Otherwise, let default arrow key behavior handle cursor movement
-        } else if (e.key === "ArrowDown") {
-            const isMultiline = input.includes("\n");
-            const textarea = textareaRef.current;
-            if (!textarea) return;
-
-            const cursorAtEdge = textarea.selectionStart === 0
-                || (textarea.selectionStart === textarea.selectionEnd
-                    && textarea.selectionStart === textarea.value.length);
-
-            // Only prevent default and navigate history if conditions are met
-            if (!isMultiline || cursorAtEdge) {
-                if (historyOffset > 0) {
-                    e.preventDefault();
-                    navigateHistory("down");
-                }
-            }
-            // Otherwise, let default arrow key behavior handle cursor movement
         } else if (e.key === "Enter" && e.shiftKey) {
             // Shift+Enter for newlines - let default behavior handle it
             // React will update the state through onChange
@@ -341,15 +430,20 @@ export const InputArea: React.FC<InputAreaProps> = ({
             sendInput();
         }
     }, [
-        navigateHistory,
-        sendInput,
-        input,
-        historyOffset,
-        commandHistory,
-        sayPillActive,
-        sayModeEnabled,
-        verbPill,
+        acceptCompletion,
         announce,
+        clearVerbPill,
+        commandHistory,
+        completionIndex,
+        completionMatches,
+        currentCompletion,
+        historyOffset,
+        input,
+        navigateHistory,
+        sayModeEnabled,
+        sayPillActive,
+        sendInput,
+        verbPill,
     ]);
 
     // Handler for rich input submission
@@ -406,52 +500,61 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
             {/* Input area with pill inside */}
             <div className="input_area_box">
-                {activePill && (
-                    <button
-                        type="button"
-                        className="say-mode-pill"
-                        onClick={() => {
-                            if (verbPill) {
-                                setVerbPill(null);
-                                setVerbPillPlaceholder(null);
-                                if (sayModeEnabled) {
-                                    setSayPillActive(true);
-                                    announce("say mode restored");
+                {activePill
+                    ? (
+                        <button
+                            type="button"
+                            className="say-mode-pill"
+                            onClick={() => {
+                                if (verbPill) {
+                                    clearVerbPill();
                                 } else {
+                                    setSayPillActive(false);
                                     announce("command mode");
                                 }
-                            } else {
-                                setSayPillActive(false);
-                                announce("command mode");
-                            }
-                        }}
-                        title="Click or press Backspace to remove"
-                        aria-label={`${activePill} command active. Click to remove.`}
-                    >
-                        {activePill}
-                    </button>
-                )}
-                <textarea
-                    ref={textareaRef}
-                    id="input_area"
-                    className="input_area_inner"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    onPaste={handlePaste}
-                    disabled={disabled}
-                    autoComplete="off"
-                    spellCheck={false}
-                    aria-label={activePill ? `${activePill} command` : "Command input"}
-                    aria-describedby="input-help"
-                    aria-multiline="true"
-                    placeholder={getPlaceholder()}
-                />
+                            }}
+                            title="Click or press Backspace to remove"
+                            aria-label={`${activePill} command active. Click to remove.`}
+                        >
+                            {activePill}
+                        </button>
+                    )
+                    : currentCompletion && (
+                        <span
+                            className="say-mode-pill say-mode-pill-ghost"
+                            aria-hidden="true"
+                        >
+                            <span className="completion-typed">{input}</span>
+                            <span className="completion-suffix">{currentCompletion.suffix}</span>
+                        </span>
+                    )}
+                <div className="input_area_wrapper">
+                    <textarea
+                        ref={textareaRef}
+                        id="input_area"
+                        className={`input_area_inner${
+                            currentCompletion && !activePill ? " input-completion-active" : ""
+                        }`}
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        onPaste={handlePaste}
+                        disabled={disabled}
+                        autoComplete="off"
+                        spellCheck={false}
+                        aria-label={activePill ? `${activePill} command` : "Command input"}
+                        aria-describedby="input-help"
+                        aria-multiline="true"
+                        placeholder={getPlaceholder()}
+                    />
+                </div>
             </div>
 
             <div id="input-help" className="sr-only">
                 {activePill
                     ? `${activePill} command active. Press Backspace to remove. Use Shift+Enter for new lines.`
+                    : currentCompletion
+                    ? `Completion available: ${currentCompletion.verb}. Tab to cycle options, Right Arrow to accept, Escape to dismiss. Shift+Tab to navigate away.`
                     : "Use Shift+Enter for new lines. Arrow keys navigate command history when at start or end of input."}
             </div>
 
