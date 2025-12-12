@@ -104,8 +104,9 @@ fn create_object_with_initialize(
     };
     Ok(VmInstr(DispatchVerb(Box::new(ve))))
 }
-/// Returns true if object is a valid object (created and not yet recycled).
-/// MOO: `int valid(obj object)`
+/// Usage: `int valid(obj object)`
+/// Returns true (1) if object is a valid object (created and not yet recycled), false (0)
+/// otherwise. Does not raise an error for invalid object references.
 fn bf_valid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(E_ARGS.msg("valid() takes 1 argument")));
@@ -120,8 +121,9 @@ fn bf_valid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(bf_args.v_bool(is_valid)))
 }
 
-/// Returns the parent of the given object.
-/// MOO: `obj parent(obj object)`
+/// Usage: `obj parent(obj object)`
+/// Returns the parent object in the inheritance hierarchy. Returns #-1 if object has no parent.
+/// Raises E_INVARG if object is not valid.
 fn bf_parent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(E_ARGS.msg("parent() takes 1 argument")));
@@ -145,8 +147,9 @@ fn bf_parent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_obj(parent)))
 }
 
-/// Changes the parent of object to be new-parent.
-/// MOO: `none chparent(obj object, obj new-parent)`
+/// Usage: `none chparent(obj object, obj new_parent)`
+/// Changes object's parent in the inheritance hierarchy. Use #-1 to remove the parent.
+/// Raises E_INVARG if either object is invalid. Raises E_PERM if not permitted.
 fn bf_chparent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(E_ARGS.msg("chparent() takes 2 arguments")));
@@ -181,8 +184,9 @@ fn bf_chparent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// Returns a list of the children of object.
-/// MOO: `list children(obj object)`
+/// Usage: `list children(obj object)`
+/// Returns a list of object's direct children in the inheritance hierarchy.
+/// Raises E_INVARG if object is not valid.
 fn bf_children(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(E_ARGS.msg("children() takes 1 argument")));
@@ -208,8 +212,9 @@ fn bf_children(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&children)))
 }
 
-/// Returns a list of all nested children of object.
-/// MOO: `list descendants(obj object)`
+/// Usage: `list descendants(obj object)`
+/// Returns a list of all descendants of object (children, grandchildren, etc).
+/// Raises E_INVARG if object is not valid.
 fn bf_descendants(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(
@@ -237,8 +242,9 @@ fn bf_descendants(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&descendants)))
 }
 
-/// Returns a list of all ancestors of object in order ascending up the inheritance hierarchy.
-/// MOO: `list ancestors(obj object [, int full])`
+/// Usage: `list ancestors(obj object [, int include_self])`
+/// Returns a list of all ancestors of object ascending up the inheritance hierarchy.
+/// If include_self is true, the object itself is included as the first element.
 fn bf_ancestors(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 2 {
         return Err(BfErr::ErrValue(
@@ -272,8 +278,9 @@ fn bf_ancestors(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&ancestors)))
 }
 
-/// Returns true if object is a descendant of possible_ancestor.
-/// MOO: `int isa(obj object, obj parent)`
+/// Usage: `int isa(obj object, obj ancestor)`
+/// Returns true if object is a descendant of ancestor (i.e., ancestor appears in
+/// object's inheritance chain). Also returns true if object equals ancestor.
 fn bf_isa(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(E_ARGS.msg("isa() takes 2 arguments")));
@@ -312,7 +319,7 @@ fn bf_isa(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// Recursively builds a list of an object's location, its location's location, and so forth until
 /// hitting #nothing. If stop is provided, it stops before that object. If is-parent is true, stop
 /// is treated as a parent and stops when any location is a child of that parent.
-/// MOO: `list locations(obj object [, obj stop [, int is-parent]])`
+/// Usage: `list locations(obj object [, obj stop [, int is-parent]])`
 fn bf_locations(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(BfErr::ErrValue(
@@ -403,7 +410,7 @@ const BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE: usize = 0;
 const BF_CREATE_OBJECT_TRAMPOLINE_DONE: usize = 1;
 
 /// Creates and returns a new object whose parent is parent and whose owner is as described below.
-/// MOO: `obj create(obj parent [, obj owner] [, int obj_type] [, list init_args])`
+/// Usage: `obj create(obj parent [, obj owner] [, int obj_type] [, list init_args])`
 /// obj_type: 0=numbered, 1=anonymous, 2=UUID
 /// Also accepts boolean for backward compatibility: false=numbered, true=anonymous
 fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -518,7 +525,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 /// Creates and returns a new object at the specified object ID. This function is wizard-only.
-/// MOO: `obj create_at(obj id, obj parent [, obj owner] [, list init-args])`
+/// Usage: `obj create_at(obj id, obj parent [, obj owner] [, list init-args])`
 fn bf_create_at(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
         return Err(BfErr::ErrValue(
@@ -605,7 +612,7 @@ fn bf_create_at(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// If object is not valid, then E_INVARG is raised. The children of object are reparented to the parent of object.
 /// Before object is recycled, each object in its contents is moved to #-1 (implying a call to object's exitfunc verb, if any)
 /// and then object's `recycle' verb, if any, is called with no arguments.
-/// MOO: `none recycle(obj object)`
+/// Usage: `none recycle(obj object)`
 // This is invoked with a list of objects to move/call :exitfunc on. When the list is empty, the
 // next trampoline is called, to do the actual recycle.
 const BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC: usize = 0;
@@ -791,8 +798,9 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// Returns the largest object number ever assigned to a created object.
-/// MOO: `obj max_object()`
+/// Usage: `obj max_object()`
+/// Returns the largest object number ever assigned to a created object. Note that
+/// this object may have been recycled; use valid() to check.
 fn bf_max_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(BfErr::ErrValue(
@@ -810,8 +818,10 @@ const BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC: usize = 1;
 const BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC: usize = 2;
 const BF_MOVE_TRAMPOLINE_DONE: usize = 3;
 
-/// Changes what's location to be where.
-/// MOO: `none move(obj what, obj where)`
+/// Usage: `none move(obj what, obj where)`
+/// Moves object 'what' to location 'where'. Calls :accept on where (must return true
+/// unless caller is wizard), :exitfunc on old location, and :enterfunc on new location.
+/// Use #-1 as destination to move nowhere. Raises E_NACC if :accept returns false.
 fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(E_ARGS.msg("move() takes 2 arguments")));
@@ -1026,8 +1036,9 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// Returns a list of the names of the verbs defined directly on the given object, not inherited from its parent.
-/// MOO: `list verbs(obj object)`
+/// Usage: `list verbs(obj object)`
+/// Returns a list of verb names defined directly on object (not inherited).
+/// Raises E_INVARG if object is not valid.
 fn bf_verbs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(E_ARGS.msg("verbs() takes 1 argument")));
@@ -1047,9 +1058,9 @@ fn bf_verbs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&verbs)))
 }
 
-/// Returns a list of the names of the properties defined directly on the given object, not inherited from its parent.
-/// If object is not valid, then E_INVARG is raised. If the programmer does not have read permission on object, then E_PERM is raised.
-/// MOO: `list properties(obj object)`
+/// Usage: `list properties(obj object)`
+/// Returns a list of property names defined directly on object (not inherited).
+/// Raises E_INVARG if object is not valid, E_PERM if no read permission.
 fn bf_properties(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(E_ARGS.msg("properties() takes 1 argument")));
@@ -1074,8 +1085,9 @@ fn bf_properties(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&props)))
 }
 
-/// Confers or removes the "player object" status of the given object, depending upon the truth value of value.
-/// MOO: `none set_player_flag(obj object, value)`
+/// Usage: `none set_player_flag(obj object, int value)`
+/// Sets or clears the player flag on object. If value is true, object becomes a player.
+/// Wizard-only. The object will appear in players() and can connect.
 fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(
@@ -1123,8 +1135,8 @@ fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// Returns a list of the object numbers of all player objects in the database.
-/// MOO: `list players()`
+/// Usage: `list players()`
+/// Returns a list of all objects with the player flag set.
 fn bf_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(BfErr::ErrValue(E_ARGS.msg("players() takes no arguments")));
@@ -1135,8 +1147,8 @@ fn bf_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(players.iter().map(v_obj))))
 }
 
+/// Usage: `list objects()`
 /// Returns a list of all valid objects in the database. Wizard-only.
-/// MOO: `list objects()`
 fn bf_objects(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -1154,9 +1166,8 @@ fn bf_objects(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(objects.iter().map(v_obj))))
 }
 
-/// Returns a list of objects owned by the given object. If owner is not valid, then E_INVARG is raised.
-/// If the programmer does not have read permission on owner, then E_PERM is raised.
-/// MOO: `list owned_objects(obj owner)`
+/// Usage: `list owned_objects(obj owner)`
+/// Returns a list of all objects owned by owner. Raises E_INVARG if owner is invalid.
 fn bf_owned_objects(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(
@@ -1185,9 +1196,9 @@ fn bf_owned_objects(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&owned_objects)))
 }
 
-/// Renumber an object to a new object number
-/// MOO: `obj renumber(obj)`
-/// MOO: `obj renumber(obj, obj target)`
+/// Usage: `obj renumber(obj object [, obj target])`
+/// Renumbers an object to a new object number. If target is provided, uses that number;
+/// otherwise assigns the lowest available number. Wizard-only.
 fn bf_renumber(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 1 || bf_args.args.len() > 2 {
         return Err(BfErr::ErrValue(
@@ -1239,7 +1250,9 @@ fn bf_renumber(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_obj(new_obj)))
 }
 
-/// Determine if the given OBJ is an anonymous reference or "regular" object id
+/// Usage: `int is_anonymous(obj object)`
+/// Returns true if object is an anonymous object reference. Anonymous objects are not
+/// stored in the database and exist only as long as they are referenced.
 fn bf_is_anonymous(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(
@@ -1264,7 +1277,8 @@ fn bf_is_anonymous(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_bool(obj.is_anonymous())))
 }
 
-/// Determine if the given OBJ is a UUID-obj reference.
+/// Usage: `int is_uuobjid(obj object)`
+/// Returns true if object is a UUID-based object reference rather than a sequential number.
 fn bf_is_uuobjid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(E_ARGS.msg("is_uuobjid() takes 1 argument")));
@@ -1288,7 +1302,7 @@ fn bf_is_uuobjid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 /// Parse a command string and return its components as a map.
-/// MOO: `map parse_command(str command, list environment, [bool complex])`
+/// Usage: `map parse_command(str command, list environment, [bool complex])`
 ///
 /// The environment is a list of objects and/or {object, names ... } entries to search for object name matching.
 /// For example: `parse_command("look frobozicon", {player, player.location, {#666, "frob", "frobozzicon"}})`
@@ -1564,7 +1578,7 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
 /// Finds command verbs matching the parsed command specification (as returned from parse_command)
 /// on the given command environment targets.
-/// MOO: `list find_command_verb(map parsed_command_spec, list command_environment)`
+/// Usage: `list find_command_verb(map parsed_command_spec, list command_environment)`
 ///
 /// This function searches for command verbs that match the parsed command specification.
 /// The search order is:
@@ -1739,7 +1753,7 @@ const BF_DISPATCH_COMMAND_VERB_TRAMPOLINE_DONE: usize = 0;
 
 /// Dispatches a command verb with full command environment (dobj, iobj, prep, etc).
 /// This is wizard-only and bypasses the exec bit requirement.
-/// MOO: `any dispatch_command_verb(obj target, str verb_name, map parsed_command_spec)`
+/// Usage: `any dispatch_command_verb(obj target, str verb_name, map parsed_command_spec)`
 /// The `parse_command_spec` passed is used to fill the various parameters (dobj, dobjstr, iobj, etc)
 /// that the command sees and expects. Its structure should map that returned from `parse_command`
 fn bf_dispatch_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {

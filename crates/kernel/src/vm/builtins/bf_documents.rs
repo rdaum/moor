@@ -29,10 +29,9 @@ use std::io::{BufReader, BufWriter};
 use tracing::error;
 use xml::{EmitterConfig, reader::XmlEvent};
 
-/// MOO: `any xml_parse(str xml_string [, int result_type] [, map tag_map])`
-/// Parses XML string into various data structures.
-/// Result type: 4=list format, 10=map format, 15=flyweight format (default: list).
-/// For flyweight format, tag_map maps tag names to objects.
+/// Usage: `any xml_parse(str xml_string [, int result_type] [, map tag_map])`
+/// Parses XML into MOO data. Result type: LIST (default), MAP, or FLYWEIGHT.
+/// For flyweight format, optional tag_map maps tag names to delegate objects.
 fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(BfErr::ErrValue(E_ARGS.with_msg(|| {
@@ -561,10 +560,9 @@ where
     Ok(tags)
 }
 
-/// MOO: `str to_xml(any root_element [, map tag_map])`
-/// Converts a tree of flyweights or lists into an XML document.
-/// List format: {"tag", {"attr", "value"}, ...contents...} or with symbols/maps.
-/// For flyweights, tag_map maps object IDs to tag names.
+/// Usage: `str to_xml(any root_element [, map tag_map])`
+/// Converts flyweights or lists to XML. List format: `{"tag", {attrs...}, contents...}`.
+/// For flyweights, tag_map maps delegate objects to tag name strings.
 fn bf_to_xml(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 && bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(E_ARGS.with_msg(|| {
@@ -694,8 +692,8 @@ fn generate_xml_from_tags(tags: &[Tag]) -> Result<String, BfErr> {
     Ok(output_as_string)
 }
 
-/// MOO: `str generate_json(any value)`
-/// Converts a MOO value to a JSON string.
+/// Usage: `str generate_json(any value)`
+/// Converts a MOO value (int, float, string, list, map, object) to JSON string.
 fn bf_generate_json(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::Code(E_ARGS));
@@ -794,8 +792,8 @@ fn json_value_to_moo(json_value: &JsonValue) -> Result<moor_var::Var, BfErr> {
     }
 }
 
-/// MOO: `any parse_json(str json_string)`
-/// Parses a JSON string into a MOO value.
+/// Usage: `any parse_json(str json_string)`
+/// Parses JSON string into MOO values. Objects become maps, arrays become lists.
 fn bf_parse_json(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::Code(E_ARGS));
@@ -867,9 +865,9 @@ fn build_css_selector(tag: &str, attrs: Option<&Map>) -> Result<String, BfErr> {
     Ok(selector)
 }
 
-/// MOO: `list html_query(str html, any tag [, map attr_filter])`
-/// Query HTML for elements matching tag name and optional attribute filters.
-/// Returns list of maps containing attributes for each matching element.
+/// Usage: `list html_query(str html, str|symbol tag [, map attr_filter])`
+/// Finds HTML elements matching tag and optional attr filters. Filter values can use
+/// glob patterns: "prefix*", "*suffix", "*contains*". Returns list of attribute maps.
 fn bf_html_query(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(BfErr::ErrValue(E_ARGS.with_msg(|| {

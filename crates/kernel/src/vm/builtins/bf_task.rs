@@ -28,8 +28,9 @@ use moor_var::{
 use std::time::{Duration, SystemTime};
 use tracing::warn;
 
-/// Suspends the current task for the given number of seconds.
-/// MOO: `none suspend([num seconds])`
+/// Usage: `any suspend([num seconds])`
+/// Suspends the current task for the given number of seconds. If no argument,
+/// suspends indefinitely until resumed. Returns the value passed to resume().
 fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(E_ARGS.msg("suspend() requires 0 or 1 arguments")));
@@ -58,13 +59,9 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(VmInstr(ExecutionResult::TaskSuspend(suspend_condition)))
 }
 
-/// Suspends the task if tick count is within a threshold of the maximum.
-/// MOO: `bool suspend_if_needed([num threshold])`
-///
-/// If no threshold is provided, defaults to 4000 ticks.
-/// If the remaining ticks are less than or equal to the threshold, suspends with a commit
-/// (which causes a commit and immediate resume in a new transaction) and returns true.
-/// Otherwise, returns false without suspending.
+/// Usage: `bool suspend_if_needed([num threshold])`
+/// If remaining ticks are below threshold (default 4000), commits and immediately resumes
+/// in a new transaction, returning true. Otherwise returns false without suspending.
 fn bf_suspend_if_needed(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(
@@ -109,8 +106,9 @@ fn bf_suspend_if_needed(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// Commits the current transaction and suspends the task, optionally returning a value.
-/// MOO: `any commit([any value])`
+/// Usage: `any commit([any value])`
+/// Commits the current transaction and immediately resumes in a new transaction.
+/// Returns the provided value (or false if omitted).
 fn bf_commit(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(E_ARGS.msg("commit() takes 0 or 1 arguments")));
@@ -127,8 +125,9 @@ fn bf_commit(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     ))))
 }
 
-/// Rolls back the current transaction. Wizard-only.
-/// MOO: `none rollback([bool output_session])`
+/// Usage: `none rollback([bool output_session])`
+/// Aborts the current transaction, discarding all changes. If output_session is true,
+/// the session output buffer is preserved. Wizard-only.
 fn bf_rollback(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Rollback is wizard only
     bf_args
@@ -146,8 +145,9 @@ fn bf_rollback(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(VmInstr(ExecutionResult::TaskRollback(output_session)))
 }
 
-/// Suspends the current task until the specified task completes.
-/// MOO: `none wait_task(int task_id)`
+/// Usage: `any wait_task(int task_id)`
+/// Suspends the current task until the specified task completes. Returns the result
+/// of the waited-for task.
 fn bf_wait_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(E_ARGS.msg("wait_task() requires 1 argument")));
@@ -164,14 +164,9 @@ fn bf_wait_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
-/// Suspends the current task to wait for input from a player.
-/// MOO: `str read([obj player [, map/alist metadata]])`
-///
-/// The optional metadata parameter allows specifying UI hints for rich input prompts:
-/// - `input_type`: Type of input ("yes_no", "choice", "number", etc.)
-/// - `prompt`: Prompt text to display
-/// - `choices`: List of choices for "choice" input type
-/// - `min`/`max`: Range constraints for "number" input type
+/// Usage: `str read([obj player [, map metadata]])`
+/// Suspends until the player enters a line of input. Optional metadata provides UI hints
+/// (input_type, prompt, choices, min/max) for rich clients. Player must be current player.
 fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 2 {
         return Err(ErrValue(E_ARGS.msg("read() requires 0 to 2 arguments")));
@@ -247,8 +242,9 @@ fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(VmInstr(ExecutionResult::TaskNeedInput(metadata)))
 }
 
-/// Returns a list of all queued (suspended) tasks.
-/// MOO: `list queued_tasks()`
+/// Usage: `list queued_tasks()`
+/// Returns all suspended tasks. Each entry is `{task_id, start_time, 0, 0, programmer,
+/// verb_loc, verb_name, line, this}`.
 fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -286,10 +282,9 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(tasks)))
 }
 
-/// Returns the list of active running (not suspended/queued) running tasks.
-/// If the player is a wizard, it returns the list of all active tasks, otherwise it returns the list of
-/// tasks only for the player themselves.
-/// MOO: `list active_tasks()`
+/// Usage: `list active_tasks()`
+/// Returns running (not suspended) tasks. Wizards see all tasks, others see only their own.
+/// Each entry is `{task_id, player, start_info}` where start_info varies by task type.
 fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let tasks = match current_task_scheduler_client().active_tasks() {
         Ok(tasks) => tasks,
@@ -405,9 +400,9 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(output)))
 }
 
-/// If player is omitted, returns a list of object numbers naming all players that currently have active task
-/// queues inside the server. If player is provided, returns the number of background tasks currently queued for that user.
-/// MOO: `list queue_info([obj player])`
+/// Usage: `list|int queue_info([obj player])`
+/// Without argument (wizard-only): returns list of players with queued tasks.
+/// With player argument: returns count of queued tasks for that player.
 fn bf_queue_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(
@@ -461,9 +456,9 @@ fn bf_queue_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// Kills the task with the given <task-id>.
-/// The task can be suspended / queued or running.
-/// MOO: `none kill_task(int task_id)`
+/// Usage: `none kill_task(int task_id)`
+/// Terminates the specified task (suspended or running). The caller must own the task
+/// or be a wizard.
 fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(E_ARGS.msg("kill_task() requires 1 argument")));
@@ -494,8 +489,9 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(result))
 }
 
-/// Resumes a previously suspended task, optionally with a value to pass back to the suspend() call.
-/// MOO: `none resume(int task_id [, any value])`
+/// Usage: `none resume(int task_id [, any value])`
+/// Resumes a suspended task. The optional value becomes the return value of suspend()
+/// in the resumed task (defaults to 0).
 fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 2 {
         return Err(ErrValue(E_ARGS.msg("resume() requires 1 or 2 arguments")));
@@ -534,8 +530,8 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(result))
 }
 
-/// Returns the number of ticks left in the current time slice.
-/// MOO: `int ticks_left()`
+/// Usage: `int ticks_left()`
+/// Returns the number of ticks remaining before the task is forcibly suspended.
 fn bf_ticks_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -551,8 +547,9 @@ fn bf_ticks_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(ticks_left as i64)))
 }
 
-/// Returns the number of seconds left in the current time slice.
-/// MOO: `int seconds_left()`
+/// Usage: `int seconds_left()`
+/// Returns the number of seconds remaining before the task is forcibly aborted.
+/// Returns -1 if there is no time limit.
 fn bf_seconds_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -568,8 +565,9 @@ fn bf_seconds_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(seconds_left))
 }
 
-/// Returns information about the current calling stack.
-/// MOO: `list callers()`
+/// Usage: `list callers()`
+/// Returns the call stack (excluding current frame). Each entry is
+/// `{this, verb_name, programmer, verb_loc, player, line_number}`.
 fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -598,8 +596,8 @@ fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }))))
 }
 
-/// Returns the unique identifier of the current task.
-/// MOO: `int task_id()`
+/// Usage: `int task_id()`
+/// Returns the unique identifier of the currently executing task.
 fn bf_task_id(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(

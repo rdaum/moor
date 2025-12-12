@@ -59,9 +59,9 @@ lazy_static! {
     static ref DETECT_SYM: Symbol = Symbol::mk("detect");
 }
 
-/// Returns a list of strings representing the object definition in objdef format.
-/// The caller must own the object or be a wizard. Options are currently ignored (keeping simple for phase 1).
-/// MOO: `list dump_object(obj object [, map options])`
+/// Usage: `list dump_object(obj object [, map options])`
+/// Returns the object definition as a list of strings in objdef format.
+/// Options: `constants -> true` to use symbolic constant names. Wizard-only.
 fn bf_dump_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(BfErr::ErrValue(
@@ -340,10 +340,10 @@ fn format_load_result(
     ]))
 }
 
-/// Loads a single object definition from a list of strings and creates it in the database.
-/// This creates the object and all its properties/verbs. Wizard-only.
-/// MOO: `obj load_object(list object_lines [, map options] [, obj|int object_spec])`
-/// object_spec: 0=NextObjid, 1=Anonymous, 2=UuObjId, #N=specific ID, omitted=use objdef's ID
+/// Usage: `obj|list load_object(list object_lines [, map options] [, obj|int object_spec])`
+/// Creates an object from objdef format. object_spec: 0=next ID, 1=anonymous, 2=UUID,
+/// #N=specific ID, omitted=use objdef's ID. Options: `dry_run, `conflict_mode, `constants.
+/// Wizard-only.
 fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(BfErr::ErrValue(
@@ -515,9 +515,9 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(return_value))
 }
 
-/// Completely replaces an existing object with a new definition from objdef format.
-/// This deletes all properties and verbs not in the new definition.
-/// MOO: `obj reload_object(list object_lines [, map constants] [, obj target])`
+/// Usage: `obj reload_object(list object_lines [, map constants] [, obj target])`
+/// Replaces an existing object with a new definition from objdef format. Properties
+/// and verbs not in the new definition are deleted. Wizard-only.
 fn bf_reload_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(BfErr::ErrValue(

@@ -71,8 +71,8 @@ pub(crate) fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
-/// Returns true if the given object is a player object.
-/// MOO: `int is_player(obj object)`
+/// Usage: `bool is_player(obj object)`
+/// Returns true if the object has the player flag set. Raises E_INVARG if not valid.
 fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(E_ARGS.msg("is_player() requires 1 argument")));
@@ -95,8 +95,9 @@ fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(bf_args.v_bool(is_player)))
 }
 
-/// Returns the object representing the permissions of the calling task.
-/// MOO: `obj caller_perms()`
+/// Usage: `obj caller_perms()`
+/// Returns the object whose permissions are being used by the current verb call.
+/// Initially this is the programmer of the verb, but can be changed by set_task_perms.
 fn bf_caller_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -107,8 +108,9 @@ fn bf_caller_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_obj(bf_args.caller_perms())))
 }
 
-/// Sets the permissions of the current task.
-/// MOO: `none set_task_perms(obj perms)`
+/// Usage: `none set_task_perms(obj perms)`
+/// Changes the permissions of the current task to those of the given object.
+/// Raises E_PERM if caller is not a wizard and perms is not the caller.
 fn bf_set_task_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(E_ARGS.msg("set_task_perms() requires 1 argument")));
@@ -131,8 +133,8 @@ fn bf_set_task_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// Shuts down the server. Wizard-only.
-/// MOO: `none shutdown([str message])`
+/// Usage: `none shutdown([str message])`
+/// Shuts down the server, optionally with a message. Wizard-only.
 fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(E_ARGS.msg("shutdown() requires 0 or 1 arguments")));
@@ -159,8 +161,8 @@ fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// Returns the current time as seconds since Unix epoch.
-/// MOO: `int time()`
+/// Usage: `int time()`
+/// Returns the current time as seconds since Unix epoch (1970-01-01 00:00:00 UTC).
 fn bf_time(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(E_ARGS.msg("time() does not take any arguments")));
@@ -173,9 +175,9 @@ fn bf_time(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
-/// Returns the current time as a floating-point number of seconds since Unix epoch.
-/// With argument 1, returns uptime instead.
-/// MOO: `float ftime([int mode])`
+/// Usage: `float ftime([int mode])`
+/// Returns the current time as a float with sub-second precision since Unix epoch.
+/// If mode is 1/true, returns server uptime in seconds instead.
 fn bf_ftime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(E_ARGS.msg("ftime() requires 0 or 1 arguments")));
@@ -204,8 +206,9 @@ fn bf_ftime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_float(seconds + nanos)))
 }
 
-/// Converts a time value to a human-readable string.
-/// MOO: `str ctime([int time])`
+/// Usage: `str ctime([int time])`
+/// Converts a Unix timestamp to a human-readable string like "Mon Jan 1 12:00:00 2024 EST".
+/// If no argument, uses current time.
 fn bf_ctime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(E_ARGS.msg("ctime() requires 0 or 1 arguments")));
@@ -238,10 +241,9 @@ fn bf_ctime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_string(datetime_str.to_string())))
 }
-/// Raises <code> as an error in the same way as other MOO expressions, statements, and functions do.
-/// <Message>, which defaults to the value of `tostr(<code>)', and <value>, which defaults to zero,
-/// are made available to any `try'-`except' statements that catch the error.
-/// MOO: `none raise(err code [, str message [, any value]])`
+/// Usage: `none raise(err code [, str message [, any value]])`
+/// Raises an error that can be caught by try-except. Message defaults to the error's
+/// default message, value defaults to the error's default value or 0.
 fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(ErrValue(E_ARGS.msg("raise() requires 1 to 3 arguments")));
@@ -273,8 +275,8 @@ fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Err(BfErr::Raise(Error::new(err.err_type, msg, value)))
 }
 
-/// Returns the version string of the server.
-/// MOO: `str server_version()`
+/// Usage: `str server_version()`
+/// Returns the version string of the server (e.g., "0.9.0-alpha+abc1234").
 fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -285,8 +287,8 @@ fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_string(version_string)))
 }
 
-/// Disconnects the player with the given object number.
-/// MOO: `none boot_player(obj player)`
+/// Usage: `none boot_player(obj player)`
+/// Disconnects the player from the server. Caller must be the player or a wizard.
 fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(E_ARGS.msg("boot_player() requires 1 argument")));
@@ -310,8 +312,9 @@ fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// Calls the given function with the given arguments and returns the result.
-/// MOO: `any call_function(str func, list args)`
+/// Usage: `any call_function(str func, ...)`
+/// Calls a builtin function by name with the remaining arguments. Raises E_INVARG
+/// if the function doesn't exist.
 fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -347,10 +350,9 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }))
 }
 
-/// The text in <message> is sent to the server log with a distinctive prefix.
-/// If the programmer is not a wizard, then `E_PERM' is raised.
-/// If <is-error> is provided and true, then <message> is marked in the server log as an error.
-/// MOO: `none server_log(str message [, int is_error])`
+/// Usage: `none server_log(str message [, int is_error])`
+/// Writes a message to the server log. If is_error is true, logs at error level.
+/// Wizard-only.
 fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(ErrValue(
@@ -403,8 +405,8 @@ fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// Logs cache statistics to the server log. Wizard-only.
-/// MOO: `none log_cache_stats()`
+/// Usage: `none log_cache_stats()`
+/// Logs property, verb, and ancestry cache statistics to the server log. Wizard-only.
 fn bf_log_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -478,8 +480,9 @@ fn bf_function_info_to_list(bf: &Builtin) -> Var {
     ])
 }
 
-/// Returns information about built-in functions.
-/// MOO: `list function_info([str function_name])`
+/// Usage: `list function_info([str function_name])`
+/// Returns `{name, min_args, max_args, {types...}}` for a builtin, or a list of all
+/// builtins if no argument. Args of -1 mean unlimited, types of -1 mean any.
 fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(
@@ -514,7 +517,7 @@ pub const BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE: usize = 0;
 pub const BF_SERVER_EVAL_TRAMPOLINE_RESUME: usize = 1;
 
 /// Compiles and evaluates a MOO expression or statement.
-/// MOO: `list eval(str program [, int verbosity [, int output_mode]])`
+/// Usage: `list eval(str program [, int verbosity [, int output_mode]])`
 ///
 /// Arguments controlling compilation error output:
 ///   - verbosity: Controls error detail level (default: 0)
@@ -614,8 +617,8 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// Triggers a database checkpoint. Wizard-only.
-/// MOO: `int dump_database([int blocking])`
+/// Usage: `bool dump_database([int blocking])`
+/// Triggers a database checkpoint. If blocking is true, waits for completion. Wizard-only.
 fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -644,8 +647,8 @@ fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(bf_args.v_bool(true)))
 }
 
-/// Triggers anonymous object garbage collection. Wizard-only.
-/// MOO: `none gc_collect()`
+/// Usage: `none gc_collect()`
+/// Forces garbage collection of anonymous objects. Wizard-only.
 fn bf_gc_collect(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -669,8 +672,8 @@ fn bf_gc_collect(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// Returns information about server memory usage. Wizard-only.
-/// MOO: `list memory_usage()`
+/// Usage: `list memory_usage()`
+/// Returns `{block_size, pages_used, pages_free}` for the server process. Wizard-only.
 fn bf_memory_usage(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -726,8 +729,8 @@ fn bf_memory_usage(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&[block_size, nused, nfree])))
 }
 
+/// Usage: `int db_disk_size()`
 /// Returns the number of bytes currently occupied by the database on disk. Wizard-only.
-/// MOO: `int db_disk_size()`
 fn db_disk_size(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -748,9 +751,8 @@ fn db_disk_size(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(disk_size as i64)))
 }
 
-/// This causes the server to consult the current common of properties on $server_options, updating
-/// the corresponding server option settings accordingly. Wizard-only.
-/// MOO: `none load_server_options()`
+/// Usage: `none load_server_options()`
+/// Reloads server options from $server_options properties. Wizard-only.
 fn load_server_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -791,8 +793,8 @@ fn counter_map(counters: &[&PerfCounter], use_symbols: bool) -> Var {
     v_map(&result)
 }
 
-/// Returns performance counters for built-in functions. Wizard-only.
-/// MOO: `map bf_counters()`
+/// Usage: `map bf_counters()`
+/// Returns performance counters for builtin functions as `{name -> {count, nanos}}`. Wizard-only.
 fn bf_bf_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -807,8 +809,8 @@ fn bf_bf_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
-/// Returns performance counters for database operations. Wizard-only.
-/// MOO: `map db_counters()`
+/// Usage: `map db_counters()`
+/// Returns performance counters for database operations as `{name -> {count, nanos}}`. Wizard-only.
 fn bf_db_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -822,8 +824,8 @@ fn bf_db_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
-/// Returns performance counters for task scheduler operations. Wizard-only.
-/// MOO: `map sched_counters()`
+/// Usage: `map sched_counters()`
+/// Returns performance counters for scheduler operations as `{name -> {count, nanos}}`. Wizard-only.
 fn bf_sched_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -838,8 +840,8 @@ fn bf_sched_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
-/// Rotates the enrollment token used for host enrollment and returns the new token.
-/// MOO: `str rotate_enrollment_token()`
+/// Usage: `str rotate_enrollment_token()`
+/// Generates a new enrollment token for host enrollment and returns it. Wizard-only.
 fn bf_rotate_enrollment_token(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -887,8 +889,9 @@ fn parse_optional_timestamp(arg: &Var, label: &str) -> Result<Option<SystemTime>
     })))
 }
 
-/// Returns summary information about a player's encrypted event history.
-/// MOO: `list player_event_log_stats(obj player [, num|float|none since [, num|float|none until]])`
+/// Usage: `list player_event_log_stats(obj player [, num since [, num until]])`
+/// Returns `{total_events, earliest_time, latest_time}` for a player's event log.
+/// Caller must own the player or be a wizard.
 fn bf_player_event_log_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 1 || bf_args.args.len() > 3 {
         return Err(ErrValue(
@@ -953,8 +956,9 @@ fn bf_player_event_log_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfE
     ])))
 }
 
-/// Deletes part or all of a player's encrypted event history and optionally drops the stored public key.
-/// MOO: `list purge_player_event_log(obj player [, num|float|none before [, any drop_pubkey]])`
+/// Usage: `list purge_player_event_log(obj player [, num before [, bool drop_pubkey]])`
+/// Deletes events before timestamp (or all if omitted). Returns `{deleted_count, pubkey_deleted}`.
+/// If drop_pubkey is true, also removes the player's stored public key.
 fn bf_purge_player_event_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 1 || bf_args.args.len() > 3 {
         return Err(ErrValue(
@@ -1028,8 +1032,8 @@ fn make_cache_stats_list(cache_stats: &moor_db::CacheStats) -> Var {
     ])
 }
 
-/// Returns verb cache statistics. Wizard-only.
-/// MOO: `list verb_cache_stats()`
+/// Usage: `list verb_cache_stats()`
+/// Returns `{hits, negative_hits, misses, flushes, histogram}` for verb cache. Wizard-only.
 fn bf_verb_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -1050,8 +1054,8 @@ fn bf_verb_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(make_cache_stats_list(&VERB_CACHE_STATS)))
 }
 
-/// Returns property cache statistics. Wizard-only.
-/// MOO: `list property_cache_stats()`
+/// Usage: `list property_cache_stats()`
+/// Returns `{hits, negative_hits, misses, flushes, histogram}` for property cache. Wizard-only.
 fn bf_property_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -1072,8 +1076,8 @@ fn bf_property_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
     Ok(Ret(make_cache_stats_list(&PROP_CACHE_STATS)))
 }
 
-/// Returns ancestry cache statistics. Wizard-only.
-/// MOO: `list ancestry_cache_stats()`
+/// Usage: `list ancestry_cache_stats()`
+/// Returns `{hits, negative_hits, misses, flushes, histogram}` for ancestry cache. Wizard-only.
 fn bf_ancestry_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -1094,8 +1098,8 @@ fn bf_ancestry_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
     Ok(Ret(make_cache_stats_list(&ANCESTRY_CACHE_STATS)))
 }
 
-/// Flushes all internal caches (verb resolution, property resolution, ancestry). Wizard-only.
-/// MOO: `none flush_caches()`
+/// Usage: `none flush_caches()`
+/// Clears all internal caches (verb, property, and ancestry resolution). Wizard-only.
 fn bf_flush_caches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -1115,9 +1119,8 @@ fn bf_flush_caches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// Returns documentation for a builtin function.
-/// MOO: `list function_help(str builtin_name)`
-/// Returns a list of strings containing the documentation for the specified builtin function.
+/// Usage: `list function_help(str builtin_name)`
+/// Returns a list of documentation strings for the specified builtin function.
 /// Raises E_INVARG if the builtin doesn't exist or has no documentation.
 fn bf_function_help(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {

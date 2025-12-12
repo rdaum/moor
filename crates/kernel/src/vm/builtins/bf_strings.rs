@@ -47,8 +47,10 @@ fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
     result
 }
 
-/// MOO: `str strsub(str subject, str what, str with [, bool case_matters])`
-/// Substitutes all occurrences of 'what' in 'subject' with 'with'.
+/// Usage: `str strsub(str subject, str what, str with [, bool case_matters])`
+/// Replaces all occurrences of 'what' in 'subject' with 'with'. Occurrences are found
+/// left to right and all substitutions happen simultaneously. By default, the search
+/// ignores case; if case_matters is true, case is significant.
 fn bf_strsub(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 3 {
         false
@@ -96,8 +98,10 @@ fn str_rindex(subject: &str, what: &str, case_matters: bool) -> i64 {
     }
 }
 
-/// MOO: `int index(str subject, str what [, bool case_matters])`
-/// Returns the position of the first occurrence of 'what' in 'subject' (1-based), or 0 if not found.
+/// Usage: `int index(str subject, str what [, bool case_matters])`
+/// Returns the index of the first character of the first occurrence of 'what' in 'subject',
+/// or 0 if not found. By default, the search ignores case; if case_matters is true, case
+/// is significant.
 fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 2 {
         false
@@ -118,8 +122,10 @@ fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `int rindex(str subject, str what [, bool case_matters])`
-/// Returns the position of the last occurrence of 'what' in 'subject' (1-based), or 0 if not found.
+/// Usage: `int rindex(str subject, str what [, bool case_matters])`
+/// Returns the index of the first character of the last occurrence of 'what' in 'subject',
+/// or 0 if not found. By default, the search ignores case; if case_matters is true, case
+/// is significant.
 fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 2 {
         false
@@ -140,8 +146,9 @@ fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `int strcmp(str str1, str str2)`
-/// Compares two strings lexicographically. Returns -1, 0, or 1.
+/// Usage: `int strcmp(str str1, str str2)`
+/// Performs a case-sensitive comparison of two strings. Returns a negative integer if
+/// str1 < str2, zero if identical, or a positive integer if str1 > str2. Uses ASCII ordering.
 fn bf_strcmp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -155,7 +162,7 @@ fn bf_strcmp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `str string_hash(str text)`
+/// Usage: `str string_hash(str text)`
 /// Returns MD5 hash of the given string in uppercase hexadecimal format.
 fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -172,7 +179,7 @@ fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `str binary_hash(binary data)`
+/// Usage: `str binary_hash(binary data)`
 /// Returns MD5 hash of the given binary data in uppercase hexadecimal format.
 fn bf_binary_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -187,7 +194,7 @@ fn bf_binary_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
-/// MOO: `str encode_base64(str|binary data [, bool url_safe] [, bool no_padding])`
+/// Usage: `str encode_base64(str|binary data [, bool url_safe] [, bool no_padding])`
 /// Encodes the given string or binary data using Base64 encoding.
 /// - url_safe: If true, uses URL-safe Base64 alphabet (- and _ instead of + and /). Defaults to false.
 /// - no_padding: If true, omits trailing = padding characters. Defaults to false.
@@ -218,7 +225,7 @@ fn bf_encode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_string(encoded)))
 }
 
-/// MOO: `binary decode_base64(str encoded_text [, bool url_safe])`
+/// Usage: `binary decode_base64(str encoded_text [, bool url_safe])`
 /// Decodes Base64-encoded string to binary data.
 /// - url_safe: If true, uses URL-safe Base64 alphabet (- and _ instead of + and /). Defaults to false.
 fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -247,7 +254,7 @@ fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_binary(decoded_bytes)))
 }
 
-/// MOO: `str binary_to_str(binary data [, bool allow_lossy])`
+/// Usage: `str binary_to_str(binary data [, bool allow_lossy])`
 /// Converts binary data to a string.
 /// If allow_lossy is false (default), returns E_INVARG on invalid UTF-8.
 /// If allow_lossy is true, uses replacement character for invalid sequences.
@@ -282,7 +289,7 @@ fn bf_binary_to_str(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_string(result)))
 }
 
-/// MOO: `binary binary_from_str(str text)`
+/// Usage: `binary binary_from_str(str text)`
 /// Converts a string to binary data.
 fn bf_binary_from_str(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -297,10 +304,10 @@ fn bf_binary_from_str(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_binary(binary_data)))
 }
 
-/// MOO: `list explode(str subject [, str break [, bool include-sequential-occurrences]])`
-/// Splits subject into a list of substrings separated by break character.
-/// Only the first character of break is used. Break defaults to space.
-/// If include-sequential-occurrences is true, empty strings are included for consecutive breaks.
+/// Usage: `list explode(str subject [, str break [, bool include_sequential]])`
+/// Returns a list of substrings of subject separated by break. Only the first character
+/// of break is used; it defaults to space. By default, empty strings from consecutive
+/// separators are omitted; if include_sequential is true, they are included.
 fn bf_explode(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(BfErr::Code(E_ARGS));

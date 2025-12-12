@@ -44,8 +44,9 @@ use moor_var::{
     v_bool, v_empty_list, v_list, v_list_iter, v_obj, v_str, v_string, v_sym,
 };
 
-/// MOO: `list verb_info(obj object, str|int verb_desc)`
-/// Returns information about a verb as `{owner, perms, names}`.
+/// Usage: `list verb_info(obj object, str|int verb_desc)`
+/// Returns `{owner, perms, names}` where perms is a string of r/w/x/d flags.
+/// Verb can be identified by name or 1-based index. Raises E_VERBNF if not found.
 fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -176,8 +177,9 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
     }
 }
 
-/// MOO: `none set_verb_info(obj object, str|int verb_desc, list info)`
-/// Sets verb information from a `{owner, perms, names}` list.
+/// Usage: `none set_verb_info(obj object, str|int verb_desc, list info)`
+/// Sets verb owner, permissions (r/w/x/d), and names from `{owner, perms, names}`.
+/// Verb can be identified by name or 1-based index. Raises E_VERBNF if not found.
 fn bf_set_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 3 {
         return Err(BfErr::Code(E_ARGS));
@@ -229,8 +231,9 @@ fn bf_set_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// MOO: `list verb_args(obj object, str|int verb_desc)`
-/// Returns verb argument specification as `{dobj, prep, iobj}`.
+/// Usage: `list verb_args(obj object, str|int verb_desc)`
+/// Returns `{dobj, prep, iobj}` as strings ("this"/"any"/"none" for objects,
+/// preposition string or "any"/"none" for prep). Raises E_VERBNF if not found.
 fn bf_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -279,8 +282,9 @@ fn parse_verb_args(verbinfo: &List) -> Result<VerbArgsSpec, Error> {
     }
 }
 
-/// MOO: `none set_verb_args(obj object, str|int verb_desc, list args)`
-/// Sets verb argument specification from a `{dobj, prep, iobj}` list.
+/// Usage: `none set_verb_args(obj object, str|int verb_desc, list args)`
+/// Sets verb argument matching from `{dobj, prep, iobj}` strings. Use "this"/"any"/"none"
+/// for dobj/iobj, and preposition string or "any"/"none" for prep.
 fn bf_set_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 3 {
         return Err(BfErr::Code(E_ARGS));
@@ -339,8 +343,9 @@ fn bf_set_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// MOO: `list verb_code(obj object, str|int verb_desc [, bool fully_paren [, bool indent]])`
-/// Returns the source code of a verb as a list of strings.
+/// Usage: `list verb_code(obj object, str|int verb_desc [, bool fully_paren [, bool indent]])`
+/// Returns decompiled source code as a list of strings. If fully_paren is true, all
+/// expressions are fully parenthesized. If indent is true (default), statements are indented.
 fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
         return Err(BfErr::Code(E_ARGS));
@@ -414,7 +419,7 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(unparsed.iter().map(|s| v_str(s)))))
 }
 
-/// MOO: `list set_verb_code(obj object, str|int verb_desc, list code [, int verbosity [, int output_mode]])`
+/// Usage: `list set_verb_code(obj object, str|int verb_desc, list code [, int verbosity [, int output_mode]])`
 /// Sets the source code of a verb. Returns empty list on success, or compilation errors.
 ///
 /// Arguments controlling compilation error output:
@@ -526,8 +531,9 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// MOO: `none add_verb(obj object, list info, list args)`
-/// Adds a new verb with the given info and argument specification.
+/// Usage: `none add_verb(obj object, list info, list args)`
+/// Defines a new verb on object. Info is `{owner, perms, names}` (like verb_info),
+/// args is `{dobj, prep, iobj}` (like verb_args). The new verb has an empty program.
 fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 3 {
         return Err(BfErr::Code(E_ARGS));
@@ -575,8 +581,9 @@ fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// MOO: `none delete_verb(obj object, str|int verb_desc)`
-/// Removes a verb from an object.
+/// Usage: `none delete_verb(obj object, str|int verb_desc)`
+/// Removes a verb defined directly on object. Raises E_VERBNF if not found,
+/// E_PERM if caller lacks write permission on the object.
 fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -610,7 +617,7 @@ fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// MOO: `list disassemble(obj object, str|int verb_desc)`
+/// Usage: `list disassemble(obj object, str|int verb_desc)`
 /// Returns the internal compiled form of a verb as a list of strings.
 /// The format is undocumented and may change between releases.
 fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -694,9 +701,9 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&disassembly)))
 }
 
-/// MOO: `bool|list respond_to(obj|flyweight object, symbol verb_name)`
-/// Returns true if object responds to verb, or `{location, names}` if readable.
-/// For flyweights, checks the delegate object.
+/// Usage: `bool|list respond_to(obj|flyweight object, symbol verb_name)`
+/// Returns true (1) if object has the verb callable, or `{defining_obj, names}` if the
+/// object is readable. Returns false (0) if verb not found. For flyweights, checks delegate.
 fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -746,7 +753,7 @@ fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `list format_error(map error [, int verbosity [, int output_mode]])`
+/// Usage: `list format_error(map error [, int verbosity [, int output_mode]])`
 /// Formats a structured error map (from set_verb_code or eval with verbosity=3) into human-readable strings.
 ///
 /// Arguments:
@@ -879,7 +886,7 @@ fn bf_format_compile_error(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
     Ok(Ret(v_list(error_vars.as_slice())))
 }
 
-/// MOO: `list prepositions()`
+/// Usage: `list prepositions()`
 /// Returns a list of all valid prepositions. Each entry is `{id, short_form, {all_forms}}`.
 /// IDs are 1-indexed for MOO compatibility (0 = id 1, 1 = id 2, etc.).
 fn bf_prepositions(_bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {

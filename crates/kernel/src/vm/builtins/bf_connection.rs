@@ -30,8 +30,9 @@ use moor_var::{
 use std::time::{Duration, SystemTime};
 use tracing::{info, warn};
 
-/// Forces input to be processed as if it came from the given connection.
-/// MOO: `int force_input(obj conn, str line [, int at_front])`
+/// Usage: `int force_input(obj conn, str line [, int at_front])`
+/// Queues input as if it came from the player's connection. Returns the task ID
+/// of the spawned command task. Caller must be player or wizard.
 fn bf_force_input(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(ErrValue(
@@ -63,9 +64,9 @@ fn bf_force_input(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// Sends a request to a worker (e.g. outbound HTTP, files, etc.) to perform some action.
-/// Task then goes into suspension until the request is completed or times out. Wizard-only.
-/// MOO: `any worker_request(str worker_type, list args [, map options])`
+/// Usage: `any worker_request(symbol worker_type, list args [, map options])`
+/// Sends a request to an external worker (e.g., HTTP). Suspends until complete.
+/// Options may include `timeout_seconds`. Wizard-only.
 fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -127,8 +128,9 @@ fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
-/// Returns information about active connections.
-/// MOO: `list connections([obj player])`
+/// Usage: `list connections([obj player])`
+/// Returns connection info for player (or all if omitted). Each entry is
+/// `{conn_obj, peer_addr, idle_secs, content_types, options}`.
 fn bf_connections(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(
@@ -218,8 +220,8 @@ fn bf_connections(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(connections_list)))
 }
 
-/// Returns the connection object for the current task.
-/// MOO: `obj connection()`
+/// Usage: `obj connection()`
+/// Returns the connection object (negative ID) for the current task's session.
 fn bf_connection(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -249,8 +251,9 @@ fn bf_connection(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_obj(connection_obj)))
 }
 
-/// Switches the current player to a different player object. Wizard-only.
-/// MOO: `none switch_player(obj new_player)`
+/// Usage: `none switch_player(obj new_player)`
+/// Switches the current session to a different player object. The target must be
+/// a valid player object. Wizard-only.
 fn bf_switch_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(E_ARGS.msg("switch_player() requires 1 argument")));
@@ -325,9 +328,9 @@ fn bf_switch_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// Returns information about all available worker types and their current state.
-/// Wizard-only function that provides insights into worker queue sizes, response times, etc.
-/// MOO: `list workers()`
+/// Usage: `list workers()`
+/// Returns info about external workers. Each entry is `{type, count, queue_size,
+/// avg_response_ms, last_ping_secs}`. Wizard-only.
 fn bf_workers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -365,8 +368,8 @@ fn bf_workers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(result)))
 }
 
-/// Returns the current output delimiters (prefix and suffix) for the specified player.
-/// MOO: `list output_delimiters(obj player)`
+/// Usage: `list output_delimiters(obj player)`
+/// Returns `{prefix, suffix}` strings used to delimit command output for the player.
 fn bf_output_delimiters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(
@@ -481,8 +484,9 @@ fn check_connection_ownership(
         .any(|detail| detail.connection_obj == connection_obj))
 }
 
-/// Returns connection options for the given connection object.
-/// MOO: `list connection_options(obj conn)`
+/// Usage: `list connection_options(obj conn)`
+/// Returns all options for connection object as `{name, value}` pairs.
+/// Argument must be a connection object (negative ID), not a player.
 fn bf_connection_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(
@@ -533,8 +537,9 @@ fn bf_connection_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> 
     Ok(Ret(v_list(&pairs)))
 }
 
-/// Returns the value of a specific connection option.
-/// MOO: `value connection_option(obj conn, str name)`
+/// Usage: `any connection_option(obj conn, str name)`
+/// Returns the value of a specific connection option. Raises E_INVARG if not found.
+/// Argument must be a connection object (negative ID), not a player.
 fn bf_connection_option(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(ErrValue(
@@ -594,8 +599,8 @@ fn bf_connection_option(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     ))))
 }
 
-/// Sets a connection option for the given connection
-/// MOO: `void set_connection_option(obj connection, str option_name, any value)`
+/// Usage: `none set_connection_option(obj conn, symbol option_name, any value)`
+/// Sets a connection option on a connection object (negative ID).
 fn bf_set_connection_option(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 3 {
         return Err(ErrValue(
@@ -633,8 +638,9 @@ fn bf_set_connection_option(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
     Ok(Ret(v_int(0)))
 }
 
-/// Sends a notification message to a player.
-/// MOO: `none notify(obj player, str message [, int no_flush [, int no_newline [, str content_type [, list metadata]]]])`
+/// Usage: `int notify(obj player, str|any message [, int no_flush [, int no_newline [, symbol content_type [, map metadata]]]])`
+/// Sends output to a player. If no_flush is true, buffering is allowed. If no_newline
+/// is true, no newline is appended. With rich_notify enabled, message can be any value.
 fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // If in non rich-mode `notify` can only send text.
     // Otherwise, it can send any value, and it's up to the host/client to interpret it.
@@ -742,10 +748,9 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(1)))
 }
 
-/// Emits a presentation event to the client. The client should interpret this as a request to present
-/// the content provided as a pop-up, panel, or other client-specific UI element (depending on 'target').
-/// If only the first two arguments are provided, the client should "unpresent" the presentation with that ID.
-/// MOO: `none present(obj player, str id [, str content_type, str target, str content [, list attributes]])`
+/// Usage: `none present(obj player, str id [, str content_type, str target, str content [, list attrs]])`
+/// Shows rich content (popup, panel, etc.) to the player. With only player and id,
+/// dismisses that presentation. Requires rich_notify enabled.
 fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.config.rich_notify {
         return Err(ErrValue(E_PERM.msg("present() is not available")));
@@ -909,8 +914,9 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// Returns a list of all currently connected players.
-/// MOO: `list connected_players([int include_all])`
+/// Usage: `list connected_players([int include_all])`
+/// Returns a list of all connected player objects. If include_all is true,
+/// includes connection objects (negative IDs) as well.
 fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let include_all = if bf_args.args.len() == 1 {
         let Some(include_all) = bf_args.args[0].as_integer() else {
@@ -935,8 +941,8 @@ fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(map)))
 }
 
-/// Returns the number of seconds since the last input from the given player.
-/// MOO: `int idle_seconds(obj player)`
+/// Usage: `int idle_seconds(obj player)`
+/// Returns the number of seconds since the player last sent input.
 fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(E_ARGS.msg("idle_seconds() requires 1 argument")));
@@ -955,8 +961,8 @@ fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(idle_seconds as i64)))
 }
 
-/// Returns the number of seconds the given player has been connected.
-/// MOO: `int connected_seconds(obj player)`
+/// Usage: `int connected_seconds(obj player)`
+/// Returns the number of seconds since the player connected.
 fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(
@@ -977,10 +983,9 @@ fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(connected_seconds as i64)))
 }
 
-/// Returns a network-specific string identifying the connection being used by the given player.
-/// If the programmer is not a wizard and not <player>, then `E_PERM' is raised.
-/// If <player> is not currently connected, then `E_INVARG' is raised.
-/// MOO: `str connection_name(obj player)`
+/// Usage: `str connection_name(obj player)`
+/// Returns a network-specific string identifying the player's connection (e.g., IP address).
+/// Caller must be the player or a wizard.
 fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(
@@ -1016,8 +1021,9 @@ fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_string(connection_name)))
 }
 
-/// Returns information about active listeners.
-/// MOO: `list listeners([any search_criteria])`
+/// Usage: `list listeners([obj|int search])`
+/// Returns active network listeners. Each entry is `{object, port, print_messages}`.
+/// If search is given, returns only the matching listener (by object or port).
 fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(
@@ -1071,8 +1077,8 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(listeners))
 }
 
-/// Stops listening on the given port.
-/// MOO: `none unlisten(int port [, str host_type])`
+/// Usage: `none unlisten(int port [, str host_type])`
+/// Stops listening on the specified port. Host_type defaults to "tcp". Wizard-only.
 fn bf_unlisten(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Requires wizard permissions.
     bf_args
@@ -1117,9 +1123,9 @@ fn bf_unlisten(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// Start listening for connections on the given port.
-/// `object` is the object to call when a connection is established, in lieu of #0 (the system object).
-/// MOO: `int listen(obj object, int port [, int print_messages [, str host_type]])`
+/// Usage: `int listen(obj object, int port [, int print_messages [, str host_type]])`
+/// Starts listening for connections. Object receives connection callbacks instead of #0.
+/// Returns the canonical port. Host_type defaults to "tcp". Wizard-only.
 fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Requires wizard permissions.
     bf_args

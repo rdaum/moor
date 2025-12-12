@@ -25,15 +25,18 @@ use moor_var::{
 };
 use uuid::Uuid;
 
-/// MOO: `int typeof(any value)`
-/// Returns the type code of the given value.
+/// Usage: `int typeof(any value)`
+/// Returns an integer representing the type code of the given value. Type codes are:
+/// 0=INT, 1=OBJ, 2=STR, 3=ERR, 4=LIST, 5=NONE/CLEAR, 6=CATCH, 7=FINALLY, 9=FLOAT.
 fn bf_typeof(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let arg = &bf_args.args[0];
     Ok(Ret(v_int(arg.type_code() as i64)))
 }
 
-/// MOO: `str tostr(any ...)`
-/// Converts arguments to their string representation and concatenates them.
+/// Usage: `str tostr(any ...)`
+/// Converts each argument to a string representation and concatenates them all together.
+/// Integers are formatted as decimal numbers, floats with decimal notation, objects as "#N",
+/// errors as their name (e.g., "E_PERM"), and lists/maps as "{list}" or "[map]".
 fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let mut result = String::new();
     for arg in bf_args.args.iter() {
@@ -70,7 +73,7 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_str(result.as_str())))
 }
 
-/// MOO: `symbol tosym(str|bool|error|symbol value)`
+/// Usage: `symbol tosym(str|bool|error|symbol value)`
 /// Converts scalar values to symbols.
 fn bf_tosym(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Convert scalar values to symbols.
@@ -94,8 +97,9 @@ fn bf_tosym(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `str toliteral(any value)`
-/// Converts a value to its literal representation (cannot convert closures with captured variables).
+/// Usage: `str toliteral(any value)`
+/// Returns a string containing the MOO literal representation of the value. The result can
+/// be evaluated to recreate the original value. Raises E_INVARG for closures with captures.
 fn bf_toliteral(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(
@@ -116,8 +120,10 @@ fn bf_toliteral(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_str(literal.as_str())))
 }
 
-/// MOO: `int toint(int|float|obj|str|error value)`
-/// Converts a value to an integer.
+/// Usage: `int toint(int|float|obj|str|error value)`
+/// Converts a value to an integer. Floats are truncated, objects return their ID number,
+/// strings are parsed as numbers (invalid strings return 0), errors return their code.
+/// Raises E_INVARG for UUID objects or unconvertible types.
 fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(
@@ -158,8 +164,9 @@ fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `obj toobj(int|float|str|obj value)`
-/// Converts a value to an object reference.
+/// Usage: `obj toobj(int|float|str|obj value)`
+/// Converts a value to an object reference. Strings accept formats like "123" or "#123".
+/// Invalid strings return #0. Raises E_RANGE if the number is outside valid object ID range.
 fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(
@@ -207,8 +214,9 @@ fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `float tofloat(int|float|str|error value)`
-/// Converts a value to a floating-point number.
+/// Usage: `float tofloat(int|float|str|error value)`
+/// Converts a value to a floating-point number. Strings are parsed as numbers (invalid
+/// strings return 0.0), errors return their code as a float.
 fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(
@@ -241,8 +249,9 @@ fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `bool equal(any a, any b)`
-/// Returns true if the two values are equal (case-sensitive comparison).
+/// Usage: `bool equal(any a, any b)`
+/// Performs a case-sensitive equality comparison between two values. Unlike the == operator,
+/// string comparisons are case-sensitive.
 fn bf_equal(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(
@@ -254,7 +263,7 @@ fn bf_equal(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(bf_args.v_bool(result)))
 }
 
-/// MOO: `int value_bytes(any value)`
+/// Usage: `int value_bytes(any value)`
 /// Returns the number of bytes used to store the value in memory.
 fn bf_value_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -266,7 +275,7 @@ fn bf_value_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(count as i64)))
 }
 
-/// MOO: `str value_hash(any value)`
+/// Usage: `str value_hash(any value)`
 /// Returns an MD5 hash of the value's literal representation.
 fn bf_value_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -281,8 +290,9 @@ fn bf_value_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
-/// MOO: `int length(list|map|str value)`
-/// Returns the length of a list, map, or string.
+/// Usage: `int length(list|map|str|binary value)`
+/// Returns the length of a sequence: number of elements for lists and maps, number of
+/// characters for strings, number of bytes for binary. Raises E_TYPE for non-sequences.
 fn bf_length(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(
@@ -296,8 +306,9 @@ fn bf_length(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `int object_bytes(obj o)`
-/// Returns the number of bytes used to store the object in the database.
+/// Usage: `int object_bytes(obj o)`
+/// Returns the number of bytes used to store the object in the database, including all
+/// properties, verbs, and other object data.
 fn bf_object_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(
@@ -319,8 +330,9 @@ fn bf_object_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(size as i64)))
 }
 
-/// MOO: `error error_code(error e)`
-/// Returns the error code from an error object (strips off message and value).
+/// Usage: `error error_code(error e)`
+/// Returns the base error type from an error value, stripping off any attached message
+/// or value. E.g., error_code(E_PERM.msg("denied")) returns E_PERM.
 fn bf_error_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(
@@ -336,8 +348,9 @@ fn bf_error_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_err(code)))
 }
 
-/// MOO: `str error_message(error e)`
-/// Returns the message from an error object.
+/// Usage: `str error_message(error e)`
+/// Returns the message string attached to an error value. Returns the default message
+/// if no custom message was attached.
 fn bf_error_message(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(
@@ -353,8 +366,9 @@ fn bf_error_message(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_str(msg.as_str())))
 }
 
-/// MOO: `str uuid([int high, int low])`
-/// Generates a v7 UUID or reconstructs a UUID from two 64-bit integers (big-endian).
+/// Usage: `str uuid([int high, int low])`
+/// With no arguments, generates a new time-ordered v7 UUID. With two integer arguments,
+/// reconstructs a UUID from its high and low 64-bit components (big-endian).
 fn bf_uuid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     match bf_args.args.len() {
         0 => {

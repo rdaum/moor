@@ -49,9 +49,9 @@ lazy_static! {
     static ref SHA256_SYM: Symbol = Symbol::mk("sha256");
 }
 
-/// MOO: `list age_generate_keypair([bool as_bytes])`
-/// Generates a new X25519 keypair for age encryption. Programmer-only function.
-/// If as_bytes is true, returns {public_key, private_key} as bytes. Otherwise returns Bech32-encoded strings.
+/// Usage: `list age_generate_keypair([bool as_bytes])`
+/// Generates an X25519 keypair for age encryption. Returns `{public_key, private_key}`.
+/// If as_bytes is true, returns as bytes; otherwise Bech32-encoded strings. Programmer-only.
 fn bf_age_generate_keypair(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(BfErr::ErrValue(
@@ -101,9 +101,9 @@ fn bf_age_generate_keypair(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
     }
 }
 
-/// MOO: `bytes age_encrypt(str message, list recipients)`
-/// Encrypts message using age encryption for one or more recipients. Programmer-only function.
-/// Recipients can be age X25519 keys or SSH public keys (strings or bytes). Returns encrypted data as bytes.
+/// Usage: `bytes age_encrypt(str message, list recipients)`
+/// Encrypts message using age for one or more recipients (X25519 or SSH keys).
+/// Recipients can be strings or bytes. Returns encrypted data as bytes. Programmer-only.
 fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(
@@ -219,9 +219,9 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_binary(encrypted)))
 }
 
-/// MOO: `str age_decrypt(bytes|str encrypted_message, list private_keys)`
-/// Decrypts age-encrypted message using one or more private keys. Programmer-only function.
-/// Encrypted message can be bytes or base64-encoded string. Private keys can be strings or bytes. Returns decrypted plaintext string.
+/// Usage: `str age_decrypt(bytes|str encrypted_message, list private_keys)`
+/// Decrypts age-encrypted message using one or more private keys (X25519 or SSH).
+/// Encrypted data can be bytes or base64-encoded string. Returns plaintext. Programmer-only.
 fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(
@@ -368,8 +368,8 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// `bytes age_passphrase_encrypt(str message, str passphrase)`
-/// Encrypts message using age encryption with a passphrase (scrypt-based key derivation). Programmer-only function.
+/// Usage: `bytes age_passphrase_encrypt(str message, str passphrase)`
+/// Encrypts message using passphrase-based age encryption (scrypt KDF). Programmer-only.
 /// Returns encrypted data as bytes.
 fn bf_age_passphrase_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -430,9 +430,9 @@ fn bf_age_passphrase_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfE
     Ok(Ret(v_binary(encrypted)))
 }
 
-/// `str age_passphrase_decrypt(bytes|str encrypted_message, str passphrase)`
-/// Decrypts age-encrypted message using a passphrase (scrypt-based key derivation). Programmer-only function.
-/// Encrypted message can be bytes or base64-encoded string. Returns decrypted plaintext string.
+/// Usage: `str age_passphrase_decrypt(bytes|str encrypted_message, str passphrase)`
+/// Decrypts passphrase-encrypted age message. Programmer-only.
+/// Encrypted data can be bytes or base64-encoded string. Returns plaintext.
 fn bf_age_passphrase_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(
@@ -510,8 +510,9 @@ fn bf_age_passphrase_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfE
     Ok(Ret(v_string(decrypted)))
 }
 
-/// MOO: `str argon2(str password, str salt [, int iterations] [, int memory] [, int parallelism])`
-/// Generates Argon2 hash with specified parameters. Wizard-only function.
+/// Usage: `str argon2(str password, str salt [, int iterations] [, int memory] [, int parallelism])`
+/// Generates Argon2id hash with specified parameters. Defaults: 3 iterations, 4096 memory, 1 parallelism.
+/// Wizard-only.
 fn bf_argon2(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Must be wizard.
     bf_args
@@ -578,8 +579,8 @@ fn bf_argon2(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_string(hash.to_string())))
 }
 
-/// MOO: `bool argon2_verify(str hashed_password, str password)`
-/// Verifies a password against an Argon2 hash. Wizard-only function.
+/// Usage: `bool argon2_verify(str hashed_password, str password)`
+/// Verifies a password against an Argon2 hash. Wizard-only.
 fn bf_argon2_verify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Must be wizard.
     bf_args
@@ -609,10 +610,9 @@ fn bf_argon2_verify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(bf_args.v_bool(validated)))
 }
 
-/// MOO: `str crypt(str text [, str salt])`
-/// Encrypts text using standard UNIX encryption method.
-/// If salt is provided, uses first two characters as encryption salt.
-/// If no salt provided, uses random pair. Salt is returned as first two characters of result.
+/// Usage: `str crypt(str text [, str salt])`
+/// Encrypts text using standard Unix DES-based crypt. Salt defaults to random 2 characters.
+/// Salt is the first 2 characters of the returned hash.
 fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -640,9 +640,8 @@ fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `str salt()`
+/// Usage: `str salt()`
 /// Generates a random cryptographically secure salt string for use with crypt & argon2.
-/// Note: Not compatible with ToastStunt's salt function which takes two arguments.
 fn bf_salt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(BfErr::Code(E_ARGS));
@@ -654,8 +653,9 @@ fn bf_salt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(salt))
 }
 
-/// MOO: `str string_hmac(str text, str key [, str algorithm] [, bool binary_output])`
-/// Computes HMAC of text using key with specified algorithm (SHA1, SHA256).
+/// Usage: `str|bytes string_hmac(str text, str key [, symbol algorithm] [, bool binary_output])`
+/// Computes HMAC of text. Algorithm is `sha1 or `sha256 (default). Returns hex string
+/// unless binary_output is true.
 fn bf_string_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let arg_count = bf_args.args.len();
     if !(2..=4).contains(&arg_count) {
@@ -723,9 +723,9 @@ fn bf_string_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `str|binary binary_hmac(binary data, str key [, symbol algorithm] [, bool binary_output])`
-/// Computes HMAC of binary data using key with specified algorithm (SHA1, SHA256).
-/// Note: Takes mooR's native Binary type, NOT ToastStunt's bin-string format.
+/// Usage: `str|bytes binary_hmac(bytes data, str key [, symbol algorithm] [, bool binary_output])`
+/// Computes HMAC of binary data. Algorithm is `sha1 or `sha256 (default). Returns hex string
+/// unless binary_output is true.
 fn bf_binary_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let arg_count = bf_args.args.len();
     if !(2..=4).contains(&arg_count) {
@@ -991,14 +991,9 @@ fn json_to_var(json: &JsonValue) -> Result<Var, BfErr> {
     }
 }
 
-/// MOO: `str paseto_make_local(map|list claims [, str|binary signing_key])`
-///
-/// Creates a PASETO V4.Local token from the given claims.
-///
-/// If signing_key is not provided, uses the server's symmetric key (wizard-only).
-/// If signing_key is provided, any user can create tokens with their own key.
-///
-/// The signing_key can be either a 32-byte Binary value or a base64-encoded string.
+/// Usage: `str paseto_make_local(map|list claims [, str|bytes signing_key])`
+/// Creates a PASETO V4.Local token from claims. Signing_key is 32 bytes or base64.
+/// Without key, uses server's symmetric key (wizard-only). With key, any programmer can call.
 fn bf_paseto_make_local(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -1064,16 +1059,9 @@ fn bf_paseto_make_local(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_string(token)))
 }
 
-/// MOO: `map paseto_verify_local(str token [, str|binary signing_key])`
-///
-/// Verifies and decrypts a PASETO V4.Local token, returning the claims as a map.
-///
-/// If signing_key is not provided, uses the server's symmetric key (wizard-only).
-/// If signing_key is provided, any user can verify tokens with their own key.
-///
-/// The signing_key can be either a 32-byte Binary value or a base64-encoded string.
-///
-/// Returns E_INVARG if the token is invalid or cannot be verified.
+/// Usage: `map paseto_verify_local(str token [, str|bytes signing_key])`
+/// Verifies and decrypts a PASETO V4.Local token, returning claims as a map.
+/// Without key, uses server's symmetric key (wizard-only). Raises E_INVARG if invalid.
 fn bf_paseto_verify_local(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(BfErr::Code(E_ARGS));

@@ -37,7 +37,10 @@ fn flyweight_to_var(f: Flyweight) -> Var {
     Var::from_flyweight(f)
 }
 
-/// MOO: `toflyweight(delegate [, slots_map [, contents_list]])`
+/// Usage: `flyweight toflyweight(obj delegate [, map slots [, list contents]])`
+/// Creates a flyweight value with the given delegate object, optional slots map, and
+/// optional contents list. Flyweights are lightweight value types that delegate verb
+/// calls to their delegate object while carrying their own slot data.
 fn bf_mk_flyweight(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     ensure_enabled(bf_args)?;
 
@@ -79,7 +82,8 @@ fn bf_mk_flyweight(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(flyweight_to_var(fly)))
 }
 
-/// MOO: `flyslots(flyweight f)`
+/// Usage: `map flyslots(flyweight f)`
+/// Returns a map of all slots (symbol -> value pairs) defined on the flyweight.
 fn bf_flyslots(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     ensure_enabled(bf_args)?;
 
@@ -101,7 +105,8 @@ fn bf_flyslots(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_map(&slots)))
 }
 
-/// MOO: `flycontents(flyweight f)`
+/// Usage: `list flycontents(flyweight f)`
+/// Returns the contents list of the flyweight.
 fn bf_flycontents(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     ensure_enabled(bf_args)?;
 
@@ -120,7 +125,9 @@ fn bf_flycontents(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(Var::from_list(f.contents().clone())))
 }
 
-/// MOO: `flyslotset(flyweight f, symbol key, any value)`
+/// Usage: `flyweight flyslotset(flyweight f, symbol key, any value)`
+/// Returns a new flyweight with the slot key set to value. Flyweights are immutable,
+/// so this creates a copy with the modified slot.
 fn bf_flyslotset(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     ensure_enabled(bf_args)?;
 
@@ -145,7 +152,8 @@ fn bf_flyslotset(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(flyweight_to_var(new_f)))
 }
 
-/// MOO: `flyslotremove(flyweight f, symbol key)`
+/// Usage: `flyweight flyslotremove(flyweight f, symbol key)`
+/// Returns a new flyweight with the slot key removed.
 fn bf_flyslotremove(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     ensure_enabled(bf_args)?;
 

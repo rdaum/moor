@@ -32,8 +32,9 @@ use crate::{
     vm::builtins::{BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction},
 };
 
-/// MOO: `int is_member(any value, list|map|flyweight container)`
-/// Returns non-zero if value is a member of container, zero otherwise.
+/// Usage: `int is_member(any value, list|map|flyweight container)`
+/// Returns the 1-based index of value in container if found, or 0 if not found.
+/// Unlike the `in` operator, this function performs case-sensitive string comparison.
 fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -75,8 +76,9 @@ fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `list listinsert(list list, any value [, int index])`
-/// Inserts value into list at the specified index (1-based), or appends if no index given.
+/// Usage: `list listinsert(list list, any value [, int index])`
+/// Returns a copy of list with value inserted before the element at the given index.
+/// If index is not provided, inserts at the beginning. Raises E_RANGE if index is invalid.
 fn bf_listinsert(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(BfErr::Code(E_ARGS));
@@ -95,8 +97,9 @@ fn bf_listinsert(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(res.map_err(BfErr::ErrValue)?))
 }
 
-/// MOO: `list listappend(list list, any value [, int index])`
-/// Appends value to list at the specified index (0-based), or appends at end if no index given.
+/// Usage: `list listappend(list list, any value [, int index])`
+/// Returns a copy of list with value inserted after the element at the given index.
+/// If index is not provided, appends at the end. Raises E_RANGE if index is invalid.
 fn bf_listappend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(BfErr::Code(E_ARGS));
@@ -115,8 +118,9 @@ fn bf_listappend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(res.map_err(BfErr::ErrValue)?))
 }
 
-/// MOO: `list listdelete(list list, int index)`
-/// Removes the element at the specified index (1-based) from list.
+/// Usage: `list listdelete(list list, int index)`
+/// Returns a copy of list with the element at index removed. Raises E_RANGE if index is
+/// not in the range [1..length(list)].
 fn bf_listdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -128,8 +132,9 @@ fn bf_listdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(BfErr::ErrValue)?))
 }
 
-/// MOO: `list listset(list list, any value, int index)`
-/// Sets the element at the specified index (1-based) in list to value.
+/// Usage: `list listset(list list, any value, int index)`
+/// Returns a copy of list with the element at index replaced by value. Raises E_RANGE
+/// if index is not in [1..length(list)]. Prefer indexed assignment (list[i] = v) instead.
 fn bf_listset(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 3 {
         return Err(BfErr::Code(E_ARGS));
@@ -145,8 +150,9 @@ fn bf_listset(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(BfErr::ErrValue)?))
 }
 
-/// MOO: `list setadd(list set, any value)`
-/// Adds value to set if not already present, treating list as a set.
+/// Usage: `list setadd(list set, any value)`
+/// Returns a copy of list with value added at the end, but only if value is not already
+/// present. Treats list as a mathematical set.
 fn bf_setadd(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -159,8 +165,9 @@ fn bf_setadd(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(list.set_add(&value).map_err(BfErr::ErrValue)?))
 }
 
-/// MOO: `list setremove(list set, any value)`
-/// Removes value from set, treating list as a set.
+/// Usage: `list setremove(list set, any value)`
+/// Returns a copy of list with the first occurrence of value removed. If value is not
+/// present, returns an identical list.
 fn bf_setremove(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -336,14 +343,16 @@ fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, Bf
         bf_args.args[0].clone(),
     ])))
 }
-/// MOO: `list match(str string, str pattern [, bool case_matters])`
-/// Searches for pattern in string using MOO-style regular expressions.
+/// Usage: `list match(str subject, str pattern [, bool case_matters])`
+/// Searches for the first occurrence of pattern in subject using MOO regular expressions.
+/// Returns {} if no match, or {start, end, replacements, subject} where replacements is
+/// a list of 9 {start,end} pairs for captured subpatterns. By default case-insensitive.
 fn bf_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     do_re_match(bf_args, false)
 }
 
-/// MOO: `list rmatch(str string, str pattern [, bool case_matters])`
-/// Reverse searches for pattern in string using MOO-style regular expressions.
+/// Usage: `list rmatch(str subject, str pattern [, bool case_matters])`
+/// Like match(), but searches for the last occurrence of pattern in subject.
 fn bf_rmatch(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     do_re_match(bf_args, true)
 }
@@ -551,7 +560,7 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
     Ok(result)
 }
 
-/// MOO: `str pcre_replace(str target, str replace_str)`
+/// Usage: `str pcre_replace(str target, str replace_str)`
 /// Performs PCRE-style replacement using syntax like 's/pattern/replacement/flags'.
 /// Supports 'g' (global) and 'i' (case-insensitive) flags.
 fn bf_pcre_replace(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -582,7 +591,7 @@ fn bf_pcre_replace(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Err(err) => Err(BfErr::ErrValue(err)),
     }
 }
-/// MOO: `list pcre_match(str subject, str pattern [, bool case_matters] [, bool repeat])`
+/// Usage: `list pcre_match(str subject, str pattern [, bool case_matters] [, bool repeat])`
 /// Searches subject for pattern using Perl Compatible Regular Expressions.
 /// Returns a list of maps (or assoc-lists if maps disabled) containing each match.
 /// Each map has keys for capture groups, with "0" being the full match.
@@ -697,8 +706,10 @@ fn substitute(template: &str, subs: &[(isize, isize)], source: &str) -> Result<S
     Ok(result)
 }
 
-/// MOO: `str substitute(str template, list match_data)`
-/// Substitutes %N patterns in template with matched substrings from match_data.
+/// Usage: `str substitute(str template, list subs)`
+/// Performs substitutions on template using match data from match() or rmatch().
+/// In template, %0 is replaced by the full match, %1-%9 by captured subpatterns,
+/// and %% by a literal %. Raises E_INVARG for invalid substitutions.
 fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -920,7 +931,7 @@ fn handle_simple_match_result(result: ComplexMatchResult<Var>) -> Result<BfRet, 
     }
 }
 
-/// MOO: `any complex_match(str token, list targets [, list keys] [, num fuzzy_threshold])`
+/// Usage: `any complex_match(str token, list targets [, list keys] [, num fuzzy_threshold])`
 /// Performs complex pattern matching with fuzzy matching support.
 /// fuzzy_threshold: 0.0 = no fuzzy, 0.5 = reasonable default, 1.0 = very permissive
 /// Also accepts boolean for backward compatibility (false = 0.0, true = 0.5)
@@ -1046,7 +1057,7 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `list sort(list values [, list keys] [, int natural] [, int reverse])`
+/// Usage: `list sort(list values [, list keys] [, int natural] [, int reverse])`
 /// Sorts a list of values, optionally using a parallel list of keys for sorting.
 /// All elements must be the same type (int, float, obj, err, or str).
 /// Strings are compared case-insensitively, optionally using natural sort order.
@@ -1188,8 +1199,9 @@ fn bf_sort(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&result)))
 }
 
-/// MOO: `list|str reverse(list|str input)`
-/// Reverses the order of elements in a list or characters in a string.
+/// Usage: `list|str reverse(list|str input)`
+/// Returns a copy of the list with elements in reverse order, or a string with
+/// characters reversed by Unicode code points.
 fn bf_reverse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::Code(E_ARGS));

@@ -20,8 +20,9 @@ use moor_var::{E_ARGS, E_INVARG, E_TYPE, Sequence, Var, Variant, v_float, v_int,
 
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction};
 
-/// MOO: `num abs(num x)`
-/// Returns the absolute value of x.
+/// Usage: `num abs(num x)`
+/// Returns the absolute value of x. If x is negative, the result is -x; otherwise the result is x.
+/// The argument can be either integer or floating-point; the result is of the same type.
 fn bf_abs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(E_ARGS.msg("abs() takes 1 argument")));
@@ -34,8 +35,9 @@ fn bf_abs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `num min(num x, ...)`
-/// Returns the minimum value among the arguments.
+/// Usage: `num min(num x, ...)`
+/// Returns the smallest of its arguments. All arguments must be numbers of the same type
+/// (i.e., either integer or floating-point); otherwise E_TYPE is raised.
 fn bf_min(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() {
         return Err(BfErr::ErrValue(
@@ -55,8 +57,9 @@ fn bf_min(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(minimum))
 }
 
-/// MOO: `num max(num x, ...)`
-/// Returns the maximum value among the arguments.
+/// Usage: `num max(num x, ...)`
+/// Returns the largest of its arguments. All arguments must be numbers of the same type
+/// (i.e., either integer or floating-point); otherwise E_TYPE is raised.
 fn bf_max(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() {
         return Err(BfErr::ErrValue(
@@ -76,8 +79,9 @@ fn bf_max(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(maximum))
 }
 
-/// MOO: `int random([int max])`
-/// Returns a random integer. If max is given, returns 1 to max, otherwise 1 to 2147483647.
+/// Usage: `int random([int max])`
+/// Returns a random integer in the range 1 to max (inclusive). If max is not provided,
+/// it defaults to the largest MOO integer (2147483647). Raises E_INVARG if max is not positive.
 fn bf_random(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(BfErr::ErrValue(
@@ -97,8 +101,11 @@ fn bf_random(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `str floatstr(float x, int precision [, bool scientific])`
-/// Converts a float to string with specified precision, optionally in scientific notation.
+/// Usage: `str floatstr(float x, int precision [, bool scientific])`
+/// Converts x into a string with more control than tostr() or toliteral(). Precision is the
+/// number of digits to appear to the right of the decimal point. If scientific is false or
+/// not provided, the result is in the form "MMMMMMM.DDDDDD". If scientific is true, the
+/// result is in the form "M.DDDDDDe+EEE".
 fn bf_floatstr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(BfErr::ErrValue(
@@ -184,16 +191,16 @@ macro_rules! math_fn_with_validation {
     };
 }
 
-// Basic trig functions
-// MOO: `float sin(num x)` - Returns the sine of x (in radians).
+// Basic trig functions (angles in radians)
+// Usage: `float sin(num x)` - Returns the sine of x.
 math_fn!(bf_sin, "sin", |x: f64| x.sin());
-// MOO: `float cos(num x)` - Returns the cosine of x (in radians).
+// Usage: `float cos(num x)` - Returns the cosine of x.
 math_fn!(bf_cos, "cos", |x: f64| x.cos());
-// MOO: `float tan(num x)` - Returns the tangent of x (in radians).
+// Usage: `float tan(num x)` - Returns the tangent of x.
 math_fn!(bf_tan, "tan", |x: f64| x.tan());
 
 // Functions with domain validation
-// MOO: `float sqrt(num x)` - Returns the square root of x (x must be non-negative).
+// Usage: `float sqrt(num x)` - Returns the square root of x. Raises E_INVARG if x is negative.
 math_fn_with_validation!(
     bf_sqrt,
     "sqrt",
@@ -201,7 +208,7 @@ math_fn_with_validation!(
     |x: f64| x >= 0.0,
     "sqrt() takes a non-negative number"
 );
-// MOO: `float asin(num x)` - Returns the arcsine of x (x must be between -1 and 1).
+// Usage: `float asin(num x)` - Returns the arc-sine of x, in the range [-pi/2..pi/2]. Raises E_INVARG if x is outside [-1.0..1.0].
 math_fn_with_validation!(
     bf_asin,
     "asin",
@@ -209,7 +216,7 @@ math_fn_with_validation!(
     |x: f64| (-1.0..=1.0).contains(&x),
     "asin() takes a number between -1 and 1"
 );
-// MOO: `float acos(num x)` - Returns the arccosine of x (x must be between -1 and 1).
+// Usage: `float acos(num x)` - Returns the arc-cosine of x, in the range [0..pi]. Raises E_INVARG if x is outside [-1.0..1.0].
 math_fn_with_validation!(
     bf_acos,
     "acos",
@@ -218,8 +225,9 @@ math_fn_with_validation!(
     "acos() takes a number between -1 and 1"
 );
 
-/// MOO: `float atan(num x)` or `float atan(num y, num x)`
-/// Returns arctangent of x, or atan2(y, x) if two arguments given.
+/// Usage: `float atan(num y [, num x])`
+/// Returns the arc-tangent of y in the range [-pi/2..pi/2] if one argument is given.
+/// If x is also provided, returns atan2(y, x) in the range [-pi..pi].
 fn bf_atan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(BfErr::ErrValue(E_ARGS.msg("atan() takes 1 or 2 arguments")));
@@ -238,17 +246,17 @@ fn bf_atan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 // Hyperbolic functions
-// MOO: `float sinh(num x)` - Returns the hyperbolic sine of x.
+// Usage: `float sinh(num x)` - Returns the hyperbolic sine of x.
 math_fn!(bf_sinh, "sinh", |x: f64| x.sinh());
-// MOO: `float cosh(num x)` - Returns the hyperbolic cosine of x.
+// Usage: `float cosh(num x)` - Returns the hyperbolic cosine of x.
 math_fn!(bf_cosh, "cosh", |x: f64| x.cosh());
-// MOO: `float tanh(num x)` - Returns the hyperbolic tangent of x.
+// Usage: `float tanh(num x)` - Returns the hyperbolic tangent of x.
 math_fn!(bf_tanh, "tanh", |x: f64| x.tanh());
 
 // Exponential and logarithmic functions
-// MOO: `float exp(num x)` - Returns e raised to the power of x.
+// Usage: `float exp(num x)` - Returns e raised to the power of x.
 math_fn!(bf_exp, "exp", |x: f64| x.exp());
-// MOO: `float log(num x)` - Returns the natural logarithm of x (x must be positive).
+// Usage: `float log(num x)` - Returns the natural logarithm of x. Raises E_INVARG if x is not positive.
 math_fn_with_validation!(
     bf_log,
     "log",
@@ -256,7 +264,7 @@ math_fn_with_validation!(
     |x: f64| x > 0.0,
     "log() takes a positive number"
 );
-// MOO: `float log10(num x)` - Returns the base-10 logarithm of x (x must be positive).
+// Usage: `float log10(num x)` - Returns the base-10 logarithm of x. Raises E_INVARG if x is not positive.
 math_fn_with_validation!(
     bf_log10,
     "log10",
@@ -266,11 +274,11 @@ math_fn_with_validation!(
 );
 
 // Rounding functions
-// MOO: `float ceil(num x)` - Returns the smallest integer greater than or equal to x.
+// Usage: `float ceil(num x)` - Returns the smallest integer not less than x, as a float.
 math_fn!(bf_ceil, "ceil", |x: f64| x.ceil());
-// MOO: `float floor(num x)` - Returns the largest integer less than or equal to x.
+// Usage: `float floor(num x)` - Returns the largest integer not greater than x, as a float.
 math_fn!(bf_floor, "floor", |x: f64| x.floor());
-// MOO: `float trunc(num x)` - Returns x with the fractional part removed.
+// Usage: `float trunc(num x)` - Returns the integer part of x, as a float. For negative x, equivalent to ceil(); otherwise equivalent to floor().
 math_fn!(bf_trunc, "trunc", |x: f64| x.trunc());
 
 pub(crate) fn register_bf_num(builtins: &mut [BuiltinFunction]) {

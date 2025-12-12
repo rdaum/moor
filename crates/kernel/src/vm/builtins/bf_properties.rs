@@ -34,8 +34,9 @@ use crate::{
     },
 };
 
-/// MOO: `list property_info(obj object, symbol prop_name)`
-/// Returns property information as `{owner, perms}`.
+/// Usage: `list property_info(obj object, symbol prop_name)`
+/// Returns property information as `{owner, perms}` where perms is a string of r/w/c flags.
+/// Raises E_PROPNF if no such property exists, E_PERM if no read permission.
 fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(Code(E_ARGS));
@@ -104,8 +105,9 @@ fn info_to_prop_attrs(info: &List) -> InfoParseResult {
     })
 }
 
-/// MOO: `none set_property_info(obj object, symbol prop_name, list info)`
-/// Sets property information from a `{owner, perms}` list.
+/// Usage: `none set_property_info(obj object, symbol prop_name, list info)`
+/// Sets property info from `{owner, perms [, new_name]}`. The optional third element renames
+/// the property. Raises E_PROPNF if no such property, E_PERM if no write permission.
 fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 3 {
         return Err(ErrValue(
@@ -134,8 +136,8 @@ fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_empty_list()))
 }
 
-/// MOO: `bool is_clear_property(obj object, symbol prop_name)`
-/// Returns true if the property is clear (has no local value).
+/// Usage: `bool is_clear_property(obj object, symbol prop_name)`
+/// Returns true if the property has no local value and inherits from its parent.
 fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(Code(E_ARGS));
@@ -151,8 +153,9 @@ fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(bf_args.v_bool(is_clear)))
 }
 
-/// MOO: `none clear_property(obj object, symbol prop_name)`
-/// Clears the local value of a property, reverting to inherited value.
+/// Usage: `none clear_property(obj object, symbol prop_name)`
+/// Removes the local value of a property so it inherits from the parent instead.
+/// When read, the value will come from the nearest ancestor that has a defined value.
 fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(Code(E_ARGS));
@@ -168,8 +171,9 @@ fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_empty_list()))
 }
 
-/// MOO: `none add_property(obj object, symbol prop_name, any value, list info)`
-/// Adds a new property with the given value and info.
+/// Usage: `none add_property(obj object, symbol prop_name, any value, list info)`
+/// Defines a new property on object with the given initial value. Info is `{owner, perms}`.
+/// The property is inherited by all descendants. Raises E_PERM if name conflicts with ancestors.
 fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 4 {
         return Err(Code(E_ARGS));
@@ -208,8 +212,9 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// MOO: `none delete_property(obj object, symbol prop_name)`
-/// Removes a property from an object.
+/// Usage: `none delete_property(obj object, symbol prop_name)`
+/// Removes a property defined directly on object (not inherited). Also removes
+/// from all descendants. Raises E_PROPNF if not defined directly on this object.
 fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(Code(E_ARGS));

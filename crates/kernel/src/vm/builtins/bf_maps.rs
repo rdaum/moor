@@ -16,8 +16,9 @@
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 use moor_compiler::offset_for_builtin;
 use moor_var::{Associative, E_ARGS, E_RANGE, E_TYPE, Sequence, Var, Variant, v_list};
-/// MOO: `map mapdelete(map m, any key)`
-/// Returns a copy of map with the value corresponding to key removed.
+/// Usage: `map mapdelete(map m, any key)`
+/// Returns a copy of map with the entry for key removed. Raises E_RANGE if key is not found.
+/// Keys must be scalar values (not lists or maps).
 fn bf_mapdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(E_ARGS.msg("mapdelete() takes 2 arguments")));
@@ -45,8 +46,9 @@ fn bf_mapdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(BfRet::Ret(nm))
 }
 
-/// MOO: `list mapkeys(map m)`
-/// Returns a list of all keys in the map.
+/// Usage: `list mapkeys(map m)`
+/// Returns a list of all keys in the map. Maps are ordered, so the keys are returned
+/// in the order they appear in the map.
 fn bf_mapkeys(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(E_ARGS.msg("mapkeys() takes 1 argument")));
@@ -63,8 +65,8 @@ fn bf_mapkeys(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(BfRet::Ret(v_list(&keys)))
 }
 
-/// MOO: `list mapvalues(map m)`
-/// Returns a list of all values in the map.
+/// Usage: `list mapvalues(map m)`
+/// Returns a list of all values in the map, in the order they appear.
 fn bf_mapvalues(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(E_ARGS.msg("mapvalues() takes 1 argument")));
@@ -81,8 +83,9 @@ fn bf_mapvalues(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(BfRet::Ret(v_list(&values)))
 }
 
-/// MOO: `bool maphaskey(map m, any key)`
-/// Returns true if the map contains the specified key.
+/// Usage: `bool maphaskey(map m, any key)`
+/// Returns true (1) if the map contains the specified key, false (0) otherwise.
+/// More efficient than `!(key in mapkeys(m))` for maps with many keys.
 fn bf_maphaskey(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(E_ARGS.msg("maphaskey() takes 2 arguments")));
