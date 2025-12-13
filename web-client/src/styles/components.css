@@ -1348,22 +1348,26 @@
 }
 
 /* ====== DEFINITION LIST STYLES ====== */
+/* Compact two-column key-value layout */
 dl {
-  margin: 1em 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3em 0;
+  margin: 0.5em 0;
   white-space: normal;
 }
 
 dt {
   font-weight: bold;
-  margin-top: 0.5em;
-  margin-bottom: 0.2em;
+  text-align: right;
+  padding-right: 0.75em;
+  border-right: 1px solid var(--color-border-medium);
   white-space: normal;
 }
 
 dd {
-  margin-left: 2em;
-  margin-bottom: 0.8em;
-  margin-top: 0;
+  margin: 0;
+  padding-left: 0.75em;
   white-space: normal;
 }
 
