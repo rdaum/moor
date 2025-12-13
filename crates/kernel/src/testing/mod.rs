@@ -13,6 +13,7 @@
 
 //! Testing utilities and mocks for the kernel crate
 
+pub mod language_test;
 pub mod mock_scheduler;
 pub mod scheduler_test_utils;
 pub mod vm_test;
