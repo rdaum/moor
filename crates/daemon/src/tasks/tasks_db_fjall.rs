@@ -185,6 +185,7 @@ mod tests {
             TaskStart::StartEval {
                 player: SYSTEM_OBJECT,
                 program: Default::default(),
+                initial_env: None,
             },
             &so,
             Arc::new(AtomicBool::new(false)),
@@ -557,6 +558,7 @@ mod tests {
             TaskStart::StartEval {
                 player: SYSTEM_OBJECT,
                 program: Default::default(),
+                initial_env: None,
             },
             &so,
             Arc::new(AtomicBool::new(false)),
