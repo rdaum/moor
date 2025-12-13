@@ -226,6 +226,8 @@ test_each_file = "0.3"
 unindent = "0.2"
 
 # Terminal & UI
+colored = "3.0"
+jotdown = { version = "0.9", default-features = false }
 rustyline = "17.0"
 termimad = "0.34"
 

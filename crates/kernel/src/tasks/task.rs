@@ -802,8 +802,12 @@ impl Task {
                 program,
                 initial_env,
             } => {
-                self.vm_host
-                    .start_eval(self.task_id, player, program.clone(), initial_env.as_deref());
+                self.vm_host.start_eval(
+                    self.task_id,
+                    player,
+                    program.clone(),
+                    initial_env.as_deref(),
+                );
             }
             TaskStart::StartDoCommand { .. } => {
                 panic!("StartDoCommand invocation should not happen on initial setup_task_start");

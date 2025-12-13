@@ -286,9 +286,6 @@ impl Listener {
                     value: "text_djot".to_string(),
                 },
                 moor_rpc::Symbol {
-                    value: "text_markdown".to_string(),
-                },
-                moor_rpc::Symbol {
                     value: "text_plain".to_string(),
                 },
             ];

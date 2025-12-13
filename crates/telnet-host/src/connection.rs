@@ -44,12 +44,13 @@ use rpc_common::{
     mk_command_msg, mk_detach_msg, mk_login_command_msg, mk_out_of_band_msg, mk_program_msg,
     mk_requested_input_msg, mk_set_client_attribute_msg,
 };
-use termimad::MadSkin;
 use tmq::subscribe::Subscribe;
 use tokio::{net::TcpStream, select};
 use tokio_util::codec::Framed;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
+
+use crate::djot_formatter::djot_to_ansi;
 
 /// Out of band messages are prefixed with this string, e.g. for MCP clients.
 const OUT_OF_BAND_PREFIX: &str = "#$#";
@@ -57,7 +58,6 @@ const OUT_OF_BAND_PREFIX: &str = "#$#";
 /// Default flush command
 pub(crate) const DEFAULT_FLUSH_COMMAND: &str = ".flush";
 
-// TODO: switch to djot
 const CONTENT_TYPE_MARKDOWN: &str = "text_markdown";
 const CONTENT_TYPE_DJOT: &str = "text_djot";
 const CONTENT_TYPE_DJOT_SLASH: &str = "text/djot";
@@ -67,7 +67,7 @@ const CONTENT_TYPE_MARKDOWN_SLASH: &str = "text/markdown";
 enum FormattedOutput {
     /// Plain text - needs newline added via send_line
     Plain(String),
-    /// Rich formatted (markdown/djot) - termimad already handles line endings
+    /// Rich formatted (markdown/djot) - djot formatter handles line endings
     Rich(String),
 }
 
@@ -301,13 +301,13 @@ impl InputMetadata {
         // Render the prompt using markdown if present
         if let Some(prompt) = &self.prompt {
             // Try to get terminal width from connection attributes
-            let width = conn
+            let _width = conn
                 .connection_attributes
                 .get(&Symbol::mk("columns"))
                 .and_then(|v| v.as_integer())
                 .and_then(|w| if w > 0 { Some(w as usize) } else { None });
 
-            let formatted = markdown_to_ansi_with_width(prompt, width);
+            let formatted = djot_to_ansi(prompt);
             conn.send_line(&formatted).await?;
         }
 
@@ -1889,22 +1889,6 @@ impl TelnetConnection {
     }
 }
 
-fn markdown_to_ansi_with_width(markdown: &str, _width: Option<usize>) -> String {
-    let mut skin = MadSkin::default_dark();
-
-    // Disable inverse styling on code blocks - use black background instead
-    // This makes code blocks visible without the jarring inverse video effect
-    skin.code_block
-        .set_bg(termimad::crossterm::style::Color::AnsiValue(0));
-    skin.inline_code
-        .set_bg(termimad::crossterm::style::Color::AnsiValue(0));
-
-    // Use a very large width to disable wrapping - let the terminal handle it naturally
-    // This prevents termimad from inserting line breaks and padding
-    // We *could* use the NAWS negotiated width here but for many clients this is simply undesirable.
-    skin.text(markdown, Some(10000)).to_string()
-}
-
 /// Produce the right kind of "telnet" compatible output for the given content.
 fn output_format(
     content: &Var,
@@ -1935,22 +1919,20 @@ fn output_format(
 fn output_str_format(
     content: &str,
     content_type: Option<Symbol>,
-    width: Option<usize>,
+    _width: Option<usize>,
 ) -> Result<FormattedOutput, eyre::Error> {
     let Some(content_type) = content_type else {
+        debug!("output_str_format: no content_type, using plain");
         return Ok(FormattedOutput::Plain(content.to_string()));
     };
-    let content_type = content_type.as_arc_str();
-    Ok(match content_type.as_str() {
+    let content_type_str = content_type.as_arc_str();
+    debug!("output_str_format: content_type={}", content_type_str);
+    Ok(match content_type_str.as_str() {
         CONTENT_TYPE_MARKDOWN | CONTENT_TYPE_MARKDOWN_SLASH => {
-            FormattedOutput::Rich(markdown_to_ansi_with_width(content, width))
+            // Use djot formatter for markdown too - djot handles most markdown syntax
+            FormattedOutput::Rich(djot_to_ansi(content))
         }
-        CONTENT_TYPE_DJOT | CONTENT_TYPE_DJOT_SLASH => {
-            // For now, we treat Djot as markdown.
-            // In the future, we might want to support Djot specifically, but in reality, djot
-            // is mainly a (safer) subset of markdown.
-            FormattedOutput::Rich(markdown_to_ansi_with_width(content, width))
-        }
+        CONTENT_TYPE_DJOT | CONTENT_TYPE_DJOT_SLASH => FormattedOutput::Rich(djot_to_ansi(content)),
         // text/plain, None, or unknown
         _ => FormattedOutput::Plain(content.to_string()),
     })

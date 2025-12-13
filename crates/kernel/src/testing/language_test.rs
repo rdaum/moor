@@ -18,18 +18,16 @@
 mod tests {
     use std::sync::Arc;
 
-    use moor_common::model::{
-        ObjectKind, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
-    };
+    use moor_common::model::{ObjectKind, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource};
     use moor_common::tasks::NoopClientSession;
     use moor_common::util::BitEnum;
-    use moor_compiler::{compile, CompileOptions, Program};
+    use moor_compiler::{CompileOptions, Program, compile};
     use moor_db::{DatabaseConfig, TxDB};
     use moor_var::program::ProgramType;
     use moor_var::{
-        v_bool, v_bool_int, v_empty_list, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_obj,
-        v_objid, v_str, v_sym, Error, IndexMode, List, Obj, Symbol, Var, E_ARGS, E_DIV, E_PERM,
-        E_QUOTA, E_RANGE, E_TYPE, NOTHING, SYSTEM_OBJECT,
+        E_ARGS, E_DIV, E_PERM, E_QUOTA, E_RANGE, E_TYPE, Error, IndexMode, List, NOTHING, Obj,
+        SYSTEM_OBJECT, Symbol, Var, v_bool, v_bool_int, v_empty_list, v_err, v_float, v_flyweight,
+        v_int, v_list, v_map, v_obj, v_objid, v_str, v_sym,
     };
     use test_case::test_case;
 
@@ -38,7 +36,6 @@ mod tests {
 
     /// Create an in-memory db with a single object (#0) containing verbs.
     fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> TxDB {
-
         let (state, _) = TxDB::open(None, DatabaseConfig::default());
         let mut tx = state.new_world_state().unwrap();
         let sysobj = tx
@@ -161,7 +158,9 @@ mod tests {
     #[test]
     fn test_while_labelled_loop() {
         assert_eq!(
-            run_moo("x = 0; while broken (1) x = x + 1; if (x == 50) break; else continue broken; endif endwhile return x;"),
+            run_moo(
+                "x = 0; while broken (1) x = x + 1; if (x == 50) break; else continue broken; endif endwhile return x;"
+            ),
             Ok(v_int(50))
         );
     }
@@ -207,7 +206,10 @@ mod tests {
             endfor
             return ret;
         "#;
-        assert_eq!(run_moo(program), Ok(v_list(&[v_int(3), v_int(2), v_int(1)])));
+        assert_eq!(
+            run_moo(program),
+            Ok(v_list(&[v_int(3), v_int(2), v_int(1)]))
+        );
     }
 
     #[test]
@@ -249,7 +251,9 @@ mod tests {
     fn test_regression_catch_issue_23() {
         // https://github.com//moor/issues/23
         assert_eq!(
-            run_moo(r#"try 5; except error (E_RANGE) return 1; endtry for x in [1..1] return 5; endfor"#),
+            run_moo(
+                r#"try 5; except error (E_RANGE) return 1; endtry for x in [1..1] return 5; endfor"#
+            ),
             Ok(v_int(5))
         );
     }
@@ -258,7 +262,9 @@ mod tests {
     fn test_try_finally_regression_1() {
         // "Finally" should not get invoked on exit conditions like return/abort, etc.
         assert_eq!(
-            run_moo(r#"a = 1; try return "hello world"[2..$]; a = 3; finally a = 2; endtry return a;"#),
+            run_moo(
+                r#"a = 1; try return "hello world"[2..$]; a = 3; finally a = 2; endtry return a;"#
+            ),
             Ok(v_str("ello world"))
         );
     }
@@ -267,7 +273,9 @@ mod tests {
     fn test_try_expr_regression() {
         // A 0 value was hanging around on the stack making the comparison fail.
         assert_eq!(
-            run_moo(r#"if (E_INVARG == (vi = `verb_info(#-1, "blerg") ! ANY')) return 666; endif return 333;"#),
+            run_moo(
+                r#"if (E_INVARG == (vi = `verb_info(#-1, "blerg") ! ANY')) return 666; endif return 333;"#
+            ),
             Ok(v_int(666))
         );
     }
@@ -1670,7 +1678,9 @@ mod tests {
     #[test]
     fn test_for_loop_continue_regression() {
         assert_eq!(
-            run_moo(r#"x = {}; for i in ({1, 2, 3, 4, 5}); if (i < 3); continue; endif; x = {@x, i}; endfor; return x;"#),
+            run_moo(
+                r#"x = {}; for i in ({1, 2, 3, 4, 5}); if (i < 3); continue; endif; x = {@x, i}; endfor; return x;"#
+            ),
             Ok(v_list(&[v_int(3), v_int(4), v_int(5)]))
         );
     }
@@ -1678,7 +1688,9 @@ mod tests {
     #[test]
     fn test_for_range_continue_regression() {
         assert_eq!(
-            run_moo(r#"x = {}; for i in [1..5]; if (i < 3); continue; endif; x = {@x, i}; endfor; return x;"#),
+            run_moo(
+                r#"x = {}; for i in [1..5]; if (i < 3); continue; endif; x = {@x, i}; endfor; return x;"#
+            ),
             Ok(v_list(&[v_int(3), v_int(4), v_int(5)]))
         );
     }
@@ -2059,8 +2071,13 @@ mod tests {
                 ObjectKind::NextObjid,
             )
             .unwrap();
-            tx.update_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk("programmer"), &v_int(1))
-                .unwrap();
+            tx.update_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("programmer"),
+                &v_int(1),
+            )
+            .unwrap();
             tx.commit().unwrap();
         }
 
@@ -2095,8 +2112,13 @@ mod tests {
                 ObjectKind::NextObjid,
             )
             .unwrap();
-            tx.update_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk("programmer"), &v_int(1))
-                .unwrap();
+            tx.update_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("programmer"),
+                &v_int(1),
+            )
+            .unwrap();
             tx.commit().unwrap();
         }
 
@@ -2132,8 +2154,13 @@ mod tests {
                 ObjectKind::NextObjid,
             )
             .unwrap();
-            tx.update_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk("programmer"), &v_int(1))
-                .unwrap();
+            tx.update_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("programmer"),
+                &v_int(1),
+            )
+            .unwrap();
             tx.commit().unwrap();
         }
 
@@ -2168,8 +2195,13 @@ mod tests {
                 ObjectKind::NextObjid,
             )
             .unwrap();
-            tx.update_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk("programmer"), &v_int(1))
-                .unwrap();
+            tx.update_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("programmer"),
+                &v_int(1),
+            )
+            .unwrap();
             tx.commit().unwrap();
         }
 

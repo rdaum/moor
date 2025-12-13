@@ -380,8 +380,12 @@ impl VmHost {
                     program,
                     initial_env,
                 } => {
-                    self.vm_exec_state
-                        .exec_eval_request(&permissions, &player, program, initial_env.as_deref());
+                    self.vm_exec_state.exec_eval_request(
+                        &permissions,
+                        &player,
+                        program,
+                        initial_env.as_deref(),
+                    );
                     return ContinueOk;
                 }
                 ExecutionResult::DispatchBuiltin {

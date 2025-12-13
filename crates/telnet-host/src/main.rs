@@ -41,6 +41,7 @@ use uuid::Uuid;
 
 mod connection;
 mod connection_codec;
+mod djot_formatter;
 mod listen;
 
 use once_cell::sync::Lazy;
