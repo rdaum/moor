@@ -55,8 +55,8 @@ use moor_db::{
 };
 use moor_var::{
     Associative, E_ARGS, E_INTRPT, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Sequence,
-    Symbol, Var, VarType::TYPE_NONE, v_arc_str, v_bool_int, v_float, v_int, v_list, v_list_iter,
-    v_map, v_none, v_obj, v_str, v_string, v_sym,
+    Var, VarType::TYPE_NONE, v_arc_str, v_bool_int, v_float, v_int, v_list, v_list_iter, v_map,
+    v_none, v_obj, v_str, v_string, v_sym,
 };
 
 /// Placeholder function for unimplemented builtins.
