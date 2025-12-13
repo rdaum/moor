@@ -12,8 +12,8 @@ E_TYPE
 ; return random(1);
 1
 
-// test_that_random_returns_a_number_between_1_and_2147483647
-; for i in [1..1000]; n = random(); if (n <= 0 || n > 2147483647); return "FAIL"; endif; endfor; return "PASS";
+// test_that_random_returns_a_number_between_1_and_i64::MAX
+; for i in [1..1000]; n = random(); if (n <= 0 || n > 9223372036854775807); return "FAIL"; endif; endfor; return "PASS";
 "PASS"
 
 // test_that_random_requires_a_positive_integer
