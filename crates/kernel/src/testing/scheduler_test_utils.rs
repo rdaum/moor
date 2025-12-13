@@ -16,7 +16,7 @@
 use std::{sync::Arc, time::Duration};
 
 use moor_common::tasks::{CommandError, SchedulerError};
-use moor_var::{E_VERBNF, Obj, SYSTEM_OBJECT, Var};
+use moor_var::{E_VERBNF, Obj, SYSTEM_OBJECT, Symbol, Var};
 
 use crate::{
     config::FeaturesConfig,
@@ -75,11 +75,22 @@ pub fn call_eval(
     player: &Obj,
     code: String,
 ) -> Result<Var, SchedulerError> {
+    call_eval_with_env(scheduler, session, player, code, None)
+}
+
+pub fn call_eval_with_env(
+    scheduler: SchedulerClient,
+    session: Arc<dyn Session>,
+    player: &Obj,
+    code: String,
+    initial_env: Option<Vec<(Symbol, Var)>>,
+) -> Result<Var, SchedulerError> {
     execute(|| {
         scheduler.submit_eval_task(
             player,
             player,
             code,
+            initial_env,
             session,
             Arc::new(FeaturesConfig::default()),
         )

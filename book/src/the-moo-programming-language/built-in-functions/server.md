@@ -576,6 +576,9 @@ connections()
 **Arguments:**
 
 - `program`: String containing MOO code to evaluate
+- `initial_env`: (Optional) Map of variable bindings to pre-populate in the eval frame. Keys are
+  variable names (strings or symbols), values can be any MOO type. Only variables that are assigned
+  to in the program will be populated from this map.
 - `verbosity`: (Optional) Controls error output detail level (default: 0)
     - `0` - Summary: Brief error message only (default for eval)
     - `1` - Context: Message with error location (graphical display when output_mode > 0)
@@ -603,16 +606,24 @@ connections()
 eval("2 + 2");
 => {4}
 
+// Evaluation with pre-populated variables
+eval("return x + y;", ["x" -> 10, "y" -> 32]);
+=> {1, 42}
+
+// Variables can be any MOO type
+eval("return items[2];", ["items" -> {1, 2, 3}]);
+=> {1, 2}
+
 // Evaluation with compilation error (default summary)
 eval("2 +");
 => {E_INVARG, "Parse error at line 1, column 4: ..."}
 
-// Get detailed error with context
-eval("return 1 + ;", 2);
+// Get detailed error with context (using empty map for initial_env)
+eval("return 1 + ;", [], 2);
 => {E_INVARG, "Parse error at line 1, column 12:", "  return 1 + ;", "             ⚠", ...}
 
 // Get structured error data for custom handling
-result = eval("return 1 + ;", 3);
+result = eval("return 1 + ;", [], 3);
 if (typeof(result[1]) == MAP)
   // result[1] is the error map, result[2] is structured data
   formatted = format_compile_error(result[2], 0);

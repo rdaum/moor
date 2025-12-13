@@ -740,6 +740,7 @@ impl Scheduler {
                 player,
                 perms,
                 program,
+                initial_env,
                 sessions,
                 reply,
             } => {
@@ -748,7 +749,11 @@ impl Scheduler {
 
                 trace_task_create_eval!(task_id, &player);
 
-                let task_start = TaskStart::StartEval { player, program };
+                let task_start = TaskStart::StartEval {
+                    player,
+                    program,
+                    initial_env,
+                };
 
                 let result = self.submit_task(task_id, &player, &perms, task_start, None, sessions);
                 reply

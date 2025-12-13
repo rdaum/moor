@@ -198,7 +198,20 @@ pub fn call_eval_builtin(
     program: Program,
 ) -> ExecResult {
     execute(world_state, session, builtins, |vm_host| {
-        vm_host.start_eval(0, &player, program);
+        vm_host.start_eval(0, &player, program, None);
+    })
+}
+
+pub fn call_eval_builtin_with_env(
+    world_state: Box<dyn WorldState>,
+    session: Arc<dyn Session>,
+    builtins: BuiltinRegistry,
+    player: Obj,
+    program: Program,
+    initial_env: &[(Symbol, Var)],
+) -> ExecResult {
+    execute(world_state, session, builtins, |vm_host| {
+        vm_host.start_eval(0, &player, program, Some(initial_env));
     })
 }
 

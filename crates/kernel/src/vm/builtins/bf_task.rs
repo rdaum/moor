@@ -385,7 +385,7 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     args,
                 ])
             }
-            TaskStart::StartEval { player, program: _ } => {
+            TaskStart::StartEval { player, .. } => {
                 v_list(&[sym_or_str(Symbol::mk("eval")), v_obj(*player)])
             }
             TaskStart::StartExceptionHandler { .. } => {

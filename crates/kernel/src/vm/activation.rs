@@ -431,7 +431,12 @@ impl Activation {
         })
     }
 
-    pub fn for_eval(permissions: Obj, player: &Obj, program: Program) -> Self {
+    pub fn for_eval(
+        permissions: Obj,
+        player: &Obj,
+        program: Program,
+        initial_env: Option<&[(Symbol, Var)]>,
+    ) -> Self {
         let verbdef = VerbDef::new(
             Uuid::new_v4(),
             NOTHING,
@@ -441,7 +446,7 @@ impl Activation {
             VerbArgsSpec::this_none_this(),
         );
 
-        let moo_frame = MooStackFrame::new_with_all_globals(
+        let mut moo_frame = MooStackFrame::new_with_all_globals(
             program,
             v_obj(*player), // player
             v_obj(NOTHING), // this
@@ -450,6 +455,17 @@ impl Activation {
             v_empty_list(), // args
             v_empty_str(),  // argstr
         );
+
+        // Apply initial environment bindings if provided
+        if let Some(env) = initial_env {
+            for (symbol, value) in env {
+                if let Some(name) = moo_frame.program.var_names().name_for_ident(*symbol) {
+                    moo_frame.set_variable(&name, value.clone());
+                }
+                // Silently ignore variables not referenced in the program
+            }
+        }
+
         let frame = Frame::Moo(moo_frame);
 
         Self {

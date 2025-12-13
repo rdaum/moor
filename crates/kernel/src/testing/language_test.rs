@@ -33,7 +33,7 @@ mod tests {
     };
     use test_case::test_case;
 
-    use crate::testing::vm_test_utils::call_verb;
+    use crate::testing::vm_test_utils::{call_eval_builtin_with_env, call_verb};
     use crate::vm::builtins::BuiltinRegistry;
 
     /// Create an in-memory db with a single object (#0) containing verbs.
@@ -2041,5 +2041,152 @@ mod tests {
             ),
             Ok(v_int(0))
         );
+    }
+
+    /// Test that initial_env bindings are applied to eval frames.
+    #[test]
+    fn test_eval_initial_env() {
+        // Compile a program that references variable 'x'
+        let program = compile("return x;", CompileOptions::default()).unwrap();
+        let (db, _) = TxDB::open(None, DatabaseConfig::default());
+        {
+            let mut tx = db.new_world_state().unwrap();
+            tx.create_object(
+                &SYSTEM_OBJECT,
+                &NOTHING,
+                &SYSTEM_OBJECT,
+                BitEnum::all(),
+                ObjectKind::NextObjid,
+            )
+            .unwrap();
+            tx.update_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk("programmer"), &v_int(1))
+                .unwrap();
+            tx.commit().unwrap();
+        }
+
+        let state = db.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+        let initial_env = [(Symbol::mk("x"), v_int(42))];
+
+        let result = call_eval_builtin_with_env(
+            state,
+            session,
+            BuiltinRegistry::new(),
+            SYSTEM_OBJECT,
+            program,
+            &initial_env,
+        );
+
+        assert_eq!(result, Ok(v_int(42)));
+    }
+
+    /// Test that multiple initial_env bindings work.
+    #[test]
+    fn test_eval_initial_env_multiple_vars() {
+        let program = compile("return x + y;", CompileOptions::default()).unwrap();
+        let (db, _) = TxDB::open(None, DatabaseConfig::default());
+        {
+            let mut tx = db.new_world_state().unwrap();
+            tx.create_object(
+                &SYSTEM_OBJECT,
+                &NOTHING,
+                &SYSTEM_OBJECT,
+                BitEnum::all(),
+                ObjectKind::NextObjid,
+            )
+            .unwrap();
+            tx.update_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk("programmer"), &v_int(1))
+                .unwrap();
+            tx.commit().unwrap();
+        }
+
+        let state = db.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+        let initial_env = [(Symbol::mk("x"), v_int(10)), (Symbol::mk("y"), v_int(32))];
+
+        let result = call_eval_builtin_with_env(
+            state,
+            session,
+            BuiltinRegistry::new(),
+            SYSTEM_OBJECT,
+            program,
+            &initial_env,
+        );
+
+        assert_eq!(result, Ok(v_int(42)));
+    }
+
+    /// Test that object variables work in initial_env.
+    #[test]
+    fn test_eval_initial_env_object_var() {
+        // Note: can't use "obj" as it's a type constant (OBJ)
+        let program = compile("return target;", CompileOptions::default()).unwrap();
+        let (db, _) = TxDB::open(None, DatabaseConfig::default());
+        {
+            let mut tx = db.new_world_state().unwrap();
+            tx.create_object(
+                &SYSTEM_OBJECT,
+                &NOTHING,
+                &SYSTEM_OBJECT,
+                BitEnum::all(),
+                ObjectKind::NextObjid,
+            )
+            .unwrap();
+            tx.update_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk("programmer"), &v_int(1))
+                .unwrap();
+            tx.commit().unwrap();
+        }
+
+        let state = db.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+        let initial_env = [(Symbol::mk("target"), v_obj(Obj::mk_id(2)))];
+
+        let result = call_eval_builtin_with_env(
+            state,
+            session,
+            BuiltinRegistry::new(),
+            SYSTEM_OBJECT,
+            program,
+            &initial_env,
+        );
+
+        assert_eq!(result, Ok(v_obj(Obj::mk_id(2))));
+    }
+
+    /// Test that unused initial_env variables don't cause errors.
+    #[test]
+    fn test_eval_initial_env_unused_var() {
+        let program = compile("return 42;", CompileOptions::default()).unwrap();
+        let (db, _) = TxDB::open(None, DatabaseConfig::default());
+        {
+            let mut tx = db.new_world_state().unwrap();
+            tx.create_object(
+                &SYSTEM_OBJECT,
+                &NOTHING,
+                &SYSTEM_OBJECT,
+                BitEnum::all(),
+                ObjectKind::NextObjid,
+            )
+            .unwrap();
+            tx.update_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk("programmer"), &v_int(1))
+                .unwrap();
+            tx.commit().unwrap();
+        }
+
+        let state = db.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+        // Pass a variable that's not referenced in the program
+        let initial_env = [(Symbol::mk("unused"), v_int(999))];
+
+        let result = call_eval_builtin_with_env(
+            state,
+            session,
+            BuiltinRegistry::new(),
+            SYSTEM_OBJECT,
+            program,
+            &initial_env,
+        );
+
+        assert_eq!(result, Ok(v_int(42)));
     }
 }

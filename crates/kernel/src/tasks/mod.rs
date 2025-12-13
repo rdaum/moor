@@ -320,7 +320,12 @@ pub enum TaskStart {
         suspended: bool,
     },
     /// The scheduler is telling the task to evaluate a specific (MOO) program.
-    StartEval { player: Obj, program: Program },
+    StartEval {
+        player: Obj,
+        program: Program,
+        /// Optional initial variable bindings to inject into the eval's environment.
+        initial_env: Option<Vec<(Symbol, Var)>>,
+    },
     /// The task is executing $handle_uncaught_error to handle an exception.
     /// The original exception is stored so if the handler returns false, we can re-raise it.
     StartExceptionHandler {

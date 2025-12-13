@@ -797,9 +797,13 @@ impl Task {
                 // pass suspended=false to ensure vm_host.running is set to true
                 self.vm_host.start_fork(self.task_id, fork_request, false);
             }
-            TaskStart::StartEval { player, program } => {
+            TaskStart::StartEval {
+                player,
+                program,
+                initial_env,
+            } => {
                 self.vm_host
-                    .start_eval(self.task_id, player, program.clone());
+                    .start_eval(self.task_id, player, program.clone(), initial_env.as_deref());
             }
             TaskStart::StartDoCommand { .. } => {
                 panic!("StartDoCommand invocation should not happen on initial setup_task_start");
@@ -1168,6 +1172,7 @@ mod tests {
         let task_start = TaskStart::StartEval {
             player: SYSTEM_OBJECT,
             program,
+            initial_env: None,
         };
         setup_test_env(task_start, &[])
     }

@@ -83,6 +83,8 @@ pub(crate) enum ExecutionResult {
         player: Obj,
         /// The program to execute.
         program: Program,
+        /// Optional initial variable bindings to inject into the eval's environment.
+        initial_env: Option<Vec<(Symbol, Var)>>,
     },
     /// Request dispatch of a builtin function with the given arguments.
     DispatchBuiltin { builtin: BuiltinId, arguments: List },
@@ -240,7 +242,13 @@ impl VmHost {
     }
 
     /// Start execution of an eval request.
-    pub fn start_eval(&mut self, task_id: TaskId, player: &Obj, program: Program) {
+    pub fn start_eval(
+        &mut self,
+        task_id: TaskId,
+        player: &Obj,
+        program: Program,
+        initial_env: Option<&[(Symbol, Var)]>,
+    ) {
         let is_programmer = with_current_transaction(|world_state| {
             world_state
                 .flags_of(player)
@@ -259,7 +267,7 @@ impl VmHost {
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
         self.vm_exec_state
-            .exec_eval_request(player, player, program);
+            .exec_eval_request(player, player, program, initial_env);
         self.running = true;
     }
 
@@ -370,9 +378,10 @@ impl VmHost {
                     permissions,
                     player,
                     program,
+                    initial_env,
                 } => {
                     self.vm_exec_state
-                        .exec_eval_request(&permissions, &player, program);
+                        .exec_eval_request(&permissions, &player, program, initial_env.as_deref());
                     return ContinueOk;
                 }
                 ExecutionResult::DispatchBuiltin {

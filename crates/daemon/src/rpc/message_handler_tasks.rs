@@ -267,6 +267,7 @@ impl RpcMessageHandler {
             player,
             player,
             expression,
+            None, // initial_env
             session,
             self.config.features.clone(),
         ) {

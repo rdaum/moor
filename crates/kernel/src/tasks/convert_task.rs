@@ -1432,7 +1432,11 @@ pub(crate) fn task_start_to_flatbuffer(
                 suspended_nanos,
             }))
         }
-        KernelTaskStart::StartEval { player, program } => {
+        KernelTaskStart::StartEval {
+            player, program, ..
+        } => {
+            // initial_env is not serialized - it's ephemeral and only used during task creation.
+            // By the time a task could suspend, the environment has already been applied to the frame.
             let fb_program = encode_program_to_fb(program).map_err(|e| {
                 TaskConversionError::ProgramError(format!("Error encoding program: {e}"))
             })?;
@@ -1577,7 +1581,12 @@ pub(crate) fn task_start_from_ref_union(
             let program = decode_stored_program_ref(program_ref)
                 .map_err(|e| TaskConversionError::ProgramError(format!("program: {e}")))?;
 
-            Ok(KernelTaskStart::StartEval { player, program })
+            // initial_env is None because it's not serialized - it's ephemeral
+            Ok(KernelTaskStart::StartEval {
+                player,
+                program,
+                initial_env: None,
+            })
         }
     }
 }

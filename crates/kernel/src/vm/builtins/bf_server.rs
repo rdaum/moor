@@ -54,9 +54,9 @@ use moor_db::{
     prop_cache::{ANCESTRY_CACHE_STATS, PROP_CACHE_STATS, VERB_CACHE_STATS},
 };
 use moor_var::{
-    E_ARGS, E_INTRPT, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Sequence, Var,
-    VarType::TYPE_NONE, v_arc_str, v_bool_int, v_float, v_int, v_list, v_list_iter, v_map, v_none,
-    v_obj, v_str, v_string, v_sym,
+    Associative, E_ARGS, E_INTRPT, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Sequence,
+    Symbol, Var, VarType::TYPE_NONE, v_arc_str, v_bool_int, v_float, v_int, v_list, v_list_iter,
+    v_map, v_none, v_obj, v_str, v_string, v_sym,
 };
 
 /// Placeholder function for unimplemented builtins.
@@ -517,9 +517,13 @@ pub const BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE: usize = 0;
 pub const BF_SERVER_EVAL_TRAMPOLINE_RESUME: usize = 1;
 
 /// Compiles and evaluates a MOO expression or statement.
-/// Usage: `list eval(str program [, int verbosity [, int output_mode]])`
+/// Usage: `list eval(str program [, map initial_env [, int verbosity [, int output_mode]]])`
 ///
-/// Arguments controlling compilation error output:
+/// Arguments:
+///   - program: MOO code to compile and execute
+///   - initial_env: Optional map of variable bindings to pre-populate in the eval frame.
+///     Keys are variable names (strings or symbols), values can be any MOO type.
+///     Only variables that are assigned to in the program will be populated.
 ///   - verbosity: Controls error detail level (default: 0)
 ///     - 0=summary: Brief error message only
 ///     - 1=context: Message with error location (graphical display when output_mode > 0)
@@ -538,8 +542,8 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?
         .check_programmer()
         .map_err(world_state_bf_err)?;
-    if bf_args.args.is_empty() || bf_args.args.len() > 3 {
-        return Err(ErrValue(E_ARGS.msg("bf_eval() requires 1-3 arguments")));
+    if bf_args.args.is_empty() || bf_args.args.len() > 4 {
+        return Err(ErrValue(E_ARGS.msg("bf_eval() requires 1-4 arguments")));
     }
     let Some(program_code) = bf_args.args[0].as_string() else {
         return Err(ErrValue(
@@ -547,15 +551,36 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     };
 
+    // Parse optional initial environment map (2nd argument)
+    let initial_env = if bf_args.args.len() >= 2 {
+        let Some(map) = bf_args.args[1].as_map() else {
+            return Err(ErrValue(
+                E_TYPE.msg("bf_eval() requires a map as the second argument"),
+            ));
+        };
+        let mut env = Vec::with_capacity(map.len());
+        for (key, value) in map.iter() {
+            let Ok(key_sym) = key.as_symbol() else {
+                return Err(ErrValue(
+                    E_TYPE.msg("bf_eval() initial_env map keys must be strings"),
+                ));
+            };
+            env.push((key_sym, value));
+        }
+        Some(env)
+    } else {
+        None
+    };
+
     // Parse optional verbosity (default 0 for eval) and output_mode (default 0)
-    let verbosity = if bf_args.args.len() >= 2 {
-        bf_args.args[1].as_integer()
+    let verbosity = if bf_args.args.len() >= 3 {
+        bf_args.args[2].as_integer()
     } else {
         Some(0) // Default to summary for eval
     };
 
-    let output_mode = if bf_args.args.len() >= 3 {
-        bf_args.args[2].as_integer()
+    let output_mode = if bf_args.args.len() >= 4 {
+        bf_args.args[3].as_integer()
     } else {
         Some(0)
     };
@@ -604,6 +629,7 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 permissions: bf_args.task_perms_who(),
                 player: bf_args.exec_state.top().player,
                 program,
+                initial_env,
             }))
         }
         BF_SERVER_EVAL_TRAMPOLINE_RESUME => {

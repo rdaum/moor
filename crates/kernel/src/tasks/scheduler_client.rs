@@ -169,6 +169,7 @@ impl SchedulerClient {
         player: &Obj,
         perms: &Obj,
         code: String,
+        initial_env: Option<Vec<(Symbol, Var)>>,
         sessions: Arc<dyn Session>,
         config: Arc<FeaturesConfig>,
     ) -> Result<TaskHandle, SchedulerError> {
@@ -186,6 +187,7 @@ impl SchedulerClient {
                 player: *player,
                 perms: *perms,
                 program,
+                initial_env,
                 sessions,
                 reply,
             })
@@ -682,6 +684,8 @@ pub enum SchedulerClientMsg {
         player: Obj,
         perms: Obj,
         program: Program,
+        /// Optional initial variable bindings to inject into the eval's environment.
+        initial_env: Option<Vec<(Symbol, Var)>>,
         sessions: Arc<dyn Session>,
         reply: oneshot::Sender<Result<TaskHandle, SchedulerError>>,
     },

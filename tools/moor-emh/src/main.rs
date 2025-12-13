@@ -1003,7 +1003,7 @@ fn eval_expression(
     let code = format!("return {expr};");
 
     let handle = scheduler_client
-        .submit_eval_task(wizard, wizard, code, session, features)
+        .submit_eval_task(wizard, wizard, code, None, session, features)
         .map_err(|e| eyre!("Failed to submit eval task: {:?}", e))?;
 
     let result = loop {
@@ -1050,7 +1050,7 @@ fn cmd_get(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Resu
     let features = Arc::new(FeaturesConfig::default());
 
     let handle = scheduler_client
-        .submit_eval_task(wizard, wizard, eval_code, session, features)
+        .submit_eval_task(wizard, wizard, eval_code, None, session, features)
         .map_err(|e| eyre!("Failed to submit task: {:?}", e))?;
 
     let result = loop {
@@ -1121,7 +1121,7 @@ fn cmd_set(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Resu
     let features = Arc::new(FeaturesConfig::default());
 
     let handle = scheduler_client
-        .submit_eval_task(wizard, wizard, code, session, features)
+        .submit_eval_task(wizard, wizard, code, None, session, features)
         .map_err(|e| eyre!("Failed to submit task: {:?}", e))?;
 
     let (_task_id, result) = handle
@@ -1276,7 +1276,7 @@ fn cmd_prog(
     let features = Arc::new(FeaturesConfig::default());
 
     let handle = scheduler_client
-        .submit_eval_task(wizard, wizard, moo_code, session, features)
+        .submit_eval_task(wizard, wizard, moo_code, None, session, features)
         .map_err(|e| eyre!("Failed to submit task: {:?}", e))?;
 
     let result = loop {
@@ -1317,7 +1317,7 @@ fn cmd_su(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Resul
     let features = Arc::new(FeaturesConfig::default());
 
     let handle = scheduler_client
-        .submit_eval_task(wizard, wizard, check_code, session, features)
+        .submit_eval_task(wizard, wizard, check_code, None, session, features)
         .map_err(|e| eyre!("Failed to submit task: {:?}", e))?;
 
     let result = loop {
@@ -1388,7 +1388,7 @@ fn cmd_list(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Res
     let features = Arc::new(FeaturesConfig::default());
 
     let handle = scheduler_client
-        .submit_eval_task(wizard, wizard, code, session, features)
+        .submit_eval_task(wizard, wizard, code, None, session, features)
         .map_err(|e| eyre!("Failed to submit task: {:?}", e))?;
 
     let result = loop {
@@ -1456,7 +1456,7 @@ fn cmd_dump(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Res
     let features = Arc::new(FeaturesConfig::default());
 
     let handle = scheduler_client
-        .submit_eval_task(wizard, wizard, code, session, features)
+        .submit_eval_task(wizard, wizard, code, None, session, features)
         .map_err(|e| eyre!("Failed to submit task: {:?}", e))?;
 
     let result = loop {
@@ -1853,6 +1853,7 @@ Type `help` for available commands or `quit` to deactivate.
                             &current_wizard,
                             &current_wizard,
                             code.trim().to_string(),
+                            None,
                             session,
                             features.clone(),
                         ) else {

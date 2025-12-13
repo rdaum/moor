@@ -444,8 +444,14 @@ impl VMExecState {
         }
     }
 
-    pub fn exec_eval_request(&mut self, permissions: &Obj, player: &Obj, program: Program) {
-        let a = Activation::for_eval(*permissions, player, program);
+    pub fn exec_eval_request(
+        &mut self,
+        permissions: &Obj,
+        player: &Obj,
+        program: Program,
+        initial_env: Option<&[(Symbol, Var)]>,
+    ) {
+        let a = Activation::for_eval(*permissions, player, program, initial_env);
         self.stack.push(a);
 
         // Emit VerbBegin trace event if this is a MOO eval
