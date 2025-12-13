@@ -43,6 +43,7 @@ mod connection;
 mod connection_codec;
 mod djot_formatter;
 mod listen;
+mod moo_highlighter;
 
 use once_cell::sync::Lazy;
 

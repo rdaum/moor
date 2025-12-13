@@ -68,6 +68,7 @@ tracing.workspace = true
 # Terminal & UI
 colored.workspace = true
 jotdown.workspace = true
+regex.workspace = true
 tabled.workspace = true
 
 # Utilities & Helpers

@@ -3602,6 +3602,7 @@ dependencies = [
  "moor-var",
  "once_cell",
  "planus",
+ "regex",
  "rpc-async-client",
  "rpc-common",
  "serde",
