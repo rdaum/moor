@@ -1378,8 +1378,7 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     impl moor_common::matching::MatchEnvironment for ListMatchEnvironment {
         fn obj_valid(&self, oid: &Obj) -> Result<bool, WorldStateError> {
-            // Check if the object is in our name map (which means it's in our environment)
-            Ok(self.name_map.contains_key(oid))
+            with_current_transaction(|world_state| world_state.valid(oid))
         }
 
         fn get_names(&self, oid: &Obj) -> Result<Vec<String>, WorldStateError> {
@@ -1463,7 +1462,7 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
         name_map.insert(obj, names);
     }
-    let env = ListMatchEnvironment::new(bf_args.task_perms_who(), name_map).map_err(|e| {
+    let env = ListMatchEnvironment::new(bf_args.player(), name_map).map_err(|e| {
         BfErr::ErrValue(
             E_INVARG.with_msg(|| format!("parse_command() error creating environment: {e}")),
         )

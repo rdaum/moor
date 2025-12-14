@@ -97,7 +97,7 @@ pub enum ParseCommandError {
     EmptyCommand,
     #[error("Unimplemented built-in command")]
     UnimplementedBuiltInCommand,
-    #[error("Error occurred during object matching")]
+    #[error("Error occurred during object matching: {0}")]
     ErrorDuringMatch(WorldStateError),
     #[error("Permission denied")]
     PermissionDenied,

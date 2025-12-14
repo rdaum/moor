@@ -176,6 +176,11 @@ impl BfCallState<'_> {
     pub fn task_perms_who(&self) -> Obj {
         self.exec_state.task_perms()
     }
+
+    pub fn player(&self) -> Obj {
+        self.exec_state.top().player
+    }
+
     pub fn task_perms(&self) -> Result<Perms, WorldStateError> {
         let who = self.task_perms_who();
         let flags = with_current_transaction(|world_state| world_state.flags_of(&who))?;
