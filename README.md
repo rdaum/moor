@@ -1,4 +1,4 @@
-<p align="center"><img src="./doc/porcupine-building.jpg" alt="mooR logo" width="300"/></p>
+<p align="center"><img src="./doc/logo.png" alt="mooR logo" width="300"/></p>
 
 # mooR
 
