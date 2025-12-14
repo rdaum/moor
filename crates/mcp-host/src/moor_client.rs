@@ -220,7 +220,7 @@ impl MoorClient {
         };
 
         let client_token = self.client_token.as_ref().unwrap();
-        let eval_msg = mk_eval_msg(client_token, auth_token, "1".to_string());
+        let eval_msg = mk_eval_msg(client_token, auth_token, "return 1;".to_string());
 
         self.rpc_call_with_timeout(eval_msg, "Connection health check")
             .await?;

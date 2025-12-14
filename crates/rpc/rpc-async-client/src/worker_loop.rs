@@ -154,7 +154,11 @@ async fn process_fb<ProcessFunc, Fut>(
         Fn(Uuid, Symbol, Obj, Vec<Var>, Option<std::time::Duration>) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Result<Var, WorkerError>> + Send + 'static + Sync,
 {
-    let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
+    let mut socket_builder = request(&zmq_ctx)
+        .set_rcvtimeo(5000)
+        .set_sndtimeo(5000)
+        .set_immediate(true)
+        .set_linger(0);
 
     // Configure CURVE encryption if keys provided
     if let Some((client_secret, client_public, server_public)) = &curve_keys {

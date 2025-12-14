@@ -22,8 +22,10 @@
 //! - `properties`: Property operations (list, get, set, add, delete)
 //! - `objdef`: Object definition tools (dump, load, reload, file ops, diff)
 //! - `util`: Utility tools (notify)
+//! - `dynamic`: MOO-defined tools fetched from #0:external_agent_tools()
 //! - `helpers`: Shared helper functions
 
+pub mod dynamic;
 mod eval;
 mod helpers;
 mod objdef;
@@ -39,7 +41,7 @@ use helpers::{with_wizard_param, wizard_required};
 use serde_json::Value;
 use tracing::debug;
 
-// Re-export helper functions needed by resources module
+// Re-export helper functions needed by other modules
 pub use helpers::{WIZARD_ONLY_TOOLS, format_var_for_resource, parse_object_ref};
 
 /// Get all available tools
@@ -161,8 +163,7 @@ pub async fn execute_tool(
         "moo_server_info" => util::execute_moo_server_info(client, arguments).await,
         "moo_queued_tasks" => util::execute_moo_queued_tasks(client, arguments).await,
         "moo_kill_task" => util::execute_moo_kill_task(client, arguments).await,
-        // Connection management
-        "moo_reconnect" => util::execute_moo_reconnect(client, arguments).await,
+        // moo_reconnect is handled as a meta-tool in mcp_server.rs
         _ => Ok(ToolCallResult::error(format!("Unknown tool: {}", name))),
     }
 }

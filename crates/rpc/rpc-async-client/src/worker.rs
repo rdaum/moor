@@ -30,7 +30,11 @@ pub async fn attach_worker(
     // Establish the initial connection to the daemon, and send the worker token and our initial
     // listener list.
     let rpc_client = loop {
-        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
+        let mut socket_builder = request(&zmq_ctx)
+            .set_rcvtimeo(5000)
+            .set_sndtimeo(5000)
+            .set_immediate(true)
+            .set_linger(0);
 
         // Configure CURVE encryption if keys provided
         if let Some((client_secret, client_public, server_public)) = &curve_keys {

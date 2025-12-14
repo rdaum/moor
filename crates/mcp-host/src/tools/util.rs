@@ -18,7 +18,6 @@ use crate::moor_client::{MoorClient, MoorResult};
 use eyre::Result;
 use moor_var::Sequence;
 use serde_json::{Value, json};
-use tracing::info;
 
 use super::helpers::format_var;
 
@@ -140,27 +139,8 @@ pub fn tool_moo_kill_task() -> Tool {
 // Tool Implementations
 // ============================================================================
 
-pub async fn execute_moo_reconnect(
-    client: &mut MoorClient,
-    _args: &Value,
-) -> Result<ToolCallResult> {
-    info!("Manual reconnect requested");
-
-    match client.reconnect().await {
-        Ok(()) => {
-            let status = if client.is_authenticated() {
-                format!(
-                    "Reconnected and authenticated as {:?}",
-                    client.player().map(|p| p.to_string()).unwrap_or_default()
-                )
-            } else {
-                "Reconnected (not authenticated - no stored credentials)".to_string()
-            };
-            Ok(ToolCallResult::text(status))
-        }
-        Err(e) => Ok(ToolCallResult::error(format!("Reconnect failed: {}", e))),
-    }
-}
+// Note: execute_moo_reconnect is handled as a meta-tool in mcp_server.rs
+// to allow it to reconnect ALL connections (both programmer and wizard)
 
 pub async fn execute_moo_notify(client: &mut MoorClient, args: &Value) -> Result<ToolCallResult> {
     let player_str = args

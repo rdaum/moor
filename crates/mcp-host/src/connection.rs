@@ -234,6 +234,82 @@ impl ConnectionManager {
         }
     }
 
+    /// Reconnect all established connections
+    ///
+    /// Clears stale connection state and re-establishes all connections.
+    /// Returns info about which connections were reconnected.
+    pub async fn reconnect_all(&mut self) -> Result<String> {
+        let mut results = Vec::new();
+
+        if let Some(desc) = self.try_reconnect_one(false).await {
+            results.push(desc);
+        }
+        if let Some(desc) = self.try_reconnect_one(true).await {
+            results.push(desc);
+        }
+
+        if results.is_empty() {
+            return Ok("No connections to reconnect".to_string());
+        }
+        Ok(format!("Reconnected: {}", results.join(", ")))
+    }
+
+    /// Attempt to reconnect a single client, returning a description on success
+    async fn try_reconnect_one(&mut self, wizard: bool) -> Option<String> {
+        let role = if wizard { "wizard" } else { "programmer" };
+
+        // Check if client exists and try reconnecting (limited borrow scope)
+        let reconnect_result = {
+            let client = if wizard {
+                self.wizard_client.as_mut()?
+            } else {
+                self.programmer_client.as_mut()?
+            };
+            client.reconnect_with_backoff(3).await
+        };
+
+        if reconnect_result.is_ok() {
+            let client = if wizard {
+                self.wizard_client.as_ref().unwrap()
+            } else {
+                self.programmer_client.as_ref().unwrap()
+            };
+            let player = client
+                .player()
+                .map(|p| p.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            return Some(format!("{} ({})", role, player));
+        }
+
+        // Reconnect failed, try recreating from scratch
+        warn!("Failed to reconnect {} client, recreating...", role);
+
+        if wizard {
+            self.wizard_client = None;
+        } else {
+            self.programmer_client = None;
+        }
+
+        let Ok(new_client) = self.create_and_connect(wizard).await else {
+            error!("Failed to recreate {} client", role);
+            return None;
+        };
+
+        let player = new_client
+            .player()
+            .map(|p| p.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        let result = format!("{} ({}) [recreated]", role, player);
+
+        if wizard {
+            self.wizard_client = Some(new_client);
+        } else {
+            self.programmer_client = Some(new_client);
+        }
+
+        Some(result)
+    }
+
     /// Gracefully disconnect all active connections
     pub async fn disconnect_all(&mut self) {
         if let Some(client) = &mut self.programmer_client

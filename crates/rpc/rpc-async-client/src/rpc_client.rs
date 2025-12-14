@@ -220,7 +220,11 @@ impl RpcClient {
     async fn create_socket(&self) -> Result<RequestSender, RpcError> {
         let mut socket_builder = tmq::request(&self.zmq_context)
             .set_rcvtimeo(self.config.receive_timeout_ms)
-            .set_sndtimeo(self.config.connect_timeout_ms);
+            .set_sndtimeo(self.config.connect_timeout_ms)
+            // Fail immediately if no connection instead of queuing messages indefinitely
+            .set_immediate(true)
+            // Don't linger on close - drop queued messages immediately
+            .set_linger(0);
 
         // Configure CURVE encryption if keys provided
         if let Some(curve_keys) = &self.curve_keys {

@@ -18,6 +18,11 @@
 
 use crate::connection::ConnectionManager;
 use crate::mcp_types::*;
+use crate::moor_client::MoorClient;
+use crate::tools::dynamic::{
+    DynamicResource, DynamicTool, execute_dynamic_tool, fetch_dynamic_resources,
+    fetch_dynamic_tools,
+};
 use crate::{prompts, resources, tools};
 use eyre::Result;
 use serde_json::{Value, json};
@@ -32,6 +37,14 @@ pub struct McpServer {
     connections: ConnectionManager,
     initialized: bool,
     shutdown_requested: bool,
+    /// Dynamically-defined tools fetched from the MOO world
+    dynamic_tools: Vec<DynamicTool>,
+    /// Whether dynamic tools have been fetched
+    dynamic_tools_loaded: bool,
+    /// Dynamically-defined resources fetched from the MOO world
+    dynamic_resources: Vec<DynamicResource>,
+    /// Whether dynamic resources have been fetched
+    dynamic_resources_loaded: bool,
 }
 
 impl McpServer {
@@ -41,7 +54,74 @@ impl McpServer {
             connections,
             initialized: false,
             shutdown_requested: false,
+            dynamic_tools: Vec::new(),
+            dynamic_tools_loaded: false,
+            dynamic_resources: Vec::new(),
+            dynamic_resources_loaded: false,
         }
+    }
+
+    /// Refresh dynamic tools from the MOO world
+    ///
+    /// Calls #0:external_agent_tools() and updates the stored tool list.
+    async fn refresh_dynamic_tools(&mut self) -> Result<usize, String> {
+        // Use programmer connection for fetching tools
+        let client = self
+            .connections
+            .programmer()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        match fetch_dynamic_tools(client).await {
+            Ok(tools) => {
+                let count = tools.len();
+                self.dynamic_tools = tools;
+                self.dynamic_tools_loaded = true;
+                info!("Loaded {} dynamic tools from MOO world", count);
+                Ok(count)
+            }
+            Err(e) => {
+                warn!("Failed to fetch dynamic tools: {}", e);
+                self.dynamic_tools_loaded = true; // Mark as loaded even on error
+                Err(e.to_string())
+            }
+        }
+    }
+
+    /// Refresh dynamic resources from the MOO world
+    ///
+    /// Calls #0:external_agent_resources() and updates the stored resource list.
+    async fn refresh_dynamic_resources(&mut self) -> Result<usize, String> {
+        let client = self
+            .connections
+            .programmer()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        match fetch_dynamic_resources(client).await {
+            Ok(resources) => {
+                let count = resources.len();
+                self.dynamic_resources = resources;
+                self.dynamic_resources_loaded = true;
+                info!("Loaded {} dynamic resources from MOO world", count);
+                Ok(count)
+            }
+            Err(e) => {
+                warn!("Failed to fetch dynamic resources: {}", e);
+                self.dynamic_resources_loaded = true;
+                Err(e.to_string())
+            }
+        }
+    }
+
+    /// Find a dynamic resource by URI
+    fn find_dynamic_resource(&self, uri: &str) -> Option<&DynamicResource> {
+        self.dynamic_resources.iter().find(|r| r.uri == uri)
+    }
+
+    /// Find a dynamic tool by name
+    fn find_dynamic_tool(&self, name: &str) -> Option<&DynamicTool> {
+        self.dynamic_tools.iter().find(|t| t.name == name)
     }
 
     /// Run the MCP server over stdio
@@ -211,10 +291,33 @@ impl McpServer {
     }
 
     /// Handle tools/list request
-    async fn handle_tools_list(&self) -> Result<Value, JsonRpcError> {
-        let result = ToolsListResult {
-            tools: tools::get_tools(),
-        };
+    async fn handle_tools_list(&mut self) -> Result<Value, JsonRpcError> {
+        // Fetch dynamic tools on first access if not already loaded
+        if !self.dynamic_tools_loaded {
+            let _ = self.refresh_dynamic_tools().await;
+        }
+
+        // Merge static tools with dynamic tools
+        let mut all_tools = tools::get_tools();
+
+        // Add dynamic tools
+        for dynamic_tool in &self.dynamic_tools {
+            all_tools.push(dynamic_tool.to_mcp_tool());
+        }
+
+        // Add the refresh_dynamic_tools meta-tool
+        all_tools.push(Tool {
+            name: "moo_refresh_dynamic_tools".to_string(),
+            description: "Refresh the list of dynamic tools from the MOO world. \
+                Call this after tools have been added or modified in #0:external_agent_tools()."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        });
+
+        let result = ToolsListResult { tools: all_tools };
         Ok(serde_json::to_value(result).unwrap())
     }
 
@@ -225,88 +328,127 @@ impl McpServer {
         let call_params: ToolCallParams = serde_json::from_value(params.clone())
             .map_err(|e| JsonRpcError::invalid_params(e.to_string()))?;
 
-        // Check if this tool requires wizard privileges
-        let is_wizard_only = tools::WIZARD_ONLY_TOOLS.contains(&call_params.name.as_str());
+        // Handle meta-tools that need special handling
+        if call_params.name == "moo_refresh_dynamic_tools" {
+            return self.handle_refresh_dynamic_tools().await;
+        }
+        if call_params.name == "moo_reconnect" {
+            return self.handle_reconnect().await;
+        }
 
-        // Extract wizard flag from arguments (defaults to false, unless wizard-only)
-        let wizard = if is_wizard_only {
-            true
-        } else {
-            call_params
+        // Determine if wizard privileges are needed
+        let dynamic_tool = self.find_dynamic_tool(&call_params.name).cloned();
+        let is_wizard_only =
+            dynamic_tool.is_none() && tools::WIZARD_ONLY_TOOLS.contains(&call_params.name.as_str());
+        let wizard = is_wizard_only
+            || call_params
                 .arguments
                 .get("wizard")
                 .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-        };
+                .unwrap_or(false);
 
-        if wizard {
-            if is_wizard_only {
-                debug!("Tool {} requires wizard privileges", call_params.name);
-            } else {
-                warn!(
-                    "Tool {} called with wizard privileges - use with caution!",
-                    call_params.name
-                );
-            }
+        if wizard && !is_wizard_only {
+            warn!(
+                "Tool {} called with wizard privileges - use with caution!",
+                call_params.name
+            );
         }
 
-        // Get the appropriate client (lazy connection)
+        // Execute the tool with automatic reconnection on connection failures
+        self.execute_tool_with_reconnect(&call_params, dynamic_tool.as_ref(), wizard)
+            .await
+    }
+
+    /// Handle the refresh_dynamic_tools meta-tool
+    async fn handle_refresh_dynamic_tools(&mut self) -> Result<Value, JsonRpcError> {
+        let result = match self.refresh_dynamic_tools().await {
+            Ok(count) => ToolCallResult::text(format!(
+                "Refreshed dynamic tools. Loaded {} tools from MOO world.",
+                count
+            )),
+            Err(e) => ToolCallResult::error(format!("Failed to refresh dynamic tools: {}", e)),
+        };
+        Ok(serde_json::to_value(result).unwrap())
+    }
+
+    /// Handle the reconnect meta-tool
+    ///
+    /// Reconnects all established connections (both programmer and wizard).
+    async fn handle_reconnect(&mut self) -> Result<Value, JsonRpcError> {
+        info!("Manual reconnect requested for all connections");
+        let result = match self.connections.reconnect_all().await {
+            Ok(msg) => ToolCallResult::text(msg),
+            Err(e) => ToolCallResult::error(format!("Reconnect failed: {}", e)),
+        };
+        Ok(serde_json::to_value(result).unwrap())
+    }
+
+    /// Execute a tool call, with automatic reconnection on connection failures
+    async fn execute_tool_with_reconnect(
+        &mut self,
+        call_params: &ToolCallParams,
+        dynamic_tool: Option<&DynamicTool>,
+        wizard: bool,
+    ) -> Result<Value, JsonRpcError> {
         let client = self
             .connections
             .get(wizard)
             .await
             .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
 
-        // Try to execute the tool
-        let result = tools::execute_tool(client, &call_params.name, &call_params.arguments).await;
+        let result = Self::execute_tool_dispatch(client, call_params, dynamic_tool).await;
 
         match result {
             Ok(result) => Ok(serde_json::to_value(result).unwrap()),
             Err(e) => {
                 let error_str = e.to_string();
-
-                // Check if this looks like a connection error
-                if Self::is_connection_error(&error_str) {
-                    warn!(
-                        "Tool call failed with connection error, attempting reconnect: {}",
-                        error_str
-                    );
-
-                    // Attempt to reconnect with backoff
-                    match self.connections.reconnect(wizard).await {
-                        Ok(()) => {
-                            info!("Reconnected successfully, retrying tool call");
-
-                            // Get client again after reconnect
-                            let client = self
-                                .connections
-                                .get(wizard)
-                                .await
-                                .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
-
-                            // Retry the tool call
-                            let retry_result = tools::execute_tool(
-                                client,
-                                &call_params.name,
-                                &call_params.arguments,
-                            )
-                            .await
-                            .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
-
-                            Ok(serde_json::to_value(retry_result).unwrap())
-                        }
-                        Err(reconnect_err) => {
-                            error!("Reconnection failed: {}", reconnect_err);
-                            Err(JsonRpcError::internal_error(format!(
-                                "Connection lost and reconnection failed: {}. Original error: {}",
-                                reconnect_err, error_str
-                            )))
-                        }
-                    }
-                } else {
-                    Err(JsonRpcError::internal_error(e.to_string()))
+                if !Self::is_connection_error(&error_str) {
+                    return Err(JsonRpcError::internal_error(error_str));
                 }
+
+                warn!(
+                    "Tool call failed with connection error, attempting reconnect: {}",
+                    error_str
+                );
+
+                self.connections
+                    .reconnect(wizard)
+                    .await
+                    .map_err(|reconnect_err| {
+                        error!("Reconnection failed: {}", reconnect_err);
+                        JsonRpcError::internal_error(format!(
+                            "Connection lost and reconnection failed: {}. Original error: {}",
+                            reconnect_err, error_str
+                        ))
+                    })?;
+
+                info!("Reconnected successfully, retrying tool call");
+
+                let client = self
+                    .connections
+                    .get(wizard)
+                    .await
+                    .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+
+                let retry_result = Self::execute_tool_dispatch(client, call_params, dynamic_tool)
+                    .await
+                    .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+
+                Ok(serde_json::to_value(retry_result).unwrap())
             }
+        }
+    }
+
+    /// Dispatch to the appropriate tool executor (dynamic or static)
+    async fn execute_tool_dispatch(
+        client: &mut MoorClient,
+        call_params: &ToolCallParams,
+        dynamic_tool: Option<&DynamicTool>,
+    ) -> Result<ToolCallResult> {
+        if let Some(tool) = dynamic_tool {
+            execute_dynamic_tool(client, tool, &call_params.arguments).await
+        } else {
+            tools::execute_tool(client, &call_params.name, &call_params.arguments).await
         }
     }
 
@@ -323,9 +465,27 @@ impl McpServer {
     }
 
     /// Handle resources/list request
-    async fn handle_resources_list(&self) -> Result<Value, JsonRpcError> {
+    async fn handle_resources_list(&mut self) -> Result<Value, JsonRpcError> {
+        // Fetch dynamic resources on first access if not already loaded
+        if !self.dynamic_resources_loaded {
+            let _ = self.refresh_dynamic_resources().await;
+        }
+
+        // Merge static resources with dynamic resources
+        let mut all_resources = resources::get_resources();
+
+        // Add dynamic resources
+        for dynamic_resource in &self.dynamic_resources {
+            all_resources.push(Resource {
+                uri: dynamic_resource.uri.clone(),
+                name: dynamic_resource.name.clone(),
+                description: Some(dynamic_resource.description.clone()),
+                mime_type: Some(dynamic_resource.mime_type.clone()),
+            });
+        }
+
         let result = ResourcesListResult {
-            resources: resources::get_resources(),
+            resources: all_resources,
         };
         Ok(serde_json::to_value(result).unwrap())
     }
@@ -335,7 +495,20 @@ impl McpServer {
         let read_params: ResourceReadParams = serde_json::from_value(params.clone())
             .map_err(|e| JsonRpcError::invalid_params(e.to_string()))?;
 
-        // Resources always use programmer connection (read-only browsing)
+        // Check if this is a dynamic resource first
+        if let Some(dynamic_resource) = self.find_dynamic_resource(&read_params.uri).cloned() {
+            let result = ResourceReadResult {
+                contents: vec![ResourceContents {
+                    uri: dynamic_resource.uri,
+                    mime_type: Some(dynamic_resource.mime_type),
+                    text: Some(dynamic_resource.content),
+                    blob: None,
+                }],
+            };
+            return Ok(serde_json::to_value(result).unwrap());
+        }
+
+        // Fall back to static resource handling
         let client = self
             .connections
             .programmer()
