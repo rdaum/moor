@@ -20,6 +20,7 @@
     "web-host:run": "cargo run --release --bin moor-web-host",
     "web-host:run:oauth2": "cargo run --release --bin moor-web-host -- --config-file ${MOOR_OAUTH2_CONFIG:-web-host-oauth2.yaml}",
     "full:dev": "concurrently \"npm run dev\" \"npm run daemon:dev\" \"npm run web-host:dev\"",
+    "full:dev:no-daemon": "concurrently \"npm run dev\" \"npm run web-host:dev\"",
     "full:dev:oauth2": "concurrently \"npm run dev\" \"npm run daemon:dev\" \"npm run web-host:dev:oauth2\"",
     "full:dev-traced": "concurrently \"npm run dev\" \"npm run daemon:traced\" \"npm run web-host:dev\"",
     "full:build": "npm run build && npm run web-host:build"
