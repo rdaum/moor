@@ -12,7 +12,7 @@
 //
 
 use crate::tasks::Exception;
-use moor_var::{Symbol, Var};
+use moor_var::{Obj, Symbol, Var};
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 use uuid::Uuid;
@@ -51,6 +51,14 @@ pub enum Event {
     Unpresent(String),
     /// Present a backtrace to the user.
     Traceback(Exception),
+    /// Set a connection option. This goes through the event stream to ensure proper ordering
+    /// with other events (e.g., set binary mode before notify, then unset after).
+    /// Connection object, option name, option value.
+    SetConnectionOption {
+        connection: Obj,
+        option: Symbol,
+        value: Var,
+    },
     // TODO: Other Event types on Session stream
     //   other events that might happen here would be things like (local) "object moved" or "object
     //   created."
@@ -96,6 +104,20 @@ impl NarrativeEvent {
                 no_flush,
                 no_newline,
                 metadata,
+            },
+        }
+    }
+
+    #[must_use]
+    pub fn set_connection_option(author: Var, connection: Obj, option: Symbol, value: Var) -> Self {
+        Self {
+            event_id: Uuid::now_v7(),
+            timestamp: SystemTime::now(),
+            author,
+            event: Event::SetConnectionOption {
+                connection,
+                option,
+                value,
             },
         }
     }

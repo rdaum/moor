@@ -637,7 +637,7 @@ impl TelnetConnection {
                 };
                 match formatted {
                     FormattedOutput::Plain(text) => {
-                        if no_newline {
+                        if no_newline || self.is_binary_mode {
                             self.send_raw_text(&text).await
                         } else {
                             self.send_line(&text).await
@@ -699,7 +699,6 @@ impl TelnetConnection {
                 }
                 Ok(event_msg) = events_recv(self.client_id, &mut self.narrative_sub) => {
                     let event = event_msg.event()?;
-                    trace!("narrative_event");
                     match event.event().map_err(|e| eyre::eyre!("Missing event: {}", e))? {
                         moor_rpc::ClientEventUnionRef::SystemMessageEvent(sys_msg) => {
                             let msg = sys_msg.message().map_err(|e| eyre::eyre!("Missing message: {}", e))?.to_string();
@@ -772,10 +771,7 @@ impl TelnetConnection {
                     };
                     let line = match item {
                         ConnectionItem::Line(line) => line,
-                        ConnectionItem::Bytes(_) => {
-                            // Binary data during login is not expected
-                            continue;
-                        }
+                        ConnectionItem::Bytes(_) => continue,
                     };
                     let words = parse_into_words(&line);
                     let login_msg = mk_login_command_msg(&self.client_token, &self.handler_object, words, true);
@@ -805,7 +801,7 @@ impl TelnetConnection {
                                 info!(?player, client_id = ?self.client_id, "Login successful");
                                 self.player_object = Some(player);
                                 return Ok((auth_token, player, connect_type))
-                            }
+                        }
                     }
                 }
             }
@@ -856,11 +852,8 @@ impl TelnetConnection {
                     }
                     ConnectionItem::Bytes(bytes) => {
                         if !self.is_binary_mode {
-                            // Binary data in text mode is not expected
-                            return ReadEvent::PendingEvent;
-                        }
-
-                        if !expecting_input.is_empty() {
+                            ReadEvent::PendingEvent
+                        } else if !expecting_input.is_empty() {
                             // Convert binary data to Var::Binary for input reply
                             ReadEvent::InputReply(Var::mk_binary(bytes.to_vec()))
                         } else {

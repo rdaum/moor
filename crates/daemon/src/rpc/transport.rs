@@ -27,14 +27,14 @@ use uuid::Uuid;
 use zmq::Socket;
 
 use super::message_handler::MessageHandler;
-use moor_common::tasks::NarrativeEvent;
+use moor_common::tasks::{Event, NarrativeEvent};
 use moor_kernel::SchedulerClient;
 use moor_rpc::{HostToDaemonMessageRef, MessageTypeRef};
 use moor_schema::{convert::narrative_event_to_flatbuffer_struct, rpc as moor_rpc};
 use moor_var::Obj;
 use rpc_common::{
     CLIENT_BROADCAST_TOPIC, HOST_BROADCAST_TOPIC, RpcMessageError, obj_fb,
-    scheduler_error_to_flatbuffer_struct,
+    scheduler_error_to_flatbuffer_struct, var_to_flatbuffer_rpc,
 };
 /// Trait for the transport layer that handles communication between hosts and the daemon
 pub trait Transport: Send + Sync {
@@ -554,26 +554,50 @@ impl Transport for RpcTransport {
         for (player, event) in events {
             let client_ids = connections.client_ids_for(*player)?;
 
-            // Build FlatBuffer ClientEvent directly
-            let narrative_fb = narrative_event_to_flatbuffer_struct(event.as_ref())
-                .map_err(|e| eyre::eyre!("Failed to convert narrative event: {}", e))?;
-            let client_event = moor_rpc::ClientEvent {
-                event: moor_rpc::ClientEventUnion::NarrativeEventMessage(Box::new(
-                    moor_rpc::NarrativeEventMessage {
-                        player: obj_fb(player),
-                        event: Box::new(narrative_fb),
-                    },
-                )),
+            let client_event = match &event.event {
+                Event::SetConnectionOption {
+                    connection,
+                    option,
+                    value,
+                } => {
+                    if let Some(&client_id) = client_ids.first() {
+                        connections.set_client_attribute(client_id, *option, Some(value.clone()))?;
+                    }
+                    let value_fb = var_to_flatbuffer_rpc(value)
+                        .map_err(|e| eyre::eyre!("Failed to encode var: {}", e))?;
+                    moor_rpc::ClientEvent {
+                        event: moor_rpc::ClientEventUnion::SetConnectionOptionEvent(Box::new(
+                            moor_rpc::SetConnectionOptionEvent {
+                                connection_obj: obj_fb(connection),
+                                option_name: Box::new(moor_rpc::Symbol {
+                                    value: option.as_string(),
+                                }),
+                                value: Box::new(value_fb),
+                            },
+                        )),
+                    }
+                }
+                _ => {
+                    let narrative_fb = narrative_event_to_flatbuffer_struct(event.as_ref())
+                        .map_err(|e| eyre::eyre!("Failed to convert narrative event: {}", e))?;
+                    moor_rpc::ClientEvent {
+                        event: moor_rpc::ClientEventUnion::NarrativeEventMessage(Box::new(
+                            moor_rpc::NarrativeEventMessage {
+                                player: obj_fb(player),
+                                event: Box::new(narrative_fb),
+                            },
+                        )),
+                    }
+                }
             };
 
-            // Serialize to bytes
             let mut builder = planus::Builder::new();
             let event_bytes = builder.finish(&client_event, None).to_vec();
 
             for client_id in &client_ids {
                 let payload = vec![client_id.as_bytes().to_vec(), event_bytes.clone()];
                 publish.send_multipart(payload, 0).map_err(|e| {
-                    error!(error = ?e, "Unable to send narrative event");
+                    error!(error = ?e, "Unable to send event");
                     eyre::eyre!("Delivery error")
                 })?;
             }

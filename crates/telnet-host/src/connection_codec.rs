@@ -135,11 +135,10 @@ impl ConnectionCodec {
     /// Set connection mode
     pub fn set_mode(&mut self, mode: ConnectionMode) {
         self.mode = mode;
-        // Reset text mode state when switching modes
         if mode == ConnectionMode::Binary {
             self.next_index = 0;
             self.is_discarding = false;
-            self.last_input_was_cr = false;
+            // Preserve last_input_was_cr across mode switches to handle pending LF from CRLF
         }
     }
 
@@ -182,9 +181,21 @@ impl ConnectionCodec {
                 self.is_discarding = false;
                 self.last_input_was_cr = is_cr;
 
+                // Filter control characters and telnet protocol bytes (matches LambdaMOO)
+                let line_bytes_filtered: Vec<u8> = line_bytes
+                    .iter()
+                    .copied()
+                    .filter(|&b| {
+                        if b == 0x09 { return true; } // tab
+                        if b >= 0xF0 { return false; } // telnet IAC and protocol bytes
+                        if (b & 0x60) == 0x00 || b == 0x7f { return false; } // control chars
+                        true
+                    })
+                    .collect();
+
                 // Convert to string using lossy conversion to handle non-UTF8 bytes
                 // Invalid sequences become � (U+FFFD REPLACEMENT CHARACTER)
-                let line_str = String::from_utf8_lossy(&line_bytes).into_owned();
+                let line_str = String::from_utf8_lossy(&line_bytes_filtered).into_owned();
                 return Ok(Some(line_str));
             }
 
@@ -284,9 +295,8 @@ impl Encoder<ConnectionFrame> for ConnectionCodec {
     fn encode(&mut self, frame: ConnectionFrame, buf: &mut BytesMut) -> Result<(), Self::Error> {
         match frame {
             ConnectionFrame::Line(line) => {
-                // Add the line and append a newline
                 buf.extend_from_slice(line.as_bytes());
-                buf.extend_from_slice(b"\n");
+                buf.extend_from_slice(b"\r\n"); // telnet protocol requires CRLF
             }
             ConnectionFrame::RawText(text) => {
                 // Add raw text without newline (for no_newline attribute)
@@ -405,7 +415,7 @@ mod tests {
         codec
             .encode(ConnectionFrame::Line("test".to_string()), &mut buf)
             .unwrap();
-        assert_eq!(buf, "test\n");
+        assert_eq!(buf, "test\r\n");
     }
 
     #[test]

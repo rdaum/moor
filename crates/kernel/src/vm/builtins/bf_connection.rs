@@ -625,15 +625,17 @@ fn bf_set_connection_option(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
         )));
     }
 
-    // Permission check: can only set connection options if user owns the connection or is wizard
     if !check_connection_ownership(obj, bf_args)? {
         return Err(ErrValue(E_PERM.msg("Permission denied")));
     }
 
-    // Set the connection attribute
-    current_session()
-        .set_connection_attribute(obj, option_symbol, value)
-        .map_err(|e| ErrValue(E_INVARG.msg(format!("Failed to set connection option: {e}"))))?;
+    let event = NarrativeEvent::set_connection_option(
+        bf_args.exec_state.this(),
+        obj,
+        option_symbol,
+        value,
+    );
+    current_task_scheduler_client().notify(obj, Box::new(event));
 
     Ok(Ret(v_int(0)))
 }

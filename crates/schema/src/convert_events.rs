@@ -243,6 +243,14 @@ pub fn event_to_flatbuffer_struct(event: &Event) -> Result<common::Event, moor_v
                 }),
             }))
         }
+        Event::SetConnectionOption { .. } => {
+            // SetConnectionOption events are handled specially in publish_narrative_events
+            // and should never reach the FlatBuffer conversion. They get converted to
+            // SetConnectionOptionEvent ClientEvents directly.
+            return Err(moor_var::EncodingError::CouldNotEncode(
+                "SetConnectionOption should not be serialized as a narrative event".to_string(),
+            ));
+        }
     };
 
     Ok(common::Event { event: event_union })
