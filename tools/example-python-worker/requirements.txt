@@ -1,14 +1,5 @@
-# ZeroMQ for messaging
+# ZeroMQ for messaging (with CURVE support)
 pyzmq>=25.1.0
 
 # FlatBuffers for serialization
 flatbuffers>=23.5.26
-
-# PASETO for authentication tokens
-pyseto>=1.7.0
-
-# Cryptography for key handling
-cryptography>=41.0.0
-
-# UUID handling (standard library, but listing for clarity)
-# uuid - built-in

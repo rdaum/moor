@@ -15,21 +15,31 @@
 # Change to the script's directory
 cd "$(dirname "$0")"
 
-# Activate virtual environment
-source venv/bin/activate
+# Activate virtual environment if it exists
+if [ -d "venv" ]; then
+    source venv/bin/activate
+fi
 
 # Add moor_schema to PYTHONPATH so FlatBuffers imports work
-export PYTHONPATH="${PWD}/moor_schema:${PYTHONPATH}"
+export PYTHONPATH="${PWD}:${PYTHONPATH}"
 
-# Default to IPC sockets
+# Default to IPC sockets (no CURVE encryption needed)
 REQUEST_ADDR="${WORKER_REQUEST_ADDR:-ipc:///tmp/moor_workers_request.sock}"
 RESPONSE_ADDR="${WORKER_RESPONSE_ADDR:-ipc:///tmp/moor_workers_response.sock}"
-PUBLIC_KEY="${WORKER_PUBLIC_KEY:-../../moor-verifying-key.pem}"
-PRIVATE_KEY="${WORKER_PRIVATE_KEY:-../../moor-signing-key.pem}"
+ENROLLMENT_ADDR="${WORKER_ENROLLMENT_ADDR:-tcp://localhost:7900}"
+DATA_DIR="${WORKER_DATA_DIR:-./.moor-worker-data}"
+
+# Build command
+CMD="python3 -u echo_worker.py"
+CMD="$CMD --request-address $REQUEST_ADDR"
+CMD="$CMD --response-address $RESPONSE_ADDR"
+CMD="$CMD --enrollment-address $ENROLLMENT_ADDR"
+CMD="$CMD --data-dir $DATA_DIR"
+
+# Add enrollment token file if specified
+if [ -n "$WORKER_ENROLLMENT_TOKEN_FILE" ]; then
+    CMD="$CMD --enrollment-token-file $WORKER_ENROLLMENT_TOKEN_FILE"
+fi
 
 # Run the worker
-exec python3 -u echo_worker.py \
-    --public-key "$PUBLIC_KEY" \
-    --private-key "$PRIVATE_KEY" \
-    --request-address "$REQUEST_ADDR" \
-    --response-address "$RESPONSE_ADDR"
+exec $CMD

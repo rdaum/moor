@@ -17,36 +17,41 @@
 import sys
 
 
+def check_python_version():
+    """Verify Python version is 3.10+."""
+    print("Checking Python version...", end=" ")
+
+    major, minor = sys.version_info[:2]
+    if major >= 3 and minor >= 10:
+        print(f"OK ({major}.{minor})")
+        return True
+    else:
+        print(f"FAILED (need 3.10+, got {major}.{minor})")
+        return False
+
+
 def check_imports():
     """Verify all required imports work."""
-    print("Checking imports...")
-
+    print("Checking pyzmq...", end=" ")
     try:
         import zmq
-        print(f"  ✓ zmq {zmq.zmq_version()}")
+        # Check for CURVE support
+        has_curve = hasattr(zmq, 'curve_keypair')
+        if has_curve:
+            print(f"OK (with CURVE support, zmq {zmq.zmq_version()})")
+        else:
+            print(f"WARNING (no CURVE support, zmq {zmq.zmq_version()})")
+            print("  Note: CURVE is only needed for TCP connections, not IPC")
     except ImportError as e:
-        print(f"  ✗ zmq failed: {e}")
+        print(f"FAILED: {e}")
         return False
 
+    print("Checking flatbuffers...", end=" ")
     try:
         import flatbuffers
-        print(f"  ✓ flatbuffers")
+        print("OK")
     except ImportError as e:
-        print(f"  ✗ flatbuffers failed: {e}")
-        return False
-
-    try:
-        import pyseto
-        print(f"  ✓ pyseto")
-    except ImportError as e:
-        print(f"  ✗ pyseto failed: {e}")
-        return False
-
-    try:
-        from cryptography.hazmat.primitives import serialization
-        print(f"  ✓ cryptography")
-    except ImportError as e:
-        print(f"  ✗ cryptography failed: {e}")
+        print(f"FAILED: {e}")
         return False
 
     return True
@@ -56,77 +61,63 @@ def check_generated_schemas():
     """Verify generated FlatBuffer schemas can be imported."""
     print("\nChecking generated FlatBuffer schemas...")
 
+    print("  MoorCommon types...", end=" ")
     try:
         from moor_schema.MoorCommon import Symbol, Obj, Uuid
-        print(f"  ✓ MoorCommon types")
+        print("OK")
     except ImportError as e:
-        print(f"  ✗ MoorCommon failed: {e}")
+        print(f"FAILED: {e}")
         return False
 
+    print("  MoorVar types...", end=" ")
     try:
         from moor_schema.MoorVar import Var
-        print(f"  ✓ MoorVar types")
+        print("OK")
     except ImportError as e:
-        print(f"  ✗ MoorVar failed: {e}")
+        print(f"FAILED: {e}")
         return False
 
+    print("  MoorRpc types...", end=" ")
     try:
         from moor_schema.MoorRpc import (
             AttachWorker,
             WorkerRequest,
-            WorkerAck,
-            WorkerError,
+            RequestResult,
+            EnrollmentRequest,
+            EnrollmentResponse,
         )
-        print(f"  ✓ MoorRpc types")
+        print("OK")
     except ImportError as e:
-        print(f"  ✗ MoorRpc failed: {e}")
+        print(f"FAILED: {e}")
         return False
 
     return True
 
 
-def test_paseto_token():
-    """Test PASETO token creation."""
-    print("\nTesting PASETO token creation...")
+def test_curve_keypair():
+    """Test CURVE keypair generation."""
+    print("\nTesting CURVE keypair generation...", end=" ")
 
     try:
-        import uuid
-        import pyseto
-        from pyseto import Key
-        from cryptography.hazmat.primitives.asymmetric import ed25519
-        from cryptography.hazmat.primitives import serialization
+        import zmq
+        public_key, secret_key = zmq.curve_keypair()
 
-        # Generate a test Ed25519 keypair
-        private_key = ed25519.Ed25519PrivateKey.generate()
-
-        # Get PEM-encoded private key (pyseto expects PEM format)
-        private_pem = private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption()
-        )
-
-        # Create Key object
-        key = Key.new(version=4, purpose="public", key=private_pem)
-
-        # Create a token
-        worker_id = uuid.uuid4()
-        token = pyseto.encode(
-            key,
-            payload=str(worker_id).encode('utf-8'),
-            footer=b"key-id:moor_worker"
-        )
-
-        print(f"  ✓ Created PASETO token: {token.decode('utf-8')[:50]}...")
-        return True
+        # Verify they're Z85-encoded (40 characters)
+        if len(public_key) == 40 and len(secret_key) == 40:
+            print("OK")
+            return True
+        else:
+            print(f"FAILED (unexpected key length)")
+            return False
     except Exception as e:
-        print(f"  ✗ PASETO token creation failed: {e}")
-        return False
+        print(f"WARNING: {e}")
+        print("  Note: CURVE is only needed for TCP connections, not IPC")
+        return True  # Don't fail the overall check
 
 
 def test_flatbuffer_creation():
     """Test creating a simple FlatBuffer message."""
-    print("\nTesting FlatBuffer message creation...")
+    print("Testing FlatBuffer message creation...", end=" ")
 
     try:
         import flatbuffers
@@ -136,17 +127,17 @@ def test_flatbuffer_creation():
 
         # Create a simple Symbol
         test_str = builder.CreateString("test")
-        Symbol.Start(builder)
-        Symbol.AddValue(builder, test_str)
-        symbol_offset = Symbol.End(builder)
+        Symbol.SymbolStart(builder)
+        Symbol.SymbolAddValue(builder, test_str)
+        symbol_offset = Symbol.SymbolEnd(builder)
 
         builder.Finish(symbol_offset)
         result = bytes(builder.Output())
 
-        print(f"  ✓ Created FlatBuffer message ({len(result)} bytes)")
+        print(f"OK ({len(result)} bytes)")
         return True
     except Exception as e:
-        print(f"  ✗ FlatBuffer creation failed: {e}")
+        print(f"FAILED: {e}")
         return False
 
 
@@ -155,27 +146,40 @@ def main():
     print("=" * 60)
     print("mooR Python Worker Setup Verification")
     print("=" * 60)
+    print()
 
     all_passed = True
 
+    all_passed = check_python_version() and all_passed
     all_passed = check_imports() and all_passed
     all_passed = check_generated_schemas() and all_passed
-    all_passed = test_paseto_token() and all_passed
+    all_passed = test_curve_keypair() and all_passed
     all_passed = test_flatbuffer_creation() and all_passed
 
-    print("\n" + "=" * 60)
+    print()
+    print("=" * 60)
     if all_passed:
-        print("✓ All checks passed! Setup is complete.")
-        print("\nNext steps:")
-        print("  1. Generate or obtain keypair files (public_key.pem, private_key.pem)")
-        print("  2. Start the mooR daemon")
-        print("  3. Run: python3 echo_worker.py --public-key KEY --private-key KEY")
+        print("All checks passed! Setup is complete.")
+        print()
+        print("Next steps:")
+        print("  1. Start the mooR daemon with --workers-enabled")
+        print("  2. Run: ./run_worker.sh")
+        print("     or: python3 echo_worker.py")
+        print()
+        print("For TCP mode (requires enrollment):")
+        print("  export MOOR_ENROLLMENT_TOKEN=<token>")
+        print("  WORKER_REQUEST_ADDR=tcp://... ./run_worker.sh")
         return 0
     else:
-        print("✗ Some checks failed. Please install missing dependencies:")
+        print("Some checks failed. Please install missing dependencies:")
         print("  pip install -r requirements.txt")
+        print()
+        print("If FlatBuffer schemas are missing, regenerate them:")
+        print("  cd ../../crates/schema/schema")
+        print("  flatc --python -o ../../../tools/example-python-worker/moor_schema/ \\")
+        print("      common.fbs var.fbs moor_program.fbs moor_rpc.fbs")
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

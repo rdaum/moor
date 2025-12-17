@@ -15,12 +15,14 @@
 """Echo worker for mooR daemon.
 
 Demonstrates a minimal Python worker that prepends "echo_response" to its
-arguments and returns them.
+arguments and returns them. Uses CURVE authentication for TCP connections.
 """
 
 import sys
 import uuid
-from moor_worker import load_keypair, make_worker_token, MoorWorker
+from pathlib import Path
+
+from moor_worker import MoorWorker, setup_curve_auth
 
 
 def echo_process(arguments, timeout):
@@ -41,50 +43,62 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='Echo worker - prepends echo_response to arguments'
+        description="Echo worker - prepends echo_response to arguments"
     )
     parser.add_argument(
-        '--public-key',
-        required=True,
-        help='Path to public key PEM file'
+        "--request-address",
+        default="ipc:///tmp/moor_workers_request.sock",
+        help="ZMQ address for receiving requests (SUB socket)",
     )
     parser.add_argument(
-        '--private-key',
-        required=True,
-        help='Path to private key PEM file'
+        "--response-address",
+        default="ipc:///tmp/moor_workers_response.sock",
+        help="ZMQ address for sending responses (REQ socket)",
     )
     parser.add_argument(
-        '--request-address',
-        default='ipc:///tmp/moor_workers_request.sock',
-        help='ZMQ address for receiving requests'
+        "--enrollment-address",
+        default="tcp://localhost:7900",
+        help="Enrollment server address for TCP connections",
     )
     parser.add_argument(
-        '--response-address',
-        default='ipc:///tmp/moor_workers_response.sock',
-        help='ZMQ address for sending responses'
+        "--enrollment-token-file",
+        type=Path,
+        help="Path to enrollment token file",
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=Path("./.moor-worker-data"),
+        help="Directory for worker identity and CURVE keys",
     )
 
     args = parser.parse_args()
 
-    try:
-        private_key, public_key = load_keypair(args.public_key, args.private_key)
-    except Exception as e:
-        print(f"Error loading keypair: {e}", file=sys.stderr)
-        sys.exit(1)
+    # Setup CURVE authentication if using TCP
+    curve_keys = setup_curve_auth(
+        args.response_address,
+        args.enrollment_address,
+        args.enrollment_token_file,
+        "python-echo-worker",
+        args.data_dir,
+    )
 
     worker_id = uuid.uuid4()
-    worker_token = make_worker_token(private_key, worker_id)
 
-    print(f"Echo Worker")
+    print("Echo Worker")
     print(f"Worker ID: {worker_id}")
-    print(f"Connecting to daemon...")
+    if curve_keys:
+        print("CURVE encryption: enabled")
+    else:
+        print("CURVE encryption: disabled (IPC mode)")
+    print("Connecting to daemon...")
 
     worker = MoorWorker(
         worker_id=worker_id,
         worker_type="echo",
-        worker_token=worker_token,
         request_address=args.request_address,
-        response_address=args.response_address
+        response_address=args.response_address,
+        curve_keys=curve_keys,
     )
 
     try:
@@ -95,10 +109,13 @@ def main():
         print("\nShutting down echo worker...")
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
+        import traceback
+
+        traceback.print_exc()
         sys.exit(1)
     finally:
         worker.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
