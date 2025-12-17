@@ -186,9 +186,15 @@ impl ConnectionCodec {
                     .iter()
                     .copied()
                     .filter(|&b| {
-                        if b == 0x09 { return true; } // tab
-                        if b >= 0xF0 { return false; } // telnet IAC and protocol bytes
-                        if (b & 0x60) == 0x00 || b == 0x7f { return false; } // control chars
+                        if b == 0x09 {
+                            return true;
+                        } // tab
+                        if b >= 0xF0 {
+                            return false;
+                        } // telnet IAC and protocol bytes
+                        if (b & 0x60) == 0x00 || b == 0x7f {
+                            return false;
+                        } // control chars
                         true
                     })
                     .collect();

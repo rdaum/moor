@@ -14,6 +14,7 @@
 use std::{
     collections::{HashMap, VecDeque},
     net::SocketAddr,
+    os::fd::RawFd,
     sync::{Arc, atomic::AtomicBool},
     time::{Duration, Instant, SystemTime},
 };
@@ -44,6 +45,7 @@ use rpc_common::{
     mk_command_msg, mk_detach_msg, mk_login_command_msg, mk_out_of_band_msg, mk_program_msg,
     mk_requested_input_msg, mk_set_client_attribute_msg,
 };
+use socket2::{SockRef, TcpKeepalive};
 use tmq::subscribe::Subscribe;
 use tokio::{net::TcpStream, select};
 use tokio_util::codec::Framed;
@@ -111,6 +113,8 @@ pub(crate) struct TelnetConnection {
     pub(crate) pending_line_mode: Option<LineMode>,
     /// Currently collecting input (allows input even when pending_task is set)
     pub(crate) collecting_input: bool,
+    /// Raw file descriptor for the socket (used for setting socket options like keep-alive)
+    pub(crate) socket_fd: RawFd,
 }
 
 /// The input modes the telnet session can be in.
@@ -529,6 +533,9 @@ impl TelnetConnection {
                 debug!("Setting flush-command to '{}'", flush_cmd);
                 self.flush_command = flush_cmd.to_string();
             }
+            "keep-alive" => {
+                self.set_tcp_keepalive(value)?;
+            }
             _ => {
                 warn!("Unsupported connection option: {}", option_str);
             }
@@ -552,6 +559,131 @@ impl TelnetConnection {
         };
 
         self.send_bytes(&telnet_cmd).await
+    }
+
+    /// Set TCP keepalive options on the socket.
+    /// Value can be:
+    /// - An integer (1 to enable with defaults, 0 to disable)
+    /// - A map with keys: "idle", "interval", "count"
+    fn set_tcp_keepalive(&self, value: Option<Var>) -> Result<(), eyre::Error> {
+        use std::os::fd::BorrowedFd;
+
+        // Default values matching ToastStunt
+        const DEFAULT_IDLE: u64 = 300; // 5 minutes
+        const DEFAULT_INTERVAL: u64 = 120; // 2 minutes
+        const DEFAULT_COUNT: u32 = 5;
+
+        // SAFETY: We know the fd is valid because the connection is still active
+        let borrowed_fd = unsafe { BorrowedFd::borrow_raw(self.socket_fd) };
+        let sock_ref = SockRef::from(&borrowed_fd);
+
+        let Some(value) = value else {
+            // No value means disable
+            if let Err(e) = sock_ref.set_tcp_keepalive(&TcpKeepalive::new()) {
+                warn!("Failed to disable TCP keepalive: {}", e);
+            } else {
+                debug!("TCP keepalive disabled");
+            }
+            return Ok(());
+        };
+
+        // Check if it's a simple integer (0 = disable, non-zero = enable with defaults)
+        if let Some(int_val) = value.as_integer() {
+            if int_val == 0 {
+                if let Err(e) = sock_ref.set_tcp_keepalive(&TcpKeepalive::new()) {
+                    warn!("Failed to disable TCP keepalive: {}", e);
+                } else {
+                    debug!("TCP keepalive disabled");
+                }
+            } else {
+                let keepalive = TcpKeepalive::new()
+                    .with_time(Duration::from_secs(DEFAULT_IDLE))
+                    .with_interval(Duration::from_secs(DEFAULT_INTERVAL))
+                    .with_retries(DEFAULT_COUNT);
+                if let Err(e) = sock_ref.set_tcp_keepalive(&keepalive) {
+                    warn!("Failed to set TCP keepalive: {}", e);
+                } else {
+                    debug!(
+                        "TCP keepalive enabled: idle={}s, interval={}s, count={}",
+                        DEFAULT_IDLE, DEFAULT_INTERVAL, DEFAULT_COUNT
+                    );
+                }
+            }
+            return Ok(());
+        }
+
+        // Check if it's a map with specific values
+        if let Some(m) = value.as_map() {
+            let idle = m
+                .iter()
+                .find(|(k, _)| {
+                    k.as_symbol()
+                        .map(|s| s.as_string() == "idle")
+                        .unwrap_or(false)
+                })
+                .and_then(|(_, v)| v.as_integer())
+                .map(|v| v as u64)
+                .unwrap_or(DEFAULT_IDLE);
+
+            let interval = m
+                .iter()
+                .find(|(k, _)| {
+                    k.as_symbol()
+                        .map(|s| s.as_string() == "interval")
+                        .unwrap_or(false)
+                })
+                .and_then(|(_, v)| v.as_integer())
+                .map(|v| v as u64)
+                .unwrap_or(DEFAULT_INTERVAL);
+
+            let count = m
+                .iter()
+                .find(|(k, _)| {
+                    k.as_symbol()
+                        .map(|s| s.as_string() == "count")
+                        .unwrap_or(false)
+                })
+                .and_then(|(_, v)| v.as_integer())
+                .map(|v| v as u32)
+                .unwrap_or(DEFAULT_COUNT);
+
+            let keepalive = TcpKeepalive::new()
+                .with_time(Duration::from_secs(idle))
+                .with_interval(Duration::from_secs(interval))
+                .with_retries(count);
+
+            if let Err(e) = sock_ref.set_tcp_keepalive(&keepalive) {
+                warn!("Failed to set TCP keepalive: {}", e);
+            } else {
+                debug!(
+                    "TCP keepalive enabled: idle={}s, interval={}s, count={}",
+                    idle, interval, count
+                );
+            }
+            return Ok(());
+        }
+
+        // Boolean true enables with defaults
+        if value.is_true() {
+            let keepalive = TcpKeepalive::new()
+                .with_time(Duration::from_secs(DEFAULT_IDLE))
+                .with_interval(Duration::from_secs(DEFAULT_INTERVAL))
+                .with_retries(DEFAULT_COUNT);
+            if let Err(e) = sock_ref.set_tcp_keepalive(&keepalive) {
+                warn!("Failed to set TCP keepalive: {}", e);
+            } else {
+                debug!(
+                    "TCP keepalive enabled: idle={}s, interval={}s, count={}",
+                    DEFAULT_IDLE, DEFAULT_INTERVAL, DEFAULT_COUNT
+                );
+            }
+        } else if let Err(e) = sock_ref.set_tcp_keepalive(&TcpKeepalive::new()) {
+            warn!("Failed to disable TCP keepalive: {}", e);
+        } else {
+            debug!("TCP keepalive disabled");
+        }
+
+        Ok(())
     }
 
     async fn update_connection_attribute(&mut self, key: Symbol, value: Option<Var>) {

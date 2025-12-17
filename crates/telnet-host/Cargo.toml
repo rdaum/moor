@@ -53,6 +53,7 @@ serde.workspace = true
 # Networking & Communication
 bytes.workspace = true
 hickory-resolver.workspace = true
+socket2.workspace = true
 tmq.workspace = true
 
 # Async Runtime & Concurrency

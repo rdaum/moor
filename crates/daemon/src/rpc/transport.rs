@@ -561,7 +561,11 @@ impl Transport for RpcTransport {
                     value,
                 } => {
                     if let Some(&client_id) = client_ids.first() {
-                        connections.set_client_attribute(client_id, *option, Some(value.clone()))?;
+                        connections.set_client_attribute(
+                            client_id,
+                            *option,
+                            Some(value.clone()),
+                        )?;
                     }
                     let value_fb = var_to_flatbuffer_rpc(value)
                         .map_err(|e| eyre::eyre!("Failed to encode var: {}", e))?;

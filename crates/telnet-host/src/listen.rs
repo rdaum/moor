@@ -24,6 +24,7 @@ use rpc_common::{CLIENT_BROADCAST_TOPIC, extract_obj, mk_connection_establish_ms
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
+    os::fd::{AsRawFd, RawFd},
     sync::{Arc, atomic::AtomicBool},
 };
 use tmq::subscribe;
@@ -154,6 +155,10 @@ impl Listeners {
                                     match result {
                                         Ok((stream, addr)) => {
                                             info!(?addr, "Accepted connection for listener");
+
+                                            // Get the raw fd before wrapping in Framed (for keep-alive support)
+                                            let socket_fd = stream.as_raw_fd();
+
                                             let listener_port = addr.port();
                                             let zmq_ctx = zmq_ctx.clone();
                                             let rpc_address = rpc_address.clone();
@@ -172,6 +177,7 @@ impl Listeners {
                                                 stream,
                                                 addr,
                                                 curve_keys,
+                                                socket_fd,
                                             ));
                                         }
                                         Err(e) => {
@@ -237,6 +243,7 @@ impl Listener {
         stream: TcpStream,
         peer_addr: SocketAddr,
         curve_keys: Option<(String, String, String)>,
+        socket_fd: RawFd,
     ) -> Result<(), eyre::Report> {
         let connection_kill_switch = kill_switch.clone();
         let rpc_address = rpc_address.clone();
@@ -428,6 +435,7 @@ impl Listener {
                 disable_oob: false,
                 pending_line_mode: None,
                 collecting_input: false,
+                socket_fd,
             };
 
             tcp_connection.run().await?;

@@ -125,6 +125,7 @@ fs2 = "0.4"
 axum = { version = "0.8", features = ["ws"] }
 hickory-resolver = "0.25"
 reqwest = "0.12"
+socket2 = { version = "0.6", features = ["all"] }
 tmq = "0.5"
 zmq = "0.10"
 

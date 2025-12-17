@@ -629,12 +629,8 @@ fn bf_set_connection_option(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
         return Err(ErrValue(E_PERM.msg("Permission denied")));
     }
 
-    let event = NarrativeEvent::set_connection_option(
-        bf_args.exec_state.this(),
-        obj,
-        option_symbol,
-        value,
-    );
+    let event =
+        NarrativeEvent::set_connection_option(bf_args.exec_state.this(), obj, option_symbol, value);
     current_task_scheduler_client().notify(obj, Box::new(event));
 
     Ok(Ret(v_int(0)))

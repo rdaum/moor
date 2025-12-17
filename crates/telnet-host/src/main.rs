@@ -157,6 +157,7 @@ async fn main() -> Result<(), eyre::Error> {
 
     let host_id = Uuid::new_v4();
     let last_daemon_ping = Arc::new(AtomicU64::new(0));
+
     let (mut listeners_server, listeners_channel, listeners) = Listeners::new(
         zmq_ctx.clone(),
         args.client_args.rpc_address.clone(),

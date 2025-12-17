@@ -3607,6 +3607,7 @@ dependencies = [
  "rpc-common",
  "serde",
  "serial_test",
+ "socket2 0.6.1",
  "tabled",
  "tempfile",
  "tmq",
