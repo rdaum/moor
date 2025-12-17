@@ -498,8 +498,8 @@ mod tests {
         let mut codec = ConnectionCodec::new();
 
         // Create buffer with valid ASCII, then invalid UTF-8, then more ASCII
-        // 0xFF is not valid UTF-8
-        let mut buf = BytesMut::from(&b"hello \xFF world\n"[..]);
+        // 0xC0 followed by ASCII is invalid (incomplete sequence)
+        let mut buf = BytesMut::from(&b"hello \xC0 world\n"[..]);
 
         let item = codec.decode(&mut buf).unwrap().unwrap();
         match item {
@@ -517,14 +517,16 @@ mod tests {
     fn test_completely_invalid_utf8() {
         let mut codec = ConnectionCodec::new();
 
-        // Multiple invalid UTF-8 bytes
-        let mut buf = BytesMut::from(&b"\xFF\xFE\xFD\n"[..]);
+        // Bytes 0xF0+ are filtered (telnet protocol range)
+        // Use incomplete multi-byte sequences that each produce a replacement char
+        let mut buf = BytesMut::from(&b"\xC0a\xC0b\xC0c\n"[..]);
 
         let item = codec.decode(&mut buf).unwrap().unwrap();
         match item {
             ConnectionItem::Line(line) => {
-                // All three invalid bytes should become replacement characters
+                // Each \xC0 is an invalid start byte, producing replacement characters
                 assert_eq!(line.chars().filter(|&c| c == '\u{FFFD}').count(), 3);
+                assert!(line.contains('a') && line.contains('b') && line.contains('c'));
             }
             _ => panic!("Expected line"),
         }
