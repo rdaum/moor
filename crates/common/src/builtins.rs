@@ -778,6 +778,23 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
         mk_builtin("all_members", Q(2), Q(2), vec![Any, Typed(TYPE_LIST)], true),
+        // Additional numeric/math functions
+        mk_builtin("round", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("cbrt", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("fract", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("signum", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("recip", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("exp2", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("expm1", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("log2", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("ln1p", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("asinh", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("acosh", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("atanh", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("to_degrees", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("to_radians", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("hypot", Q(2), Q(2), vec![AnyNum, AnyNum], true),
+        mk_builtin("copysign", Q(2), Q(2), vec![AnyNum, AnyNum], true),
     ]
 }
 

@@ -149,6 +149,34 @@ float tanh(float x)
 
 Returns the hyperbolic tangent of x.
 
+### `asinh`
+
+```
+float asinh(num x)
+```
+
+Returns the inverse hyperbolic sine of x.
+
+### `acosh`
+
+```
+float acosh(num x)
+```
+
+Returns the inverse hyperbolic cosine of x.
+
+Raises `E_INVARG` if x is less than 1.
+
+### `atanh`
+
+```
+float atanh(num x)
+```
+
+Returns the inverse hyperbolic tangent of x.
+
+Note: The result is undefined (NaN or infinity) if |x| >= 1.
+
 ## Exponential and Logarithmic Functions
 
 ### `exp`
@@ -189,6 +217,109 @@ Returns the square root of x.
 
 Raises `E_INVARG` if x is negative.
 
+### `cbrt`
+
+```
+float cbrt(num x)
+```
+
+Returns the cube root of x. Unlike `sqrt()`, this works for negative numbers.
+
+```
+cbrt(8)    => 2.0
+cbrt(-27)  => -3.0
+```
+
+### `exp2`
+
+```
+float exp2(num x)
+```
+
+Returns 2 raised to the power of x.
+
+```
+exp2(3)   => 8.0
+exp2(0.5) => 1.4142135623730951
+```
+
+### `expm1`
+
+```
+float expm1(num x)
+```
+
+Returns e^x - 1 in a way that is accurate even when x is close to zero.
+
+This is more accurate than computing `exp(x) - 1` directly for small values of x.
+
+### `log2`
+
+```
+float log2(num x)
+```
+
+Returns the base-2 logarithm of x.
+
+Raises `E_INVARG` if x is not positive.
+
+```
+log2(8)   => 3.0
+log2(256) => 8.0
+```
+
+### `ln1p`
+
+```
+float ln1p(num x)
+```
+
+Returns ln(1+x) in a way that is accurate even when x is close to zero.
+
+This is more accurate than computing `log(1 + x)` directly for small values of x.
+
+Raises `E_INVARG` if x is less than or equal to -1.
+
+### `hypot`
+
+```
+float hypot(num x, num y)
+```
+
+Returns sqrt(x² + y²), computed in a way that avoids overflow and underflow.
+
+Useful for calculating the length of the hypotenuse of a right triangle or the distance between two points.
+
+```
+hypot(3, 4) => 5.0
+```
+
+## Angle Conversion Functions
+
+### `to_degrees`
+
+```
+float to_degrees(num x)
+```
+
+Converts x from radians to degrees.
+
+```
+to_degrees(3.14159265358979) => 180.0
+```
+
+### `to_radians`
+
+```
+float to_radians(num x)
+```
+
+Converts x from degrees to radians.
+
+```
+to_radians(180) => 3.14159265358979
+```
+
 ## Rounding Functions
 
 ### `ceil`
@@ -216,3 +347,70 @@ float trunc(float x)
 Returns the integer obtained by truncating x at the decimal point, as a floating-point number.
 
 For negative x, this is equivalent to `ceil()`; otherwise it is equivalent to `floor()`.
+
+### `round`
+
+```
+float round(num x)
+```
+
+Returns x rounded to the nearest integer, as a floating-point number. Halfway cases round away from zero.
+
+```
+round(2.3)   => 2.0
+round(2.5)   => 3.0
+round(-2.5)  => -3.0
+```
+
+### `fract`
+
+```
+float fract(num x)
+```
+
+Returns the fractional part of x (equivalent to `x - trunc(x)`).
+
+```
+fract(3.14)   => 0.14
+fract(-3.14)  => -0.14
+```
+
+### `signum`
+
+```
+float signum(num x)
+```
+
+Returns the sign of x: 1.0 if x is positive, -1.0 if negative, or 0.0 if zero.
+
+```
+signum(42)   => 1.0
+signum(-17)  => -1.0
+signum(0)    => 0.0
+```
+
+### `recip`
+
+```
+float recip(num x)
+```
+
+Returns the reciprocal (1/x) of x.
+
+```
+recip(2)   => 0.5
+recip(0.5) => 2.0
+```
+
+### `copysign`
+
+```
+float copysign(num magnitude, num sign)
+```
+
+Returns a value with the magnitude of the first argument and the sign of the second.
+
+```
+copysign(5.0, -1.0)  => -5.0
+copysign(-5.0, 1.0)  => 5.0
+```

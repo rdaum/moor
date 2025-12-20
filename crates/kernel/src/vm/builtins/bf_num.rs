@@ -341,6 +341,126 @@ math_fn!(
     "trunc",
     |x: f64| x.trunc()
 );
+math_fn!(
+    "Usage: `float round(num x)`\nReturns x rounded to the nearest integer, as a float. Halfway cases round away from zero.",
+    bf_round,
+    "round",
+    |x: f64| x.round()
+);
+
+// Additional math functions
+math_fn!(
+    "Usage: `float cbrt(num x)`\nReturns the cube root of x.",
+    bf_cbrt,
+    "cbrt",
+    |x: f64| x.cbrt()
+);
+math_fn!(
+    "Usage: `float fract(num x)`\nReturns the fractional part of x (x - trunc(x)).",
+    bf_fract,
+    "fract",
+    |x: f64| x.fract()
+);
+math_fn!(
+    "Usage: `float signum(num x)`\nReturns 1.0 if x is positive, -1.0 if negative, or 0.0 if zero.",
+    bf_signum,
+    "signum",
+    |x: f64| x.signum()
+);
+math_fn!(
+    "Usage: `float recip(num x)`\nReturns the reciprocal (1/x) of x.",
+    bf_recip,
+    "recip",
+    |x: f64| x.recip()
+);
+math_fn!(
+    "Usage: `float exp2(num x)`\nReturns 2 raised to the power of x.",
+    bf_exp2,
+    "exp2",
+    |x: f64| x.exp2()
+);
+math_fn!(
+    "Usage: `float expm1(num x)`\nReturns e^x - 1 in a way that is accurate even when x is close to zero.",
+    bf_expm1,
+    "expm1",
+    |x: f64| x.exp_m1()
+);
+math_fn_with_validation!(
+    "Usage: `float log2(num x)`\nReturns the base-2 logarithm of x. Raises E_INVARG if x is not positive.",
+    bf_log2,
+    "log2",
+    |x: f64| x.log2(),
+    |x: f64| x > 0.0,
+    "log2() takes a positive number"
+);
+math_fn_with_validation!(
+    "Usage: `float ln1p(num x)`\nReturns ln(1+x) in a way that is accurate even when x is close to zero. Raises E_INVARG if x <= -1.",
+    bf_ln1p,
+    "ln1p",
+    |x: f64| x.ln_1p(),
+    |x: f64| x > -1.0,
+    "ln1p() takes a number greater than -1"
+);
+
+// Inverse hyperbolic functions
+math_fn!(
+    "Usage: `float asinh(num x)`\nReturns the inverse hyperbolic sine of x.",
+    bf_asinh,
+    "asinh",
+    |x: f64| x.asinh()
+);
+math_fn_with_validation!(
+    "Usage: `float acosh(num x)`\nReturns the inverse hyperbolic cosine of x. Raises E_INVARG if x < 1.",
+    bf_acosh,
+    "acosh",
+    |x: f64| x.acosh(),
+    |x: f64| x >= 1.0,
+    "acosh() takes a number >= 1"
+);
+math_fn!(
+    "Usage: `float atanh(num x)`\nReturns the inverse hyperbolic tangent of x. Raises E_INVARG if |x| >= 1.",
+    bf_atanh,
+    "atanh",
+    |x: f64| x.atanh()
+);
+
+// Angle conversion functions
+math_fn!(
+    "Usage: `float to_degrees(num x)`\nConverts x from radians to degrees.",
+    bf_to_degrees,
+    "to_degrees",
+    |x: f64| x.to_degrees()
+);
+math_fn!(
+    "Usage: `float to_radians(num x)`\nConverts x from degrees to radians.",
+    bf_to_radians,
+    "to_radians",
+    |x: f64| x.to_radians()
+);
+
+/// Usage: `float hypot(num x, num y)`
+/// Returns sqrt(x^2 + y^2) computed in a way that avoids overflow/underflow.
+fn bf_hypot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 2 {
+        return Err(BfErr::ErrValue(E_ARGS.msg("hypot() takes 2 arguments")));
+    }
+
+    let x = numeric_arg(&bf_args.args[0])?;
+    let y = numeric_arg(&bf_args.args[1])?;
+    Ok(Ret(v_float(x.hypot(y))))
+}
+
+/// Usage: `float copysign(num magnitude, num sign)`
+/// Returns a value with the magnitude of the first argument and the sign of the second.
+fn bf_copysign(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 2 {
+        return Err(BfErr::ErrValue(E_ARGS.msg("copysign() takes 2 arguments")));
+    }
+
+    let magnitude = numeric_arg(&bf_args.args[0])?;
+    let sign = numeric_arg(&bf_args.args[1])?;
+    Ok(Ret(v_float(magnitude.copysign(sign))))
+}
 
 pub(crate) fn register_bf_num(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("abs")] = bf_abs;
@@ -364,4 +484,20 @@ pub(crate) fn register_bf_num(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("ceil")] = bf_ceil;
     builtins[offset_for_builtin("floor")] = bf_floor;
     builtins[offset_for_builtin("trunc")] = bf_trunc;
+    builtins[offset_for_builtin("round")] = bf_round;
+    builtins[offset_for_builtin("cbrt")] = bf_cbrt;
+    builtins[offset_for_builtin("fract")] = bf_fract;
+    builtins[offset_for_builtin("signum")] = bf_signum;
+    builtins[offset_for_builtin("recip")] = bf_recip;
+    builtins[offset_for_builtin("exp2")] = bf_exp2;
+    builtins[offset_for_builtin("expm1")] = bf_expm1;
+    builtins[offset_for_builtin("log2")] = bf_log2;
+    builtins[offset_for_builtin("ln1p")] = bf_ln1p;
+    builtins[offset_for_builtin("asinh")] = bf_asinh;
+    builtins[offset_for_builtin("acosh")] = bf_acosh;
+    builtins[offset_for_builtin("atanh")] = bf_atanh;
+    builtins[offset_for_builtin("to_degrees")] = bf_to_degrees;
+    builtins[offset_for_builtin("to_radians")] = bf_to_radians;
+    builtins[offset_for_builtin("hypot")] = bf_hypot;
+    builtins[offset_for_builtin("copysign")] = bf_copysign;
 }
