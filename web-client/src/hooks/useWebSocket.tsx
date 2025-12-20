@@ -144,7 +144,7 @@ export const useWebSocket = (
             const clientId = localStorage.getItem("client_id");
             const sessionActive = localStorage.getItem("client_session_active") === "true";
 
-            let wsUrl = `${isSecure ? "wss://" : "ws://"}${baseUrl}/ws/attach/${mode}`;
+            const wsUrl = `${isSecure ? "wss://" : "ws://"}${baseUrl}/ws/attach/${mode}`;
             const wsProtocols = ["moor", `paseto.${player.authToken}`];
 
             if (player.isInitialAttach) {
