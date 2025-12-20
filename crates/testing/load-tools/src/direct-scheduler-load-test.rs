@@ -825,7 +825,7 @@ async fn main() -> Result<(), eyre::Error> {
     // Create scheduler components
     let system_control = Arc::new(NoopSystemControl {});
     let tasks_db = Box::new(NoopTasksDb {});
-    let version = semver::Version::parse("0.9.0-alpha").unwrap();
+    let version = semver::Version::parse("1.0.0-beta5").unwrap();
 
     // Create scheduler
     let scheduler = Scheduler::new(

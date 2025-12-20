@@ -550,7 +550,7 @@ information.
 2. **Version Information**:
    - Look for the startup log line that includes version and commit hash:
    ```
-   moor-daemon | 2025-10-29T02:25:51.723186Z  INFO main crates/daemon/src/main.rs:434: moor 0.9.0-alpha (commit: 7c56ea9) daemon starting...
+   moor-daemon | 2025-12-20T02:25:51.723186Z  INFO main crates/daemon/src/main.rs:434: moor 1.0.0-beta5 (commit: 7c56ea9) daemon starting...
    ```
    - Include both version number and commit hash
 

@@ -1,6 +1,6 @@
 [package]
 name = "moor-daemon"
-version = "1.0.0-beta2"
+version = "1.0.0-beta5"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true

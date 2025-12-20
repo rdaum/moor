@@ -5,6 +5,71 @@ All notable changes to mooR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+### Changed
+
+### Fixed
+
+## [1.0.0-beta5] - 2025-12-20
+
+
+### Added
+
+`daemon`:
+
+- New floating-point math builtins
+- New `html_query` builtin for fuzzy HTML parsing
+- `listen()` now accepts ToastStunt-style options maps
+- `bf_eval` can accept predefined variable bindings
+
+`telnet-host`:
+
+- TLS support for inbound telnet connections
+- TCP keep-alive configuration options
+
+`web-client`:
+
+- Verb suggestions palette with optional auto-say mode
+- Link previews and an iframe-based welcome screen
+
+`mcp-host`:
+
+- Support for requesting external core MCP tools from a running MOO
+
+### Changed
+
+`web-host`:
+
+- WebSocket auth now uses a subprotocol to pass tokens and client metadata
+
+`telnet-host`:
+
+- Djot formatting replaces markdown rendering
+
+`curl-worker`:
+
+- TLS stack now uses rustls, removing the implicit OpenSSL dependency
+
+### Fixed
+
+`daemon`:
+
+- UTF-8 correctness in `match`/`rmatch` and string search/replace
+- Password prompt flow and login command handling
+- `parse_command` environment setup errors
+- New task scheduling now runs immediately again
+
+`telnet-host`:
+
+- Listener port mismatch in argument handling
+
+`web-client`:
+
+- Mobile sizing regressions
+
 ## [1.0.0-beta4] - 2025-12-10
 
 ### Added
