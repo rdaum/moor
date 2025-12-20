@@ -260,34 +260,28 @@ pub fn moo_frame_execute(
                     );
                 };
 
-                // Get current element - check bounds first to avoid expensive error construction
-                let tc = sequence.type_class();
-                let len = match &tc {
-                    TypeClass::Sequence(s) => s.len(),
-                    TypeClass::Associative(a) => a.len(),
-                    TypeClass::Scalar => {
-                        return ExecutionResult::RaiseError(
-                            E_TYPE.msg("invalid sequence type in for loop"),
-                        );
-                    }
-                };
-
-                // Bounds check before iteration (avoids E_RANGE error construction)
+                // Bounds check using cached length (avoids dereferencing on loop end)
+                let len = sequence.len().expect("already validated as sequence");
                 if *current_index >= len {
                     let end_lbl = *end_label;
                     f.jump(&end_lbl);
                     continue;
                 }
 
-                let next = match tc {
-                    TypeClass::Sequence(s) => s
-                        .index(*current_index)
-                        .map(|v| (v_int(*current_index as i64 + 1), v.clone())),
-                    TypeClass::Associative(a) => match current_key {
+                // Get next element - maps need special key iteration, sequences use direct index
+                let next = if sequence.is_associative() {
+                    let TypeClass::Associative(a) = sequence.type_class() else {
+                        unreachable!()
+                    };
+                    match current_key {
                         Some(current_key) => a.next_after(current_key, false),
                         None => a.first(),
-                    },
-                    TypeClass::Scalar => unreachable!(),
+                    }
+                } else {
+                    // Sequences use optimized index path
+                    sequence
+                        .index(&v_int(*current_index as i64 + 1), IndexMode::OneBased)
+                        .map(|v| (v_int(*current_index as i64 + 1), v))
                 };
 
                 let k_v = match next {
@@ -301,7 +295,7 @@ pub fn moo_frame_execute(
 
                 // Increment index for next iteration
                 *current_index += 1;
-                if let TypeClass::Associative(_) = tc {
+                if sequence.is_associative() {
                     *current_key = Some(k_v.0.clone());
                 }
 

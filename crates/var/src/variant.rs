@@ -60,14 +60,40 @@ static EMPTY_STR_VAR: Lazy<Var> = Lazy::new(|| Var::from_str_type(Str::mk_str(""
 static NOTHING_VAR: Lazy<Var> = Lazy::new(|| Var::mk_object(NOTHING));
 
 /// MOO variable - C-like representation optimized for fast clone.
-/// 16 bytes total - tag + padding + data pointer/value.
+/// 16 bytes total - tag + metadata + data pointer/value.
 #[repr(C)]
 pub struct Var {
     /// Type tag with COMPLEX_FLAG for refcounted types
     tag: u8,
-    _pad: [u8; 7],
+    /// Metadata bytes - interpretation depends on tag (union semantics).
+    /// For List/Map/String: bytes[0..2] = cached length (u16 native-endian), rest reserved.
+    /// For other types: unused (all zeros).
+    meta: [u8; 7],
     /// Union of all possible values (inline for simple types, pointer for complex)
     data: u64,
+}
+
+/// Sentinel value indicating the cached length overflowed and real length must be checked.
+const LEN_OVERFLOW: u16 = 0xFFFF;
+
+impl Var {
+    /// Get cached length from meta bytes (for List/Map/String).
+    #[inline(always)]
+    fn cached_len(&self) -> u16 {
+        u16::from_ne_bytes([self.meta[0], self.meta[1]])
+    }
+
+    /// Create meta bytes with cached length.
+    #[inline(always)]
+    fn meta_with_len(len: usize) -> [u8; 7] {
+        let len16 = if len >= LEN_OVERFLOW as usize {
+            LEN_OVERFLOW
+        } else {
+            len as u16
+        };
+        let bytes = len16.to_ne_bytes();
+        [bytes[0], bytes[1], 0, 0, 0, 0, 0]
+    }
 }
 
 /// View type for pattern matching - constructed on demand from Var.
@@ -96,7 +122,7 @@ impl Var {
     pub const fn mk_none() -> Self {
         Self {
             tag: TAG_NONE,
-            _pad: [0; 7],
+            meta: [0; 7],
             data: 0,
         }
     }
@@ -105,7 +131,7 @@ impl Var {
     pub const fn mk_bool(b: bool) -> Self {
         Self {
             tag: if b { TAG_BOOL_TRUE } else { TAG_BOOL_FALSE },
-            _pad: [0; 7],
+            meta: [0; 7],
             data: 0,
         }
     }
@@ -114,7 +140,7 @@ impl Var {
     pub const fn mk_integer(i: i64) -> Self {
         Self {
             tag: TAG_INT,
-            _pad: [0; 7],
+            meta: [0; 7],
             data: i as u64,
         }
     }
@@ -123,7 +149,7 @@ impl Var {
     pub fn mk_float(f: f64) -> Self {
         Self {
             tag: TAG_FLOAT,
-            _pad: [0; 7],
+            meta: [0; 7],
             data: f.to_bits(),
         }
     }
@@ -132,7 +158,7 @@ impl Var {
     pub fn mk_object(o: Obj) -> Self {
         Self {
             tag: TAG_OBJ,
-            _pad: [0; 7],
+            meta: [0; 7],
             data: o.as_u64(),
         }
     }
@@ -143,7 +169,7 @@ impl Var {
         let data: u64 = unsafe { std::mem::transmute(s) };
         Self {
             tag: TAG_SYM,
-            _pad: [0; 7],
+            meta: [0; 7],
             data,
         }
     }
@@ -162,11 +188,12 @@ impl Var {
 
     /// Create a Var from a Str type directly
     pub fn from_str_type(s: string::Str) -> Self {
+        let len = s.as_str().chars().count();
         // SAFETY: Str is #[repr(transparent)] around Arc<String>, exactly 8 bytes
         let data: u64 = unsafe { std::mem::transmute(s) };
         Self {
             tag: TAG_STR,
-            _pad: [0; 7],
+            meta: Self::meta_with_len(len),
             data,
         }
     }
@@ -181,11 +208,12 @@ impl Var {
 
     /// Create a Var from a List directly
     pub fn from_list(list: List) -> Self {
+        let len = list.len();
         // SAFETY: List is #[repr(transparent)] around Box<Vector>, exactly 8 bytes
         let data: u64 = unsafe { std::mem::transmute(list) };
         Self {
             tag: TAG_LIST,
-            _pad: [0; 7],
+            meta: Self::meta_with_len(len),
             data,
         }
     }
@@ -200,11 +228,12 @@ impl Var {
 
     /// Create a Var from a Map directly
     pub fn from_map(m: map::Map) -> Self {
+        let len = m.len();
         // SAFETY: Map is #[repr(transparent)] around Box<OrdMap>, exactly 8 bytes
         let data: u64 = unsafe { std::mem::transmute(m) };
         Self {
             tag: TAG_MAP,
-            _pad: [0; 7],
+            meta: Self::meta_with_len(len),
             data,
         }
     }
@@ -213,7 +242,7 @@ impl Var {
         let arced = Arc::new(e);
         Self {
             tag: TAG_ERR,
-            _pad: [0; 7],
+            meta: [0; 7],
             data: Arc::into_raw(arced) as u64,
         }
     }
@@ -221,16 +250,17 @@ impl Var {
     pub fn mk_error_arc(e: Arc<Error>) -> Self {
         Self {
             tag: TAG_ERR,
-            _pad: [0; 7],
+            meta: [0; 7],
             data: Arc::into_raw(e) as u64,
         }
     }
 
     pub fn mk_binary(bytes: Vec<u8>) -> Self {
+        let len = bytes.len();
         let boxed = Box::new(Binary::from_bytes(bytes));
         Self {
             tag: TAG_BINARY,
-            _pad: [0; 7],
+            meta: Self::meta_with_len(len),
             data: Box::into_raw(boxed) as u64,
         }
     }
@@ -240,7 +270,7 @@ impl Var {
         let boxed = Box::new(f);
         Self {
             tag: TAG_FLYWEIGHT,
-            _pad: [0; 7],
+            meta: [0; 7],
             data: Box::into_raw(boxed) as u64,
         }
     }
@@ -256,7 +286,7 @@ impl Var {
         let data: u64 = unsafe { std::mem::transmute(lambda) };
         Self {
             tag: TAG_LAMBDA,
-            _pad: [0; 7],
+            meta: [0; 7],
             data,
         }
     }
@@ -267,7 +297,7 @@ impl Var {
         let data: u64 = unsafe { std::mem::transmute(l) };
         Self {
             tag: TAG_LAMBDA,
-            _pad: [0; 7],
+            meta: [0; 7],
             data,
         }
     }
@@ -569,8 +599,7 @@ impl Var {
 
     /// Index into a sequence type, or get Nth element of an association set
     pub fn index(&self, index: &Var, index_mode: IndexMode) -> Result<Self, Error> {
-        let tc = self.type_class();
-        if tc.is_scalar() {
+        if self.is_scalar() {
             return Err(E_TYPE.with_msg(|| {
                 format!(
                     "Cannot index into scalar value {}",
@@ -578,31 +607,45 @@ impl Var {
                 )
             }));
         }
-        let idx = match index.variant() {
-            Variant::Int(i) => {
-                let i = index_mode.adjust_i64(i);
-                if i < 0 {
-                    return Err(E_RANGE.with_msg(|| {
-                        format!("Cannot index into sequence with negative index {i}")
-                    }));
-                }
-                i as usize
-            }
-            _ => {
-                return Err(E_TYPE.with_msg(|| {
-                    format!(
-                        "Cannot index into sequence with non-integer index {}",
-                        index.type_code().to_literal()
-                    )
-                }));
-            }
+
+        let Some(i) = index.as_integer() else {
+            return Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot index into sequence with non-integer index {}",
+                    index.type_code().to_literal()
+                )
+            }));
         };
 
-        match tc {
-            TypeClass::Sequence(s) => Ok(s.index(idx)?),
-            TypeClass::Associative(a) => Ok(a.index(idx)?.1),
-            _ => Err(E_TYPE
-                .with_msg(|| format!("Cannot index into type {}", self.type_code().to_literal()))),
+        let idx = {
+            let i = index_mode.adjust_i64(i);
+            if i < 0 {
+                return Err(E_RANGE
+                    .with_msg(|| format!("Cannot index into sequence with negative index {i}")));
+            }
+            i as usize
+        };
+
+        // Bounds check using cached length (avoids dereferencing on out-of-bounds)
+        let cached = self.cached_len();
+        if cached != LEN_OVERFLOW && idx >= cached as usize {
+            return Err(E_RANGE.with_msg(|| {
+                format!(
+                    "Index {} out of bounds for {} of length {}",
+                    idx + 1,
+                    self.type_code().to_literal(),
+                    cached
+                )
+            }));
+        }
+
+        // Dispatch directly on tag - we already know it's not scalar
+        match self.tag {
+            TAG_LIST => self.as_list().unwrap().index(idx),
+            TAG_STR => self.as_str().unwrap().index(idx),
+            TAG_BINARY => self.as_binary().unwrap().index(idx),
+            TAG_MAP => Ok(self.as_map().unwrap().index(idx)?.1),
+            _ => unreachable!(),
         }
     }
 
@@ -638,33 +681,28 @@ impl Var {
         value: &Self,
         index_mode: IndexMode,
     ) -> Result<Self, Error> {
-        match self.type_class() {
-            TypeClass::Sequence(s) => {
-                let idx = match idx.variant() {
-                    Variant::Int(i) => {
-                        let i = index_mode.adjust_i64(i);
-                        if i < 0 {
-                            return Err(E_RANGE.with_msg(|| {
-                                format!("Cannot index into sequence with negative index {i}")
-                            }));
-                        }
-                        i as usize
-                    }
-                    _ => {
-                        return Err(E_INVARG.with_msg(|| {
-                            format!(
-                                "Cannot index into sequence with non-integer index {}",
-                                idx.type_code().to_literal()
-                            )
-                        }));
-                    }
-                };
-                s.index_set(idx, value)
+        let Some(idx) = idx.as_integer() else {
+            return Err(E_INVARG.with_msg(|| {
+                format!(
+                    "Cannot index into sequence with non-integer index {}",
+                    idx.type_code().to_literal()
+                )
+            }));
+        };
+        let idx = {
+            let i = index_mode.adjust_i64(idx);
+            if i < 0 {
+                return Err(E_RANGE
+                    .with_msg(|| format!("Cannot index into sequence with negative index {i}")));
             }
-            _ => Err(E_TYPE.with_msg(|| {
+            i as usize
+        };
+        let TypeClass::Sequence(s) = self.type_class() else {
+            return Err(E_TYPE.with_msg(|| {
                 format!("Cannot set value in type {}", self.type_code().to_literal())
-            })),
-        }
+            }));
+        };
+        s.index_set(idx, value)
     }
 
     /// Insert a new value at `index` in a sequence only.
@@ -887,28 +925,44 @@ impl Var {
     }
 
     pub fn is_empty(&self) -> Result<bool, Error> {
-        match self.type_class() {
-            TypeClass::Sequence(s) => Ok(s.is_empty()),
-            TypeClass::Associative(a) => Ok(a.is_empty()),
-            TypeClass::Scalar => Err(E_INVARG.with_msg(|| {
+        if self.is_scalar() {
+            return Err(E_INVARG.with_msg(|| {
                 format!(
                     "Cannot check if scalar value {} is empty",
                     self.type_code().to_literal()
                 )
-            })),
+            }));
+        }
+        let cached = self.cached_len();
+        if cached != LEN_OVERFLOW {
+            return Ok(cached == 0);
+        }
+        // Overflow: fall back to real length check
+        match self.type_class() {
+            TypeClass::Sequence(s) => Ok(s.is_empty()),
+            TypeClass::Associative(a) => Ok(a.is_empty()),
+            TypeClass::Scalar => unreachable!(),
         }
     }
 
     pub fn len(&self) -> Result<usize, Error> {
-        match self.type_class() {
-            TypeClass::Sequence(s) => Ok(s.len()),
-            TypeClass::Associative(a) => Ok(a.len()),
-            TypeClass::Scalar => Err(E_INVARG.with_msg(|| {
+        if self.is_scalar() {
+            return Err(E_INVARG.with_msg(|| {
                 format!(
                     "Cannot get length of scalar value {}",
                     self.type_code().to_literal()
                 )
-            })),
+            }));
+        }
+        let cached = self.cached_len();
+        if cached != LEN_OVERFLOW {
+            return Ok(cached as usize);
+        }
+        // Overflow: fall back to real length
+        match self.type_class() {
+            TypeClass::Sequence(s) => Ok(s.len()),
+            TypeClass::Associative(a) => Ok(a.len()),
+            TypeClass::Scalar => unreachable!(),
         }
     }
 
@@ -998,7 +1052,7 @@ impl Var {
                 std::mem::forget(arc);
                 Self {
                     tag: TAG_ERR,
-                    _pad: [0; 7],
+                    meta: [0; 7],
                     data: Arc::into_raw(cloned) as u64,
                 }
             }
@@ -1012,7 +1066,7 @@ impl Var {
                 let boxed = Box::new(b.clone());
                 Self {
                     tag: TAG_BINARY,
-                    _pad: [0; 7],
+                    meta: self.meta, // preserve cached length
                     data: Box::into_raw(boxed) as u64,
                 }
             }

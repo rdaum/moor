@@ -373,6 +373,12 @@ mod tests {
     }
 
     #[test]
+    fn test_string_cached_len_utf8() {
+        let s = Var::mk_str("aé😊");
+        assert_eq!(s.len().unwrap(), 3);
+    }
+
+    #[test]
     fn test_string_equality_inquality() {
         let s1 = Var::mk_str("hello");
         let s2 = Var::mk_str("hello");
