@@ -286,7 +286,13 @@ fn describe_compile_error(compile_error: CompileError) -> String {
 
 fn failure_error_context<'a>(
     failure: moor_rpc::FailureRef<'a>,
-) -> Result<(moor_rpc::RpcMessageErrorRef<'a>, moor_rpc::RpcMessageErrorCode), eyre::Error> {
+) -> Result<
+    (
+        moor_rpc::RpcMessageErrorRef<'a>,
+        moor_rpc::RpcMessageErrorCode,
+    ),
+    eyre::Error,
+> {
     let error_ref = failure
         .error()
         .map_err(|e| eyre::eyre!("Missing error: {e}"))?;

@@ -152,8 +152,8 @@ pub async fn create_user_session(
         }
     };
 
-    let reply = read_reply_result(&reply_bytes)
-        .map_err(|e| anyhow!("Failed to parse reply: {}", e))?;
+    let reply =
+        read_reply_result(&reply_bytes).map_err(|e| anyhow!("Failed to parse reply: {}", e))?;
 
     let (client_token, connection_oid) = match reply.result().expect("Missing result") {
         moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -213,8 +213,7 @@ pub async fn create_user_session(
         .await
         .expect("Unable to send login request to RPC server");
 
-    let reply =
-        read_reply_result(&reply_bytes).expect("Failed to parse login reply");
+    let reply = read_reply_result(&reply_bytes).expect("Failed to parse login reply");
 
     let (connection_oid, auth_token) = match reply.result().expect("Missing result") {
         moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -275,8 +274,7 @@ pub async fn compile(
         .await
         .expect("Unable to send verbs request to RPC server");
 
-    let reply =
-        read_reply_result(&reply_bytes).expect("Failed to parse verbs reply");
+    let reply = read_reply_result(&reply_bytes).expect("Failed to parse verbs reply");
     if let moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) =
         reply.result().expect("Missing result")
     {
@@ -353,8 +351,7 @@ pub async fn initialization_session(
         .await
         .expect("Unable to send eval request to RPC server");
 
-    let reply =
-        read_reply_result(&reply_bytes).expect("Failed to parse eval reply");
+    let reply = read_reply_result(&reply_bytes).expect("Failed to parse eval reply");
     match reply.result().expect("Missing result") {
         moor_rpc::ReplyResultUnionRef::ClientSuccess(_) => {
             info!("Evaluated successfully");

@@ -119,6 +119,15 @@ fn get_client_addr(headers: &HeaderMap, connect_addr: SocketAddr) -> SocketAddr 
     connect_addr
 }
 
+fn failure_message(failure: moor_rpc::FailureRef<'_>) -> String {
+    failure
+        .error()
+        .ok()
+        .and_then(|e| e.message().ok().flatten())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "unknown error".to_string())
+}
+
 /// Cached DNS resolver to avoid recreating on every connection
 /// Initialized lazily on first use
 static DNS_RESOLVER: LazyLock<TokioResolver> = LazyLock::new(|| {
@@ -362,12 +371,7 @@ impl WebHost {
                 }
             }
             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let msg = failure
-                    .error()
-                    .ok()
-                    .and_then(|e| e.message().ok().flatten())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown error".to_string());
+                let msg = failure_message(failure);
                 debug!("Attach rejected: {}", msg);
                 return Err(WsHostError::AuthenticationFailed);
             }
@@ -482,12 +486,7 @@ impl WebHost {
                 }
             }
             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let msg = failure
-                    .error()
-                    .ok()
-                    .and_then(|e| e.message().ok().flatten())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown error".to_string());
+                let msg = failure_message(failure);
                 debug!("Reattach rejected: {}", msg);
                 return Err(WsHostError::AuthenticationFailed);
             }

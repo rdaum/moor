@@ -24,9 +24,7 @@ use axum::{
 };
 use moor_schema::rpc as moor_rpc;
 use rpc_async_client::rpc_client::RpcClient;
-use rpc_common::{
-    AuthToken, ClientToken, mk_detach_msg, mk_login_command_msg, read_reply_result,
-};
+use rpc_common::{AuthToken, ClientToken, mk_detach_msg, mk_login_command_msg, read_reply_result};
 use serde_derive::Deserialize;
 use std::net::SocketAddr;
 use tracing::{debug, error, warn};
@@ -115,8 +113,7 @@ async fn auth_handler(
         .await
         .expect("Unable to send login request to RPC server");
 
-    let reply =
-        read_reply_result(&reply_bytes).expect("Failed to parse reply");
+    let reply = read_reply_result(&reply_bytes).expect("Failed to parse reply");
 
     // Check if login was successful and extract auth_token
     let auth_token = match reply.result().expect("Missing result") {

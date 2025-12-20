@@ -40,6 +40,13 @@ use uuid::Uuid;
 const TASK_TIMEOUT: Duration = Duration::from_secs(10);
 const WEBSOCKET_PING_INTERVAL: Duration = Duration::from_secs(30);
 
+fn log_rpc_failure(failure: moor_rpc::FailureRef<'_>) {
+    let error_ref = failure.error().expect("Missing error");
+    let error_code = error_ref.error_code().expect("Missing error code");
+    // Task errors are now handled client-side via FlatBuffer events
+    warn!("RPC error: {:?}", error_code);
+}
+
 pub struct WebSocketConnection {
     pub(crate) player: Obj,
     pub(crate) peer_addr: SocketAddr,
@@ -282,8 +289,7 @@ impl WebSocketConnection {
             .await
             .expect("Unable to send command to RPC server");
 
-        let reply =
-            read_reply_result(&reply_bytes).expect("Failed to parse reply");
+        let reply = read_reply_result(&reply_bytes).expect("Failed to parse reply");
         match reply.result().expect("Missing result") {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
                 let daemon_reply = client_success.reply().expect("Missing reply");
@@ -304,10 +310,7 @@ impl WebSocketConnection {
                 }
             }
             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error_ref = failure.error().expect("Missing error");
-                let error_code = error_ref.error_code().expect("Missing error code");
-                // Task errors are now handled client-side via FlatBuffer events
-                warn!("RPC error: {:?}", error_code);
+                log_rpc_failure(failure);
             }
             moor_rpc::ReplyResultUnionRef::HostSuccess(_) => {
                 error!("Unexpected host success");
@@ -366,8 +369,7 @@ impl WebSocketConnection {
             .await
             .expect("Unable to send input to RPC server");
 
-        let reply =
-            read_reply_result(&reply_bytes).expect("Failed to parse reply");
+        let reply = read_reply_result(&reply_bytes).expect("Failed to parse reply");
         match reply.result().expect("Missing result") {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
                 let daemon_reply = client_success.reply().expect("Missing reply");
@@ -389,10 +391,7 @@ impl WebSocketConnection {
                 }
             }
             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error_ref = failure.error().expect("Missing error");
-                let error_code = error_ref.error_code().expect("Missing error code");
-                // Task errors are now handled client-side via FlatBuffer events
-                warn!("RPC error: {:?}", error_code);
+                log_rpc_failure(failure);
             }
             moor_rpc::ReplyResultUnionRef::HostSuccess(_) => {
                 error!("Unexpected host success");

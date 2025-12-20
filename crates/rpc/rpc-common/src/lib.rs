@@ -41,9 +41,7 @@ pub use extract::{
 
 pub use errors::*;
 
-pub fn read_reply_result(
-    bytes: &[u8],
-) -> Result<rpc::ReplyResultRef<'_>, planus::Error> {
+pub fn read_reply_result(bytes: &[u8]) -> Result<rpc::ReplyResultRef<'_>, planus::Error> {
     rpc::ReplyResultRef::read_as_root(bytes)
 }
 

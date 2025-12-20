@@ -41,6 +41,15 @@ use uuid::Uuid;
 /// Timeout for RPC operations (connect, login, etc.)
 const RPC_TIMEOUT: Duration = Duration::from_secs(10);
 
+fn failure_message(failure: moor_rpc::FailureRef<'_>) -> String {
+    failure
+        .error()
+        .ok()
+        .and_then(|e| e.message().ok().flatten())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "unknown error".to_string())
+}
+
 /// Configuration for connecting to the mooR daemon
 #[derive(Debug, Clone)]
 pub struct MoorClientConfig {
@@ -251,8 +260,8 @@ impl MoorClient {
             .rpc_call_with_timeout(establish_msg, "Connection establishment")
             .await?;
 
-        let reply = read_reply_result(&reply_bytes)
-            .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
+        let reply =
+            read_reply_result(&reply_bytes).map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -280,13 +289,7 @@ impl MoorClient {
                 }
             }
             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error = failure
-                    .error()
-                    .ok()
-                    .and_then(|e| e.message().ok().flatten())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown error".to_string());
-                Err(eyre!("Connection failed: {}", error))
+                Err(eyre!("Connection failed: {}", failure_message(failure)))
             }
             _ => Err(eyre!("Unexpected response type")),
         }
@@ -411,8 +414,8 @@ impl MoorClient {
 
         let reply_bytes = self.rpc_call_with_timeout(login_msg, &operation).await?;
 
-        let reply = read_reply_result(&reply_bytes)
-            .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
+        let reply =
+            read_reply_result(&reply_bytes).map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -450,13 +453,7 @@ impl MoorClient {
                 }
             }
             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error = failure
-                    .error()
-                    .ok()
-                    .and_then(|e| e.message().ok().flatten())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown error".to_string());
-                Err(eyre!("Login failed: {}", error))
+                Err(eyre!("Login failed: {}", failure_message(failure)))
             }
             _ => Err(eyre!("Unexpected response type")),
         }
@@ -609,8 +606,8 @@ impl MoorClient {
 
     /// Extract task_id from TaskSubmitted response
     fn extract_task_id(&self, reply_bytes: &[u8]) -> Result<u64> {
-        let reply = read_reply_result(reply_bytes)
-            .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
+        let reply =
+            read_reply_result(reply_bytes).map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -627,15 +624,10 @@ impl MoorClient {
                     other => Err(eyre!("Expected TaskSubmitted, got {:?}", other)),
                 }
             }
-            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error = failure
-                    .error()
-                    .ok()
-                    .and_then(|e| e.message().ok().flatten())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown error".to_string());
-                Err(eyre!("Task submission failed: {}", error))
-            }
+            moor_rpc::ReplyResultUnionRef::Failure(failure) => Err(eyre!(
+                "Task submission failed: {}",
+                failure_message(failure)
+            )),
             _ => Err(eyre!("Unexpected response type")),
         }
     }
@@ -736,8 +728,8 @@ impl MoorClient {
 
         let reply_bytes = self.rpc_call_with_timeout(verbs_msg, "List verbs").await?;
 
-        let reply = read_reply_result(&reply_bytes)
-            .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
+        let reply =
+            read_reply_result(&reply_bytes).map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -817,13 +809,7 @@ impl MoorClient {
                 }
             }
             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error = failure
-                    .error()
-                    .ok()
-                    .and_then(|e| e.message().ok().flatten())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown error".to_string());
-                Err(eyre!("List verbs failed: {}", error))
+                Err(eyre!("List verbs failed: {}", failure_message(failure)))
             }
             _ => Err(eyre!("Unexpected response type")),
         }
@@ -847,8 +833,8 @@ impl MoorClient {
             .rpc_call_with_timeout(retrieve_msg, &format!("Get verb '{}'", verb_name))
             .await?;
 
-        let reply = read_reply_result(&reply_bytes)
-            .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
+        let reply =
+            read_reply_result(&reply_bytes).map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -875,13 +861,7 @@ impl MoorClient {
                 }
             }
             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error = failure
-                    .error()
-                    .ok()
-                    .and_then(|e| e.message().ok().flatten())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown error".to_string());
-                Err(eyre!("Get verb failed: {}", error))
+                Err(eyre!("Get verb failed: {}", failure_message(failure)))
             }
             _ => Err(eyre!("Unexpected response type")),
         }
@@ -915,8 +895,8 @@ impl MoorClient {
             .rpc_call_with_timeout(program_msg, &format!("Program verb '{}'", verb_name))
             .await?;
 
-        let reply = read_reply_result(&reply_bytes)
-            .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
+        let reply =
+            read_reply_result(&reply_bytes).map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -945,13 +925,7 @@ impl MoorClient {
                 }
             }
             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error = failure
-                    .error()
-                    .ok()
-                    .and_then(|e| e.message().ok().flatten())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown error".to_string());
-                Err(eyre!("Program verb failed: {}", error))
+                Err(eyre!("Program verb failed: {}", failure_message(failure)))
             }
             _ => Err(eyre!("Unexpected response type")),
         }
@@ -974,8 +948,8 @@ impl MoorClient {
             .rpc_call_with_timeout(props_msg, "List properties")
             .await?;
 
-        let reply = read_reply_result(&reply_bytes)
-            .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
+        let reply =
+            read_reply_result(&reply_bytes).map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -1029,15 +1003,10 @@ impl MoorClient {
                     _ => Err(eyre!("Unexpected properties response")),
                 }
             }
-            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error = failure
-                    .error()
-                    .ok()
-                    .and_then(|e| e.message().ok().flatten())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown error".to_string());
-                Err(eyre!("List properties failed: {}", error))
-            }
+            moor_rpc::ReplyResultUnionRef::Failure(failure) => Err(eyre!(
+                "List properties failed: {}",
+                failure_message(failure)
+            )),
             _ => Err(eyre!("Unexpected response type")),
         }
     }
@@ -1060,8 +1029,8 @@ impl MoorClient {
             .rpc_call_with_timeout(retrieve_msg, &format!("Get property '{}'", prop_name))
             .await?;
 
-        let reply = read_reply_result(&reply_bytes)
-            .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
+        let reply =
+            read_reply_result(&reply_bytes).map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -1083,13 +1052,7 @@ impl MoorClient {
                 }
             }
             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error = failure
-                    .error()
-                    .ok()
-                    .and_then(|e| e.message().ok().flatten())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown error".to_string());
-                Err(eyre!("Get property failed: {}", error))
+                Err(eyre!("Get property failed: {}", failure_message(failure)))
             }
             _ => Err(eyre!("Unexpected response type")),
         }
@@ -1114,19 +1077,13 @@ impl MoorClient {
             .rpc_call_with_timeout(update_msg, &format!("Set property '{}'", prop_name))
             .await?;
 
-        let reply = read_reply_result(&reply_bytes)
-            .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
+        let reply =
+            read_reply_result(&reply_bytes).map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(_) => Ok(()),
             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error = failure
-                    .error()
-                    .ok()
-                    .and_then(|e| e.message().ok().flatten())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown error".to_string());
-                Err(eyre!("Set property failed: {}", error))
+                Err(eyre!("Set property failed: {}", failure_message(failure)))
             }
             _ => Err(eyre!("Unexpected response type")),
         }
@@ -1143,8 +1100,8 @@ impl MoorClient {
 
         let reply_bytes = self.rpc_call_with_timeout(list_msg, "List objects").await?;
 
-        let reply = read_reply_result(&reply_bytes)
-            .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
+        let reply =
+            read_reply_result(&reply_bytes).map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -1205,13 +1162,7 @@ impl MoorClient {
                 }
             }
             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error = failure
-                    .error()
-                    .ok()
-                    .and_then(|e| e.message().ok().flatten())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown error".to_string());
-                Err(eyre!("List objects failed: {}", error))
+                Err(eyre!("List objects failed: {}", failure_message(failure)))
             }
             _ => Err(eyre!("Unexpected response type")),
         }
@@ -1231,8 +1182,8 @@ impl MoorClient {
             .rpc_call_with_timeout(resolve_msg, "Resolve object")
             .await?;
 
-        let reply = read_reply_result(&reply_bytes)
-            .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
+        let reply =
+            read_reply_result(&reply_bytes).map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -1254,13 +1205,7 @@ impl MoorClient {
                 }
             }
             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error = failure
-                    .error()
-                    .ok()
-                    .and_then(|e| e.message().ok().flatten())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown error".to_string());
-                Err(eyre!("Resolve failed: {}", error))
+                Err(eyre!("Resolve failed: {}", failure_message(failure)))
             }
             _ => Err(eyre!("Unexpected response type")),
         }
@@ -1283,8 +1228,8 @@ impl MoorClient {
 
     /// Parse eval result from reply bytes
     fn parse_eval_result(&self, reply_bytes: &[u8]) -> Result<MoorResult> {
-        let reply = read_reply_result(reply_bytes)
-            .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
+        let reply =
+            read_reply_result(reply_bytes).map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {

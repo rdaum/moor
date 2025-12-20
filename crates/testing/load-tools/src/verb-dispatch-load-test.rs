@@ -179,8 +179,7 @@ async fn continuous_workload(
             .await
             .expect("Unable to send call request to RPC server");
 
-        let reply =
-            read_reply_result(&reply_bytes).expect("Failed to parse reply");
+        let reply = read_reply_result(&reply_bytes).expect("Failed to parse reply");
 
         let task_id = match reply.result().expect("Failed to get reply result") {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -263,8 +262,7 @@ async fn workload(
             .await
             .expect("Unable to send call request to RPC server");
 
-        let reply =
-            read_reply_result(&reply_bytes).expect("Failed to parse reply");
+        let reply = read_reply_result(&reply_bytes).expect("Failed to parse reply");
 
         let task_id = match reply.result().expect("Failed to get reply result") {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
