@@ -1348,7 +1348,7 @@ impl Scheduler {
                 handler_object,
                 host_type,
                 port,
-                print_messages,
+                options,
                 reply,
             } => {
                 let Some(_task) = self.task_q.active.get_mut(&task_id) else {
@@ -1357,7 +1357,7 @@ impl Scheduler {
                 };
                 let result = self
                     .system_control
-                    .listen(handler_object, &host_type, port, print_messages)
+                    .listen(handler_object, &host_type, port, *options)
                     .err();
                 reply.send(result).expect("Could not send listen reply");
             }

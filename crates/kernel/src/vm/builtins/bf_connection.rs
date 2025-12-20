@@ -25,7 +25,7 @@ use moor_common::tasks::{NarrativeEvent, Presentation, SessionError};
 use moor_var::VarType::TYPE_STR;
 use moor_var::{
     E_ARGS, E_INVARG, E_PERM, E_TYPE, Sequence, Symbol, Var, Variant, v_arc_str, v_float, v_int,
-    v_list, v_list_iter, v_obj, v_str, v_string, v_sym,
+    v_list, v_list_iter, v_map, v_obj, v_str, v_string, v_sym,
 };
 use std::time::{Duration, SystemTime};
 use tracing::{info, warn};
@@ -1020,7 +1020,8 @@ fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 /// Usage: `list listeners([obj|int search])`
-/// Returns active network listeners. Each entry is `{object, port, print_messages}`.
+/// Returns active network listeners. Each entry is `{object, port, options}`.
+/// Options is a map of Symbol->Var pairs (e.g., ["tls" -> 1, "print_messages" -> 1]).
 /// If search is given, returns only the matching listener (by object or port).
 fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
@@ -1031,6 +1032,15 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let listeners = current_task_scheduler_client().listeners();
 
+    // Helper to convert options Vec to a map Var
+    let options_to_map = |options: &[(Symbol, Var)]| -> Var {
+        let pairs: Vec<(Var, Var)> = options
+            .iter()
+            .map(|(k, v)| (v_sym(*k), v.clone()))
+            .collect();
+        v_map(&pairs)
+    };
+
     // If an argument is provided, try to find the specific listener
     if bf_args.args.len() == 1 {
         let find_arg = &bf_args.args[0];
@@ -1040,11 +1050,11 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             // Check if the argument matches the listener object
             if let Some(obj) = find_arg.as_object() {
                 if obj == listener.0 {
-                    let print_messages = if listener.3 { v_int(1) } else { v_int(0) };
+                    let options_map = options_to_map(&listener.3);
                     return Ok(Ret(v_list(&[
                         v_obj(listener.0),
                         v_int(listener.2 as i64),
-                        print_messages,
+                        options_map,
                     ])));
                 }
             }
@@ -1052,11 +1062,11 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             else if let Some(port) = find_arg.as_integer()
                 && port == listener.2 as i64
             {
-                let print_messages = if listener.3 { v_int(1) } else { v_int(0) };
+                let options_map = options_to_map(&listener.3);
                 return Ok(Ret(v_list(&[
                     v_obj(listener.0),
                     v_int(listener.2 as i64),
-                    print_messages,
+                    options_map,
                 ])));
             }
         }
@@ -1066,8 +1076,8 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // No argument provided, return all listeners
     let listeners = listeners.iter().map(|listener| {
-        let print_messages = if listener.3 { v_int(1) } else { v_int(0) };
-        v_list(&[v_obj(listener.0), v_int(listener.2 as i64), print_messages])
+        let options_map = options_to_map(&listener.3);
+        v_list(&[v_obj(listener.0), v_int(listener.2 as i64), options_map])
     });
 
     let listeners = v_list_iter(listeners);
@@ -1121,9 +1131,15 @@ fn bf_unlisten(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
-/// Usage: `int listen(obj object, int port [, int print_messages [, str host_type]])`
+/// Usage: `int listen(obj object, int port [, int|map options])`
+///
 /// Starts listening for connections. Object receives connection callbacks instead of #0.
-/// Returns the canonical port. Host_type defaults to "tcp". Wizard-only.
+/// Third argument can be:
+///
+///   - An integer (legacy): treated as print_messages flag (0 or 1)
+///   - A map (new style): options like ["tls" -> 1, "print_messages" -> 1]
+///
+/// Returns the canonical port. Wizard-only.
 fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Requires wizard permissions.
     bf_args
@@ -1132,8 +1148,8 @@ fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_wizard()
         .map_err(world_state_bf_err)?;
 
-    if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
-        return Err(ErrValue(E_ARGS.msg("listen() requires 2 to 4 arguments")));
+    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
+        return Err(ErrValue(E_ARGS.msg("listen() requires 2 to 3 arguments")));
     }
 
     let Some(object) = bf_args.args[0].as_object() else {
@@ -1157,31 +1173,44 @@ fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let port = point as u16;
 
-    let print_messages = if bf_args.args.len() >= 3 {
-        let Some(print_messages) = bf_args.args[2].as_integer() else {
+    // Parse options - can be an integer (legacy print_messages) or a map
+    let options: Vec<(Symbol, Var)> = if bf_args.args.len() >= 3 {
+        let options_arg = &bf_args.args[2];
+
+        if let Some(options_map) = options_arg.as_map() {
+            // New mode: map of options
+            let mut opts = Vec::new();
+            for (key, value) in options_map.iter() {
+                let Ok(key_sym) = key.as_symbol() else {
+                    return Err(ErrValue(
+                        E_TYPE.msg("listen() options map keys must be strings or symbols"),
+                    ));
+                };
+                opts.push((key_sym, value.clone()));
+            }
+            opts
+        } else if options_arg.is_scalar() {
+            // Legacy mode: scalar (int/bool/float) argument is print_messages flag
+            if options_arg.is_true() {
+                vec![(Symbol::mk("print_messages"), v_int(1))]
+            } else {
+                vec![]
+            }
+        } else {
             return Err(ErrValue(
-                E_TYPE.msg("listen() requires an integer as the third argument"),
+                E_TYPE.msg("listen() third argument must be an integer or map"),
             ));
-        };
-        print_messages == 1
+        }
     } else {
-        false
+        vec![]
     };
 
-    let host_type = if bf_args.args.len() == 4 {
-        let Some(host_type) = bf_args.args[3].as_string() else {
-            return Err(ErrValue(
-                E_TYPE.msg("listen() requires a string as the fourth argument"),
-            ));
-        };
-        host_type.to_string()
-    } else {
-        "tcp".to_string()
-    };
+    // Host type defaults to TCP
+    let host_type = "tcp".to_string();
 
     // Ask the scheduler to broadcast a listen request out to all the hosts.
     if let Some(error) =
-        current_task_scheduler_client().listen(object, host_type, port, print_messages)
+        current_task_scheduler_client().listen(object, host_type, port, options)
     {
         return Err(ErrValue(error));
     }

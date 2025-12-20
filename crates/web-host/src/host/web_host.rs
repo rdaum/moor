@@ -159,10 +159,11 @@ fn extract_ws_attach_info(headers: &HeaderMap) -> Result<WsAttachInfo, StatusCod
                 continue;
             }
 
-            if let Some(flag) = protocol.strip_prefix("initial_attach.") {
-                if flag.eq_ignore_ascii_case("true") {
-                    is_initial_attach = true;
-                }
+            if protocol
+                .strip_prefix("initial_attach.")
+                .is_some_and(|f| f.eq_ignore_ascii_case("true"))
+            {
+                is_initial_attach = true;
             }
         }
     }

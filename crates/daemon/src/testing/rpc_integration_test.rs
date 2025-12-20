@@ -188,7 +188,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Verify the specific listeners are present
-        let listener_ports: Vec<u16> = hosts_listeners.iter().map(|(_, _, port)| *port).collect();
+        let listener_ports: Vec<u16> = hosts_listeners.iter().map(|(_, _, port, _)| *port).collect();
         assert!(
             listener_ports.contains(&8080),
             "Should contain first listener port"
@@ -199,7 +199,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Verify the object IDs are correct
-        let listener_objs: Vec<Obj> = hosts_listeners.iter().map(|(obj, _, _)| *obj).collect();
+        let listener_objs: Vec<Obj> = hosts_listeners.iter().map(|(obj, _, _, _)| *obj).collect();
         assert!(
             listener_objs.contains(&Obj::mk_id(100)),
             "Should contain first listener object"
@@ -1028,7 +1028,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                     handler_object: obj_fb(&SYSTEM_OBJECT),
                     host_type: moor_rpc::HostType::Tcp,
                     port: 8080,
-                    print_messages: true,
+                    options: None,
                 },
             )),
         };
@@ -1394,7 +1394,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             Obj::mk_id(100),
             rpc_common::HostType::WebSocket,
             8080,
-            true,
+            vec![],
         );
 
         assert!(listen_result.is_ok(), "Broadcast listen should succeed");

@@ -137,7 +137,7 @@ impl SystemControl for NoopSystemControl {
         Ok(())
     }
 
-    fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, Error> {
+    fn listeners(&self) -> Result<Vec<(Obj, String, u16, Vec<(Symbol, Var)>)>, Error> {
         Ok(vec![])
     }
 
@@ -146,7 +146,7 @@ impl SystemControl for NoopSystemControl {
         _handler_object: Obj,
         _host_type: &str,
         _port: u16,
-        _print_messages: bool,
+        _options: Vec<(Symbol, Var)>,
     ) -> Result<(), Error> {
         Ok(())
     }

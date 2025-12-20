@@ -55,6 +55,9 @@ pub struct EventLogPurgeResult {
     pub pubkey_deleted: bool,
 }
 
+/// Information about a network listener: (handler_object, host_type, port, options)
+pub type ListenerInfo = (Obj, String, u16, Vec<(Symbol, Var)>);
+
 /// The interface for managing the user I/O connection side of state, exposed by the scheduler to
 /// the VM during execution and by the host server to the scheduler.
 ///
@@ -177,19 +180,20 @@ pub trait SystemControl: Send + Sync {
     fn shutdown(&self, msg: Option<String>) -> Result<(), Error>;
 
     /// Ask hosts of `host_type` to listen on the given port, with the given handler object.
+    /// `options` is a map of Symbol->Var options (e.g., tls, print_messages).
     fn listen(
         &self,
         handler_object: Obj,
         host_type: &str,
         port: u16,
-        print_messages: bool,
+        options: Vec<(Symbol, Var)>,
     ) -> Result<(), Error>;
 
     /// Ask hosts of `host_type` to stop listening on the given port.
     fn unlisten(&self, port: u16, host_type: &str) -> Result<(), Error>;
 
-    /// Return the set of listeners, their type, and the port they are listening on.
-    fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, Error>;
+    /// Return the set of listeners, their type, port, and options.
+    fn listeners(&self) -> Result<Vec<ListenerInfo>, Error>;
 
     /// Switch the player for the given connection object to the new player.
     fn switch_player(&self, connection_obj: Obj, new_player: Obj) -> Result<(), Error>;
@@ -340,7 +344,7 @@ impl SystemControl for NoopSystemControl {
         _handler_object: Obj,
         _host_type: &str,
         _port: u16,
-        _print_messages: bool,
+        _options: Vec<(Symbol, Var)>,
     ) -> Result<(), Error> {
         Ok(())
     }
@@ -349,7 +353,7 @@ impl SystemControl for NoopSystemControl {
         Ok(())
     }
 
-    fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, Error> {
+    fn listeners(&self) -> Result<Vec<(Obj, String, u16, Vec<(Symbol, Var)>)>, Error> {
         Ok(vec![])
     }
 
@@ -534,7 +538,7 @@ impl SystemControl for MockClientSession {
         _handler_object: Obj,
         _host_type: &str,
         _port: u16,
-        _print_messages: bool,
+        _options: Vec<(Symbol, Var)>,
     ) -> Result<(), Error> {
         let mut system = self.system.write().unwrap();
         system.push(String::from("listen"));
@@ -547,8 +551,8 @@ impl SystemControl for MockClientSession {
         Ok(())
     }
 
-    fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, Error> {
-        Ok(vec![(SYSTEM_OBJECT, String::from("tcp"), 8888, true)])
+    fn listeners(&self) -> Result<Vec<(Obj, String, u16, Vec<(Symbol, Var)>)>, Error> {
+        Ok(vec![(SYSTEM_OBJECT, String::from("tcp"), 8888, vec![])])
     }
 
     fn switch_player(&self, _connection_obj: Obj, _new_player: Obj) -> Result<(), Error> {

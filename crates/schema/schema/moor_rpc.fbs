@@ -474,7 +474,7 @@ table HostBroadcastListen {
     handler_object: MoorCommon.Obj (required);
     host_type: HostType;
     port: uint16;
-    print_messages: bool;
+    options: [MoorVar.VarMapPair];  // Symbol->Var options (tls, print_messages, etc.)
 }
 
 table HostBroadcastUnlisten {

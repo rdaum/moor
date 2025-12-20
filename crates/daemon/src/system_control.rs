@@ -23,7 +23,7 @@ use std::{
 };
 
 use moor_common::tasks::{EventLogPurgeResult, EventLogStats, SystemControl};
-use moor_var::{E_INVARG, E_QUOTA, Obj};
+use moor_var::{E_INVARG, E_QUOTA, Obj, Symbol, Var};
 use rpc_common::HostType;
 use tracing::warn;
 
@@ -66,7 +66,7 @@ impl SystemControl for SystemControlHandle {
         handler_object: Obj,
         host_type: &str,
         port: u16,
-        print_messages: bool,
+        options: Vec<(Symbol, Var)>,
     ) -> Result<(), moor_var::Error> {
         let host_type = match host_type {
             "tcp" => HostType::TCP,
@@ -78,7 +78,7 @@ impl SystemControl for SystemControlHandle {
         };
 
         self.message_handler
-            .broadcast_listen(handler_object, host_type, port, print_messages)
+            .broadcast_listen(handler_object, host_type, port, options)
             .map_err(|_| moor_var::E_INVARG.msg("Unable to send Listen event"))
     }
 
@@ -93,12 +93,12 @@ impl SystemControl for SystemControlHandle {
             .map_err(|_| moor_var::E_INVARG.msg("Unable to send Unlisten event"))
     }
 
-    fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, moor_var::Error> {
+    fn listeners(&self) -> Result<Vec<(Obj, String, u16, Vec<(Symbol, Var)>)>, moor_var::Error> {
         let listeners = self
             .message_handler
             .get_listeners()
             .iter()
-            .map(|(o, t, port)| (*o, t.id_str().to_string(), *port, true))
+            .map(|(o, t, port, options)| (*o, t.id_str().to_string(), *port, options.clone()))
             .collect();
         Ok(listeners)
     }

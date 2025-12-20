@@ -12,7 +12,7 @@
 //
 
 use crate::{ListenersClient, pubsub_client::hosts_events_recv, rpc_client::RpcClient};
-use moor_schema::{convert::obj_from_ref, rpc as moor_rpc};
+use moor_schema::{convert::obj_from_ref, rpc as moor_rpc, var as moor_var_fb};
 use rpc_common::{
     HOST_BROADCAST_TOPIC, HostType, RpcError, mk_host_pong_msg, mk_register_host_msg, obj_fb,
     read_reply_result,
@@ -27,6 +27,55 @@ use std::{
 };
 use tracing::{error, info, warn};
 use uuid::Uuid;
+
+/// Extract a boolean option from a HostBroadcastListen options map.
+/// Returns true if the option exists and is truthy (non-zero int or true bool).
+fn extract_bool_option(listen: &moor_rpc::HostBroadcastListenRef<'_>, key_name: &str) -> bool {
+    let Ok(Some(options)) = listen.options() else {
+        return false;
+    };
+
+    for pair_result in options.iter() {
+        let Ok(pair) = pair_result else {
+            continue;
+        };
+        let Ok(key) = pair.key() else {
+            continue;
+        };
+        let Ok(value) = pair.value() else {
+            continue;
+        };
+
+        // Check if key is a symbol matching our key_name
+        let Ok(key_variant) = key.variant() else {
+            continue;
+        };
+        let moor_var_fb::VarUnionRef::VarSym(var_sym) = key_variant else {
+            continue;
+        };
+        let Ok(sym) = var_sym.symbol() else {
+            continue;
+        };
+        let Ok(sym_val) = sym.value() else {
+            continue;
+        };
+        if sym_val != key_name {
+            continue;
+        }
+
+        // Check if value is truthy
+        let Ok(value_variant) = value.variant() else {
+            return false;
+        };
+        return match value_variant {
+            moor_var_fb::VarUnionRef::VarInt(i) => i.value().unwrap_or(0) != 0,
+            moor_var_fb::VarUnionRef::VarBool(b) => b.value().unwrap_or(false),
+            _ => false,
+        };
+    }
+
+    false
+}
 
 /// Start the host session with the daemon, and return the RPC client and host_id to use for further
 /// communication.
@@ -333,27 +382,35 @@ pub async fn process_hosts_events(
                     .port()
                     .map_err(|e| RpcError::CouldNotDecode(format!("Missing port: {e}")))?;
 
-                if host_type == our_host_type {
-                    let listen_addr = format!("{listen_address}:{port}");
-                    let sockaddr = listen_addr.parse::<SocketAddr>().unwrap();
-                    info!(
-                        "Starting listener for {} on {}",
-                        host_type.id_str(),
-                        sockaddr
-                    );
-                    let listeners = listeners.clone();
-                    tokio::spawn(async move {
-                        let sockaddr_sockaddr = listen_addr
-                            .parse::<SocketAddr>()
-                            .unwrap_or_else(|_| panic!("Unable to parse address: {listen_addr}"));
-                        if let Err(e) = listeners
-                            .add_listener(&handler_object, sockaddr_sockaddr)
-                            .await
-                        {
-                            error!("Error starting listener: {}", e);
-                        }
-                    });
+                let use_tls = extract_bool_option(&listen, "tls");
+
+                if host_type != our_host_type {
+                    continue;
                 }
+
+                let listen_addr = format!("{listen_address}:{port}");
+                let sockaddr = listen_addr.parse::<SocketAddr>().unwrap();
+                let tls_label = if use_tls { " (TLS)" } else { "" };
+                info!(
+                    "Starting listener for {} on {}{}",
+                    host_type.id_str(),
+                    sockaddr,
+                    tls_label
+                );
+                let listeners = listeners.clone();
+                tokio::spawn(async move {
+                    let sockaddr = listen_addr
+                        .parse::<SocketAddr>()
+                        .unwrap_or_else(|_| panic!("Unable to parse address: {listen_addr}"));
+                    let result = if use_tls {
+                        listeners.add_tls_listener(&handler_object, sockaddr).await
+                    } else {
+                        listeners.add_listener(&handler_object, sockaddr).await
+                    };
+                    if let Err(e) = result {
+                        error!("Error starting listener: {}", e);
+                    }
+                });
             }
             moor_rpc::HostBroadcastEventUnionRef::HostBroadcastUnlisten(unlisten) => {
                 let host_type_fb = unlisten

@@ -116,6 +116,23 @@ command = [
 allow_warnings = true
 need_stdout = true
 
+[jobs.telnet-tls]
+command = [
+    "cargo",
+    "run",
+    "-p",
+    "moor-telnet-host",
+    "--",
+    "--tls-port",
+    "8889",
+    "--tls-cert",
+    "certs/test-cert.pem",
+    "--tls-key",
+    "certs/test-key.pem",
+]
+allow_warnings = true
+need_stdout = true
+
 [jobs.web]
 command = [
     "cargo",

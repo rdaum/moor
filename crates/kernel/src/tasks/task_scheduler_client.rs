@@ -24,7 +24,7 @@ use moor_common::{
     model::{Perms, WorldState},
     tasks::{
         AbortLimitReason, CommandError, EventLogPurgeResult, EventLogStats, Exception,
-        NarrativeEvent, SchedulerError, TaskId,
+        ListenerInfo, NarrativeEvent, SchedulerError, TaskId,
     },
     util::PerfTimerGuard,
 };
@@ -277,7 +277,7 @@ impl TaskSchedulerClient {
         handler_object: Obj,
         host_type: String,
         port: u16,
-        print_messages: bool,
+        options: Vec<(Symbol, Var)>,
     ) -> Option<Error> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
@@ -288,7 +288,7 @@ impl TaskSchedulerClient {
                     handler_object,
                     host_type,
                     port,
-                    print_messages,
+                    options: Box::new(options),
                 },
             ))
             .expect("Unable to send listen message to scheduler");
@@ -298,7 +298,7 @@ impl TaskSchedulerClient {
             .expect("Listen message timed out")
     }
 
-    pub fn listeners(&self) -> Vec<(Obj, String, u16, bool)> {
+    pub fn listeners(&self) -> Vec<ListenerInfo> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::GetListeners(reply)))
@@ -545,15 +545,15 @@ pub enum TaskControlMsg {
         player: Obj,
         event: Box<NarrativeEvent>,
     },
-    GetListeners(oneshot::Sender<Vec<(Obj, String, u16, bool)>>),
+    GetListeners(oneshot::Sender<Vec<ListenerInfo>>),
     /// Ask hosts to listen for connections on `port` and send them to `handler_object`
-    /// `print_messages` is a flag to enable or disable printing of connected etc strings
-    /// `host_type` is a string identifying the type of host
+    /// `options` is a map of Symbol->Var options (e.g., tls, print_messages)
+    /// `host_type` is a string identifying the type of host (boxed to keep enum small)
     Listen {
         handler_object: Obj,
         host_type: String,
         port: u16,
-        print_messages: bool,
+        options: Box<Vec<(Symbol, Var)>>,
         reply: oneshot::Sender<Option<Error>>,
     },
     /// Ask hosts of type `host_type` to stop listening on `port`

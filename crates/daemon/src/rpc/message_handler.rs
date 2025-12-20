@@ -23,7 +23,7 @@ use moor_rpc::{
     VerbProgramResponseReply, VerbProgramResponseUnion,
 };
 use moor_schema::{
-    common, rpc as moor_rpc,
+    common, rpc as moor_rpc, var as moor_var_fb,
     rpc::{HostClientToDaemonMessageUnionRef, ListenerRef},
 };
 use papaya::HashMap as PapayaHashMap;
@@ -63,7 +63,7 @@ use moor_schema::convert::{
     narrative_event_to_flatbuffer_struct, obj_from_ref, presentation_to_flatbuffer_struct,
     var_from_ref, var_to_flatbuffer,
 };
-use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var};
+use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, v_sym};
 use rpc_common::{
     AuthToken, ClientToken, HostType, RpcErr, RpcMessageError, auth_token_from_ref,
     client_token_from_ref, extract_field_rpc, extract_host_type, extract_obj_rpc,
@@ -94,6 +94,9 @@ pub const HOST_TIMEOUT: Duration = Duration::from_secs(10);
 type ConnectionAttributesResult =
     Result<Vec<(Obj, std::collections::HashMap<Symbol, Var>)>, SessionError>;
 
+/// Internal listener info: (handler_object, host_type, port, options)
+type InternalListenerInfo = (Obj, HostType, u16, Vec<(Symbol, Var)>);
+
 /// Trait for handling RPC message business logic
 pub trait MessageHandler: Send + Sync {
     /// Process a host-to-daemon message (FlatBuffer refs)
@@ -117,14 +120,14 @@ pub trait MessageHandler: Send + Sync {
         handler_object: Obj,
         host_type: HostType,
         port: u16,
-        print_messages: bool,
+        options: Vec<(Symbol, Var)>,
     ) -> Result<(), SessionError>;
 
     /// Broadcast an unlisten event to hosts
     fn broadcast_unlisten(&self, host_type: HostType, port: u16) -> Result<(), SessionError>;
 
     /// Get current listeners
-    fn get_listeners(&self) -> Vec<(Obj, HostType, u16)>;
+    fn get_listeners(&self) -> Vec<InternalListenerInfo>;
 
     /// Get current connections
     #[allow(dead_code)]
@@ -432,19 +435,40 @@ impl MessageHandler for RpcMessageHandler {
         handler_object: Obj,
         host_type: HostType,
         port: u16,
-        print_messages: bool,
+        options: Vec<(Symbol, Var)>,
     ) -> Result<(), SessionError> {
         let host_type_enum = match host_type {
             HostType::TCP => moor_rpc::HostType::Tcp,
             HostType::WebSocket => moor_rpc::HostType::WebSocket,
         };
+
+        // Convert options to flatbuffer VarMapPair format
+        let options_fb: Option<Vec<moor_var_fb::VarMapPair>> = if options.is_empty() {
+            None
+        } else {
+            let pairs: Result<Vec<_>, _> = options
+                .iter()
+                .map(|(key, value)| {
+                    let key_fb = var_to_flatbuffer(&v_sym(*key))
+                        .map_err(|_| SessionError::DeliveryError)?;
+                    let value_fb =
+                        var_to_flatbuffer(value).map_err(|_| SessionError::DeliveryError)?;
+                    Ok(moor_var_fb::VarMapPair {
+                        key: Box::new(key_fb),
+                        value: Box::new(value_fb),
+                    })
+                })
+                .collect();
+            Some(pairs?)
+        };
+
         let event = moor_rpc::HostBroadcastEvent {
             event: moor_rpc::HostBroadcastEventUnion::HostBroadcastListen(Box::new(
                 moor_rpc::HostBroadcastListen {
                     handler_object: obj_fb(&handler_object),
                     host_type: host_type_enum,
                     port,
-                    print_messages,
+                    options: options_fb,
                 },
             )),
         };
@@ -473,12 +497,12 @@ impl MessageHandler for RpcMessageHandler {
             .map_err(|_| SessionError::DeliveryError)
     }
 
-    fn get_listeners(&self) -> Vec<(Obj, HostType, u16)> {
+    fn get_listeners(&self) -> Vec<InternalListenerInfo> {
         let hosts = self.hosts.read().unwrap();
         hosts
             .listeners()
             .iter()
-            .map(|(o, t, h)| (*o, *t, h.port()))
+            .map(|(o, t, h)| (*o, *t, h.port(), vec![]))
             .collect()
     }
 
