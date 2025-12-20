@@ -19,6 +19,9 @@
 ; return index("fooBar", "bar", 1);
 0
 
+; return index("AİB", "b");
+3
+
 ; return rindex("bazbarbazfoo", "baz");
 7
 
@@ -31,6 +34,9 @@
 ; return rindex("bazbarBazfoo", "baz", 1);
 1
 
+; return rindex("AİB", "b");
+3
+
 ; return strcmp("abc", "abd") < 0;
 1
 
@@ -39,6 +45,9 @@
 
 ; return strcmp("abc", "abc");
 0
+
+; return strsub("İB", "i", "x");
+"xB"
 
 ; return crypt("foobar", "SA");
 "SAEmC5UwrAl2A"

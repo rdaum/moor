@@ -203,6 +203,108 @@ fn var_as_integer(ctx: &mut IntCloneContext, chunk_size: usize, _chunk_num: usiz
     }
 }
 
+// === STRING SEARCH BENCHMARKS ===
+// These measure the performance of str_find, str_rfind, and str_replace
+// with both ASCII fast path and Unicode fallback
+
+// Context for ASCII string search benchmarks
+struct AsciiStringSearchContext {
+    subject: Var,
+    needle: Var,
+    replacement: Var,
+}
+impl BenchContext for AsciiStringSearchContext {
+    fn prepare(_num_chunks: usize) -> Self {
+        // A longer string to search in - all ASCII
+        let subject = "The quick brown fox jumps over the lazy dog. ".repeat(100);
+        AsciiStringSearchContext {
+            subject: Var::mk_str(&subject),
+            needle: Var::mk_str("lazy"),
+            replacement: Var::mk_str("sleepy"),
+        }
+    }
+}
+
+// Context for Unicode string search benchmarks
+struct UnicodeStringSearchContext {
+    subject: Var,
+    needle: Var,
+    replacement: Var,
+}
+impl BenchContext for UnicodeStringSearchContext {
+    fn prepare(_num_chunks: usize) -> Self {
+        // String with İ (U+0130) which lowercases to 'i' + combining char
+        let subject = "Türkİye İstanbul İzmir ".repeat(100);
+        UnicodeStringSearchContext {
+            subject: Var::mk_str(&subject),
+            needle: Var::mk_str("i"), // Should match İ case-insensitively
+            replacement: Var::mk_str("X"),
+        }
+    }
+}
+
+fn str_find_ascii_cs(ctx: &mut AsciiStringSearchContext, chunk_size: usize, _chunk_num: usize) {
+    for _ in 0..chunk_size {
+        let _ = black_box(ctx.subject.str_find(&ctx.needle, true, 0));
+    }
+}
+
+fn str_find_ascii_ci(ctx: &mut AsciiStringSearchContext, chunk_size: usize, _chunk_num: usize) {
+    for _ in 0..chunk_size {
+        let _ = black_box(ctx.subject.str_find(&ctx.needle, false, 0));
+    }
+}
+
+fn str_find_unicode_ci(ctx: &mut UnicodeStringSearchContext, chunk_size: usize, _chunk_num: usize) {
+    for _ in 0..chunk_size {
+        let _ = black_box(ctx.subject.str_find(&ctx.needle, false, 0));
+    }
+}
+
+fn str_rfind_ascii_cs(ctx: &mut AsciiStringSearchContext, chunk_size: usize, _chunk_num: usize) {
+    for _ in 0..chunk_size {
+        let _ = black_box(ctx.subject.str_rfind(&ctx.needle, true, 0));
+    }
+}
+
+fn str_rfind_ascii_ci(ctx: &mut AsciiStringSearchContext, chunk_size: usize, _chunk_num: usize) {
+    for _ in 0..chunk_size {
+        let _ = black_box(ctx.subject.str_rfind(&ctx.needle, false, 0));
+    }
+}
+
+fn str_rfind_unicode_ci(
+    ctx: &mut UnicodeStringSearchContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for _ in 0..chunk_size {
+        let _ = black_box(ctx.subject.str_rfind(&ctx.needle, false, 0));
+    }
+}
+
+fn str_replace_ascii_cs(ctx: &mut AsciiStringSearchContext, chunk_size: usize, _chunk_num: usize) {
+    for _ in 0..chunk_size {
+        let _ = black_box(ctx.subject.str_replace(&ctx.needle, &ctx.replacement, true));
+    }
+}
+
+fn str_replace_ascii_ci(ctx: &mut AsciiStringSearchContext, chunk_size: usize, _chunk_num: usize) {
+    for _ in 0..chunk_size {
+        let _ = black_box(ctx.subject.str_replace(&ctx.needle, &ctx.replacement, false));
+    }
+}
+
+fn str_replace_unicode_ci(
+    ctx: &mut UnicodeStringSearchContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for _ in 0..chunk_size {
+        let _ = black_box(ctx.subject.str_replace(&ctx.needle, &ctx.replacement, false));
+    }
+}
+
 // Context that pre-creates pools of Vars to drop
 struct DropContext {
     int_vars: Vec<Var>,
@@ -451,6 +553,69 @@ pub fn main() {
     run_benchmark_group::<IntCloneContext>(
         &var_as_int_benchmarks,
         "Var.as_integer() Benchmarks",
+        filter,
+    );
+
+    // String search benchmarks - ASCII fast path
+    let ascii_string_benchmarks = [
+        BenchmarkDef {
+            name: "str_find_ascii_cs",
+            group: "string",
+            func: str_find_ascii_cs,
+        },
+        BenchmarkDef {
+            name: "str_find_ascii_ci",
+            group: "string",
+            func: str_find_ascii_ci,
+        },
+        BenchmarkDef {
+            name: "str_rfind_ascii_cs",
+            group: "string",
+            func: str_rfind_ascii_cs,
+        },
+        BenchmarkDef {
+            name: "str_rfind_ascii_ci",
+            group: "string",
+            func: str_rfind_ascii_ci,
+        },
+        BenchmarkDef {
+            name: "str_replace_ascii_cs",
+            group: "string",
+            func: str_replace_ascii_cs,
+        },
+        BenchmarkDef {
+            name: "str_replace_ascii_ci",
+            group: "string",
+            func: str_replace_ascii_ci,
+        },
+    ];
+    run_benchmark_group::<AsciiStringSearchContext>(
+        &ascii_string_benchmarks,
+        "String Search (ASCII)",
+        filter,
+    );
+
+    // String search benchmarks - Unicode fallback
+    let unicode_string_benchmarks = [
+        BenchmarkDef {
+            name: "str_find_unicode_ci",
+            group: "string",
+            func: str_find_unicode_ci,
+        },
+        BenchmarkDef {
+            name: "str_rfind_unicode_ci",
+            group: "string",
+            func: str_rfind_unicode_ci,
+        },
+        BenchmarkDef {
+            name: "str_replace_unicode_ci",
+            group: "string",
+            func: str_replace_unicode_ci,
+        },
+    ];
+    run_benchmark_group::<UnicodeStringSearchContext>(
+        &unicode_string_benchmarks,
+        "String Search (Unicode)",
         filter,
     );
 

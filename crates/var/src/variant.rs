@@ -66,7 +66,8 @@ pub struct Var {
     /// Type tag with COMPLEX_FLAG for refcounted types
     tag: u8,
     /// Metadata bytes - interpretation depends on tag (union semantics).
-    /// For List/Map/String: bytes[0..2] = cached length (u16 native-endian), rest reserved.
+    /// For List/Map: bytes[0..2] = cached element count (u16 native-endian), rest reserved.
+    /// For String: bytes[0..2] = cached char count, byte[2] = ASCII flag (1 if pure ASCII).
     /// For other types: unused (all zeros).
     meta: [u8; 7],
     /// Union of all possible values (inline for simple types, pointer for complex)
@@ -93,6 +94,82 @@ impl Var {
         };
         let bytes = len16.to_ne_bytes();
         [bytes[0], bytes[1], 0, 0, 0, 0, 0]
+    }
+
+    /// Create meta bytes with cached length and ASCII flag for strings.
+    /// meta[0..2] = char count, meta[2] = 1 if ASCII, 0 otherwise.
+    #[inline(always)]
+    fn meta_with_str_info(char_len: usize, byte_len: usize) -> [u8; 7] {
+        let len16 = if char_len >= LEN_OVERFLOW as usize {
+            LEN_OVERFLOW
+        } else {
+            char_len as u16
+        };
+        let bytes = len16.to_ne_bytes();
+        let is_ascii = if byte_len == char_len { 1 } else { 0 };
+        [bytes[0], bytes[1], is_ascii, 0, 0, 0, 0]
+    }
+
+    /// Check if a string Var contains only ASCII characters.
+    /// Returns false for non-string types.
+    #[inline(always)]
+    pub fn str_is_ascii(&self) -> bool {
+        self.tag == TAG_STR && self.meta[2] == 1
+    }
+
+    // === String search and replace operations with cached ASCII optimization ===
+
+    /// Find first occurrence of needle in self. Returns 0-based char index or None.
+    /// Uses cached ASCII flag for fast path when both strings are ASCII.
+    #[inline]
+    pub fn str_find(&self, needle: &Var, case_matters: bool, skip: usize) -> Option<usize> {
+        let (Some(subject), Some(needle_str)) = (self.as_str(), needle.as_str()) else {
+            return None;
+        };
+        let is_ascii = self.str_is_ascii() && needle.str_is_ascii();
+        string::str_find(subject.as_str(), needle_str.as_str(), case_matters, skip, is_ascii)
+    }
+
+    /// Find last occurrence of needle in self. Returns 0-based char index or None.
+    /// Uses cached ASCII flag for fast path when both strings are ASCII.
+    #[inline]
+    pub fn str_rfind(
+        &self,
+        needle: &Var,
+        case_matters: bool,
+        skip_from_end: usize,
+    ) -> Option<usize> {
+        let (Some(subject), Some(needle_str)) = (self.as_str(), needle.as_str()) else {
+            return None;
+        };
+        let is_ascii = self.str_is_ascii() && needle.str_is_ascii();
+        string::str_rfind(
+            subject.as_str(),
+            needle_str.as_str(),
+            case_matters,
+            skip_from_end,
+            is_ascii,
+        )
+    }
+
+    /// Replace all occurrences of `what` with `with` in self.
+    /// Uses cached ASCII flag for fast path when all strings are ASCII.
+    #[inline]
+    pub fn str_replace(&self, what: &Var, with: &Var, case_matters: bool) -> Option<Var> {
+        let (Some(subject), Some(what_str), Some(with_str)) =
+            (self.as_str(), what.as_str(), with.as_str())
+        else {
+            return None;
+        };
+        let is_ascii = self.str_is_ascii() && what.str_is_ascii() && with.str_is_ascii();
+        let result = string::str_replace(
+            subject.as_str(),
+            what_str.as_str(),
+            with_str.as_str(),
+            case_matters,
+            is_ascii,
+        );
+        Some(Var::mk_string(result))
     }
 }
 
@@ -188,12 +265,14 @@ impl Var {
 
     /// Create a Var from a Str type directly
     pub fn from_str_type(s: string::Str) -> Self {
-        let len = s.as_str().chars().count();
+        let str_ref = s.as_str();
+        let byte_len = str_ref.len();
+        let char_len = str_ref.chars().count();
         // SAFETY: Str is #[repr(transparent)] around Arc<String>, exactly 8 bytes
         let data: u64 = unsafe { std::mem::transmute(s) };
         Self {
             tag: TAG_STR,
-            meta: Self::meta_with_len(len),
+            meta: Self::meta_with_str_info(char_len, byte_len),
             data,
         }
     }
@@ -840,6 +919,20 @@ impl Var {
     }
 
     pub fn contains(&self, value: &Var, case_sensitive: bool) -> Result<Var, Error> {
+        // Fast path for strings: use str_find with cached ASCII flag
+        if self.tag == TAG_STR {
+            if value.as_str().is_none() {
+                return Err(E_TYPE.with_msg(|| {
+                    format!(
+                        "Cannot check if string contains {}",
+                        value.type_code().to_literal()
+                    )
+                }));
+            }
+            let result = self.str_find(value, case_sensitive, 0).is_some();
+            return Ok(v_bool_int(result));
+        }
+
         match self.type_class() {
             TypeClass::Sequence(s) => {
                 let c = s.contains(value, case_sensitive)?;
@@ -864,6 +957,23 @@ impl Var {
         case_sensitive: bool,
         index_mode: IndexMode,
     ) -> Result<Var, Error> {
+        // Fast path for strings: use str_find with cached ASCII flag
+        if self.tag == TAG_STR {
+            if value.as_str().is_none() {
+                return Err(E_TYPE.with_msg(|| {
+                    format!(
+                        "Cannot index string with {}",
+                        value.type_code().to_literal()
+                    )
+                }));
+            }
+            let idx = self
+                .str_find(value, case_sensitive, 0)
+                .map(|i| i as i64)
+                .unwrap_or(-1);
+            return Ok(v_int(index_mode.reverse_adjust_isize(idx as isize) as i64));
+        }
+
         match self.type_class() {
             TypeClass::Sequence(s) => {
                 let idx = s

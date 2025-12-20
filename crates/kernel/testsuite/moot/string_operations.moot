@@ -13,6 +13,10 @@
 ; return index("foobar", "O", 0);
 2
 
+// UTF-8 case-folding regression
+; return index("AİB", "b");
+3
+
 // test_that_rindex_finds_position_of_substring_in_a_string
 ; return rindex("foobar", "x");
 0
@@ -23,6 +27,10 @@
 ; return rindex("foobar", "O", 1);
 0
 ; return rindex("foobar", "O", 0);
+3
+
+// UTF-8 case-folding regression
+; return rindex("AİB", "b");
 3
 
 // Further non-Stunt tests based on examples in https://www.hayseed.net/MOO/manuals/ProgrammersManual.html
@@ -38,6 +46,8 @@
 "oioi"
 ; return strsub("%n is a fink.", "%n", "Fred");
 "Fred is a fink."
+; return strsub("İB", "i", "x");
+"xB"
 
 // length
 ; return length("foo");
