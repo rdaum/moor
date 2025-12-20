@@ -35,7 +35,6 @@ use moor_schema::{
     rpc as moor_rpc,
 };
 use moor_var::{Obj, Symbol, Var, Variant, v_str};
-use planus::ReadAsRoot;
 use rpc_async_client::{
     pubsub_client::{broadcast_recv, events_recv},
     rpc_client::RpcClient,
@@ -43,7 +42,8 @@ use rpc_async_client::{
 use rpc_common::{
     AuthToken, ClientToken, extract_obj, extract_symbol, extract_var, mk_client_pong_msg,
     mk_command_msg, mk_detach_msg, mk_login_command_msg, mk_out_of_band_msg, mk_program_msg,
-    mk_requested_input_msg, mk_set_client_attribute_msg,
+    mk_requested_input_msg, mk_set_client_attribute_msg, read_reply_result,
+    scheduler_error_from_rpc_error,
 };
 use socket2::{SockRef, TcpKeepalive};
 use tmq::subscribe::Subscribe;
@@ -912,7 +912,7 @@ impl TelnetConnection {
                         login_msg,
                     ).await?;
 
-                    let reply_ref = moor_rpc::ReplyResultRef::read_as_root(&response_bytes)
+                    let reply_ref = read_reply_result(&response_bytes)
                         .map_err(|e| eyre::eyre!("Invalid flatbuffer: {}", e))?;
 
                     if let moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) = reply_ref.result().map_err(|e| eyre::eyre!("Missing result: {}", e))? {
@@ -1092,7 +1092,7 @@ impl TelnetConnection {
                     .make_client_rpc_call(self.client_id, program_msg)
                     .await?;
 
-                let reply_ref = moor_rpc::ReplyResultRef::read_as_root(&response_bytes)
+                let reply_ref = read_reply_result(&response_bytes)
                     .map_err(|e| eyre::eyre!("Invalid flatbuffer: {}", e))?;
 
                 match reply_ref
@@ -1172,15 +1172,8 @@ impl TelnetConnection {
                             .map_err(|e| eyre::eyre!("Missing error_code: {}", e))?;
                         match error_code {
                             moor_rpc::RpcMessageErrorCode::TaskError => {
-                                let scheduler_err_ref = error_ref
-                                    .scheduler_error()
-                                    .map_err(|e| eyre::eyre!("Missing scheduler_error: {}", e))?
-                                    .ok_or_else(|| eyre::eyre!("Scheduler error is None"))?;
-                                let scheduler_error =
-                                    rpc_common::scheduler_error_from_ref(scheduler_err_ref)
-                                        .map_err(|e| {
-                                            eyre::eyre!("Failed to decode scheduler error: {}", e)
-                                        })?;
+                                let scheduler_error = scheduler_error_from_rpc_error(error_ref)
+                                    .map_err(|e| eyre::eyre!("{e}"))?;
                                 self.handle_task_error(scheduler_error).await?;
                             }
                             _ => {
@@ -1226,7 +1219,7 @@ impl TelnetConnection {
                         .await?;
 
                     // Process the response
-                    let reply_ref = moor_rpc::ReplyResultRef::read_as_root(&result)
+                    let reply_ref = read_reply_result(&result)
                         .map_err(|e| eyre::eyre!("Invalid flatbuffer: {}", e))?;
 
                     match reply_ref
@@ -1271,14 +1264,8 @@ impl TelnetConnection {
                                 .map_err(|e| eyre::eyre!("Missing error_code: {}", e))?;
                             match error_code {
                                 moor_rpc::RpcMessageErrorCode::TaskError => {
-                                    let scheduler_err_ref = error_ref
-                                        .scheduler_error()
-                                        .map_err(|e| eyre::eyre!("Missing scheduler_error: {}", e))?
-                                        .ok_or_else(|| eyre::eyre!("Scheduler error is None"))?;
-                                    let e = rpc_common::scheduler_error_from_ref(scheduler_err_ref)
-                                        .map_err(|e| {
-                                            eyre::eyre!("Failed to decode scheduler error: {}", e)
-                                        })?;
+                                    let e = scheduler_error_from_rpc_error(error_ref)
+                                        .map_err(|e| eyre::eyre!("{e}"))?;
                                     self.handle_task_error(e).await?;
                                 }
                                 _ => {
@@ -1729,8 +1716,8 @@ impl TelnetConnection {
                 .await?
         };
 
-        let reply_ref = moor_rpc::ReplyResultRef::read_as_root(&result)
-            .map_err(|e| eyre::eyre!("Invalid flatbuffer: {}", e))?;
+        let reply_ref =
+            read_reply_result(&result).map_err(|e| eyre::eyre!("Invalid flatbuffer: {}", e))?;
 
         match reply_ref
             .result()
@@ -1772,12 +1759,8 @@ impl TelnetConnection {
                     .map_err(|e| eyre::eyre!("Missing error_code: {}", e))?;
                 match error_code {
                     moor_rpc::RpcMessageErrorCode::TaskError => {
-                        let scheduler_err_ref = error_ref
-                            .scheduler_error()
-                            .map_err(|e| eyre::eyre!("Missing scheduler_error: {}", e))?
-                            .ok_or_else(|| eyre::eyre!("Scheduler error is None"))?;
-                        let e = rpc_common::scheduler_error_from_ref(scheduler_err_ref)
-                            .map_err(|e| eyre::eyre!("Failed to decode scheduler error: {}", e))?;
+                        let e = scheduler_error_from_rpc_error(error_ref)
+                            .map_err(|e| eyre::eyre!("{e}"))?;
 
                         self.handle_task_error(e)
                             .await
@@ -1875,8 +1858,8 @@ impl TelnetConnection {
             .await
             .expect("Unable to send input to RPC server");
 
-        let reply_ref = moor_rpc::ReplyResultRef::read_as_root(&result)
-            .map_err(|e| eyre::eyre!("Invalid flatbuffer: {}", e))?;
+        let reply_ref =
+            read_reply_result(&result).map_err(|e| eyre::eyre!("Invalid flatbuffer: {}", e))?;
 
         match reply_ref
             .result()
@@ -1919,12 +1902,8 @@ impl TelnetConnection {
                     .map_err(|e| eyre::eyre!("Missing error_code: {}", e))?;
                 match error_code {
                     moor_rpc::RpcMessageErrorCode::TaskError => {
-                        let scheduler_err_ref = error_ref
-                            .scheduler_error()
-                            .map_err(|e| eyre::eyre!("Missing scheduler_error: {}", e))?
-                            .ok_or_else(|| eyre::eyre!("Scheduler error is None"))?;
-                        let e = rpc_common::scheduler_error_from_ref(scheduler_err_ref)
-                            .map_err(|e| eyre::eyre!("Failed to decode scheduler error: {}", e))?;
+                        let e = scheduler_error_from_rpc_error(error_ref)
+                            .map_err(|e| eyre::eyre!("{e}"))?;
                         self.handle_task_error(e).await?;
                     }
                     _ => {

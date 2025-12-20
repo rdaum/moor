@@ -20,7 +20,9 @@ use moor_var::{Obj, Symbol};
 use rpc_async_client::{
     ListenersClient, ListenersError, ListenersMessage, rpc_client::RpcClient, zmq,
 };
-use rpc_common::{CLIENT_BROADCAST_TOPIC, extract_obj, mk_connection_establish_msg};
+use rpc_common::{
+    CLIENT_BROADCAST_TOPIC, extract_obj, mk_connection_establish_msg, read_reply_result,
+};
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
@@ -323,8 +325,7 @@ impl Listener {
                 .await
             {
                 Ok(bytes) => {
-                    use planus::ReadAsRoot;
-                    let reply_ref = moor_rpc::ReplyResultRef::read_as_root(&bytes)
+                    let reply_ref = read_reply_result(&bytes)
                         .map_err(|e| eyre::eyre!("Invalid flatbuffer: {}", e))?;
 
                     match reply_ref

@@ -33,7 +33,7 @@ pub enum ConnectionItem {
     /// A complete line (text mode only)
     Line(String),
     /// Raw bytes (binary mode, or partial data in text mode)
-    Bytes(#[allow(dead_code)] Bytes),
+    Bytes(Bytes),
 }
 
 /// Frames that can be encoded and sent
@@ -103,7 +103,7 @@ impl ConnectionCodec {
     }
 
     /// Create a new codec in text mode with maximum line length
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn new_with_max_length(max_length: usize) -> Self {
         Self {
             mode: ConnectionMode::Text,
@@ -115,7 +115,7 @@ impl ConnectionCodec {
     }
 
     /// Create a new codec in binary mode
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn new_binary() -> Self {
         Self {
             mode: ConnectionMode::Binary,
@@ -127,7 +127,7 @@ impl ConnectionCodec {
     }
 
     /// Get current connection mode
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn mode(&self) -> &ConnectionMode {
         &self.mode
     }

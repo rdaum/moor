@@ -20,7 +20,6 @@ use moor_schema::{
     rpc as moor_rpc,
 };
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
-use planus::ReadAsRoot;
 use rpc_async_client::{
     ListenersClient, ListenersMessage,
     pubsub_client::{broadcast_recv, events_recv},
@@ -29,6 +28,7 @@ use rpc_async_client::{
 use rpc_common::{
     AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, auth_token_from_ref, mk_client_pong_msg,
     mk_connection_establish_msg, mk_eval_msg, mk_login_command_msg, mk_program_msg, mk_verbs_msg,
+    read_reply_result,
 };
 use std::{
     collections::HashMap,
@@ -152,7 +152,7 @@ pub async fn create_user_session(
         }
     };
 
-    let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+    let reply = read_reply_result(&reply_bytes)
         .map_err(|e| anyhow!("Failed to parse reply: {}", e))?;
 
     let (client_token, connection_oid) = match reply.result().expect("Missing result") {
@@ -214,7 +214,7 @@ pub async fn create_user_session(
         .expect("Unable to send login request to RPC server");
 
     let reply =
-        moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse login reply");
+        read_reply_result(&reply_bytes).expect("Failed to parse login reply");
 
     let (connection_oid, auth_token) = match reply.result().expect("Missing result") {
         moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -276,7 +276,7 @@ pub async fn compile(
         .expect("Unable to send verbs request to RPC server");
 
     let reply =
-        moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse verbs reply");
+        read_reply_result(&reply_bytes).expect("Failed to parse verbs reply");
     if let moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) =
         reply.result().expect("Missing result")
     {
@@ -305,8 +305,7 @@ pub async fn compile(
         .await
         .expect("Unable to send program request to RPC server");
 
-    let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
-        .expect("Failed to parse program reply");
+    let reply = read_reply_result(&reply_bytes).expect("Failed to parse program reply");
     match reply.result().expect("Missing result") {
         moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
             let daemon_reply = client_success.reply().expect("Missing reply");
@@ -355,7 +354,7 @@ pub async fn initialization_session(
         .expect("Unable to send eval request to RPC server");
 
     let reply =
-        moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse eval reply");
+        read_reply_result(&reply_bytes).expect("Failed to parse eval reply");
     match reply.result().expect("Missing result") {
         moor_rpc::ReplyResultUnionRef::ClientSuccess(_) => {
             info!("Evaluated successfully");

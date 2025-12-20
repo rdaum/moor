@@ -19,11 +19,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use moor_common::tasks::SchedulerError;
-use moor_schema::rpc::ReplyResultRef;
 use moor_schema::{convert::var_from_flatbuffer_ref, rpc as moor_rpc};
 use moor_var::{List, SYSTEM_OBJECT, Var, Variant};
-use planus::ReadAsRoot;
-use rpc_common::{mk_detach_msg, mk_invoke_system_handler_msg, scheduler_error_from_ref};
+use rpc_common::{
+    mk_detach_msg, mk_invoke_system_handler_msg, read_reply_result, scheduler_error_from_ref,
+};
 use std::{collections::HashMap, net::SocketAddr, time::Duration};
 use tracing::{debug, error};
 
@@ -230,7 +230,7 @@ pub async fn web_hook_handler(
         }
     };
 
-    let reply = match ReplyResultRef::read_as_root(&reply_bytes) {
+    let reply = match read_reply_result(&reply_bytes) {
         Ok(reply) => reply,
         Err(e) => {
             return internal_server_error(&format!("Failed to parse web hook reply: {e}"));

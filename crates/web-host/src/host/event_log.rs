@@ -22,9 +22,9 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use moor_schema::rpc as moor_rpc;
-use planus::ReadAsRoot;
 use rpc_common::{
     mk_dismiss_presentation_msg, mk_request_current_presentations_msg, mk_request_history_msg,
+    read_reply_result,
 };
 use serde_derive::Deserialize;
 use serde_json::json;
@@ -37,7 +37,7 @@ use uuid::Uuid;
 fn extract_daemon_reply(
     reply_bytes: &[u8],
 ) -> Result<moor_rpc::DaemonToClientReplyUnionRef<'_>, Box<Response>> {
-    let reply = match moor_rpc::ReplyResultRef::read_as_root(reply_bytes) {
+    let reply = match read_reply_result(reply_bytes) {
         Ok(r) => r,
         Err(e) => {
             error!("Failed to parse reply: {}", e);
@@ -275,7 +275,7 @@ pub async fn set_pubkey_handler(
         Err(status) => return status.into_response(),
     };
 
-    let _ = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+    let _ = match read_reply_result(&reply_bytes) {
         Ok(r) => r,
         Err(e) => {
             error!("Failed to parse reply: {}", e);

@@ -25,6 +25,7 @@ use planus::ReadAsRoot;
 use rpc_async_client::pubsub_client::events_recv;
 use rpc_common::{
     mk_detach_msg, mk_invoke_verb_msg, mk_program_msg, mk_retrieve_msg, mk_verbs_msg,
+    read_reply_result,
 };
 use serde::Deserialize;
 use std::net::SocketAddr;
@@ -106,7 +107,7 @@ pub async fn verbs_handler(
 
 /// Extract task_id from a TaskSubmitted response
 fn extract_task_id(reply_bytes: &[u8]) -> Result<u64, StatusCode> {
-    let reply_result = moor_rpc::ReplyResultRef::read_as_root(reply_bytes).map_err(|e| {
+    let reply_result = read_reply_result(reply_bytes).map_err(|e| {
         error!("Failed to parse ReplyResult: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;

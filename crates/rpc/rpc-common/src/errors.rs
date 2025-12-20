@@ -344,6 +344,17 @@ pub fn scheduler_error_from_ref(
     }
 }
 
+pub fn scheduler_error_from_rpc_error(
+    error_ref: rpc::RpcMessageErrorRef<'_>,
+) -> Result<SchedulerError, String> {
+    let scheduler_err_ref = error_ref
+        .scheduler_error()
+        .map_err(|e| format!("Missing scheduler_error: {e}"))?
+        .ok_or_else(|| "Scheduler error is None".to_string())?;
+    scheduler_error_from_ref(scheduler_err_ref)
+        .map_err(|e| format!("Failed to decode scheduler error: {e}"))
+}
+
 /// Convert from FlatBuffer CommandErrorRef to CommandError
 fn command_error_from_ref(error_ref: rpc::CommandErrorRef<'_>) -> Result<CommandError, String> {
     match fb_read!(error_ref, error) {

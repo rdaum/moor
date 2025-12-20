@@ -22,14 +22,13 @@ use moor_common::tasks::{Event, Exception, SchedulerError};
 use moor_schema::convert::{narrative_event_from_ref, var_from_flatbuffer_ref};
 use moor_schema::rpc as moor_rpc;
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
-use planus::ReadAsRoot;
 use rpc_async_client::pubsub_client::events_recv;
 use rpc_async_client::rpc_client::{CurveKeys, RpcClient};
 use rpc_async_client::zmq;
 use rpc_common::{
     AuthToken, ClientToken, RpcError, mk_command_msg, mk_connection_establish_msg, mk_detach_msg,
     mk_eval_msg, mk_invoke_verb_msg, mk_list_objects_msg, mk_program_msg, mk_properties_msg,
-    mk_resolve_msg, mk_retrieve_msg, mk_update_property_msg, mk_verbs_msg,
+    mk_resolve_msg, mk_retrieve_msg, mk_update_property_msg, mk_verbs_msg, read_reply_result,
     scheduler_error_from_ref,
 };
 use std::sync::Arc;
@@ -252,7 +251,7 @@ impl MoorClient {
             .rpc_call_with_timeout(establish_msg, "Connection establishment")
             .await?;
 
-        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+        let reply = read_reply_result(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
@@ -412,7 +411,7 @@ impl MoorClient {
 
         let reply_bytes = self.rpc_call_with_timeout(login_msg, &operation).await?;
 
-        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+        let reply = read_reply_result(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
@@ -610,7 +609,7 @@ impl MoorClient {
 
     /// Extract task_id from TaskSubmitted response
     fn extract_task_id(&self, reply_bytes: &[u8]) -> Result<u64> {
-        let reply = moor_rpc::ReplyResultRef::read_as_root(reply_bytes)
+        let reply = read_reply_result(reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
@@ -737,7 +736,7 @@ impl MoorClient {
 
         let reply_bytes = self.rpc_call_with_timeout(verbs_msg, "List verbs").await?;
 
-        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+        let reply = read_reply_result(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
@@ -848,7 +847,7 @@ impl MoorClient {
             .rpc_call_with_timeout(retrieve_msg, &format!("Get verb '{}'", verb_name))
             .await?;
 
-        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+        let reply = read_reply_result(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
@@ -916,7 +915,7 @@ impl MoorClient {
             .rpc_call_with_timeout(program_msg, &format!("Program verb '{}'", verb_name))
             .await?;
 
-        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+        let reply = read_reply_result(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
@@ -975,7 +974,7 @@ impl MoorClient {
             .rpc_call_with_timeout(props_msg, "List properties")
             .await?;
 
-        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+        let reply = read_reply_result(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
@@ -1061,7 +1060,7 @@ impl MoorClient {
             .rpc_call_with_timeout(retrieve_msg, &format!("Get property '{}'", prop_name))
             .await?;
 
-        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+        let reply = read_reply_result(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
@@ -1115,7 +1114,7 @@ impl MoorClient {
             .rpc_call_with_timeout(update_msg, &format!("Set property '{}'", prop_name))
             .await?;
 
-        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+        let reply = read_reply_result(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
@@ -1144,7 +1143,7 @@ impl MoorClient {
 
         let reply_bytes = self.rpc_call_with_timeout(list_msg, "List objects").await?;
 
-        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+        let reply = read_reply_result(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
@@ -1232,7 +1231,7 @@ impl MoorClient {
             .rpc_call_with_timeout(resolve_msg, "Resolve object")
             .await?;
 
-        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+        let reply = read_reply_result(&reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {
@@ -1284,7 +1283,7 @@ impl MoorClient {
 
     /// Parse eval result from reply bytes
     fn parse_eval_result(&self, reply_bytes: &[u8]) -> Result<MoorResult> {
-        let reply = moor_rpc::ReplyResultRef::read_as_root(reply_bytes)
+        let reply = read_reply_result(reply_bytes)
             .map_err(|e| eyre!("Failed to parse reply: {}", e))?;
 
         match reply.result().map_err(|e| eyre!("Missing result: {}", e))? {

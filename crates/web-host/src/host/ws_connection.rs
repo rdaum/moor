@@ -25,7 +25,7 @@ use rpc_async_client::{
 };
 use rpc_common::{
     AuthToken, ClientToken, mk_client_pong_msg, mk_command_msg, mk_detach_msg,
-    mk_requested_input_msg,
+    mk_requested_input_msg, read_reply_result,
 };
 use std::{
     collections::VecDeque,
@@ -283,7 +283,7 @@ impl WebSocketConnection {
             .expect("Unable to send command to RPC server");
 
         let reply =
-            moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse reply");
+            read_reply_result(&reply_bytes).expect("Failed to parse reply");
         match reply.result().expect("Missing result") {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
                 let daemon_reply = client_success.reply().expect("Missing reply");
@@ -367,7 +367,7 @@ impl WebSocketConnection {
             .expect("Unable to send input to RPC server");
 
         let reply =
-            moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse reply");
+            read_reply_result(&reply_bytes).expect("Failed to parse reply");
         match reply.result().expect("Missing result") {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
                 let daemon_reply = client_success.reply().expect("Missing reply");

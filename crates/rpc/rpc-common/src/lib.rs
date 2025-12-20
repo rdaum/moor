@@ -17,6 +17,8 @@
 //! for RPC communication between moor components (hosts, clients, workers, daemon).
 
 use moor_common::tasks::SchedulerError;
+use moor_schema::rpc;
+use planus::ReadAsRoot;
 use thiserror::Error;
 
 // Re-export domain types
@@ -38,6 +40,12 @@ pub use extract::{
 };
 
 pub use errors::*;
+
+pub fn read_reply_result(
+    bytes: &[u8],
+) -> Result<rpc::ReplyResultRef<'_>, planus::Error> {
+    rpc::ReplyResultRef::read_as_root(bytes)
+}
 
 // Re-export FlatBuffer construction helpers
 pub use helpers::{

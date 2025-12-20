@@ -25,13 +25,12 @@ use hickory_resolver::TokioResolver;
 use moor_common::model::ObjectRef;
 use moor_schema::{convert::obj_from_ref, rpc as moor_rpc};
 use moor_var::{Obj, Symbol};
-use planus::ReadAsRoot;
 use rpc_async_client::{rpc_client::RpcClient, zmq};
 use rpc_common::{
     AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, mk_attach_msg, mk_call_system_verb_msg,
     mk_connection_establish_msg, mk_detach_host_msg, mk_detach_msg, mk_eval_msg,
     mk_get_server_features_msg, mk_reattach_msg, mk_register_host_msg, mk_request_sys_prop_msg,
-    mk_resolve_msg,
+    mk_resolve_msg, read_reply_result,
 };
 use serde::Deserialize;
 use std::{
@@ -326,7 +325,7 @@ impl WebHost {
             }
         };
 
-        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+        let reply = read_reply_result(&reply_bytes)
             .map_err(|e| WsHostError::RpcError(eyre!("Failed to parse reply: {}", e)))?;
 
         let (client_token, player) = match reply.result().expect("Missing result") {
@@ -447,7 +446,7 @@ impl WebHost {
             }
         };
 
-        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+        let reply = read_reply_result(&reply_bytes)
             .map_err(|e| WsHostError::RpcError(eyre!("Failed to parse reply: {}", e)))?;
 
         let (client_token, player) = match reply.result().expect("Missing result") {
@@ -673,8 +672,7 @@ impl WebHost {
             }
         };
 
-        use planus::ReadAsRoot;
-        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+        let reply = read_reply_result(&reply_bytes)
             .map_err(|e| WsHostError::RpcError(eyre!("Failed to parse reply: {}", e)))?;
 
         let client_token = match reply.result().expect("Missing result") {
@@ -759,8 +757,7 @@ impl WebHost {
             }
         };
 
-        use planus::ReadAsRoot;
-        let register_reply = match moor_rpc::ReplyResultRef::read_as_root(&register_bytes) {
+        let register_reply = match read_reply_result(&register_bytes) {
             Ok(reply) => reply,
             Err(e) => {
                 error!("Failed to parse register reply: {}", e);
@@ -813,7 +810,7 @@ impl WebHost {
             }
         };
 
-        let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+        let reply = match read_reply_result(&reply_bytes) {
             Ok(reply) => reply,
             Err(e) => {
                 error!("Failed to parse server feature reply: {}", e);

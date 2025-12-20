@@ -15,6 +15,7 @@ use crate::{ListenersClient, pubsub_client::hosts_events_recv, rpc_client::RpcCl
 use moor_schema::{convert::obj_from_ref, rpc as moor_rpc};
 use rpc_common::{
     HOST_BROADCAST_TOPIC, HostType, RpcError, mk_host_pong_msg, mk_register_host_msg, obj_fb,
+    read_reply_result,
 };
 use std::{
     net::SocketAddr,
@@ -88,8 +89,7 @@ pub async fn start_host_session(
         let reply_bytes = rpc_client.make_host_rpc_call(host_id, host_hello).await;
         match reply_bytes {
             Ok(bytes) => {
-                use planus::ReadAsRoot;
-                let reply_ref = moor_rpc::ReplyResultRef::read_as_root(&bytes)
+                let reply_ref = read_reply_result(&bytes)
                     .map_err(|e| RpcError::CouldNotDecode(format!("Invalid flatbuffer: {e}")))?;
 
                 match reply_ref
@@ -204,7 +204,6 @@ pub async fn process_hosts_events(
         let msg = hosts_events_recv(&mut events_sub).await?;
         let event = msg.event()?;
 
-        use planus::ReadAsRoot;
         match event
             .event()
             .map_err(|e| RpcError::CouldNotDecode(format!("Missing event: {e}")))?
@@ -247,10 +246,9 @@ pub async fn process_hosts_events(
                 let reply_bytes = rpc_client.make_host_rpc_call(host_id, host_pong).await;
                 match reply_bytes {
                     Ok(bytes) => {
-                        let reply_ref =
-                            moor_rpc::ReplyResultRef::read_as_root(&bytes).map_err(|e| {
-                                RpcError::CouldNotDecode(format!("Invalid flatbuffer: {e}"))
-                            })?;
+                        let reply_ref = read_reply_result(&bytes).map_err(|e| {
+                            RpcError::CouldNotDecode(format!("Invalid flatbuffer: {e}"))
+                        })?;
 
                         match reply_ref
                             .result()

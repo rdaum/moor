@@ -27,11 +27,10 @@ use futures::{StreamExt, stream::FuturesUnordered};
 use moor_common::model::ObjectRef;
 use moor_schema::rpc as moor_rpc;
 use moor_var::{Obj, Symbol, Var, v_int};
-use planus::ReadAsRoot;
 use rpc_async_client::{rpc_client::RpcClient, start_host_session};
 use rpc_common::{
     AuthToken, ClientToken, client_args::RpcClientArgs, mk_invoke_verb_msg,
-    mk_request_performance_counters_msg,
+    mk_request_performance_counters_msg, read_reply_result,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -181,7 +180,7 @@ async fn continuous_workload(
             .expect("Unable to send call request to RPC server");
 
         let reply =
-            moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse reply");
+            read_reply_result(&reply_bytes).expect("Failed to parse reply");
 
         let task_id = match reply.result().expect("Failed to get reply result") {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -265,7 +264,7 @@ async fn workload(
             .expect("Unable to send call request to RPC server");
 
         let reply =
-            moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse reply");
+            read_reply_result(&reply_bytes).expect("Failed to parse reply");
 
         let task_id = match reply.result().expect("Failed to get reply result") {
             moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
@@ -329,7 +328,7 @@ async fn request_counters(
         .await
         .expect("Unable to send call request to RPC server");
 
-    let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)?;
+    let reply = read_reply_result(&reply_bytes)?;
 
     let counters = match reply.result()? {
         moor_rpc::ReplyResultUnionRef::HostSuccess(host_success) => {

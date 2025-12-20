@@ -22,7 +22,7 @@ use axum::{
 };
 use moor_common::model::ObjectRef;
 use moor_schema::rpc as moor_rpc;
-use rpc_common::mk_login_command_msg;
+use rpc_common::{mk_login_command_msg, read_reply_result};
 use serde_derive::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tracing::{debug, error, info, warn};
@@ -186,8 +186,7 @@ pub async fn oauth2_callback_handler(
         }
     };
 
-    use planus::ReadAsRoot;
-    let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+    let reply = match read_reply_result(&reply_bytes) {
         Ok(r) => r,
         Err(e) => {
             error!("Failed to parse reply: {}", e);
@@ -368,8 +367,7 @@ pub async fn oauth2_account_choice_handler(
         }
     };
 
-    use planus::ReadAsRoot;
-    let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+    let reply = match read_reply_result(&reply_bytes) {
         Ok(r) => r,
         Err(e) => {
             error!("Failed to parse reply: {}", e);
