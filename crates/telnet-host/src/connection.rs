@@ -284,6 +284,18 @@ fn describe_compile_error(compile_error: CompileError) -> String {
     }
 }
 
+fn failure_error_context<'a>(
+    failure: moor_rpc::FailureRef<'a>,
+) -> Result<(moor_rpc::RpcMessageErrorRef<'a>, moor_rpc::RpcMessageErrorCode), eyre::Error> {
+    let error_ref = failure
+        .error()
+        .map_err(|e| eyre::eyre!("Missing error: {e}"))?;
+    let error_code = error_ref
+        .error_code()
+        .map_err(|e| eyre::eyre!("Missing error_code: {e}"))?;
+    Ok((error_ref, error_code))
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct PendingTask {
     task_id: usize,
@@ -1164,12 +1176,7 @@ impl TelnetConnection {
                         }
                     }
                     moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                        let error_ref = failure
-                            .error()
-                            .map_err(|e| eyre::eyre!("Missing error: {}", e))?;
-                        let error_code = error_ref
-                            .error_code()
-                            .map_err(|e| eyre::eyre!("Missing error_code: {}", e))?;
+                        let (error_ref, error_code) = failure_error_context(failure)?;
                         match error_code {
                             moor_rpc::RpcMessageErrorCode::TaskError => {
                                 let scheduler_error = scheduler_error_from_rpc_error(error_ref)
@@ -1256,12 +1263,7 @@ impl TelnetConnection {
                             }
                         }
                         moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                            let error_ref = failure
-                                .error()
-                                .map_err(|e| eyre::eyre!("Missing error: {}", e))?;
-                            let error_code = error_ref
-                                .error_code()
-                                .map_err(|e| eyre::eyre!("Missing error_code: {}", e))?;
+                            let (error_ref, error_code) = failure_error_context(failure)?;
                             match error_code {
                                 moor_rpc::RpcMessageErrorCode::TaskError => {
                                     let e = scheduler_error_from_rpc_error(error_ref)
@@ -1751,12 +1753,7 @@ impl TelnetConnection {
                 }
             }
             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error_ref = failure
-                    .error()
-                    .map_err(|e| eyre::eyre!("Missing error: {}", e))?;
-                let error_code = error_ref
-                    .error_code()
-                    .map_err(|e| eyre::eyre!("Missing error_code: {}", e))?;
+                let (error_ref, error_code) = failure_error_context(failure)?;
                 match error_code {
                     moor_rpc::RpcMessageErrorCode::TaskError => {
                         let e = scheduler_error_from_rpc_error(error_ref)
@@ -1894,12 +1891,7 @@ impl TelnetConnection {
                 }
             }
             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                let error_ref = failure
-                    .error()
-                    .map_err(|e| eyre::eyre!("Missing error: {}", e))?;
-                let error_code = error_ref
-                    .error_code()
-                    .map_err(|e| eyre::eyre!("Missing error_code: {}", e))?;
+                let (error_ref, error_code) = failure_error_context(failure)?;
                 match error_code {
                     moor_rpc::RpcMessageErrorCode::TaskError => {
                         let e = scheduler_error_from_rpc_error(error_ref)
