@@ -144,6 +144,11 @@ impl Listeners {
                     // Signal that the listener is successfully bound
                     let _ = reply.send(Ok(()));
 
+                    let local_listener_port = listener
+                        .local_addr()
+                        .map(|addr| addr.port())
+                        .unwrap_or(addr.port());
+
                     // One task per listener.
                     tokio::spawn(async move {
                         loop {
@@ -161,7 +166,7 @@ impl Listeners {
                                             // Get the raw fd before wrapping in Framed (for keep-alive support)
                                             let socket_fd = stream.as_raw_fd();
 
-                                            let listener_port = addr.port();
+                                            let listener_port = local_listener_port;
                                             let zmq_ctx = zmq_ctx.clone();
                                             let rpc_address = rpc_address.clone();
                                             let events_address = events_address.clone();
