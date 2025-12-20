@@ -83,7 +83,7 @@
 // ; return encode_binary("foo", 10, "bar", 13);
 // "foo~0Abar~0D"
 
-// match & rmatch 
+// match & rmatch
 ; return match("foo", "^f*o$");
 {}
 ; return match("foo", "^fo*$");
@@ -95,7 +95,32 @@
 ; return match("foobar", "f%(o*%)b");
 {1, 4, {{2, 3}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}}, "foobar"}
 
-// substitute 
+// match/rmatch UTF-8: positions are char indices, not byte offsets
+// "héllo" - é is 2 bytes but char position 2
+; return match("héllo", "é")[1..2];
+{2, 2}
+; return match("héllo", "ll")[1..2];
+{3, 4}
+; return match("héllo", "%(é%)")[3][1];
+{2, 2}
+// rmatch finds last 'l' at char position 4
+; return rmatch("héllo", "l")[1..2];
+{4, 4}
+// "日本語" - each char is 3 bytes
+; return match("日本語", "本")[1..2];
+{2, 2}
+; return match("日本語", "語")[1..2];
+{3, 3}
+; return rmatch("日本語test", "t")[1..2];
+{7, 7}
+
+// substitute with UTF-8 captures
+; subs = match("héllo wörld", "%(wörld%)"); return substitute("say %1", subs);
+"say wörld"
+; subs = match("日本語です", "%(日本語%)"); return substitute("Language: %1", subs);
+"Language: 日本語"
+
+// substitute
 ; subs = match("*** Welcome to LambdaMOO!!!", "%(%w*%) to %(%w*%)"); return substitute("I thank you for your %1 here in %2.", subs);
 "I thank you for your Welcome here in LambdaMOO."
 

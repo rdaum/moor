@@ -245,6 +245,32 @@ fn translate_pattern(pattern: &str) -> Option<String> {
 type Span = (isize, isize);
 type MatchSpans = (Span, Vec<Span>);
 
+fn byte_offset_to_char_index(s: &str, byte: usize) -> usize {
+    s[..byte].chars().count()
+}
+
+fn char_range_to_byte_range(s: &str, start: isize, end: isize) -> Option<(usize, usize)> {
+    if start < 1 || end < start {
+        return None;
+    }
+    let mut start_byte = None;
+    let mut end_byte = None;
+    for (i, (byte_index, ch)) in s.char_indices().enumerate() {
+        let pos = (i + 1) as isize;
+        if pos == start {
+            start_byte = Some(byte_index);
+        }
+        if pos == end {
+            end_byte = Some(byte_index + ch.len_utf8());
+            break;
+        }
+    }
+    match (start_byte, end_byte) {
+        (Some(start_byte), Some(end_byte)) => Some((start_byte, end_byte)),
+        _ => None,
+    }
+}
+
 lazy_static! {
     static ref MOO_REGEX_CACHE: Mutex<HashMap<(String, bool), Result<onig::Regex, onig::Error>>> =
         Default::default();
@@ -312,14 +338,20 @@ fn perform_regex_match(
         return Ok(None);
     };
 
-    let overall = ((start + 1) as isize, end as isize);
+    let overall = (
+        (byte_offset_to_char_index(subject, start) + 1) as isize,
+        byte_offset_to_char_index(subject, end) as isize,
+    );
     // Now we'll iterate through the captures, and build up a Vec<Span> of the captured groups.
     // MOO match() returns 9 subpatterns, no more, no less. So we start with a Vec of 9
     // (-1, -1) pairs and then fill that in with the captured groups, if any.
     let mut match_vec = vec![(0, -1); 9];
     for i in 1..=8 {
         if let Some((start, end)) = region.pos(i) {
-            match_vec[i - 1] = ((start + 1) as isize, end as isize);
+            match_vec[i - 1] = (
+                (byte_offset_to_char_index(subject, start) + 1) as isize,
+                byte_offset_to_char_index(subject, end) as isize,
+            );
         }
     }
 
@@ -436,11 +468,13 @@ fn perform_pcre_match(
             let mut map = vec![];
             for i in 0..region.len() {
                 let (start, end) = region.pos(i).unwrap();
+                let start_char = (byte_offset_to_char_index(target, start) + 1) as i64;
+                let end_char = byte_offset_to_char_index(target, end) as i64;
                 let match_map = vec![
                     (v_str("match"), v_str(&target[start..end])),
                     (
                         v_str("position"),
-                        v_list(&[v_int((start as i64) + 1), v_int(end as i64)]),
+                        v_list(&[v_int(start_char), v_int(end_char)]),
                     ),
                 ];
                 map.push((v_string(i.to_string()), v_map(&match_map)));
@@ -452,11 +486,13 @@ fn perform_pcre_match(
             let mut assoc_list = vec![];
             for i in 0..region.len() {
                 let (start, end) = region.pos(i).unwrap();
+                let start_char = (byte_offset_to_char_index(target, start) + 1) as i64;
+                let end_char = byte_offset_to_char_index(target, end) as i64;
                 let match_list = vec![
                     v_list(&[v_str("match"), v_str(&target[start..end])]),
                     v_list(&[
                         v_str("position"),
-                        v_list(&[v_int((start as i64) + 1), v_int(end as i64)]),
+                        v_list(&[v_int(start_char), v_int(end_char)]),
                     ]),
                 ];
                 assoc_list.push(v_list(&[v_string(i.to_string()), v_list(&match_list)]));
@@ -714,13 +750,16 @@ fn substitute(template: &str, subs: &[(isize, isize)], source: &str) -> Result<S
 
         // Now validate the range in the source string, and if the range is invalid, we just skip,
         // as this seems to be how LambdaMOO behaves.
-        if start < 0 || start > end || end > (source.len() as isize) {
+        let source_char_len = source.chars().count() as isize;
+        if start < 1 || start > end || end > source_char_len {
             continue;
         }
 
-        let (start, end) = (start as usize - 1, end as usize);
+        let Some((start_byte, end_byte)) = char_range_to_byte_range(source, start, end) else {
+            continue;
+        };
         // Now append the corresponding substring to `result`.
-        result.push_str(&source[start..end]);
+        result.push_str(&source[start_byte..end_byte]);
         if let Some(last_c) = last_c {
             result.push(last_c);
         }
@@ -1379,6 +1418,27 @@ mod tests {
                 ]
             )
         );
+    }
+
+    #[test]
+    fn test_match_unicode_indices() {
+        let source = "héllo";
+        let (overall, subs) = perform_regex_match("%(é%)", source, false, false)
+            .unwrap()
+            .unwrap();
+        assert_eq!(overall, (2, 2));
+        assert_eq!(subs[0], (2, 2));
+        let result = substitute("%1", &subs, source).unwrap();
+        assert_eq!(result, "é");
+    }
+
+    #[test]
+    fn test_rmatch_unicode_indices() {
+        let source = "héllö";
+        let (overall, _) = perform_regex_match("l", source, false, true)
+            .unwrap()
+            .unwrap();
+        assert_eq!(overall, (4, 4));
     }
 
     /// This pattern was causing an E_INVARG in BfMatch, due to the "-" after the 9.
