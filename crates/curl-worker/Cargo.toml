@@ -34,7 +34,6 @@ once_cell.workspace = true
 
 ## Logging & tracing
 tracing.workspace = true
-tracing-subscriber.workspace = true
 
 ## ZMQ / RPC
 tmq.workspace = true
