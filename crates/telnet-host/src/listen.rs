@@ -11,22 +11,29 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::{connection::TelnetConnection, connection_codec::ConnectionCodec};
+use crate::{
+    connection::{BoxedAsyncIo, TelnetConnection},
+    connection_codec::ConnectionCodec,
+};
 use eyre::bail;
 use futures_util::StreamExt;
 use hickory_resolver::TokioResolver;
 use moor_schema::{convert::var_to_flatbuffer, rpc as moor_rpc};
 use moor_var::{Obj, Symbol};
 use rpc_async_client::{
-    ListenersClient, ListenersError, ListenersMessage, rpc_client::RpcClient, zmq,
+    ListenerInfo, ListenersClient, ListenersError, ListenersMessage, rpc_client::RpcClient, zmq,
 };
 use rpc_common::{
     CLIENT_BROADCAST_TOPIC, extract_obj, mk_connection_establish_msg, read_reply_result,
 };
+use rustls_pemfile::{certs, private_key};
 use std::{
     collections::HashMap,
+    fs::File,
+    io::BufReader,
     net::{IpAddr, SocketAddr},
     os::fd::{AsRawFd, RawFd},
+    path::Path,
     sync::{Arc, atomic::AtomicBool},
 };
 use tmq::subscribe;
@@ -34,9 +41,40 @@ use tokio::{
     net::{TcpListener, TcpStream},
     select,
 };
+use tokio_rustls::{TlsAcceptor, rustls::ServerConfig};
 use tokio_util::codec::Framed;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+
+/// Load TLS configuration from certificate and key files.
+pub fn load_tls_config(cert_path: &Path, key_path: &Path) -> Result<Arc<ServerConfig>, eyre::Error> {
+    let cert_file = File::open(cert_path)
+        .map_err(|e| eyre::eyre!("Failed to open certificate file {:?}: {}", cert_path, e))?;
+    let key_file = File::open(key_path)
+        .map_err(|e| eyre::eyre!("Failed to open key file {:?}: {}", key_path, e))?;
+
+    let mut cert_reader = BufReader::new(cert_file);
+    let mut key_reader = BufReader::new(key_file);
+
+    let cert_chain: Vec<_> = certs(&mut cert_reader)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| eyre::eyre!("Failed to parse certificate: {}", e))?;
+
+    if cert_chain.is_empty() {
+        return Err(eyre::eyre!("No certificates found in {:?}", cert_path));
+    }
+
+    let key = private_key(&mut key_reader)
+        .map_err(|e| eyre::eyre!("Failed to parse private key: {}", e))?
+        .ok_or_else(|| eyre::eyre!("No private key found in {:?}", key_path))?;
+
+    let config = ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(cert_chain, key)
+        .map_err(|e| eyre::eyre!("Failed to build TLS config: {}", e))?;
+
+    Ok(Arc::new(config))
+}
 
 /// Perform async reverse DNS lookup for an IP address
 async fn resolve_hostname(ip: IpAddr) -> Result<String, eyre::Error> {
@@ -78,6 +116,7 @@ pub struct Listeners {
     events_address: String,
     kill_switch: Arc<AtomicBool>,
     curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public)
+    tls_config: Option<Arc<ServerConfig>>,
 }
 
 impl Listeners {
@@ -87,6 +126,7 @@ impl Listeners {
         events_address: String,
         kill_switch: Arc<AtomicBool>,
         curve_keys: Option<(String, String, String)>,
+        tls_config: Option<Arc<ServerConfig>>,
     ) -> (
         Self,
         tokio::sync::mpsc::Receiver<ListenersMessage>,
@@ -100,9 +140,103 @@ impl Listeners {
             events_address,
             kill_switch,
             curve_keys,
+            tls_config,
         };
         let listeners_client = ListenersClient::new(tx);
         (listeners, rx, listeners_client)
+    }
+
+    async fn start_listener(
+        &mut self,
+        handler: Obj,
+        addr: SocketAddr,
+        reply: tokio::sync::oneshot::Sender<Result<(), ListenersError>>,
+        is_tls: bool,
+    ) {
+        let listener = match TcpListener::bind(addr).await {
+            Ok(listener) => listener,
+            Err(e) => {
+                let _ = reply.send(Err(ListenersError::AddListenerFailed(handler, addr)));
+                error!(?addr, "Unable to bind listener: {}", e);
+                return;
+            }
+        };
+
+        let (terminate_send, terminate_receive) = tokio::sync::watch::channel(false);
+        self.listeners
+            .insert(addr, Listener::new(terminate_send, handler, is_tls));
+
+        let tls_label = if is_tls { " (TLS)" } else { "" };
+        info!("Listening @ {}{}", addr, tls_label);
+
+        let zmq_ctx = self.zmq_ctx.clone();
+        let rpc_address = self.rpc_address.clone();
+        let events_address = self.events_address.clone();
+        let kill_switch = self.kill_switch.clone();
+        let curve_keys = self.curve_keys.clone();
+        let tls_acceptor = if is_tls {
+            self.tls_config.as_ref().map(|c| TlsAcceptor::from(c.clone()))
+        } else {
+            None
+        };
+
+        // Signal that the listener is successfully bound
+        let _ = reply.send(Ok(()));
+
+        let local_listener_port = listener
+            .local_addr()
+            .map(|addr| addr.port())
+            .unwrap_or(addr.port());
+
+        // One task per listener.
+        tokio::spawn(async move {
+            loop {
+                let mut term_receive = terminate_receive.clone();
+                select! {
+                    _ = term_receive.changed() => {
+                        info!("Listener terminated, stopping...");
+                        break;
+                    }
+                    result = listener.accept() => {
+                        match result {
+                            Ok((stream, peer_addr)) => {
+                                info!(?peer_addr, is_tls, "Accepted connection for listener");
+
+                                // Get the raw fd before wrapping (for keep-alive support)
+                                let socket_fd = stream.as_raw_fd();
+
+                                let listener_port = local_listener_port;
+                                let zmq_ctx = zmq_ctx.clone();
+                                let rpc_address = rpc_address.clone();
+                                let events_address = events_address.clone();
+                                let kill_switch = kill_switch.clone();
+                                let curve_keys = curve_keys.clone();
+                                let tls_acceptor = tls_acceptor.clone();
+
+                                // Spawn a task to handle the accepted connection.
+                                tokio::spawn(Listener::handle_accepted_connection(
+                                    zmq_ctx,
+                                    rpc_address,
+                                    events_address,
+                                    handler,
+                                    kill_switch,
+                                    listener_port,
+                                    stream,
+                                    peer_addr,
+                                    curve_keys,
+                                    socket_fd,
+                                    tls_acceptor,
+                                ));
+                            }
+                            Err(e) => {
+                                warn!(?e, "Accept failed, can't handle connection");
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        });
     }
 
     pub async fn run(
@@ -121,81 +255,15 @@ impl Listeners {
 
             match listeners_channel.recv().await {
                 Some(ListenersMessage::AddListener(handler, addr, reply)) => {
-                    let listener = match TcpListener::bind(addr).await {
-                        Ok(listener) => listener,
-                        Err(e) => {
-                            let _ =
-                                reply.send(Err(ListenersError::AddListenerFailed(handler, addr)));
-                            error!(?addr, "Unable to bind listener: {}", e);
-                            continue;
-                        }
-                    };
-                    let (terminate_send, terminate_receive) = tokio::sync::watch::channel(false);
-                    self.listeners
-                        .insert(addr, Listener::new(terminate_send, handler));
-
-                    info!("Listening @ {}", addr);
-                    let zmq_ctx = self.zmq_ctx.clone();
-                    let rpc_address = self.rpc_address.clone();
-                    let events_address = self.events_address.clone();
-                    let kill_switch = self.kill_switch.clone();
-                    let curve_keys = self.curve_keys.clone();
-
-                    // Signal that the listener is successfully bound
-                    let _ = reply.send(Ok(()));
-
-                    let local_listener_port = listener
-                        .local_addr()
-                        .map(|addr| addr.port())
-                        .unwrap_or(addr.port());
-
-                    // One task per listener.
-                    tokio::spawn(async move {
-                        loop {
-                            let mut term_receive = terminate_receive.clone();
-                            select! {
-                                _ = term_receive.changed() => {
-                                    info!("Listener terminated, stopping...");
-                                    break;
-                                }
-                                result = listener.accept() => {
-                                    match result {
-                                        Ok((stream, addr)) => {
-                                            info!(?addr, "Accepted connection for listener");
-
-                                            // Get the raw fd before wrapping in Framed (for keep-alive support)
-                                            let socket_fd = stream.as_raw_fd();
-
-                                            let listener_port = local_listener_port;
-                                            let zmq_ctx = zmq_ctx.clone();
-                                            let rpc_address = rpc_address.clone();
-                                            let events_address = events_address.clone();
-                                            let kill_switch = kill_switch.clone();
-                                            let curve_keys = curve_keys.clone();
-
-                                            // Spawn a task to handle the accepted connection.
-                                            tokio::spawn(Listener::handle_accepted_connection(
-                                                zmq_ctx,
-                                                rpc_address,
-                                                events_address,
-                                                handler,
-                                                kill_switch,
-                                                listener_port,
-                                                stream,
-                                                addr,
-                                                curve_keys,
-                                                socket_fd,
-                                            ));
-                                        }
-                                        Err(e) => {
-                                            warn!(?e, "Accept failed, can't handle connection");
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    });
+                    self.start_listener(handler, addr, reply, false).await;
+                }
+                Some(ListenersMessage::AddTlsListener(handler, addr, reply)) => {
+                    if self.tls_config.is_none() {
+                        error!("TLS listener requested but no TLS config available");
+                        let _ = reply.send(Err(ListenersError::AddListenerFailed(handler, addr)));
+                        continue;
+                    }
+                    self.start_listener(handler, addr, reply, true).await;
                 }
                 Some(ListenersMessage::RemoveListener(addr, reply)) => {
                     let listener = self.listeners.remove(&addr);
@@ -214,7 +282,11 @@ impl Listeners {
                     let listeners = self
                         .listeners
                         .iter()
-                        .map(|(addr, listener)| (listener.handler_object, *addr))
+                        .map(|(addr, listener)| ListenerInfo {
+                            handler: listener.handler_object,
+                            addr: *addr,
+                            is_tls: listener.is_tls,
+                        })
                         .collect();
                     tx.send(listeners).expect("Unable to send listeners list");
                 }
@@ -230,13 +302,19 @@ impl Listeners {
 pub struct Listener {
     pub(crate) handler_object: Obj,
     pub(crate) terminate: tokio::sync::watch::Sender<bool>,
+    pub(crate) is_tls: bool,
 }
 
 impl Listener {
-    pub fn new(terminate: tokio::sync::watch::Sender<bool>, handler_object: Obj) -> Self {
+    pub fn new(
+        terminate: tokio::sync::watch::Sender<bool>,
+        handler_object: Obj,
+        is_tls: bool,
+    ) -> Self {
         Self {
             handler_object,
             terminate,
+            is_tls,
         }
     }
 
@@ -251,6 +329,7 @@ impl Listener {
         peer_addr: SocketAddr,
         curve_keys: Option<(String, String, String)>,
         socket_fd: RawFd,
+        tls_acceptor: Option<TlsAcceptor>,
     ) -> Result<(), eyre::Report> {
         let connection_kill_switch = kill_switch.clone();
         let rpc_address = rpc_address.clone();
@@ -414,8 +493,25 @@ impl Listener {
                 client_id, events_address
             );
 
+            // Perform TLS handshake if this is a TLS connection, then box the stream
+            let is_tls = tls_acceptor.is_some();
+            let boxed_stream: BoxedAsyncIo = if let Some(acceptor) = tls_acceptor {
+                match acceptor.accept(stream).await {
+                    Ok(tls_stream) => Box::pin(tls_stream),
+                    Err(e) => {
+                        error!(?peer_addr, "TLS handshake failed: {}", e);
+                        bail!("TLS handshake failed: {}", e);
+                    }
+                }
+            } else {
+                Box::pin(stream)
+            };
+
+            // Add TLS status to connection attributes
+            connection_attributes.insert(Symbol::mk("tls"), moor_var::Var::mk_bool(is_tls));
+
             // Re-ify the connection.
-            let framed_stream = Framed::new(stream, ConnectionCodec::new());
+            let framed_stream = Framed::new(boxed_stream, ConnectionCodec::new());
             let (write, read) = framed_stream.split();
             let mut tcp_connection = TelnetConnection {
                 handler_object,

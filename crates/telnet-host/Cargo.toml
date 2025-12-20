@@ -53,8 +53,10 @@ serde.workspace = true
 # Networking & Communication
 bytes.workspace = true
 hickory-resolver.workspace = true
+rustls-pemfile.workspace = true
 socket2.workspace = true
 tmq.workspace = true
+tokio-rustls.workspace = true
 
 # Async Runtime & Concurrency
 futures-util.workspace = true

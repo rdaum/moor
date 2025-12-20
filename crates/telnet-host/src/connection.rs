@@ -46,11 +46,22 @@ use rpc_common::{
     scheduler_error_from_rpc_error,
 };
 use socket2::{SockRef, TcpKeepalive};
+use std::pin::Pin;
 use tmq::subscribe::Subscribe;
-use tokio::{net::TcpStream, select};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    select,
+};
 use tokio_util::codec::Framed;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
+
+/// Combined trait for async read/write streams (needed for trait objects).
+pub(crate) trait AsyncStream: AsyncRead + AsyncWrite + Unpin + Send {}
+impl<T: AsyncRead + AsyncWrite + Unpin + Send> AsyncStream for T {}
+
+/// Type alias for a boxed async stream that can be either TcpStream or TlsStream.
+pub(crate) type BoxedAsyncIo = Pin<Box<dyn AsyncStream>>;
 
 use crate::djot_formatter::djot_to_ansi;
 
@@ -85,8 +96,8 @@ pub(crate) struct TelnetConnection {
     pub(crate) client_id: Uuid,
     /// Current PASETO token.
     pub(crate) client_token: ClientToken,
-    pub(crate) write: SplitSink<Framed<TcpStream, ConnectionCodec>, ConnectionFrame>,
-    pub(crate) read: SplitStream<Framed<TcpStream, ConnectionCodec>>,
+    pub(crate) write: SplitSink<Framed<BoxedAsyncIo, ConnectionCodec>, ConnectionFrame>,
+    pub(crate) read: SplitStream<Framed<BoxedAsyncIo, ConnectionCodec>>,
     pub(crate) kill_switch: Arc<AtomicBool>,
 
     pub(crate) broadcast_sub: Subscribe,

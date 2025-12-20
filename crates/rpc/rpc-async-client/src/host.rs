@@ -79,9 +79,9 @@ pub async fn start_host_session(
 
         let listeners_fb: Vec<moor_rpc::Listener> = listener_list
             .iter()
-            .map(|(obj, addr)| moor_rpc::Listener {
-                handler_object: obj_fb(obj),
-                socket_addr: addr.to_string(),
+            .map(|info| moor_rpc::Listener {
+                handler_object: obj_fb(&info.handler),
+                socket_addr: info.addr.to_string(),
             })
             .collect();
 
@@ -236,9 +236,9 @@ pub async fn process_hosts_events(
 
                 let listeners_fb: Vec<moor_rpc::Listener> = listener_list
                     .iter()
-                    .map(|(obj, addr)| moor_rpc::Listener {
-                        handler_object: obj_fb(obj),
-                        socket_addr: addr.to_string(),
+                    .map(|info| moor_rpc::Listener {
+                        handler_object: obj_fb(&info.handler),
+                        socket_addr: info.addr.to_string(),
                     })
                     .collect();
 

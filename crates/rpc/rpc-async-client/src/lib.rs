@@ -14,7 +14,7 @@
 #![allow(clippy::too_many_arguments)]
 
 pub use host::{process_hosts_events, start_host_session};
-pub use listeners::{ListenersClient, ListenersError, ListenersMessage};
+pub use listeners::{ListenerInfo, ListenersClient, ListenersError, ListenersMessage};
 pub use worker::attach_worker;
 pub use worker_loop::{WorkerRpcError, worker_loop};
 pub use worker_rpc_client::WorkerRpcSendClient;

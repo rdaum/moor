@@ -51,7 +51,8 @@ pub async fn noop_listeners_loop() -> (ListenersClient, JoinHandle<()>) {
     let t = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             match msg {
-                ListenersMessage::AddListener(_, _, reply) => {
+                ListenersMessage::AddListener(_, _, reply)
+                | ListenersMessage::AddTlsListener(_, _, reply) => {
                     let _ = reply.send(Ok(()));
                 }
                 ListenersMessage::RemoveListener(_, reply) => {

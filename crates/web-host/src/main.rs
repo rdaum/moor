@@ -30,7 +30,8 @@ use figment::{
 };
 use moor_var::{Obj, SYSTEM_OBJECT};
 use rpc_async_client::{
-    ListenersClient, ListenersError, ListenersMessage, process_hosts_events, start_host_session,
+    ListenerInfo, ListenersClient, ListenersError, ListenersMessage, process_hosts_events,
+    start_host_session,
 };
 use rpc_common::{HostType, client_args::RpcClientArgs};
 use serde_derive::{Deserialize, Serialize};
@@ -146,6 +147,11 @@ impl Listeners {
             }
 
             match listeners_channel.recv().await {
+                Some(ListenersMessage::AddTlsListener(handler, addr, reply)) => {
+                    // Web-host doesn't support TLS directly - TLS is handled at the reverse proxy level
+                    error!(?addr, "TLS listeners not supported by web-host");
+                    let _ = reply.send(Err(ListenersError::AddListenerFailed(handler, addr)));
+                }
                 Some(ListenersMessage::AddListener(handler, addr, reply)) => {
                     let listener = match TcpListener::bind(addr).await {
                         Ok(listener) => listener,
@@ -225,7 +231,11 @@ impl Listeners {
                     let listeners = self
                         .listeners
                         .iter()
-                        .map(|(addr, listener)| (listener.handler_object, *addr))
+                        .map(|(addr, listener)| ListenerInfo {
+                            handler: listener.handler_object,
+                            addr: *addr,
+                            is_tls: false,
+                        })
                         .collect();
                     tx.send(listeners).expect("Unable to send listeners list");
                 }
@@ -269,14 +279,8 @@ fn mk_routes(
     enable_webhooks: bool,
 ) -> eyre::Result<Router> {
     let mut webhost_router = Router::new()
-        .route(
-            "/ws/attach/connect/{token}",
-            get(host::ws_connect_attach_handler),
-        )
-        .route(
-            "/ws/attach/create/{token}",
-            get(host::ws_create_attach_handler),
-        )
+        .route("/ws/attach/connect", get(host::ws_connect_attach_handler))
+        .route("/ws/attach/create", get(host::ws_create_attach_handler))
         .route("/auth/connect", post(host::connect_auth_handler))
         .route("/auth/create", post(host::create_auth_handler))
         .route("/auth/validate", get(host::validate_auth_handler))

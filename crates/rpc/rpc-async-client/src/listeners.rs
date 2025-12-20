@@ -31,10 +31,20 @@ pub struct ListenersClient {
     listeners_channel: mpsc::Sender<ListenersMessage>,
 }
 
+/// Information about a listener.
+#[derive(Debug, Clone)]
+pub struct ListenerInfo {
+    pub handler: Obj,
+    pub addr: SocketAddr,
+    pub is_tls: bool,
+}
+
 pub enum ListenersMessage {
     AddListener(Obj, SocketAddr, oneshot::Sender<Result<(), ListenersError>>),
+    /// Add a TLS listener. The actual TLS config is stored in the host's Listeners struct.
+    AddTlsListener(Obj, SocketAddr, oneshot::Sender<Result<(), ListenersError>>),
     RemoveListener(SocketAddr, oneshot::Sender<Result<(), ListenersError>>),
-    GetListeners(oneshot::Sender<Vec<(Obj, SocketAddr)>>),
+    GetListeners(oneshot::Sender<Vec<ListenerInfo>>),
 }
 
 impl ListenersClient {
@@ -56,6 +66,20 @@ impl ListenersClient {
             .map_err(|_| ListenersError::AddListenerFailed(*handler, addr))?
     }
 
+    pub async fn add_tls_listener(
+        &self,
+        handler: &Obj,
+        addr: SocketAddr,
+    ) -> Result<(), ListenersError> {
+        let (tx, rx) = oneshot::channel();
+        self.listeners_channel
+            .send(ListenersMessage::AddTlsListener(*handler, addr, tx))
+            .await
+            .map_err(|_| ListenersError::AddListenerFailed(*handler, addr))?;
+        rx.await
+            .map_err(|_| ListenersError::AddListenerFailed(*handler, addr))?
+    }
+
     pub async fn remove_listener(&self, addr: SocketAddr) -> Result<(), ListenersError> {
         let (tx, rx) = oneshot::channel();
         self.listeners_channel
@@ -66,7 +90,7 @@ impl ListenersClient {
             .map_err(|_| ListenersError::RemoveListenerFailed(addr))?
     }
 
-    pub async fn get_listeners(&self) -> Result<Vec<(Obj, SocketAddr)>, ListenersError> {
+    pub async fn get_listeners(&self) -> Result<Vec<ListenerInfo>, ListenersError> {
         let (tx, rx) = oneshot::channel();
         self.listeners_channel
             .send(ListenersMessage::GetListeners(tx))

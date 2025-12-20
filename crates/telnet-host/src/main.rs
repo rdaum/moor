@@ -13,7 +13,7 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use crate::listen::Listeners;
+use crate::listen::{Listeners, load_tls_config};
 use clap::Parser;
 use clap_derive::Parser;
 use colored::control;
@@ -27,6 +27,7 @@ use rpc_common::{HostType, client_args::RpcClientArgs};
 use serde::{Deserialize, Serialize};
 use std::{
     net::SocketAddr,
+    path::PathBuf,
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU64},
@@ -91,6 +92,27 @@ struct Args {
         default_value = "9888"
     )]
     health_check_port: u16,
+
+    #[arg(
+        long,
+        value_name = "tls-port",
+        help = "Listen port for TLS connections (requires --tls-cert and --tls-key)"
+    )]
+    tls_port: Option<u16>,
+
+    #[arg(
+        long,
+        value_name = "tls-cert",
+        help = "Path to TLS certificate chain file (PEM format)"
+    )]
+    tls_cert: Option<PathBuf>,
+
+    #[arg(
+        long,
+        value_name = "tls-key",
+        help = "Path to TLS private key file (PEM format)"
+    )]
+    tls_key: Option<PathBuf>,
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -160,12 +182,38 @@ async fn main() -> Result<(), eyre::Error> {
     let host_id = Uuid::new_v4();
     let last_daemon_ping = Arc::new(AtomicU64::new(0));
 
+    // Load TLS config if cert and key are provided
+    let tls_config = match (&args.tls_cert, &args.tls_key) {
+        (Some(cert_path), Some(key_path)) => {
+            info!("Loading TLS certificate from {:?}", cert_path);
+            match load_tls_config(cert_path, key_path) {
+                Ok(config) => Some(config),
+                Err(e) => {
+                    error!("Failed to load TLS configuration: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        (Some(_), None) | (None, Some(_)) => {
+            error!("Both --tls-cert and --tls-key must be provided together");
+            std::process::exit(1);
+        }
+        (None, None) => None,
+    };
+
+    // Validate TLS port requires TLS config
+    if args.tls_port.is_some() && tls_config.is_none() {
+        error!("--tls-port requires --tls-cert and --tls-key");
+        std::process::exit(1);
+    }
+
     let (mut listeners_server, listeners_channel, listeners) = Listeners::new(
         zmq_ctx.clone(),
         args.client_args.rpc_address.clone(),
         args.client_args.events_address.clone(),
         kill_switch.clone(),
         curve_keys.clone(),
+        tls_config,
     );
 
     let listeners_thread = tokio::spawn(async move {
@@ -179,6 +227,25 @@ async fn main() -> Result<(), eyre::Error> {
             error!("Unable to start default listener: {}", e);
             std::process::exit(1);
         });
+
+    // Add TLS listener if configured
+    if let Some(tls_port) = args.tls_port {
+        let tls_listen_addr = format!("{}:{}", args.telnet_address, tls_port);
+        let tls_sockaddr = match tls_listen_addr.parse::<SocketAddr>() {
+            Ok(addr) => addr,
+            Err(e) => {
+                error!("Failed to parse TLS socket address {}: {}", tls_listen_addr, e);
+                std::process::exit(1);
+            }
+        };
+        listeners
+            .add_tls_listener(&SYSTEM_OBJECT, tls_sockaddr)
+            .await
+            .unwrap_or_else(|e| {
+                error!("Unable to start TLS listener: {}", e);
+                std::process::exit(1);
+            });
+    }
 
     // Start health check server
     let health_check_addr = format!("{}:{}", args.telnet_address, args.health_check_port);
