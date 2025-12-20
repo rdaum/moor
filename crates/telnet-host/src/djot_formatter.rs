@@ -799,6 +799,7 @@ mod tests {
 
     #[test]
     fn test_heading_has_ansi_styling() {
+        colored::control::set_override(true);
         let output = djot_to_ansi("## Heading 2");
         // Should contain ANSI escape codes for styling
         assert!(
@@ -951,6 +952,7 @@ fn main() {
 
     #[test]
     fn test_moo_code_block() {
+        colored::control::set_override(true);
         let djot = r#"```moo
 set_task_perms(caller_perms());
 return $look:mk(this, @this.contents);

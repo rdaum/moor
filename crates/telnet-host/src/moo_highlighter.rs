@@ -313,6 +313,7 @@ mod tests {
 
     #[test]
     fn test_highlight_basic_moo() {
+        colored::control::set_override(true);
         let code = r#"set_task_perms(caller_perms());
 return $look:mk(this, @this.contents);"#;
 
@@ -328,6 +329,7 @@ return $look:mk(this, @this.contents);"#;
 
     #[test]
     fn test_highlight_keywords() {
+        colored::control::set_override(true);
         let code = "if (x > 0)\n  return x;\nendif";
         let highlighted = highlight_moo(code);
 
@@ -339,6 +341,7 @@ return $look:mk(this, @this.contents);"#;
 
     #[test]
     fn test_highlight_strings() {
+        colored::control::set_override(true);
         let code = r#"x = "hello world";"#;
         let highlighted = highlight_moo(code);
 
@@ -348,6 +351,7 @@ return $look:mk(this, @this.contents);"#;
 
     #[test]
     fn test_highlight_objects() {
+        colored::control::set_override(true);
         let code = "#0.name = \"Root\";\nplayer = #-1;";
         let highlighted = highlight_moo(code);
 
@@ -358,6 +362,7 @@ return $look:mk(this, @this.contents);"#;
 
     #[test]
     fn test_highlight_comments() {
+        colored::control::set_override(true);
         let code = "// This is a comment\nx = 5; /* inline */";
         let highlighted = highlight_moo(code);
 
@@ -367,6 +372,7 @@ return $look:mk(this, @this.contents);"#;
 
     #[test]
     fn test_highlight_sysprop() {
+        colored::control::set_override(true);
         let code = "$string_utils:capitalize(s);";
         let highlighted = highlight_moo(code);
 
@@ -376,6 +382,7 @@ return $look:mk(this, @this.contents);"#;
 
     #[test]
     fn test_highlight_errors() {
+        colored::control::set_override(true);
         let code = "raise(E_PERM);";
         let highlighted = highlight_moo(code);
 
@@ -385,6 +392,7 @@ return $look:mk(this, @this.contents);"#;
 
     #[test]
     fn test_highlight_symbols() {
+        colored::control::set_override(true);
         let code = "x = 'foo;";
         let highlighted = highlight_moo(code);
 
@@ -394,6 +402,7 @@ return $look:mk(this, @this.contents);"#;
 
     #[test]
     fn test_highlight_type_constants() {
+        colored::control::set_override(true);
         let code = "typeof(x) == INT";
         let highlighted = highlight_moo(code);
 
