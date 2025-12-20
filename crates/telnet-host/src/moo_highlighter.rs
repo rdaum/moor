@@ -11,18 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
-// software: you can redistribute it and/or modify it under the terms of the GNU
-// General Public License as published by the Free Software Foundation, version
-// 3.
-//
-// This program is distributed in the hope that it will be useful, but WITHOUT
-// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along with
-// this program. If not, see <https://www.gnu.org/licenses/>.
-
 //! Syntax highlighting for MOO code using regex-based tokenization and ANSI colors.
 
 use colored::{Color, Colorize};
@@ -97,9 +85,6 @@ static PATTERNS: Lazy<MooPatterns> = Lazy::new(|| {
 
 /// Highlight MOO code with ANSI terminal colors.
 pub fn highlight_moo(code: &str) -> String {
-    // Force colors on since we're generating output for telnet, not stdout
-    colored::control::set_override(true);
-
     let mut output = String::new();
     let mut in_block_comment = false;
 

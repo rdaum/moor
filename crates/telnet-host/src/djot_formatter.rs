@@ -25,9 +25,6 @@ use tabled::{
 
 /// Render djot markup to ANSI-colored terminal output.
 pub fn djot_to_ansi(input: &str) -> String {
-    // Force colors on since we're generating output for telnet, not stdout
-    colored::control::set_override(true);
-
     let parser = Parser::new(input);
     let mut renderer = AnsiRenderer::new();
     renderer.render(parser);
@@ -46,8 +43,6 @@ struct TableState {
     current_row: Vec<String>,
     current_cell: String,
     column_alignments: Vec<Alignment>,
-    in_header: bool,
-    header_row_count: usize,
 }
 
 impl TableState {
@@ -57,8 +52,6 @@ impl TableState {
             current_row: Vec::new(),
             current_cell: String::new(),
             column_alignments: Vec::new(),
-            in_header: false,
-            header_row_count: 0,
         }
     }
 }
@@ -84,14 +77,10 @@ struct AnsiRenderer {
     at_line_start: bool,
     /// Track if we're in a code block
     in_code_block: bool,
-    /// Current code block language (if any)
-    code_language: Option<String>,
     /// Buffered code block content for syntax highlighting
     code_block_content: Option<String>,
     /// Pending newlines to emit (coalesced for better output)
     pending_newlines: usize,
-    /// Current heading level (0 = not in heading)
-    heading_level: u16,
     /// Table state for collecting table data
     table_state: Option<TableState>,
     /// Definition list state for collecting deflist data
@@ -118,10 +107,8 @@ impl AnsiRenderer {
             indent_level: 0,
             at_line_start: true,
             in_code_block: false,
-            code_language: None,
             code_block_content: None,
             pending_newlines: 0,
-            heading_level: 0,
             table_state: None,
             deflist_state: None,
         }
@@ -199,7 +186,6 @@ impl AnsiRenderer {
             Container::Heading { level, .. } => {
                 self.flush_pending_newlines();
                 self.emit_indent();
-                self.heading_level = level;
                 self.style_stack.push(StyleModifier::Bold);
                 match level {
                     1 => self.style_stack.push(StyleModifier::FgColor(Color::Cyan)),
@@ -236,7 +222,6 @@ impl AnsiRenderer {
                     }
                     self.style_stack.push(StyleModifier::FgColor(Color::White));
                 }
-                self.code_language = lang_str;
             }
             Container::List { kind, tight: _ } => {
                 self.flush_pending_newlines();
@@ -303,9 +288,8 @@ impl AnsiRenderer {
                 self.flush_pending_newlines();
                 self.table_state = Some(TableState::new());
             }
-            Container::TableRow { head } => {
+            Container::TableRow { head: _ } => {
                 if let Some(state) = &mut self.table_state {
-                    state.in_header = head;
                     state.current_row = Vec::new();
                 }
             }
@@ -389,7 +373,6 @@ impl AnsiRenderer {
                     self.style_stack.pop();
                 }
                 self.style_stack.pop(); // Bold
-                self.heading_level = 0;
                 self.pending_newlines = 2;
             }
             Container::Blockquote => {
@@ -414,7 +397,6 @@ impl AnsiRenderer {
                     self.style_stack.pop();
                 }
                 self.in_code_block = false;
-                self.code_language = None;
                 self.pending_newlines = 2;
             }
             Container::List { .. } => {
@@ -450,13 +432,10 @@ impl AnsiRenderer {
                 }
                 self.pending_newlines = 2;
             }
-            Container::TableRow { head } => {
+            Container::TableRow { head: _ } => {
                 if let Some(state) = &mut self.table_state {
                     let row = std::mem::take(&mut state.current_row);
                     state.rows.push(row);
-                    if head {
-                        state.header_row_count = state.rows.len();
-                    }
                 }
             }
             Container::TableCell { .. } => {

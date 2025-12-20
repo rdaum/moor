@@ -16,6 +16,7 @@
 use crate::listen::Listeners;
 use clap::Parser;
 use clap_derive::Parser;
+use colored::control;
 use figment::{
     Figment,
     providers::{Format, Serialized, Yaml},
@@ -107,6 +108,7 @@ async fn main() -> Result<(), eyre::Error> {
         eprintln!("Unable to configure logging: {e}");
         std::process::exit(1);
     });
+    control::set_override(true);
 
     let mut hup_signal = match signal(SignalKind::hangup()) {
         Ok(signal) => signal,
