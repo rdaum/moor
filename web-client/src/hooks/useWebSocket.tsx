@@ -144,29 +144,24 @@ export const useWebSocket = (
             const clientId = localStorage.getItem("client_id");
             const sessionActive = localStorage.getItem("client_session_active") === "true";
 
-            // Add tokens as query params if available
-            let wsUrl = `${isSecure ? "wss://" : "ws://"}${baseUrl}/ws/attach/${mode}/${player.authToken}`;
-            const queryParams: string[] = [];
+            let wsUrl = `${isSecure ? "wss://" : "ws://"}${baseUrl}/ws/attach/${mode}`;
+            const wsProtocols = ["moor", `paseto.${player.authToken}`];
 
             if (player.isInitialAttach) {
-                queryParams.push("is_initial_attach=true");
+                wsProtocols.push("initial_attach.true");
                 console.log("[WebSocket] Initial attach - will trigger user_connected");
             }
 
             if (sessionActive && clientToken && clientId) {
-                queryParams.push(`client_token=${encodeURIComponent(clientToken)}`);
-                queryParams.push(`client_id=${encodeURIComponent(clientId)}`);
+                wsProtocols.push(`client_id.${clientId}`);
+                wsProtocols.push(`client_token.${clientToken}`);
                 console.log("[WebSocket] Reconnecting with existing client_id:", clientId);
             } else {
                 console.log("[WebSocket] New connection (no stored tokens)");
             }
 
-            if (queryParams.length > 0) {
-                wsUrl += `?${queryParams.join("&")}`;
-            }
-
             console.log("[WebSocket] Creating new WebSocket to:", wsUrl);
-            const ws = new WebSocket(wsUrl);
+            const ws = new WebSocket(wsUrl, wsProtocols);
             socketRef.current = ws;
             console.log("[WebSocket] Socket created, readyState:", ws.readyState);
 

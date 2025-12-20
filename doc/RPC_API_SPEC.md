@@ -1781,7 +1781,7 @@ sequenceDiagram
     WH ->> D: ConnectionEstablish(peer_addr, ports)
     D ->> WH: NewConnection(client_token, connection_obj)
     Note over WH, D: 2. Validate Auth & Execute
-    WH ->> WH: Validate auth_token from header
+    WH ->> WH: Validate auth_token from header or subprotocol
     WH ->> D: RequestSysProp(client_token, object, property)
     D ->> DB: Retrieve system property
     D ->> WH: SysPropValue(value)
@@ -1800,7 +1800,7 @@ sequenceDiagram
     participant D as Daemon
     participant DB as Database/VM
     Note over WC, WH: Client upgrades to WebSocket
-    WC ->> WH: GET /ws/attach/{auth_token}<br/>Upgrade: websocket
+    WC ->> WH: GET /ws/attach/{connect|create}<br/>Upgrade: websocket<br/>Sec-WebSocket-Protocol: moor, paseto.&lt;token&gt;, client_id.&lt;uuid&gt;, client_token.&lt;token&gt;, initial_attach.true
     Note over WH, D: 1. Validate & Attach
     WH ->> D: Attach(auth_token, connect_type, peer_addr)
     D ->> WH: AttachResult(success, client_token, player)
@@ -1811,7 +1811,7 @@ sequenceDiagram
     D ->> WH: TaskSubmitted(task_id)
     D ->> DB: Execute task
     D -->> WH: (PUB) NarrativeEvent(output)
-    WH ->> WC: WebSocket: narrative JSON
+    WH ->> WC: WebSocket: narrative FlatBuffer
     D -->> WH: (PUB) TaskSuccessEvent
     Note over WH, DB: 3. Server-initiated events
     D -->> WH: (PUB) RequestInputEvent(request_id)

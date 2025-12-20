@@ -16,8 +16,8 @@
 use crate::host::{auth, ws_connection::WebSocketConnection};
 use axum::{
     body::{Body, Bytes},
-    extract::{ConnectInfo, Path, Query, State, WebSocketUpgrade},
-    http::{HeaderMap, StatusCode},
+    extract::{ConnectInfo, Path, State, WebSocketUpgrade},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use eyre::eyre;
@@ -32,7 +32,6 @@ use rpc_common::{
     mk_get_server_features_msg, mk_reattach_msg, mk_register_host_msg, mk_request_sys_prop_msg,
     mk_resolve_msg, read_reply_result,
 };
-use serde::Deserialize;
 use std::{
     net::{IpAddr, SocketAddr},
     sync::{
@@ -119,6 +118,68 @@ fn get_client_addr(headers: &HeaderMap, connect_addr: SocketAddr) -> SocketAddr 
     connect_addr
 }
 
+fn extract_ws_attach_info(headers: &HeaderMap) -> Result<WsAttachInfo, StatusCode> {
+    let mut auth_token = headers
+        .get("X-Moor-Auth-Token")
+        .and_then(|value| value.to_str().ok())
+        .map(|token| token.to_string());
+    let mut client_id = headers
+        .get("X-Moor-Client-Id")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| Uuid::parse_str(value).ok());
+    let mut client_token = headers
+        .get("X-Moor-Client-Token")
+        .and_then(|value| value.to_str().ok())
+        .map(|value| ClientToken(value.to_string()));
+    let mut is_initial_attach = false;
+
+    if let Some(protocols_header) = headers.get(header::SEC_WEBSOCKET_PROTOCOL) {
+        let protocols_str = protocols_header
+            .to_str()
+            .map_err(|_| StatusCode::BAD_REQUEST)?;
+        for protocol in protocols_str.split(',').map(|p| p.trim()) {
+            if let Some(token) = protocol.strip_prefix("paseto.") {
+                if !token.is_empty() {
+                    auth_token = Some(token.to_string());
+                }
+                continue;
+            }
+
+            if let Some(id_str) = protocol.strip_prefix("client_id.") {
+                if let Ok(parsed_id) = Uuid::parse_str(id_str) {
+                    client_id = Some(parsed_id);
+                }
+                continue;
+            }
+
+            if let Some(token) = protocol.strip_prefix("client_token.") {
+                if !token.is_empty() {
+                    client_token = Some(ClientToken(token.to_string()));
+                }
+                continue;
+            }
+
+            if let Some(flag) = protocol.strip_prefix("initial_attach.") {
+                if flag.eq_ignore_ascii_case("true") {
+                    is_initial_attach = true;
+                }
+            }
+        }
+    }
+
+    let auth_token = auth_token.ok_or(StatusCode::UNAUTHORIZED)?;
+    let client_hint = match (client_id, client_token) {
+        (Some(id), Some(token)) => Some((id, token)),
+        _ => None,
+    };
+
+    Ok(WsAttachInfo {
+        auth_token,
+        client_hint,
+        is_initial_attach,
+    })
+}
+
 fn failure_message(failure: moor_rpc::FailureRef<'_>) -> String {
     failure
         .error()
@@ -186,15 +247,10 @@ pub enum LoginType {
     Create,
 }
 
-#[derive(Debug, Default, Deserialize)]
-pub struct ReattachQuery {
-    #[serde(default)]
-    client_token: Option<String>,
-    #[serde(default)]
-    client_id: Option<String>,
-    #[serde(default)]
-    /// Indicates if this is a fresh login (initial attach) vs a reconnection
-    /// Initial attaches should create new connections to trigger :user_connected
+#[derive(Debug, Default)]
+struct WsAttachInfo {
+    auth_token: String,
+    client_hint: Option<(Uuid, ClientToken)>,
     is_initial_attach: bool,
 }
 
@@ -941,7 +997,7 @@ async fn attach(
     auth_token: String,
     client_hint: Option<(Uuid, ClientToken)>,
     is_initial_attach: bool,
-) -> impl IntoResponse + use<> {
+) -> Response {
     debug!("Connection from {}", addr);
 
     let auth_token = AuthToken(auth_token);
@@ -1018,10 +1074,8 @@ pub async fn ws_connect_attach_handler(
     headers: HeaderMap,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebHost>,
-    Path(token): Path<String>,
-    Query(query): Query<ReattachQuery>,
     ws: WebSocketUpgrade,
-) -> impl IntoResponse + use<> {
+) -> Response {
     debug!(
         "ws_connect_attach_handler called, ConnectInfo addr: {}",
         addr
@@ -1029,21 +1083,20 @@ pub async fn ws_connect_attach_handler(
     let client_addr = get_client_addr(&headers, addr);
     info!("WebSocket connection from {}", client_addr);
 
-    let client_hint = match (&query.client_id, &query.client_token) {
-        (Some(id), Some(token_str)) => Uuid::parse_str(id)
-            .ok()
-            .map(|uuid| (uuid, ClientToken(token_str.clone()))),
-        _ => None,
+    let attach_info = match extract_ws_attach_info(&headers) {
+        Ok(info) => info,
+        Err(status) => return status.into_response(),
     };
 
+    let ws = ws.protocols(["moor"]);
     attach(
         ws,
         client_addr,
         moor_rpc::ConnectType::Connected,
         &ws_host,
-        token,
-        client_hint,
-        query.is_initial_attach,
+        attach_info.auth_token,
+        attach_info.client_hint,
+        attach_info.is_initial_attach,
     )
     .await
 }
@@ -1053,10 +1106,8 @@ pub async fn ws_create_attach_handler(
     headers: HeaderMap,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebHost>,
-    Path(token): Path<String>,
-    Query(query): Query<ReattachQuery>,
     ws: WebSocketUpgrade,
-) -> impl IntoResponse + use<> {
+) -> Response {
     debug!(
         "ws_create_attach_handler called, ConnectInfo addr: {}",
         addr
@@ -1064,21 +1115,20 @@ pub async fn ws_create_attach_handler(
     let client_addr = get_client_addr(&headers, addr);
     info!("WebSocket connection from {}", client_addr);
 
-    let client_hint = match (&query.client_id, &query.client_token) {
-        (Some(id), Some(token_str)) => Uuid::parse_str(id)
-            .ok()
-            .map(|uuid| (uuid, ClientToken(token_str.clone()))),
-        _ => None,
+    let attach_info = match extract_ws_attach_info(&headers) {
+        Ok(info) => info,
+        Err(status) => return status.into_response(),
     };
 
+    let ws = ws.protocols(["moor"]);
     attach(
         ws,
         client_addr,
         moor_rpc::ConnectType::Created,
         &ws_host,
-        token,
-        client_hint,
-        query.is_initial_attach,
+        attach_info.auth_token,
+        attach_info.client_hint,
+        attach_info.is_initial_attach,
     )
     .await
 }
