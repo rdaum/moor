@@ -201,6 +201,9 @@ pub fn extract_index_names(object_defs: &[ObjectDefinition]) -> HashMap<Obj, Str
 }
 
 /// Extract constant names and file names from objects' import_export_id properties.
+/// Skips objects where:
+/// - The import_export_id is not unique across all objects
+/// - The import_export_id equals the parent's import_export_id (inherited without override)
 fn extract_object_constants(
     object_defs: &[ObjectDefinition],
 ) -> (HashMap<Obj, String>, HashMap<Obj, String>) {
@@ -208,8 +211,9 @@ fn extract_object_constants(
     let mut file_names = HashMap::new();
     let import_export_id_sym = import_export_id();
 
+    // First pass: collect all import_export_id values
+    let mut id_values: HashMap<Obj, String> = HashMap::new();
     for od in object_defs {
-        // Look for import_export_id in both definitions and overrides
         let import_export_id_value = od
             .property_definitions
             .iter()
@@ -223,7 +227,6 @@ fn extract_object_constants(
             });
 
         if let Some(id_value) = import_export_id_value {
-            // Extract the string value (Symbol or String)
             let id_str = if let Some(s) = id_value.as_string() {
                 s.to_string()
             } else if let Ok(sym) = id_value.as_symbol() {
@@ -231,13 +234,60 @@ fn extract_object_constants(
             } else {
                 continue;
             };
-            {
-                let constant_name = id_str.to_ascii_uppercase();
-                let file_name = id_str.to_lowercase();
-                index_names.insert(od.oid, constant_name);
-                file_names.insert(od.oid, file_name);
-            }
+            id_values.insert(od.oid, id_str);
         }
+    }
+
+    // Count occurrences of each value to detect duplicates
+    let mut value_counts: HashMap<&str, Vec<Obj>> = HashMap::new();
+    for (oid, id_str) in &id_values {
+        value_counts.entry(id_str.as_str()).or_default().push(*oid);
+    }
+
+    // Log duplicates
+    for (id_str, objects) in &value_counts {
+        if objects.len() > 1 {
+            tracing::warn!(
+                "Duplicate import_export_id '{}' on objects {:?}, skipping constant generation",
+                id_str,
+                objects
+            );
+        }
+    }
+
+    // Second pass: only include unique, non-inherited values
+    for od in object_defs {
+        let Some(id_str) = id_values.get(&od.oid) else {
+            continue;
+        };
+
+        // Skip if not unique
+        if value_counts
+            .get(id_str.as_str())
+            .map(|v| v.len())
+            .unwrap_or(0)
+            > 1
+        {
+            continue;
+        }
+
+        // Skip if same as parent's import_export_id (inherited without meaningful override)
+        if od.parent != NOTHING
+            && id_values.get(&od.parent).is_some_and(|parent_id| parent_id == id_str)
+        {
+            tracing::debug!(
+                "Skipping {} - import_export_id '{}' inherited from parent {}",
+                od.oid,
+                id_str,
+                od.parent
+            );
+            continue;
+        }
+
+        let constant_name = id_str.to_ascii_uppercase();
+        let file_name = id_str.to_lowercase();
+        index_names.insert(od.oid, constant_name);
+        file_names.insert(od.oid, file_name);
     }
 
     (index_names, file_names)
