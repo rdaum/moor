@@ -1192,7 +1192,7 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
             // Syntax:
             // < delegate, .slot = value, ..., { ... } >
             result.push('<');
-            result.push_str(fl.delegate().to_literal().as_str());
+            result.push_str(&f(fl.delegate()));
             if !fl.slots().is_empty() {
                 for (k, v) in fl.slots().iter() {
                     result.push_str(", .");
