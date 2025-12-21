@@ -28,7 +28,7 @@ const deserializeBool = (raw: string): boolean | null => {
 export const SayModeToggle: React.FC = () => {
     const [sayModeEnabled, setSayModeEnabled] = usePersistentState<boolean>(
         SAY_MODE_STORAGE_KEY,
-        true,
+        false,
         {
             serialize: serializeBool,
             deserialize: deserializeBool,
@@ -70,9 +70,9 @@ export const SayModeToggle: React.FC = () => {
  */
 export const getSayModeEnabled = (): boolean => {
     if (typeof window === "undefined") {
-        return true;
+        return false;
     }
     const saved = window.localStorage.getItem(SAY_MODE_STORAGE_KEY);
     const parsed = saved ? deserializeBool(saved) : null;
-    return parsed ?? true;
+    return parsed ?? false;
 };
