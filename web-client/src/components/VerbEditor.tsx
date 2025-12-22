@@ -1155,7 +1155,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         minimap: { enabled: minimapEnabled },
                         fontSize,
                         fontFamily:
-                            "\"JetBrains Mono\", \"Fira Code\", \"Source Code Pro\", Consolas, \"Liberation Mono\", Monaco, Menlo, \"Courier New\", monospace",
+                            "\"Comic Mono\", \"JetBrains Mono\", \"Fira Code\", \"Source Code Pro\", Consolas, \"Liberation Mono\", Monaco, Menlo, \"Courier New\", monospace",
                         automaticLayout: true,
                         colorDecorators: true,
                         dragAndDrop: false,
