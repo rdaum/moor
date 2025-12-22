@@ -191,3 +191,36 @@ binary_from_str("🦀")           ⇒    b"\xF0\x9F\xA6\x80"
 binary_from_str("")             ⇒    b""
 ```
 
+### `urlencode`
+
+`str urlencode(str text)`
+
+Percent-encodes a string for use in URLs per RFC 3986.
+
+Unreserved characters (A-Z, a-z, 0-9, `-`, `_`, `.`, `~`) are left unchanged. All other characters are encoded as `%XX` where XX is the uppercase hexadecimal representation of each UTF-8 byte.
+
+```
+urlencode("hello world")        ⇒    "hello%20world"
+urlencode("foo=bar&baz=qux")    ⇒    "foo%3Dbar%26baz%3Dqux"
+urlencode("café")               ⇒    "caf%C3%A9"
+urlencode("日本語")              ⇒    "%E6%97%A5%E6%9C%AC%E8%AA%9E"
+```
+
+### `urldecode`
+
+`str urldecode(str encoded_text [, bool plus_as_space])`
+
+Decodes a percent-encoded string.
+
+Each `%XX` sequence is converted back to the corresponding byte. If `plus_as_space` is true, `+` characters are also decoded as spaces (useful for query strings using application/x-www-form-urlencoded format).
+
+Raises `E_INVARG` if the input contains incomplete or invalid percent sequences, or if the decoded bytes are not valid UTF-8.
+
+```
+urldecode("hello%20world")      ⇒    "hello world"
+urldecode("caf%C3%A9")          ⇒    "café"
+urldecode("a+b", 0)             ⇒    "a+b"
+urldecode("a+b", 1)             ⇒    "a b"
+urldecode("%E6%97%A5")          ⇒    "日"
+```
+

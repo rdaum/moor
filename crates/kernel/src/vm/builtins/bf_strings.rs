@@ -407,6 +407,89 @@ fn bf_strtr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// Usage: `str urlencode(str text)`
+/// Percent-encodes a string for use in URLs per RFC 3986.
+/// Unreserved characters (A-Z, a-z, 0-9, -, _, ., ~) are not encoded.
+fn bf_urlencode(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Some(text) = bf_args.args[0].as_string() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let mut result = String::new();
+    for byte in text.as_bytes() {
+        if byte.is_ascii_alphanumeric()
+            || *byte == b'-'
+            || *byte == b'_'
+            || *byte == b'.'
+            || *byte == b'~'
+        {
+            result.push(*byte as char);
+        } else {
+            result.push_str(&format!("%{byte:02X}"));
+        }
+    }
+
+    Ok(Ret(v_string(result)))
+}
+
+/// Usage: `str urldecode(str encoded_text [, bool plus_as_space])`
+/// Decodes a percent-encoded string.
+/// If plus_as_space is true, '+' characters are decoded as spaces (for query strings).
+fn bf_urldecode(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.is_empty() || bf_args.args.len() > 2 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Some(text) = bf_args.args[0].as_string() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let plus_as_space = bf_args.args.len() >= 2 && bf_args.args[1].is_true();
+
+    let mut bytes = Vec::new();
+    let mut chars = text.chars();
+
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let Some(hex1) = chars.next() else {
+                return Err(BfErr::ErrValue(
+                    E_INVARG.msg("incomplete percent sequence"),
+                ));
+            };
+            let Some(hex2) = chars.next() else {
+                return Err(BfErr::ErrValue(
+                    E_INVARG.msg("incomplete percent sequence"),
+                ));
+            };
+            let hex_str: String = [hex1, hex2].iter().collect();
+            let Ok(byte) = u8::from_str_radix(&hex_str, 16) else {
+                return Err(BfErr::ErrValue(
+                    E_INVARG.msg("invalid hex in percent sequence"),
+                ));
+            };
+            bytes.push(byte);
+        } else if plus_as_space && c == '+' {
+            bytes.push(b' ');
+        } else {
+            let mut buf = [0u8; 4];
+            let encoded = c.encode_utf8(&mut buf);
+            bytes.extend_from_slice(encoded.as_bytes());
+        }
+    }
+
+    let Ok(result) = String::from_utf8(bytes) else {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("invalid UTF-8 after decoding"),
+        ));
+    };
+
+    Ok(Ret(v_string(result)))
+}
+
 pub(crate) fn register_bf_strings(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("strsub")] = bf_strsub;
     builtins[offset_for_builtin("index")] = bf_index;
@@ -420,6 +503,8 @@ pub(crate) fn register_bf_strings(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("binary_from_str")] = bf_binary_from_str;
     builtins[offset_for_builtin("explode")] = bf_explode;
     builtins[offset_for_builtin("strtr")] = bf_strtr;
+    builtins[offset_for_builtin("urlencode")] = bf_urlencode;
+    builtins[offset_for_builtin("urldecode")] = bf_urldecode;
 }
 
 #[cfg(test)]

@@ -795,6 +795,8 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin("to_radians", Q(1), Q(1), vec![AnyNum], true),
         mk_builtin("hypot", Q(2), Q(2), vec![AnyNum, AnyNum], true),
         mk_builtin("copysign", Q(2), Q(2), vec![AnyNum, AnyNum], true),
+        mk_builtin("urlencode", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
+        mk_builtin("urldecode", Q(1), Q(2), vec![Typed(TYPE_STR), Any], true),
     ]
 }
 

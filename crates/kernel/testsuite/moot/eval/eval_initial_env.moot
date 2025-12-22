@@ -1,0 +1,67 @@
+// Test bf_eval with initial_env map argument (2nd position)
+// Note: avoid type constants as variable names (obj, int, str, list, map, err, float, sym)
+
+// Basic: pass a variable binding and use it in eval
+@programmer
+; return eval("return x;", ["x" -> 42]);
+{1, 42}
+
+// Multiple variable bindings
+@programmer
+; return eval("return x + y;", ["x" -> 10, "y" -> 32]);
+{1, 42}
+
+// String variable
+@programmer
+; return eval("return greeting;", ["greeting" -> "hello world"]);
+{1, "hello world"}
+
+// List variable
+@programmer
+; return eval("return items[2];", ["items" -> {1, 2, 3}]);
+{1, 2}
+
+// Object variable (use "target" not "obj" which is a type constant)
+@programmer
+; return eval("return target;", ["target" -> #2]);
+{1, #2}
+
+// Map variable (use "data" not "map" which is a type constant)
+@programmer
+; return eval("return data[\"key\"];", ["data" -> ["key" -> "value"]]);
+{1, "value"}
+
+// Variable not referenced in code is silently ignored
+@programmer
+; return eval("return 42;", ["unused" -> 999]);
+{1, 42}
+
+// Partial use - only some vars from map are used
+@programmer
+; return eval("return a;", ["a" -> 1, "b" -> 2, "c" -> 3]);
+{1, 1}
+
+// Empty map is allowed
+@programmer
+; return eval("return 42;", []);
+{1, 42}
+
+// Variable can be overwritten in eval code
+@programmer
+; return eval("x = 100; return x;", ["x" -> 42]);
+{1, 100}
+
+// Nested expression using initial var
+@programmer
+; return eval("return {x, x + 1, x * 2};", ["x" -> 5]);
+{1, {5, 6, 10}}
+
+// Error: non-string key in map
+@programmer
+; return eval("return x;", [42 -> "bad"]);
+E_TYPE
+
+// Error: non-map 2nd argument
+@programmer
+; return eval("return x;", {1, 2, 3});
+E_TYPE
