@@ -55,7 +55,7 @@ export const VerbPaletteToggle: React.FC = () => {
                 aria-describedby="verb-palette-description"
                 title="Show quick verb buttons above the input area"
             >
-                {paletteEnabled ? "✅ On" : "❌ Off"}
+                {paletteEnabled ? "✓ On" : "Off"}
             </button>
             <span id="verb-palette-description" className="sr-only">
                 Shows a row of quick-tap verb buttons above the input area for common actions.

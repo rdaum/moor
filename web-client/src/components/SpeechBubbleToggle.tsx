@@ -65,7 +65,7 @@ export const SpeechBubbleToggle: React.FC = () => {
                 aria-label={`Speech bubbles ${enabled ? "enabled" : "disabled"}`}
                 title="Toggle whether say events render as speech bubbles"
             >
-                {enabled ? "✅ On" : "❌ Off"}
+                {enabled ? "✓ On" : "Off"}
             </button>
         </div>
     );

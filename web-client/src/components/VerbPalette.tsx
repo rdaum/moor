@@ -206,32 +206,43 @@ export const VerbPalette: React.FC<VerbPaletteProps> = ({ visible, onVerbSelect 
 
     if (!visible) return null;
 
+    const showLeftIndicator = scrollPosition === "scrolled-middle" || scrollPosition === "scrolled-end";
+    const showRightIndicator = scrollPosition === "scrolled-start" || scrollPosition === "scrolled-middle";
+
     return (
-        <div className={`verb-palette-container ${scrollPosition}`}>
-            <div
-                ref={paletteRef}
-                className="verb-palette"
-                role="toolbar"
-                aria-label="Quick command buttons. Select a verb to start a command. Swipe down on a verb to select it."
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseLeave}
-            >
-                {displayVerbs.map(({ verb, label, placeholder }) => (
-                    <button
-                        key={verb}
-                        className="verb-chip"
-                        onClick={(e) => handleClick(e, verb, placeholder)}
-                        onPointerDown={(e) => handlePointerDown(e, verb)}
-                        onPointerUp={(e) => handlePointerUp(e, verb, placeholder)}
-                        type="button"
-                        aria-label={`${verb} command`}
-                    >
-                        {label}
-                    </button>
-                ))}
+        <div className="verb-palette-wrapper">
+            {showLeftIndicator && (
+                <div className="verb-palette-indicator verb-palette-indicator-left" aria-hidden="true">‹</div>
+            )}
+            <div className={`verb-palette-container ${scrollPosition}`}>
+                <div
+                    ref={paletteRef}
+                    className="verb-palette"
+                    role="toolbar"
+                    aria-label="Quick command buttons. Select a verb to start a command. Swipe down on a verb to select it."
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseLeave}
+                >
+                    {displayVerbs.map(({ verb, label, placeholder }) => (
+                        <button
+                            key={verb}
+                            className="verb-chip"
+                            onClick={(e) => handleClick(e, verb, placeholder)}
+                            onPointerDown={(e) => handlePointerDown(e, verb)}
+                            onPointerUp={(e) => handlePointerUp(e, verb, placeholder)}
+                            type="button"
+                            aria-label={`${verb} command`}
+                        >
+                            {label}
+                        </button>
+                    ))}
+                </div>
             </div>
+            {showRightIndicator && (
+                <div className="verb-palette-indicator verb-palette-indicator-right" aria-hidden="true">›</div>
+            )}
         </div>
     );
 };

@@ -84,9 +84,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         <h3>About</h3>
                         <div className="settings-item">
                             <span>Version</span>
-                            <span className="font-mono text-sm text-secondary">
+                            <button
+                                className="version-copy-button"
+                                onClick={(e) => {
+                                    navigator.clipboard.writeText(__GIT_HASH__);
+                                    const btn = e.currentTarget;
+                                    btn.textContent = "Copied!";
+                                    setTimeout(() => {
+                                        btn.textContent = __GIT_HASH__;
+                                    }, 1500);
+                                }}
+                                title="Click to copy"
+                            >
                                 {__GIT_HASH__}
-                            </span>
+                            </button>
                         </div>
                     </div>
                 </div>

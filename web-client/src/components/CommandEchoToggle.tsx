@@ -61,7 +61,7 @@ export const CommandEchoToggle: React.FC = () => {
                 aria-describedby="echo-description"
                 title="Toggle whether typed commands are echoed to the output window"
             >
-                {echoEnabled ? "✅ On" : "❌ Off"}
+                {echoEnabled ? "✓ On" : "Off"}
             </button>
             <span id="echo-description" className="sr-only">
                 Controls whether your typed commands appear in the output window. Helpful for screen readers when

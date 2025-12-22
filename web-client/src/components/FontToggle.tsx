@@ -20,9 +20,9 @@ import { type FontStyle } from "./themeSupport";
 const getFontDisplay = (font: FontStyle) => {
     switch (font) {
         case "proportional":
-            return "Aa Proportional";
+            return "Proportional";
         case "monospace":
-            return "⌨ Monospace";
+            return "Monospace";
     }
 };
 
@@ -45,10 +45,10 @@ export const FontToggle: React.FC = () => {
         <div className="settings-item">
             <span>Font</span>
             <button
-                className="settings-value-button"
+                className="settings-value-button settings-cycle-button"
                 onClick={toggleFont}
                 aria-label={`Switch font style (current: ${fontStyle})`}
-                title="Toggle between proportional and monospace fonts"
+                title="Click to toggle between proportional and monospace fonts"
             >
                 {getFontDisplay(fontStyle)}
             </button>

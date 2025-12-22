@@ -55,7 +55,7 @@ export const SayModeToggle: React.FC = () => {
                 aria-describedby="say-mode-description"
                 title="When enabled, text input defaults to 'say' command"
             >
-                {sayModeEnabled ? "✅ On" : "❌ Off"}
+                {sayModeEnabled ? "✓ On" : "Off"}
             </button>
             <span id="say-mode-description" className="sr-only">
                 When enabled, typed text will be sent as speech by default. Backspace to switch to command mode, or
