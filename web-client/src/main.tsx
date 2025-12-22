@@ -1622,6 +1622,7 @@ function AppContent({
                                     onToggleSplitMode={toggleObjectBrowserDock}
                                     isInSplitMode={true}
                                     focusedObjectCurie={objectBrowserFocusedObjectCurie}
+                                    onOpenVerbInEditor={showVerbEditor}
                                 />
                             )}
                             {evalPanelDocked && canUseObjectBrowser && (
@@ -1763,6 +1764,7 @@ function AppContent({
                     onToggleSplitMode={toggleObjectBrowserDock}
                     isInSplitMode={false}
                     focusedObjectCurie={objectBrowserFocusedObjectCurie}
+                    onOpenVerbInEditor={showVerbEditor}
                 />
             )}
 

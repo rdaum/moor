@@ -849,8 +849,8 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                                 e.stopPropagation(); // Prevent drag handler from firing
                                 onToggleSplitMode();
                             }}
-                            aria-label={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
-                            title={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
+                            aria-label={isInSplitMode ? "Open in separate window" : "Dock to split view"}
+                            title={isInSplitMode ? "Open in separate window" : "Dock to split view"}
                             className="editor-btn-toggle-split"
                         >
                             {isInSplitMode ? "🪟" : "⬌"}

@@ -15,7 +15,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.0.0-beta5] - 2025-12-20
 
-
 ### Added
 
 `daemon`:

@@ -42,6 +42,7 @@ interface ObjectBrowserProps {
     onToggleSplitMode?: () => void;
     isInSplitMode?: boolean;
     focusedObjectCurie?: string; // Focus on specific object when presentation opens it
+    onOpenVerbInEditor?: (title: string, objectCurie: string, verbName: string, content: string) => void;
 }
 
 interface ObjectData {
@@ -171,6 +172,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     onToggleSplitMode,
     isInSplitMode = false,
     focusedObjectCurie,
+    onOpenVerbInEditor,
 }) => {
     const isMobile = useMediaQuery("(max-width: 768px)");
     const isTouchDevice = useTouchDevice();
@@ -683,6 +685,20 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             console.error("Failed to load verb code:", error);
             setVerbCode("// Failed to load verb code");
         }
+    };
+
+    const handleDetachVerbEditor = () => {
+        if (!selectedVerb || !onOpenVerbInEditor) return;
+
+        const objectCurie = stringToCurie(selectedVerb.location);
+        const title = `#${selectedVerb.location}:${selectedVerb.names.join(" ")}`;
+
+        // Open in the main verb editor system
+        onOpenVerbInEditor(title, objectCurie, selectedVerb.names[0], verbCode);
+
+        // Clear the embedded editor
+        setSelectedVerb(null);
+        setEditorVisible(false);
     };
 
     const handleNameSave = async () => {
@@ -1276,6 +1292,14 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         const filterLower = propertyFilter.toLowerCase();
         const filteredProps = properties.filter(prop => prop.name.toLowerCase().includes(filterLower));
 
+        // Track the order definers appear in the original array (API order = ancestor order)
+        const definerOrder = new Map<string, number>();
+        for (const prop of properties) {
+            if (!definerOrder.has(prop.definer)) {
+                definerOrder.set(prop.definer, definerOrder.size);
+            }
+        }
+
         const groups = new Map<string, PropertyData[]>();
         for (const prop of filteredProps) {
             const definer = prop.definer;
@@ -1285,10 +1309,13 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             groups.get(definer)!.push(prop);
         }
         let entries = Array.from(groups.entries()).sort((a, b) => {
-            // Sort by definer ID (current object first)
+            // Current object always first
             if (selectedObject && a[0] === selectedObject.obj) return -1;
             if (selectedObject && b[0] === selectedObject.obj) return 1;
-            return a[0].localeCompare(b[0]);
+            // Otherwise preserve API order (nearest ancestor first)
+            const orderA = definerOrder.get(a[0]) ?? Infinity;
+            const orderB = definerOrder.get(b[0]) ?? Infinity;
+            return orderA - orderB;
         });
         if (!showInheritedProperties && selectedObject) {
             const currentId = selectedObject.obj;
@@ -1302,6 +1329,14 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         const filterLower = verbFilter.toLowerCase();
         const filteredVerbs = verbs.filter(verb => verb.names.some(name => name.toLowerCase().includes(filterLower)));
 
+        // Track the order locations appear in the original array (API order = ancestor order)
+        const locationOrder = new Map<string, number>();
+        for (const verb of verbs) {
+            if (!locationOrder.has(verb.location)) {
+                locationOrder.set(verb.location, locationOrder.size);
+            }
+        }
+
         const groups = new Map<string, VerbData[]>();
         for (const verb of filteredVerbs) {
             const location = verb.location;
@@ -1312,10 +1347,13 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         }
 
         let entries = Array.from(groups.entries()).sort((a, b) => {
-            // Sort by location ID (current object first)
+            // Current object always first
             if (selectedObject && a[0] === selectedObject.obj) return -1;
             if (selectedObject && b[0] === selectedObject.obj) return 1;
-            return a[0].localeCompare(b[0]);
+            // Otherwise preserve API order (nearest ancestor first)
+            const orderA = locationOrder.get(a[0]) ?? Infinity;
+            const orderB = locationOrder.get(b[0]) ?? Infinity;
+            return orderA - orderB;
         });
         if (!showInheritedVerbs && selectedObject) {
             const currentId = selectedObject.obj;
@@ -1403,10 +1441,15 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
 
     // Filter and group objects by type
     const filteredObjects = objects
-        .filter(obj =>
-            obj.name.toLowerCase().includes(filter.toLowerCase())
-            || obj.obj.includes(filter)
-        );
+        .filter(obj => {
+            const filterLower = filter.toLowerCase();
+            // Strip leading $ for matching against dollarNames
+            const filterNormalized = filterLower.startsWith("$") ? filterLower.slice(1) : filterLower;
+            const dollarName = dollarNames.get(obj.obj);
+            return obj.name.toLowerCase().includes(filterLower)
+                || obj.obj.includes(filter)
+                || (dollarName && dollarName.toLowerCase().includes(filterNormalized));
+        });
 
     // Separate numeric OIDs from UUIDs
     const numericObjects = filteredObjects
@@ -1499,6 +1542,24 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const describeObject = (obj: ObjectData): string => {
         const id = normalizeObjectInput(obj.obj) || "#?";
         return obj.name ? `${id} ("${obj.name}")` : id;
+    };
+
+    // Format an object reference for the "from ..." header
+    // Shows: $name / #id ("object name") or just #id ("object name") if no $ name
+    const formatInheritedFrom = (objId: string): string => {
+        const dollarName = getDollarName(objId);
+        const objData = objects.find(o => o.obj === objId);
+        const displayRef = normalizeObjectRef(objId).display;
+
+        let result = "";
+        if (dollarName) {
+            result = `$${dollarName} / `;
+        }
+        result += displayRef;
+        if (objData?.name) {
+            result += ` ("${objData.name}")`;
+        }
+        return result;
     };
 
     const isSplitDraggable = splitMode && typeof onSplitDrag === "function";
@@ -1780,14 +1841,15 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                                 key={obj.obj}
                                                                 data-obj-id={obj.obj}
                                                                 className={`browser-item ${
-                                                                    selectedObject?.obj === obj.obj ? "selected" : ""
+                                                                    selectedObject?.obj === obj.obj
+                                                                        ? "selected"
+                                                                        : ""
                                                                 }`}
                                                                 onClick={() => handleObjectSelect(obj)}
                                                             >
                                                                 <div className="browser-item-name font-bold">
-                                                                    {dollarName ? `$${dollarName} / ` : ""}#{obj.obj}
-                                                                    {" "}
-                                                                    {obj.name && `("${obj.name}")`}{" "}
+                                                                    {dollarName ? `$${dollarName} / ` : ""}#{obj
+                                                                        .obj} {obj.name && `("${obj.name}")`}{" "}
                                                                     {formatObjectFlags(obj.flags) && (
                                                                         <span
                                                                             className="text-secondary"
@@ -1816,7 +1878,9 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         </div>
 
                         {/* Properties pane */}
-                        <div className={`browser-pane ${!useTabLayout || activeTab === "properties" ? "active" : ""}`}>
+                        <div
+                            className={`browser-pane ${!useTabLayout || activeTab === "properties" ? "active" : ""}`}
+                        >
                             <div className="browser-pane-header">
                                 <span
                                     className="browser-pane-title"
@@ -1880,7 +1944,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                         className="browser-inherited-label"
                                                         style={{ fontSize: `${secondaryFontSize}px` }}
                                                     >
-                                                        from {normalizeObjectRef(definer).display}
+                                                        from {formatInheritedFrom(definer)}
                                                     </div>
                                                 )}
                                                 {props.map((prop, idx) => (
@@ -1990,7 +2054,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                         className="browser-inherited-label"
                                                         style={{ fontSize: `${secondaryFontSize}px` }}
                                                     >
-                                                        from {normalizeObjectRef(location).display}
+                                                        from {formatInheritedFrom(location)}
                                                     </div>
                                                 )}
                                                 {verbList.map((verb, idx) => (
@@ -2157,6 +2221,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     initialContent={verbCode}
                                     authToken={authToken}
                                     splitMode={true}
+                                    isInSplitMode={true}
+                                    onToggleSplitMode={onOpenVerbInEditor ? handleDetachVerbEditor : undefined}
                                     owner={selectedVerb.owner}
                                     definer={selectedVerb.location}
                                     permissions={{
