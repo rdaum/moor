@@ -131,6 +131,11 @@ export function isSafeUrl(url: string): boolean {
         return false;
     }
 
+    // Allow moo:// protocol for internal links
+    if (url.toLowerCase().startsWith("moo://")) {
+        return true;
+    }
+
     if (/^[/#?]|^\.\.?\//.test(url)) {
         return true;
     }
@@ -141,6 +146,27 @@ export function isSafeUrl(url: string): boolean {
     } catch {
         return false;
     }
+}
+
+/**
+ * Determines the CSS class for a link based on its URL scheme.
+ * Returns the appropriate moo-link-* class for styling.
+ */
+export function getLinkClass(url: string): string {
+    if (url.startsWith("moo://cmd/")) {
+        return "moo-link-cmd";
+    }
+    if (url.startsWith("moo://inspect/")) {
+        return "moo-link-inspect";
+    }
+    if (url.startsWith("moo://help/")) {
+        return "moo-link-help";
+    }
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+        return "moo-link-external";
+    }
+    // Fallback for unknown moo:// schemes or other URLs
+    return "moo-link";
 }
 
 /**
@@ -255,10 +281,10 @@ function processCodeBlocks(container: HTMLElement, ansi_up: AnsiUp): void {
 }
 
 /**
- * Converts anchor tags to moo-link spans and adds table classes in HTML content
+ * Converts anchor tags to styled spans and adds table classes in HTML content
  */
 function convertLinksAndTables(container: HTMLElement): void {
-    // Convert all <a> tags to moo-link spans
+    // Convert all <a> tags to clickable spans with appropriate styling
     const links = container.querySelectorAll("a");
     links.forEach(link => {
         const href = link.getAttribute("href") || "";
@@ -271,13 +297,10 @@ function convertLinksAndTables(container: HTMLElement): void {
             return;
         }
 
-        // Create span to replace the link
+        // Create span to replace the link with URL-based styling
         const span = document.createElement("span");
-        span.className = "moo-link";
+        span.className = getLinkClass(href);
         span.setAttribute("data-url", href);
-        span.style.color = "var(--color-link)";
-        span.style.textDecoration = "underline";
-        span.style.cursor = "pointer";
         span.title = href;
         span.textContent = linkText;
 
@@ -313,11 +336,11 @@ export function processHtmlContent(html: string): string {
  * This is used for text/html content type
  */
 export function renderHtmlContent(html: string): string {
-    // First sanitize
+    // First sanitize (moo:// is allowed for internal MOO links)
     const sanitizedHtml = DOMPurify.sanitize(html, {
         ALLOWED_TAGS: CONTENT_ALLOWED_TAGS,
         ALLOWED_ATTR: CONTENT_ALLOWED_ATTR,
-        ALLOWED_URI_REGEXP: /^(https?|mailto|tel|callto|cid|xmpp):/i,
+        ALLOWED_URI_REGEXP: /^(https?|mailto|tel|callto|cid|xmpp|moo):/i,
     });
 
     // Convert links and tables
@@ -389,7 +412,10 @@ export function renderDjot(content: string, options: DjotRenderOptions = {}): st
                 return linkText;
             }
 
-            return `<span class="${linkHandler.className}" ${linkHandler.dataAttribute}="${href}" style="color: var(--color-link); text-decoration: underline; cursor: pointer;" title="${href}">${linkText}</span>`;
+            // Determine CSS class based on URL scheme
+            const linkClass = getLinkClass(href);
+
+            return `<span class="${linkClass}" ${linkHandler.dataAttribute}="${href}" title="${href}">${linkText}</span>`;
         };
     }
 

@@ -47,9 +47,8 @@ import { useTouchDevice } from "./hooks/useTouchDevice";
 import { useVerbEditor } from "./hooks/useVerbEditor";
 import { MoorVar } from "./lib/MoorVar";
 import { OAuth2UserInfo } from "./lib/oauth2";
-import { MoorRemoteObject } from "./lib/rpc";
 import { fetchServerFeatures, invokeVerbFlatBuffer } from "./lib/rpc-fb";
-import { oidRef, stringToCurie } from "./lib/var";
+import { stringToCurie } from "./lib/var";
 import { PresentationData } from "./types/presentation";
 import "./styles/main.css";
 
@@ -73,13 +72,11 @@ const deserializeNarrativeFontSize = (raw: string): number | null => {
 function AppContent({
     narrativeRef,
     narrativeCallbackRef,
-    onLinkClick,
     onVerbEditorReady,
     onPropertyEditorReady,
 }: {
     narrativeRef: React.RefObject<NarrativeRef>;
     narrativeCallbackRef: (node: NarrativeRef | null) => void;
-    onLinkClick?: (url: string) => void;
     onVerbEditorReady?: (
         showVerbEditor: (
             title: string,
@@ -904,6 +901,30 @@ function AppContent({
     const { wsState, connect: connectWS, disconnect: disconnectWS, sendMessage, inputMetadata, clearInputMetadata } =
         useWebSocketContext();
 
+    // Handle MOO link clicks based on URL scheme
+    const handleLinkClick = useCallback((url: string) => {
+        if (url.startsWith("moo://cmd/")) {
+            // Command link: send as if typed
+            const command = decodeURIComponent(url.slice(10));
+            sendMessage(command);
+        } else if (url.startsWith("moo://inspect/")) {
+            // Inspect link: show object info in popover (TODO)
+            const oref = url.slice(14);
+            console.log("Inspect link clicked:", oref);
+            showMessage("Inspect not yet implemented", 2);
+        } else if (url.startsWith("moo://help/")) {
+            // Help link: show help in panel (TODO)
+            const topic = decodeURIComponent(url.slice(11));
+            console.log("Help link clicked:", topic);
+            showMessage("Help links not yet implemented", 2);
+        } else if (url.startsWith("http://") || url.startsWith("https://")) {
+            // External link: open in new tab
+            window.open(url, "_blank", "noopener,noreferrer");
+        } else {
+            console.warn("Unknown link scheme:", url);
+        }
+    }, [sendMessage, showMessage]);
+
     // Track previous player OID to detect logout
     const previousPlayerOidRef = useRef<string | null>(null);
 
@@ -1449,7 +1470,7 @@ function AppContent({
                             <TopDock
                                 presentations={getTopDockPresentations()}
                                 onClosePresentation={handleClosePresentation}
-                                onLinkClick={onLinkClick}
+                                onLinkClick={handleLinkClick}
                             />
                         </aside>
 
@@ -1459,7 +1480,7 @@ function AppContent({
                                 <LeftDock
                                     presentations={getLeftDockPresentations()}
                                     onClosePresentation={handleClosePresentation}
-                                    onLinkClick={onLinkClick}
+                                    onLinkClick={handleLinkClick}
                                 />
                             </aside>
 
@@ -1472,7 +1493,7 @@ function AppContent({
                                     onSendMessage={sendMessage}
                                     onLoadMoreHistory={eventLogEnabled === false ? undefined : handleLoadMoreHistory}
                                     isLoadingHistory={eventLogEnabled === false ? false : isLoadingHistory}
-                                    onLinkClick={onLinkClick}
+                                    onLinkClick={handleLinkClick}
                                     playerOid={playerOid}
                                     onMessageAppended={handleMessageAppended}
                                     fontSize={narrativeFontSize}
@@ -1486,7 +1507,7 @@ function AppContent({
                                 <RightDock
                                     presentations={getRightDockPresentations()}
                                     onClosePresentation={handleClosePresentation}
-                                    onLinkClick={onLinkClick}
+                                    onLinkClick={handleLinkClick}
                                 />
                             </aside>
                         </div>
@@ -1496,7 +1517,7 @@ function AppContent({
                             <BottomDock
                                 presentations={getBottomDockPresentations()}
                                 onClosePresentation={handleClosePresentation}
-                                onLinkClick={onLinkClick}
+                                onLinkClick={handleLinkClick}
                             />
                         </aside>
                     </div>
@@ -1813,7 +1834,6 @@ function AppWrapper() {
     const { authState, setPlayerConnected, setPlayerFlags } = useAuthContext();
     const { addPresentation, removePresentation } = usePresentationContext();
     const { showMessage } = useSystemMessage();
-    const authToken = authState.player?.authToken ?? null;
     const narrativeRef = useRef<NarrativeRef | null>(null);
 
     // Store verb editor function from AppContent
@@ -1841,25 +1861,6 @@ function AppWrapper() {
         },
     );
 
-    // Handle MOO link clicks
-    const handleLinkClick = useCallback(async (url: string) => {
-        if (!authToken) {
-            console.warn("Cannot handle link click: No auth token available");
-            return;
-        }
-
-        try {
-            const sysobj = new MoorRemoteObject(oidRef(0), authToken);
-            // TODO: Need to convert URL to FlatBuffer Var and pass as argument
-            // For now, calling without arguments - the verb may not work correctly
-            await sysobj.callVerb("handle_client_url");
-            console.warn(`Link click handling called without URL argument: ${url}`);
-            // The result comes through WebSocket narrative, so we don't need to handle the return value
-        } catch (error) {
-            console.error("Failed to handle link click:", error);
-            showMessage(`Failed to handle link: ${error instanceof Error ? error.message : String(error)}`, 5);
-        }
-    }, [authToken, showMessage]);
     const [pendingMessages, setPendingMessages] = useState<
         Array<{
             content: string | string[];
@@ -2021,7 +2022,6 @@ function AppWrapper() {
             <AppContent
                 narrativeRef={narrativeRef}
                 narrativeCallbackRef={narrativeCallbackRef}
-                onLinkClick={handleLinkClick}
                 onVerbEditorReady={(fn) => {
                     showVerbEditorRef.current = fn;
                 }}

@@ -33,15 +33,14 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
         return typeof content === "string" ? content : String(content);
     }, [content]);
 
-    // Unified click handler for moo-link spans
+    // Unified click handler for moo-link spans (all moo-link-* variants)
     const handleLinkClick = useCallback((e: React.MouseEvent) => {
         const target = e.target as HTMLElement;
-        if (target.classList.contains("moo-link")) {
+        // Check for data-url attribute which all our link spans have
+        const url = target.getAttribute("data-url");
+        if (url && onLinkClick) {
             e.preventDefault();
-            const url = target.getAttribute("data-url");
-            if (url && onLinkClick) {
-                onLinkClick(url);
-            }
+            onLinkClick(url);
         }
     }, [onLinkClick]);
 

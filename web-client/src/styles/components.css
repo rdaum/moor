@@ -1336,6 +1336,8 @@
 }
 
 /* ====== MOO LINK STYLES ====== */
+
+/* Base link style (fallback) */
 .moo-link {
   color: var(--color-link);
   text-decoration: underline;
@@ -1345,6 +1347,64 @@
 .moo-link:hover {
   text-decoration: none;
   opacity: 0.8;
+}
+
+/* Command links: pill/button style for actions and exits */
+.moo-link-cmd {
+  display: inline-block;
+  background-color: var(--color-accent, #3b82f6);
+  color: var(--color-bg, #fff);
+  padding: 0.1em 0.5em;
+  border-radius: 0.75em;
+  text-decoration: none;
+  cursor: pointer;
+  font-size: 0.9em;
+  vertical-align: baseline;
+  transition: opacity 0.15s ease;
+}
+
+.moo-link-cmd:hover {
+  opacity: 0.85;
+}
+
+/* Inspect links: dotted underline for object references */
+.moo-link-inspect {
+  color: var(--color-text-secondary, #6b7280);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: pointer;
+}
+
+.moo-link-inspect:hover {
+  text-decoration-style: solid;
+  color: var(--color-link);
+}
+
+/* Help links: solid underline, standard link appearance */
+.moo-link-help {
+  color: var(--color-link);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.moo-link-help:hover {
+  text-decoration: none;
+}
+
+/* External links: underline with external icon */
+.moo-link-external {
+  color: var(--color-link);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.moo-link-external::after {
+  content: " ↗";
+  font-size: 0.8em;
+}
+
+.moo-link-external:hover {
+  text-decoration: none;
 }
 
 /* ====== DEFINITION LIST STYLES ====== */
