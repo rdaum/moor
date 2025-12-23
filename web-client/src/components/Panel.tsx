@@ -22,7 +22,9 @@ interface PanelProps {
     titleClassName: string;
     contentClassName: string;
     closeButtonClassName: string;
-    onLinkClick?: (url: string) => void;
+    onLinkClick?: (url: string, position?: { x: number; y: number }) => void;
+    onLinkHoldStart?: (url: string, position: { x: number; y: number }) => void;
+    onLinkHoldEnd?: () => void;
 }
 
 export const Panel: React.FC<PanelProps> = ({
@@ -33,6 +35,8 @@ export const Panel: React.FC<PanelProps> = ({
     contentClassName,
     closeButtonClassName,
     onLinkClick,
+    onLinkHoldStart,
+    onLinkHoldEnd,
 }) => {
     const handleClose = () => {
         onClose(presentation.id);
@@ -55,6 +59,8 @@ export const Panel: React.FC<PanelProps> = ({
                     content={presentation.content}
                     contentType={presentation.contentType}
                     onLinkClick={onLinkClick}
+                    onLinkHoldStart={onLinkHoldStart}
+                    onLinkHoldEnd={onLinkHoldEnd}
                 />
             </div>
         </div>

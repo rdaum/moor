@@ -1373,6 +1373,11 @@
   text-decoration: underline;
   text-decoration-style: dotted;
   cursor: pointer;
+  /* Prevent native long-press behavior on mobile */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
 }
 
 .moo-link-inspect:hover {
@@ -1405,6 +1410,112 @@
 
 .moo-link-external:hover {
   text-decoration: none;
+}
+
+/* ====== INSPECT POPOVER STYLES ====== */
+.inspect-popover {
+  background: var(--color-bg, #0a0a0a);
+  border: 2px solid var(--color-text-secondary, #666);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  max-width: 280px;
+  min-width: 180px;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  overflow: hidden;
+}
+
+.inspect-popover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6em 0.9em;
+  border-bottom: 1px solid var(--color-border, #333);
+  background: var(--color-bg-secondary, #111);
+}
+
+.inspect-popover-title {
+  font-weight: 600;
+  color: var(--color-text, #fff);
+}
+
+.inspect-popover-close {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary, #888);
+  font-family: var(--font-ui);
+  font-size: 1.2em;
+  cursor: pointer;
+  padding: 0 0.25em;
+  line-height: 1;
+}
+
+.inspect-popover-close:hover {
+  color: var(--color-text, #fff);
+}
+
+.inspect-popover-description {
+  padding: 0.9em;
+  color: var(--color-text, #ccc);
+  line-height: 1.5;
+}
+
+.inspect-popover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+  padding: 0.6em 0.9em 0.9em;
+  border-top: 1px solid var(--color-border, #333);
+}
+
+/* Use same pill style as command links */
+.inspect-popover-action {
+  display: inline-block;
+  background-color: var(--color-accent, #3b82f6);
+  color: var(--color-bg, #fff);
+  border: none;
+  padding: 0.2em 0.6em;
+  border-radius: 0.75em;
+  font-family: var(--font-ui);
+  font-size: 0.9em;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.inspect-popover-action:hover {
+  opacity: 0.85;
+}
+
+.inspect-popover-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inspect-popover-feedback {
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--color-bg-subtle, rgba(0, 0, 0, 0.1));
+  border-radius: 4px;
+  font-size: 0.85em;
+  max-height: 100px;
+  overflow-y: auto;
+  opacity: 1;
+  transition: opacity 0.5s ease-out;
+}
+
+.inspect-popover-feedback.fading {
+  opacity: 0;
+}
+
+.inspect-popover-feedback-message {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.inspect-popover-feedback-message + .inspect-popover-feedback-message {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border-light, rgba(128, 128, 128, 0.2));
 }
 
 /* ====== DEFINITION LIST STYLES ====== */

@@ -4,6 +4,7 @@ import * as flatbuffers from "flatbuffers";
 
 import { Obj } from "../moor-common/obj.js";
 import { HostType } from "../moor-rpc/host-type.js";
+import { VarMapPair } from "../moor-var/var-map-pair.js";
 
 export class HostBroadcastListen {
     bb: flatbuffers.ByteBuffer | null = null;
@@ -41,9 +42,19 @@ export class HostBroadcastListen {
         return offset ? this.bb!.readUint16(this.bb_pos + offset) : 0;
     }
 
-    printMessages(): boolean {
+    options(index: number, obj?: VarMapPair): VarMapPair | null {
         const offset = this.bb!.__offset(this.bb_pos, 10);
-        return offset ? !!this.bb!.readInt8(this.bb_pos + offset) : false;
+        return offset
+            ? (obj || new VarMapPair()).__init(
+                this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4),
+                this.bb!,
+            )
+            : null;
+    }
+
+    optionsLength(): number {
+        const offset = this.bb!.__offset(this.bb_pos, 10);
+        return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
     }
 
     static startHostBroadcastListen(builder: flatbuffers.Builder) {
@@ -62,8 +73,20 @@ export class HostBroadcastListen {
         builder.addFieldInt16(2, port, 0);
     }
 
-    static addPrintMessages(builder: flatbuffers.Builder, printMessages: boolean) {
-        builder.addFieldInt8(3, +printMessages, +false);
+    static addOptions(builder: flatbuffers.Builder, optionsOffset: flatbuffers.Offset) {
+        builder.addFieldOffset(3, optionsOffset, 0);
+    }
+
+    static createOptionsVector(builder: flatbuffers.Builder, data: flatbuffers.Offset[]): flatbuffers.Offset {
+        builder.startVector(4, data.length, 4);
+        for (let i = data.length - 1; i >= 0; i--) {
+            builder.addOffset(data[i]!);
+        }
+        return builder.endVector();
+    }
+
+    static startOptionsVector(builder: flatbuffers.Builder, numElems: number) {
+        builder.startVector(4, numElems, 4);
     }
 
     static endHostBroadcastListen(builder: flatbuffers.Builder): flatbuffers.Offset {
@@ -77,13 +100,13 @@ export class HostBroadcastListen {
         handlerObjectOffset: flatbuffers.Offset,
         hostType: HostType,
         port: number,
-        printMessages: boolean,
+        optionsOffset: flatbuffers.Offset,
     ): flatbuffers.Offset {
         HostBroadcastListen.startHostBroadcastListen(builder);
         HostBroadcastListen.addHandlerObject(builder, handlerObjectOffset);
         HostBroadcastListen.addHostType(builder, hostType);
         HostBroadcastListen.addPort(builder, port);
-        HostBroadcastListen.addPrintMessages(builder, printMessages);
+        HostBroadcastListen.addOptions(builder, optionsOffset);
         return HostBroadcastListen.endHostBroadcastListen(builder);
     }
 }

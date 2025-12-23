@@ -18,6 +18,7 @@ import * as flatbuffers from "flatbuffers";
 import { ErrorCode } from "../generated/moor-common/error-code.js";
 import { ObjId } from "../generated/moor-common/obj-id.js";
 import { ObjUnion } from "../generated/moor-common/obj-union.js";
+import { Obj } from "../generated/moor-common/obj.js";
 import { Symbol as FbSymbol } from "../generated/moor-common/symbol.js";
 import { UuObjId } from "../generated/moor-common/uu-obj-id.js";
 import { VarAnonymous } from "../generated/moor-var/var-anonymous.js";
@@ -611,6 +612,75 @@ export class MoorVar {
         const outerListVarOffset = FbVar.createVar(builder, VarUnion.VarList, outerListOffset);
 
         builder.finish(outerListVarOffset);
+        return builder.asUint8Array();
+    }
+
+    /**
+     * Parse UUID string (FFFFFF-FFFFFFFFFF) back to packed bigint
+     * Reverse of uuObjIdToString in var.ts
+     */
+    private static parseUuidString(uuidStr: string): bigint {
+        const parts = uuidStr.split("-");
+        if (parts.length !== 2 || parts[0].length !== 6 || parts[1].length !== 10) {
+            throw new Error(`Invalid UUID format: ${uuidStr}`);
+        }
+
+        const firstGroup = parseInt(parts[0], 16);
+        const epochMs = BigInt("0x" + parts[1]);
+
+        // Unpack firstGroup: (autoincrement << 6) | rng
+        const autoincrement = BigInt(firstGroup >> 6);
+        const rng = BigInt(firstGroup & 0x3F);
+
+        // Reconstruct packed value
+        return (autoincrement << 46n) | (rng << 40n) | epochMs;
+    }
+
+    /**
+     * Build an object reference Var from a CURIE string
+     * Supports "oid:123" and "uuid:FFFFFF-FFFFFFFFFF" formats
+     * Returns the offset for use in list building, not a finished buffer
+     */
+    private static buildObjRefOffset(builder: flatbuffers.Builder, curie: string): number {
+        if (curie.startsWith("oid:")) {
+            const oid = parseInt(curie.slice(4), 10);
+            if (isNaN(oid)) {
+                throw new Error(`Invalid oid in CURIE: ${curie}`);
+            }
+            const objIdOffset = ObjId.createObjId(builder, oid);
+            const objOffset = Obj.createObj(builder, ObjUnion.ObjId, objIdOffset);
+            const varObjOffset = VarObj.createVarObj(builder, objOffset);
+            return FbVar.createVar(builder, VarUnion.VarObj, varObjOffset);
+        }
+
+        if (curie.startsWith("uuid:")) {
+            const uuidStr = curie.slice(5);
+            const packedValue = MoorVar.parseUuidString(uuidStr);
+            const uuObjIdOffset = UuObjId.createUuObjId(builder, packedValue);
+            const objOffset = Obj.createObj(builder, ObjUnion.UuObjId, uuObjIdOffset);
+            const varObjOffset = VarObj.createVarObj(builder, objOffset);
+            return FbVar.createVar(builder, VarUnion.VarObj, varObjOffset);
+        }
+
+        throw new Error(`Unsupported CURIE format: ${curie}`);
+    }
+
+    /**
+     * Build a VarList containing object references from CURIEs
+     */
+    static buildObjRefList(curies: string[]): Uint8Array {
+        const builder = new flatbuffers.Builder(256 + curies.length * 32);
+
+        const varOffsets: number[] = [];
+        for (const curie of curies) {
+            varOffsets.push(MoorVar.buildObjRefOffset(builder, curie));
+        }
+
+        const elementsVectorOffset = VarList.createElementsVector(builder, varOffsets);
+        const varListOffset = VarList.createVarList(builder, elementsVectorOffset);
+        const listVarOffset = FbVar.createVar(builder, VarUnion.VarList, varListOffset);
+
+        builder.finish(listVarOffset);
         return builder.asUint8Array();
     }
 }

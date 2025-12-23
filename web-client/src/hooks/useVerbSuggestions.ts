@@ -14,7 +14,6 @@
 // Hook for fetching verb suggestions from the player object
 
 import { useCallback, useEffect, useState } from "react";
-import { MoorVar } from "../lib/MoorVar";
 import { invokeVerbFlatBuffer } from "../lib/rpc-fb";
 
 export interface VerbSuggestion {
@@ -52,30 +51,26 @@ export const useVerbSuggestions = (
         setError(null);
 
         try {
-            const result = await invokeVerbFlatBuffer(
+            const { result } = await invokeVerbFlatBuffer(
                 authToken,
                 playerOid,
                 "verb_suggestions",
             );
 
-            const resultVarFb = result.result();
-            if (!resultVarFb) {
+            if (!result) {
                 setSuggestions([]);
                 setAvailable(false);
                 return;
             }
 
-            const resultVar = new MoorVar(resultVarFb);
-            const jsValue = resultVar.toJS();
-
-            if (!Array.isArray(jsValue)) {
+            if (!Array.isArray(result)) {
                 setSuggestions([]);
                 setAvailable(false);
                 return;
             }
 
             // Parse the list of maps into VerbSuggestion objects
-            const parsed: VerbSuggestion[] = jsValue.map((item: Record<string, unknown>) => ({
+            const parsed: VerbSuggestion[] = result.map((item: Record<string, unknown>) => ({
                 verb: String(item.verb || ""),
                 dobj: String(item.dobj || "none"),
                 prep: String(item.prep || "none"),

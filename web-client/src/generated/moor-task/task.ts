@@ -4,7 +4,6 @@ import * as flatbuffers from "flatbuffers";
 
 import { Exception } from "../moor-common/exception.js";
 import { Obj } from "../moor-common/obj.js";
-import { PendingTimeout } from "../moor-task/pending-timeout.js";
 import { TaskState } from "../moor-task/task-state.js";
 import { VmHost } from "../moor-task/vm-host.js";
 import { VMExecState } from "../moor-task/vmexec-state.js";
@@ -77,16 +76,14 @@ export class Task {
         return offset ? (obj || new Exception()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
     }
 
-    handlingTaskTimeout(): boolean {
+    waitingForExceptionHandlerTask(): bigint {
         const offset = this.bb!.__offset(this.bb_pos, 24);
-        return offset ? !!this.bb!.readInt8(this.bb_pos + offset) : false;
+        return offset ? this.bb!.readUint64(this.bb_pos + offset) : BigInt("0");
     }
 
-    pendingTimeout(obj?: PendingTimeout): PendingTimeout | null {
+    hasWaitingForExceptionHandlerTask(): boolean {
         const offset = this.bb!.__offset(this.bb_pos, 26);
-        return offset
-            ? (obj || new PendingTimeout()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!)
-            : null;
+        return offset ? !!this.bb!.readInt8(this.bb_pos + offset) : false;
     }
 
     static startTask(builder: flatbuffers.Builder) {
@@ -133,12 +130,15 @@ export class Task {
         builder.addFieldOffset(9, pendingExceptionOffset, 0);
     }
 
-    static addHandlingTaskTimeout(builder: flatbuffers.Builder, handlingTaskTimeout: boolean) {
-        builder.addFieldInt8(10, +handlingTaskTimeout, +false);
+    static addWaitingForExceptionHandlerTask(builder: flatbuffers.Builder, waitingForExceptionHandlerTask: bigint) {
+        builder.addFieldInt64(10, waitingForExceptionHandlerTask, BigInt("0"));
     }
 
-    static addPendingTimeout(builder: flatbuffers.Builder, pendingTimeoutOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(11, pendingTimeoutOffset, 0);
+    static addHasWaitingForExceptionHandlerTask(
+        builder: flatbuffers.Builder,
+        hasWaitingForExceptionHandlerTask: boolean,
+    ) {
+        builder.addFieldInt8(11, +hasWaitingForExceptionHandlerTask, +false);
     }
 
     static endTask(builder: flatbuffers.Builder): flatbuffers.Offset {

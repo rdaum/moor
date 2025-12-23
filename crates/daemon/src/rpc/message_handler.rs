@@ -2123,21 +2123,20 @@ impl RpcMessageHandler {
                     );
 
                     break Ok(moor_rpc::DaemonToClientReply {
-                        reply: moor_rpc::DaemonToClientReplyUnion::SystemVerbResponseReply(
-                            Box::new(moor_rpc::SystemVerbResponseReply {
-                                response: moor_rpc::SystemVerbResponseUnion::SystemVerbSuccess(
-                                    Box::new(moor_rpc::SystemVerbSuccess {
+                        reply: moor_rpc::DaemonToClientReplyUnion::VerbCallResponse(Box::new(
+                            moor_rpc::VerbCallResponse {
+                                response: moor_rpc::VerbCallResponseUnion::VerbCallSuccess(
+                                    Box::new(moor_rpc::VerbCallSuccess {
                                         result: Box::new(result_fb),
                                         output: output_fb,
                                     }),
                                 ),
-                            }),
-                        ),
+                            },
+                        )),
                     });
                 }
                 Ok((_, Ok(TaskNotification::Suspended))) => continue,
                 Ok((_, Err(e))) => {
-                    // Convert scheduler error to FlatBuffer and return as SystemVerbError
                     let scheduler_error_fb = match scheduler_error_to_flatbuffer_struct(&e) {
                         Ok(fb) => fb,
                         Err(encode_err) => {
@@ -2147,15 +2146,15 @@ impl RpcMessageHandler {
                         }
                     };
                     break Ok(moor_rpc::DaemonToClientReply {
-                        reply: moor_rpc::DaemonToClientReplyUnion::SystemVerbResponseReply(
-                            Box::new(moor_rpc::SystemVerbResponseReply {
-                                response: moor_rpc::SystemVerbResponseUnion::SystemVerbError(
-                                    Box::new(moor_rpc::SystemVerbError {
+                        reply: moor_rpc::DaemonToClientReplyUnion::VerbCallResponse(Box::new(
+                            moor_rpc::VerbCallResponse {
+                                response: moor_rpc::VerbCallResponseUnion::VerbCallError(Box::new(
+                                    moor_rpc::VerbCallError {
                                         error: Box::new(scheduler_error_fb),
-                                    }),
-                                ),
-                            }),
-                        ),
+                                    },
+                                )),
+                            },
+                        )),
                     });
                 }
                 Err(e) => {

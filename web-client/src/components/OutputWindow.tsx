@@ -47,7 +47,9 @@ interface OutputWindowProps {
     }>;
     onLoadMoreHistory?: () => void;
     isLoadingHistory?: boolean;
-    onLinkClick?: (url: string) => void;
+    onLinkClick?: (url: string, position?: { x: number; y: number }) => void;
+    onLinkHoldStart?: (url: string, position: { x: number; y: number }) => void;
+    onLinkHoldEnd?: () => void;
     fontSize?: number;
     shouldShowDisconnectDivider?: boolean;
     playerOid?: string | null;
@@ -85,6 +87,8 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
     onLoadMoreHistory,
     isLoadingHistory = false,
     onLinkClick,
+    onLinkHoldStart,
+    onLinkHoldEnd,
     fontSize,
     shouldShowDisconnectDivider = false,
     playerOid,
@@ -128,7 +132,13 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                     {thumbnail && <img src={thumbnail.data} alt="thumbnail" className="narrative_thumbnail" />}
                     <span className="sr-only">{ttsText}</span>
                     <span aria-hidden="true">
-                        <ContentRenderer content={content} contentType={contentType} onLinkClick={onLinkClick} />
+                        <ContentRenderer
+                            content={content}
+                            contentType={contentType}
+                            onLinkClick={onLinkClick}
+                            onLinkHoldStart={onLinkHoldStart}
+                            onLinkHoldEnd={onLinkHoldEnd}
+                        />
                     </span>
                     {linkPreview && <LinkPreviewCard preview={linkPreview} />}
                 </>
@@ -137,11 +147,17 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         return (
             <>
                 {thumbnail && <img src={thumbnail.data} alt="thumbnail" className="narrative_thumbnail" />}
-                <ContentRenderer content={content} contentType={contentType} onLinkClick={onLinkClick} />
+                <ContentRenderer
+                    content={content}
+                    contentType={contentType}
+                    onLinkClick={onLinkClick}
+                    onLinkHoldStart={onLinkHoldStart}
+                    onLinkHoldEnd={onLinkHoldEnd}
+                />
                 {linkPreview && <LinkPreviewCard preview={linkPreview} />}
             </>
         );
-    }, [onLinkClick]);
+    }, [onLinkClick, onLinkHoldStart, onLinkHoldEnd]);
 
     // Auto-scroll to bottom when new messages arrive
     useEffect(() => {
@@ -267,7 +283,13 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
             >
                 <span className="speech_bubble_actor" aria-hidden="true">{displayName}</span>
                 <div className={bubbleClass} aria-hidden="true">
-                    <ContentRenderer content={content} contentType={contentType} onLinkClick={onLinkClick} />
+                    <ContentRenderer
+                        content={content}
+                        contentType={contentType}
+                        onLinkClick={onLinkClick}
+                        onLinkHoldStart={onLinkHoldStart}
+                        onLinkHoldEnd={onLinkHoldEnd}
+                    />
                 </div>
             </div>
         );

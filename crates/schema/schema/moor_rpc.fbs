@@ -737,7 +737,7 @@ union DaemonToClientReplyUnion {
     ListObjectsReply,
     PropertyUpdated,
     SystemHandlerResponseReply,
-    SystemVerbResponseReply
+    VerbCallResponse
 }
 
 table NewConnection {
@@ -866,22 +866,22 @@ table SystemHandlerResponseReply {
     response: SystemHandlerResponseUnion (required);
 }
 
-union SystemVerbResponseUnion {
-    SystemVerbSuccess,
-    SystemVerbError
+union VerbCallResponseUnion {
+    VerbCallSuccess,
+    VerbCallError
 }
 
-table SystemVerbSuccess {
+table VerbCallSuccess {
     result: MoorVar.Var (required);
     output: [MoorCommon.NarrativeEvent] (required);
 }
 
-table SystemVerbError {
+table VerbCallError {
     error: SchedulerError (required);
 }
 
-table SystemVerbResponseReply {
-    response: SystemVerbResponseUnion (required);
+table VerbCallResponse {
+    response: VerbCallResponseUnion (required);
 }
 
 table DaemonToClientReply {

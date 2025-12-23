@@ -21,6 +21,7 @@ import { TopDock } from "./components/docks/TopDock";
 import { EncryptionPasswordPrompt } from "./components/EncryptionPasswordPrompt";
 import { EncryptionSetupPrompt } from "./components/EncryptionSetupPrompt";
 import { EvalPanel } from "./components/EvalPanel";
+import { InspectData, InspectPopover } from "./components/InspectPopover";
 import { Login, useWelcomeMessage } from "./components/Login";
 import { MessageBoard, useSystemMessage } from "./components/MessageBoard";
 import { Narrative, NarrativeMessage, NarrativeRef } from "./components/Narrative";
@@ -136,6 +137,15 @@ function AppContent({
     );
     const [unseenCount, setUnseenCount] = useState(0);
     const [eventLogEnabled, setEventLogEnabled] = useState<boolean | null>(null);
+
+    // Inspect popover state
+    const [inspectPopover, setInspectPopover] = useState<
+        {
+            data: InspectData;
+            position: { x: number; y: number };
+            isPreview?: boolean;
+        } | null
+    >(null);
     const [hasShownHistoryUnavailable, setHasShownHistoryUnavailable] = useState(false);
 
     const splitRatioRef = useRef(splitRatio);
@@ -902,16 +912,36 @@ function AppContent({
         useWebSocketContext();
 
     // Handle MOO link clicks based on URL scheme
-    const handleLinkClick = useCallback((url: string) => {
+    const handleLinkClick = useCallback(async (url: string, position?: { x: number; y: number }) => {
         if (url.startsWith("moo://cmd/")) {
             // Command link: send as if typed
             const command = decodeURIComponent(url.slice(10));
             sendMessage(command);
         } else if (url.startsWith("moo://inspect/")) {
-            // Inspect link: show object info in popover (TODO)
+            // Inspect link: call web_inspect verb and show popover
             const oref = url.slice(14);
-            console.log("Inspect link clicked:", oref);
-            showMessage("Inspect not yet implemented", 2);
+            if (!authToken) {
+                showMessage("Not connected", 2);
+                return;
+            }
+
+            try {
+                const { result } = await invokeVerbFlatBuffer(authToken, oref, "inspection");
+                if (result) {
+                    const data = result as InspectData;
+
+                    // Show popover at click position (or center if no position)
+                    setInspectPopover({
+                        data,
+                        position: position ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+                    });
+                } else {
+                    showMessage("No inspect data available", 2);
+                }
+            } catch (error) {
+                console.error("Failed to inspect object:", error);
+                showMessage(`Inspect failed: ${error instanceof Error ? error.message : String(error)}`, 3);
+            }
         } else if (url.startsWith("moo://help/")) {
             // Help link: show help in panel (TODO)
             const topic = decodeURIComponent(url.slice(11));
@@ -923,7 +953,32 @@ function AppContent({
         } else {
             console.warn("Unknown link scheme:", url);
         }
-    }, [sendMessage, showMessage]);
+    }, [authToken, sendMessage, showMessage]);
+
+    // Handle hold-to-preview for inspect links (mobile)
+    const handleLinkHoldStart = useCallback(async (url: string, position: { x: number; y: number }) => {
+        if (!url.startsWith("moo://inspect/") || !authToken) return;
+
+        const oref = url.slice(14);
+        try {
+            const { result } = await invokeVerbFlatBuffer(authToken, oref, "inspection");
+            if (result) {
+                const data = result as InspectData;
+                setInspectPopover({ data, position, isPreview: true });
+            }
+        } catch (error) {
+            console.error("Failed to inspect object:", error);
+        }
+    }, [authToken]);
+
+    // Handle end of hold-to-preview
+    const handleLinkHoldEnd = useCallback(() => {
+        setInspectPopover((current) => {
+            // Only dismiss if it's a preview popover
+            if (current?.isPreview) return null;
+            return current;
+        });
+    }, []);
 
     // Track previous player OID to detect logout
     const previousPlayerOidRef = useRef<string | null>(null);
@@ -1471,6 +1526,8 @@ function AppContent({
                                 presentations={getTopDockPresentations()}
                                 onClosePresentation={handleClosePresentation}
                                 onLinkClick={handleLinkClick}
+                                onLinkHoldStart={handleLinkHoldStart}
+                                onLinkHoldEnd={handleLinkHoldEnd}
                             />
                         </aside>
 
@@ -1481,6 +1538,8 @@ function AppContent({
                                     presentations={getLeftDockPresentations()}
                                     onClosePresentation={handleClosePresentation}
                                     onLinkClick={handleLinkClick}
+                                    onLinkHoldStart={handleLinkHoldStart}
+                                    onLinkHoldEnd={handleLinkHoldEnd}
                                 />
                             </aside>
 
@@ -1494,6 +1553,8 @@ function AppContent({
                                     onLoadMoreHistory={eventLogEnabled === false ? undefined : handleLoadMoreHistory}
                                     isLoadingHistory={eventLogEnabled === false ? false : isLoadingHistory}
                                     onLinkClick={handleLinkClick}
+                                    onLinkHoldStart={handleLinkHoldStart}
+                                    onLinkHoldEnd={handleLinkHoldEnd}
                                     playerOid={playerOid}
                                     onMessageAppended={handleMessageAppended}
                                     fontSize={narrativeFontSize}
@@ -1508,6 +1569,8 @@ function AppContent({
                                     presentations={getRightDockPresentations()}
                                     onClosePresentation={handleClosePresentation}
                                     onLinkClick={handleLinkClick}
+                                    onLinkHoldStart={handleLinkHoldStart}
+                                    onLinkHoldEnd={handleLinkHoldEnd}
                                 />
                             </aside>
                         </div>
@@ -1518,6 +1581,8 @@ function AppContent({
                                 presentations={getBottomDockPresentations()}
                                 onClosePresentation={handleClosePresentation}
                                 onLinkClick={handleLinkClick}
+                                onLinkHoldStart={handleLinkHoldStart}
+                                onLinkHoldEnd={handleLinkHoldEnd}
                             />
                         </aside>
                     </div>
@@ -1797,6 +1862,24 @@ function AppContent({
                     authToken={authToken}
                     onToggleSplitMode={toggleEvalPanelDock}
                     isInSplitMode={false}
+                />
+            )}
+
+            {/* Inspect popover for object info */}
+            {inspectPopover && (
+                <InspectPopover
+                    data={inspectPopover.data}
+                    position={inspectPopover.position}
+                    onClose={() => setInspectPopover(null)}
+                    onAction={async (verb, target, args) => {
+                        if (!authToken) return [];
+                        const argsBytes = args && args.length > 0
+                            ? MoorVar.buildObjRefList(args)
+                            : undefined;
+                        const { output } = await invokeVerbFlatBuffer(authToken, target, verb, argsBytes);
+                        return output;
+                    }}
+                    isPreview={inspectPopover.isPreview}
                 />
             )}
         </div>

@@ -18,7 +18,6 @@
  * including object reference handling, remote method invocation, and
  * data transformation between JSON and MOO formats.
  */
-import { EvalResult } from "../generated/moor-rpc/eval-result.js";
 import { MoorVar } from "./MoorVar";
 import {
     compileVerbFlatBuffer,
@@ -80,22 +79,14 @@ export class MoorRemoteObject {
             throw new Error("Cannot invoke verbs on anonymous objects");
         }
 
-        const evalResult = await invokeVerbFlatBuffer(
+        const { result } = await invokeVerbFlatBuffer(
             this.authToken,
             orefCurie(this.oref),
             verbName,
             args,
         );
 
-        // Extract result from FlatBuffer EvalResult
-        const resultVar = (evalResult as EvalResult).result();
-        if (!resultVar) {
-            throw new Error(`No result from verb ${verbName}`);
-        }
-
-        // Convert Var to JavaScript value
-        const moorVar = new MoorVar(resultVar);
-        return moorVar.toJS();
+        return result;
     }
 
     /**

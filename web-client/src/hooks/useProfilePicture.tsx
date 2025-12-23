@@ -20,7 +20,6 @@ import { VarBinary } from "../generated/moor-var/var-binary";
 import { VarList } from "../generated/moor-var/var-list";
 import { VarStr } from "../generated/moor-var/var-str";
 import { VarUnion } from "../generated/moor-var/var-union";
-import { MoorVar } from "../lib/MoorVar";
 import { invokeVerbFlatBuffer } from "../lib/rpc-fb";
 
 interface ProfilePictureData {
@@ -43,37 +42,22 @@ export const useProfilePicture = (authToken: string | null, playerOid: string | 
 
         try {
             // Invoke the profile_picture verb on the player object
-            // Server waits for task completion and returns TaskSuccessEvent
-            const result = await invokeVerbFlatBuffer(
+            const { result } = await invokeVerbFlatBuffer(
                 authToken,
                 playerOid,
                 "profile_picture",
             );
 
-            // Result is a TaskSuccessEvent - extract the Var from it
-            const resultVarFb = result.result();
-            if (!resultVarFb) {
+            // Result is already JS: [content_type, binary_data]
+            if (!Array.isArray(result) || result.length < 2) {
                 setProfilePicture(null);
                 return;
             }
 
-            // Parse it using MoorVar
-            const resultVar = new MoorVar(resultVarFb);
-            const resultList = resultVar.asList();
+            const contentType = result[0];
+            const binaryData = result[1];
 
-            if (!resultList || resultList.length < 2) {
-                setProfilePicture(null);
-                return;
-            }
-
-            // Result is a list: [content_type, binary_data]
-            const contentTypeVar = resultList[0];
-            const binaryVar = resultList[1];
-
-            const contentType = contentTypeVar.asString();
-            const binaryData = binaryVar.asBinary();
-
-            if (!contentType || !binaryData) {
+            if (typeof contentType !== "string" || !(binaryData instanceof Uint8Array)) {
                 setProfilePicture(null);
                 return;
             }

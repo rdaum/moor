@@ -453,13 +453,9 @@ impl AnsiRenderer {
                 self.pending_newlines = 1;
             }
             Container::Section { .. } | Container::Div { .. } => {}
-            Container::Link(dest, _) => {
+            Container::Link(_, _) => {
                 self.style_stack.pop(); // FgColor
                 self.style_stack.pop(); // Underline
-                if !dest.is_empty() {
-                    let url_display = format!(" ({})", dest).dimmed().to_string();
-                    self.emit_text(&url_display);
-                }
             }
             Container::Image(_, _) => {
                 self.emit_text("]");
@@ -869,7 +865,8 @@ fn main() {
         let djot = "[example](https://example.com)";
         let output = djot_to_ansi(djot);
         assert!(output.contains("example"));
-        assert!(output.contains("https://example.com"));
+        // URL should NOT be shown in terminal output
+        assert!(!output.contains("https://example.com"));
     }
 
     #[test]

@@ -174,13 +174,8 @@ export const TextEditor: React.FC<TextEditorProps> = ({
                 argsBuffer = MoorVar.buildTextEditorArgs(sessionId, lines);
             }
 
-            // Invoke the verb
-            const result = await invokeVerbFlatBuffer(authToken, objectCurie, verbName, argsBuffer);
-
-            // Check for errors in the result
-            if (result && typeof result === "object" && "error" in result) {
-                throw new Error(result.error || "Verb returned an error");
-            }
+            // Invoke the verb (throws on error)
+            await invokeVerbFlatBuffer(authToken, objectCurie, verbName, argsBuffer);
 
             setErrors([]);
             setSaveSuccess(true);

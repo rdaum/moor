@@ -52,7 +52,9 @@ interface NarrativeProps {
     onSendMessage: (message: string | Uint8Array | ArrayBuffer) => void;
     onLoadMoreHistory?: () => void;
     isLoadingHistory?: boolean;
-    onLinkClick?: (url: string) => void;
+    onLinkClick?: (url: string, position?: { x: number; y: number }) => void;
+    onLinkHoldStart?: (url: string, position: { x: number; y: number }) => void;
+    onLinkHoldEnd?: () => void;
     playerOid?: string | null;
     onMessageAppended?: (message: NarrativeMessage) => void;
     fontSize?: number;
@@ -99,6 +101,8 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     onLoadMoreHistory,
     isLoadingHistory = false,
     onLinkClick,
+    onLinkHoldStart,
+    onLinkHoldEnd,
     playerOid,
     onMessageAppended,
     fontSize,
@@ -378,6 +382,8 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
                     onLoadMoreHistory={onLoadMoreHistory}
                     isLoadingHistory={isLoadingHistory}
                     onLinkClick={onLinkClick}
+                    onLinkHoldStart={onLinkHoldStart}
+                    onLinkHoldEnd={onLinkHoldEnd}
                     fontSize={fontSize}
                     shouldShowDisconnectDivider={shouldShowDisconnectDivider}
                     playerOid={playerOid}

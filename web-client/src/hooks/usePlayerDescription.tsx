@@ -19,7 +19,6 @@ import { Var } from "../generated/moor-var/var";
 import { VarList } from "../generated/moor-var/var-list";
 import { VarStr } from "../generated/moor-var/var-str";
 import { VarUnion } from "../generated/moor-var/var-union";
-import { MoorVar } from "../lib/MoorVar";
 import { invokeVerbFlatBuffer } from "../lib/rpc-fb";
 
 export const usePlayerDescription = (authToken: string | null, playerOid: string | null) => {
@@ -37,29 +36,18 @@ export const usePlayerDescription = (authToken: string | null, playerOid: string
 
         try {
             // Invoke the description verb on the player object
-            const result = await invokeVerbFlatBuffer(
+            const { result } = await invokeVerbFlatBuffer(
                 authToken,
                 playerOid,
                 "description",
             );
 
-            // Result is a TaskSuccessEvent - extract the Var from it
-            const resultVarFb = result.result();
-            if (!resultVarFb) {
+            if (!result || typeof result !== "string") {
                 setPlayerDescription(null);
                 return;
             }
 
-            // Parse it using MoorVar - should be a simple string
-            const resultVar = new MoorVar(resultVarFb);
-            const description = resultVar.asString();
-
-            if (!description) {
-                setPlayerDescription(null);
-                return;
-            }
-
-            setPlayerDescription(description);
+            setPlayerDescription(result);
         } catch (err) {
             console.debug("Player description fetch failed (verb may not exist):", err);
             setPlayerDescription(null);

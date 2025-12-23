@@ -19,9 +19,9 @@ import { PropertyValue } from "../moor-rpc/property-value.js";
 import { ResolveResult } from "../moor-rpc/resolve-result.js";
 import { SysPropValue } from "../moor-rpc/sys-prop-value.js";
 import { SystemHandlerResponseReply } from "../moor-rpc/system-handler-response-reply.js";
-import { SystemVerbResponseReply } from "../moor-rpc/system-verb-response-reply.js";
 import { TaskSubmitted } from "../moor-rpc/task-submitted.js";
 import { ThanksPong } from "../moor-rpc/thanks-pong.js";
+import { VerbCallResponse } from "../moor-rpc/verb-call-response.js";
 import { VerbProgramResponseReply } from "../moor-rpc/verb-program-response-reply.js";
 import { VerbValue } from "../moor-rpc/verb-value.js";
 import { VerbsReply } from "../moor-rpc/verbs-reply.js";
@@ -52,7 +52,7 @@ export enum DaemonToClientReplyUnion {
     ListObjectsReply = 22,
     PropertyUpdated = 23,
     SystemHandlerResponseReply = 24,
-    SystemVerbResponseReply = 25,
+    VerbCallResponse = 25,
 }
 
 export function unionToDaemonToClientReplyUnion(
@@ -78,9 +78,9 @@ export function unionToDaemonToClientReplyUnion(
             | ResolveResult
             | SysPropValue
             | SystemHandlerResponseReply
-            | SystemVerbResponseReply
             | TaskSubmitted
             | ThanksPong
+            | VerbCallResponse
             | VerbProgramResponseReply
             | VerbValue
             | VerbsReply,
@@ -104,9 +104,9 @@ export function unionToDaemonToClientReplyUnion(
         | ResolveResult
         | SysPropValue
         | SystemHandlerResponseReply
-        | SystemVerbResponseReply
         | TaskSubmitted
         | ThanksPong
+        | VerbCallResponse
         | VerbProgramResponseReply
         | VerbValue
         | VerbsReply
@@ -131,9 +131,9 @@ export function unionToDaemonToClientReplyUnion(
     | ResolveResult
     | SysPropValue
     | SystemHandlerResponseReply
-    | SystemVerbResponseReply
     | TaskSubmitted
     | ThanksPong
+    | VerbCallResponse
     | VerbProgramResponseReply
     | VerbValue
     | VerbsReply
@@ -190,8 +190,8 @@ export function unionToDaemonToClientReplyUnion(
             return accessor(new PropertyUpdated())! as PropertyUpdated;
         case "SystemHandlerResponseReply":
             return accessor(new SystemHandlerResponseReply())! as SystemHandlerResponseReply;
-        case "SystemVerbResponseReply":
-            return accessor(new SystemVerbResponseReply())! as SystemVerbResponseReply;
+        case "VerbCallResponse":
+            return accessor(new VerbCallResponse())! as VerbCallResponse;
         default:
             return null;
     }
@@ -221,9 +221,9 @@ export function unionListToDaemonToClientReplyUnion(
             | ResolveResult
             | SysPropValue
             | SystemHandlerResponseReply
-            | SystemVerbResponseReply
             | TaskSubmitted
             | ThanksPong
+            | VerbCallResponse
             | VerbProgramResponseReply
             | VerbValue
             | VerbsReply,
@@ -247,9 +247,9 @@ export function unionListToDaemonToClientReplyUnion(
         | ResolveResult
         | SysPropValue
         | SystemHandlerResponseReply
-        | SystemVerbResponseReply
         | TaskSubmitted
         | ThanksPong
+        | VerbCallResponse
         | VerbProgramResponseReply
         | VerbValue
         | VerbsReply
@@ -275,9 +275,9 @@ export function unionListToDaemonToClientReplyUnion(
     | ResolveResult
     | SysPropValue
     | SystemHandlerResponseReply
-    | SystemVerbResponseReply
     | TaskSubmitted
     | ThanksPong
+    | VerbCallResponse
     | VerbProgramResponseReply
     | VerbValue
     | VerbsReply
@@ -334,8 +334,8 @@ export function unionListToDaemonToClientReplyUnion(
             return accessor(index, new PropertyUpdated())! as PropertyUpdated;
         case "SystemHandlerResponseReply":
             return accessor(index, new SystemHandlerResponseReply())! as SystemHandlerResponseReply;
-        case "SystemVerbResponseReply":
-            return accessor(index, new SystemVerbResponseReply())! as SystemVerbResponseReply;
+        case "VerbCallResponse":
+            return accessor(index, new VerbCallResponse())! as VerbCallResponse;
         default:
             return null;
     }

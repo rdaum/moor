@@ -55,13 +55,14 @@ import { SchedulerError } from "../generated/moor-rpc/scheduler-error.js";
 import { ServerFeatures } from "../generated/moor-rpc/server-features.js";
 import { SysPropValue } from "../generated/moor-rpc/sys-prop-value.js";
 import { SystemMessageEvent } from "../generated/moor-rpc/system-message-event.js";
-import { SystemVerbResponseReply } from "../generated/moor-rpc/system-verb-response-reply.js";
-import { unionToSystemVerbResponseUnion } from "../generated/moor-rpc/system-verb-response-union.js";
-import { SystemVerbSuccess } from "../generated/moor-rpc/system-verb-success.js";
 import { TaskAbortedException } from "../generated/moor-rpc/task-aborted-exception.js";
 import { TaskAbortedLimit } from "../generated/moor-rpc/task-aborted-limit.js";
 import { TaskErrorEvent } from "../generated/moor-rpc/task-error-event.js";
 import { TaskSuccessEvent } from "../generated/moor-rpc/task-success-event.js";
+import { VerbCallError } from "../generated/moor-rpc/verb-call-error.js";
+import { unionToVerbCallResponseUnion } from "../generated/moor-rpc/verb-call-response-union.js";
+import { VerbCallResponse } from "../generated/moor-rpc/verb-call-response.js";
+import { VerbCallSuccess } from "../generated/moor-rpc/verb-call-success.js";
 import { VerbCompilationError } from "../generated/moor-rpc/verb-compilation-error.js";
 import { VerbProgramErrorUnion } from "../generated/moor-rpc/verb-program-error-union.js";
 import {
@@ -1462,20 +1463,36 @@ export async function getVerbCodeFlatBuffer(
 }
 
 /**
+ * Result of invoking a verb, containing both the return value and any narrative events
+ */
+export interface VerbInvocationResult {
+    /** The return value from the verb */
+    result: any;
+    /** Narrative events that occurred during verb execution */
+    output: Array<{
+        eventId: string;
+        timestamp: Date;
+        author: any;
+        eventType: string;
+        event: any;
+    }>;
+}
+
+/**
  * Invoke a verb using FlatBuffer protocol
  *
  * @param authToken - Authentication token
  * @param objectCurie - Object CURIE
  * @param verbName - Verb name
  * @param args - Optional FlatBuffer-encoded Var (typically a VarList) as Uint8Array
- * @returns Promise resolving to EvalResult FlatBuffer (or TaskSubmitted)
+ * @returns Promise resolving to VerbInvocationResult with result and output events
  */
 export async function invokeVerbFlatBuffer(
     authToken: string,
     objectCurie: string,
     verbName: string,
     args?: Uint8Array,
-): Promise<EvalResult | any> {
+): Promise<VerbInvocationResult> {
     // If no args provided, build an empty list
     const argsBytes = args ?? MoorVar.buildEmptyList();
 
@@ -1498,23 +1515,57 @@ export async function invokeVerbFlatBuffer(
     const arrayBuffer = await response.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
 
-    // Server returns ClientEvent (TaskSuccessEvent or TaskErrorEvent)
-    const clientEvent = ClientEvent.getRootAsClientEvent(
+    // Server returns VerbCallResponse (VerbCallSuccess or VerbCallError)
+    const verbCallResponse = VerbCallResponse.getRootAsVerbCallResponse(
         new flatbuffers.ByteBuffer(bytes),
     );
 
-    const eventType = clientEvent.eventType();
-    const event = unionToClientEventUnion(
-        eventType,
-        (obj: any) => clientEvent.event(obj),
+    const responseType = verbCallResponse.responseType();
+    const responseUnion = unionToVerbCallResponseUnion(
+        responseType,
+        (obj: any) => verbCallResponse.response(obj),
     );
 
-    if (!event) {
-        throw new Error("Failed to parse client event");
+    if (!responseUnion) {
+        throw new Error("Failed to parse verb call response");
     }
 
-    // Return the event (TaskSuccessEvent or TaskErrorEvent)
-    return event;
+    // Handle error case
+    if (responseUnion instanceof VerbCallError) {
+        const errorObj = responseUnion as VerbCallError;
+        const schedulerError = errorObj.error();
+        if (schedulerError) {
+            const errorType = schedulerError.errorType();
+            throw new Error(`Verb invocation failed: ${SchedulerErrorUnion[errorType] ?? "unknown error"}`);
+        }
+        throw new Error("Verb invocation failed with unknown error");
+    }
+
+    // Handle success case
+    if (!(responseUnion instanceof VerbCallSuccess)) {
+        throw new Error("Unexpected response type in verb call response");
+    }
+
+    const verbCallSuccess = responseUnion as VerbCallSuccess;
+
+    // Extract result
+    const resultVar = verbCallSuccess.result();
+    const result = resultVar ? new MoorVar(resultVar).toJS() : null;
+
+    // Extract output (narrative events)
+    const output: VerbInvocationResult["output"] = [];
+    const outputCount = verbCallSuccess.outputLength();
+    for (let i = 0; i < outputCount; i++) {
+        const narrativeEvent = verbCallSuccess.output(i, new NarrativeEvent());
+        if (narrativeEvent) {
+            const eventObj = narrativeEventToJS(narrativeEvent);
+            if (eventObj) {
+                output.push(eventObj);
+            }
+        }
+    }
+
+    return { result, output };
 }
 
 /**
@@ -1913,10 +1964,18 @@ function narrativeEventToJS(narrativeEvent: any): any {
         }
         case 2: { // PresentEvent
             const presentEvent = eventUnion as any;
+            const presentation = presentEvent.presentation();
             return {
                 eventType: "PresentEvent",
                 event: {
-                    object: presentEvent.object(),
+                    presentation: presentation
+                        ? {
+                            id: presentation.id(),
+                            contentType: presentation.contentType(),
+                            content: presentation.content(),
+                            target: presentation.target(),
+                        }
+                        : null,
                 },
             };
         }
@@ -1925,16 +1984,40 @@ function narrativeEventToJS(narrativeEvent: any): any {
             return {
                 eventType: "UnpresentEvent",
                 event: {
-                    object: unpresentEvent.object(),
+                    presentationId: unpresentEvent.presentationId(),
                 },
             };
         }
         case 4: { // TracebackEvent
             const tracebackEvent = eventUnion as any;
+            const exception = tracebackEvent.exception();
+            // Extract exception details if available
+            let errorInfo = null;
+            let backtrace: string[] = [];
+            if (exception) {
+                const error = exception.error();
+                if (error) {
+                    errorInfo = {
+                        code: error.code(),
+                        message: error.message(),
+                    };
+                }
+                // Extract backtrace as array of strings
+                const backtraceLen = exception.backtraceLength();
+                for (let i = 0; i < backtraceLen; i++) {
+                    const varFb = exception.backtrace(i);
+                    if (varFb) {
+                        const moorVar = new MoorVar(varFb);
+                        const str = moorVar.asString();
+                        if (str) backtrace.push(str);
+                    }
+                }
+            }
             return {
                 eventType: "TracebackEvent",
                 event: {
-                    traceback: tracebackEvent.traceback(),
+                    error: errorInfo,
+                    backtrace,
                 },
             };
         }
@@ -2013,38 +2096,38 @@ export async function invokeWelcomeMessageFlatBuffer(): Promise<{
             throw new Error("Failed to parse reply union");
         }
 
-        // Check if it's a SystemVerbResponseReply
-        if (!(replyUnion instanceof SystemVerbResponseReply)) {
+        // Check if it's a VerbCallResponse
+        if (!(replyUnion instanceof VerbCallResponse)) {
             throw new Error(`Unexpected reply type: ${replyUnion.constructor.name}`);
         }
 
-        const systemVerbReply = replyUnion as SystemVerbResponseReply;
-        const responseType = systemVerbReply.responseType();
-        const responseUnion = unionToSystemVerbResponseUnion(
+        const verbCallResponse = replyUnion as VerbCallResponse;
+        const responseType = verbCallResponse.responseType();
+        const responseUnion = unionToVerbCallResponseUnion(
             responseType,
-            (obj: any) => systemVerbReply.response(obj),
+            (obj: any) => verbCallResponse.response(obj),
         );
 
         if (!responseUnion) {
-            throw new Error("Failed to parse system verb response union");
+            throw new Error("Failed to parse verb call response union");
         }
 
-        // Check if it's a SystemVerbSuccess
-        if (!(responseUnion instanceof SystemVerbSuccess)) {
-            throw new Error(`Unexpected system verb response type: ${responseUnion.constructor.name}`);
+        // Check if it's a VerbCallSuccess
+        if (!(responseUnion instanceof VerbCallSuccess)) {
+            throw new Error(`Unexpected verb call response type: ${responseUnion.constructor.name}`);
         }
 
-        const systemVerbSuccess = responseUnion as SystemVerbSuccess;
+        const verbCallSuccess = responseUnion as VerbCallSuccess;
 
-        // Get the output (narrative events) directly from the SystemVerbSuccess
-        const outputCount = systemVerbSuccess.outputLength();
+        // Get the output (narrative events) from VerbCallSuccess
+        const outputCount = verbCallSuccess.outputLength();
 
         // Extract welcome message from narrative events
         let welcomeMessage = "";
         let contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback" | "text/x-uri" = "text/plain";
 
         for (let i = 0; i < outputCount; i++) {
-            const narrativeEvent = systemVerbSuccess.output(i, new NarrativeEvent());
+            const narrativeEvent = verbCallSuccess.output(i, new NarrativeEvent());
             if (narrativeEvent) {
                 // Convert the narrative event to JavaScript object
                 const eventObj = narrativeEventToJS(narrativeEvent);

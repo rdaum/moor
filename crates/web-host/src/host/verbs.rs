@@ -19,19 +19,28 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use moor_common::model::ObjectRef;
-use moor_schema::{convert::var_from_flatbuffer_ref, rpc as moor_rpc, var as moor_var_schema};
+use moor_common::tasks::NarrativeEvent;
+use moor_schema::{
+    common as moor_common_fb,
+    convert::{
+        narrative_event_from_ref, narrative_event_to_flatbuffer_struct, var_from_flatbuffer_ref,
+        var_to_flatbuffer,
+    },
+    rpc as moor_rpc,
+    var as moor_var_schema,
+};
 use moor_var::Symbol;
 use planus::ReadAsRoot;
 use rpc_async_client::pubsub_client::events_recv;
 use rpc_common::{
     mk_detach_msg, mk_invoke_verb_msg, mk_program_msg, mk_retrieve_msg, mk_verbs_msg,
-    read_reply_result,
+    read_reply_result, scheduler_error_from_ref, scheduler_error_to_flatbuffer_struct,
 };
 use serde::Deserialize;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::time::timeout;
-use tracing::error;
+use tracing::{debug, error};
 
 #[derive(Deserialize)]
 pub struct VerbsQuery {
@@ -140,12 +149,22 @@ fn extract_task_id(reply_bytes: &[u8]) -> Result<u64, StatusCode> {
     })
 }
 
-/// Wait for a task completion event matching the given task_id
+/// Result of waiting for task completion
+enum TaskCompletionResult {
+    /// Task succeeded with a result Var and collected narrative events
+    Success(moor_var::Var, Vec<NarrativeEvent>),
+    /// Task failed with an error (using moor_common error type for processing)
+    Error(moor_common::tasks::SchedulerError),
+}
+
+/// Wait for a task completion event matching the given task_id, collecting narrative events
 async fn wait_for_task_completion(
     client_id: uuid::Uuid,
     mut narrative_sub: tmq::subscribe::Subscribe,
     task_id: u64,
-) -> Result<(bool, Vec<u8>), StatusCode> {
+) -> Result<TaskCompletionResult, StatusCode> {
+    let mut collected_events: Vec<NarrativeEvent> = Vec::new();
+
     loop {
         let event_msg = events_recv(client_id, &mut narrative_sub)
             .await
@@ -165,13 +184,41 @@ async fn wait_for_task_completion(
         })?;
 
         match event_ref {
+            moor_rpc::ClientEventUnionRef::NarrativeEventMessage(narrative_msg) => {
+                // Collect narrative events during execution
+                let Ok(event_ref) = narrative_msg.event() else {
+                    continue;
+                };
+                match narrative_event_from_ref(event_ref) {
+                    Ok(narrative_event) => {
+                        debug!("Collected narrative event during verb execution");
+                        collected_events.push(narrative_event);
+                    }
+                    Err(e) => {
+                        error!("Failed to parse narrative event: {}", e);
+                    }
+                }
+            }
             moor_rpc::ClientEventUnionRef::TaskSuccessEvent(success) => {
                 let Ok(event_task_id) = success.task_id() else {
                     continue;
                 };
 
                 if event_task_id == task_id {
-                    return Ok((true, event_msg.consume()));
+                    let Ok(result_ref) = success.result() else {
+                        error!("Failed to get result from TaskSuccessEvent");
+                        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                    };
+                    let result_var = var_from_flatbuffer_ref(result_ref).map_err(|e| {
+                        error!("Failed to parse result Var: {}", e);
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?;
+                    debug!(
+                        "Task {} completed successfully with {} collected events",
+                        task_id,
+                        collected_events.len()
+                    );
+                    return Ok(TaskCompletionResult::Success(result_var, collected_events));
                 }
             }
             moor_rpc::ClientEventUnionRef::TaskErrorEvent(error_event) => {
@@ -180,7 +227,16 @@ async fn wait_for_task_completion(
                 };
 
                 if event_task_id == task_id {
-                    return Ok((false, event_msg.consume()));
+                    let Ok(error_ref) = error_event.error() else {
+                        error!("Failed to get error from TaskErrorEvent");
+                        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                    };
+                    let scheduler_error = scheduler_error_from_ref(error_ref).map_err(|e| {
+                        error!("Failed to parse scheduler error: {}", e);
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?;
+                    debug!("Task {} failed with error", task_id);
+                    return Ok(TaskCompletionResult::Error(scheduler_error));
                 }
             }
             _ => continue,
@@ -288,16 +344,13 @@ pub async fn invoke_verb_handler(
     };
 
     // Wait for task completion with 60 second timeout
-    let (success, result_bytes) = match timeout(
+    let completion_result = match timeout(
         Duration::from_secs(60),
         wait_for_task_completion(client_id, narrative_sub, task_id),
     )
     .await
     {
-        Ok(Ok((success, bytes))) => {
-            tracing::debug!("Task {} completed with success={}", task_id, success);
-            (success, bytes)
-        }
+        Ok(Ok(result)) => result,
         Ok(Err(status)) => return status.into_response(),
         Err(_) => {
             error!(
@@ -314,17 +367,71 @@ pub async fn invoke_verb_handler(
     };
     let _ = rpc_client.make_client_rpc_call(client_id, detach_msg).await;
 
-    // Return the task result event with appropriate status code
-    let status = if success {
-        StatusCode::OK
-    } else {
-        StatusCode::INTERNAL_SERVER_ERROR
+    // Build VerbCallResponse based on the completion result
+    let response = match completion_result {
+        TaskCompletionResult::Success(result_var, collected_events) => {
+            // Convert result Var to FlatBuffer
+            let result_fb = match var_to_flatbuffer(&result_var) {
+                Ok(fb) => fb,
+                Err(e) => {
+                    error!("Failed to encode result: {}", e);
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            };
+
+            // Convert collected events to FlatBuffer format
+            let output_fb: Vec<moor_common_fb::NarrativeEvent> = collected_events
+                .iter()
+                .filter_map(|event| match narrative_event_to_flatbuffer_struct(event) {
+                    Ok(fb_event) => Some(fb_event),
+                    Err(e) => {
+                        error!("Failed to convert narrative event to FlatBuffer: {e}");
+                        None
+                    }
+                })
+                .collect();
+
+            debug!(
+                "Building VerbCallResponse with {} events for task {}",
+                output_fb.len(),
+                task_id
+            );
+
+            moor_rpc::VerbCallResponse {
+                response: moor_rpc::VerbCallResponseUnion::VerbCallSuccess(Box::new(
+                    moor_rpc::VerbCallSuccess {
+                        result: Box::new(result_fb),
+                        output: output_fb,
+                    },
+                )),
+            }
+        }
+        TaskCompletionResult::Error(scheduler_error) => {
+            let scheduler_error_fb = match scheduler_error_to_flatbuffer_struct(&scheduler_error) {
+                Ok(fb) => fb,
+                Err(e) => {
+                    error!("Failed to encode scheduler error: {}", e);
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            };
+            moor_rpc::VerbCallResponse {
+                response: moor_rpc::VerbCallResponseUnion::VerbCallError(Box::new(
+                    moor_rpc::VerbCallError {
+                        error: Box::new(scheduler_error_fb),
+                    },
+                )),
+            }
+        }
     };
 
+    // Serialize the response to FlatBuffer bytes
+    let mut builder = planus::Builder::new();
+    let response_bytes = builder.finish(&response, None).to_vec();
+
     Response::builder()
-        .status(status)
+        .status(StatusCode::OK)
         .header("Content-Type", "application/x-flatbuffer")
-        .body(Body::from(result_bytes))
+        .body(Body::from(response_bytes))
         .unwrap()
 }
 
