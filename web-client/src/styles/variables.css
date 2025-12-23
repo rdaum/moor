@@ -27,10 +27,11 @@
   --color-text-primary: #fff;
   --color-text-secondary: #ccc;
   --color-text-header: #eee;
-  --color-text-accent: #7aa3ff;
+  --color-text-accent: #5c7cfa;
   --color-text-error: #cc0000;
-  --color-text-success: #00ff00;
+  --color-text-success: #51cf66;
   --color-text-historical: #999;
+  --color-text-placeholder: rgba(204, 204, 204, 0.7);
 
   /* Border Colors - Dark Theme */
   --color-border-light: #333;
@@ -39,11 +40,16 @@
 
   /* Interactive Elements - Dark Theme */
   --color-danger: #e74c3c;
-  --color-button-primary: #5865f2;
+  --color-button-primary: #5c7cfa;
+  --color-accent-hover: #4c6ef5;
   --color-shadow: rgba(0, 0, 0, 0.3);
   --color-bg-hover: rgba(255, 255, 255, 0.05);
   --color-bg-accent: var(--color-text-primary);
   --color-surface-raised: #444;
+
+  /* Link Colors - Dark Theme */
+  --color-link: var(--color-text-accent);
+  --color-link-hover: var(--color-accent-hover);
 
   /* Syntax Highlighting - Dark Theme (VS Code inspired) */
   --color-keyword: #569cd6;
@@ -66,24 +72,28 @@
   --light-color-bg-header: #d0d0d0;
   --light-color-bg-input: #f0f0f0;
 
-  --light-color-text-primary: #222;
-  --light-color-text-secondary: #555;
-  --light-color-text-header: #333;
-  --light-color-text-accent: #1a53ff;
-  --light-color-text-error: #d32f2f;
-  --light-color-text-success: #2e7d32;
-  --light-color-text-historical: #777;
+  --light-color-text-primary: #1a1a1a;
+  --light-color-text-secondary: #4a4a4a;
+  --light-color-text-header: #2a2a2a;
+  --light-color-text-accent: #4263eb;
+  --light-color-text-error: #c92a2a;
+  --light-color-text-success: #2f9e44;
+  --light-color-text-historical: #666;
+  --light-color-text-placeholder: rgba(74, 74, 74, 0.6);
 
   --light-color-border-light: #ccc;
   --light-color-border-medium: #aaa;
   --light-color-border-dark: #888;
 
-  --light-color-danger: #f44336;
-  --light-color-button-primary: #3f51b5;
+  --light-color-danger: #e03131;
+  --light-color-button-primary: #4263eb;
+  --light-color-accent-hover: #364fc7;
   --light-color-shadow: rgba(0, 0, 0, 0.1);
   --light-color-bg-hover: rgba(0, 0, 0, 0.05);
   --light-color-bg-accent: var(--light-color-text-primary);
   --light-color-surface-raised: #ddd;
+  --light-color-link: var(--light-color-text-accent);
+  --light-color-link-hover: var(--light-color-accent-hover);
 
   /* Syntax Highlighting - Light Theme */
   --light-color-keyword: #0000ff;
@@ -236,10 +246,14 @@
   /* Interactive Elements - Light Theme */
   --color-danger: var(--light-color-danger);
   --color-button-primary: var(--light-color-button-primary);
+  --color-accent-hover: var(--light-color-accent-hover);
   --color-shadow: var(--light-color-shadow);
   --color-bg-hover: var(--light-color-bg-hover);
   --color-bg-accent: var(--light-color-bg-accent);
   --color-surface-raised: var(--light-color-surface-raised);
+  --color-link: var(--light-color-link);
+  --color-link-hover: var(--light-color-link-hover);
+  --color-text-placeholder: var(--light-color-text-placeholder);
 
   /* Syntax Highlighting - Light Theme */
   --color-keyword: var(--light-color-keyword);
