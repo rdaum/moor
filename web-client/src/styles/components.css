@@ -43,11 +43,89 @@
 
 /* Inset presentation styling */
 .presentation_inset {
+  position: relative;
   margin: 0.5rem 1.5rem;
   padding: 0.75rem 1rem;
   border: 2px solid var(--color-border-primary);
   border-radius: 8px;
   background-color: var(--color-bg-secondary);
+}
+
+/* Collapsed summary for look events (shows when description is collapsed) */
+.look_collapsed_summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.look_collapsed_name {
+  font-family: var(--font-sans);
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--color-text-header);
+  letter-spacing: 0.01em;
+}
+
+/* Toggle button for collapsing/expanding look descriptions - always on left */
+.look_toggle_button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2em;
+  height: 1.2em;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: color 0.15s ease;
+  flex-shrink: 0;
+  vertical-align: baseline;
+}
+
+.look_toggle_button:hover {
+  color: var(--color-text-primary);
+}
+
+.look_toggle_button:focus-visible {
+  outline: 2px solid var(--color-text-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Chevron indicator */
+.look_chevron {
+  display: inline-block;
+  font-size: 0.6em;
+  transition: transform 0.15s ease;
+}
+
+.look_chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+/* Dedicated flex row for toggle + content */
+.look_toggle_row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.look_toggle_row > .look_toggle_button {
+  flex-shrink: 0;
+  margin-top: 0.15em;
+}
+
+.look_toggle_row > .text_narrative,
+.look_toggle_row > .text_djot {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Remove top margin from h3 inside toggle row */
+.look_toggle_row h3:first-child {
+  margin-top: 0;
 }
 
 /* Speech bubble styling for say events */

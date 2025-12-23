@@ -17,6 +17,8 @@ import { ContentRenderer } from "./ContentRenderer";
 import { LinkPreview, LinkPreviewCard } from "./LinkPreviewCard";
 import { getSpeechBubblesEnabled } from "./SpeechBubbleToggle";
 
+const COLLAPSED_LOOKS_KEY = "moor-collapsed-looks";
+
 interface EventMetadata {
     verb?: string;
     actor?: any;
@@ -25,6 +27,7 @@ interface EventMetadata {
     thisObj?: any;
     thisName?: string;
     dobj?: any;
+    dobjName?: string;
     iobj?: any;
     timestamp?: number;
 }
@@ -98,6 +101,36 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
     const previousScrollHeight = useRef<number>(0);
     const [isViewingHistory, setIsViewingHistory] = useState(false);
     const [speechBubblesEnabled, setSpeechBubblesEnabled] = useState(getSpeechBubblesEnabled);
+
+    // Track collapsed look descriptions by groupId
+    const [collapsedLooks, setCollapsedLooks] = useState<Set<string>>(() => {
+        if (typeof window === "undefined") return new Set();
+        try {
+            const stored = sessionStorage.getItem(COLLAPSED_LOOKS_KEY);
+            return stored ? new Set(JSON.parse(stored)) : new Set();
+        } catch {
+            return new Set();
+        }
+    });
+
+    // Toggle collapse state for a look description
+    const toggleLookCollapse = useCallback((groupId: string) => {
+        setCollapsedLooks(prev => {
+            const next = new Set(prev);
+            if (next.has(groupId)) {
+                next.delete(groupId);
+            } else {
+                next.add(groupId);
+            }
+            // Persist to session storage
+            try {
+                sessionStorage.setItem(COLLAPSED_LOOKS_KEY, JSON.stringify([...next]));
+            } catch {
+                // Ignore storage errors
+            }
+            return next;
+        });
+    }, []);
 
     // Listen for speech bubble setting changes
     useEffect(() => {
@@ -313,6 +346,16 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
             && typeof eventMetadata?.actorName === "string";
     };
 
+    // Check if a message is a "look" event with a title to display
+    const isLookEvent = (
+        presentationHint?: string,
+        eventMetadata?: EventMetadata,
+    ): eventMetadata is EventMetadata & { dobjName: string } => {
+        return presentationHint === "inset"
+            && eventMetadata?.verb === "look"
+            && typeof eventMetadata?.dobjName === "string";
+    };
+
     const resolvedFontSize = fontSize ?? 14;
 
     return (
@@ -438,19 +481,69 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                         } else if (message.presentationHint) {
                             // If it has a presentationHint, wrap it like we do for groups
                             const baseClassName = getMessageClassName(message.type, message.isHistorical);
-                            const wrapperClassName = message.presentationHint === "inset" ? "presentation_inset" : "";
+                            const showLookTitle = isLookEvent(message.presentationHint, message.eventMetadata);
+                            const groupId = message.groupId;
+
+                            // Use message.id for collapse key (unique per event)
+                            const collapseKey = message.id;
+                            const isCollapsible = showLookTitle && groupId;
+                            const isThisCollapsed = isCollapsible && collapsedLooks.has(collapseKey);
+
+                            const wrapperClassName = message.presentationHint === "inset"
+                                ? "presentation_inset"
+                                : "";
 
                             result.push(
                                 <div key={message.id} className={wrapperClassName}>
-                                    <div className={baseClassName}>
-                                        {renderContentWithTts(
-                                            message.content,
-                                            message.contentType,
-                                            message.ttsText,
-                                            message.thumbnail,
-                                            message.linkPreview,
-                                        )}
-                                    </div>
+                                    {isCollapsible && isThisCollapsed && (
+                                        <div className="look_collapsed_summary">
+                                            <button
+                                                type="button"
+                                                className="look_toggle_button"
+                                                onClick={() => toggleLookCollapse(collapseKey)}
+                                                aria-expanded={false}
+                                                aria-label="Expand description"
+                                            >
+                                                <span className="look_chevron collapsed">▼</span>
+                                            </button>
+                                            <span className="look_collapsed_name">
+                                                {message.eventMetadata!.dobjName}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {!isThisCollapsed && isCollapsible && (
+                                        <div className="look_toggle_row">
+                                            <button
+                                                type="button"
+                                                className="look_toggle_button"
+                                                onClick={() => toggleLookCollapse(collapseKey)}
+                                                aria-expanded={true}
+                                                aria-label="Collapse description"
+                                            >
+                                                <span className="look_chevron">▼</span>
+                                            </button>
+                                            <div className={baseClassName}>
+                                                {renderContentWithTts(
+                                                    message.content,
+                                                    message.contentType,
+                                                    message.ttsText,
+                                                    message.thumbnail,
+                                                    message.linkPreview,
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {!isThisCollapsed && !isCollapsible && (
+                                        <div className={baseClassName}>
+                                            {renderContentWithTts(
+                                                message.content,
+                                                message.contentType,
+                                                message.ttsText,
+                                                message.thumbnail,
+                                                message.linkPreview,
+                                            )}
+                                        </div>
+                                    )}
                                 </div>,
                             );
                         } else {
@@ -514,31 +607,87 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                     firstMessage.type,
                                     firstMessage.isHistorical,
                                 );
+                                const showLookTitle = isLookEvent(
+                                    firstMessage.presentationHint,
+                                    firstMessage.eventMetadata,
+                                );
+                                const groupId = firstMessage.groupId;
+
+                                // Use firstMessage.id for collapse key (unique per event group)
+                                const collapseKey = firstMessage.id;
+                                const isCollapsible = showLookTitle && groupId;
+                                const isThisCollapsed = isCollapsible && collapsedLooks.has(collapseKey);
+
                                 const wrapperClassName = firstMessage.presentationHint === "inset"
                                     ? "presentation_inset"
                                     : "";
 
-                                // Use firstMessage.id for stable key - prevents re-render when group grows
-                                // The stable key ensures React preserves the DOM node and only appends
-                                // new children, so screen readers announce only additions (not the whole group)
                                 result.push(
                                     <div
                                         key={`hint_${firstMessage.id}`}
                                         className={wrapperClassName}
                                         role="group"
-                                        aria-label="Grouped content"
+                                        aria-label={showLookTitle
+                                            ? firstMessage.eventMetadata!.dobjName
+                                            : "Grouped content"}
                                     >
-                                        {group.map(msg => (
-                                            <div key={msg.id} className={baseClassName}>
-                                                {renderContentWithTts(
-                                                    msg.content,
-                                                    msg.contentType,
-                                                    msg.ttsText,
-                                                    msg.thumbnail,
-                                                    msg.linkPreview,
-                                                )}
+                                        {isCollapsible && isThisCollapsed && (
+                                            <div className="look_collapsed_summary">
+                                                <button
+                                                    type="button"
+                                                    className="look_toggle_button"
+                                                    onClick={() => toggleLookCollapse(collapseKey)}
+                                                    aria-expanded={false}
+                                                    aria-label="Expand description"
+                                                >
+                                                    <span className="look_chevron collapsed">▼</span>
+                                                </button>
+                                                <span className="look_collapsed_name">
+                                                    {firstMessage.eventMetadata!.dobjName}
+                                                </span>
                                             </div>
-                                        ))}
+                                        )}
+                                        {!isThisCollapsed && isCollapsible && (
+                                            <div className="look_toggle_row">
+                                                <button
+                                                    type="button"
+                                                    className="look_toggle_button"
+                                                    onClick={() => toggleLookCollapse(collapseKey)}
+                                                    aria-expanded={true}
+                                                    aria-label="Collapse description"
+                                                >
+                                                    <span className="look_chevron">▼</span>
+                                                </button>
+                                                <div>
+                                                    {group.map(msg => (
+                                                        <div key={msg.id} className={baseClassName}>
+                                                            {renderContentWithTts(
+                                                                msg.content,
+                                                                msg.contentType,
+                                                                msg.ttsText,
+                                                                msg.thumbnail,
+                                                                msg.linkPreview,
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {!isThisCollapsed && !isCollapsible && (
+                                            <>
+                                                {group.map(msg => (
+                                                    <div key={msg.id} className={baseClassName}>
+                                                        {renderContentWithTts(
+                                                            msg.content,
+                                                            msg.contentType,
+                                                            msg.ttsText,
+                                                            msg.thumbnail,
+                                                            msg.linkPreview,
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </>
+                                        )}
                                     </div>,
                                 );
                             }

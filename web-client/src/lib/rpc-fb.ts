@@ -26,7 +26,7 @@ import { PresentEvent } from "../generated/moor-common/present-event.js";
 import { TracebackEvent } from "../generated/moor-common/traceback-event.js";
 import { UnpresentEvent } from "../generated/moor-common/unpresent-event.js";
 import { AbortLimitReason } from "../generated/moor-rpc/abort-limit-reason.js";
-import { ClientEventUnion, unionToClientEventUnion } from "../generated/moor-rpc/client-event-union.js";
+import { ClientEventUnion } from "../generated/moor-rpc/client-event-union.js";
 import { ClientEvent } from "../generated/moor-rpc/client-event.js";
 import { ClientSuccess } from "../generated/moor-rpc/client-success.js";
 import { CommandErrorUnion } from "../generated/moor-rpc/command-error-union.js";
@@ -869,6 +869,7 @@ export interface EventMetadata {
     thisObj?: any;
     thisName?: string;
     dobj?: any;
+    dobjName?: string;
     iobj?: any;
     timestamp?: number;
 }
@@ -1033,6 +1034,8 @@ export function handleClientEventFlatBuffer(
                                     eventMeta.thisName = value;
                                 } else if (keyValue === "dobj") {
                                     eventMeta.dobj = value;
+                                } else if (keyValue === "dobj_name" && typeof value === "string") {
+                                    eventMeta.dobjName = value;
                                 } else if (keyValue === "iobj") {
                                     eventMeta.iobj = value;
                                 } else if (keyValue === "timestamp" && typeof value === "number") {
@@ -1993,7 +1996,7 @@ function narrativeEventToJS(narrativeEvent: any): any {
             const exception = tracebackEvent.exception();
             // Extract exception details if available
             let errorInfo = null;
-            let backtrace: string[] = [];
+            const backtrace: string[] = [];
             if (exception) {
                 const error = exception.error();
                 if (error) {

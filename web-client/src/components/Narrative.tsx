@@ -26,6 +26,7 @@ export interface EventMetadata {
     thisObj?: any;
     thisName?: string;
     dobj?: any;
+    dobjName?: string;
     iobj?: any;
     timestamp?: number;
 }
