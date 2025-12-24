@@ -732,12 +732,14 @@ export const Login: React.FC<LoginProps> = (
                     </div>
                 )}
 
-                {/* OAuth2 login options at top */}
-                <div className="login_oauth_section">
-                    <OAuth2Buttons disabled={authState.isConnecting} mode={mode} />
-                </div>
+                {/* OAuth2 login options at top - hide during wizard steps */}
+                {!(mode === "create" && createStep !== "credentials") && (
+                    <div className="login_oauth_section">
+                        <OAuth2Buttons disabled={authState.isConnecting} mode={mode} />
+                    </div>
+                )}
 
-                {/* Divider - hide during encryption wizard steps */}
+                {/* Divider - hide during wizard steps */}
                 {!(mode === "create" && createStep !== "credentials") && (
                     <div className="login_divider">
                         <span>{mode === "connect" ? "or continue with username" : "or create with username"}</span>

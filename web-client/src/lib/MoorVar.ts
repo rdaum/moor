@@ -301,6 +301,42 @@ export class MoorVar {
             case VarUnion.VarBinary:
                 return this.asBinary();
 
+            case VarUnion.VarFlyweight: {
+                const varFlyweight = this.fb.variant(new VarFlyweight()) as VarFlyweight | null;
+                if (!varFlyweight) return null;
+
+                // Convert flyweight to object with slots as properties
+                const result: Record<string, unknown> = {};
+
+                // Add slots as properties
+                const slotsLen = varFlyweight.slotsLength();
+                for (let i = 0; i < slotsLen; i++) {
+                    const slot = varFlyweight.slots(i);
+                    if (slot) {
+                        const slotName = slot.name()?.value();
+                        const slotValue = slot.value();
+                        if (slotName && slotValue) {
+                            result[slotName] = new MoorVar(slotValue).toJS();
+                        }
+                    }
+                }
+
+                // Add contents as array if present
+                const contents = varFlyweight.contents();
+                if (contents && contents.elementsLength() > 0) {
+                    const contentsArray: unknown[] = [];
+                    for (let i = 0; i < contents.elementsLength(); i++) {
+                        const item = contents.elements(i);
+                        if (item) {
+                            contentsArray.push(new MoorVar(item).toJS());
+                        }
+                    }
+                    result._contents = contentsArray;
+                }
+
+                return result;
+            }
+
             default:
                 console.warn(`Unsupported Var type: ${VarUnion[varType]}`);
                 return null;

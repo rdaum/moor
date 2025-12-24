@@ -17,6 +17,7 @@ import React, { useMemo, useRef, useState } from "react";
 import AvatarEditor from "react-avatar-editor";
 import { usePlayerDescription } from "../hooks/usePlayerDescription";
 import { useProfilePicture } from "../hooks/useProfilePicture";
+import { usePronouns } from "../hooks/usePronouns";
 import { EncryptionSettings } from "./EncryptionSettings";
 
 interface AccountMenuProps {
@@ -26,6 +27,7 @@ interface AccountMenuProps {
     historyAvailable: boolean;
     authToken: string | null;
     playerOid: string | null;
+    refreshKey?: number;
 }
 
 export const AccountMenu: React.FC<AccountMenuProps> = ({
@@ -35,13 +37,26 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
     historyAvailable,
     authToken,
     playerOid,
+    refreshKey,
 }) => {
-    const { profilePicture, loading, uploadProfilePicture } = useProfilePicture(authToken, playerOid);
+    const { profilePicture, loading, uploadProfilePicture, refreshProfilePicture } = useProfilePicture(
+        authToken,
+        playerOid,
+    );
     const {
         playerDescription,
         loading: descriptionLoading,
         updatePlayerDescription,
+        refreshPlayerDescription,
     } = usePlayerDescription(authToken, playerOid);
+    const {
+        currentPronouns,
+        availablePresets,
+        pronounsAvailable,
+        loading: pronounsLoading,
+        updatePronouns,
+        refreshPronouns,
+    } = usePronouns(authToken, playerOid);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const editorRef = useRef<AvatarEditor>(null);
@@ -68,6 +83,15 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
             }
         };
     }, [profilePictureUrl]);
+
+    // Refresh profile data when refreshKey changes (e.g., after profile setup)
+    React.useEffect(() => {
+        if (refreshKey && refreshKey > 0) {
+            refreshProfilePicture();
+            refreshPlayerDescription();
+            refreshPronouns();
+        }
+    }, [refreshKey, refreshProfilePicture, refreshPlayerDescription, refreshPronouns]);
 
     const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -303,6 +327,55 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
                             </button>
                         </div>
                     </div>
+
+                    {/* Pronouns Section - only shown if pronouns are supported */}
+                    {pronounsAvailable && (
+                        <div className="settings-section">
+                            <h3>Pronouns</h3>
+                            <div
+                                style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: "12px",
+                                    padding: "12px 0",
+                                }}
+                            >
+                                {pronounsLoading
+                                    ? (
+                                        <div style={{ color: "var(--text-secondary)" }}>
+                                            Loading...
+                                        </div>
+                                    )
+                                    : (
+                                        <select
+                                            value={currentPronouns || ""}
+                                            onChange={async (e) => {
+                                                try {
+                                                    await updatePronouns(e.target.value);
+                                                } catch {
+                                                    // Error handled by hook
+                                                }
+                                            }}
+                                            disabled={pronounsLoading}
+                                            style={{
+                                                padding: "8px 12px",
+                                                borderRadius: "6px",
+                                                border: "1px solid var(--border-color)",
+                                                backgroundColor: "var(--bg-secondary)",
+                                                color: "var(--text-primary)",
+                                                fontSize: "14px",
+                                            }}
+                                        >
+                                            {availablePresets.map((preset) => (
+                                                <option key={preset} value={preset}>
+                                                    {preset}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
+                            </div>
+                        </div>
+                    )}
 
                     <div className="settings-section">
                         <h3>Security</h3>

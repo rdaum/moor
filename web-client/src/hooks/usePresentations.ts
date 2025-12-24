@@ -111,7 +111,8 @@ export const usePresentations = () => {
         || target === TARGET_TYPES.PROPERTY_EDITOR
         || target === TARGET_TYPES.PROPERTY_VALUE_EDITOR
         || target === TARGET_TYPES.OBJECT_BROWSER
-        || target === TARGET_TYPES.TEXT_EDITOR;
+        || target === TARGET_TYPES.TEXT_EDITOR
+        || target === TARGET_TYPES.PROFILE_SETUP;
 
     const getLeftDockPresentations = useCallback((): Presentation[] => {
         return Array.from(presentations.values()).filter(p => {
@@ -174,6 +175,11 @@ export const usePresentations = () => {
 
     const getTextEditorPresentations = useCallback(
         () => getPresentationsByTarget(TARGET_TYPES.TEXT_EDITOR),
+        [getPresentationsByTarget],
+    );
+
+    const getProfileSetupPresentations = useCallback(
+        () => getPresentationsByTarget(TARGET_TYPES.PROFILE_SETUP),
         [getPresentationsByTarget],
     );
 
@@ -285,6 +291,7 @@ export const usePresentations = () => {
         getPropertyValueEditorPresentations,
         getObjectBrowserPresentations,
         getTextEditorPresentations,
+        getProfileSetupPresentations,
         dismissPresentation,
         fetchCurrentPresentations,
         clearAll,

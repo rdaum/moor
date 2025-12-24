@@ -492,7 +492,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                         // Check if this should render as a speech bubble
                         if (isSpeechBubble(message.presentationHint, message.eventMetadata)) {
                             const fromMe = isActorPlayer(message.eventMetadata.actor, playerOid);
-                            const isMessageStale = staleMessageIds?.has(message.id);
+                            const isMessageStale = staleMessageIds?.has(message.id) || message.isHistorical;
                             result.push(
                                 renderSpeechBubble(
                                     message.eventMetadata.actorName,
@@ -509,7 +509,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                             const baseClassName = getMessageClassName(message.type, message.isHistorical);
                             const showLookTitle = isLookEvent(message.presentationHint, message.eventMetadata);
                             const groupId = message.groupId;
-                            const isMessageStale = staleMessageIds?.has(message.id);
+                            const isMessageStale = staleMessageIds?.has(message.id) || message.isHistorical;
 
                             // Use message.id for collapse key (unique per event)
                             const collapseKey = message.id;
@@ -579,7 +579,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                             );
                         } else {
                             // Regular message without presentationHint
-                            const isMessageStale = staleMessageIds?.has(message.id);
+                            const isMessageStale = staleMessageIds?.has(message.id) || message.isHistorical;
                             result.push(
                                 <div
                                     key={message.id}
@@ -618,8 +618,10 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                 // Get actor name from first message (all in group are same speaker)
                                 const actorName = firstMessage.eventMetadata.actorName;
                                 const fromMe = isActorPlayer(firstMessage.eventMetadata.actor, playerOid);
-                                // Group is stale if any message in it is stale
-                                const isGroupStale = group.some(msg => staleMessageIds?.has(msg.id));
+                                // Group is stale if any message in it is stale or historical
+                                const isGroupStale = group.some(msg =>
+                                    staleMessageIds?.has(msg.id) || msg.isHistorical
+                                );
 
                                 // Combine all messages into one bubble with newlines
                                 const combinedContent = group.map(msg =>
@@ -649,8 +651,10 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                     firstMessage.eventMetadata,
                                 );
                                 const groupId = firstMessage.groupId;
-                                // Group is stale if any message in it is stale
-                                const isGroupStale = group.some(msg => staleMessageIds?.has(msg.id));
+                                // Group is stale if any message in it is stale or historical
+                                const isGroupStale = group.some(msg =>
+                                    staleMessageIds?.has(msg.id) || msg.isHistorical
+                                );
 
                                 // Use firstMessage.id for collapse key (unique per event group)
                                 const collapseKey = firstMessage.id;
@@ -761,8 +765,8 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                             // Get linkPreview from the last message in the group (if any)
                             const lastLinkPreview = group.find(msg => msg.linkPreview)?.linkPreview;
 
-                            // Group is stale if any message in it is stale
-                            const isGroupStale = group.some(msg => staleMessageIds?.has(msg.id));
+                            // Group is stale if any message in it is stale or historical
+                            const isGroupStale = group.some(msg => staleMessageIds?.has(msg.id) || msg.isHistorical);
 
                             result.push(
                                 <div

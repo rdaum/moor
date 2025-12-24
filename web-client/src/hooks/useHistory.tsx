@@ -130,6 +130,7 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
             let messageContent: string | string[] = "";
             let contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback" = "text/plain";
             let presentationHint: string | undefined;
+            let groupId: string | undefined;
             let thumbnail: { contentType: string; data: string } | undefined;
 
             switch (eventType) {
@@ -157,45 +158,34 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
                         }
                     }
 
-                    // Extract presentation_hint and thumbnail from metadata
+                    // Extract metadata fields directly from top-level entries (same as live handler)
                     const metadataLength = notify.metadataLength();
                     for (let mi = 0; mi < metadataLength; mi++) {
                         const metadata = notify.metadata(mi);
                         if (metadata) {
                             const key = metadata.key();
                             const keyValue = key ? key.value() : null;
-                            if (keyValue === "metadata") {
-                                // The metadata value contains a map (as array of pairs) with our actual metadata
-                                const metadataMapVar = metadata.value();
-                                if (metadataMapVar) {
-                                    const metadataMap = new MoorVar(metadataMapVar).toJS();
-                                    // MOO maps come through as arrays of [key, value] pairs
-                                    if (Array.isArray(metadataMap)) {
-                                        for (const pair of metadataMap) {
-                                            if (Array.isArray(pair) && pair.length === 2) {
-                                                const [k, v] = pair;
-                                                if (k === "presentation_hint" && typeof v === "string") {
-                                                    presentationHint = v;
-                                                } else if (k === "thumbnail" && Array.isArray(v) && v.length === 2) {
-                                                    // thumbnail is [content_type, binary_data]
-                                                    const [contentType, binaryData] = v;
-                                                    if (
-                                                        typeof contentType === "string"
-                                                        && binaryData instanceof Uint8Array
-                                                    ) {
-                                                        // Convert binary data to base64 data URL
-                                                        const base64 = btoa(String.fromCharCode(...binaryData));
-                                                        thumbnail = {
-                                                            contentType,
-                                                            data: `data:${contentType};base64,${base64}`,
-                                                        };
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
+                            const metaValue = metadata.value();
+                            const value = metaValue ? new MoorVar(metaValue).toJS() : null;
+
+                            if (keyValue === "presentation_hint" && typeof value === "string") {
+                                presentationHint = value;
+                            } else if (keyValue === "group_id" && typeof value === "string") {
+                                groupId = value;
+                            } else if (keyValue === "thumbnail" && Array.isArray(value) && value.length === 2) {
+                                // thumbnail is [content_type, binary_data]
+                                const [contentType, binaryData] = value;
+                                if (
+                                    typeof contentType === "string"
+                                    && binaryData instanceof Uint8Array
+                                ) {
+                                    // Convert binary data to base64 data URL
+                                    const base64 = btoa(String.fromCharCode(...binaryData));
+                                    thumbnail = {
+                                        contentType,
+                                        data: `data:${contentType};base64,${base64}`,
+                                    };
                                 }
-                                break;
                             }
                         }
                     }
@@ -249,6 +239,7 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
                 isHistorical: true,
                 contentType,
                 presentationHint,
+                groupId,
                 thumbnail: thumbnail,
             };
         } catch (error) {

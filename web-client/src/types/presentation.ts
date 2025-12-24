@@ -36,7 +36,8 @@ export type PresentationTarget =
     | "property-editor"
     | "property-value-editor"
     | "object-browser"
-    | "text-editor";
+    | "text-editor"
+    | "profile-setup";
 
 export const TARGET_TYPES = {
     WINDOW: "window" as const,
@@ -51,4 +52,5 @@ export const TARGET_TYPES = {
     PROPERTY_VALUE_EDITOR: "property-value-editor" as const,
     OBJECT_BROWSER: "object-browser" as const,
     TEXT_EDITOR: "text-editor" as const,
+    PROFILE_SETUP: "profile-setup" as const,
 };

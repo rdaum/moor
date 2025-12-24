@@ -1048,6 +1048,9 @@
   padding: var(--space-md);
   background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
+  /* Firefox scrollbar */
+  scrollbar-width: auto;
+  scrollbar-color: #666 #333;
   border-radius: var(--radius-sm);
   font-size: 0.9em;
   color: var(--text-secondary);
@@ -1056,22 +1059,23 @@
 
 /* Wider, more visible scrollbar */
 .wizard_policy_content::-webkit-scrollbar {
-  width: 10px;
+  width: 12px;
 }
 
 .wizard_policy_content::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
-  border-radius: 5px;
+  background: #222;
+  border-radius: 6px;
 }
 
 .wizard_policy_content::-webkit-scrollbar-thumb {
-  background: var(--border-primary);
-  border-radius: 5px;
-  border: 2px solid var(--bg-secondary);
+  background: #666;
+  border-radius: 6px;
+  border: 2px solid #222;
+  min-height: 40px;
 }
 
 .wizard_policy_content::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
+  background: #888;
 }
 
 .wizard_policy_content p {
@@ -1154,6 +1158,150 @@
 
 .login_button_row .login_submit_button {
   flex: 1;
+}
+
+/* ====== PROFILE SETUP PANEL ====== */
+.profile-setup-panel {
+  max-width: 500px;
+}
+
+.profile-setup-intro {
+  margin: 0 0 var(--space-lg) 0;
+  color: var(--text-secondary);
+  font-size: 0.95em;
+}
+
+.profile-setup-error {
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-md);
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-error-text);
+  font-size: 0.9em;
+}
+
+.profile-setup-section {
+  margin-bottom: var(--space-lg);
+}
+
+.profile-setup-section > label {
+  display: block;
+  margin-bottom: var(--space-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.profile-setup-picture {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+}
+
+.profile-setup-preview {
+  width: 128px;
+  height: 128px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 2px solid var(--border-primary);
+}
+
+.profile-setup-picture-placeholder {
+  width: 128px;
+  height: 128px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border: 2px dashed var(--border-primary);
+  border-radius: 50%;
+  color: var(--text-tertiary);
+  font-size: 0.9em;
+}
+
+.profile-setup-picture-actions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.profile-setup-editor {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+}
+
+.profile-setup-editor-canvas {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-md);
+}
+
+.profile-setup-zoom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+}
+
+.profile-setup-zoom label {
+  font-size: 0.85em;
+  color: var(--text-secondary);
+}
+
+.profile-setup-zoom input[type="range"] {
+  width: 100%;
+}
+
+.profile-setup-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.profile-setup-select {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  font-size: 1em;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.profile-setup-select:focus {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 1px;
+}
+
+.profile-setup-textarea {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  font-size: 1em;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  resize: vertical;
+  min-height: 100px;
+  box-sizing: border-box;
+}
+
+.profile-setup-textarea:focus {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 1px;
+}
+
+.profile-setup-hint {
+  margin: var(--space-xs) 0 0 0;
+  font-size: 0.85em;
+  color: var(--text-tertiary);
+  font-style: italic;
 }
 
 /* Mobile responsive adjustments */

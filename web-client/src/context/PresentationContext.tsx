@@ -31,6 +31,7 @@ interface PresentationContextType {
     getPropertyValueEditorPresentations: () => Presentation[];
     getObjectBrowserPresentations: () => Presentation[];
     getTextEditorPresentations: () => Presentation[];
+    getProfileSetupPresentations: () => Presentation[];
     dismissPresentation: (id: string, authToken: string) => Promise<void>;
     fetchCurrentPresentations: (authToken: string, ageIdentity?: string | null) => Promise<boolean>;
     clearAll: () => void;

@@ -26,6 +26,7 @@ import { Login, useWelcomeMessage } from "./components/Login";
 import { MessageBoard, useSystemMessage } from "./components/MessageBoard";
 import { Narrative, NarrativeMessage, NarrativeRef } from "./components/Narrative";
 import { ObjectBrowser } from "./components/ObjectBrowser";
+import { ProfileSetupPanel } from "./components/ProfileSetupPanel";
 import { PropertyEditor } from "./components/PropertyEditor";
 import { PropertyValueEditorWindow } from "./components/PropertyValueEditorWindow";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -50,7 +51,7 @@ import { MoorVar } from "./lib/MoorVar";
 import { OAuth2UserInfo } from "./lib/oauth2";
 import { fetchServerFeatures, invokeVerbFlatBuffer } from "./lib/rpc-fb";
 import { stringToCurie } from "./lib/var";
-import { PresentationData } from "./types/presentation";
+import { Presentation, PresentationData } from "./types/presentation";
 import "./styles/main.css";
 
 // ObjFlag enum values (must match server-side ObjFlag::Programmer = 1)
@@ -119,6 +120,9 @@ function AppContent({
     const [objectBrowserPresentationIds, setObjectBrowserPresentationIds] = useState<string[]>([]);
     const [objectBrowserLinkedToPresentation, setObjectBrowserLinkedToPresentation] = useState(false);
     const [objectBrowserFocusedObjectCurie, setObjectBrowserFocusedObjectCurie] = useState<string | undefined>();
+    const [profileSetupPresentation, setProfileSetupPresentation] = useState<Presentation | null>(null);
+    const closedProfileSetupPresentationsRef = useRef<Set<string>>(new Set());
+    const [profileRefreshKey, setProfileRefreshKey] = useState(0);
     const [isEvalPanelOpen, setIsEvalPanelOpen] = useState<boolean>(false);
     const [showEncryptionSetup, setShowEncryptionSetup] = useState(false);
     const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
@@ -337,6 +341,7 @@ function AppContent({
         getPropertyValueEditorPresentations,
         getObjectBrowserPresentations,
         getTextEditorPresentations,
+        getProfileSetupPresentations,
         dismissPresentation,
         fetchCurrentPresentations,
         clearAll: clearAllPresentations,
@@ -896,6 +901,68 @@ function AppContent({
         showMessage,
         textEditorSession,
     ]);
+
+    // Handle profile-setup presentations from server
+    useEffect(() => {
+        const profilePresentations = getProfileSetupPresentations();
+
+        if (profilePresentations.length === 0) {
+            if (profileSetupPresentation) {
+                setProfileSetupPresentation(null);
+            }
+            return;
+        }
+
+        // Filter out presentations we've already closed
+        const activePresentations = profilePresentations.filter(
+            p => !closedProfileSetupPresentationsRef.current.has(p.id),
+        );
+
+        if (activePresentations.length === 0) {
+            if (profileSetupPresentation) {
+                setProfileSetupPresentation(null);
+            }
+            return;
+        }
+
+        // Use the most recent presentation
+        const latestPresentation = activePresentations[activePresentations.length - 1];
+
+        // Dismiss older presentations
+        if (activePresentations.length > 1 && authToken) {
+            for (let i = 0; i < activePresentations.length - 1; i++) {
+                dismissPresentation(activePresentations[i].id, authToken);
+            }
+        }
+
+        // Only set if it's a different presentation
+        if (!profileSetupPresentation || profileSetupPresentation.id !== latestPresentation.id) {
+            setProfileSetupPresentation(latestPresentation);
+        }
+    }, [authToken, dismissPresentation, getProfileSetupPresentations, profileSetupPresentation]);
+
+    // Handlers for profile setup panel
+    const handleProfileSetupComplete = useCallback(() => {
+        if (profileSetupPresentation) {
+            closedProfileSetupPresentationsRef.current.add(profileSetupPresentation.id);
+            if (authToken) {
+                dismissPresentation(profileSetupPresentation.id, authToken);
+            }
+        }
+        setProfileSetupPresentation(null);
+        // Trigger refresh of profile data in AccountMenu
+        setProfileRefreshKey((k) => k + 1);
+    }, [authToken, dismissPresentation, profileSetupPresentation]);
+
+    const handleProfileSetupSkip = useCallback(() => {
+        if (profileSetupPresentation) {
+            closedProfileSetupPresentationsRef.current.add(profileSetupPresentation.id);
+            if (authToken) {
+                dismissPresentation(profileSetupPresentation.id, authToken);
+            }
+        }
+        setProfileSetupPresentation(null);
+    }, [authToken, dismissPresentation, profileSetupPresentation]);
 
     // MCP handler for parsing edit commands - passed from parent
     // (We receive the handler instead of creating it here)
@@ -1497,6 +1564,7 @@ function AppContent({
                 historyAvailable={eventLogEnabled !== false}
                 authToken={authToken}
                 playerOid={playerOid}
+                refreshKey={profileRefreshKey}
             />
 
             {/* Main app layout with narrative interface */}
@@ -1837,6 +1905,17 @@ function AppContent({
                         setShowEncryptionSetup(false);
                         setUserSkippedEncryption(true);
                     }}
+                />
+            )}
+
+            {/* Profile Setup Panel */}
+            {profileSetupPresentation && authToken && player?.oid && (
+                <ProfileSetupPanel
+                    presentation={profileSetupPresentation}
+                    authToken={authToken}
+                    playerOid={player.oid}
+                    onComplete={handleProfileSetupComplete}
+                    onSkip={handleProfileSetupSkip}
                 />
             )}
 
