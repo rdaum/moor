@@ -1501,6 +1501,24 @@
   color: var(--color-link-hover);
 }
 
+/* ====== STALE CONTENT STYLES ====== */
+/* Links in stale content are no longer actionable */
+
+.content-stale .moo-link,
+.content-stale .moo-link-cmd,
+.content-stale .moo-link-inspect,
+.content-stale .moo-link-help,
+.content-stale .moo-link-external {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+
+.content-stale .moo-link-cmd {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-muted);
+}
+
 /* ====== INSPECT POPOVER STYLES ====== */
 .inspect-popover {
   background: var(--color-bg-primary);

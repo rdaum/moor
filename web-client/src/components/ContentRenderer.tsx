@@ -20,6 +20,7 @@ interface ContentRendererProps {
     onLinkClick?: (url: string, position?: { x: number; y: number }) => void;
     onLinkHoldStart?: (url: string, position: { x: number; y: number }) => void;
     onLinkHoldEnd?: () => void;
+    isStale?: boolean;
 }
 
 const HOLD_THRESHOLD_MS = 300;
@@ -30,6 +31,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
     onLinkClick,
     onLinkHoldStart,
     onLinkHoldEnd,
+    isStale = false,
 }) => {
     // Touch state tracking for tap vs hold detection
     const touchStateRef = useRef<
@@ -51,6 +53,9 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
 
     // Unified click handler for moo-link spans (all moo-link-* variants)
     const handleLinkClick = useCallback((e: React.MouseEvent) => {
+        // Ignore clicks when content is stale
+        if (isStale) return;
+
         const target = e.target as HTMLElement;
         // Check for data-url attribute which all our link spans have
         const url = target.getAttribute("data-url");
@@ -59,10 +64,13 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
             // Pass click position for popovers
             onLinkClick(url, { x: e.clientX, y: e.clientY });
         }
-    }, [onLinkClick]);
+    }, [onLinkClick, isStale]);
 
     // Touch start: begin tracking for hold detection on inspect links
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
+        // Ignore touches when content is stale
+        if (isStale) return;
+
         const target = e.target as HTMLElement;
         const url = target.getAttribute("data-url");
 
@@ -89,7 +97,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
         }, HOLD_THRESHOLD_MS);
 
         touchStateRef.current = { url, position, timer, isHolding: false };
-    }, [onLinkHoldStart]);
+    }, [onLinkHoldStart, isStale]);
 
     // Touch end: either complete tap or end hold preview
     const handleTouchEnd = useCallback((e: React.TouchEvent) => {
@@ -133,6 +141,8 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
         }
     }, []);
 
+    const staleClass = isStale ? " content-stale" : "";
+
     const renderedContent = useMemo(() => {
         switch (contentType) {
             case "text/html": {
@@ -147,7 +157,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                         onTouchEnd={handleTouchEnd}
                         onTouchCancel={handleTouchCancel}
                         onContextMenu={handleContextMenu}
-                        className="content-html"
+                        className={`content-html${staleClass}`}
                     />
                 );
             }
@@ -165,7 +175,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
 
                     return (
                         <div
-                            className="text_djot content-html"
+                            className={`text_djot content-html${staleClass}`}
                             dangerouslySetInnerHTML={{ __html: processedDjotHtml }}
                             onClick={handleLinkClick}
                             onTouchStart={handleTouchStart}
@@ -177,7 +187,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 } catch (error) {
                     console.warn("Failed to parse djot content:", error);
                     return (
-                        <div className="content-text">
+                        <div className={`content-text${staleClass}`}>
                             {content}
                         </div>
                     );
@@ -187,7 +197,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
             case "text/traceback": {
                 const tracebackContent = getContentString("\n");
                 return (
-                    <pre className="traceback_narrative">
+                    <pre className={`traceback_narrative${staleClass}`}>
                         {tracebackContent}
                     </pre>
                 );
@@ -198,7 +208,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 return (
                     <iframe
                         src={uri}
-                        className="content-iframe"
+                        className={`content-iframe${staleClass}`}
                         title="Welcome content"
                         sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
                     />
@@ -213,7 +223,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 return (
                     <div
                         dangerouslySetInnerHTML={{ __html: renderedHtml }}
-                        className="content-text"
+                        className={`content-text${staleClass}`}
                     />
                 );
             }
@@ -227,6 +237,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
         handleTouchCancel,
         handleContextMenu,
         content,
+        staleClass,
     ]);
 
     return renderedContent;

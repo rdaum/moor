@@ -83,7 +83,11 @@ export interface NarrativeRef {
     getContainerHeight: () => number;
     clearAll: () => void;
     getLastMessageTimestamp: () => number;
+    markMessageStale: (messageId: string) => void;
 }
+
+// Verbs that trigger staleness - a new event with this verb makes previous events with the same verb stale
+const STALENESS_VERBS = new Set(["look"]);
 
 const COMMAND_HISTORY_STORAGE_PREFIX = "moor-command-history";
 const MAX_COMMAND_HISTORY = 500;
@@ -114,6 +118,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     const connected = connectionStatus === "connected";
     const [messages, setMessages] = useState<NarrativeMessage[]>([]);
     const [commandHistory, setCommandHistory] = useState<string[]>([]);
+    const [staleMessageIds, setStaleMessageIds] = useState<Set<string>>(new Set());
     const narrativeContainerRef = useRef<HTMLDivElement>(null);
     const storageKeyRef = useRef<string | null>(null);
     const previousStorageKeyRef = useRef<string | null>(null);
@@ -144,6 +149,16 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         } catch (error) {
             console.warn("Failed to clear stored command history:", error);
         }
+    }, []);
+
+    // Mark a message as stale (links no longer actionable)
+    const markMessageStale = useCallback((messageId: string) => {
+        setStaleMessageIds(prev => {
+            if (prev.has(messageId)) return prev;
+            const next = new Set(prev);
+            next.add(messageId);
+            return next;
+        });
     }, []);
 
     // Add a new message to the narrative
@@ -178,7 +193,30 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         // Track the latest message timestamp (update even for input echo)
         lastMessageTimestampRef.current = now;
 
-        setMessages(prev => [...prev, newMessage]);
+        // If this message has a verb that triggers staleness, mark previous messages
+        // with the same verb as stale
+        const verb = eventMetadata?.verb;
+        if (verb && STALENESS_VERBS.has(verb)) {
+            setMessages(prev => {
+                // Find all previous messages with the same verb and mark them stale
+                const idsToStale = prev
+                    .filter(msg => msg.eventMetadata?.verb === verb)
+                    .map(msg => msg.id);
+
+                if (idsToStale.length > 0) {
+                    setStaleMessageIds(prevStale => {
+                        const next = new Set(prevStale);
+                        idsToStale.forEach(id => next.add(id));
+                        return next;
+                    });
+                }
+
+                return [...prev, newMessage];
+            });
+        } else {
+            setMessages(prev => [...prev, newMessage]);
+        }
+
         if (type !== "input_echo") {
             onMessageAppended?.(newMessage);
         }
@@ -291,6 +329,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
 
         setMessages([]);
         setCommandHistory([]);
+        setStaleMessageIds(new Set());
     }, [clearStoredHistory]);
 
     // Expose methods to parent component
@@ -303,6 +342,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         getContainerHeight,
         clearAll,
         getLastMessageTimestamp: () => lastDisconnectMessageTimestampRef.current,
+        markMessageStale,
     }), [
         addNarrativeContent,
         addSystemMessage,
@@ -311,6 +351,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         prependHistoricalMessages,
         getContainerHeight,
         clearAll,
+        markMessageStale,
     ]);
 
     // Track the current storage key for this player and load stored history when it changes
@@ -388,6 +429,8 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
                     fontSize={fontSize}
                     shouldShowDisconnectDivider={shouldShowDisconnectDivider}
                     playerOid={playerOid}
+                    staleMessageIds={staleMessageIds}
+                    onMessageLinkClicked={markMessageStale}
                 />
                 {promptActive && (
                     <>

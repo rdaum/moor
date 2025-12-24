@@ -56,6 +56,8 @@ interface OutputWindowProps {
     fontSize?: number;
     shouldShowDisconnectDivider?: boolean;
     playerOid?: string | null;
+    staleMessageIds?: Set<string>;
+    onMessageLinkClicked?: (messageId: string) => void;
 }
 
 // Compare actor from event metadata with playerOid
@@ -95,6 +97,8 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
     fontSize,
     shouldShowDisconnectDivider = false,
     playerOid,
+    staleMessageIds,
+    onMessageLinkClicked,
 }) => {
     const outputRef = useRef<HTMLDivElement>(null);
     const shouldAutoScroll = useRef(true);
@@ -151,6 +155,16 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         };
     }, []);
 
+    // Create a wrapped link click handler that also marks the message as stale
+    const createLinkClickHandler = useCallback((messageId: string) => {
+        return (url: string, position?: { x: number; y: number }) => {
+            // Mark the message as stale when any link is clicked
+            onMessageLinkClicked?.(messageId);
+            // Then call the original handler
+            onLinkClick?.(url, position);
+        };
+    }, [onLinkClick, onMessageLinkClicked]);
+
     // Render content with optional TTS text for screen readers
     const renderContentWithTts = useCallback((
         content: string | string[],
@@ -158,7 +172,12 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         ttsText: string | undefined,
         thumbnail?: { contentType: string; data: string },
         linkPreview?: LinkPreview,
+        messageId?: string,
+        isStale?: boolean,
     ) => {
+        // Use a wrapped handler that marks the message stale, or fall back to direct handler
+        const linkClickHandler = messageId ? createLinkClickHandler(messageId) : onLinkClick;
+
         if (ttsText) {
             return (
                 <>
@@ -168,9 +187,10 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                         <ContentRenderer
                             content={content}
                             contentType={contentType}
-                            onLinkClick={onLinkClick}
+                            onLinkClick={linkClickHandler}
                             onLinkHoldStart={onLinkHoldStart}
                             onLinkHoldEnd={onLinkHoldEnd}
+                            isStale={isStale}
                         />
                     </span>
                     {linkPreview && <LinkPreviewCard preview={linkPreview} />}
@@ -183,14 +203,15 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                 <ContentRenderer
                     content={content}
                     contentType={contentType}
-                    onLinkClick={onLinkClick}
+                    onLinkClick={linkClickHandler}
                     onLinkHoldStart={onLinkHoldStart}
                     onLinkHoldEnd={onLinkHoldEnd}
+                    isStale={isStale}
                 />
                 {linkPreview && <LinkPreviewCard preview={linkPreview} />}
             </>
         );
-    }, [onLinkClick, onLinkHoldStart, onLinkHoldEnd]);
+    }, [onLinkClick, onLinkHoldStart, onLinkHoldEnd, createLinkClickHandler]);
 
     // Auto-scroll to bottom when new messages arrive
     useEffect(() => {
@@ -301,10 +322,12 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         isHistorical?: boolean,
         fromMe?: boolean,
         contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback",
+        isStale?: boolean,
     ) => {
         const displayName = fromMe ? "You" : actorName;
         const bubbleClass = fromMe ? "speech_bubble speech_bubble_me" : "speech_bubble";
         const ariaLabel = fromMe ? `You say: ${content}` : `${actorName} says: ${content}`;
+        const linkClickHandler = createLinkClickHandler(messageId);
         return (
             <div
                 key={messageId}
@@ -319,9 +342,10 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                     <ContentRenderer
                         content={content}
                         contentType={contentType}
-                        onLinkClick={onLinkClick}
+                        onLinkClick={linkClickHandler}
                         onLinkHoldStart={onLinkHoldStart}
                         onLinkHoldEnd={onLinkHoldEnd}
+                        isStale={isStale}
                     />
                 </div>
             </div>
@@ -468,6 +492,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                         // Check if this should render as a speech bubble
                         if (isSpeechBubble(message.presentationHint, message.eventMetadata)) {
                             const fromMe = isActorPlayer(message.eventMetadata.actor, playerOid);
+                            const isMessageStale = staleMessageIds?.has(message.id);
                             result.push(
                                 renderSpeechBubble(
                                     message.eventMetadata.actorName,
@@ -476,6 +501,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                     message.isHistorical,
                                     fromMe,
                                     message.contentType,
+                                    isMessageStale,
                                 ),
                             );
                         } else if (message.presentationHint) {
@@ -483,6 +509,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                             const baseClassName = getMessageClassName(message.type, message.isHistorical);
                             const showLookTitle = isLookEvent(message.presentationHint, message.eventMetadata);
                             const groupId = message.groupId;
+                            const isMessageStale = staleMessageIds?.has(message.id);
 
                             // Use message.id for collapse key (unique per event)
                             const collapseKey = message.id;
@@ -529,6 +556,8 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                     message.ttsText,
                                                     message.thumbnail,
                                                     message.linkPreview,
+                                                    message.id,
+                                                    isMessageStale,
                                                 )}
                                             </div>
                                         </div>
@@ -541,6 +570,8 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                 message.ttsText,
                                                 message.thumbnail,
                                                 message.linkPreview,
+                                                message.id,
+                                                isMessageStale,
                                             )}
                                         </div>
                                     )}
@@ -548,6 +579,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                             );
                         } else {
                             // Regular message without presentationHint
+                            const isMessageStale = staleMessageIds?.has(message.id);
                             result.push(
                                 <div
                                     key={message.id}
@@ -562,6 +594,8 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                         message.ttsText,
                                         message.thumbnail,
                                         message.linkPreview,
+                                        message.id,
+                                        isMessageStale,
                                     )}
                                 </div>,
                             );
@@ -584,6 +618,8 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                 // Get actor name from first message (all in group are same speaker)
                                 const actorName = firstMessage.eventMetadata.actorName;
                                 const fromMe = isActorPlayer(firstMessage.eventMetadata.actor, playerOid);
+                                // Group is stale if any message in it is stale
+                                const isGroupStale = group.some(msg => staleMessageIds?.has(msg.id));
 
                                 // Combine all messages into one bubble with newlines
                                 const combinedContent = group.map(msg =>
@@ -599,6 +635,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                         firstMessage.isHistorical,
                                         fromMe,
                                         firstMessage.contentType,
+                                        isGroupStale,
                                     ),
                                 );
                             } else {
@@ -612,6 +649,8 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                     firstMessage.eventMetadata,
                                 );
                                 const groupId = firstMessage.groupId;
+                                // Group is stale if any message in it is stale
+                                const isGroupStale = group.some(msg => staleMessageIds?.has(msg.id));
 
                                 // Use firstMessage.id for collapse key (unique per event group)
                                 const collapseKey = firstMessage.id;
@@ -667,6 +706,8 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                                 msg.ttsText,
                                                                 msg.thumbnail,
                                                                 msg.linkPreview,
+                                                                msg.id,
+                                                                isGroupStale,
                                                             )}
                                                         </div>
                                                     ))}
@@ -683,6 +724,8 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                             msg.ttsText,
                                                             msg.thumbnail,
                                                             msg.linkPreview,
+                                                            msg.id,
+                                                            isGroupStale,
                                                         )}
                                                     </div>
                                                 ))}
@@ -718,6 +761,9 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                             // Get linkPreview from the last message in the group (if any)
                             const lastLinkPreview = group.find(msg => msg.linkPreview)?.linkPreview;
 
+                            // Group is stale if any message in it is stale
+                            const isGroupStale = group.some(msg => staleMessageIds?.has(msg.id));
+
                             result.push(
                                 <div
                                     key={`noline_${firstMessage.id}`}
@@ -732,6 +778,8 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                         combinedTtsText || undefined,
                                         undefined,
                                         lastLinkPreview,
+                                        firstMessage.id,
+                                        isGroupStale,
                                     )}
                                 </div>,
                             );
