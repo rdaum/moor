@@ -59,6 +59,9 @@ tracing-subscriber.workspace = true
 # Utilities & Helpers
 uuid.workspace = true
 
+# HTTP Client
+reqwest.workspace = true
+
 [[bin]]
 name = "moor-mcp-host"
 path = "src/main.rs"

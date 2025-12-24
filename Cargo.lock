@@ -3458,6 +3458,7 @@ dependencies = [
  "moor-schema",
  "moor-var",
  "planus",
+ "reqwest",
  "rpc-async-client",
  "rpc-common",
  "serde",

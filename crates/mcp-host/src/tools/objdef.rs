@@ -16,10 +16,87 @@
 use crate::mcp_types::{Tool, ToolCallResult};
 use crate::moor_client::{MoorClient, MoorResult};
 use eyre::Result;
-use moor_compiler::{CompileOptions, ObjFileContext, compile_object_definitions};
+use moor_compiler::{CompileOptions, ObjFileContext, compile_object_definitions, to_literal};
 use serde_json::{Value, json};
 
 use super::helpers::format_var;
+
+/// Check if a path looks like a URL (http:// or https://)
+/// RFC 3986 specifies schemes are case-insensitive
+fn is_url(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.starts_with("http://") || lower.starts_with("https://")
+}
+
+/// Maximum content size for URL fetches (10 MB)
+const MAX_URL_CONTENT_SIZE: u64 = 10 * 1024 * 1024;
+
+/// Read content from either a local file path or a URL.
+/// Returns the content as a string, or an error message.
+async fn read_file_or_url(path: &str) -> std::result::Result<String, String> {
+    if is_url(path) {
+        // Fetch from URL with timeouts
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .build()
+            .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+        match client.get(path).send().await {
+            Ok(response) => {
+                if !response.status().is_success() {
+                    return Err(format!(
+                        "HTTP error fetching '{}': {}",
+                        path,
+                        response.status()
+                    ));
+                }
+
+                // Check content length if provided
+                if let Some(content_length) = response.content_length() {
+                    if content_length > MAX_URL_CONTENT_SIZE {
+                        return Err(format!(
+                            "Content too large: {} bytes (max {} bytes)",
+                            content_length, MAX_URL_CONTENT_SIZE
+                        ));
+                    }
+                }
+
+                response
+                    .text()
+                    .await
+                    .map_err(|e| format!("Failed to read response from '{}': {}", path, e))
+            }
+            Err(e) => Err(format!("Failed to fetch '{}': {}", path, e)),
+        }
+    } else {
+        // Read from local file
+        std::fs::read_to_string(path).map_err(|e| format!("Failed to read file '{}': {}", path, e))
+    }
+}
+
+/// Parse a constants file locally and return a MOO map literal string.
+/// Uses the objdef compiler to parse `define NAME = value;` statements.
+fn parse_constants_file_to_map_literal(content: &str) -> Result<String, String> {
+    let mut context = ObjFileContext::new();
+    let options = CompileOptions::default();
+
+    // Parse the file - we only care about the constants that get accumulated
+    let _ = compile_object_definitions(content, &options, &mut context);
+
+    // Build MOO map literal from parsed constants
+    if context.constants().is_empty() {
+        return Ok("[]".to_string());
+    }
+
+    let entries: Vec<String> = context
+        .constants()
+        .iter()
+        .map(|(name, value)| format!("\"{}\" -> {}", name.as_string(), to_literal(value)))
+        .collect();
+
+    Ok(format!("[{}]", entries.join(", ")))
+}
 
 // ============================================================================
 // Tool Definitions
@@ -160,8 +237,9 @@ pub fn tool_moo_write_objdef_file() -> Tool {
 pub fn tool_moo_load_objdef_file() -> Tool {
     Tool {
         name: "moo_load_objdef_file".to_string(),
-        description: "Load an object into the MOO database from an objdef file on the filesystem. \
-            This is a convenience that combines reading an objdef file and calling load_object. \
+        description: "Load an object into the MOO database from an objdef file or URL. \
+            Supports both local file paths and HTTP/HTTPS URLs. \
+            This is a convenience that combines reading an objdef and calling load_object. \
             Use object_spec to control ID assignment."
             .to_string(),
         input_schema: json!({
@@ -169,7 +247,7 @@ pub fn tool_moo_load_objdef_file() -> Tool {
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Path to the objdef file (e.g., 'cores/cowbell/src/myobject.moo')"
+                    "description": "Path or URL to the objdef file (e.g., 'src/myobject.moo' or 'https://example.com/object.moo')"
                 },
                 "object_spec": {
                     "type": "string",
@@ -179,6 +257,10 @@ pub fn tool_moo_load_objdef_file() -> Tool {
                     "type": "boolean",
                     "description": "Automatically build constants map from objects with import_export_id property. This allows symbolic names like HENRI, ACTOR, etc. in objdef files to be resolved. Defaults to true.",
                     "default": true
+                },
+                "constants_file": {
+                    "type": "string",
+                    "description": "Path or URL to a constants file (e.g., 'src/constants.moo' or 'https://example.com/constants.moo'). The file is read and parsed locally/fetched, and the constants are sent to the remote daemon. This is useful when the constants aren't yet defined as objects in the database."
                 }
             },
             "required": ["path"]
@@ -189,15 +271,16 @@ pub fn tool_moo_load_objdef_file() -> Tool {
 pub fn tool_moo_reload_objdef_file() -> Tool {
     Tool {
         name: "moo_reload_objdef_file".to_string(),
-        description: "Reload an existing object from an objdef file on the filesystem. \
-            Reads the objdef from the file and reloads the target object with that definition."
+        description: "Reload an existing object from an objdef file or URL. \
+            Supports both local file paths and HTTP/HTTPS URLs. \
+            Reads the objdef and reloads the target object with that definition."
             .to_string(),
         input_schema: json!({
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Path to the objdef file (e.g., 'cores/cowbell/src/root.moo')"
+                    "description": "Path or URL to the objdef file (e.g., 'src/root.moo' or 'https://example.com/object.moo')"
                 },
                 "target": {
                     "type": "string",
@@ -207,6 +290,10 @@ pub fn tool_moo_reload_objdef_file() -> Tool {
                     "type": "boolean",
                     "description": "Automatically build constants map from objects with import_export_id property. This allows symbolic names like HENRI, ACTOR, etc. in objdef files to be resolved. Defaults to true.",
                     "default": true
+                },
+                "constants_file": {
+                    "type": "string",
+                    "description": "Path or URL to a constants file (e.g., 'src/constants.moo' or 'https://example.com/constants.moo'). The file is fetched/read and parsed, and the constants are sent to the remote daemon."
                 }
             },
             "required": ["path"]
@@ -500,15 +587,34 @@ pub async fn execute_moo_load_objdef_file(
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
-    // Read the file from the filesystem
-    let objdef = match std::fs::read_to_string(path) {
+    let constants_file = args.get("constants_file").and_then(|v| v.as_str());
+
+    // Read the objdef from file or URL
+    let objdef = match read_file_or_url(path).await {
         Ok(content) => content,
         Err(e) => {
-            return Ok(ToolCallResult::error(format!(
-                "Failed to read file '{}': {}",
-                path, e
-            )));
+            return Ok(ToolCallResult::error(e));
         }
+    };
+
+    // If constants_file is provided, read and parse it (supports URLs too)
+    let local_constants_map = if let Some(cf_path) = constants_file {
+        match read_file_or_url(cf_path).await {
+            Ok(content) => match parse_constants_file_to_map_literal(&content) {
+                Ok(map_literal) => Some(map_literal),
+                Err(e) => {
+                    return Ok(ToolCallResult::error(format!(
+                        "Failed to parse constants file '{}': {}",
+                        cf_path, e
+                    )));
+                }
+            },
+            Err(e) => {
+                return Ok(ToolCallResult::error(e));
+            }
+        }
+    } else {
+        None
     };
 
     // Convert objdef text to a list of strings for the builtin
@@ -523,17 +629,31 @@ pub async fn execute_moo_load_objdef_file(
     );
 
     // Build the MOO expression
-    // If auto_constants is enabled, build constants map from import_export_id properties
-    let expr = if auto_constants {
+    // load_object takes: (lines, options_map [, object_spec])
+    // where options_map has 'constants key for constant definitions
+    // Priority: constants_file > auto_constants > no constants
+    let expr = if let Some(constants_map) = local_constants_map {
+        // Use locally-parsed constants in options map
+        let options = format!("['constants -> {}]", constants_map);
+        if let Some(spec) = object_spec {
+            format!(
+                "return load_object({}, {}, {});",
+                lines_literal, options, spec
+            )
+        } else {
+            format!("return load_object({}, {});", lines_literal, options)
+        }
+    } else if auto_constants {
+        // Build constants from objects in the database
         let constants_builder = r#"constants = []; for o in (objects()) id = `o.import_export_id ! E_PROPNF => 0'; if (typeof(id) == STR && id != "") constants[id:uppercase()] = o; endif endfor"#;
         if let Some(spec) = object_spec {
             format!(
-                "{} return load_object({}, constants, {});",
+                "{} return load_object({}, ['constants -> constants], {});",
                 constants_builder, lines_literal, spec
             )
         } else {
             format!(
-                "{} return load_object({}, constants);",
+                "{} return load_object({}, ['constants -> constants]);",
                 constants_builder, lines_literal
             )
         }
@@ -569,15 +689,34 @@ pub async fn execute_moo_reload_objdef_file(
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
-    // Read the file from the filesystem
-    let objdef = match std::fs::read_to_string(path) {
+    let constants_file = args.get("constants_file").and_then(|v| v.as_str());
+
+    // Read the objdef from file or URL
+    let objdef = match read_file_or_url(path).await {
         Ok(content) => content,
         Err(e) => {
-            return Ok(ToolCallResult::error(format!(
-                "Failed to read file '{}': {}",
-                path, e
-            )));
+            return Ok(ToolCallResult::error(e));
         }
+    };
+
+    // If constants_file is provided, read and parse it (supports URLs too)
+    let local_constants_map = if let Some(cf_path) = constants_file {
+        match read_file_or_url(cf_path).await {
+            Ok(content) => match parse_constants_file_to_map_literal(&content) {
+                Ok(map_literal) => Some(map_literal),
+                Err(e) => {
+                    return Ok(ToolCallResult::error(format!(
+                        "Failed to parse constants file '{}': {}",
+                        cf_path, e
+                    )));
+                }
+            },
+            Err(e) => {
+                return Ok(ToolCallResult::error(e));
+            }
+        }
+    } else {
+        None
     };
 
     // Convert objdef text to a list of strings for the builtin
@@ -592,8 +731,23 @@ pub async fn execute_moo_reload_objdef_file(
     );
 
     // Build the MOO expression: reload_object(lines [, constants] [, target])
-    // If auto_constants is enabled, build constants map from import_export_id properties
-    let expr = if auto_constants {
+    // Note: reload_object uses a simpler API - constants is the second arg directly, not in options map
+    // Priority: constants_file > auto_constants > no constants
+    let expr = if let Some(constants_map) = local_constants_map {
+        // Use locally-parsed constants
+        if let Some(target_obj) = target {
+            format!(
+                "return reload_object({}, {}, {});",
+                lines_literal, constants_map, target_obj
+            )
+        } else {
+            format!(
+                "return reload_object({}, {});",
+                lines_literal, constants_map
+            )
+        }
+    } else if auto_constants {
+        // Build constants from objects in the database
         let constants_builder = r#"constants = []; for o in (objects()) id = `o.import_export_id ! E_PROPNF => 0'; if (typeof(id) == STR && id != "") constants[id:uppercase()] = o; endif endfor"#;
         if let Some(target_obj) = target {
             format!(
