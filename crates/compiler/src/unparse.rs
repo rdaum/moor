@@ -454,18 +454,31 @@ impl<'a> Unparse<'a> {
                 body,
                 self_name,
             } => {
-                // Check if this is a simple expression lambda or a complex multi-statement lambda
-                let is_simple_expr = matches!(&body.node, StmtNode::Expr(Expr::Return(Some(_))));
+                // Check if this is a simple expression lambda or a complex multi-statement lambda.
+                // Simple expression lambdas are output as {x} => expr.
+                // They can be detected as either:
+                // 1. A direct Return statement (legacy format)
+                // 2. A Scope containing exactly one Return statement (new format with scope tracking)
+                let simple_return_expr = match &body.node {
+                    StmtNode::Expr(Expr::Return(Some(e))) => Some(e),
+                    StmtNode::Scope { body: stmts, .. } if stmts.len() == 1 => {
+                        if let StmtNode::Expr(Expr::Return(Some(e))) = &stmts[0].node {
+                            Some(e)
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                };
 
                 let param_str = self.unparse_lambda_params(params)?;
 
-                if is_simple_expr && self_name.is_none() {
+                if let Some(expr) = simple_return_expr
+                    && self_name.is_none()
+                {
                     // Simple expression lambda: {param1, ?param2, @param3} => expr
-                    let expr = match &body.node {
-                        StmtNode::Expr(Expr::Return(Some(e))) => self.unparse_expr(e)?,
-                        _ => unreachable!("is_simple_expr check guarantees this pattern"),
-                    };
-                    Ok(format!("{{{param_str}}} => {expr}"))
+                    let expr_str = self.unparse_expr(expr)?;
+                    Ok(format!("{{{param_str}}} => {expr_str}"))
                 } else {
                     // Multi-statement lambda: fn (params) ... endfn
                     // or fn name(params) ... endfn for named/recursive functions
@@ -1992,13 +2005,18 @@ endif"#;
         let stripped = unindent(program);
         let result = parse_and_unparse(&stripped).unwrap();
         parse_and_unparse(&result).expect("Unparsed output should be re-parseable");
+        // Outer lambda has multiple statements, so it stays as fn...endfn
         assert!(result.contains("fn (x)"), "Should contain outer fn");
-        assert!(result.contains("fn (y)"), "Should contain inner fn");
-        // Should have two endfn markers
+        // Inner lambda has only a single return, so it gets simplified to arrow form
+        assert!(
+            result.contains("{y} => y * 2"),
+            "Inner lambda should be simplified to arrow form"
+        );
+        // Only the outer fn should have endfn (inner was simplified)
         assert_eq!(
             result.matches("endfn").count(),
-            2,
-            "Should have two endfn markers"
+            1,
+            "Should have one endfn marker (outer only)"
         );
     }
 

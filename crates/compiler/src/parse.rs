@@ -561,6 +561,10 @@ impl TreeTransformer {
                         let lambda_params = inner.next().unwrap();
                         let body_part = inner.next().unwrap();
 
+                        // Enter a new scope BEFORE parsing lambda parameters
+                        // so parameters are scoped to the lambda, not the outer scope
+                        primary_self.enter_scope();
+
                         let params = primary_self
                             .clone()
                             .parse_lambda_params(lambda_params.into_inner())?;
@@ -602,9 +606,23 @@ impl TreeTransformer {
                             }
                         };
 
+                        let num_total_bindings = primary_self.exit_scope();
+
+                        // Wrap body in a Scope node to track bindings.
+                        // The unparser will detect single-Return Scopes and
+                        // simplify to the condensed {x} => expr form.
+                        let scope_line_col = body.line_col;
+                        let scoped_body = Box::new(Stmt::new(
+                            StmtNode::Scope {
+                                num_bindings: num_total_bindings,
+                                body: vec![*body],
+                            },
+                            scope_line_col,
+                        ));
+
                         Ok(Expr::Lambda {
                             params,
-                            body,
+                            body: scoped_body,
                             self_name: None,
                         })
                     }
@@ -613,24 +631,8 @@ impl TreeTransformer {
                         let lambda_params = inner.next().unwrap();
                         let statements_part = inner.next().unwrap();
 
-                        let params = primary_self
-                            .clone()
-                            .parse_lambda_params(lambda_params.into_inner())?;
-
-                        // Parse the statements and wrap them in a scope with proper binding tracking
-                        let scope_line_col = statements_part.line_col();
-                        primary_self.enter_scope();
-                        let statements = primary_self
-                            .clone()
-                            .parse_statements(statements_part.into_inner())?;
-                        let num_total_bindings = primary_self.exit_scope();
-                        let body = Box::new(Stmt::new(
-                            StmtNode::Scope {
-                                num_bindings: num_total_bindings,
-                                body: statements,
-                            },
-                            scope_line_col, // Use actual line numbers from statements
-                        ));
+                        let (params, body) =
+                            primary_self.clone().parse_fn_lambda_body(lambda_params, statements_part)?;
 
                         Ok(Expr::Lambda {
                             params,
@@ -1557,23 +1559,8 @@ impl TreeTransformer {
                         let params_part = parts.next().unwrap();
                         let statements_part = parts.next().unwrap();
 
-                        // Parse the lambda parameters
-                        let params = self.clone().parse_lambda_params(params_part.into_inner())?;
-
-                        // Parse the function body with proper scope tracking
-                        let scope_line_col = statements_part.line_col();
-                        self.enter_scope();
-                        let statements = self
-                            .clone()
-                            .parse_statements(statements_part.into_inner())?;
-                        let num_total_bindings = self.exit_scope();
-                        let body = Box::new(Stmt::new(
-                            StmtNode::Scope {
-                                num_bindings: num_total_bindings,
-                                body: statements,
-                            },
-                            scope_line_col, // Use actual line numbers from statements
-                        ));
+                        let (params, body) =
+                            self.clone().parse_fn_lambda_body(params_part, statements_part)?;
 
                         // Create a declaration for the function name
                         let id = {
@@ -1603,29 +1590,13 @@ impl TreeTransformer {
                         let var_name = parts.next().unwrap().as_str();
                         let func_expr_part = parts.next().unwrap(); // This is the fn_expr rule
 
-                        // Parse the fn expression manually (similar to fn_expr case above)
+                        // Parse the fn expression
                         let mut func_parts = func_expr_part.into_inner();
                         let lambda_params = func_parts.next().unwrap();
                         let statements_part = func_parts.next().unwrap();
 
-                        let params = self
-                            .clone()
-                            .parse_lambda_params(lambda_params.into_inner())?;
-
-                        // Parse the function body with proper scope tracking
-                        let scope_line_col = statements_part.line_col();
-                        self.enter_scope();
-                        let statements = self
-                            .clone()
-                            .parse_statements(statements_part.into_inner())?;
-                        let num_total_bindings = self.exit_scope();
-                        let body = Box::new(Stmt::new(
-                            StmtNode::Scope {
-                                num_bindings: num_total_bindings,
-                                body: statements,
-                            },
-                            scope_line_col, // Use actual line numbers from statements
-                        ));
+                        let (params, body) =
+                            self.clone().parse_fn_lambda_body(lambda_params, statements_part)?;
 
                         // Create the lambda expression
                         let lambda_expr = Expr::Lambda {
@@ -1915,6 +1886,37 @@ impl TreeTransformer {
         }
 
         Ok(items)
+    }
+
+    /// Parse a fn-style lambda body with proper scope isolation.
+    /// This is used by fn_expr, fn_named, and fn_assignment to ensure
+    /// lambda parameters are scoped to the lambda, not the outer scope.
+    fn parse_fn_lambda_body(
+        self: Rc<Self>,
+        params_pair: Pair<Rule>,
+        statements_pair: Pair<Rule>,
+    ) -> Result<(Vec<ScatterItem>, Box<Stmt>), CompileError> {
+        // Enter a new scope BEFORE parsing lambda parameters
+        // so parameters are scoped to the lambda, not the outer scope
+        let scope_line_col = params_pair.line_col();
+        self.enter_scope();
+
+        // Parse the lambda parameters (now inside the lambda's scope)
+        let params = self.clone().parse_lambda_params(params_pair.into_inner())?;
+
+        // Parse the function body (still within the same scope as parameters)
+        let statements = self.clone().parse_statements(statements_pair.into_inner())?;
+        let num_total_bindings = self.exit_scope();
+
+        let body = Box::new(Stmt::new(
+            StmtNode::Scope {
+                num_bindings: num_total_bindings,
+                body: statements,
+            },
+            scope_line_col,
+        ));
+
+        Ok((params, body))
     }
 
     fn transform_tree(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Parse, CompileError> {
@@ -3883,6 +3885,37 @@ mod tests {
     }
 
     #[test]
+    fn test_lambda_params_scoped_independently() {
+        // Multiple lambdas with the same parameter name should NOT conflict.
+        // Each lambda has its own scope for parameters.
+        let program = r#"let funcs = {{s} => s + 1, {s} => s + 2};"#;
+        let result = parse_program(program, CompileOptions::default());
+        assert!(
+            result.is_ok(),
+            "Multiple lambdas with same param name should compile: {:?}",
+            result.err()
+        );
+
+        // Also test fn-style lambdas with same parameter names
+        let program2 = r#"let funcs = {fn (x) return x + 1; endfn, fn (x) return x + 2; endfn};"#;
+        let result2 = parse_program(program2, CompileOptions::default());
+        assert!(
+            result2.is_ok(),
+            "Multiple fn lambdas with same param name should compile: {:?}",
+            result2.err()
+        );
+
+        // Mixed arrow and fn-style lambdas
+        let program3 = r#"let funcs = {{s} => s, fn (s) return s; endfn};"#;
+        let result3 = parse_program(program3, CompileOptions::default());
+        assert!(
+            result3.is_ok(),
+            "Mixed lambda styles with same param name should compile: {:?}",
+            result3.err()
+        );
+    }
+
+    #[test]
     fn test_lambda_parse() {
         // Test simple lambda
         let program = r#"let f = {x} => 5;"#;
@@ -3917,12 +3950,23 @@ mod tests {
         }) = &expr_parse.stmts[0].node
             && let Expr::Lambda { body, .. } = expr.as_ref()
         {
-            // Should be a return statement wrapping the expression
-            if let StmtNode::Expr(Expr::Return(Some(_))) = &body.node {
-                // Good - expression lambda was wrapped in return
+            // Expression lambda body should be a Scope containing a single Return statement
+            if let StmtNode::Scope {
+                body: statements, ..
+            } = &body.node
+            {
+                assert_eq!(statements.len(), 1);
+                if let StmtNode::Expr(Expr::Return(Some(_))) = &statements[0].node {
+                    // Good - expression lambda body is Scope with Return
+                } else {
+                    panic!(
+                        "Expected return statement in expression lambda scope, got: {:?}",
+                        &statements[0].node
+                    );
+                }
             } else {
                 panic!(
-                    "Expected return statement for expression lambda, got: {:?}",
+                    "Expected Scope for expression lambda body, got: {:?}",
                     &body.node
                 );
             }
