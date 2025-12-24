@@ -116,6 +116,12 @@ pub trait Session: Send + Sync {
     /// rollback.
     fn send_event(&self, player: Obj, event: Box<NarrativeEvent>) -> Result<(), SessionError>;
 
+    /// Spool an event for logging only (no broadcast to connections).
+    /// On commit, the event will be written to the player's event log but will not be sent to
+    /// any connected clients. Used by `event_log()` builtin to allow MOO code to control what
+    /// gets logged separately from what gets displayed.
+    fn log_event(&self, player: Obj, event: Box<NarrativeEvent>) -> Result<(), SessionError>;
+
     /// Send non-spooled output to the given player's connection
     /// Examples of the kinds of messages that would be sent here are state-independent messages
     /// like login/logout messages, system error messages ("task aborted") or messages that are not
@@ -276,6 +282,10 @@ impl Session for NoopClientSession {
     }
 
     fn send_event(&self, _player: Obj, _msg: Box<NarrativeEvent>) -> Result<(), SessionError> {
+        Ok(())
+    }
+
+    fn log_event(&self, _player: Obj, _event: Box<NarrativeEvent>) -> Result<(), SessionError> {
         Ok(())
     }
 
@@ -457,6 +467,11 @@ impl Session for MockClientSession {
 
     fn send_event(&self, _player: Obj, msg: Box<NarrativeEvent>) -> Result<(), SessionError> {
         self.inner.write().unwrap().received.push(*msg);
+        Ok(())
+    }
+
+    fn log_event(&self, _player: Obj, _event: Box<NarrativeEvent>) -> Result<(), SessionError> {
+        // Mock session doesn't persist to event log, so this is a no-op
         Ok(())
     }
 

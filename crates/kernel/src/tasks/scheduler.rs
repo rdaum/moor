@@ -1335,6 +1335,17 @@ impl Scheduler {
                     return self.task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
             }
+            TaskControlMsg::LogEvent { player, event } => {
+                // Task is asking to log an event without broadcasting.
+                let Some(task) = self.task_q.active.get_mut(&task_id) else {
+                    warn!(task_id, "Task not found for log_event request");
+                    return;
+                };
+                let Ok(()) = task.session.log_event(player, event) else {
+                    warn!("Could not log event; aborting task");
+                    return self.task_q.send_task_result(task_id, Err(TaskAbortedError));
+                };
+            }
             TaskControlMsg::GetListeners(reply) => {
                 let listeners = self
                     .system_control

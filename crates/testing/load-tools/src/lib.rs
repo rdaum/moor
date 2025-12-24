@@ -63,6 +63,10 @@ impl Session for DirectSession {
         Ok(())
     }
 
+    fn log_event(&self, _player: Obj, _event: Box<NarrativeEvent>) -> Result<(), SessionError> {
+        Ok(())
+    }
+
     fn send_system_msg(&self, _player: Obj, _msg: &str) -> Result<(), SessionError> {
         Ok(())
     }

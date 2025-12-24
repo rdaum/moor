@@ -281,6 +281,11 @@ impl Session for ConsoleSession {
         Ok(())
     }
 
+    fn log_event(&self, _player: Obj, _event: Box<NarrativeEvent>) -> Result<(), SessionError> {
+        // Log-only events are ignored in console mode - no persistent event log
+        Ok(())
+    }
+
     fn send_system_msg(&self, _player: Obj, msg: &str) -> Result<(), SessionError> {
         println!("** {msg} **");
         Ok(())

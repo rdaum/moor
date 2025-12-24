@@ -29,8 +29,10 @@ pub struct RpcSession {
     player: Obj,
     /// Shared event log for persistent storage across all sessions
     event_log: Arc<dyn EventLogOps>,
-    /// Transaction-local buffer for events pending commit
+    /// Transaction-local buffer for events pending commit (both logged and broadcast)
     transaction_buffer: Mutex<Vec<(Obj, Box<NarrativeEvent>)>>,
+    /// Transaction-local buffer for log-only events (logged but not broadcast)
+    log_only_buffer: Mutex<Vec<(Obj, Box<NarrativeEvent>)>>,
     send: Sender<SessionActions>,
 }
 
@@ -79,6 +81,7 @@ impl RpcSession {
             player,
             event_log,
             transaction_buffer: Mutex::new(Vec::new()),
+            log_only_buffer: Mutex::new(Vec::new()),
             send: sender,
         }
     }
@@ -90,8 +93,13 @@ impl Session for RpcSession {
             let mut transaction_buffer = self.transaction_buffer.lock().unwrap();
             transaction_buffer.drain(..).collect()
         };
+        let log_only_events: Vec<_> = {
+            let mut log_only_buffer = self.log_only_buffer.lock().unwrap();
+            log_only_buffer.drain(..).collect()
+        };
 
-        for (player, event) in &events {
+        // Log events from both buffers to the event log
+        for (player, event) in events.iter().chain(log_only_events.iter()) {
             let Some(pubkey) = self.event_log.get_pubkey(*player) else {
                 continue;
             };
@@ -104,7 +112,7 @@ impl Session for RpcSession {
             }
         }
 
-        // Then, publish them to connected clients
+        // Only publish regular events to connected clients (not log_only_events)
         self.send
             .send(SessionActions::PublishNarrativeEvents(events))
             .map_err(|e| SessionError::CommitError(e.to_string()))?;
@@ -112,8 +120,8 @@ impl Session for RpcSession {
     }
 
     fn rollback(&self) -> Result<(), SessionError> {
-        let mut transaction_buffer = self.transaction_buffer.lock().unwrap();
-        transaction_buffer.clear();
+        self.transaction_buffer.lock().unwrap().clear();
+        self.log_only_buffer.lock().unwrap().clear();
         Ok(())
     }
 
@@ -148,6 +156,11 @@ impl Session for RpcSession {
             .lock()
             .unwrap()
             .push((player, event));
+        Ok(())
+    }
+
+    fn log_event(&self, player: Obj, event: Box<NarrativeEvent>) -> Result<(), SessionError> {
+        self.log_only_buffer.lock().unwrap().push((player, event));
         Ok(())
     }
 

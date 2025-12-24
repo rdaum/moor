@@ -49,6 +49,51 @@ notify(player, "= Welcome\nThis is {em}djot{/em}!", false, false, "text/djot");
 - Content types help rich clients (web, mobile) render content appropriately
 - Telnet clients receive formatted plain text regardless of content type
 
+### `event_log`
+
+**Description:** Logs an event to a player's persistent event log without broadcasting to their connections.
+This allows MOO code to render content in different formats for different connections while still logging
+a canonical format to the event log for later retrieval.
+
+**Syntax:** `int event_log(obj player, any message [, symbol content_type [, map metadata]])`
+
+**Arguments:**
+
+- `player`: The player object (must be a player, not a connection object)
+- `message`: The message content to log (can be any type in rich mode, must be string otherwise)
+- `content_type`: (Optional) Symbol indicating content type (e.g., `'text_plain`, `'text_djot`, `'text_html`)
+- `metadata`: (Optional) Map or alist of additional metadata to include with the log entry
+
+**Returns:** Integer (1 on success)
+
+**Permission Requirements:**
+
+- Must be the target player, own the target player, or be a wizard
+
+**Examples:**
+
+```moo
+// Log a message without sending to connections
+event_log(player, "Player performed action X");
+
+// Log with content type
+event_log(player, "= Heading\nSome {em}djot{/em} content", 'text_djot);
+
+// Log with metadata
+event_log(player, "Important event", 'text_plain, ["category" -> "system"]);
+```
+
+**Notes:**
+
+- Unlike `notify()`, this function never sends output to the player's connections
+- Events logged with this function are stored in the player's encrypted event log
+- Use this when you need to iterate over connections with `notify()` (rendering per-connection formats)
+  while still maintaining a canonical event log entry
+- Only works with player objects, not connection objects (since event logs are per-player)
+- The event log requires the player to have a pubkey set for encryption
+
+**See Also:** [notify](#notify), [player_event_log_stats](#player_event_log_stats), [purge_player_event_log](#purge_player_event_log)
+
 ### `present`
 
 **Description:** Emits a presentation event to the client. The client should interpret this as a request to present

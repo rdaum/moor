@@ -797,6 +797,18 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin("copysign", Q(2), Q(2), vec![AnyNum, AnyNum], true),
         mk_builtin("urlencode", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
         mk_builtin("urldecode", Q(1), Q(2), vec![Typed(TYPE_STR), Any], true),
+        mk_builtin(
+            "event_log",
+            Q(2),
+            Q(4),
+            vec![
+                Typed(TYPE_OBJ),
+                Typed(TYPE_STR),
+                Typed(TYPE_SYMBOL),
+                Typed(TYPE_MAP),
+            ],
+            true,
+        ),
     ]
 }
 

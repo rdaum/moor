@@ -1,0 +1,1203 @@
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
+// FlatBuffer schema for the mooR RPC system
+
+include "common.fbs";
+include "var.fbs";
+
+namespace MoorRpc;
+
+// ============================================================================
+// Basic primitive wrappers and tokens
+// ============================================================================
+
+table ClientToken {
+    token: string (required);
+}
+
+table AuthToken {
+    token: string (required);
+}
+
+// ============================================================================
+// Enrollment messages
+// ============================================================================
+
+table EnrollmentRequest {
+    enrollment_token: string (required);
+    curve_public_key: string (required);
+    service_type: string (required);
+    hostname: string (required);
+}
+
+table EnrollmentResponse {
+    success: bool;
+    service_uuid: string;  // Optional - present if success is true
+    daemon_curve_public_key: string;  // Optional - present if success is true
+    error: string;  // Optional - present if success is false
+}
+
+// ============================================================================
+// Scheduler and other errors (properly structured)
+// ============================================================================
+
+enum AbortLimitReason: uint8 {
+    Ticks = 0,
+    Time = 1
+}
+
+table AbortLimit {
+    reason: AbortLimitReason;
+    ticks: uint64;  // for Ticks variant
+    time_nanos: uint64;  // for Time variant (Duration as nanos)
+}
+
+union SchedulerErrorUnion {
+    SchedulerNotResponding,
+    TaskNotFound,
+    InputRequestNotFound,
+    CouldNotStartTask,
+    CompilationError,
+    CommandExecutionError,
+    TaskAbortedLimit,
+    TaskAbortedError,
+    TaskAbortedVerbNotFound,
+    TaskAbortedException,
+    TaskAbortedCancelled,
+    VerbProgramFailed,
+    PropertyRetrievalFailed,
+    VerbRetrievalFailed,
+    ObjectResolutionFailed,
+    GarbageCollectionFailed
+}
+
+table SchedulerNotResponding {
+}
+
+table TaskNotFound {
+    task_id: uint64;
+}
+
+table InputRequestNotFound {
+    request_id: MoorCommon.Uuid (required);
+}
+
+table CouldNotStartTask {
+}
+
+table CompilationError {
+    error: MoorCommon.CompileError (required);
+}
+
+table CommandExecutionError {
+    error: CommandError (required);
+}
+
+table TaskAbortedLimit {
+    limit: AbortLimit (required);
+}
+
+table TaskAbortedError {
+}
+
+table TaskAbortedException {
+    exception: MoorCommon.Exception (required);
+}
+
+table TaskAbortedVerbNotFound {
+    where: MoorVar.Var (required);
+    what: MoorCommon.Symbol (required);
+}
+
+table TaskAbortedCancelled {
+}
+
+table VerbProgramFailed {
+    error: VerbProgramError (required);
+}
+
+table PropertyRetrievalFailed {
+    error: MoorCommon.WorldStateError (required);
+}
+
+table VerbRetrievalFailed {
+    error: MoorCommon.WorldStateError (required);
+}
+
+table ObjectResolutionFailed {
+    error: MoorCommon.WorldStateError (required);
+}
+
+table GarbageCollectionFailed {
+    message: string (required);
+}
+
+table SchedulerError {
+    error: SchedulerErrorUnion (required);
+}
+
+// Command errors
+union CommandErrorUnion {
+    CouldNotParseCommand,
+    NoObjectMatch,
+    NoCommandMatch,
+    DatabaseError,
+    PermissionDenied
+}
+
+table CouldNotParseCommand {
+}
+
+table NoObjectMatch {
+}
+
+table NoCommandMatch {
+}
+
+table DatabaseError {
+    error: MoorCommon.WorldStateError (required);
+}
+
+table PermissionDenied {
+}
+
+table CommandError {
+    error: CommandErrorUnion (required);
+}
+
+// Verb program errors
+union VerbProgramErrorUnion {
+    NoVerbToProgram,
+    VerbPermissionDenied,
+    VerbCompilationError,
+    VerbDatabaseError
+}
+
+table NoVerbToProgram {
+}
+
+table VerbPermissionDenied {
+}
+
+table VerbCompilationError {
+    error: MoorCommon.CompileError (required);
+}
+
+table VerbDatabaseError {
+}
+
+table VerbProgramError {
+    error: VerbProgramErrorUnion (required);
+}
+
+// Worker errors
+union WorkerErrorUnion {
+    WorkerPermissionDenied,
+    WorkerInvalidRequest,
+    WorkerInternalError,
+    WorkerRequestTimedOut,
+    WorkerRequestError,
+    WorkerDetached,
+    NoWorkerAvailable
+}
+
+table WorkerPermissionDenied {
+    message: string (required);
+}
+
+table WorkerInvalidRequest {
+    message: string (required);
+}
+
+table WorkerInternalError {
+    message: string (required);
+}
+
+table WorkerRequestTimedOut {
+    message: string (required);
+}
+
+table WorkerRequestError {
+    message: string (required);
+}
+
+table WorkerDetached {
+    message: string (required);
+}
+
+table NoWorkerAvailable {
+    worker_type: MoorCommon.Symbol (required);
+}
+
+table WorkerError {
+    error: WorkerErrorUnion (required);
+}
+
+// CompileError types
+table CompileContext {
+    line: uint64;
+    col: uint64;
+}
+
+table StringLexError {
+    context: CompileContext (required);
+    message: string (required);
+}
+
+table ParseError {
+    error_position: CompileContext (required);
+    context: string (required);
+    end_line: uint64;
+    end_col: uint64;
+    has_end: bool;
+    message: string (required);
+    span_start: uint64;
+    span_end: uint64;
+    has_span: bool;
+    expected_tokens: [string];
+    notes: [string];
+}
+
+table UnknownBuiltinFunction {
+    context: CompileContext (required);
+    name: string (required);
+}
+
+table UnknownTypeConstant {
+    context: CompileContext (required);
+    name: string (required);
+}
+
+table UnknownLoopLabel {
+    context: CompileContext (required);
+    label: string (required);
+}
+
+table DuplicateVariable {
+    context: CompileContext (required);
+    var_name: MoorCommon.Symbol (required);
+}
+
+table AssignToConst {
+    context: CompileContext (required);
+    var_name: MoorCommon.Symbol (required);
+}
+
+table DisabledFeature {
+    context: CompileContext (required);
+    feature: string (required);
+}
+
+table BadSlotName {
+    context: CompileContext (required);
+    slot: string (required);
+}
+
+table InvalidAssignment {
+    context: CompileContext (required);
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum HostType: uint8 {
+    TCP = 0,
+    WebSocket = 1
+}
+
+enum ConnectType: uint8 {
+    Connected = 0,
+    Reconnected = 1,
+    Created = 2,
+    NoConnect = 255  // For transient/non-connection sessions (history retrieval, etc.)
+}
+
+enum EntityType: uint8 {
+    Property = 0,
+    Verb = 1
+}
+
+// ============================================================================
+// Verb Programming
+// ============================================================================
+
+union VerbProgramResponseUnion {
+    VerbProgramSuccess,
+    VerbProgramFailure
+}
+
+table VerbProgramSuccess {
+    obj: MoorCommon.Obj (required);
+    verb_name: string (required);
+}
+
+table VerbProgramFailure {
+    error: VerbProgramError (required);
+}
+
+table VerbProgramResponse {
+    response: VerbProgramResponseUnion (required);
+}
+
+// ============================================================================
+// Connection attributes
+// ============================================================================
+
+table ConnectionAttribute {
+    key: MoorCommon.Symbol (required);
+    value: MoorVar.Var (required);
+}
+
+// ============================================================================
+// Host-to-Daemon Messages
+// ============================================================================
+
+union HostToDaemonMessageUnion {
+    RegisterHost,
+    DetachHost,
+    RequestPerformanceCounters,
+    HostPong,
+    GetServerFeatures
+}
+
+table RegisterHost {
+    host_id: MoorCommon.Uuid (required);
+    timestamp: uint64;  // SystemTime as nanos since epoch
+    host_type: HostType;
+    listeners: [Listener] (required);
+}
+
+table DetachHost {
+    host_id: MoorCommon.Uuid (required);
+}
+
+table RequestPerformanceCounters {
+}
+
+table GetServerFeatures {
+}
+
+table HostPong {
+    host_id: MoorCommon.Uuid (required);
+    timestamp: uint64;  // SystemTime as nanos since epoch
+    host_type: HostType;
+    listeners: [Listener] (required);
+}
+
+table Listener {
+    handler_object: MoorCommon.Obj (required);
+    socket_addr: string (required);  // SocketAddr serialized as string
+}
+
+table HostToDaemonMessage {
+    message: HostToDaemonMessageUnion (required);
+}
+
+// ============================================================================
+// Daemon-to-Host Messages
+// ============================================================================
+
+union DaemonToHostReplyUnion {
+    DaemonToHostAck,
+    DaemonToHostReject,
+    DaemonToHostPerfCounters,
+    ServerFeatures
+}
+
+table DaemonToHostAck {
+}
+
+table DaemonToHostReject {
+    reason: string (required);
+}
+
+table Counter {
+    name: MoorCommon.Symbol (required);
+    count: int64;
+    total_cumulative_ns: int64;
+}
+
+table CounterCategory {
+    category: MoorCommon.Symbol (required);
+    counters: [Counter] (required);
+}
+
+table DaemonToHostPerfCounters {
+    timestamp: uint64;  // SystemTime as nanos since epoch
+    counters: [CounterCategory] (required);
+}
+
+table ServerFeatures {
+    persistent_tasks: bool = false;
+    rich_notify: bool = false;
+    lexical_scopes: bool = false;
+    type_dispatch: bool = false;
+    flyweight_type: bool = false;
+    list_comprehensions: bool = false;
+    bool_type: bool = false;
+    use_boolean_returns: bool = false;
+    symbol_type: bool = false;
+    use_symbols_in_builtins: bool = false;
+    custom_errors: bool = false;
+    use_uuobjids: bool = false;
+    enable_eventlog: bool = false;
+    anonymous_objects: bool = false;
+}
+
+table DaemonToHostReply {
+    reply: DaemonToHostReplyUnion (required);
+}
+
+// ============================================================================
+// Host Broadcast Events
+// ============================================================================
+
+union HostBroadcastEventUnion {
+    HostBroadcastListen,
+    HostBroadcastUnlisten,
+    HostBroadcastPingPong
+}
+
+table HostBroadcastListen {
+    handler_object: MoorCommon.Obj (required);
+    host_type: HostType;
+    port: uint16;
+    options: [MoorVar.VarMapPair];  // Symbol->Var options (tls, print_messages, etc.)
+}
+
+table HostBroadcastUnlisten {
+    host_type: HostType;
+    port: uint16;
+}
+
+table HostBroadcastPingPong {
+    timestamp: uint64;  // SystemTime as nanos since epoch
+}
+
+table HostBroadcastEvent {
+    event: HostBroadcastEventUnion (required);
+}
+
+// ============================================================================
+// Client-to-Daemon Messages (via Host)
+// ============================================================================
+
+union HostClientToDaemonMessageUnion {
+    ConnectionEstablish,
+    Reattach,
+    RequestSysProp,
+    LoginCommand,
+    Attach,
+    Command,
+    Verbs,
+    InvokeVerb,
+    Properties,
+    Retrieve,
+    Program,
+    RequestedInput,
+    OutOfBand,
+    Eval,
+    Resolve,
+    ClientPong,
+    RequestHistory,
+    RequestCurrentPresentations,
+    DismissPresentation,
+    SetClientAttribute,
+    Detach,
+    GetEventLogPublicKey,
+    SetEventLogPublicKey,
+    DeleteEventLogHistory,
+    ListObjects,
+    UpdateProperty,
+    InvokeSystemHandler,
+    CallSystemVerb
+}
+
+table ConnectionEstablish {
+    peer_addr: string (required);
+    local_port: uint16;
+    remote_port: uint16;
+    acceptable_content_types: [MoorCommon.Symbol];
+    connection_attributes: [ConnectionAttribute];
+}
+
+table Reattach {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    peer_addr: string;
+    local_port: uint16;
+    remote_port: uint16;
+    acceptable_content_types: [MoorCommon.Symbol];
+    connection_attributes: [ConnectionAttribute];
+}
+
+table RequestSysProp {
+    auth_token: AuthToken;
+    object: MoorCommon.ObjectRef (required);
+    property: MoorCommon.Symbol (required);
+}
+
+table LoginCommand {
+    client_token: ClientToken (required);
+    handler_object: MoorCommon.Obj (required);
+    connect_args: [string] (required);
+    do_attach: bool;
+}
+
+table Attach {
+    auth_token: AuthToken (required);
+    connect_type: ConnectType;  // Optional, 255 means None
+    handler_object: MoorCommon.Obj (required);
+    peer_addr: string (required);
+    local_port: uint16;
+    remote_port: uint16;
+    acceptable_content_types: [MoorCommon.Symbol];
+}
+
+table Command {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    handler_object: MoorCommon.Obj (required);
+    command: string (required);
+}
+
+table Verbs {
+    auth_token: AuthToken (required);
+    object: MoorCommon.ObjectRef (required);
+    inherited: bool;
+}
+
+table InvokeVerb {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    object: MoorCommon.ObjectRef (required);
+    verb: MoorCommon.Symbol (required);
+    args: [MoorVar.Var] (required);
+}
+
+table Properties {
+    auth_token: AuthToken (required);
+    object: MoorCommon.ObjectRef (required);
+    inherited: bool;
+}
+
+table Retrieve {
+    auth_token: AuthToken (required);
+    object: MoorCommon.ObjectRef (required);
+    entity_type: EntityType;
+    name: MoorCommon.Symbol (required);
+}
+
+table Program {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    object: MoorCommon.ObjectRef (required);
+    verb: MoorCommon.Symbol (required);
+    code: [string] (required);
+}
+
+table RequestedInput {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    request_id: MoorCommon.Uuid (required);
+    input: MoorVar.Var (required);
+}
+
+table OutOfBand {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    handler_object: MoorCommon.Obj (required);
+    command: string (required);
+}
+
+table Eval {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    expression: string (required);
+}
+
+table Resolve {
+    auth_token: AuthToken (required);
+    objref: MoorCommon.ObjectRef (required);
+}
+
+table ClientPong {
+    client_token: ClientToken (required);
+    client_sys_time: uint64;  // SystemTime as nanos since epoch
+    player: MoorCommon.Obj (required);
+    host_type: HostType;
+    socket_addr: string (required);  // SocketAddr as string
+}
+
+table RequestHistory {
+    auth_token: AuthToken (required);
+    history_recall: HistoryRecall (required);
+}
+
+table RequestCurrentPresentations {
+    auth_token: AuthToken (required);
+}
+
+table DismissPresentation {
+    auth_token: AuthToken (required);
+    presentation_id: string (required);
+}
+
+table SetClientAttribute {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    key: MoorCommon.Symbol (required);
+    value: MoorVar.Var;  // Optional, null means remove
+}
+
+table Detach {
+    client_token: ClientToken (required);
+    disconnected: bool;
+}
+
+table GetEventLogPublicKey {
+    auth_token: AuthToken (required);
+}
+
+table SetEventLogPublicKey {
+    auth_token: AuthToken (required);
+    public_key: string (required);
+}
+
+table DeleteEventLogHistory {
+    auth_token: AuthToken (required);
+}
+
+table ListObjects {
+    auth_token: AuthToken (required);
+}
+
+table UpdateProperty {
+    auth_token: AuthToken (required);
+    object: MoorCommon.ObjectRef (required);
+    property: MoorCommon.Symbol (required);
+    value: MoorVar.Var (required);
+}
+
+table InvokeSystemHandler {
+    host_id: MoorCommon.Uuid (required);
+    handler_type: string (required);
+    args: [MoorVar.Var] (required);
+    auth_token: AuthToken;
+}
+
+table CallSystemVerb {
+    auth_token: AuthToken;
+    verb: MoorCommon.Symbol (required);
+    args: [MoorVar.Var] (required);
+}
+
+table HostClientToDaemonMessage {
+    message: HostClientToDaemonMessageUnion (required);
+}
+
+// ============================================================================
+// Daemon-to-Client Replies
+// ============================================================================
+
+union DaemonToClientReplyUnion {
+    NewConnection,
+    LoginResult,
+    AttachResult,
+    SysPropValue,
+    TaskSubmitted,
+    InputThanks,
+    EvalResult,
+    ThanksPong,
+    VerbsReply,
+    PropertiesReply,
+    VerbProgramResponseReply,
+    PropertyValue,
+    VerbValue,
+    ResolveResult,
+    HistoryResponseReply,
+    CurrentPresentations,
+    PresentationDismissed,
+    ClientAttributeSet,
+    Disconnected,
+    EventLogPublicKey,
+    EventLogHistoryDeleted,
+    ListObjectsReply,
+    PropertyUpdated,
+    SystemHandlerResponseReply,
+    SystemVerbResponseReply
+}
+
+table NewConnection {
+    client_token: ClientToken (required);
+    connection_obj: MoorCommon.Obj (required);
+}
+
+table LoginResult {
+    success: bool;
+    auth_token: AuthToken;
+    connect_type: ConnectType;
+    player: MoorCommon.Obj;
+    player_flags: uint16;  // BitEnum<ObjFlag> for player object
+}
+
+table AttachResult {
+    success: bool;
+    client_token: ClientToken;
+    player: MoorCommon.Obj;
+    player_flags: uint16;  // BitEnum<ObjFlag> for player object
+}
+
+table SysPropValue {
+    value: MoorVar.Var;  // Optional
+}
+
+table TaskSubmitted {
+    task_id: uint64;
+}
+
+table InputThanks {
+}
+
+table EvalResult {
+    result: MoorVar.Var (required);
+}
+
+table ThanksPong {
+    timestamp: uint64;  // SystemTime as nanos since epoch
+}
+
+table VerbsReply {
+    verbs: [MoorCommon.VerbInfo] (required);
+}
+
+table PropertiesReply {
+    properties: [MoorCommon.PropInfo] (required);
+}
+
+table VerbProgramResponseReply {
+    response: VerbProgramResponse (required);
+}
+
+table PropertyValue {
+    prop_info: MoorCommon.PropInfo (required);
+    value: MoorVar.Var (required);
+}
+
+table VerbValue {
+    verb_info: MoorCommon.VerbInfo (required);
+    code: [string] (required);
+}
+
+table ResolveResult {
+    result: MoorVar.Var (required);
+}
+
+table HistoryResponseReply {
+    response: HistoryResponse (required);
+}
+
+table CurrentPresentations {
+    presentations: [MoorCommon.Presentation] (required);
+}
+
+table PresentationDismissed {
+}
+
+table ClientAttributeSet {
+}
+
+table Disconnected {
+}
+
+table EventLogPublicKey {
+    public_key: string;  // Empty string if not set
+}
+
+table EventLogHistoryDeleted {
+    success: bool;
+}
+
+table ObjectInfo {
+    obj: MoorCommon.Obj (required);
+    name: MoorCommon.Symbol;  // Optional - object name if it has one
+    parent: MoorCommon.Obj;   // Optional - parent object
+    owner: MoorCommon.Obj (required);
+    flags: uint16;  // BitEnum<ObjFlag>
+    location: MoorCommon.Obj;  // Optional - current location
+    contents_count: uint32;
+    verbs_count: uint32;
+    properties_count: uint32;
+}
+
+table ListObjectsReply {
+    objects: [ObjectInfo] (required);
+}
+
+table PropertyUpdated {
+}
+
+union SystemHandlerResponseUnion {
+    SystemHandlerSuccess,
+    SystemHandlerError
+}
+
+table SystemHandlerSuccess {
+    result: MoorVar.Var (required);
+}
+
+table SystemHandlerError {
+    error: SchedulerError (required);
+}
+
+table SystemHandlerResponseReply {
+    response: SystemHandlerResponseUnion (required);
+}
+
+union SystemVerbResponseUnion {
+    SystemVerbSuccess,
+    SystemVerbError
+}
+
+table SystemVerbSuccess {
+    result: MoorVar.Var (required);
+    output: [MoorCommon.NarrativeEvent] (required);
+}
+
+table SystemVerbError {
+    error: SchedulerError (required);
+}
+
+table SystemVerbResponseReply {
+    response: SystemVerbResponseUnion (required);
+}
+
+table DaemonToClientReply {
+    reply: DaemonToClientReplyUnion (required);
+}
+
+// ============================================================================
+// Client Events
+// ============================================================================
+
+union ClientEventUnion {
+    NarrativeEventMessage,
+    RequestInputEvent,
+    SystemMessageEvent,
+    DisconnectEvent,
+    TaskErrorEvent,
+    TaskSuccessEvent,
+    TaskSuspendedEvent,
+    PlayerSwitchedEvent,
+    SetConnectionOptionEvent
+}
+
+table NarrativeEventMessage {
+    player: MoorCommon.Obj (required);
+    event: MoorCommon.NarrativeEvent (required);
+}
+
+table MetadataPair {
+    key: MoorCommon.Symbol (required);
+    value: MoorVar.Var (required);
+}
+
+table RequestInputEvent {
+    request_id: MoorCommon.Uuid (required);
+    metadata: [MetadataPair];
+}
+
+table SystemMessageEvent {
+    player: MoorCommon.Obj (required);
+    message: string (required);
+}
+
+table DisconnectEvent {
+}
+
+table TaskErrorEvent {
+    task_id: uint64;
+    error: SchedulerError (required);
+}
+
+table TaskSuccessEvent {
+    task_id: uint64;
+    result: MoorVar.Var (required);
+}
+
+table TaskSuspendedEvent {
+    task_id: uint64;
+}
+
+table PlayerSwitchedEvent {
+    new_player: MoorCommon.Obj (required);
+    new_auth_token: AuthToken (required);
+}
+
+table SetConnectionOptionEvent {
+    connection_obj: MoorCommon.Obj (required);
+    option_name: MoorCommon.Symbol (required);
+    value: MoorVar.Var (required);
+}
+
+table ClientEvent {
+    event: ClientEventUnion (required);
+}
+
+// ============================================================================
+// Client Broadcast Events
+// ============================================================================
+
+union ClientsBroadcastEventUnion {
+    ClientsBroadcastPingPong
+}
+
+table ClientsBroadcastPingPong {
+    timestamp: uint64;  // SystemTime as nanos since epoch
+}
+
+table ClientsBroadcastEvent {
+    event: ClientsBroadcastEventUnion (required);
+}
+
+// ============================================================================
+// Worker Messages
+// ============================================================================
+
+union DaemonToWorkerMessageUnion {
+    PingWorkers,
+    WorkerRequest,
+    PleaseDie
+}
+
+table PingWorkers {
+}
+
+table WorkerRequest {
+    worker_id: MoorCommon.Uuid (required);
+    id: MoorCommon.Uuid (required);
+    perms: MoorCommon.Obj (required);
+    request: [MoorVar.Var] (required);
+    timeout_ms: uint64;  // Optional timeout in milliseconds, 0 means no timeout
+}
+
+table PleaseDie {
+    worker_id: MoorCommon.Uuid (required);
+}
+
+table DaemonToWorkerMessage {
+    message: DaemonToWorkerMessageUnion (required);
+}
+
+union WorkerToDaemonMessageUnion {
+    AttachWorker,
+    WorkerPong,
+    DetachWorker,
+    RequestResult,
+    RequestError
+}
+
+table AttachWorker {
+    worker_id: MoorCommon.Uuid (required);
+    worker_type: MoorCommon.Symbol (required);
+}
+
+table WorkerPong {
+    worker_id: MoorCommon.Uuid (required);
+    worker_type: MoorCommon.Symbol (required);
+}
+
+table DetachWorker {
+    worker_id: MoorCommon.Uuid (required);
+}
+
+table RequestResult {
+    worker_id: MoorCommon.Uuid (required);
+    request_id: MoorCommon.Uuid (required);
+    result: MoorVar.Var (required);
+}
+
+table RequestError {
+    worker_id: MoorCommon.Uuid (required);
+    request_id: MoorCommon.Uuid (required);
+    error: WorkerError (required);
+}
+
+table WorkerToDaemonMessage {
+    message: WorkerToDaemonMessageUnion (required);
+}
+
+union DaemonToWorkerReplyUnion {
+    WorkerAck,
+    WorkerRejected,
+    WorkerAttached,
+    WorkerAuthFailed,
+    WorkerInvalidPayload,
+    WorkerUnknownRequest,
+    WorkerNotRegistered
+}
+
+table WorkerAck {
+}
+
+table WorkerRejected {
+    reason: string;
+}
+
+table WorkerAttached {
+    worker_id: MoorCommon.Uuid (required);
+}
+
+table WorkerAuthFailed {
+    reason: string (required);
+}
+
+table WorkerInvalidPayload {
+    reason: string (required);
+}
+
+table WorkerUnknownRequest {
+    request_id: MoorCommon.Uuid (required);
+}
+
+table WorkerNotRegistered {
+    worker_id: MoorCommon.Uuid (required);
+}
+
+table DaemonToWorkerReply {
+    reply: DaemonToWorkerReplyUnion (required);
+}
+
+// ============================================================================
+// Top-level Error and Message Types
+// ============================================================================
+
+enum RpcMessageErrorCode: uint8 {
+    AlreadyConnected = 0,
+    InvalidRequest = 1,
+    NoConnection = 2,
+    ErrorCouldNotRetrieveSysProp = 3,
+    LoginTaskFailed = 4,
+    CreateSessionFailed = 5,
+    PermissionDenied = 6,
+    TaskError = 7,
+    EntityRetrievalError = 8,
+    InternalError = 9
+}
+
+table RpcMessageError {
+    error_code: RpcMessageErrorCode;
+    message: string;
+    scheduler_error: SchedulerError;  // Optional, for TaskError variant
+}
+
+union MessageTypeUnion {
+    HostToDaemonMsg,
+    HostClientToDaemonMsg
+}
+
+table HostToDaemonMsg {
+    host_id: MoorCommon.Uuid (required);
+    message: HostToDaemonMessage (required);
+}
+
+table HostClientToDaemonMsg {
+    client_data: [uint8] (required);
+    message: HostClientToDaemonMessage (required);
+}
+
+table MessageType {
+    message: MessageTypeUnion (required);
+}
+
+union ReplyResultUnion {
+    HostSuccess,
+    ClientSuccess,
+    Failure
+}
+
+table HostSuccess {
+    reply: DaemonToHostReply (required);
+}
+
+table ClientSuccess {
+    reply: DaemonToClientReply (required);
+}
+
+table Failure {
+    error: RpcMessageError (required);
+}
+
+table ReplyResult {
+    result: ReplyResultUnion (required);
+}
+
+// ============================================================================
+// History and Events
+// ============================================================================
+
+union HistoryRecallUnion {
+    HistoryRecallSinceEvent,
+    HistoryRecallUntilEvent,
+    HistoryRecallSinceSeconds,
+    HistoryRecallNone
+}
+
+table HistoryRecallSinceEvent {
+    event_id: MoorCommon.Uuid (required);
+    limit: uint64;  // Optional limit, 0 means no limit
+}
+
+table HistoryRecallUntilEvent {
+    event_id: MoorCommon.Uuid (required);
+    limit: uint64;  // Optional limit, 0 means no limit
+}
+
+table HistoryRecallSinceSeconds {
+    seconds_ago: uint64;
+    limit: uint64;  // Optional limit, 0 means no limit
+}
+
+table HistoryRecallNone {
+}
+
+table HistoryRecall {
+    recall: HistoryRecallUnion (required);
+}
+
+table HistoricalNarrativeEvent {
+    event_id: MoorCommon.Uuid (required);
+    timestamp: uint64;  // SystemTime as nanos since epoch
+    player: MoorCommon.Obj (required);
+    is_historical: bool;
+    encrypted_blob: [ubyte] (required);
+}
+
+table HistoryResponse {
+    events: [HistoricalNarrativeEvent] (required);
+    time_range_start: uint64;  // SystemTime as nanos since epoch
+    time_range_end: uint64;    // SystemTime as nanos since epoch
+    total_events: uint64;
+    has_more_before: bool;
+    earliest_event_id: MoorCommon.Uuid;  // Optional UUID
+    latest_event_id: MoorCommon.Uuid;    // Optional UUID
+}
+
+
+// ============================================================================
+// Root tables for different message flows
+// ============================================================================
+
+root_type MessageType;

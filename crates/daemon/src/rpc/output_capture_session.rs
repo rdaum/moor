@@ -83,6 +83,11 @@ impl Session for OutputCaptureSession {
         Ok(())
     }
 
+    fn log_event(&self, _player: Obj, _event: Box<NarrativeEvent>) -> Result<(), SessionError> {
+        // Log-only events are not captured for output capture sessions
+        Ok(())
+    }
+
     fn send_system_msg(&self, _player: Obj, _msg: &str) -> Result<(), SessionError> {
         // System messages are not captured for output capture sessions
         Ok(())

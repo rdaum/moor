@@ -746,6 +746,117 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(1)))
 }
 
+/// Usage: `int event_log(obj player, str|any message [, symbol content_type [, map metadata]])`
+/// Logs an event to the player's persistent event log without broadcasting to connections.
+/// This allows sending formatted output to connections separately while still logging a
+/// canonical format to the event log. With rich_notify enabled, message can be any value.
+fn bf_event_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    // If in non rich-mode `event_log` can only log text.
+    // Otherwise, it can log any value.
+    if !bf_args.config.rich_notify {
+        if bf_args.args.len() < 2 || bf_args.args.len() > 2 {
+            return Err(ErrValue(
+                E_ARGS.msg("event_log() requires exactly 2 arguments"),
+            ));
+        }
+        if bf_args.args[1].type_code() != TYPE_STR {
+            return Err(ErrValue(
+                E_TYPE.msg("event_log() requires a string as the second argument"),
+            ));
+        }
+    }
+
+    if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
+        return Err(ErrValue(
+            E_ARGS.msg("event_log() requires 2 to 4 arguments"),
+        ));
+    }
+
+    let Some(player) = bf_args.args[0].as_object() else {
+        return Err(ErrValue(
+            E_TYPE.msg("event_log() requires an object as the first argument"),
+        ));
+    };
+
+    // Must be player object, not connection object
+    if !player.is_positive() {
+        return Err(ErrValue(
+            E_INVARG.msg("event_log() requires a player object, not a connection object"),
+        ));
+    }
+
+    // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    task_perms
+        .check_obj_owner_perms(&player)
+        .map_err(world_state_bf_err)?;
+
+    let content_type = if bf_args.config.rich_notify && bf_args.args.len() >= 3 {
+        let content_type = bf_args.args[2].as_symbol().map_err(ErrValue)?;
+        Some(content_type)
+    } else {
+        None
+    };
+
+    let metadata = if bf_args.config.rich_notify && bf_args.args.len() == 4 {
+        let metadata_arg = &bf_args.args[3];
+        let mut metadata_vec = Vec::new();
+
+        match metadata_arg.variant() {
+            Variant::Map(m) => {
+                for (key, value) in m.iter() {
+                    let key_sym = key.as_symbol().map_err(ErrValue)?;
+                    metadata_vec.push((key_sym, value));
+                }
+            }
+            Variant::List(l) => {
+                for item in l.iter() {
+                    match item.variant() {
+                        Variant::List(pair) => {
+                            if pair.len() != 2 {
+                                return Err(ErrValue(E_ARGS.msg(
+                                    "event_log() metadata alist must contain {key, value} pairs",
+                                )));
+                            }
+                            let key_sym = pair[0].as_symbol().map_err(ErrValue)?;
+                            metadata_vec.push((key_sym, pair[1].clone()));
+                        }
+                        _ => {
+                            return Err(ErrValue(
+                                E_TYPE.msg(
+                                    "event_log() metadata alist must contain {key, value} pairs",
+                                ),
+                            ));
+                        }
+                    }
+                }
+            }
+            _ => {
+                return Err(ErrValue(
+                    E_TYPE.msg("event_log() metadata must be a map or alist"),
+                ));
+            }
+        }
+
+        Some(metadata_vec)
+    } else {
+        None
+    };
+
+    // Create the event - no_flush and no_newline are always false for event log
+    let event = NarrativeEvent::notify(
+        bf_args.exec_state.this(),
+        bf_args.args[1].clone(),
+        content_type,
+        false,
+        false,
+        metadata,
+    );
+    current_task_scheduler_client().log_event(player, Box::new(event));
+
+    Ok(Ret(v_int(1)))
+}
+
 /// Usage: `none present(obj player, str id [, str content_type, str target, str content [, list attrs]])`
 /// Shows rich content (popup, panel, etc.) to the player. With only player and id,
 /// dismisses that presentation. Requires rich_notify enabled.
@@ -1240,4 +1351,5 @@ pub(crate) fn register_bf_connection(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("listeners")] = bf_listeners;
     builtins[offset_for_builtin("listen")] = bf_listen;
     builtins[offset_for_builtin("unlisten")] = bf_unlisten;
+    builtins[offset_for_builtin("event_log")] = bf_event_log;
 }

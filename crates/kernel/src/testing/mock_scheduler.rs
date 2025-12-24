@@ -522,6 +522,14 @@ mod tests {
             Ok(())
         }
 
+        fn log_event(
+            &self,
+            _player: Obj,
+            _event: Box<moor_common::tasks::NarrativeEvent>,
+        ) -> Result<(), moor_common::tasks::SessionError> {
+            Ok(())
+        }
+
         fn request_input(
             &self,
             _player: Obj,

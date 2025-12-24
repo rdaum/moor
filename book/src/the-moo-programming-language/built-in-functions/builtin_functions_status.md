@@ -160,6 +160,7 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 | [`connection_name`](server.md#connection_name)               | &check;  | To make this 100% compat with core, reverse DNS & listen port is needed. |
 | [`connections`](server.md#connections)                       | &check;  | Returns connections for current player, or other players.                |  mooR extension. |
 | [`notify`](server.md#notify)                                 | &check;  | With `rich_notify` feature on, supports sending additional content types |
+| [`event_log`](server.md#event_log)                           | &check;  | mooR extension. Log to event history without broadcasting to connections |
 | [`boot_player`](server.md#boot_player)                       | &check;  |                                                                          |
 | [`player_event_log_stats`](server.md#player_event_log_stats) | &check;  | mooR extension. Inspect encrypted event history.                         |
 | [`purge_player_event_log`](server.md#purge_player_event_log) | &check;  | mooR extension. Delete encrypted history / public key.                   |

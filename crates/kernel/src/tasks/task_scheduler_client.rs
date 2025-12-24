@@ -272,6 +272,13 @@ impl TaskSchedulerClient {
             .expect("Could not deliver client message -- scheduler shut down?");
     }
 
+    /// Ask the scheduler to log an event to a player's event log without broadcasting.
+    pub fn log_event(&self, player: Obj, event: Box<NarrativeEvent>) {
+        self.scheduler_sender
+            .send((self.task_id, TaskControlMsg::LogEvent { player, event }))
+            .expect("Could not deliver client message -- scheduler shut down?");
+    }
+
     pub fn listen(
         &self,
         handler_object: Obj,
@@ -542,6 +549,11 @@ pub enum TaskControlMsg {
     /// If None, returns immediately after initiating checkpoint (non-blocking).
     Checkpoint(Option<oneshot::Sender<Result<(), SchedulerError>>>),
     Notify {
+        player: Obj,
+        event: Box<NarrativeEvent>,
+    },
+    /// Log an event to the player's event log without broadcasting to connections.
+    LogEvent {
         player: Obj,
         event: Box<NarrativeEvent>,
     },
