@@ -730,7 +730,7 @@ impl TelnetConnection {
         // Provoke welcome message, which is a login command with no arguments, and we
         // don't care about the reply at this point.
         let login_msg =
-            mk_login_command_msg(&self.client_token, &self.handler_object, vec![], false);
+            mk_login_command_msg(&self.client_token, &self.handler_object, vec![], false, None, None);
         self.rpc_client
             .make_client_rpc_call(self.client_id, login_msg)
             .await
@@ -935,7 +935,7 @@ impl TelnetConnection {
                         ConnectionItem::Bytes(_) => continue,
                     };
                     let words = parse_into_words(&line);
-                    let login_msg = mk_login_command_msg(&self.client_token, &self.handler_object, words, true);
+                    let login_msg = mk_login_command_msg(&self.client_token, &self.handler_object, words, true, None, None);
                     let response_bytes = self.rpc_client.make_client_rpc_call(
                         self.client_id,
                         login_msg,

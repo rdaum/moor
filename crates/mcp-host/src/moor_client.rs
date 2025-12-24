@@ -404,6 +404,8 @@ impl MoorClient {
                 password.to_string(),
             ],
             true,
+            None,
+            None,
         );
 
         let operation = if is_reconnect {

@@ -1151,6 +1151,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             &SYSTEM_OBJECT,
             vec!["create".to_string(), "TestPlayer".to_string()],
             true,
+            None,
+            None,
         );
 
         let login_result = transport.process_client_message(
@@ -1226,6 +1228,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             &SYSTEM_OBJECT,
             vec!["connect".to_string(), "TestPlayer".to_string()],
             true,
+            None,
+            None,
         );
 
         let login_result = transport.process_client_message(

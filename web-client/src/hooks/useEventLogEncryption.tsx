@@ -17,59 +17,13 @@
 import { useCallback, useState } from "react";
 import { identityFromDerivedBytes, publicKeyFromIdentity } from "../lib/age-decrypt";
 import { buildAuthHeaders } from "../lib/authHeaders";
+import { deriveKeyBytes } from "../lib/keyDerivation";
 
 interface EncryptionState {
     hasEncryption: boolean;
     isChecking: boolean;
     hasCheckedOnce: boolean; // Track if we've checked at least once
     ageIdentity: string | null; // AGE-SECRET-KEY-1... private key string
-}
-
-/**
- * Derive 32 bytes from password using Argon2id KDF
- * Uses player OID as salt for domain separation
- * Same password + same player OID = same bytes (deterministic)
- * Returns base64-encoded bytes
- */
-async function deriveKeyBytes(password: string, playerOid: string): Promise<string> {
-    const saltString = `moor-event-log-v1-${playerOid}`;
-
-    // Load argon2-browser from local bundled version if not already loaded
-    // @ts-expect-error - UMD module attaches to window
-    if (!window.argon2) {
-        // Set WASM path before loading argon2
-        // @ts-expect-error - argon2WasmPath not in Window type
-        window.argon2WasmPath = "/argon2.wasm";
-
-        await new Promise<void>((resolve, reject) => {
-            const script = document.createElement("script");
-            script.src = "/argon2-bundled.min.js";
-            script.onload = () => resolve();
-            script.onerror = () => reject(new Error("Failed to load argon2-browser"));
-            document.head.appendChild(script);
-        });
-    }
-
-    // @ts-expect-error - UMD module attaches to window
-    const argon2 = window.argon2;
-
-    if (!argon2 || typeof argon2.hash !== "function") {
-        throw new Error("argon2-browser failed to load");
-    }
-
-    const result = await argon2.hash({
-        pass: password,
-        salt: saltString,
-        type: 2, // Argon2id
-        time: 3,
-        mem: 65536, // 64 MiB
-        parallelism: 4,
-        hashLen: 32,
-    });
-
-    // Convert to base64
-    const bytes = new Uint8Array(result.hash);
-    return btoa(String.fromCharCode(...bytes));
 }
 
 export const useEventLogEncryption = (
@@ -137,15 +91,7 @@ export const useEventLogEncryption = (
 
         try {
             console.log("Deriving encryption key for player:", playerOid);
-            const derivedBytes = await deriveKeyBytes(password, playerOid);
-            console.log("Derived key bytes (base64):", derivedBytes.substring(0, 20) + "...");
-
-            // Decode base64 to bytes for age identity generation
-            const binaryString = atob(derivedBytes);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
+            const bytes = await deriveKeyBytes(password, playerOid);
 
             // Generate age identity from derived bytes (client-side)
             console.log("Generating age keypair client-side...");
@@ -200,14 +146,7 @@ export const useEventLogEncryption = (
         }
 
         try {
-            const derivedBytes = await deriveKeyBytes(password, playerOid);
-
-            // Decode base64 to bytes
-            const binaryString = atob(derivedBytes);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
+            const bytes = await deriveKeyBytes(password, playerOid);
 
             // Generate age identity from derived bytes
             const identity = identityFromDerivedBytes(bytes);

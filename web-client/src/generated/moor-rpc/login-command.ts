@@ -4,6 +4,7 @@ import * as flatbuffers from "flatbuffers";
 
 import { Obj } from "../moor-common/obj.js";
 import { ClientToken } from "../moor-rpc/client-token.js";
+import { VarMap } from "../moor-var/var-map.js";
 
 export class LoginCommand {
     bb: flatbuffers.ByteBuffer | null = null;
@@ -50,8 +51,20 @@ export class LoginCommand {
         return offset ? !!this.bb!.readInt8(this.bb_pos + offset) : false;
     }
 
+    eventLogPubkey(): string | null;
+    eventLogPubkey(optionalEncoding: flatbuffers.Encoding): string | Uint8Array | null;
+    eventLogPubkey(optionalEncoding?: any): string | Uint8Array | null {
+        const offset = this.bb!.__offset(this.bb_pos, 12);
+        return offset ? this.bb!.__string(this.bb_pos + offset, optionalEncoding) : null;
+    }
+
+    registrationData(obj?: VarMap): VarMap | null {
+        const offset = this.bb!.__offset(this.bb_pos, 14);
+        return offset ? (obj || new VarMap()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
+    }
+
     static startLoginCommand(builder: flatbuffers.Builder) {
-        builder.startObject(4);
+        builder.startObject(6);
     }
 
     static addClientToken(builder: flatbuffers.Builder, clientTokenOffset: flatbuffers.Offset) {
@@ -80,6 +93,14 @@ export class LoginCommand {
 
     static addDoAttach(builder: flatbuffers.Builder, doAttach: boolean) {
         builder.addFieldInt8(3, +doAttach, +false);
+    }
+
+    static addEventLogPubkey(builder: flatbuffers.Builder, eventLogPubkeyOffset: flatbuffers.Offset) {
+        builder.addFieldOffset(4, eventLogPubkeyOffset, 0);
+    }
+
+    static addRegistrationData(builder: flatbuffers.Builder, registrationDataOffset: flatbuffers.Offset) {
+        builder.addFieldOffset(5, registrationDataOffset, 0);
     }
 
     static endLoginCommand(builder: flatbuffers.Builder): flatbuffers.Offset {

@@ -145,6 +145,7 @@ impl RpcMessageHandler {
         connection: &Obj,
         args: Vec<String>,
         attach: bool,
+        event_log_pubkey: Option<String>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         // TODO: change result of login to return this information, rather than just Objid, so
         //   we're not dependent on this.
@@ -227,6 +228,13 @@ impl RpcMessageHandler {
                 "Unable to update client connection".to_string(),
             ));
         };
+
+        // Set event log pubkey BEFORE triggering connected events, ensuring encryption
+        // is active from the very start of the session
+        if let Some(pubkey) = event_log_pubkey {
+            debug!(player = ?player, "Setting event log pubkey during login");
+            self.event_log.set_pubkey(player, pubkey);
+        }
 
         if attach
             && let Err(e) = self.submit_connected_task(

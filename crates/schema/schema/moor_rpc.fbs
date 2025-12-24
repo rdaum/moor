@@ -554,6 +554,10 @@ table LoginCommand {
     handler_object: MoorCommon.Obj (required);
     connect_args: [string] (required);
     do_attach: bool;
+    // Optional pubkey for event log encryption - set before connected task runs
+    event_log_pubkey: string;
+    // Optional registration data - passed as additional arg to do_login_command if non-empty
+    registration_data: MoorVar.VarMap;
 }
 
 table Attach {

@@ -18,6 +18,7 @@ import { unionToDaemonToClientReplyUnion } from "../generated/moor-rpc/daemon-to
 import { LoginResult } from "../generated/moor-rpc/login-result";
 import { ReplyResult } from "../generated/moor-rpc/reply-result";
 import { ReplyResultUnion, unionToReplyResultUnion } from "../generated/moor-rpc/reply-result-union";
+import { generateKeypairFromPassword } from "../lib/keyDerivation";
 import { objToCurie } from "../lib/var";
 
 export interface Player {
@@ -154,7 +155,10 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
         mode: "connect" | "create",
         username: string,
         password: string,
+        encryptPassword?: string,
     ) => {
+        let generatedIdentity: string | null = null;
+
         try {
             setAuthState(prev => ({ ...prev, isConnecting: true, error: null }));
 
@@ -174,6 +178,26 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
             const data = new URLSearchParams();
             data.set("player", username.trim());
             data.set("password", password);
+
+            // For create mode, generate encryption keypair using username as salt
+            // This is done BEFORE the server request so the pubkey can be bundled with account creation
+            // Use provided encryption password or fall back to account password
+            if (mode === "create") {
+                onSystemMessage("Setting up encryption...", 2);
+                const effectiveEncryptPassword = encryptPassword || password;
+                try {
+                    const { identity, publicKey } = await generateKeypairFromPassword(
+                        effectiveEncryptPassword,
+                        username.trim(),
+                    );
+                    generatedIdentity = identity;
+                    data.set("event_log_pubkey", publicKey);
+                    console.log("Generated encryption keypair for new account");
+                } catch (keyError) {
+                    console.error("Failed to generate encryption keypair:", keyError);
+                    // Continue without encryption - user can set it up later
+                }
+            }
 
             // Show connecting status
             onSystemMessage("Connecting to server...", 2);
@@ -301,6 +325,13 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
             localStorage.setItem("auth_token", authToken);
             localStorage.setItem("player_oid", playerOid);
             localStorage.setItem("player_flags", playerFlags.toString());
+
+            // For create mode, store the generated encryption identity keyed by playerOid
+            if (mode === "create" && generatedIdentity) {
+                const storageKey = `moor_event_log_identity_${playerOid}`;
+                localStorage.setItem(storageKey, generatedIdentity);
+                console.log("Stored encryption identity for new account:", playerOid);
+            }
 
             // Update player state (authorized but not yet connected)
             const player: Player = {

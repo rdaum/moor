@@ -1461,6 +1461,7 @@ function AppContent({
                 welcomeMessage={welcomeMessage}
                 contentType={contentType}
                 isServerReady={isServerReady}
+                eventLogEnabled={eventLogEnabled}
                 onConnect={handleConnect}
                 oauth2UserInfo={oauth2UserInfo}
                 onOAuth2AccountChoice={handleOAuth2AccountChoice}

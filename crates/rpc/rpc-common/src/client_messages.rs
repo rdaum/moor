@@ -29,6 +29,8 @@ pub fn mk_login_command_msg(
     handler_object: &Obj,
     connect_args: Vec<String>,
     do_attach: bool,
+    event_log_pubkey: Option<String>,
+    registration_data: Option<Box<var::VarMap>>,
 ) -> rpc::HostClientToDaemonMessage {
     rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::LoginCommand(Box::new(rpc::LoginCommand {
@@ -36,6 +38,8 @@ pub fn mk_login_command_msg(
             handler_object: obj_fb(handler_object),
             connect_args,
             do_attach,
+            event_log_pubkey,
+            registration_data,
         })),
     }
 }

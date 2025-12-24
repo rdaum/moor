@@ -176,6 +176,8 @@ pub async fn oauth2_callback_handler(
         &oauth2_state.web_host.handler_object,
         check_args,
         false, // just checking, not attaching yet
+        None,
+        None,
     );
 
     let reply_bytes = match rpc_client.make_client_rpc_call(client_id, login_msg).await {
@@ -353,6 +355,8 @@ pub async fn oauth2_account_choice_handler(
         &oauth2_state.web_host.handler_object,
         final_args,
         true, // do_attach
+        None,
+        None,
     );
 
     let reply_bytes = match rpc_client.make_client_rpc_call(client_id, login_msg).await {

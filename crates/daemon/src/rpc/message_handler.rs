@@ -894,6 +894,11 @@ impl RpcMessageHandler {
         let handler_object = extract_obj_rpc(&login, "handler_object", |l| l.handler_object())?;
         let args = extract_string_list_rpc(&login, "connect_args", |l| l.connect_args())?;
         let attach = extract_field_rpc(&login, "do_attach", |l| l.do_attach())?;
+        let event_log_pubkey = login
+            .event_log_pubkey()
+            .ok()
+            .flatten()
+            .map(|s| s.to_string());
 
         self.perform_login(
             &handler_object,
@@ -902,6 +907,7 @@ impl RpcMessageHandler {
             &connection,
             args,
             attach,
+            event_log_pubkey,
         )
     }
 

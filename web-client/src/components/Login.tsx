@@ -39,7 +39,8 @@ interface LoginProps {
     welcomeMessage: string;
     contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback" | "text/x-uri";
     isServerReady: boolean;
-    onConnect: (mode: "connect" | "create", username: string, password: string) => void;
+    eventLogEnabled?: boolean | null;
+    onConnect: (mode: "connect" | "create", username: string, password: string, encryptPassword?: string) => void;
     oauth2UserInfo?: OAuth2UserInfo | null;
     onOAuth2AccountChoice?: (choice: {
         mode: "oauth2_create" | "oauth2_connect";
@@ -128,6 +129,7 @@ export const Login: React.FC<LoginProps> = (
         welcomeMessage,
         contentType,
         isServerReady,
+        eventLogEnabled,
         onConnect,
         oauth2UserInfo,
         onOAuth2AccountChoice,
@@ -138,6 +140,15 @@ export const Login: React.FC<LoginProps> = (
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
+    // Create wizard state: credentials -> encryption-info -> encryption-password
+    const [createStep, setCreateStep] = useState<"credentials" | "encryption-info" | "encryption-password">(
+        "credentials",
+    );
+    const [useSeparateEncryptPassword, setUseSeparateEncryptPassword] = useState(false);
+    const [encryptPassword, setEncryptPassword] = useState("");
+    const [confirmEncryptPassword, setConfirmEncryptPassword] = useState("");
+    const [understoodEncryption, setUnderstoodEncryption] = useState(false);
+    // OAuth2 state
     const [oauth2Mode, setOAuth2Mode] = useState<"create" | "link">("create");
     const [oauth2PlayerName, setOAuth2PlayerName] = useState("");
     const [oauth2ExistingUsername, setOAuth2ExistingUsername] = useState("");
@@ -152,6 +163,57 @@ export const Login: React.FC<LoginProps> = (
 
     const usernameRef = useRef<HTMLInputElement>(null);
     const passwordRef = useRef<HTMLInputElement>(null);
+
+    // Proceed to encryption info step in create wizard (or skip if event log disabled)
+    const handleNextToEncryptionInfo = (e?: React.FormEvent) => {
+        e?.preventDefault();
+
+        if (!username.trim()) {
+            usernameRef.current?.focus();
+            return;
+        }
+
+        if (!password) {
+            passwordRef.current?.focus();
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            return;
+        }
+
+        // Skip encryption wizard if event log is disabled
+        if (eventLogEnabled === false) {
+            onConnect("create", username.trim(), password);
+            return;
+        }
+
+        setCreateStep("encryption-info");
+    };
+
+    // Final submit for create mode (from encryption-password step)
+    const handleCreateSubmit = (e?: React.FormEvent) => {
+        e?.preventDefault();
+
+        // Must acknowledge understanding
+        if (!understoodEncryption) {
+            return;
+        }
+
+        // If using separate encryption password, validate it
+        if (useSeparateEncryptPassword) {
+            if (!encryptPassword) {
+                return;
+            }
+            if (encryptPassword !== confirmEncryptPassword) {
+                return;
+            }
+        }
+
+        // Use encryption password if set, otherwise use account password
+        const effectiveEncryptPassword = useSeparateEncryptPassword ? encryptPassword : password;
+        onConnect(mode, username.trim(), password, effectiveEncryptPassword);
+    };
 
     const handleSubmit = (e?: React.FormEvent) => {
         e?.preventDefault();
@@ -169,9 +231,9 @@ export const Login: React.FC<LoginProps> = (
             return;
         }
 
-        // For create mode, validate password confirmation
-        if (mode === "create" && password !== confirmPassword) {
-            // Show error or focus confirm password field
+        // For create mode, this shouldn't be called directly - use wizard
+        if (mode === "create") {
+            handleNextToEncryptionInfo(e);
             return;
         }
 
@@ -237,10 +299,15 @@ export const Login: React.FC<LoginProps> = (
         }
     }, [visible, authState.isConnecting]);
 
-    // Clear confirm password when switching to connect mode
+    // Reset create wizard state when switching modes
     useEffect(() => {
         if (mode === "connect") {
             setConfirmPassword("");
+            setCreateStep("credentials");
+            setUseSeparateEncryptPassword(false);
+            setEncryptPassword("");
+            setConfirmEncryptPassword("");
+            setUnderstoodEncryption(false);
         }
     }, [mode]);
 
@@ -564,103 +631,268 @@ export const Login: React.FC<LoginProps> = (
                     <OAuth2Buttons disabled={authState.isConnecting} mode={mode} />
                 </div>
 
-                {/* Divider */}
-                <div className="login_divider">
-                    <span>{mode === "connect" ? "or continue with username" : "or create with username"}</span>
-                </div>
-
-                {/* Login form */}
-                <form
-                    id="login-form-panel"
-                    className="login_form"
-                    onSubmit={handleSubmit}
-                    noValidate
-                    role="tabpanel"
-                    aria-labelledby={mode === "connect" ? "tab-connect" : "tab-create"}
-                >
-                    <div className="login_field">
-                        <label htmlFor="login_username" className="login_field_label">
-                            Player Name
-                        </label>
-                        <input
-                            ref={usernameRef}
-                            id="login_username"
-                            name="username"
-                            type="text"
-                            className="login_input"
-                            placeholder={mode === "connect" ? "Enter your player name" : "Enter your new player name"}
-                            autoComplete="username"
-                            spellCheck={false}
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            onKeyUp={handleKeyPress}
-                            disabled={authState.isConnecting}
-                            required
-                            aria-invalid={authState.error ? "true" : "false"}
-                            aria-describedby={authState.error ? "login-error" : undefined}
-                        />
+                {/* Divider - hide during encryption wizard steps */}
+                {!(mode === "create" && createStep !== "credentials") && (
+                    <div className="login_divider">
+                        <span>{mode === "connect" ? "or continue with username" : "or create with username"}</span>
                     </div>
+                )}
 
-                    <div className="login_field">
-                        <label htmlFor="login_password" className="login_field_label">
-                            Password
-                        </label>
-                        <input
-                            ref={passwordRef}
-                            id="login_password"
-                            name="password"
-                            type="password"
-                            className="login_input"
-                            placeholder={mode === "connect" ? "Enter your password" : "Choose a password"}
-                            autoComplete={mode === "connect" ? "current-password" : "new-password"}
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            onKeyUp={handleKeyPress}
-                            disabled={authState.isConnecting}
-                            required
-                            aria-invalid={authState.error ? "true" : "false"}
-                            aria-describedby={authState.error ? "login-error" : undefined}
-                        />
-                    </div>
-
-                    {mode === "create" && (
+                {/* Connect form OR Create wizard step 1 (credentials) */}
+                {(mode === "connect" || (mode === "create" && createStep === "credentials")) && (
+                    <form
+                        id="login-form-panel"
+                        className="login_form"
+                        onSubmit={handleSubmit}
+                        noValidate
+                        role="tabpanel"
+                        aria-labelledby={mode === "connect" ? "tab-connect" : "tab-create"}
+                    >
                         <div className="login_field">
-                            <label htmlFor="login_confirm_password" className="login_field_label">
-                                Confirm Password
+                            <label htmlFor="login_username" className="login_field_label">
+                                Player Name
                             </label>
                             <input
-                                id="login_confirm_password"
-                                name="confirm_password"
-                                type="password"
+                                ref={usernameRef}
+                                id="login_username"
+                                name="username"
+                                type="text"
                                 className="login_input"
-                                placeholder="Re-enter your password"
-                                autoComplete="new-password"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                placeholder={mode === "connect"
+                                    ? "Enter your player name"
+                                    : "Enter your new player name"}
+                                autoComplete="username"
+                                spellCheck={false}
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
                                 onKeyUp={handleKeyPress}
                                 disabled={authState.isConnecting}
                                 required
-                                aria-invalid={password !== confirmPassword && confirmPassword !== "" ? "true" : "false"}
+                                aria-invalid={authState.error ? "true" : "false"}
+                                aria-describedby={authState.error ? "login-error" : undefined}
                             />
-                            {password !== confirmPassword && confirmPassword !== "" && (
-                                <span className="login_field_error">Passwords do not match</span>
-                            )}
                         </div>
-                    )}
 
-                    <button
-                        type="submit"
-                        className="login_submit_button"
-                        disabled={authState.isConnecting}
-                        aria-describedby={authState.isConnecting
-                            ? "login-status"
-                            : authState.error
-                            ? "login-error"
-                            : undefined}
+                        <div className="login_field">
+                            <label htmlFor="login_password" className="login_field_label">
+                                Password
+                            </label>
+                            <input
+                                ref={passwordRef}
+                                id="login_password"
+                                name="password"
+                                type="password"
+                                className="login_input"
+                                placeholder={mode === "connect" ? "Enter your password" : "Choose a password"}
+                                autoComplete={mode === "connect" ? "current-password" : "new-password"}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                onKeyUp={handleKeyPress}
+                                disabled={authState.isConnecting}
+                                required
+                                aria-invalid={authState.error ? "true" : "false"}
+                                aria-describedby={authState.error ? "login-error" : undefined}
+                            />
+                        </div>
+
+                        {mode === "create" && (
+                            <div className="login_field">
+                                <label htmlFor="login_confirm_password" className="login_field_label">
+                                    Confirm Password
+                                </label>
+                                <input
+                                    id="login_confirm_password"
+                                    name="confirm_password"
+                                    type="password"
+                                    className="login_input"
+                                    placeholder="Re-enter your password"
+                                    autoComplete="new-password"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    onKeyUp={handleKeyPress}
+                                    disabled={authState.isConnecting}
+                                    required
+                                    aria-invalid={password !== confirmPassword && confirmPassword !== ""
+                                        ? "true"
+                                        : "false"}
+                                />
+                                {password !== confirmPassword && confirmPassword !== "" && (
+                                    <span className="login_field_error">Passwords do not match</span>
+                                )}
+                            </div>
+                        )}
+
+                        <button
+                            type="submit"
+                            className="login_submit_button"
+                            disabled={authState.isConnecting}
+                            aria-describedby={authState.isConnecting
+                                ? "login-status"
+                                : authState.error
+                                ? "login-error"
+                                : undefined}
+                        >
+                            {authState.isConnecting ? "Connecting..." : mode === "connect" ? "Sign In" : "Next"}
+                        </button>
+                    </form>
+                )}
+
+                {/* Create wizard step 2: Encryption explanation */}
+                {mode === "create" && createStep === "encryption-info" && (
+                    <div className="wizard_step">
+                        <div className="wizard_step_indicator">Step 2 of 3</div>
+                        <h3 className="wizard_step_title">Your History</h3>
+
+                        <div className="wizard_step_content">
+                            <p>
+                                Your <strong>history</strong>{" "}
+                                is a complete record of everything you see and do—conversations, actions, descriptions,
+                                and more.
+                            </p>
+                            <p>
+                                It's stored encrypted so only you can read it. With your encryption password, your
+                                history follows you across devices and persists over time.
+                            </p>
+                        </div>
+
+                        <div className="login_button_row">
+                            <button
+                                type="button"
+                                className="login_back_button"
+                                onClick={() => setCreateStep("credentials")}
+                            >
+                                Back
+                            </button>
+                            <button
+                                type="button"
+                                className="login_submit_button"
+                                onClick={() => setCreateStep("encryption-password")}
+                            >
+                                Continue
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Create wizard step 3: Encryption password choice */}
+                {mode === "create" && createStep === "encryption-password" && (
+                    <form
+                        id="encryption-form-panel"
+                        className="wizard_step"
+                        onSubmit={handleCreateSubmit}
+                        noValidate
                     >
-                        {authState.isConnecting ? "Connecting..." : mode === "connect" ? "Sign In" : "Create Account"}
-                    </button>
-                </form>
+                        <div className="wizard_step_indicator">Step 3 of 3</div>
+                        <h3 className="wizard_step_title">Encryption Password</h3>
+
+                        <div className="wizard_step_content">
+                            <p>
+                                By default, your current account password will be used to encrypt your history. If you
+                                change your account password later, your encryption password stays the same.
+                            </p>
+                        </div>
+
+                        <div className="login_field">
+                            <label className="login_checkbox_label">
+                                <input
+                                    type="checkbox"
+                                    checked={useSeparateEncryptPassword}
+                                    onChange={(e) => {
+                                        setUseSeparateEncryptPassword(e.target.checked);
+                                        if (!e.target.checked) {
+                                            setEncryptPassword("");
+                                            setConfirmEncryptPassword("");
+                                        }
+                                    }}
+                                    disabled={authState.isConnecting}
+                                />
+                                <span>Use a different password for encryption</span>
+                            </label>
+                        </div>
+
+                        {useSeparateEncryptPassword && (
+                            <>
+                                <div className="login_field">
+                                    <label htmlFor="encrypt_password" className="login_field_label">
+                                        Encryption Password
+                                    </label>
+                                    <input
+                                        id="encrypt_password"
+                                        type="password"
+                                        className="login_input"
+                                        placeholder="Choose an encryption password"
+                                        autoComplete="new-password"
+                                        value={encryptPassword}
+                                        onChange={(e) => setEncryptPassword(e.target.value)}
+                                        disabled={authState.isConnecting}
+                                        required
+                                    />
+                                </div>
+
+                                <div className="login_field">
+                                    <label htmlFor="confirm_encrypt_password" className="login_field_label">
+                                        Confirm Encryption Password
+                                    </label>
+                                    <input
+                                        id="confirm_encrypt_password"
+                                        type="password"
+                                        className="login_input"
+                                        placeholder="Re-enter encryption password"
+                                        autoComplete="new-password"
+                                        value={confirmEncryptPassword}
+                                        onChange={(e) => setConfirmEncryptPassword(e.target.value)}
+                                        disabled={authState.isConnecting}
+                                        required
+                                        aria-invalid={encryptPassword !== confirmEncryptPassword
+                                                && confirmEncryptPassword !== ""
+                                            ? "true"
+                                            : "false"}
+                                    />
+                                    {encryptPassword !== confirmEncryptPassword && confirmEncryptPassword !== "" && (
+                                        <span className="login_field_error">Passwords do not match</span>
+                                    )}
+                                </div>
+                            </>
+                        )}
+
+                        <div className="wizard_warning">
+                            <strong>Important:</strong>{" "}
+                            If you lose your encryption password, you lose access to your history permanently. There is
+                            no recovery. You can change your account password later, but not your encryption password.
+                        </div>
+
+                        <div className="login_field">
+                            <label className="login_checkbox_label">
+                                <input
+                                    type="checkbox"
+                                    checked={understoodEncryption}
+                                    onChange={(e) => setUnderstoodEncryption(e.target.checked)}
+                                    disabled={authState.isConnecting}
+                                    required
+                                />
+                                <span>I understand this password cannot be recovered</span>
+                            </label>
+                        </div>
+
+                        <div className="login_button_row">
+                            <button
+                                type="button"
+                                className="login_back_button"
+                                onClick={() => setCreateStep("encryption-info")}
+                                disabled={authState.isConnecting}
+                            >
+                                Back
+                            </button>
+                            <button
+                                type="submit"
+                                className="login_submit_button"
+                                disabled={authState.isConnecting || !understoodEncryption}
+                            >
+                                {authState.isConnecting ? "Creating..." : "Create Account"}
+                            </button>
+                        </div>
+                    </form>
+                )}
             </div>
 
             {/* Help modal */}

@@ -54,22 +54,32 @@ pub fn extract_client_credentials(header_map: &HeaderMap) -> Option<(Uuid, Clien
 pub struct AuthRequest {
     player: String,
     password: String,
+    /// Optional event log public key for encryption (typically only for create)
+    event_log_pubkey: Option<String>,
 }
 
 pub async fn connect_auth_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebHost>,
-    Form(AuthRequest { player, password }): Form<AuthRequest>,
+    Form(AuthRequest {
+        player,
+        password,
+        event_log_pubkey,
+    }): Form<AuthRequest>,
 ) -> impl IntoResponse {
-    auth_handler(LoginType::Connect, addr, ws_host, player, password).await
+    auth_handler(LoginType::Connect, addr, ws_host, player, password, event_log_pubkey).await
 }
 
 pub async fn create_auth_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebHost>,
-    Form(AuthRequest { player, password }): Form<AuthRequest>,
+    Form(AuthRequest {
+        player,
+        password,
+        event_log_pubkey,
+    }): Form<AuthRequest>,
 ) -> impl IntoResponse {
-    auth_handler(LoginType::Create, addr, ws_host, player, password).await
+    auth_handler(LoginType::Create, addr, ws_host, player, password, event_log_pubkey).await
 }
 
 /// Stand-alone HTTP POST authentication handler which connects and then gets a valid authentication token
@@ -80,6 +90,7 @@ async fn auth_handler(
     host: WebHost,
     player: String,
     password: String,
+    event_log_pubkey: Option<String>,
 ) -> impl IntoResponse {
     debug!("Authenticating player: {}", player);
     let (client_id, rpc_client, client_token) = match host.establish_client_connection(addr).await {
@@ -106,7 +117,8 @@ async fn auth_handler(
     };
 
     let words = vec![auth_verb.to_string(), player, password];
-    let login_msg = mk_login_command_msg(&client_token, &host.handler_object, words, false);
+    let login_msg =
+        mk_login_command_msg(&client_token, &host.handler_object, words, false, event_log_pubkey, None);
 
     let reply_bytes = rpc_client
         .make_client_rpc_call(client_id, login_msg)

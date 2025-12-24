@@ -990,6 +990,107 @@
   cursor: not-allowed;
 }
 
+/* Wizard step styles for multi-step flows */
+.wizard_step {
+  padding: var(--space-md);
+}
+
+.wizard_step_indicator {
+  text-align: center;
+  font-size: 0.85em;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.wizard_step_title {
+  margin: 0 0 var(--space-md) 0;
+  font-size: 1.2em;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.wizard_step_content {
+  margin-bottom: var(--space-lg);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.wizard_step_content p {
+  margin: 0 0 var(--space-md) 0;
+}
+
+.wizard_step_content p:last-child {
+  margin-bottom: 0;
+}
+
+.wizard_warning {
+  margin: var(--space-md) 0;
+  padding: var(--space-md);
+  background: color-mix(in srgb, var(--text-warning, #d97706) 10%, transparent);
+  border: 1px solid var(--text-warning, #d97706);
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.login_checkbox_label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+  font-size: 0.95em;
+  color: var(--text-primary);
+}
+
+.login_checkbox_label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.login_field_hint {
+  margin: var(--space-xs) 0 0 0;
+  font-size: 0.85em;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.login_button_row {
+  display: flex;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+}
+
+.login_back_button {
+  flex: 0 0 auto;
+  padding: var(--space-sm) var(--space-lg);
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 1em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.login_back_button:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.login_back_button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login_button_row .login_submit_button {
+  flex: 1;
+}
+
 /* Mobile responsive adjustments */
 @media (max-width: 768px) {
   .login_window {
