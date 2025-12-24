@@ -26,8 +26,7 @@ use moor_schema::{
         narrative_event_from_ref, narrative_event_to_flatbuffer_struct, var_from_flatbuffer_ref,
         var_to_flatbuffer,
     },
-    rpc as moor_rpc,
-    var as moor_var_schema,
+    rpc as moor_rpc, var as moor_var_schema,
 };
 use moor_var::Symbol;
 use planus::ReadAsRoot;

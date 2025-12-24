@@ -360,7 +360,18 @@ pub fn assert_exprs_match(e1: &Expr, e2: &Expr) {
             assert_eq!(s1, s2, "Lambda self_name mismatch");
             assert_stmts_match(b1, b2);
         }
-        (Expr::Decl { id: id1, is_const: c1, expr: e1 }, Expr::Decl { id: id2, is_const: c2, expr: e2 }) => {
+        (
+            Expr::Decl {
+                id: id1,
+                is_const: c1,
+                expr: e1,
+            },
+            Expr::Decl {
+                id: id2,
+                is_const: c2,
+                expr: e2,
+            },
+        ) => {
             assert_eq!(id1, id2, "Decl id mismatch");
             assert_eq!(c1, c2, "Decl is_const mismatch");
             match (e1, e2) {
@@ -369,7 +380,16 @@ pub fn assert_exprs_match(e1: &Expr, e2: &Expr) {
                 _ => panic!("Decl expr mismatch: {e1:?} vs {e2:?}"),
             }
         }
-        (Expr::Assign { left: l1, right: r1 }, Expr::Assign { left: l2, right: r2 }) => {
+        (
+            Expr::Assign {
+                left: l1,
+                right: r1,
+            },
+            Expr::Assign {
+                left: l2,
+                right: r2,
+            },
+        ) => {
             assert_exprs_match(l1, l2);
             assert_exprs_match(r1, r2);
         }

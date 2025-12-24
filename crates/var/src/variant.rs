@@ -127,7 +127,13 @@ impl Var {
             return None;
         };
         let is_ascii = self.str_is_ascii() && needle.str_is_ascii();
-        string::str_find(subject.as_str(), needle_str.as_str(), case_matters, skip, is_ascii)
+        string::str_find(
+            subject.as_str(),
+            needle_str.as_str(),
+            case_matters,
+            skip,
+            is_ascii,
+        )
     }
 
     /// Find last occurrence of needle in self. Returns 0-based char index or None.

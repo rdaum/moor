@@ -47,7 +47,10 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Load TLS configuration from certificate and key files.
-pub fn load_tls_config(cert_path: &Path, key_path: &Path) -> Result<Arc<ServerConfig>, eyre::Error> {
+pub fn load_tls_config(
+    cert_path: &Path,
+    key_path: &Path,
+) -> Result<Arc<ServerConfig>, eyre::Error> {
     let cert_file = File::open(cert_path)
         .map_err(|e| eyre::eyre!("Failed to open certificate file {:?}: {}", cert_path, e))?;
     let key_file = File::open(key_path)
@@ -175,7 +178,9 @@ impl Listeners {
         let kill_switch = self.kill_switch.clone();
         let curve_keys = self.curve_keys.clone();
         let tls_acceptor = if is_tls {
-            self.tls_config.as_ref().map(|c| TlsAcceptor::from(c.clone()))
+            self.tls_config
+                .as_ref()
+                .map(|c| TlsAcceptor::from(c.clone()))
         } else {
             None
         };

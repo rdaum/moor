@@ -780,9 +780,9 @@ fn bf_event_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Must be player object, not connection object
     if !player.is_positive() {
-        return Err(ErrValue(
-            E_INVARG.msg("event_log() requires a player object, not a connection object"),
-        ));
+        return Err(ErrValue(E_INVARG.msg(
+            "event_log() requires a player object, not a connection object",
+        )));
     }
 
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
@@ -822,11 +822,9 @@ fn bf_event_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             metadata_vec.push((key_sym, pair[1].clone()));
                         }
                         _ => {
-                            return Err(ErrValue(
-                                E_TYPE.msg(
-                                    "event_log() metadata alist must contain {key, value} pairs",
-                                ),
-                            ));
+                            return Err(ErrValue(E_TYPE.msg(
+                                "event_log() metadata alist must contain {key, value} pairs",
+                            )));
                         }
                     }
                 }
@@ -1320,9 +1318,7 @@ fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let host_type = "tcp".to_string();
 
     // Ask the scheduler to broadcast a listen request out to all the hosts.
-    if let Some(error) =
-        current_task_scheduler_client().listen(object, host_type, port, options)
-    {
+    if let Some(error) = current_task_scheduler_client().listen(object, host_type, port, options) {
         return Err(ErrValue(error));
     }
 

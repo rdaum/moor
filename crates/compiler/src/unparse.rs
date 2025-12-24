@@ -455,10 +455,7 @@ impl<'a> Unparse<'a> {
                 self_name,
             } => {
                 // Check if this is a simple expression lambda or a complex multi-statement lambda
-                let is_simple_expr = matches!(
-                    &body.node,
-                    StmtNode::Expr(Expr::Return(Some(_)))
-                );
+                let is_simple_expr = matches!(&body.node, StmtNode::Expr(Expr::Return(Some(_))));
 
                 let param_str = self.unparse_lambda_params(params)?;
 
@@ -1998,7 +1995,11 @@ endif"#;
         assert!(result.contains("fn (x)"), "Should contain outer fn");
         assert!(result.contains("fn (y)"), "Should contain inner fn");
         // Should have two endfn markers
-        assert_eq!(result.matches("endfn").count(), 2, "Should have two endfn markers");
+        assert_eq!(
+            result.matches("endfn").count(),
+            2,
+            "Should have two endfn markers"
+        );
     }
 
     #[test]
@@ -2020,7 +2021,15 @@ endif"#;
         let result = parse_and_unparse(&stripped).unwrap();
         parse_and_unparse(&result).expect("Unparsed output should be re-parseable");
         // Should have two lambda functions
-        assert_eq!(result.matches("fn ()").count(), 2, "Should have two lambdas");
-        assert_eq!(result.matches("endfn").count(), 2, "Should have two endfn markers");
+        assert_eq!(
+            result.matches("fn ()").count(),
+            2,
+            "Should have two lambdas"
+        );
+        assert_eq!(
+            result.matches("endfn").count(),
+            2,
+            "Should have two endfn markers"
+        );
     }
 }

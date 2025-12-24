@@ -291,7 +291,10 @@ fn str_replace_ascii_cs(ctx: &mut AsciiStringSearchContext, chunk_size: usize, _
 
 fn str_replace_ascii_ci(ctx: &mut AsciiStringSearchContext, chunk_size: usize, _chunk_num: usize) {
     for _ in 0..chunk_size {
-        let _ = black_box(ctx.subject.str_replace(&ctx.needle, &ctx.replacement, false));
+        let _ = black_box(
+            ctx.subject
+                .str_replace(&ctx.needle, &ctx.replacement, false),
+        );
     }
 }
 
@@ -301,7 +304,10 @@ fn str_replace_unicode_ci(
     _chunk_num: usize,
 ) {
     for _ in 0..chunk_size {
-        let _ = black_box(ctx.subject.str_replace(&ctx.needle, &ctx.replacement, false));
+        let _ = black_box(
+            ctx.subject
+                .str_replace(&ctx.needle, &ctx.replacement, false),
+        );
     }
 }
 

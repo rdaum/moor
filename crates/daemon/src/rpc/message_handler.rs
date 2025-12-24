@@ -23,8 +23,9 @@ use moor_rpc::{
     VerbProgramResponseReply, VerbProgramResponseUnion,
 };
 use moor_schema::{
-    common, rpc as moor_rpc, var as moor_var_fb,
+    common, rpc as moor_rpc,
     rpc::{HostClientToDaemonMessageUnionRef, ListenerRef},
+    var as moor_var_fb,
 };
 use papaya::HashMap as PapayaHashMap;
 use std::{
@@ -449,8 +450,8 @@ impl MessageHandler for RpcMessageHandler {
             let pairs: Result<Vec<_>, _> = options
                 .iter()
                 .map(|(key, value)| {
-                    let key_fb = var_to_flatbuffer(&v_sym(*key))
-                        .map_err(|_| SessionError::DeliveryError)?;
+                    let key_fb =
+                        var_to_flatbuffer(&v_sym(*key)).map_err(|_| SessionError::DeliveryError)?;
                     let value_fb =
                         var_to_flatbuffer(value).map_err(|_| SessionError::DeliveryError)?;
                     Ok(moor_var_fb::VarMapPair {

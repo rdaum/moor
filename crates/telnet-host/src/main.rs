@@ -234,7 +234,10 @@ async fn main() -> Result<(), eyre::Error> {
         let tls_sockaddr = match tls_listen_addr.parse::<SocketAddr>() {
             Ok(addr) => addr,
             Err(e) => {
-                error!("Failed to parse TLS socket address {}: {}", tls_listen_addr, e);
+                error!(
+                    "Failed to parse TLS socket address {}: {}",
+                    tls_listen_addr, e
+                );
                 std::process::exit(1);
             }
         };

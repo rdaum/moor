@@ -273,7 +273,9 @@ fn extract_object_constants(
 
         // Skip if same as parent's import_export_id (inherited without meaningful override)
         if od.parent != NOTHING
-            && id_values.get(&od.parent).is_some_and(|parent_id| parent_id == id_str)
+            && id_values
+                .get(&od.parent)
+                .is_some_and(|parent_id| parent_id == id_str)
         {
             tracing::debug!(
                 "Skipping {} - import_export_id '{}' inherited from parent {}",

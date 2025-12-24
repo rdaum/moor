@@ -1380,7 +1380,11 @@ mod tests {
 
         // Compile should succeed
         let compiled = compile(program, CompileOptions::default());
-        assert!(compiled.is_ok(), "Compile should succeed: {:?}", compiled.err());
+        assert!(
+            compiled.is_ok(),
+            "Compile should succeed: {:?}",
+            compiled.err()
+        );
 
         // Decompile should now succeed (bug fixed)
         let binary = compiled.unwrap();
@@ -1391,7 +1395,6 @@ mod tests {
             decompiled.err()
         );
     }
-
 
     #[test_case("if (1) return 2; endif"; "simple if")]
     #[test_case("if (1) return 2; else return 3; endif"; "if_else")]

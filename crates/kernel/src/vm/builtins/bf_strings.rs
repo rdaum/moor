@@ -16,7 +16,9 @@
 use base64::{Engine, engine::general_purpose};
 use md5::Digest;
 use moor_compiler::offset_for_builtin;
-use moor_var::{E_ARGS, E_INVARG, E_TYPE, Sequence, Variant, v_binary, v_int, v_list, v_str, v_string};
+use moor_var::{
+    E_ARGS, E_INVARG, E_TYPE, Sequence, Variant, v_binary, v_int, v_list, v_str, v_string,
+};
 
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction};
 
@@ -456,14 +458,10 @@ fn bf_urldecode(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     while let Some(c) = chars.next() {
         if c == '%' {
             let Some(hex1) = chars.next() else {
-                return Err(BfErr::ErrValue(
-                    E_INVARG.msg("incomplete percent sequence"),
-                ));
+                return Err(BfErr::ErrValue(E_INVARG.msg("incomplete percent sequence")));
             };
             let Some(hex2) = chars.next() else {
-                return Err(BfErr::ErrValue(
-                    E_INVARG.msg("incomplete percent sequence"),
-                ));
+                return Err(BfErr::ErrValue(E_INVARG.msg("incomplete percent sequence")));
             };
             let hex_str: String = [hex1, hex2].iter().collect();
             let Ok(byte) = u8::from_str_radix(&hex_str, 16) else {

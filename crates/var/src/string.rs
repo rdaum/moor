@@ -281,11 +281,7 @@ pub(crate) fn unicode_find_ci(subject: &str, needle: &str, skip_chars: usize) ->
 }
 
 /// Unicode case-insensitive rfind - streaming match with a first-char filter.
-pub(crate) fn unicode_rfind_ci(
-    subject: &str,
-    needle: &str,
-    skip_from_end: usize,
-) -> Option<usize> {
+pub(crate) fn unicode_rfind_ci(subject: &str, needle: &str, skip_from_end: usize) -> Option<usize> {
     let total_chars = subject.chars().count();
     let search_chars = total_chars.saturating_sub(skip_from_end);
 
@@ -491,7 +487,13 @@ impl Sequence for Str {
 
         // Compute ASCII flag on the fly (enables ASCII fast path for case-insensitive)
         let is_ascii = self.as_str().is_ascii() && needle_str.as_str().is_ascii();
-        Ok(str_find(self.as_str(), needle_str.as_str(), case_sensitive, 0, is_ascii))
+        Ok(str_find(
+            self.as_str(),
+            needle_str.as_str(),
+            case_sensitive,
+            0,
+            is_ascii,
+        ))
     }
 
     fn contains(&self, value: &Var, case_sensitive: bool) -> Result<bool, Error> {
@@ -506,7 +508,14 @@ impl Sequence for Str {
 
         // Compute ASCII flag on the fly (enables ASCII fast path for case-insensitive)
         let is_ascii = self.as_str().is_ascii() && needle_str.as_str().is_ascii();
-        Ok(str_find(self.as_str(), needle_str.as_str(), case_sensitive, 0, is_ascii).is_some())
+        Ok(str_find(
+            self.as_str(),
+            needle_str.as_str(),
+            case_sensitive,
+            0,
+            is_ascii,
+        )
+        .is_some())
     }
 
     fn index(&self, index: usize) -> Result<Var, Error> {
@@ -736,6 +745,7 @@ impl From<String> for Str {
 
 #[cfg(test)]
 mod tests {
+    use super::Str;
     use crate::{
         IndexMode, Sequence,
         error::ErrorCode::E_RANGE,
@@ -743,7 +753,6 @@ mod tests {
         variant::Variant,
         variant::{Var, v_int, v_str},
     };
-    use super::Str;
 
     #[test]
     fn test_str_pack_unpack() {
@@ -1112,13 +1121,19 @@ mod tests {
 
         #[test]
         fn test_replace_basic_ascii() {
-            assert_eq!(replace("hello world", "world", "there", true), "hello there");
+            assert_eq!(
+                replace("hello world", "world", "there", true),
+                "hello there"
+            );
             assert_eq!(replace("foo foo foo", "foo", "bar", true), "bar bar bar");
         }
 
         #[test]
         fn test_replace_case_insensitive_ascii() {
-            assert_eq!(replace("Hello World", "world", "there", false), "Hello there");
+            assert_eq!(
+                replace("Hello World", "world", "there", false),
+                "Hello there"
+            );
             assert_eq!(replace("FOO foo FoO", "foo", "bar", false), "bar bar bar");
         }
 
