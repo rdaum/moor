@@ -308,6 +308,13 @@ export class MoorVar {
                 // Convert flyweight to object with slots as properties
                 const result: Record<string, unknown> = {};
 
+                // Add delegate as _delegate (object reference string like "#123")
+                const delegate = varFlyweight.delegate();
+                if (delegate) {
+                    const delegateStr = objToString(delegate);
+                    result._delegate = delegateStr ? `#${delegateStr}` : "#-1";
+                }
+
                 // Add slots as properties
                 const slotsLen = varFlyweight.slotsLength();
                 for (let i = 0; i < slotsLen; i++) {

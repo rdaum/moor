@@ -39,22 +39,19 @@ export const usePronouns = (authToken: string | null, playerOid: string | null) 
         setError(null);
 
         try {
-            // Try to get current pronouns from the player
+            // Try to get current pronouns display string from the player
             const { result } = await invokeVerbFlatBuffer(
                 authToken,
                 playerOid,
-                "pronouns",
+                "pronouns_display",
             );
 
-            // Result should be a flyweight with a .display property
-            if (result && typeof result === "object" && "display" in result) {
-                setCurrentPronouns(result.display as string);
-                setPronounsAvailable(true);
-            } else if (typeof result === "string") {
+            // Result should be a simple string like "they/them"
+            if (typeof result === "string") {
                 setCurrentPronouns(result);
                 setPronounsAvailable(true);
             } else {
-                // Pronouns verb exists but returned unexpected format
+                // Verb exists but returned unexpected format
                 setCurrentPronouns(null);
                 setPronounsAvailable(true);
             }

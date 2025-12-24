@@ -1193,6 +1193,7 @@ function AppContent({
         player_name?: string;
         existing_email?: string;
         existing_password?: string;
+        encrypt_password?: string;
     }) => {
         try {
             const response = await fetch("/auth/oauth2/account", {
@@ -1239,6 +1240,11 @@ function AppContent({
                     localStorage.setItem("client_id", result.client_id);
                 }
 
+                // If encryption password was provided, store it temporarily for auto-setup after reload
+                if (choice.encrypt_password) {
+                    sessionStorage.setItem("pending_encrypt_password", choice.encrypt_password);
+                }
+
                 showMessage(`Account ${choice.mode === "oauth2_create" ? "created" : "linked"}! Connecting...`, 2);
 
                 // Reload to trigger auth flow
@@ -1264,6 +1270,9 @@ function AppContent({
             const hasLocalKey = !!encryptionState.ageIdentity;
             const backendHasPubkey = encryptionState.hasEncryption;
 
+            // Check for pending encryption password from OAuth2 flow
+            const pendingEncryptPassword = sessionStorage.getItem("pending_encrypt_password");
+
             // If no local key but backend has pubkey, prompt for existing password (NOT setup!)
             if (!hasLocalKey && backendHasPubkey) {
                 console.log("Backend has pubkey but no local key - prompting for existing password");
@@ -1274,15 +1283,26 @@ function AppContent({
                 if (showEncryptionSetup) {
                     setShowEncryptionSetup(false);
                 }
-            } // If no local key and backend has no pubkey, prompt for new setup (NOT password!)
+            } // If no local key and backend has no pubkey, check for pending password or prompt for new setup
             else if (!hasLocalKey && !backendHasPubkey) {
-                console.log("No encryption key anywhere - prompting for new setup");
-                if (!showEncryptionSetup) {
-                    setShowEncryptionSetup(true);
-                }
-                // Make sure password prompt is NOT showing
-                if (showPasswordPrompt) {
-                    setShowPasswordPrompt(false);
+                // If we have a pending encryption password from OAuth2, auto-setup
+                if (pendingEncryptPassword) {
+                    console.log("Auto-setting up encryption with pending OAuth2 password");
+                    sessionStorage.removeItem("pending_encrypt_password");
+                    setupEncryption(pendingEncryptPassword).catch((err) => {
+                        console.error("Failed to auto-setup encryption:", err);
+                        // Fall back to showing setup prompt
+                        setShowEncryptionSetup(true);
+                    });
+                } else {
+                    console.log("No encryption key anywhere - prompting for new setup");
+                    if (!showEncryptionSetup) {
+                        setShowEncryptionSetup(true);
+                    }
+                    // Make sure password prompt is NOT showing
+                    if (showPasswordPrompt) {
+                        setShowPasswordPrompt(false);
+                    }
                 }
             } // If we have a local key but backend doesn't have our pubkey (DB was reset), clear and re-prompt
             else if (hasLocalKey && !backendHasPubkey) {
@@ -1309,6 +1329,7 @@ function AppContent({
         forgetKey,
         userSkippedEncryption,
         eventLogEnabled,
+        setupEncryption,
     ]);
 
     // Load history and connect WebSocket after authentication

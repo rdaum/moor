@@ -52,6 +52,7 @@ interface LoginProps {
         player_name?: string;
         existing_email?: string;
         existing_password?: string;
+        encrypt_password?: string;
     }) => Promise<void>;
     onOAuth2Cancel?: () => void;
 }
@@ -162,6 +163,17 @@ export const Login: React.FC<LoginProps> = (
     const [oauth2ExistingUsername, setOAuth2ExistingUsername] = useState("");
     const [oauth2ExistingPassword, setOAuth2ExistingPassword] = useState("");
     const [oauth2IsSubmitting, setOAuth2IsSubmitting] = useState(false);
+    // OAuth2 create wizard state (same steps as regular create, minus credentials)
+    const [oauth2CreateStep, setOAuth2CreateStep] = useState<
+        "player-name" | "privacy-policy" | "encryption-info" | "encryption-password"
+    >("player-name");
+    // OAuth2 always requires explicit encryption password (no login password to reuse)
+    const [oauth2EncryptPassword, setOAuth2EncryptPassword] = useState("");
+    const [oauth2ConfirmEncryptPassword, setOAuth2ConfirmEncryptPassword] = useState("");
+    const [oauth2UnderstoodEncryption, setOAuth2UnderstoodEncryption] = useState(false);
+    const [oauth2AcceptedPrivacyPolicy, setOAuth2AcceptedPrivacyPolicy] = useState(false);
+    const [oauth2PolicyScrolledToBottom, setOAuth2PolicyScrolledToBottom] = useState(false);
+    const oauth2PolicyContentRef = useRef<HTMLDivElement>(null);
     const [showHelp, setShowHelp] = useState(false);
     const [helpMessage, setHelpMessage] = useState<string>("");
     const [helpContentType, setHelpContentType] = useState<"text/plain" | "text/djot" | "text/html" | "text/traceback">(
@@ -287,18 +299,80 @@ export const Login: React.FC<LoginProps> = (
         }
     };
 
-    const handleOAuth2Submit = async (e?: React.FormEvent) => {
-        e?.preventDefault();
+    // OAuth2 wizard step calculation
+    const oauth2TotalSteps = 1 + (hasPrivacyPolicy ? 1 : 0) + (hasEncryption ? 2 : 0);
 
+    const getOAuth2StepNumber = (step: typeof oauth2CreateStep): number => {
+        switch (step) {
+            case "player-name":
+                return 1;
+            case "privacy-policy":
+                return 2;
+            case "encryption-info":
+                return hasPrivacyPolicy ? 3 : 2;
+            case "encryption-password":
+                return hasPrivacyPolicy ? 4 : 3;
+        }
+    };
+
+    // OAuth2 create: proceed from player name step
+    const handleOAuth2PlayerNameNext = () => {
+        if (!oauth2PlayerName.trim()) return;
+
+        if (hasPrivacyPolicy) {
+            setOAuth2CreateStep("privacy-policy");
+        } else if (hasEncryption) {
+            setOAuth2CreateStep("encryption-info");
+        } else {
+            // No privacy policy, no encryption - submit directly
+            handleOAuth2FinalSubmit();
+        }
+    };
+
+    // OAuth2 create: proceed from privacy policy step
+    const handleOAuth2PrivacyPolicyNext = () => {
+        if (!oauth2AcceptedPrivacyPolicy) return;
+
+        if (hasEncryption) {
+            setOAuth2CreateStep("encryption-info");
+        } else {
+            // No encryption - submit directly
+            handleOAuth2FinalSubmit();
+        }
+    };
+
+    // OAuth2 create: proceed from encryption info step
+    const handleOAuth2EncryptionInfoNext = () => {
+        setOAuth2CreateStep("encryption-password");
+    };
+
+    // OAuth2 policy scroll handler
+    const handleOAuth2PolicyScroll = (e: React.UIEvent<HTMLDivElement>) => {
+        const target = e.currentTarget;
+        const isAtBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 10;
+        if (isAtBottom && !oauth2PolicyScrolledToBottom) {
+            setOAuth2PolicyScrolledToBottom(true);
+        }
+    };
+
+    // OAuth2 final submit (for both create and link modes)
+    const handleOAuth2FinalSubmit = async () => {
         if (!oauth2UserInfo || !onOAuth2AccountChoice) return;
 
         setOAuth2IsSubmitting(true);
 
         try {
             if (oauth2Mode === "create") {
-                if (!oauth2PlayerName.trim()) {
-                    return;
+                // For create with encryption, must acknowledge understanding and provide password
+                if (hasEncryption) {
+                    if (!oauth2UnderstoodEncryption) {
+                        return;
+                    }
+                    if (!oauth2EncryptPassword || oauth2EncryptPassword !== oauth2ConfirmEncryptPassword) {
+                        return;
+                    }
                 }
+
                 await onOAuth2AccountChoice({
                     mode: "oauth2_create",
                     provider: oauth2UserInfo.provider,
@@ -307,6 +381,7 @@ export const Login: React.FC<LoginProps> = (
                     name: oauth2UserInfo.name,
                     username: oauth2UserInfo.username,
                     player_name: oauth2PlayerName.trim(),
+                    encrypt_password: hasEncryption ? oauth2EncryptPassword : undefined,
                 });
             } else {
                 if (!oauth2ExistingUsername.trim() || !oauth2ExistingPassword) {
@@ -325,6 +400,23 @@ export const Login: React.FC<LoginProps> = (
             }
         } finally {
             setOAuth2IsSubmitting(false);
+        }
+    };
+
+    const handleOAuth2Submit = async (e?: React.FormEvent) => {
+        e?.preventDefault();
+
+        if (oauth2Mode === "link") {
+            // Link mode submits directly
+            await handleOAuth2FinalSubmit();
+        } else {
+            // Create mode: if at player-name step, start wizard; otherwise submit
+            if (oauth2CreateStep === "player-name") {
+                handleOAuth2PlayerNameNext();
+            } else if (oauth2CreateStep === "encryption-password") {
+                await handleOAuth2FinalSubmit();
+            }
+            // Other steps have their own Next buttons
         }
     };
 
@@ -353,6 +445,18 @@ export const Login: React.FC<LoginProps> = (
         }
     }, [mode]);
 
+    // Reset OAuth2 wizard state when switching between create/link modes
+    useEffect(() => {
+        if (oauth2Mode === "link") {
+            setOAuth2CreateStep("player-name");
+            setOAuth2EncryptPassword("");
+            setOAuth2ConfirmEncryptPassword("");
+            setOAuth2UnderstoodEncryption(false);
+            setOAuth2AcceptedPrivacyPolicy(false);
+            setOAuth2PolicyScrolledToBottom(false);
+        }
+    }, [oauth2Mode]);
+
     // Check if policy content needs scrolling and handle scroll events
     const handlePolicyScroll = (e: React.UIEvent<HTMLDivElement>) => {
         const target = e.currentTarget;
@@ -372,6 +476,16 @@ export const Login: React.FC<LoginProps> = (
             }
         }
     }, [createStep, privacyPolicy]);
+
+    // Check OAuth2 policy scroll on step change
+    useEffect(() => {
+        if (oauth2CreateStep === "privacy-policy" && oauth2PolicyContentRef.current) {
+            const el = oauth2PolicyContentRef.current;
+            if (el.scrollHeight <= el.clientHeight) {
+                setOAuth2PolicyScrolledToBottom(true);
+            }
+        }
+    }, [oauth2CreateStep, privacyPolicy]);
 
     // Fetch privacy policy when component becomes visible and server is ready
     useEffect(() => {
@@ -533,92 +647,326 @@ export const Login: React.FC<LoginProps> = (
                         </button>
                     </div>
 
-                    <form
-                        id="oauth2-form-panel"
-                        className="login_form oauth2_complete_form"
-                        onSubmit={handleOAuth2Submit}
-                        noValidate
-                        role="tabpanel"
-                        aria-labelledby={oauth2Mode === "create" ? "tab-create" : "tab-link"}
-                    >
-                        {oauth2Mode === "create"
-                            ? (
-                                <div className="login_field">
-                                    <label htmlFor="oauth2_player_name" className="login_field_label">
-                                        Choose Your Player Name
-                                    </label>
+                    {/* Link mode: simple form */}
+                    {oauth2Mode === "link" && (
+                        <form
+                            id="oauth2-form-panel"
+                            className="login_form oauth2_complete_form"
+                            onSubmit={handleOAuth2Submit}
+                            noValidate
+                            role="tabpanel"
+                        >
+                            <div className="login_field">
+                                <label htmlFor="oauth2_existing_username" className="login_field_label">
+                                    Player Name
+                                </label>
+                                <input
+                                    id="oauth2_existing_username"
+                                    type="text"
+                                    className="login_input"
+                                    placeholder="Your existing player name"
+                                    value={oauth2ExistingUsername}
+                                    onChange={(e) => setOAuth2ExistingUsername(e.target.value)}
+                                    disabled={oauth2IsSubmitting}
+                                    required
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="login_field">
+                                <label htmlFor="oauth2_existing_password" className="login_field_label">
+                                    Password
+                                </label>
+                                <input
+                                    id="oauth2_existing_password"
+                                    type="password"
+                                    className="login_input"
+                                    placeholder="Your existing password"
+                                    value={oauth2ExistingPassword}
+                                    onChange={(e) => setOAuth2ExistingPassword(e.target.value)}
+                                    disabled={oauth2IsSubmitting}
+                                    required
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                className="login_submit_button"
+                                disabled={oauth2IsSubmitting}
+                            >
+                                {oauth2IsSubmitting ? "Processing..." : "Link Account"}
+                            </button>
+
+                            <button
+                                type="button"
+                                className="login_cancel_button"
+                                onClick={() => {
+                                    setOAuth2ExistingUsername("");
+                                    setOAuth2ExistingPassword("");
+                                    onOAuth2Cancel?.();
+                                }}
+                                disabled={oauth2IsSubmitting}
+                            >
+                                Cancel
+                            </button>
+                        </form>
+                    )}
+
+                    {/* Create mode: wizard steps */}
+                    {oauth2Mode === "create" && oauth2CreateStep === "player-name" && (
+                        <form
+                            id="oauth2-form-panel"
+                            className="login_form oauth2_complete_form"
+                            onSubmit={handleOAuth2Submit}
+                            noValidate
+                            role="tabpanel"
+                        >
+                            <div className="wizard_step_indicator">
+                                Step {getOAuth2StepNumber("player-name")} of {oauth2TotalSteps}
+                            </div>
+
+                            <div className="login_field">
+                                <label htmlFor="oauth2_player_name" className="login_field_label">
+                                    Choose Your Player Name
+                                </label>
+                                <input
+                                    id="oauth2_player_name"
+                                    type="text"
+                                    className="login_input"
+                                    placeholder="Enter desired player name"
+                                    value={oauth2PlayerName}
+                                    onChange={(e) => setOAuth2PlayerName(e.target.value)}
+                                    disabled={oauth2IsSubmitting}
+                                    required
+                                    autoFocus
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                className="login_submit_button"
+                                disabled={oauth2IsSubmitting || !oauth2PlayerName.trim()}
+                            >
+                                {oauth2IsSubmitting ? "Processing..." : "Next"}
+                            </button>
+
+                            <button
+                                type="button"
+                                className="login_cancel_button"
+                                onClick={() => {
+                                    setOAuth2PlayerName("");
+                                    setOAuth2CreateStep("player-name");
+                                    onOAuth2Cancel?.();
+                                }}
+                                disabled={oauth2IsSubmitting}
+                            >
+                                Cancel
+                            </button>
+                        </form>
+                    )}
+
+                    {/* Create mode: Privacy policy step */}
+                    {oauth2Mode === "create" && oauth2CreateStep === "privacy-policy" && privacyPolicy && (
+                        <div className="wizard_step">
+                            <div className="wizard_step_indicator">
+                                Step {getOAuth2StepNumber("privacy-policy")} of {oauth2TotalSteps}
+                            </div>
+                            <h3 className="wizard_step_title">Privacy Policy</h3>
+
+                            <div className="wizard_policy_wrapper">
+                                <div
+                                    ref={oauth2PolicyContentRef}
+                                    className="wizard_policy_content"
+                                    onScroll={handleOAuth2PolicyScroll}
+                                >
+                                    <ContentRenderer content={privacyPolicy} contentType={privacyPolicyContentType} />
+                                </div>
+                                {!oauth2PolicyScrolledToBottom && (
+                                    <div className="wizard_policy_scroll_hint">
+                                        Scroll to read the full policy ↓
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="login_field">
+                                <label
+                                    className={`login_checkbox_label ${
+                                        !oauth2PolicyScrolledToBottom ? "disabled" : ""
+                                    }`}
+                                >
                                     <input
-                                        id="oauth2_player_name"
-                                        type="text"
-                                        className="login_input"
-                                        placeholder="Enter desired player name"
-                                        value={oauth2PlayerName}
-                                        onChange={(e) => setOAuth2PlayerName(e.target.value)}
+                                        type="checkbox"
+                                        checked={oauth2AcceptedPrivacyPolicy}
+                                        onChange={(e) => setOAuth2AcceptedPrivacyPolicy(e.target.checked)}
+                                        disabled={oauth2IsSubmitting || !oauth2PolicyScrolledToBottom}
+                                        required
+                                    />
+                                    <span>I have read and accept the privacy policy</span>
+                                </label>
+                            </div>
+
+                            <div className="login_button_row">
+                                <button
+                                    type="button"
+                                    className="login_back_button"
+                                    onClick={() => setOAuth2CreateStep("player-name")}
+                                >
+                                    Back
+                                </button>
+                                <button
+                                    type="button"
+                                    className="login_submit_button"
+                                    onClick={handleOAuth2PrivacyPolicyNext}
+                                    disabled={!oauth2AcceptedPrivacyPolicy}
+                                >
+                                    Continue
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Create mode: Encryption info step */}
+                    {oauth2Mode === "create" && oauth2CreateStep === "encryption-info" && (
+                        <div className="wizard_step">
+                            <div className="wizard_step_indicator">
+                                Step {getOAuth2StepNumber("encryption-info")} of {oauth2TotalSteps}
+                            </div>
+                            <h3 className="wizard_step_title">Your History</h3>
+
+                            <div className="wizard_step_content">
+                                <p>
+                                    Your <strong>history</strong>{" "}
+                                    is a complete record of everything you see and do—conversations, actions,
+                                    descriptions, and more.
+                                </p>
+                                <p>
+                                    It's stored encrypted so only you can read it. With your encryption password, your
+                                    history follows you across devices and persists over time.
+                                </p>
+                            </div>
+
+                            <div className="login_button_row">
+                                <button
+                                    type="button"
+                                    className="login_back_button"
+                                    onClick={() =>
+                                        setOAuth2CreateStep(hasPrivacyPolicy ? "privacy-policy" : "player-name")}
+                                >
+                                    Back
+                                </button>
+                                <button
+                                    type="button"
+                                    className="login_submit_button"
+                                    onClick={handleOAuth2EncryptionInfoNext}
+                                >
+                                    Continue
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Create mode: Encryption password step */}
+                    {oauth2Mode === "create" && oauth2CreateStep === "encryption-password" && (
+                        <form
+                            id="oauth2-encryption-form"
+                            className="wizard_step"
+                            onSubmit={handleOAuth2Submit}
+                            noValidate
+                        >
+                            <div className="wizard_step_indicator">
+                                Step {getOAuth2StepNumber("encryption-password")} of {oauth2TotalSteps}
+                            </div>
+                            <h3 className="wizard_step_title">Encryption Password</h3>
+
+                            <div className="wizard_step_content">
+                                <p>
+                                    Since you're signing in with {oauth2UserInfo.provider.charAt(0).toUpperCase()
+                                        + oauth2UserInfo.provider.slice(1)}, you'll need to create a separate password
+                                    to encrypt your history.
+                                </p>
+                            </div>
+
+                            <div className="login_field">
+                                <label htmlFor="oauth2_encrypt_password" className="login_field_label">
+                                    Encryption Password
+                                </label>
+                                <input
+                                    id="oauth2_encrypt_password"
+                                    type="password"
+                                    className="login_input"
+                                    placeholder="Choose an encryption password"
+                                    autoComplete="new-password"
+                                    value={oauth2EncryptPassword}
+                                    onChange={(e) => setOAuth2EncryptPassword(e.target.value)}
+                                    disabled={oauth2IsSubmitting}
+                                    required
+                                />
+                            </div>
+
+                            <div className="login_field">
+                                <label htmlFor="oauth2_confirm_encrypt_password" className="login_field_label">
+                                    Confirm Encryption Password
+                                </label>
+                                <input
+                                    id="oauth2_confirm_encrypt_password"
+                                    type="password"
+                                    className="login_input"
+                                    placeholder="Re-enter encryption password"
+                                    autoComplete="new-password"
+                                    value={oauth2ConfirmEncryptPassword}
+                                    onChange={(e) => setOAuth2ConfirmEncryptPassword(e.target.value)}
+                                    disabled={oauth2IsSubmitting}
+                                    required
+                                    aria-invalid={oauth2EncryptPassword !== oauth2ConfirmEncryptPassword
+                                            && oauth2ConfirmEncryptPassword !== ""
+                                        ? "true"
+                                        : "false"}
+                                />
+                                {oauth2EncryptPassword !== oauth2ConfirmEncryptPassword
+                                    && oauth2ConfirmEncryptPassword !== "" && (
+                                    <span className="login_field_error">Passwords do not match</span>
+                                )}
+                            </div>
+
+                            <div className="wizard_warning">
+                                <strong>Important:</strong>{" "}
+                                If you lose your encryption password, you lose access to your history permanently. There
+                                is no recovery.
+                            </div>
+
+                            <div className="login_field">
+                                <label className="login_checkbox_label">
+                                    <input
+                                        type="checkbox"
+                                        checked={oauth2UnderstoodEncryption}
+                                        onChange={(e) => setOAuth2UnderstoodEncryption(e.target.checked)}
                                         disabled={oauth2IsSubmitting}
                                         required
-                                        autoFocus
                                     />
-                                </div>
-                            )
-                            : (
-                                <>
-                                    <div className="login_field">
-                                        <label htmlFor="oauth2_existing_username" className="login_field_label">
-                                            Player Name
-                                        </label>
-                                        <input
-                                            id="oauth2_existing_username"
-                                            type="text"
-                                            className="login_input"
-                                            placeholder="Your existing player name"
-                                            value={oauth2ExistingUsername}
-                                            onChange={(e) => setOAuth2ExistingUsername(e.target.value)}
-                                            disabled={oauth2IsSubmitting}
-                                            required
-                                            autoFocus
-                                        />
-                                    </div>
-                                    <div className="login_field">
-                                        <label htmlFor="oauth2_existing_password" className="login_field_label">
-                                            Password
-                                        </label>
-                                        <input
-                                            id="oauth2_existing_password"
-                                            type="password"
-                                            className="login_input"
-                                            placeholder="Your existing password"
-                                            value={oauth2ExistingPassword}
-                                            onChange={(e) => setOAuth2ExistingPassword(e.target.value)}
-                                            disabled={oauth2IsSubmitting}
-                                            required
-                                        />
-                                    </div>
-                                </>
-                            )}
+                                    <span>I understand this password cannot be recovered</span>
+                                </label>
+                            </div>
 
-                        <button
-                            type="submit"
-                            className="login_submit_button"
-                            disabled={oauth2IsSubmitting}
-                        >
-                            {oauth2IsSubmitting ? "Processing..." : "Continue"}
-                        </button>
-
-                        <button
-                            type="button"
-                            className="login_cancel_button"
-                            onClick={() => {
-                                setOAuth2PlayerName("");
-                                setOAuth2ExistingUsername("");
-                                setOAuth2ExistingPassword("");
-                                setOAuth2Mode("create");
-                                onOAuth2Cancel?.();
-                            }}
-                            disabled={oauth2IsSubmitting}
-                        >
-                            Cancel
-                        </button>
-                    </form>
+                            <div className="login_button_row">
+                                <button
+                                    type="button"
+                                    className="login_back_button"
+                                    onClick={() => setOAuth2CreateStep("encryption-info")}
+                                    disabled={oauth2IsSubmitting}
+                                >
+                                    Back
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="login_submit_button"
+                                    disabled={oauth2IsSubmitting || !oauth2UnderstoodEncryption
+                                        || !oauth2EncryptPassword
+                                        || oauth2EncryptPassword !== oauth2ConfirmEncryptPassword}
+                                >
+                                    {oauth2IsSubmitting ? "Creating..." : "Create Account"}
+                                </button>
+                            </div>
+                        </form>
+                    )}
                 </div>
             </div>
         );
