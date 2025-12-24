@@ -124,6 +124,50 @@ impl<'a> Unparse<'a> {
         }
     }
 
+    /// Format lambda parameters as a comma-separated string with proper prefixes.
+    /// Used by both simple (`{params} => expr`) and complex (`fn (params) ... endfn`) lambda syntax.
+    fn unparse_lambda_params(&self, params: &[ast::ScatterItem]) -> Result<String, DecompileError> {
+        let param_strings: Vec<String> = params
+            .iter()
+            .map(|param| {
+                let prefix = match param.kind {
+                    ast::ScatterKind::Required => "",
+                    ast::ScatterKind::Optional => "?",
+                    ast::ScatterKind::Rest => "@",
+                };
+                let name = self.unparse_variable(&param.id);
+                if let Some(ref default) = param.expr {
+                    format!(
+                        "{}{} = {}",
+                        prefix,
+                        name.as_arc_str(),
+                        self.unparse_expr(default).unwrap()
+                    )
+                } else {
+                    format!("{}{}", prefix, name.as_arc_str())
+                }
+            })
+            .collect();
+        Ok(param_strings.join(", "))
+    }
+
+    /// Format lambda body statements inline (space-separated, trimmed).
+    /// Used for inline lambda representation in expressions.
+    fn unparse_lambda_body_inline(&self, stmts: &[Stmt]) -> Result<String, DecompileError> {
+        let mut parts = Vec::with_capacity(stmts.len());
+        for stmt in stmts {
+            let mut stmt_buf = String::new();
+            self.unparse_stmt(stmt, &mut stmt_buf, 0)?;
+            parts.push(stmt_buf.trim().to_string());
+        }
+        // Join with space and add trailing space for consistency
+        Ok(if parts.is_empty() {
+            String::new()
+        } else {
+            format!("{} ", parts.join(" "))
+        })
+    }
+
     fn unparse_expr(&self, current_expr: &Expr) -> Result<String, DecompileError> {
         let brace_if_needed = |expr: &Expr, position: ParenPosition| -> String {
             if (self.fully_paren && expr_precedence_level(expr) != PrecedenceLevel::Atomic)
@@ -416,94 +460,34 @@ impl<'a> Unparse<'a> {
                     StmtNode::Expr(Expr::Return(Some(_)))
                 );
 
+                let param_str = self.unparse_lambda_params(params)?;
+
                 if is_simple_expr && self_name.is_none() {
                     // Simple expression lambda: {param1, ?param2, @param3} => expr
-                    let mut buffer = String::new();
-                    buffer.push('{');
-
-                    let len = params.len();
-                    for (i, param) in params.iter().enumerate() {
-                        match param.kind {
-                            ast::ScatterKind::Required => {
-                                // No prefix for required parameters
-                            }
-                            ast::ScatterKind::Optional => {
-                                buffer.push('?');
-                            }
-                            ast::ScatterKind::Rest => {
-                                buffer.push('@');
-                            }
-                        }
-                        let name = self.unparse_variable(&param.id);
-                        buffer.push_str(&name.as_arc_str());
-                        if let Some(expr) = &param.expr {
-                            buffer.push_str(" = ");
-                            buffer.push_str(self.unparse_expr(expr)?.as_str());
-                        }
-                        if i + 1 < len {
-                            buffer.push_str(", ");
-                        }
-                    }
-
-                    buffer.push_str("} => ");
-
-                    // Expression lambda: return expr; → just show the expr
-                    if let StmtNode::Expr(Expr::Return(Some(expr))) = &body.node {
-                        buffer.push_str(&self.unparse_expr(expr)?);
-                    }
-                    Ok(buffer)
+                    let expr = match &body.node {
+                        StmtNode::Expr(Expr::Return(Some(e))) => self.unparse_expr(e)?,
+                        _ => unreachable!("is_simple_expr check guarantees this pattern"),
+                    };
+                    Ok(format!("{{{param_str}}} => {expr}"))
                 } else {
-                    // Multi-statement lambda: fn (params) statements endfn
-                    // or fn name(params) statements endfn for named/recursive functions
-                    let mut buffer = String::new();
-                    if let Some(name_var) = self_name {
-                        let name = self.unparse_variable(name_var);
-                        buffer.push_str(&format!("fn {}(", name.as_arc_str()));
-                    } else {
-                        buffer.push_str("fn (");
-                    }
-
-                    let len = params.len();
-                    for (i, param) in params.iter().enumerate() {
-                        match param.kind {
-                            ast::ScatterKind::Required => {
-                                // No prefix for required parameters
-                            }
-                            ast::ScatterKind::Optional => {
-                                buffer.push('?');
-                            }
-                            ast::ScatterKind::Rest => {
-                                buffer.push('@');
-                            }
+                    // Multi-statement lambda: fn (params) ... endfn
+                    // or fn name(params) ... endfn for named/recursive functions
+                    let fn_header = match self_name {
+                        Some(name_var) => {
+                            let name = self.unparse_variable(name_var);
+                            format!("fn {}({param_str}) ", name.as_arc_str())
                         }
-                        let name = self.unparse_variable(&param.id);
-                        buffer.push_str(&name.as_arc_str());
-                        if let Some(expr) = &param.expr {
-                            buffer.push_str(" = ");
-                            buffer.push_str(self.unparse_expr(expr)?.as_str());
-                        }
-                        if i + 1 < len {
-                            buffer.push_str(", ");
-                        }
-                    }
+                        None => format!("fn ({param_str}) "),
+                    };
 
-                    buffer.push_str(") ");
-
-                    // Unparse the body statements
+                    // Collect body statements
                     let stmts = match &body.node {
                         StmtNode::Scope { body, .. } => body.as_slice(),
                         _ => std::slice::from_ref(body.as_ref()),
                     };
 
-                    for stmt in stmts {
-                        let mut stmt_buf = String::new();
-                        self.unparse_stmt(stmt, &mut stmt_buf, 0)?;
-                        buffer.push_str(stmt_buf.trim());
-                        buffer.push(' ');
-                    }
-
-                    buffer.push_str("endfn");
-                    Ok(buffer)
+                    let body_str = self.unparse_lambda_body_inline(stmts)?;
+                    Ok(format!("{fn_header}{body_str}endfn"))
                 }
             }
         }
@@ -792,29 +776,7 @@ impl<'a> Unparse<'a> {
             String::new()
         };
 
-        // Build parameter string
-        let param_strings: Vec<String> = params
-            .iter()
-            .map(|param| match param.kind {
-                crate::ast::ScatterKind::Required => self.unparse_variable(&param.id).to_string(),
-                crate::ast::ScatterKind::Optional => {
-                    if let Some(ref default) = param.expr {
-                        format!(
-                            "?{} = {}",
-                            self.unparse_variable(&param.id),
-                            self.unparse_expr(default).unwrap()
-                        )
-                    } else {
-                        format!("?{}", self.unparse_variable(&param.id))
-                    }
-                }
-                crate::ast::ScatterKind::Rest => {
-                    format!("@{}", self.unparse_variable(&param.id))
-                }
-            })
-            .collect();
-        let param_str = param_strings.join(", ");
-
+        let param_str = self.unparse_lambda_params(params)?;
         writeln!(writer, "{indent_str}fn {name}({param_str})")?;
 
         // Add body statements (with increased indentation)
@@ -1079,17 +1041,12 @@ pub fn to_literal(v: &Var) -> String {
                 }
             } else {
                 // Multi-statement lambda - use fn () ... endfn syntax
-                // Build the body as inline statements
-                let mut body_parts = vec![];
-                for stmt in &decompiled_tree.stmts {
-                    let mut stmt_buf = String::new();
-                    temp_unparse
-                        .unparse_stmt(stmt, &mut stmt_buf, 0)
-                        .unwrap_or_default();
-                    body_parts.push(stmt_buf.trim().to_string());
-                }
-                // Return the body wrapped in fn/endfn syntax - we'll build the full string below
-                body_parts.join(" ")
+                // Reuse the inline body formatter (trim trailing space since we add it below)
+                temp_unparse
+                    .unparse_lambda_body_inline(&decompiled_tree.stmts)
+                    .unwrap_or_default()
+                    .trim_end()
+                    .to_string()
             };
 
             let use_fn_syntax = !is_simple_expr;
