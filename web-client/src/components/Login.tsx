@@ -140,14 +140,22 @@ export const Login: React.FC<LoginProps> = (
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
-    // Create wizard state: credentials -> encryption-info -> encryption-password
-    const [createStep, setCreateStep] = useState<"credentials" | "encryption-info" | "encryption-password">(
-        "credentials",
-    );
+    // Create wizard state: credentials -> privacy-policy (if exists) -> encryption-info -> encryption-password
+    const [createStep, setCreateStep] = useState<
+        "credentials" | "privacy-policy" | "encryption-info" | "encryption-password"
+    >("credentials");
     const [useSeparateEncryptPassword, setUseSeparateEncryptPassword] = useState(false);
     const [encryptPassword, setEncryptPassword] = useState("");
     const [confirmEncryptPassword, setConfirmEncryptPassword] = useState("");
     const [understoodEncryption, setUnderstoodEncryption] = useState(false);
+    // Privacy policy state
+    const [privacyPolicy, setPrivacyPolicy] = useState<string | null>(null);
+    const [privacyPolicyContentType, setPrivacyPolicyContentType] = useState<
+        "text/plain" | "text/djot" | "text/html"
+    >("text/plain");
+    const [acceptedPrivacyPolicy, setAcceptedPrivacyPolicy] = useState(false);
+    const [policyScrolledToBottom, setPolicyScrolledToBottom] = useState(false);
+    const policyContentRef = useRef<HTMLDivElement>(null);
     // OAuth2 state
     const [oauth2Mode, setOAuth2Mode] = useState<"create" | "link">("create");
     const [oauth2PlayerName, setOAuth2PlayerName] = useState("");
@@ -164,8 +172,26 @@ export const Login: React.FC<LoginProps> = (
     const usernameRef = useRef<HTMLInputElement>(null);
     const passwordRef = useRef<HTMLInputElement>(null);
 
-    // Proceed to encryption info step in create wizard (or skip if event log disabled)
-    const handleNextToEncryptionInfo = (e?: React.FormEvent) => {
+    // Calculate total wizard steps and current step number
+    const hasPrivacyPolicy = privacyPolicy !== null;
+    const hasEncryption = eventLogEnabled !== false;
+    const totalSteps = 1 + (hasPrivacyPolicy ? 1 : 0) + (hasEncryption ? 2 : 0);
+
+    const getStepNumber = (step: typeof createStep): number => {
+        switch (step) {
+            case "credentials":
+                return 1;
+            case "privacy-policy":
+                return 2;
+            case "encryption-info":
+                return hasPrivacyPolicy ? 3 : 2;
+            case "encryption-password":
+                return hasPrivacyPolicy ? 4 : 3;
+        }
+    };
+
+    // Proceed from credentials step
+    const handleCredentialsNext = (e?: React.FormEvent) => {
         e?.preventDefault();
 
         if (!username.trim()) {
@@ -182,13 +208,27 @@ export const Login: React.FC<LoginProps> = (
             return;
         }
 
-        // Skip encryption wizard if event log is disabled
-        if (eventLogEnabled === false) {
+        // Next step depends on what's available
+        if (hasPrivacyPolicy) {
+            setCreateStep("privacy-policy");
+        } else if (hasEncryption) {
+            setCreateStep("encryption-info");
+        } else {
+            // No privacy policy, no encryption - create directly
             onConnect("create", username.trim(), password);
-            return;
         }
+    };
 
-        setCreateStep("encryption-info");
+    // Proceed from privacy policy step
+    const handlePrivacyPolicyNext = () => {
+        if (!acceptedPrivacyPolicy) return;
+
+        if (hasEncryption) {
+            setCreateStep("encryption-info");
+        } else {
+            // No encryption - create directly
+            onConnect("create", username.trim(), password);
+        }
     };
 
     // Final submit for create mode (from encryption-password step)
@@ -233,7 +273,7 @@ export const Login: React.FC<LoginProps> = (
 
         // For create mode, this shouldn't be called directly - use wizard
         if (mode === "create") {
-            handleNextToEncryptionInfo(e);
+            handleCredentialsNext(e);
             return;
         }
 
@@ -308,8 +348,74 @@ export const Login: React.FC<LoginProps> = (
             setEncryptPassword("");
             setConfirmEncryptPassword("");
             setUnderstoodEncryption(false);
+            setAcceptedPrivacyPolicy(false);
+            setPolicyScrolledToBottom(false);
         }
     }, [mode]);
+
+    // Check if policy content needs scrolling and handle scroll events
+    const handlePolicyScroll = (e: React.UIEvent<HTMLDivElement>) => {
+        const target = e.currentTarget;
+        const isAtBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 10;
+        if (isAtBottom && !policyScrolledToBottom) {
+            setPolicyScrolledToBottom(true);
+        }
+    };
+
+    // Check on mount if content doesn't need scrolling (fits in view)
+    useEffect(() => {
+        if (createStep === "privacy-policy" && policyContentRef.current) {
+            const el = policyContentRef.current;
+            // If content fits without scrolling, consider it "scrolled"
+            if (el.scrollHeight <= el.clientHeight) {
+                setPolicyScrolledToBottom(true);
+            }
+        }
+    }, [createStep, privacyPolicy]);
+
+    // Fetch privacy policy when component becomes visible and server is ready
+    useEffect(() => {
+        if (!visible || !isServerReady) return;
+
+        const fetchPrivacyPolicy = async () => {
+            try {
+                const { getSystemPropertyFlatBuffer } = await import("../lib/rpc-fb");
+
+                // Fetch privacy policy
+                const policyValue = await getSystemPropertyFlatBuffer(["login"], "privacy_policy");
+                if (policyValue !== null) {
+                    let policyText = "";
+                    if (Array.isArray(policyValue)) {
+                        policyText = policyValue.join("\n");
+                    } else if (typeof policyValue === "string") {
+                        policyText = policyValue;
+                    }
+                    if (policyText.trim()) {
+                        setPrivacyPolicy(policyText);
+                    }
+                }
+
+                // Fetch privacy policy content type
+                try {
+                    const typeValue = await getSystemPropertyFlatBuffer(
+                        ["login"],
+                        "privacy_policy_content_type",
+                    );
+                    if (typeof typeValue === "string") {
+                        if (typeValue === "text/html" || typeValue === "text/djot" || typeValue === "text/plain") {
+                            setPrivacyPolicyContentType(typeValue);
+                        }
+                    }
+                } catch {
+                    // Content type not available, use default
+                }
+            } catch {
+                // Privacy policy not available, that's fine
+            }
+        };
+
+        fetchPrivacyPolicy();
+    }, [visible, isServerReady]);
 
     // Pre-populate OAuth2 player name with name (display name) or username from provider
     useEffect(() => {
@@ -737,10 +843,70 @@ export const Login: React.FC<LoginProps> = (
                     </form>
                 )}
 
-                {/* Create wizard step 2: Encryption explanation */}
+                {/* Create wizard: Privacy policy step (if exists) */}
+                {mode === "create" && createStep === "privacy-policy" && privacyPolicy && (
+                    <div className="wizard_step">
+                        <div className="wizard_step_indicator">
+                            Step {getStepNumber("privacy-policy")} of {totalSteps}
+                        </div>
+                        <h3 className="wizard_step_title">Privacy Policy</h3>
+
+                        <div className="wizard_policy_wrapper">
+                            <div
+                                ref={policyContentRef}
+                                className="wizard_policy_content"
+                                onScroll={handlePolicyScroll}
+                            >
+                                <ContentRenderer content={privacyPolicy} contentType={privacyPolicyContentType} />
+                            </div>
+                            {!policyScrolledToBottom && (
+                                <div className="wizard_policy_scroll_hint">
+                                    Scroll to read the full policy ↓
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="login_field">
+                            <label
+                                className={`login_checkbox_label ${!policyScrolledToBottom ? "disabled" : ""}`}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={acceptedPrivacyPolicy}
+                                    onChange={(e) => setAcceptedPrivacyPolicy(e.target.checked)}
+                                    disabled={authState.isConnecting || !policyScrolledToBottom}
+                                    required
+                                />
+                                <span>I have read and accept the privacy policy</span>
+                            </label>
+                        </div>
+
+                        <div className="login_button_row">
+                            <button
+                                type="button"
+                                className="login_back_button"
+                                onClick={() => setCreateStep("credentials")}
+                            >
+                                Back
+                            </button>
+                            <button
+                                type="button"
+                                className="login_submit_button"
+                                onClick={handlePrivacyPolicyNext}
+                                disabled={!acceptedPrivacyPolicy}
+                            >
+                                Continue
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Create wizard: Encryption explanation */}
                 {mode === "create" && createStep === "encryption-info" && (
                     <div className="wizard_step">
-                        <div className="wizard_step_indicator">Step 2 of 3</div>
+                        <div className="wizard_step_indicator">
+                            Step {getStepNumber("encryption-info")} of {totalSteps}
+                        </div>
                         <h3 className="wizard_step_title">Your History</h3>
 
                         <div className="wizard_step_content">
@@ -759,7 +925,7 @@ export const Login: React.FC<LoginProps> = (
                             <button
                                 type="button"
                                 className="login_back_button"
-                                onClick={() => setCreateStep("credentials")}
+                                onClick={() => setCreateStep(hasPrivacyPolicy ? "privacy-policy" : "credentials")}
                             >
                                 Back
                             </button>
@@ -774,7 +940,7 @@ export const Login: React.FC<LoginProps> = (
                     </div>
                 )}
 
-                {/* Create wizard step 3: Encryption password choice */}
+                {/* Create wizard: Encryption password choice */}
                 {mode === "create" && createStep === "encryption-password" && (
                     <form
                         id="encryption-form-panel"
@@ -782,7 +948,9 @@ export const Login: React.FC<LoginProps> = (
                         onSubmit={handleCreateSubmit}
                         noValidate
                     >
-                        <div className="wizard_step_indicator">Step 3 of 3</div>
+                        <div className="wizard_step_indicator">
+                            Step {getStepNumber("encryption-password")} of {totalSteps}
+                        </div>
                         <h3 className="wizard_step_title">Encryption Password</h3>
 
                         <div className="wizard_step_content">

@@ -1037,6 +1037,71 @@
   line-height: 1.5;
 }
 
+.wizard_policy_wrapper {
+  position: relative;
+  margin-bottom: var(--space-lg);
+}
+
+.wizard_policy_content {
+  max-height: 250px;
+  overflow-y: auto;
+  padding: var(--space-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* Wider, more visible scrollbar */
+.wizard_policy_content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.wizard_policy_content::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 5px;
+}
+
+.wizard_policy_content::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 5px;
+  border: 2px solid var(--bg-secondary);
+}
+
+.wizard_policy_content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+.wizard_policy_content p {
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.wizard_policy_content p:last-child {
+  margin-bottom: 0;
+}
+
+.wizard_policy_scroll_hint {
+  text-align: center;
+  padding: var(--space-sm);
+  font-size: 0.85em;
+  color: var(--text-tertiary);
+  background: linear-gradient(to bottom, transparent, var(--bg-primary) 50%);
+  margin-top: -2em;
+  padding-top: 2em;
+  position: relative;
+}
+
+.login_checkbox_label.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.login_checkbox_label.disabled input[type="checkbox"] {
+  cursor: not-allowed;
+}
+
 .login_checkbox_label {
   display: flex;
   align-items: center;
