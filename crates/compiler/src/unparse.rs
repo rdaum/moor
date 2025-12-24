@@ -408,53 +408,103 @@ impl<'a> Unparse<'a> {
             Expr::Lambda {
                 params,
                 body,
-                self_name: _,
+                self_name,
             } => {
-                // Lambda syntax: {param1, ?param2, @param3} => expr
-                let mut buffer = String::new();
-                buffer.push('{');
+                // Check if this is a simple expression lambda or a complex multi-statement lambda
+                let is_simple_expr = matches!(
+                    &body.node,
+                    StmtNode::Expr(Expr::Return(Some(_)))
+                );
 
-                let len = params.len();
-                for (i, param) in params.iter().enumerate() {
-                    match param.kind {
-                        ast::ScatterKind::Required => {
-                            // No prefix for required parameters
+                if is_simple_expr && self_name.is_none() {
+                    // Simple expression lambda: {param1, ?param2, @param3} => expr
+                    let mut buffer = String::new();
+                    buffer.push('{');
+
+                    let len = params.len();
+                    for (i, param) in params.iter().enumerate() {
+                        match param.kind {
+                            ast::ScatterKind::Required => {
+                                // No prefix for required parameters
+                            }
+                            ast::ScatterKind::Optional => {
+                                buffer.push('?');
+                            }
+                            ast::ScatterKind::Rest => {
+                                buffer.push('@');
+                            }
                         }
-                        ast::ScatterKind::Optional => {
-                            buffer.push('?');
+                        let name = self.unparse_variable(&param.id);
+                        buffer.push_str(&name.as_arc_str());
+                        if let Some(expr) = &param.expr {
+                            buffer.push_str(" = ");
+                            buffer.push_str(self.unparse_expr(expr)?.as_str());
                         }
-                        ast::ScatterKind::Rest => {
-                            buffer.push('@');
+                        if i + 1 < len {
+                            buffer.push_str(", ");
                         }
                     }
-                    let name = self.unparse_variable(&param.id);
-                    buffer.push_str(&name.as_arc_str());
-                    if let Some(expr) = &param.expr {
-                        buffer.push_str(" = ");
-                        buffer.push_str(self.unparse_expr(expr)?.as_str());
-                    }
-                    if i + 1 < len {
-                        buffer.push_str(", ");
-                    }
-                }
 
-                buffer.push_str("} => ");
+                    buffer.push_str("} => ");
 
-                // Handle different types of lambda bodies
-                match &body.node {
                     // Expression lambda: return expr; → just show the expr
-                    StmtNode::Expr(Expr::Return(Some(expr))) => {
+                    if let StmtNode::Expr(Expr::Return(Some(expr))) = &body.node {
                         buffer.push_str(&self.unparse_expr(expr)?);
                     }
-                    // Complex lambda body should not occur in expression context
-                    // (these should be converted to named functions at statement level)
-                    _ => {
-                        return Err(DecompileError::UnsupportedConstruct(
-                            "Complex lambda body encountered in expression context - should be named function".to_string()
-                        ));
+                    Ok(buffer)
+                } else {
+                    // Multi-statement lambda: fn (params) statements endfn
+                    // or fn name(params) statements endfn for named/recursive functions
+                    let mut buffer = String::new();
+                    if let Some(name_var) = self_name {
+                        let name = self.unparse_variable(name_var);
+                        buffer.push_str(&format!("fn {}(", name.as_arc_str()));
+                    } else {
+                        buffer.push_str("fn (");
                     }
+
+                    let len = params.len();
+                    for (i, param) in params.iter().enumerate() {
+                        match param.kind {
+                            ast::ScatterKind::Required => {
+                                // No prefix for required parameters
+                            }
+                            ast::ScatterKind::Optional => {
+                                buffer.push('?');
+                            }
+                            ast::ScatterKind::Rest => {
+                                buffer.push('@');
+                            }
+                        }
+                        let name = self.unparse_variable(&param.id);
+                        buffer.push_str(&name.as_arc_str());
+                        if let Some(expr) = &param.expr {
+                            buffer.push_str(" = ");
+                            buffer.push_str(self.unparse_expr(expr)?.as_str());
+                        }
+                        if i + 1 < len {
+                            buffer.push_str(", ");
+                        }
+                    }
+
+                    buffer.push_str(") ");
+
+                    // Unparse the body statements
+                    let stmts = match &body.node {
+                        StmtNode::Scope { body, .. } => body.as_slice(),
+                        _ => std::slice::from_ref(body.as_ref()),
+                    };
+
+                    for stmt in stmts {
+                        let mut stmt_buf = String::new();
+                        self.unparse_stmt(stmt, &mut stmt_buf, 0)?;
+                        buffer.push_str(stmt_buf.trim());
+                        buffer.push(' ');
+                    }
+
+                    buffer.push_str("endfn");
+                    Ok(buffer)
                 }
-                Ok(buffer)
             }
         }
     }
@@ -1009,17 +1059,40 @@ pub fn to_literal(v: &Var) -> String {
 
             // Just manually construct the lambda syntax - simpler than reconstructing AST
             let decompiled_tree = decompile::program_to_tree(&l.0.body).unwrap();
-            let lambda_body = &decompiled_tree.stmts[0];
-
             let temp_unparse = Unparse::new(&decompiled_tree, false, true);
-            let body_str = match &lambda_body.node {
+
+            // Check if this is a simple expression lambda or multi-statement
+            let is_simple_expr = decompiled_tree.stmts.len() == 1
+                && matches!(
+                    &decompiled_tree.stmts[0].node,
+                    crate::ast::StmtNode::Expr(crate::ast::Expr::Return(Some(_)))
+                );
+
+            let body_str = if is_simple_expr {
                 // Expression lambda: return expr; → just show the expr
-                crate::ast::StmtNode::Expr(crate::ast::Expr::Return(Some(expr))) => {
+                if let crate::ast::StmtNode::Expr(crate::ast::Expr::Return(Some(expr))) =
+                    &decompiled_tree.stmts[0].node
+                {
                     temp_unparse.unparse_expr(expr).unwrap()
+                } else {
+                    unreachable!()
                 }
-                // Complex lambda body: should not occur in literals
-                _ => "/* complex lambda */".to_string(),
+            } else {
+                // Multi-statement lambda - use fn () ... endfn syntax
+                // Build the body as inline statements
+                let mut body_parts = vec![];
+                for stmt in &decompiled_tree.stmts {
+                    let mut stmt_buf = String::new();
+                    temp_unparse
+                        .unparse_stmt(stmt, &mut stmt_buf, 0)
+                        .unwrap_or_default();
+                    body_parts.push(stmt_buf.trim().to_string());
+                }
+                // Return the body wrapped in fn/endfn syntax - we'll build the full string below
+                body_parts.join(" ")
             };
+
+            let use_fn_syntax = !is_simple_expr;
 
             // Build metadata string for captured environment and self-reference
             let mut metadata_parts = vec![];
@@ -1076,13 +1149,26 @@ pub fn to_literal(v: &Var) -> String {
                 metadata_parts.push("self 1".to_string());
             }
 
-            if metadata_parts.is_empty() {
-                format!("{{{param_str}}} => {body_str}")
+            if use_fn_syntax {
+                // Multi-statement lambda: fn (params) statements endfn
+                if metadata_parts.is_empty() {
+                    format!("fn ({param_str}) {body_str} endfn")
+                } else {
+                    format!(
+                        "fn ({param_str}) {body_str} endfn with {}",
+                        metadata_parts.join(" ")
+                    )
+                }
             } else {
-                format!(
-                    "{{{param_str}}} => {body_str} with {}",
-                    metadata_parts.join(" ")
-                )
+                // Simple expression lambda: {params} => expr
+                if metadata_parts.is_empty() {
+                    format!("{{{param_str}}} => {body_str}")
+                } else {
+                    format!(
+                        "{{{param_str}}} => {body_str} with {}",
+                        metadata_parts.join(" ")
+                    )
+                }
             }
         }
     }
@@ -1880,5 +1966,104 @@ endif"#;
     #[test]
     fn test_empty_map_complex_expression_roundtrip() {
         compare_parse_roundtrip(r#"return [] == [] && "yes" || "no";"#);
+    }
+
+    // Tests for multi-statement lambda unparsing
+    // These test that fn () ... endfn syntax with multiple statements can be unparsed
+    // Note: The unparser produces canonical format which may differ slightly from input
+    // (e.g., adding 'let' for new variable declarations). We verify the output can be re-parsed.
+
+    #[test]
+    fn test_multi_statement_lambda_unparse() {
+        // Multi-statement lambda using fn/endfn syntax
+        let program = r#"f = fn ()
+            x = 1;
+            return x + 1;
+        endfn;
+        return f();"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        // Verify the output can be re-parsed (semantic equivalence)
+        parse_and_unparse(&result).expect("Unparsed output should be re-parseable");
+        // Check key elements are present
+        assert!(result.contains("fn ()"), "Should contain fn ()");
+        assert!(result.contains("endfn"), "Should contain endfn");
+        assert!(result.contains("x = 1"), "Should contain x = 1");
+        assert!(result.contains("return x + 1"), "Should contain return");
+    }
+
+    #[test]
+    fn test_multi_statement_lambda_with_params_unparse() {
+        // Multi-statement lambda with parameters
+        let program = r#"f = fn (a, b)
+            sum = a + b;
+            return sum * 2;
+        endfn;
+        return f(1, 2);"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        parse_and_unparse(&result).expect("Unparsed output should be re-parseable");
+        assert!(result.contains("fn (a, b)"), "Should contain fn (a, b)");
+        assert!(result.contains("endfn"), "Should contain endfn");
+    }
+
+    #[test]
+    fn test_multi_statement_lambda_with_conditionals_unparse() {
+        // Multi-statement lambda with control flow
+        let program = r#"f = fn (x)
+            if (x > 0)
+                return x;
+            endif
+            return -x;
+        endfn;
+        return f(-5);"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        parse_and_unparse(&result).expect("Unparsed output should be re-parseable");
+        assert!(result.contains("fn (x)"), "Should contain fn (x)");
+        assert!(result.contains("endfn"), "Should contain endfn");
+        assert!(result.contains("if (x > 0)"), "Should contain conditional");
+    }
+
+    #[test]
+    fn test_nested_multi_statement_lambdas_unparse() {
+        // Nested multi-statement lambdas
+        let program = r#"outer = fn (x)
+            inner = fn (y)
+                return y * 2;
+            endfn;
+            return inner(x) + 1;
+        endfn;
+        return outer(5);"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        parse_and_unparse(&result).expect("Unparsed output should be re-parseable");
+        assert!(result.contains("fn (x)"), "Should contain outer fn");
+        assert!(result.contains("fn (y)"), "Should contain inner fn");
+        // Should have two endfn markers
+        assert_eq!(result.matches("endfn").count(), 2, "Should have two endfn markers");
+    }
+
+    #[test]
+    fn test_lambda_in_list_with_multi_statements_unparse() {
+        // Lambda stored in a list (common pattern in OMeta parsers)
+        let program = r#"handlers = {
+            fn ()
+                x = 1;
+                return x + 1;
+            endfn,
+            fn ()
+                y = 2;
+                return y + 2;
+            endfn
+        };
+        f = handlers[1];
+        return f();"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        parse_and_unparse(&result).expect("Unparsed output should be re-parseable");
+        // Should have two lambda functions
+        assert_eq!(result.matches("fn ()").count(), 2, "Should have two lambdas");
+        assert_eq!(result.matches("endfn").count(), 2, "Should have two endfn markers");
     }
 }

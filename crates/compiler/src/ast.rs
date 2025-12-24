@@ -329,7 +329,107 @@ impl StmtNode {
 
 // Recursive descent compare of two trees, ignoring the parser-provided line numbers, but
 // validating equality for everything else.
-#[cfg(test)]
+//
+// These helpers are used by decompile tests to compare parsed vs decompiled ASTs.
+// They handle cosmetic differences that arise because:
+// 1. The parser records actual source positions; the decompiler uses placeholder (0,0)
+// 2. The parser knows the exact num_bindings; the decompiler cannot determine this from bytecode
+// 3. Scopes with num_bindings=0 are elided by codegen, so decompile may produce them when
+//    parse doesn't (or vice versa for single-statement scopes)
+
+/// Compare two expressions for equality, handling Lambdas specially by recursively
+/// comparing their bodies with assert_stmts_match instead of direct equality.
+/// This ignores line_col and num_bindings differences in lambda bodies.
+/// Panics with a detailed message if expressions don't match.
+pub fn assert_exprs_match(e1: &Expr, e2: &Expr) {
+    match (e1, e2) {
+        (
+            Expr::Lambda {
+                params: p1,
+                body: b1,
+                self_name: s1,
+            },
+            Expr::Lambda {
+                params: p2,
+                body: b2,
+                self_name: s2,
+            },
+        ) => {
+            assert_eq!(p1, p2, "Lambda params mismatch");
+            assert_eq!(s1, s2, "Lambda self_name mismatch");
+            assert_stmts_match(b1, b2);
+        }
+        (Expr::Decl { id: id1, is_const: c1, expr: e1 }, Expr::Decl { id: id2, is_const: c2, expr: e2 }) => {
+            assert_eq!(id1, id2, "Decl id mismatch");
+            assert_eq!(c1, c2, "Decl is_const mismatch");
+            match (e1, e2) {
+                (Some(e1), Some(e2)) => assert_exprs_match(e1, e2),
+                (None, None) => {}
+                _ => panic!("Decl expr mismatch: {e1:?} vs {e2:?}"),
+            }
+        }
+        (Expr::Assign { left: l1, right: r1 }, Expr::Assign { left: l2, right: r2 }) => {
+            assert_exprs_match(l1, l2);
+            assert_exprs_match(r1, r2);
+        }
+        (Expr::List(items1), Expr::List(items2)) => {
+            assert_eq!(items1.len(), items2.len(), "List length mismatch");
+            for (a1, a2) in items1.iter().zip(items2.iter()) {
+                assert_args_match(a1, a2);
+            }
+        }
+        _ => assert_eq!(e1, e2),
+    }
+}
+
+/// Compare two Args for equality, recursively handling Lambdas.
+fn assert_args_match(a1: &Arg, a2: &Arg) {
+    match (a1, a2) {
+        (Arg::Normal(e1), Arg::Normal(e2)) => assert_exprs_match(e1, e2),
+        (Arg::Splice(e1), Arg::Splice(e2)) => assert_exprs_match(e1, e2),
+        _ => assert_eq!(a1, a2, "Arg type mismatch"),
+    }
+}
+
+/// Compare two statements for equality, handling Lambdas specially.
+/// Also handles the case where a Scope with num_bindings=0 and single statement
+/// is equivalent to just that statement (codegen elides empty scopes).
+fn assert_stmts_match(s1: &Stmt, s2: &Stmt) {
+    // Unwrap single-statement scopes with no bindings (they're elided by codegen)
+    // We need to handle both directions: decompiled may have Scope, parsed may not (or vice versa)
+    let (node1, node2) = match (&s1.node, &s2.node) {
+        // If one side is an empty scope with single statement, unwrap it
+        (
+            StmtNode::Scope {
+                num_bindings: 0,
+                body,
+            },
+            other,
+        ) if body.len() == 1 => (&body[0].node, other),
+        (
+            other,
+            StmtNode::Scope {
+                num_bindings: 0,
+                body,
+            },
+        ) if body.len() == 1 => (other, &body[0].node),
+        (n1, n2) => (n1, n2),
+    };
+
+    match (node1, node2) {
+        (StmtNode::Expr(e1), StmtNode::Expr(e2)) => {
+            assert_exprs_match(e1, e2);
+        }
+        (StmtNode::Scope { body: b1, .. }, StmtNode::Scope { body: b2, .. }) => {
+            assert_trees_match_recursive(b1, b2);
+        }
+        _ => {
+            // For other statement types, use the regular recursive matching
+            assert_trees_match_recursive(&[s1.clone()], &[s2.clone()]);
+        }
+    }
+}
+
 pub fn assert_trees_match_recursive(a: &[Stmt], b: &[Stmt]) {
     assert_eq!(a.len(), b.len());
     for (left, right) in a.iter().zip(b.iter()) {
@@ -337,7 +437,7 @@ pub fn assert_trees_match_recursive(a: &[Stmt], b: &[Stmt]) {
 
         match (&left.node, &right.node) {
             (StmtNode::Expr(e1), StmtNode::Expr(e2)) => {
-                assert_eq!(e1, e2);
+                assert_exprs_match(e1, e2);
             }
             (StmtNode::Break { .. }, StmtNode::Break { .. }) => {}
             (StmtNode::Continue { .. }, StmtNode::Continue { .. }) => {}

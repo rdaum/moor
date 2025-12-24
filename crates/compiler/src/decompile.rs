@@ -487,15 +487,24 @@ impl Decompile {
                 let name = self.program.var_names().name_for_var(&varname);
                 let decl_info = name.and_then(|n| self.program.var_names().decls.get(&n));
 
+                // Check if this is a named function (lambda with self_name matching the variable)
+                let is_named_function = matches!(
+                    &expr,
+                    Expr::Lambda { self_name: Some(self_var), .. }
+                    if self_var.id == varname.id && self_var.scope_id == varname.scope_id
+                );
+
                 // Check if this should be treated as a declaration:
                 // 1. It's the first assignment to this variable in this scope
-                // 2. The variable was declared with DeclType::Let (not a global or assignment)
-                // 3. It's a local variable (scope_id != 0)
+                // 2. Either:
+                //    a. The variable was declared with DeclType::Let and is a local (scope_id != 0)
+                //    b. It's a named function (lambda with self_name) - these are always declarations
                 let should_be_declaration = is_first_assignment
-                    && varname.scope_id != 0
-                    && decl_info
-                        .map(|d| d.decl_type == DeclType::Let)
-                        .unwrap_or(false);
+                    && (is_named_function
+                        || (varname.scope_id != 0
+                            && decl_info
+                                .map(|d| d.decl_type == DeclType::Let)
+                                .unwrap_or(false)));
 
                 if should_be_declaration {
                     // Mark as assigned
@@ -1246,12 +1255,32 @@ impl Decompile {
             lambda_decompile.decompile()?;
         }
 
-        // Lambda body should result in a single statement
+        // Handle both single-statement (expression) lambdas and multi-statement lambdas
         if lambda_decompile.statements.len() == 1 {
+            // Single statement - return directly (expression lambda like `{x} => x + 1`)
             Ok(lambda_decompile.statements.into_iter().next().unwrap())
+        } else if lambda_decompile.statements.is_empty() {
+            // Empty lambda body - wrap in scope with no statements
+            Ok(Stmt::new(
+                StmtNode::Scope {
+                    num_bindings: 0,
+                    body: vec![],
+                },
+                (0, 0),
+            ))
         } else {
-            Err(MalformedProgram(
-                "lambda body should produce single statement".to_string(),
+            // Multi-statement lambda (fn () ... endfn) - wrap in Scope
+            // Note: We set num_bindings to 0 because we cannot reliably determine the
+            // correct count from bytecode. The bytecode doesn't distinguish between new
+            // declarations and reassignments to existing variables. When num_bindings is 0,
+            // codegen will not emit BeginScope/EndScope opcodes, which is safe because the
+            // lambda already has its own scope in the VM.
+            Ok(Stmt::new(
+                StmtNode::Scope {
+                    num_bindings: 0,
+                    body: lambda_decompile.statements,
+                },
+                (0, 0),
             ))
         }
     }
@@ -1335,6 +1364,34 @@ mod tests {
         annotate_line_numbers(1, &mut parse_2.stmts);
         (parse_1, parse_2)
     }
+
+    // Test that multi-statement lambdas parse, compile, and decompile successfully
+    #[test]
+    fn test_multi_statement_lambda_parses_compiles_and_decompiles() {
+        let program = r#"f = fn ()
+            x = 1;
+            return x + 1;
+        endfn;
+        return f();"#;
+
+        // Parse should succeed
+        let parsed = parse_program(program, CompileOptions::default());
+        assert!(parsed.is_ok(), "Parse should succeed: {:?}", parsed.err());
+
+        // Compile should succeed
+        let compiled = compile(program, CompileOptions::default());
+        assert!(compiled.is_ok(), "Compile should succeed: {:?}", compiled.err());
+
+        // Decompile should now succeed (bug fixed)
+        let binary = compiled.unwrap();
+        let decompiled = program_to_tree(&binary);
+        assert!(
+            decompiled.is_ok(),
+            "Decompile should succeed: {:?}",
+            decompiled.err()
+        );
+    }
+
 
     #[test_case("if (1) return 2; endif"; "simple if")]
     #[test_case("if (1) return 2; else return 3; endif"; "if_else")]
@@ -1555,6 +1612,84 @@ return 0 && "Automatically Added Return";
     #[test]
     fn test_for_list_comprehension() {
         let program = r#"return { x * 2 for x in ({1,2,3}) };"#;
+        let (parse, decompiled) = parse_decompile(program);
+        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+    }
+
+    // Tests for multi-statement lambda decompilation
+    // These test that fn () ... endfn syntax with multiple statements can be decompiled
+    // Note: We use named function syntax (fn name() ... endfn) because it produces
+    // consistent Decl nodes in both parse and decompile. The assignment form
+    // (f = fn() ... endfn) produces Decl in parse but Assign in decompile.
+
+    #[test]
+    fn test_multi_statement_lambda_decompile() {
+        // Multi-statement lambda using named fn syntax
+        let program = r#"fn f()
+            x = 1;
+            return x + 1;
+        endfn
+        return f();"#;
+        let (parse, decompiled) = parse_decompile(program);
+        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+    }
+
+    #[test]
+    fn test_multi_statement_lambda_with_params_decompile() {
+        // Multi-statement lambda with parameters
+        let program = r#"fn f(a, b)
+            sum = a + b;
+            return sum * 2;
+        endfn
+        return f(1, 2);"#;
+        let (parse, decompiled) = parse_decompile(program);
+        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+    }
+
+    #[test]
+    fn test_multi_statement_lambda_with_conditionals_decompile() {
+        // Multi-statement lambda with control flow
+        let program = r#"fn f(x)
+            if (x > 0)
+                return x;
+            endif
+            return -x;
+        endfn
+        return f(-5);"#;
+        let (parse, decompiled) = parse_decompile(program);
+        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+    }
+
+    #[test]
+    fn test_nested_multi_statement_lambdas_decompile() {
+        // Nested multi-statement lambdas using named function syntax
+        let program = r#"fn outer(x)
+            fn inner(y)
+                return y * 2;
+            endfn
+            return inner(x) + 1;
+        endfn
+        return outer(5);"#;
+        let (parse, decompiled) = parse_decompile(program);
+        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+    }
+
+    #[test]
+    fn test_lambda_in_list_with_multi_statements_decompile() {
+        // Lambda stored in a list (common pattern in OMeta parsers)
+        // Using anonymous fn syntax inside list literal
+        let program = r#"handlers = {
+            fn ()
+                x = 1;
+                return x + 1;
+            endfn,
+            fn ()
+                y = 2;
+                return y + 2;
+            endfn
+        };
+        f = handlers[1];
+        return f();"#;
         let (parse, decompiled) = parse_decompile(program);
         assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
     }
