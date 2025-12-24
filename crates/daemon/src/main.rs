@@ -15,6 +15,7 @@
 use crate::args::Args;
 use eyre::{bail, eyre};
 use fs2::FileExt;
+use moor_common::tracing;
 use std::io::IsTerminal;
 use std::{
     fs::{self, File, OpenOptions},
@@ -30,6 +31,7 @@ use crate::{
     rpc::{RpcServer, Transport, transport::RpcTransport},
     workers::WorkersServer,
 };
+use ::tracing::{debug, error, info, warn};
 use base64::{Engine as _, engine::general_purpose};
 use clap::Parser;
 use ed25519_dalek::{
@@ -52,7 +54,6 @@ use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
 use rand::Rng;
 use rpc_common::load_keypair;
 use sha2::{Digest, Sha256};
-use tracing::{debug, error, info, warn};
 
 mod allowed_hosts;
 mod args;
@@ -75,6 +76,18 @@ use moor_common::model::{CommitResult, CompileError, loader::LoaderInterface};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
+
+const BANNER_MSG: &str = r#"                                   ███████████      ████        █████   
+                                  ▒▒███▒▒▒▒▒███    ▒▒███      ███▒▒▒███ 
+ █████████████    ██████   ██████  ▒███    ▒███     ▒███     ███   ▒▒███
+▒▒███▒▒███▒▒███  ███▒▒███ ███▒▒███ ▒██████████      ▒███    ▒███    ▒███
+ ▒███ ▒███ ▒███ ▒███ ▒███▒███ ▒███ ▒███▒▒▒▒▒███     ▒███    ▒███    ▒███
+ ▒███ ▒███ ▒███ ▒███ ▒███▒███ ▒███ ▒███    ▒███     ▒███    ▒▒███   ███ 
+ █████▒███ █████▒▒██████ ▒▒██████  █████   █████    █████ ██ ▒▒▒█████▒  
+▒▒▒▒▒ ▒▒▒ ▒▒▒▒▒  ▒▒▒▒▒▒   ▒▒▒▒▒▒  ▒▒▒▒▒   ▒▒▒▒▒    ▒▒▒▒▒ ▒▒    ▒▒▒▒▒▒   
+                                                                        
+                                                                        
+                                                                        "#;
 
 /// Acquire an exclusive lock on the data directory to prevent multiple daemon instances
 /// from operating on the same data.
@@ -379,8 +392,9 @@ fn main() -> Result<(), Report> {
     let version = semver::Version::parse(build::PKG_VERSION)
         .map_err(|e| eyre!("Invalid moor version '{}': {}", build::PKG_VERSION, e))?;
 
-    moor_common::tracing::init_tracing(args.debug)
-        .map_err(|e| eyre!("Unable to configure logging: {}", e))?;
+    eprintln!("Initializing...\n{BANNER_MSG}");
+
+    tracing::init_tracing(args.debug).map_err(|e| eyre!("Unable to configure logging: {}", e))?;
 
     // If rotate-enrollment-token flag is provided, rotate token and exit
     if args.rotate_enrollment_token {
