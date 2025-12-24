@@ -21,14 +21,34 @@ import { VarStr } from "../generated/moor-var/var-str";
 import { VarUnion } from "../generated/moor-var/var-union";
 import { invokeVerbFlatBuffer } from "../lib/rpc-fb";
 
-// Standard pronoun presets (same as ProfileSetupPanel)
-const PRONOUN_PRESETS = ["they/them", "she/her", "he/him", "xe/xem", "it/its", "any", "ask"];
-
 export const usePronouns = (authToken: string | null, playerOid: string | null) => {
     const [currentPronouns, setCurrentPronouns] = useState<string | null>(null);
+    const [availablePresets, setAvailablePresets] = useState<string[]>([]);
     const [pronounsAvailable, setPronounsAvailable] = useState<boolean | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const fetchPresets = useCallback(async () => {
+        if (!authToken) {
+            return;
+        }
+
+        try {
+            // Fetch available presets from $pronouns:list_presets()
+            const { result } = await invokeVerbFlatBuffer(
+                authToken,
+                "sysobj:pronouns",
+                "list_presets",
+            );
+
+            if (Array.isArray(result)) {
+                setAvailablePresets(result.filter((p): p is string => typeof p === "string"));
+            }
+        } catch (err) {
+            console.debug("Failed to fetch pronoun presets:", err);
+            // Keep empty array on failure
+        }
+    }, [authToken]);
 
     const fetchPronouns = useCallback(async () => {
         if (!authToken || !playerOid) {
@@ -65,10 +85,11 @@ export const usePronouns = (authToken: string | null, playerOid: string | null) 
         }
     }, [authToken, playerOid]);
 
-    // Fetch on mount and when auth changes
+    // Fetch presets and current pronouns on mount and when auth changes
     useEffect(() => {
+        fetchPresets();
         fetchPronouns();
-    }, [fetchPronouns]);
+    }, [fetchPresets, fetchPronouns]);
 
     const updatePronouns = useCallback(
         async (pronouns: string) => {
@@ -111,7 +132,7 @@ export const usePronouns = (authToken: string | null, playerOid: string | null) 
 
     return {
         currentPronouns,
-        availablePresets: PRONOUN_PRESETS,
+        availablePresets,
         pronounsAvailable,
         loading,
         error,
