@@ -67,7 +67,15 @@ pub async fn connect_auth_handler(
         event_log_pubkey,
     }): Form<AuthRequest>,
 ) -> impl IntoResponse {
-    auth_handler(LoginType::Connect, addr, ws_host, player, password, event_log_pubkey).await
+    auth_handler(
+        LoginType::Connect,
+        addr,
+        ws_host,
+        player,
+        password,
+        event_log_pubkey,
+    )
+    .await
 }
 
 pub async fn create_auth_handler(
@@ -79,7 +87,15 @@ pub async fn create_auth_handler(
         event_log_pubkey,
     }): Form<AuthRequest>,
 ) -> impl IntoResponse {
-    auth_handler(LoginType::Create, addr, ws_host, player, password, event_log_pubkey).await
+    auth_handler(
+        LoginType::Create,
+        addr,
+        ws_host,
+        player,
+        password,
+        event_log_pubkey,
+    )
+    .await
 }
 
 /// Stand-alone HTTP POST authentication handler which connects and then gets a valid authentication token
@@ -117,8 +133,14 @@ async fn auth_handler(
     };
 
     let words = vec![auth_verb.to_string(), player, password];
-    let login_msg =
-        mk_login_command_msg(&client_token, &host.handler_object, words, false, event_log_pubkey, None);
+    let login_msg = mk_login_command_msg(
+        &client_token,
+        &host.handler_object,
+        words,
+        false,
+        event_log_pubkey,
+        None,
+    );
 
     let reply_bytes = rpc_client
         .make_client_rpc_call(client_id, login_msg)

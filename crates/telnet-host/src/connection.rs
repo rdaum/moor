@@ -729,8 +729,14 @@ impl TelnetConnection {
     pub(crate) async fn run(&mut self) -> Result<(), eyre::Error> {
         // Provoke welcome message, which is a login command with no arguments, and we
         // don't care about the reply at this point.
-        let login_msg =
-            mk_login_command_msg(&self.client_token, &self.handler_object, vec![], false, None, None);
+        let login_msg = mk_login_command_msg(
+            &self.client_token,
+            &self.handler_object,
+            vec![],
+            false,
+            None,
+            None,
+        );
         self.rpc_client
             .make_client_rpc_call(self.client_id, login_msg)
             .await

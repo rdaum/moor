@@ -461,7 +461,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // 2. Then actual login (with args, do_attach: true)
 
         // Step 1: Welcome message call
-        let welcome_message = mk_login_command_msg(&client_token, &SYSTEM_OBJECT, vec![], false);
+        let welcome_message =
+            mk_login_command_msg(&client_token, &SYSTEM_OBJECT, vec![], false, None, None);
 
         let welcome_result = env.transport.process_client_message(
             env.message_handler.as_ref(),
@@ -489,6 +490,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             &SYSTEM_OBJECT,
             vec!["connect".to_string(), "wizard".to_string()], // Same as user typing "connect wizard"
             true,
+            None,
+            None,
         );
 
         let login_result = env.transport.process_client_message(
@@ -891,7 +894,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         };
 
         // Welcome message call
-        let welcome_message = mk_login_command_msg(&client_token, &SYSTEM_OBJECT, vec![], false);
+        let welcome_message =
+            mk_login_command_msg(&client_token, &SYSTEM_OBJECT, vec![], false, None, None);
 
         let _welcome_result = env.transport.process_client_message(
             env.message_handler.as_ref(),
@@ -912,6 +916,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             &SYSTEM_OBJECT,
             vec!["connect".to_string(), "wizard".to_string()],
             true,
+            None,
+            None,
         );
 
         let login_result = env.transport.process_client_message(
@@ -1054,7 +1060,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // For non-wizard test, we'll connect as a guest (which should be non-wizard)
         let welcome_message_2 =
-            mk_login_command_msg(&client_token_2, &SYSTEM_OBJECT, vec![], false);
+            mk_login_command_msg(&client_token_2, &SYSTEM_OBJECT, vec![], false, None, None);
 
         let _welcome_result_2 = env.transport.process_client_message(
             env.message_handler.as_ref(),
@@ -1069,6 +1075,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             &SYSTEM_OBJECT,
             vec!["connect".to_string(), "guest".to_string()],
             true,
+            None,
+            None,
         );
 
         let login_result_2 = env.transport.process_client_message(
