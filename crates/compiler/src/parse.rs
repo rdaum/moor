@@ -2055,10 +2055,9 @@ mod tests {
             BinaryOp::Add,
             CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr,
             Expr::{Call, Error, Flyweight, Id, Prop, Value, Verb},
-            ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp, assert_trees_match_recursive,
+            ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp, assert_stmts_equal_ignoring_pos,
         },
         parse::parse_program,
-        unparse::annotate_line_numbers,
     };
     use moor_common::{model::CompileError, util::unquote_str};
 
@@ -2215,22 +2214,16 @@ mod tests {
     }
 
     fn assert_same_single(tree_a: &[Stmt], tree_b: StmtNode) {
-        let mut tree_a = tree_a.to_vec();
-        let mut tree_b = vec![Stmt::new(tree_b, (1, 1))];
-        annotate_line_numbers(1, &mut tree_a);
-        annotate_line_numbers(1, &mut tree_b);
-        assert_trees_match_recursive(&tree_a, &tree_b);
+        let tree_b = vec![Stmt::new(tree_b, (1, 1))];
+        assert_stmts_equal_ignoring_pos(tree_a, &tree_b);
     }
 
     fn assert_same(tree_a: &[Stmt], tree_b: &[StmtNode]) {
-        let mut tree_a = tree_a.to_vec();
-        let mut tree_b: Vec<_> = tree_b
+        let tree_b: Vec<_> = tree_b
             .iter()
             .map(|s| Stmt::new(s.clone(), (1, 1)))
             .collect();
-        annotate_line_numbers(1, &mut tree_a);
-        annotate_line_numbers(1, &mut tree_b);
-        assert_trees_match_recursive(&tree_a, &tree_b);
+        assert_stmts_equal_ignoring_pos(tree_a, &tree_b);
     }
 
     #[test]

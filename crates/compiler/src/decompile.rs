@@ -1349,20 +1349,34 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
 mod tests {
     use crate::{
         CompileOptions,
-        ast::assert_trees_match_recursive,
+        ast::assert_stmts_equal_ignoring_pos,
         codegen::compile,
         decompile::program_to_tree,
         parse::{Parse, parse_program},
-        unparse::annotate_line_numbers,
+        unparse::{annotate_line_numbers, unparse},
     };
     use test_case::test_case;
 
-    fn parse_decompile(program_text: &str) -> (Parse, Parse) {
-        let parse_1 = parse_program(program_text, CompileOptions::default()).unwrap();
+    /// Roundtrip test helper: parse → compile → decompile → unparse → parse again.
+    /// Returns both the original parse tree and the re-parsed tree for comparison.
+    /// This approach ensures both trees have consistent structure since they both
+    /// come from the parser.
+    fn roundtrip_parse(program_text: &str) -> (Parse, Parse) {
+        // Parse original
+        let parse_original = parse_program(program_text, CompileOptions::default()).unwrap();
+
+        // Compile → Decompile → Unparse
         let binary = compile(program_text, CompileOptions::default()).unwrap();
-        let mut parse_2 = program_to_tree(&binary).unwrap();
-        annotate_line_numbers(1, &mut parse_2.stmts);
-        (parse_1, parse_2)
+        let mut decompiled = program_to_tree(&binary).unwrap();
+        annotate_line_numbers(1, &mut decompiled.stmts);
+        let unparsed_lines = unparse(&decompiled, false, false).unwrap();
+        let unparsed_text = unparsed_lines.join("\n");
+
+        // Parse the unparsed output
+        let parse_roundtrip = parse_program(&unparsed_text, CompileOptions::default())
+            .unwrap_or_else(|e| panic!("Failed to re-parse unparsed output:\n{unparsed_text}\nError: {e:?}"));
+
+        (parse_original, parse_roundtrip)
     }
 
     // Test that multi-statement lambdas parse, compile, and decompile successfully
@@ -1459,8 +1473,8 @@ mod tests {
     #[test_case(r#"5; fork tst (5) 1; endfork 2;"#; "labelled fork decompile")]
     #[test_case(r#"[ 1 -> 2, 3 -> 4 ];"#; "map")]
     fn test_case_decompile_matches(prg: &str) {
-        let (parse, decompiled) = parse_decompile(prg);
-        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+        let (original, roundtrip) = roundtrip_parse(prg);
+        assert_stmts_equal_ignoring_pos(&original.stmts, &roundtrip.stmts);
     }
 
     #[test]
@@ -1468,8 +1482,8 @@ mod tests {
         let program = r#"begin
             let a = 5;
         end"#;
-        let (parse, decompiled) = parse_decompile(program);
-        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+        let (original, roundtrip) = roundtrip_parse(program);
+        assert_stmts_equal_ignoring_pos(&original.stmts, &roundtrip.stmts);
     }
 
     #[test]
@@ -1518,8 +1532,8 @@ mod tests {
         "this:tell_contents(things, this.ctype);";
         this:tell_contents(things);
         "#;
-        let (parse, decompiled) = parse_decompile(program);
-        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+        let (original, roundtrip) = roundtrip_parse(program);
+        assert_stmts_equal_ignoring_pos(&original.stmts, &roundtrip.stmts);
     }
 
     #[test]
@@ -1568,15 +1582,15 @@ player:tell("Wrote ", what:title(), ":", verbname, ".");
 endif
 return 0 && "Automatically Added Return";
 "Metadata 202106";"#;
-        let (parse, decompiled) = parse_decompile(program);
-        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+        let (original, roundtrip) = roundtrip_parse(program);
+        assert_stmts_equal_ignoring_pos(&original.stmts, &roundtrip.stmts);
     }
 
     #[test]
     fn regression_scatter() {
         let program = r#"{things, ?nothingstr = "nothing", ?andstr = " and ", ?commastr = ", ", ?finalcommastr = ","} = args;"#;
-        let (parse, decompiled) = parse_decompile(program);
-        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+        let (original, roundtrip) = roundtrip_parse(program);
+        assert_stmts_equal_ignoring_pos(&original.stmts, &roundtrip.stmts);
     }
 
     #[test]
@@ -1584,43 +1598,40 @@ return 0 && "Automatically Added Return";
         let program = r#"begin
             let {things, ?nothingstr = "nothing", ?andstr = " and ", ?commastr = ", ", ?finalcommastr = ","} = args;
         end"#;
-        let (parse, decompiled) = parse_decompile(program);
-        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+        let (original, roundtrip) = roundtrip_parse(program);
+        assert_stmts_equal_ignoring_pos(&original.stmts, &roundtrip.stmts);
     }
 
     #[test]
     fn test_flyweight() {
         let program = r#"flywt = < #1, .colour = "orange", .z = 5, {#2, #4, "a"}>;"#;
-        let (parse, decompiled) = parse_decompile(program);
-        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+        let (original, roundtrip) = roundtrip_parse(program);
+        assert_stmts_equal_ignoring_pos(&original.stmts, &roundtrip.stmts);
     }
 
     #[test]
     fn test_map_decompile() {
         let program = r#"[ 1 -> 2, 3 -> 4 ];"#;
-        let (parse, decompiled) = parse_decompile(program);
-        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+        let (original, roundtrip) = roundtrip_parse(program);
+        assert_stmts_equal_ignoring_pos(&original.stmts, &roundtrip.stmts);
     }
 
     #[test]
     fn test_for_range_comprehension() {
         let program = r#"return { x * 2 for x in [1..3] };"#;
-        let (parse, decompiled) = parse_decompile(program);
-        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+        let (original, roundtrip) = roundtrip_parse(program);
+        assert_stmts_equal_ignoring_pos(&original.stmts, &roundtrip.stmts);
     }
 
     #[test]
     fn test_for_list_comprehension() {
         let program = r#"return { x * 2 for x in ({1,2,3}) };"#;
-        let (parse, decompiled) = parse_decompile(program);
-        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+        let (original, roundtrip) = roundtrip_parse(program);
+        assert_stmts_equal_ignoring_pos(&original.stmts, &roundtrip.stmts);
     }
 
     // Tests for multi-statement lambda decompilation
     // These test that fn () ... endfn syntax with multiple statements can be decompiled
-    // Note: We use named function syntax (fn name() ... endfn) because it produces
-    // consistent Decl nodes in both parse and decompile. The assignment form
-    // (f = fn() ... endfn) produces Decl in parse but Assign in decompile.
 
     #[test]
     fn test_multi_statement_lambda_decompile() {
@@ -1630,8 +1641,8 @@ return 0 && "Automatically Added Return";
             return x + 1;
         endfn
         return f();"#;
-        let (parse, decompiled) = parse_decompile(program);
-        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+        let (original, roundtrip) = roundtrip_parse(program);
+        assert_stmts_equal_ignoring_pos(&original.stmts, &roundtrip.stmts);
     }
 
     #[test]
@@ -1642,8 +1653,8 @@ return 0 && "Automatically Added Return";
             return sum * 2;
         endfn
         return f(1, 2);"#;
-        let (parse, decompiled) = parse_decompile(program);
-        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+        let (original, roundtrip) = roundtrip_parse(program);
+        assert_stmts_equal_ignoring_pos(&original.stmts, &roundtrip.stmts);
     }
 
     #[test]
@@ -1656,8 +1667,8 @@ return 0 && "Automatically Added Return";
             return -x;
         endfn
         return f(-5);"#;
-        let (parse, decompiled) = parse_decompile(program);
-        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+        let (original, roundtrip) = roundtrip_parse(program);
+        assert_stmts_equal_ignoring_pos(&original.stmts, &roundtrip.stmts);
     }
 
     #[test]
@@ -1670,8 +1681,8 @@ return 0 && "Automatically Added Return";
             return inner(x) + 1;
         endfn
         return outer(5);"#;
-        let (parse, decompiled) = parse_decompile(program);
-        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+        let (original, roundtrip) = roundtrip_parse(program);
+        assert_stmts_equal_ignoring_pos(&original.stmts, &roundtrip.stmts);
     }
 
     #[test]
@@ -1690,7 +1701,7 @@ return 0 && "Automatically Added Return";
         };
         f = handlers[1];
         return f();"#;
-        let (parse, decompiled) = parse_decompile(program);
-        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+        let (original, roundtrip) = roundtrip_parse(program);
+        assert_stmts_equal_ignoring_pos(&original.stmts, &roundtrip.stmts);
     }
 }

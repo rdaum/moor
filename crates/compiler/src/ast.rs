@@ -327,183 +327,154 @@ impl StmtNode {
     }
 }
 
-// Recursive descent compare of two trees, ignoring the parser-provided line numbers, but
-// validating equality for everything else.
-//
-// These helpers are used by decompile tests to compare parsed vs decompiled ASTs.
-// They handle cosmetic differences that arise because:
-// 1. The parser records actual source positions; the decompiler uses placeholder (0,0)
-// 2. The parser knows the exact num_bindings; the decompiler cannot determine this from bytecode
-// 3. Scopes with num_bindings=0 are elided by codegen, so decompile may produce them when
-//    parse doesn't (or vice versa for single-statement scopes)
+/// Compare two statement trees for semantic equality, ignoring line position metadata.
+///
+/// This is used for roundtrip testing: parse → compile → decompile → unparse → parse again.
+/// Both trees come from the parser, so they have consistent structure. We only need to
+/// ignore `line_col` and `tree_line_no` which differ due to different source text.
+///
+/// Panics with a detailed diff message if trees don't match.
+/// Macro for comparing AST nodes while ignoring position metadata.
+/// Provides detailed mismatch diagnostics with path tracking.
+macro_rules! assert_ast_eq {
+    // Entry point for statement slices
+    (stmts: $a:expr, $b:expr) => {{
+        let a = $a;
+        let b = $b;
+        if a.len() != b.len() {
+            panic!(
+                "Statement count mismatch: {} vs {}\nLeft:  {a:?}\nRight: {b:?}",
+                a.len(),
+                b.len()
+            );
+        }
+        for (i, (left, right)) in a.iter().zip(b.iter()).enumerate() {
+            assert_ast_eq!(stmt: left, right, format!("stmt[{i}]"));
+        }
+    }};
 
-/// Compare two expressions for equality, handling Lambdas specially by recursively
-/// comparing their bodies with assert_stmts_match instead of direct equality.
-/// This ignores line_col and num_bindings differences in lambda bodies.
-/// Panics with a detailed message if expressions don't match.
-pub fn assert_exprs_match(e1: &Expr, e2: &Expr) {
-    match (e1, e2) {
+    // Compare single statements with path tracking
+    (stmt: $a:expr, $b:expr, $path:expr) => {{
+        if !stmt_nodes_equal(&$a.node, &$b.node) {
+            panic!(
+                "Mismatch at {}:\nLeft:  {:?}\nRight: {:?}",
+                $path, $a.node, $b.node
+            );
+        }
+    }};
+}
+
+pub fn assert_stmts_equal_ignoring_pos(a: &[Stmt], b: &[Stmt]) {
+    assert_ast_eq!(stmts: a, b);
+}
+
+/// Deep equality check for StmtNode, recursively checking children but ignoring
+/// position metadata in nested Stmts.
+fn stmt_nodes_equal(a: &StmtNode, b: &StmtNode) -> bool {
+    match (a, b) {
+        (StmtNode::Expr(e1), StmtNode::Expr(e2)) => exprs_equal(e1, e2),
+        (StmtNode::Break { exit }, StmtNode::Break { exit: exit2 }) => exit == exit2,
+        (StmtNode::Continue { exit }, StmtNode::Continue { exit: exit2 }) => exit == exit2,
         (
-            Expr::Lambda {
-                params: p1,
-                body: b1,
-                self_name: s1,
-            },
-            Expr::Lambda {
-                params: p2,
-                body: b2,
-                self_name: s2,
-            },
+            StmtNode::Cond { arms: a1, otherwise: o1 },
+            StmtNode::Cond { arms: a2, otherwise: o2 },
         ) => {
-            assert_eq!(p1, p2, "Lambda params mismatch");
-            assert_eq!(s1, s2, "Lambda self_name mismatch");
-            assert_stmts_match(b1, b2);
+            a1.len() == a2.len()
+                && a1.iter().zip(a2.iter()).all(|(arm1, arm2)| {
+                    exprs_equal(&arm1.condition, &arm2.condition)
+                        && stmts_equal(&arm1.statements, &arm2.statements)
+                })
+                && opts_equal(o1, o2, |e1, e2| stmts_equal(&e1.statements, &e2.statements))
         }
-        (Expr::Decl { id: id1, is_const: c1, expr: e1 }, Expr::Decl { id: id2, is_const: c2, expr: e2 }) => {
-            assert_eq!(id1, id2, "Decl id mismatch");
-            assert_eq!(c1, c2, "Decl is_const mismatch");
-            match (e1, e2) {
-                (Some(e1), Some(e2)) => assert_exprs_match(e1, e2),
-                (None, None) => {}
-                _ => panic!("Decl expr mismatch: {e1:?} vs {e2:?}"),
-            }
+        (
+            StmtNode::ForList { value_binding: v1, key_binding: k1, expr: e1, body: b1, .. },
+            StmtNode::ForList { value_binding: v2, key_binding: k2, expr: e2, body: b2, .. },
+        ) => v1 == v2 && k1 == k2 && exprs_equal(e1, e2) && stmts_equal(b1, b2),
+        (
+            StmtNode::ForRange { id: id1, from: f1, to: t1, body: b1, .. },
+            StmtNode::ForRange { id: id2, from: f2, to: t2, body: b2, .. },
+        ) => id1 == id2 && exprs_equal(f1, f2) && exprs_equal(t1, t2) && stmts_equal(b1, b2),
+        (
+            StmtNode::While { id: id1, condition: c1, body: b1, .. },
+            StmtNode::While { id: id2, condition: c2, body: b2, .. },
+        ) => id1 == id2 && exprs_equal(c1, c2) && stmts_equal(b1, b2),
+        (
+            StmtNode::Fork { id: id1, time: t1, body: b1 },
+            StmtNode::Fork { id: id2, time: t2, body: b2 },
+        ) => id1 == id2 && exprs_equal(t1, t2) && stmts_equal(b1, b2),
+        (
+            StmtNode::TryExcept { body: b1, excepts: e1, environment_width: w1 },
+            StmtNode::TryExcept { body: b2, excepts: e2, environment_width: w2 },
+        ) => {
+            w1 == w2
+                && stmts_equal(b1, b2)
+                && e1.len() == e2.len()
+                && e1.iter().zip(e2.iter()).all(|(ex1, ex2)| {
+                    ex1.id == ex2.id
+                        && ex1.codes == ex2.codes
+                        && stmts_equal(&ex1.statements, &ex2.statements)
+                })
         }
+        (
+            StmtNode::TryFinally { body: b1, handler: h1, environment_width: w1 },
+            StmtNode::TryFinally { body: b2, handler: h2, environment_width: w2 },
+        ) => w1 == w2 && stmts_equal(b1, b2) && stmts_equal(h1, h2),
+        (
+            StmtNode::Scope { num_bindings: n1, body: b1 },
+            StmtNode::Scope { num_bindings: n2, body: b2 },
+        ) => n1 == n2 && stmts_equal(b1, b2),
+        _ => false,
+    }
+}
+
+fn stmts_equal(a: &[Stmt], b: &[Stmt]) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b.iter())
+            .all(|(s1, s2)| stmt_nodes_equal(&s1.node, &s2.node))
+}
+
+fn exprs_equal(a: &Expr, b: &Expr) -> bool {
+    match (a, b) {
+        (
+            Expr::Lambda { params: p1, body: b1, self_name: s1 },
+            Expr::Lambda { params: p2, body: b2, self_name: s2 },
+        ) => p1 == p2 && s1 == s2 && stmt_nodes_equal(&b1.node, &b2.node),
         (Expr::Assign { left: l1, right: r1 }, Expr::Assign { left: l2, right: r2 }) => {
-            assert_exprs_match(l1, l2);
-            assert_exprs_match(r1, r2);
+            exprs_equal(l1, l2) && exprs_equal(r1, r2)
         }
+        (
+            Expr::Decl { id: id1, is_const: c1, expr: e1 },
+            Expr::Decl { id: id2, is_const: c2, expr: e2 },
+        ) => id1 == id2 && c1 == c2 && opts_equal(e1, e2, |a, b| exprs_equal(a, b)),
         (Expr::List(items1), Expr::List(items2)) => {
-            assert_eq!(items1.len(), items2.len(), "List length mismatch");
-            for (a1, a2) in items1.iter().zip(items2.iter()) {
-                assert_args_match(a1, a2);
-            }
+            items1.len() == items2.len()
+                && items1.iter().zip(items2.iter()).all(|(a1, a2)| args_equal(a1, a2))
         }
-        _ => assert_eq!(e1, e2),
+        (Expr::Map(pairs1), Expr::Map(pairs2)) => {
+            pairs1.len() == pairs2.len()
+                && pairs1
+                    .iter()
+                    .zip(pairs2.iter())
+                    .all(|((k1, v1), (k2, v2))| exprs_equal(k1, k2) && exprs_equal(v1, v2))
+        }
+        _ => a == b,
     }
 }
 
-/// Compare two Args for equality, recursively handling Lambdas.
-fn assert_args_match(a1: &Arg, a2: &Arg) {
-    match (a1, a2) {
-        (Arg::Normal(e1), Arg::Normal(e2)) => assert_exprs_match(e1, e2),
-        (Arg::Splice(e1), Arg::Splice(e2)) => assert_exprs_match(e1, e2),
-        _ => assert_eq!(a1, a2, "Arg type mismatch"),
+fn args_equal(a: &Arg, b: &Arg) -> bool {
+    match (a, b) {
+        (Arg::Normal(e1), Arg::Normal(e2)) | (Arg::Splice(e1), Arg::Splice(e2)) => exprs_equal(e1, e2),
+        _ => false,
     }
 }
 
-/// Compare two statements for equality, handling Lambdas specially.
-/// Also handles the case where a Scope with num_bindings=0 and single statement
-/// is equivalent to just that statement (codegen elides empty scopes).
-fn assert_stmts_match(s1: &Stmt, s2: &Stmt) {
-    // Unwrap single-statement scopes with no bindings (they're elided by codegen)
-    // We need to handle both directions: decompiled may have Scope, parsed may not (or vice versa)
-    let (node1, node2) = match (&s1.node, &s2.node) {
-        // If one side is an empty scope with single statement, unwrap it
-        (
-            StmtNode::Scope {
-                num_bindings: 0,
-                body,
-            },
-            other,
-        ) if body.len() == 1 => (&body[0].node, other),
-        (
-            other,
-            StmtNode::Scope {
-                num_bindings: 0,
-                body,
-            },
-        ) if body.len() == 1 => (other, &body[0].node),
-        (n1, n2) => (n1, n2),
-    };
-
-    match (node1, node2) {
-        (StmtNode::Expr(e1), StmtNode::Expr(e2)) => {
-            assert_exprs_match(e1, e2);
-        }
-        (StmtNode::Scope { body: b1, .. }, StmtNode::Scope { body: b2, .. }) => {
-            assert_trees_match_recursive(b1, b2);
-        }
-        _ => {
-            // For other statement types, use the regular recursive matching
-            assert_trees_match_recursive(&[s1.clone()], &[s2.clone()]);
-        }
-    }
-}
-
-pub fn assert_trees_match_recursive(a: &[Stmt], b: &[Stmt]) {
-    assert_eq!(a.len(), b.len());
-    for (left, right) in a.iter().zip(b.iter()) {
-        assert_eq!(left.tree_line_no, right.tree_line_no);
-
-        match (&left.node, &right.node) {
-            (StmtNode::Expr(e1), StmtNode::Expr(e2)) => {
-                assert_exprs_match(e1, e2);
-            }
-            (StmtNode::Break { .. }, StmtNode::Break { .. }) => {}
-            (StmtNode::Continue { .. }, StmtNode::Continue { .. }) => {}
-            (
-                StmtNode::Cond {
-                    otherwise: otherwise1,
-                    arms: arms1,
-                    ..
-                },
-                StmtNode::Cond {
-                    otherwise: otherwise2,
-                    arms: arms2,
-                    ..
-                },
-            ) => {
-                match (otherwise1, otherwise2) {
-                    (
-                        Some(ElseArm { statements, .. }),
-                        Some(ElseArm {
-                            statements: statements2,
-                            ..
-                        }),
-                    ) => {
-                        assert_trees_match_recursive(statements, statements2);
-                    }
-                    (None, None) => {}
-                    _ => panic!("Mismatched otherwise: {otherwise1:?} vs {otherwise2:?}"),
-                }
-                for arms in arms1.iter().zip(arms2.iter()) {
-                    assert_eq!(arms.0.condition, arms.1.condition);
-                    assert_trees_match_recursive(&arms.0.statements, &arms.1.statements);
-                }
-            }
-            (
-                StmtNode::TryFinally {
-                    body: body1,
-                    handler: handler1,
-                    environment_width: ew1,
-                },
-                StmtNode::TryFinally {
-                    body: body2,
-                    handler: handler2,
-                    environment_width: ew2,
-                },
-            ) => {
-                assert_trees_match_recursive(body1, body2);
-                assert_trees_match_recursive(handler1, handler2);
-                assert_eq!(ew1, ew2);
-            }
-            (StmtNode::TryExcept { body: body1, .. }, StmtNode::TryExcept { body: body2, .. })
-            | (StmtNode::ForList { body: body1, .. }, StmtNode::ForList { body: body2, .. })
-            | (StmtNode::ForRange { body: body1, .. }, StmtNode::ForRange { body: body2, .. })
-            | (StmtNode::Fork { body: body1, .. }, StmtNode::Fork { body: body2, .. })
-            | (StmtNode::Scope { body: body1, .. }, StmtNode::Scope { body: body2, .. })
-            | (StmtNode::While { body: body1, .. }, StmtNode::While { body: body2, .. }) => {
-                assert_trees_match_recursive(body1, body2);
-            }
-            _ => {
-                panic!(
-                    "Mismatched statements:\n\
-                {left:?}\n\
-                vs\n\
-                {right:?}"
-                );
-            }
-        }
+/// Helper for comparing Option<T> with a custom equality function.
+fn opts_equal<T, F: Fn(&T, &T) -> bool>(a: &Option<T>, b: &Option<T>, eq: F) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => eq(a, b),
+        (None, None) => true,
+        _ => false,
     }
 }
 

@@ -1383,7 +1383,7 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CompileOptions, ast::assert_trees_match_recursive};
+    use crate::{CompileOptions, ast::assert_stmts_equal_ignoring_pos};
 
     use pretty_assertions::assert_eq;
     use test_case::test_case;
@@ -1502,7 +1502,7 @@ end"#; "complex scatter declaration with optional and rest")]
             crate::parse::parse_program(&stripped, CompileOptions::default()).unwrap();
         let parsed_decompiled =
             crate::parse::parse_program(&result, CompileOptions::default()).unwrap();
-        assert_trees_match_recursive(&parsed_original.stmts, &parsed_decompiled.stmts)
+        assert_stmts_equal_ignoring_pos(&parsed_original.stmts, &parsed_decompiled.stmts)
     }
 
     #[test]
