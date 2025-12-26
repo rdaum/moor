@@ -20,7 +20,8 @@ use moor_common::{
 };
 use moor_db::{DatabaseConfig, TxDB};
 use moor_var::{NOTHING, SYSTEM_OBJECT, Symbol, v_int, v_list_iter};
-use rand::prelude::IndexedRandom;
+use rand::Rng;
+use std::sync::{Arc, Barrier};
 use std::time::Duration;
 
 fn create_db() -> TxDB {
@@ -39,79 +40,122 @@ fn create_db() -> TxDB {
     ws_source
 }
 
-fn commit_latency(c: &mut Criterion) {
-    let db = create_db();
+fn setup_properties(db: &TxDB, count: usize) -> Vec<Symbol> {
+    let append_values = v_list_iter((0..100).map(v_int));
     let mut tx = db.new_world_state().unwrap();
-    let _sysobj = tx
-        .create_object(
+    let mut prop_names = Vec::with_capacity(count);
+    for index in 0..count {
+        let name = Symbol::mk(&format!("bench_prop_{index}"));
+        tx.define_property(
             &SYSTEM_OBJECT,
-            &NOTHING,
             &SYSTEM_OBJECT,
-            BitEnum::all(),
-            ObjectKind::NextObjid,
+            &SYSTEM_OBJECT,
+            name,
+            &SYSTEM_OBJECT,
+            PropFlag::rw(),
+            Some(append_values.clone()),
         )
         .unwrap();
+        prop_names.push(name);
+    }
     assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+    prop_names
+}
 
-    let append_values = v_list_iter((0..100).map(v_int));
-    let mut group = c.benchmark_group("commit_latency");
-    let mut all_props = vec![];
+fn run_concurrent_workload(
+    db: &TxDB,
+    prop_names: &[Symbol],
+    concurrency: usize,
+    ops_per_tx: usize,
+    write_percent: u32,
+    iters: u64,
+) -> Duration {
+    let ready = Arc::new(Barrier::new(concurrency + 1));
+    let start = Arc::new(Barrier::new(concurrency + 1));
+    let start_time = std::thread::scope(|scope| {
+        for thread_id in 0..concurrency {
+            let db = db.clone();
+            let ready = Arc::clone(&ready);
+            let start = Arc::clone(&start);
+            scope.spawn(move || {
+                let mut rng = rand::rng();
+                ready.wait();
+                start.wait();
+                for iter in 0..iters {
+                    let mut tx = db.new_world_state().unwrap();
+                    for op in 0..ops_per_tx {
+                        let prop_name =
+                            prop_names[rng.random_range(0..prop_names.len())];
+                        if rng.random_range(0..100) < write_percent {
+                            let value = v_int(
+                                (thread_id as i64) * 1_000_000
+                                    + (iter as i64) * ops_per_tx as i64
+                                    + op as i64,
+                            );
+                            let _ = tx.update_property(
+                                &SYSTEM_OBJECT,
+                                &SYSTEM_OBJECT,
+                                prop_name,
+                                &value,
+                            );
+                        } else {
+                            let _ = tx.retrieve_property(
+                                &SYSTEM_OBJECT,
+                                &SYSTEM_OBJECT,
+                                prop_name,
+                            );
+                        }
+                    }
+                    let _ = tx.commit();
+                }
+            });
+        }
+        ready.wait();
+        let start_time = std::time::Instant::now();
+        start.wait();
+        start_time
+    });
+    start_time.elapsed()
+}
+
+fn commit_concurrency(c: &mut Criterion) {
+    let db = create_db();
+    let prop_names = setup_properties(&db, 128);
+
+    let mut group = c.benchmark_group("commit_concurrency");
     group.sample_size(10);
 
-    let num_tuples = 100;
-    group.throughput(Throughput::Elements(num_tuples));
+    let ops_per_tx = 64usize;
+    let write_percents = [10u32, 50u32, 90u32];
+    let max_threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    let concurrency_levels = [1usize, 2, 4, 8, 16];
 
-    // Benchmark for write-load "commit" time.
-    group.bench_function("write_commit", |b| {
-        b.iter_custom(|iters| {
-            let mut cumulative_time = Duration::new(0, 0);
-            for _ in 0..iters {
-                // start a new tx
-                let mut tx = db.new_world_state().unwrap();
-                for _ in 0..num_tuples {
-                    let new_prop_name = uuid::Uuid::new_v4();
-                    let new_prop_name = Symbol::mk(&new_prop_name.to_string());
-                    all_props.push(new_prop_name);
-                    tx.define_property(
-                        &SYSTEM_OBJECT,
-                        &SYSTEM_OBJECT,
-                        &SYSTEM_OBJECT,
-                        new_prop_name,
-                        &SYSTEM_OBJECT,
-                        PropFlag::rw(),
-                        Some(append_values.clone()),
+    for &concurrency in concurrency_levels.iter() {
+        if concurrency > max_threads {
+            continue;
+        }
+        for &write_percent in write_percents.iter() {
+            // Each criterion iteration = concurrency threads each doing 1 transaction
+            // (criterion's `iters` parameter scales the transaction count per thread)
+            group.throughput(Throughput::Elements(concurrency as u64));
+            let label = format!("threads={concurrency}/write={write_percent}%");
+            group.bench_function(label, |b| {
+                b.iter_custom(|iters| {
+                    run_concurrent_workload(
+                        &db,
+                        &prop_names,
+                        concurrency,
+                        ops_per_tx,
+                        write_percent,
+                        iters,
                     )
-                    .ok();
-                }
-                let start = std::time::Instant::now();
-                tx.commit().unwrap();
-                cumulative_time += start.elapsed();
-            }
-            cumulative_time
-        })
-    });
-
-    // Benchmark for read-only "commit" time.
-    group.bench_function("read_commit", |b| {
-        b.iter_custom(|iters| {
-            let mut cumulative_time = Duration::new(0, 0);
-            for _ in 0..iters {
-                // pick a prop name from random out of all_props
-                let mut rng = rand::rng();
-                let prop_name = *all_props.choose(&mut rng).unwrap();
-                let tx = db.new_world_state().unwrap();
-                for _ in 0..num_tuples {
-                    let _ = tx
-                        .retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, prop_name)
-                        .ok();
-                }
-                let start = std::time::Instant::now();
-                tx.commit().unwrap();
-                cumulative_time += start.elapsed();
-            }
-            cumulative_time
-        })
-    });
+                })
+            });
+        }
+    }
+    group.finish();
 }
-criterion_group!(benches, commit_latency);
+criterion_group!(benches, commit_concurrency);
 criterion_main!(benches);
