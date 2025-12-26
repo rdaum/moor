@@ -12,8 +12,8 @@
 //
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { InputMetadata } from "../types/input";
 import { stringToCurie, uuObjIdToString } from "../lib/var";
+import { InputMetadata } from "../types/input";
 import { getCommandEchoEnabled } from "./CommandEchoToggle";
 import { InputArea } from "./InputArea";
 import { LinkPreview } from "./LinkPreviewCard";

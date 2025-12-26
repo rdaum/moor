@@ -22,13 +22,16 @@ use crate::vm::builtins::{
 use lazy_static::lazy_static;
 use moor_common::builtins::offset_for_builtin;
 use moor_common::model::{ObjectKind, obj_flags_string, prop_flags_string};
-use moor_compiler::{DiagnosticRenderOptions, format_compile_error};
+use moor_compiler::{
+    CompileOptions, DiagnosticRenderOptions, ObjDefParseError, ObjFileContext,
+    format_compile_error,
+};
 use moor_objdef::{
     ConflictEntity, ConflictMode, Constants, Entity, ObjDefLoaderOptions, ObjdefLoaderError,
 };
 use moor_var::{
-    E_ARGS, E_INVARG, E_TYPE, Sequence, Symbol, Var, Variant, v_empty_map, v_list, v_obj, v_str,
-    v_sym,
+    E_ARGS, E_INVARG, E_TYPE, Sequence, Symbol, Var, Variant, v_empty_map, v_list, v_map, v_obj,
+    v_str, v_sym,
 };
 
 lazy_static! {
@@ -108,6 +111,73 @@ fn bf_dump_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Convert to MOO list of strings
     let string_vars: Vec<_> = lines.iter().map(|line| v_str(line)).collect();
     Ok(Ret(v_list(&string_vars)))
+}
+
+/// Usage: `map parse_objdef_constants(str|list lines)`
+/// Parses constants from objdef content and returns a map of constant -> value.
+fn bf_parse_objdef_constants(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("parse_objdef_constants() requires 1 argument"),
+        ));
+    }
+
+    let source = match bf_args.args[0].variant() {
+        Variant::Str(_) => bf_args.args[0].as_string().unwrap().to_string(),
+        Variant::List(lines_list) => {
+            let mut lines = Vec::new();
+            for line_val in lines_list.iter() {
+                let Some(line_str) = line_val.as_string() else {
+                    return Err(BfErr::ErrValue(
+                        E_TYPE.msg("parse_objdef_constants() requires a string or list of strings"),
+                    ));
+                };
+                lines.push(line_str.to_string());
+            }
+            lines.join("\n")
+        }
+        _ => {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("parse_objdef_constants() requires a string or list of strings"),
+            ));
+        }
+    };
+
+    let mut context = ObjFileContext::new();
+    let compile_options = CompileOptions::default();
+    if let Err(err) = moor_compiler::compile_object_definitions(
+        &source,
+        &compile_options,
+        &mut context,
+    ) {
+        let diagnostic_options = DiagnosticRenderOptions::default();
+        match err {
+            ObjDefParseError::ParseError(compile_error) => {
+                let formatted =
+                    format_compile_error(&compile_error, Some(&source), diagnostic_options);
+                return Err(BfErr::ErrValue(E_INVARG.msg(formatted.join("\n"))));
+            }
+            ObjDefParseError::VerbCompileError(compile_error, verb_source) => {
+                let formatted = format_compile_error(
+                    &compile_error,
+                    Some(verb_source.as_str()),
+                    diagnostic_options,
+                );
+                return Err(BfErr::ErrValue(E_INVARG.msg(formatted.join("\n"))));
+            }
+            other => {
+                return Err(BfErr::ErrValue(E_INVARG.msg(other.to_string())));
+            }
+        }
+    }
+
+    let constants = context
+        .constants()
+        .iter()
+        .map(|(name, value)| (v_sym(*name), value.clone()))
+        .collect::<Vec<_>>();
+
+    Ok(Ret(v_map(&constants)))
 }
 
 /// Convert a MOO entity specification to an internal Entity enum.
@@ -609,4 +679,5 @@ pub(crate) fn register_bf_obj_load(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("dump_object")] = bf_dump_object;
     builtins[offset_for_builtin("load_object")] = bf_load_object;
     builtins[offset_for_builtin("reload_object")] = bf_reload_object;
+    builtins[offset_for_builtin("parse_objdef_constants")] = bf_parse_objdef_constants;
 }

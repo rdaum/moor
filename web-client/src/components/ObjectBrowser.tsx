@@ -105,6 +105,12 @@ interface AddVerbFormValues {
     iobj: string;
 }
 
+interface ReloadObjectFormValues {
+    objdefFile: File;
+    constantsFile: File | null;
+    confirmation: string;
+}
+
 // Helper to decode object flags to readable string
 function formatObjectFlags(flags: number): string {
     const parts: string[] = [];
@@ -160,6 +166,15 @@ const deserializeVerbIndex = (raw: string): number | null => {
         return null;
     }
     return parsed;
+};
+
+const escapeMooString = (value: string): string => {
+    return value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+};
+
+const listToMooLiteral = (items: string[]): string => {
+    const parts = items.map(item => `"${escapeMooString(item)}"`);
+    return `{${parts.join(", ")}}`;
 };
 
 export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
@@ -318,6 +333,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [showAddVerbDialog, setShowAddVerbDialog] = useState(false);
     const [showDeleteVerbDialog, setShowDeleteVerbDialog] = useState(false);
     const [showEditFlagsDialog, setShowEditFlagsDialog] = useState(false);
+    const [showReloadDialog, setShowReloadDialog] = useState(false);
     const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
     const [isSubmittingRecycle, setIsSubmittingRecycle] = useState(false);
     const [isSubmittingAddProperty, setIsSubmittingAddProperty] = useState(false);
@@ -325,6 +341,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [isSubmittingAddVerb, setIsSubmittingAddVerb] = useState(false);
     const [isSubmittingDeleteVerb, setIsSubmittingDeleteVerb] = useState(false);
     const [isSubmittingEditFlags, setIsSubmittingEditFlags] = useState(false);
+    const [isSubmittingReload, setIsSubmittingReload] = useState(false);
     const [createDialogError, setCreateDialogError] = useState<string | null>(null);
     const [recycleDialogError, setRecycleDialogError] = useState<string | null>(null);
     const [addPropertyDialogError, setAddPropertyDialogError] = useState<string | null>(null);
@@ -332,6 +349,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [addVerbDialogError, setAddVerbDialogError] = useState<string | null>(null);
     const [deleteVerbDialogError, setDeleteVerbDialogError] = useState<string | null>(null);
     const [editFlagsDialogError, setEditFlagsDialogError] = useState<string | null>(null);
+    const [reloadDialogError, setReloadDialogError] = useState<string | null>(null);
     const [actionMessage, setActionMessage] = useState<string | null>(null);
     const [editingName, setEditingName] = useState<string>("");
     const [isSavingName, setIsSavingName] = useState(false);
@@ -502,6 +520,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             setShowRecycleDialog(false);
             setShowAddPropertyDialog(false);
             setShowDeletePropertyDialog(false);
+            setShowReloadDialog(false);
         }
     }, [visible]);
 
@@ -1040,6 +1059,67 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             console.error("Failed to dump object:", error);
             setActionMessage(`Failed to dump object: ${error instanceof Error ? error.message : String(error)}`);
             setTimeout(() => setActionMessage(null), 5000);
+        }
+    };
+
+    const readFileAsText = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result ?? ""));
+            reader.onerror = () => reject(reader.error || new Error("Failed to read file"));
+            reader.readAsText(file);
+        });
+    };
+
+    const handleReloadObjectSubmit = async (form: ReloadObjectFormValues) => {
+        if (!selectedObject) return;
+
+        const objectExpr = normalizeObjectInput(selectedObject.obj ? `#${selectedObject.obj}` : "");
+        if (!objectExpr || objectExpr === "#-1") {
+            setReloadDialogError("Unable to determine object reference.");
+            return;
+        }
+
+        setIsSubmittingReload(true);
+        setReloadDialogError(null);
+
+        try {
+            const objdefText = await readFileAsText(form.objdefFile);
+            const objdefLines = objdefText.split(/\r?\n/);
+            const objdefLiteral = listToMooLiteral(objdefLines);
+
+            let expr = `return reload_object(${objdefLiteral}, [], ${objectExpr});`;
+
+            if (form.constantsFile) {
+                const constantsText = await readFileAsText(form.constantsFile);
+                const constantsLines = constantsText.split(/\r?\n/);
+                const constantsLiteral = listToMooLiteral(constantsLines);
+                expr = `constants = parse_objdef_constants(${constantsLiteral}); `
+                    + `return reload_object(${objdefLiteral}, constants, ${objectExpr});`;
+            }
+
+            const result = await performEvalFlatBuffer(authToken, expr);
+            if (result && typeof result === "object" && "error" in result) {
+                const errorResult = result as { error?: { msg?: string } };
+                const msg = errorResult.error?.msg ?? "reload_object() failed";
+                throw new Error(msg);
+            }
+
+            const updatedObjects = await loadObjects();
+            const updated = updatedObjects.find(obj => obj.obj === selectedObject.obj);
+            if (updated) {
+                setSelectedObject(updated);
+                setEditingName(updated.name);
+                await loadPropertiesAndVerbs(updated);
+            }
+
+            setShowReloadDialog(false);
+            setActionMessage(`Reloaded ${describeObject(selectedObject)}`);
+            setTimeout(() => setActionMessage(null), 3000);
+        } catch (error) {
+            setReloadDialogError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setIsSubmittingReload(false);
         }
     };
 
@@ -2149,8 +2229,14 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         setShowEditFlagsDialog(true);
                                     }}
                                     onDumpObject={handleDumpObject}
+                                    onReloadObject={() => {
+                                        setReloadDialogError(null);
+                                        setActionMessage(null);
+                                        setShowReloadDialog(true);
+                                    }}
                                     isSubmittingCreate={isSubmittingCreate}
                                     isSubmittingRecycle={isSubmittingRecycle}
+                                    isSubmittingReload={isSubmittingReload}
                                     editingName={editingName}
                                     onNameChange={setEditingName}
                                     onNameSave={handleNameSave}
@@ -2340,6 +2426,17 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     onSubmit={handleEditFlagsSubmit}
                     isSubmitting={isSubmittingEditFlags}
                     errorMessage={editFlagsDialogError}
+                />
+            )}
+            {showReloadDialog && selectedObject && (
+                <ReloadObjectDialog
+                    key={`reload-${selectedObject.obj}`}
+                    objectLabel={describeObject(selectedObject)}
+                    objectId={selectedObject.obj}
+                    onCancel={() => setShowReloadDialog(false)}
+                    onSubmit={handleReloadObjectSubmit}
+                    isSubmitting={isSubmittingReload}
+                    errorMessage={reloadDialogError}
                 />
             )}
         </EditorWindow>
@@ -3322,6 +3419,141 @@ const EditFlagsDialog: React.FC<EditFlagsDialogProps> = ({
     );
 };
 
+interface ReloadObjectDialogProps {
+    objectLabel: string;
+    objectId: string;
+    onCancel: () => void;
+    onSubmit: (form: ReloadObjectFormValues) => void;
+    isSubmitting: boolean;
+    errorMessage: string | null;
+}
+
+const ReloadObjectDialog: React.FC<ReloadObjectDialogProps> = ({
+    objectLabel,
+    objectId,
+    onCancel,
+    onSubmit,
+    isSubmitting,
+    errorMessage,
+}) => {
+    const [objdefFile, setObjdefFile] = useState<File | null>(null);
+    const [constantsFile, setConstantsFile] = useState<File | null>(null);
+    const [showConstants, setShowConstants] = useState(false);
+    const [confirmation, setConfirmation] = useState("");
+
+    const expectedConfirmation = `#${objectId}`;
+    const canSubmit = objdefFile !== null && confirmation.trim() === expectedConfirmation;
+
+    const handleSubmit = (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!objdefFile) return;
+        onSubmit({ objdefFile, constantsFile, confirmation });
+    };
+
+    return (
+        <DialogSheet
+            title="Reload Object From Objdef"
+            titleId="reload-object-title"
+            maxWidth="520px"
+            role="alertdialog"
+            onCancel={onCancel}
+        >
+            <form onSubmit={handleSubmit} className="dialog-sheet-content form-stack">
+                <div
+                    style={{
+                        padding: "0.75em",
+                        borderRadius: "var(--radius-sm)",
+                        border: "1px solid var(--color-text-warning)",
+                        backgroundColor: "color-mix(in srgb, var(--color-text-warning) 12%, transparent)",
+                        color: "var(--color-text-primary)",
+                        fontFamily: "inherit",
+                        display: "grid",
+                        gap: "0.5em",
+                    }}
+                >
+                    <strong>Reloading replaces the current object.</strong>
+                    <ul className="m-0" style={{ paddingLeft: "1.1em" }}>
+                        <li>Properties and verbs not in the objdef will be deleted.</li>
+                        <li>Flags, name, owner, parent, and location will be overwritten.</li>
+                        <li>There is no undo for this action.</li>
+                    </ul>
+                </div>
+                <p className="m-0 text-secondary">
+                    Reload <strong>{objectLabel}</strong> from an objdef file.
+                </p>
+                <label className="form-group">
+                    <span className="form-group-label">Objdef file (.moo)</span>
+                    <input
+                        type="file"
+                        accept=".moo,text/plain"
+                        onChange={(e) => setObjdefFile(e.target.files?.[0] ?? null)}
+                        required
+                        className="form-input"
+                    />
+                </label>
+                <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                        setShowConstants((prev) => {
+                            if (prev) {
+                                setConstantsFile(null);
+                            }
+                            return !prev;
+                        });
+                    }}
+                    style={{ alignSelf: "flex-start" }}
+                >
+                    {showConstants ? "Hide constants file" : "Add constants file"}
+                </button>
+                {showConstants && (
+                    <label className="form-group">
+                        <span className="form-group-label">Constants file (constants.moo)</span>
+                        <input
+                            type="file"
+                            accept=".moo,text/plain"
+                            onChange={(e) => setConstantsFile(e.target.files?.[0] ?? null)}
+                            className="form-input"
+                        />
+                    </label>
+                )}
+                <label className="form-group">
+                    <span className="form-group-label">Type {expectedConfirmation} to confirm</span>
+                    <input
+                        type="text"
+                        value={confirmation}
+                        onChange={(e) => setConfirmation(e.target.value)}
+                        placeholder={expectedConfirmation}
+                        className="form-input font-mono"
+                        required
+                    />
+                </label>
+                {errorMessage && (
+                    <div role="alert" className="dialog-error">
+                        {errorMessage}
+                    </div>
+                )}
+                <div className="button-group">
+                    <button type="button" onClick={onCancel} className="btn btn-secondary">
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={!canSubmit || isSubmitting}
+                        className="btn btn-danger"
+                        style={{
+                            opacity: !canSubmit || isSubmitting ? 0.6 : 1,
+                            cursor: !canSubmit || isSubmitting ? "not-allowed" : "pointer",
+                        }}
+                    >
+                        {isSubmitting ? "Reloading…" : "Reload"}
+                    </button>
+                </div>
+            </form>
+        </DialogSheet>
+    );
+};
+
 interface ObjectInfoEditorProps {
     object: ObjectData;
     objects: ObjectData[];
@@ -3334,8 +3566,10 @@ interface ObjectInfoEditorProps {
     onRecycle: () => void;
     onEditFlags: () => void;
     onDumpObject: () => void;
+    onReloadObject: () => void;
     isSubmittingCreate: boolean;
     isSubmittingRecycle: boolean;
+    isSubmittingReload: boolean;
     editingName: string;
     onNameChange: (name: string) => void;
     onNameSave: () => void;
@@ -3355,8 +3589,10 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
     onRecycle,
     onEditFlags,
     onDumpObject,
+    onReloadObject,
     isSubmittingCreate,
     isSubmittingRecycle,
+    isSubmittingReload,
     editingName,
     onNameChange,
     onNameSave,
@@ -3664,6 +3900,22 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
                         title="Export object definition to .moo file"
                     >
                         Export Objdef
+                    </button>
+                    <button
+                        type="button"
+                        className="btn btn-sm"
+                        onClick={onReloadObject}
+                        disabled={!object || object.obj === "-1" || isSubmittingReload}
+                        style={{
+                            cursor: !object || object.obj === "-1" || isSubmittingReload
+                                ? "not-allowed"
+                                : "pointer",
+                            opacity: !object || object.obj === "-1" || isSubmittingReload ? 0.6 : 1,
+                            whiteSpace: "nowrap",
+                        }}
+                        title="Reload object definition from .moo file"
+                    >
+                        Reload Objdef
                     </button>
                 </div>
             </div>
