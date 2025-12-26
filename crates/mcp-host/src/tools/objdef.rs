@@ -53,13 +53,13 @@ async fn read_file_or_url(path: &str) -> std::result::Result<String, String> {
                 }
 
                 // Check content length if provided
-                if let Some(content_length) = response.content_length() {
-                    if content_length > MAX_URL_CONTENT_SIZE {
-                        return Err(format!(
-                            "Content too large: {} bytes (max {} bytes)",
-                            content_length, MAX_URL_CONTENT_SIZE
-                        ));
-                    }
+                if let Some(content_length) = response.content_length()
+                    && content_length > MAX_URL_CONTENT_SIZE
+                {
+                    return Err(format!(
+                        "Content too large: {} bytes (max {} bytes)",
+                        content_length, MAX_URL_CONTENT_SIZE
+                    ));
                 }
 
                 response

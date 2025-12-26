@@ -448,7 +448,7 @@ fn assert_stmts_match(s1: &Stmt, s2: &Stmt) {
         }
         _ => {
             // For other statement types, use the regular recursive matching
-            assert_trees_match_recursive(&[s1.clone()], &[s2.clone()]);
+            assert_trees_match_recursive(std::slice::from_ref(s1), std::slice::from_ref(s2));
         }
     }
 }

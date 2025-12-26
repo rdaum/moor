@@ -137,6 +137,7 @@ impl RpcMessageHandler {
         AuthToken(token)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn perform_login(
         &self,
         handler_object: &Obj,
