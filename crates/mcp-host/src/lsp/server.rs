@@ -13,24 +13,31 @@
 
 //! TCP-based LSP server with single-client enforcement.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use eyre::Result;
 use tokio::net::TcpListener;
+use tower_lsp::{LspService, Server};
 use tracing::{info, warn};
 
 use crate::connection::ConnectionManager;
+use crate::lsp::backend::MooLanguageServer;
 use crate::lsp::state::{LspConfig, LspState};
 
 /// LSP server that listens on TCP and handles one client at a time.
 pub struct LspServer {
     state: Arc<LspState>,
+    client_active: Arc<AtomicBool>,
 }
 
 impl LspServer {
     pub fn new(config: LspConfig, connections: Arc<tokio::sync::Mutex<ConnectionManager>>) -> Self {
         let state = Arc::new(LspState::new(config, connections));
-        Self { state }
+        Self {
+            state,
+            client_active: Arc::new(AtomicBool::new(false)),
+        }
     }
 
     /// Run the LSP server, accepting one client at a time.
@@ -41,12 +48,32 @@ impl LspServer {
 
         loop {
             let (stream, client_addr) = listener.accept().await?;
+
+            // Single-client enforcement
+            if self.client_active.swap(true, Ordering::SeqCst) {
+                warn!(
+                    "Rejecting connection from {}: another client is active",
+                    client_addr
+                );
+                drop(stream);
+                continue;
+            }
+
             info!("LSP client connected from {}", client_addr);
 
-            // TODO: Handle client connection with tower-lsp
-            // For now, just log and close
-            warn!("LSP protocol handling not yet implemented, closing connection");
-            drop(stream);
+            let state = Arc::clone(&self.state);
+            let client_active = Arc::clone(&self.client_active);
+
+            let (read, write) = tokio::io::split(stream);
+
+            let (service, socket) = LspService::new(|client| MooLanguageServer::new(client, state));
+
+            // Run the LSP server for this client
+            Server::new(read, write, socket).serve(service).await;
+
+            // Mark client as disconnected
+            client_active.store(false, Ordering::SeqCst);
+            info!("LSP client from {} disconnected", client_addr);
         }
     }
 }
