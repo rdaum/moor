@@ -84,6 +84,80 @@ mod test {
         String::from_utf8(output).expect("Failed to convert output to string")
     }
 
+    /// Create a fresh database with system object initialized
+    fn create_test_db() -> Arc<TxDB> {
+        let (db, _) = TxDB::open(None, DatabaseConfig::default());
+        Arc::new(db)
+    }
+
+    /// Create system object in a new transaction
+    fn create_system_object(db: &Arc<TxDB>) {
+        let mut tx = db.new_world_state().unwrap();
+        let system_obj = tx
+            .create_object(
+                &SYSTEM_OBJECT,
+                &Obj::mk_id(-1),
+                &SYSTEM_OBJECT,
+                BitEnum::new(),
+                moor_common::model::ObjectKind::NextObjid,
+            )
+            .unwrap();
+        assert_eq!(system_obj, SYSTEM_OBJECT);
+        tx.commit().unwrap();
+    }
+
+    /// Write database to textdump using moor format and return as bytes
+    fn write_moor_textdump(db: &Arc<TxDB>) -> Vec<u8> {
+        let mut output = Vec::new();
+        let snapshot = db.create_snapshot().unwrap();
+        let textdump = make_textdump(
+            snapshot.as_ref(),
+            TextdumpVersion::Moor(
+                Version::new(0, 1, 0),
+                CompileOptions::default(),
+                EncodingMode::UTF8,
+            )
+            .to_version_string(),
+        );
+        let mut writer = TextdumpWriter::new(&mut output, EncodingMode::UTF8);
+        writer.write_textdump(&textdump).unwrap();
+        output
+    }
+
+    /// Load textdump bytes into a fresh database
+    fn load_textdump_bytes(data: &[u8]) -> Arc<TxDB> {
+        let db = create_test_db();
+        let mut loader = db.loader_client().unwrap();
+        let cursor = std::io::BufReader::new(std::io::Cursor::new(data));
+        read_textdump(
+            loader.as_mut(),
+            cursor,
+            Version::new(0, 1, 0),
+            CompileOptions::default(),
+        )
+        .unwrap();
+        assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
+        db
+    }
+
+    /// Define a property on SYSTEM_OBJECT with standard permissions
+    fn define_system_property(
+        tx: &mut Box<dyn moor_common::model::WorldState>,
+        name: &str,
+        value: Var,
+    ) {
+        tx.define_property(
+            &SYSTEM_OBJECT,
+            &SYSTEM_OBJECT,
+            &SYSTEM_OBJECT,
+            Symbol::mk(name),
+            &SYSTEM_OBJECT,
+            BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
+            Some(value),
+        )
+        .unwrap();
+    }
+
     /// Load Minimal.db with the textdump reader and confirm that it has the expected contents.
     #[test]
     fn load_minimal() {
@@ -746,280 +820,199 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_anonymous_object_textdump_roundtrip() {
-        use moor_common::model::ObjectKind;
+    /// Configuration for object type roundtrip tests
+    struct ObjectTypeTestConfig {
+        kind: moor_common::model::ObjectKind,
+        type_check: fn(&Obj) -> bool,
+        type_name: &'static str,
+        ref_prop: &'static str,
+        list_prop: &'static str,
+        obj_prop: &'static str,
+        prop_value: &'static str,
+        textdump_markers: &'static [&'static str],
+    }
+
+    /// Helper to test textdump roundtrip for different object types (anonymous, UUID)
+    fn test_object_type_textdump_roundtrip(config: ObjectTypeTestConfig) {
         use moor_var::{v_list, v_obj, v_str};
 
-        // Create a database with anonymous objects
-        let (db, _) = TxDB::open(None, DatabaseConfig::default());
-        let db = Arc::new(db);
-        let anon_obj1;
-        let anon_obj2;
+        let db = create_test_db();
+        let obj1;
+        let obj2;
 
+        // Setup: create system object and test objects with properties
         {
             let mut tx = db.new_world_state().unwrap();
 
-            // Create system object first
-            let system_obj = tx
-                .create_object(
-                    &SYSTEM_OBJECT,
-                    &Obj::mk_id(-1), // parent: nothing
-                    &SYSTEM_OBJECT,  // owner: self
-                    BitEnum::new(),  // flags: none
-                    moor_common::model::ObjectKind::NextObjid,
-                )
-                .unwrap();
-            assert_eq!(system_obj, SYSTEM_OBJECT);
-
-            // Create anonymous objects
-            anon_obj1 = tx
-                .create_object(
-                    &SYSTEM_OBJECT,
-                    &SYSTEM_OBJECT, // parent: system
-                    &SYSTEM_OBJECT, // owner: system
-                    BitEnum::new(), // flags: none
-                    ObjectKind::Anonymous,
-                )
-                .unwrap();
-
-            anon_obj2 = tx
-                .create_object(
-                    &SYSTEM_OBJECT,
-                    &SYSTEM_OBJECT, // parent: system
-                    &SYSTEM_OBJECT, // owner: system
-                    BitEnum::new(), // flags: none
-                    ObjectKind::Anonymous,
-                )
-                .unwrap();
-
-            // Verify they're anonymous
-            assert!(anon_obj1.is_anonymous());
-            assert!(anon_obj2.is_anonymous());
-            assert_ne!(anon_obj1, anon_obj2);
-
-            // Add properties with anonymous object references
-            tx.define_property(
+            tx.create_object(
                 &SYSTEM_OBJECT,
+                &Obj::mk_id(-1),
                 &SYSTEM_OBJECT,
-                &SYSTEM_OBJECT,
-                Symbol::mk("anon_ref"),
-                &SYSTEM_OBJECT,
-                BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
-                Some(v_obj(anon_obj1)),
+                BitEnum::new(),
+                moor_common::model::ObjectKind::NextObjid,
             )
             .unwrap();
 
-            tx.define_property(
-                &SYSTEM_OBJECT,
-                &SYSTEM_OBJECT,
-                &SYSTEM_OBJECT,
-                Symbol::mk("anon_list"),
-                &SYSTEM_OBJECT,
-                BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
-                Some(v_list(&[v_obj(anon_obj1), v_obj(anon_obj2), v_str("test")])),
-            )
-            .unwrap();
+            obj1 = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &SYSTEM_OBJECT,
+                    &SYSTEM_OBJECT,
+                    BitEnum::new(),
+                    config.kind.clone(),
+                )
+                .unwrap();
 
-            // Add a property to the anonymous object itself
+            obj2 = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &SYSTEM_OBJECT,
+                    &SYSTEM_OBJECT,
+                    BitEnum::new(),
+                    config.kind.clone(),
+                )
+                .unwrap();
+
+            assert!(
+                (config.type_check)(&obj1),
+                "obj1 should be {}",
+                config.type_name
+            );
+            assert!(
+                (config.type_check)(&obj2),
+                "obj2 should be {}",
+                config.type_name
+            );
+            assert_ne!(obj1, obj2);
+
+            define_system_property(&mut tx, config.ref_prop, v_obj(obj1));
+            define_system_property(
+                &mut tx,
+                config.list_prop,
+                v_list(&[v_obj(obj1), v_obj(obj2), v_str("test")]),
+            );
+
+            // Property on the object itself
             tx.define_property(
                 &SYSTEM_OBJECT,
-                &anon_obj1,
-                &anon_obj1,
-                Symbol::mk("anon_prop"),
+                &obj1,
+                &obj1,
+                Symbol::mk(config.obj_prop),
                 &SYSTEM_OBJECT,
                 BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
-                Some(v_str("anonymous property")),
+                Some(v_str(config.prop_value)),
             )
             .unwrap();
 
             tx.commit().unwrap();
         }
 
-        // Create textdump
-        let mut textdump_data = Vec::new();
-        {
-            let snapshot = db.create_snapshot().unwrap();
-            let textdump = make_textdump(
-                snapshot.as_ref(),
-                TextdumpVersion::Moor(
-                    Version::new(0, 1, 0),
-                    CompileOptions::default(),
-                    EncodingMode::UTF8,
-                )
-                .to_version_string(),
-            );
-            let mut writer = TextdumpWriter::new(&mut textdump_data, EncodingMode::UTF8);
-            writer.write_textdump(&textdump).unwrap();
-        }
-
-        // Verify the textdump was created and contains anonymous objects
+        // Write textdump and verify markers
+        let textdump_data = write_moor_textdump(&db);
         let textdump_str = String::from_utf8(textdump_data.clone()).unwrap();
+        for marker in config.textdump_markers {
+            assert!(
+                textdump_str.contains(marker),
+                "Missing '{}' for {} objects",
+                marker,
+                config.type_name
+            );
+        }
 
-        assert!(
-            textdump_str.contains("*anonymous*"),
-            "Textdump should contain anonymous objects"
-        );
-        assert!(
-            textdump_str.contains("#0"),
-            "Anonymous objects should have temp IDs"
-        );
-        assert!(
-            textdump_str.contains("12"),
-            "Should contain anonymous object type marker"
-        );
+        // Roundtrip and verify
+        let db2 = load_textdump_bytes(&textdump_data);
+        let snapshot = db2.create_snapshot().unwrap();
+        let objects = snapshot.get_objects().unwrap();
 
-        // Now test full round-trip: load the textdump back into a new database
-        let (db2, _) = TxDB::open(None, DatabaseConfig::default());
-        let db2 = Arc::new(db2);
-        {
-            let mut loader = db2.loader_client().unwrap();
-            let cursor = std::io::BufReader::new(std::io::Cursor::new(&textdump_data));
+        assert_eq!(
+            objects.len(),
+            3,
+            "Expected 3 objects (system + 2 {})",
+            config.type_name
+        );
+        let typed_count = objects.iter().filter(|o| (config.type_check)(o)).count();
+        assert_eq!(typed_count, 2, "Expected 2 {} objects", config.type_name);
 
-            read_textdump(
-                loader.as_mut(),
-                cursor,
-                Version::new(0, 1, 0),
-                CompileOptions::default(),
-            )
+        let tx = db2.new_world_state().unwrap();
+
+        // Verify object references
+        let loaded_obj1 = tx
+            .retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk(config.ref_prop))
+            .unwrap()
+            .as_object()
             .unwrap();
-            assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
-        }
+        assert!(
+            (config.type_check)(&loaded_obj1),
+            "Loaded object should be {}",
+            config.type_name
+        );
 
-        // Verify anonymous objects were preserved correctly
-        {
-            let snapshot = db2.create_snapshot().unwrap();
-            let objects = snapshot.get_objects().unwrap();
+        // Verify list contents
+        let list_prop = tx
+            .retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk(config.list_prop))
+            .unwrap();
+        let list = list_prop.as_list().unwrap();
+        assert_eq!(list.len(), 3);
+        let list_obj1 = list.iter().next().unwrap().as_object().unwrap();
+        let list_obj2 = list.iter().nth(1).unwrap().as_object().unwrap();
+        assert!((config.type_check)(&list_obj1) && (config.type_check)(&list_obj2));
+        assert_ne!(list_obj1, list_obj2);
 
-            // Should have system object + 2 anonymous objects
-            assert_eq!(
-                objects.len(),
-                3,
-                "Should have loaded 3 objects (system + 2 anonymous)"
-            );
+        // Verify property on object itself
+        let prop_val = tx
+            .retrieve_property(&SYSTEM_OBJECT, &loaded_obj1, Symbol::mk(config.obj_prop))
+            .unwrap();
+        assert_eq!(prop_val.as_string().unwrap(), config.prop_value);
 
-            let anon_objects: Vec<_> = objects.iter().filter(|obj| obj.is_anonymous()).collect();
-            assert_eq!(anon_objects.len(), 2, "Should have 2 anonymous objects");
+        // Verify object validity and parent
+        assert!(tx.valid(&loaded_obj1).unwrap());
+        assert_eq!(
+            tx.parent_of(&SYSTEM_OBJECT, &loaded_obj1).unwrap(),
+            SYSTEM_OBJECT
+        );
+    }
 
-            let tx = db2.new_world_state().unwrap();
+    #[test]
+    fn test_anonymous_object_textdump_roundtrip() {
+        test_object_type_textdump_roundtrip(ObjectTypeTestConfig {
+            kind: moor_common::model::ObjectKind::Anonymous,
+            type_check: Obj::is_anonymous,
+            type_name: "anonymous",
+            ref_prop: "anon_ref",
+            list_prop: "anon_list",
+            obj_prop: "anon_prop",
+            prop_value: "anonymous property",
+            textdump_markers: &["*anonymous*", "#0"],
+        });
+    }
 
-            // Check that anonymous object references work
-            let anon_ref_prop = tx
-                .retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk("anon_ref"))
-                .unwrap();
-            let loaded_anon_obj1 = anon_ref_prop.as_object().unwrap();
-            assert!(
-                loaded_anon_obj1.is_anonymous(),
-                "Loaded object should be anonymous"
-            );
-
-            // Check the list with multiple anonymous objects
-            let anon_list_prop = tx
-                .retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk("anon_list"))
-                .unwrap();
-            let list = anon_list_prop.as_list().unwrap();
-            assert_eq!(list.len(), 3, "List should have 3 elements");
-
-            let list_anon_obj1 = list.iter().next().unwrap().as_object().unwrap();
-            let list_anon_obj2 = list.iter().nth(1).unwrap().as_object().unwrap();
-            assert!(
-                list_anon_obj1.is_anonymous(),
-                "First list object should be anonymous"
-            );
-            assert!(
-                list_anon_obj2.is_anonymous(),
-                "Second list object should be anonymous"
-            );
-            assert_ne!(
-                list_anon_obj1, list_anon_obj2,
-                "Anonymous objects should be different"
-            );
-
-            // Check the property on the anonymous object itself
-            let anon_prop = tx
-                .retrieve_property(&SYSTEM_OBJECT, &loaded_anon_obj1, Symbol::mk("anon_prop"))
-                .unwrap();
-            assert_eq!(
-                anon_prop.as_string().unwrap(),
-                "anonymous property",
-                "Anonymous object property should be preserved"
-            );
-
-            // Verify anonymous objects are valid and functional
-            assert!(
-                tx.valid(&loaded_anon_obj1).unwrap(),
-                "Anonymous object should be valid"
-            );
-            assert_eq!(
-                tx.parent_of(&SYSTEM_OBJECT, &loaded_anon_obj1).unwrap(),
-                SYSTEM_OBJECT,
-                "Anonymous object parent should be preserved"
-            );
-        }
+    /// Test UUID object textdump roundtrip - verifies the fix for UUID object serialization
+    /// that previously crashed at crates/var/src/obj.rs:247
+    #[test]
+    fn test_uuid_object_textdump_roundtrip() {
+        test_object_type_textdump_roundtrip(ObjectTypeTestConfig {
+            kind: moor_common::model::ObjectKind::UuObjId,
+            type_check: Obj::is_uuobjid,
+            type_name: "UUID",
+            ref_prop: "uuid_ref",
+            list_prop: "uuid_list",
+            obj_prop: "uuid_prop",
+            prop_value: "uuid property",
+            textdump_markers: &["#u", "-"],
+        });
     }
 
     #[test]
     fn test_debug_textdump_format() {
-        // Create a simple database and see what textdump format it produces
-        let (db, _) = TxDB::open(None, DatabaseConfig::default());
-        let db = Arc::new(db);
+        // Create a simple database and verify textdump roundtrip works
+        let db = create_test_db();
+        create_system_object(&db);
 
-        {
-            let mut tx = db.new_world_state().unwrap();
-
-            // Create system object first
-            let system_obj = tx
-                .create_object(
-                    &SYSTEM_OBJECT,
-                    &Obj::mk_id(-1), // parent: nothing
-                    &SYSTEM_OBJECT,  // owner: self
-                    BitEnum::new(),  // flags: none
-                    moor_common::model::ObjectKind::NextObjid,
-                )
-                .unwrap();
-            assert_eq!(system_obj, SYSTEM_OBJECT);
-
-            tx.commit().unwrap();
-        }
-
-        // Create textdump
-        let mut textdump_data = Vec::new();
-        {
-            let snapshot = db.create_snapshot().unwrap();
-            let textdump = make_textdump(
-                snapshot.as_ref(),
-                TextdumpVersion::Moor(
-                    Version::new(0, 1, 0),
-                    CompileOptions::default(),
-                    EncodingMode::UTF8,
-                )
-                .to_version_string(),
-            );
-            let mut writer = TextdumpWriter::new(&mut textdump_data, EncodingMode::UTF8);
-            writer.write_textdump(&textdump).unwrap();
-        }
-
-        let textdump_str = String::from_utf8(textdump_data).unwrap();
+        let textdump_data = write_moor_textdump(&db);
+        let textdump_str = String::from_utf8(textdump_data.clone()).unwrap();
         println!("Reference textdump format:\n{textdump_str}");
 
-        // Now try to load this textdump to make sure the basic format works
-        let (db2, _) = TxDB::open(None, DatabaseConfig::default());
-        let db2 = Arc::new(db2);
-        {
-            let mut loader = db2.loader_client().unwrap();
-            let cursor = std::io::BufReader::new(std::io::Cursor::new(textdump_str.as_bytes()));
-
-            read_textdump(
-                loader.as_mut(),
-                cursor,
-                Version::new(0, 1, 0),
-                CompileOptions::default(),
-            )
-            .unwrap();
-
-            assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
-        }
-
+        let _db2 = load_textdump_bytes(&textdump_data);
         println!("Basic textdump format works!");
     }
 

@@ -263,11 +263,23 @@ impl<W: io::Write> TextdumpWriter<W> {
         Ok(())
     }
 
+    // Object ID formats in textdump:
+    // - Regular objects: #{numeric_id}
+    // - Anonymous objects: #{temp_id} with name "*anonymous*"
+    // - UUID objects: #u{UUID_STRING} (e.g., #u048D05-1234567890)
     fn write_object(&mut self, object: &Object) -> Result<(), io::Error> {
         if object.id.is_anonymous() {
             // For anonymous objects, write with temporary ID
             let temp_id = self.get_or_assign_anonymous_id(&object.id);
             writeln!(self.writer, "#{}\n{}\n", temp_id, &object.name)?;
+        } else if object.id.is_uuobjid() {
+            // For UUID objects, write with 'u' prefix followed by UUID string
+            writeln!(
+                self.writer,
+                "#u{}\n{}\n",
+                object.id.to_literal(),
+                &object.name
+            )?;
         } else {
             writeln!(self.writer, "#{}\n{}\n", object.id.id().0, &object.name)?;
         }

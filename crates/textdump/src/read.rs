@@ -471,25 +471,45 @@ impl<R: Read> TextdumpReader<R> {
         }
         // TODO: handle "recycled" flag in textdump loading.
         let oid_str = &ospec[1..];
-        let Ok(oid) = oid_str.trim().parse() else {
-            return Err(TextdumpReaderError::ParseError(
-                format!("invalid objid: {oid_str}"),
-                self.line_num,
-            ));
-        };
         let name = self.read_string()?;
+
+        // Parse the object ID - could be numeric, UUID (prefixed with 'u'), or anonymous
         let oid = if name == "*anonymous*" {
-            // This is an anonymous object - check if we've already created it
-            if let Some(&existing_obj) = self.anonymous_obj_map.get(&oid) {
+            // This is an anonymous object - parse temporary ID and map it
+            let Ok(temp_id) = oid_str.trim().parse::<i64>() else {
+                return Err(TextdumpReaderError::ParseError(
+                    format!("invalid anonymous objid: {oid_str}"),
+                    self.line_num,
+                ));
+            };
+            if let Some(&existing_obj) = self.anonymous_obj_map.get(&temp_id) {
                 existing_obj
             } else {
                 // Create new anonymous object and map the temporary ID to it
                 let anon_obj = Obj::mk_anonymous_generated();
-                self.anonymous_obj_map.insert(oid, anon_obj);
+                self.anonymous_obj_map.insert(temp_id, anon_obj);
                 anon_obj
             }
+        } else if let Some(uuid_str) = oid_str.strip_prefix('u') {
+            // UUID object (prefixed with 'u')
+            match Obj::try_from(uuid_str.trim()) {
+                Ok(obj) => obj,
+                Err(_) => {
+                    return Err(TextdumpReaderError::ParseError(
+                        format!("invalid UUID objid: {uuid_str}"),
+                        self.line_num,
+                    ));
+                }
+            }
         } else {
-            Obj::mk_id(oid.try_into().unwrap())
+            // Regular numeric object ID
+            let Ok(oid) = oid_str.trim().parse::<i32>() else {
+                return Err(TextdumpReaderError::ParseError(
+                    format!("invalid objid: {oid_str}"),
+                    self.line_num,
+                ));
+            };
+            Obj::mk_id(oid)
         };
         match self.version {
             ToastStunt(v) if v >= ToastDbvNextGen => {}
@@ -623,21 +643,37 @@ impl<R: Read> TextdumpReader<R> {
     fn read_verb(&mut self) -> Result<Verb, TextdumpReaderError> {
         let header = self.read_string()?;
 
-        let (oid, verbnum) = match header.strip_prefix('#').and_then(|s| s.split_once(':')) {
+        let (objid, verbnum) = match header.strip_prefix('#').and_then(|s| s.split_once(':')) {
             Some((oid_str, verbnum_str)) => {
-                let oid = oid_str.parse::<i32>().map_err(|e| {
-                    TextdumpReaderError::ParseError(
-                        format!("invalid object id: {e}"),
-                        self.line_num,
-                    )
-                })?;
+                // Parse the object ID - could be numeric or UUID format
+                let objid = if oid_str.contains('-') {
+                    // UUID format: 048D05-1234567890
+                    match Obj::try_from(oid_str) {
+                        Ok(obj) => obj,
+                        Err(_) => {
+                            return Err(TextdumpReaderError::ParseError(
+                                format!("invalid UUID objid: {oid_str}"),
+                                self.line_num,
+                            ));
+                        }
+                    }
+                } else {
+                    // Regular numeric object ID
+                    let oid = oid_str.parse::<i32>().map_err(|e| {
+                        TextdumpReaderError::ParseError(
+                            format!("invalid object id: {e}"),
+                            self.line_num,
+                        )
+                    })?;
+                    Obj::mk_id(oid)
+                };
                 let verbnum = verbnum_str.parse::<usize>().map_err(|e| {
                     TextdumpReaderError::ParseError(
                         format!("invalid verb number: {e}"),
                         self.line_num,
                     )
                 })?;
-                (oid, verbnum)
+                (objid, verbnum)
             }
             None => {
                 return Err(TextdumpReaderError::ParseError(
@@ -654,7 +690,7 @@ impl<R: Read> TextdumpReader<R> {
         let program_lines = self.read_program()?;
         let program = program_lines.join("\n");
         Ok(Verb {
-            objid: Obj::mk_id(oid),
+            objid,
             verbnum,
             program: Some(program),
             start_line,
