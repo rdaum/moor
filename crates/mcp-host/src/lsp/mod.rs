@@ -18,6 +18,7 @@ mod diagnostics;
 mod server;
 mod state;
 mod symbols;
+mod workspace;
 
 pub use server::LspServer;
 pub use state::LspConfig;

@@ -73,6 +73,30 @@ impl LanguageServer for MooLanguageServer {
         self.client
             .log_message(MessageType::INFO, "MOO LSP server initialized")
             .await;
+
+        // Scan workspace for .moo files and publish initial diagnostics
+        let files =
+            crate::lsp::workspace::scan_workspace(&self.state.config.workspace).await;
+
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!("Found {} .moo files in workspace", files.len()),
+            )
+            .await;
+
+        // Parse each file and publish initial diagnostics
+        for file in files {
+            if let Ok(content) = tokio::fs::read_to_string(&file).await {
+                if let Ok(uri) = Url::from_file_path(&file) {
+                    self.documents
+                        .write()
+                        .await
+                        .insert(uri.clone(), content.clone());
+                    self.publish_diagnostics(uri, &content).await;
+                }
+            }
+        }
     }
 
     async fn shutdown(&self) -> Result<()> {
