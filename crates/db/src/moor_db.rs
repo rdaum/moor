@@ -234,14 +234,27 @@ impl MoorDB {
     }
 
     pub(crate) fn start_transaction(&self) -> WorldStateTransaction {
+        let mut backoff = 0u32;
         loop {
             // Check if commit is in progress (odd version)
             let v1 = self
                 .commit_version
                 .load(std::sync::atomic::Ordering::Acquire);
             if v1 & 1 == 1 {
-                // Commit in progress, spin
-                std::hint::spin_loop();
+                // Commit in progress - use exponential backoff to reduce CPU waste
+                // Phase 1: Spin (backoff 0-5) - tight loop for very brief waits
+                // Phase 2: Yield (backoff 6-9) - give up timeslice
+                // Phase 3: Sleep (backoff 10+) - sleep 10µs for longer waits
+                if backoff < 6 {
+                    for _ in 0..(1 << backoff) {
+                        std::hint::spin_loop();
+                    }
+                } else if backoff < 10 {
+                    std::thread::yield_now();
+                } else {
+                    std::thread::sleep(Duration::from_micros(10));
+                }
+                backoff = backoff.saturating_add(1);
                 continue;
             }
 
