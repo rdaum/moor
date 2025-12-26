@@ -42,7 +42,9 @@ serde_derive.workspace = true
 serde_json.workspace = true
 
 # Networking & Communication
+lsp-types.workspace = true
 tmq.workspace = true
+tower-lsp.workspace = true
 
 # Async Runtime & Concurrency
 futures-util.workspace = true

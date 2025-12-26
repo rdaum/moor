@@ -123,6 +123,8 @@ fs2 = "0.4"
 
 # Networking & Communication
 axum = { version = "0.8", features = ["ws"] }
+lsp-types = "0.97"
+tower-lsp = "0.20"
 hickory-resolver = "0.25"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 rustls-pemfile = "2.2"
