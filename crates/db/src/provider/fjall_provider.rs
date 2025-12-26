@@ -64,10 +64,21 @@ use tracing::{error, warn};
 
 use crate::THREAD_JOIN_TIMEOUT;
 
+/// Result of joining a thread with timeout.
+enum JoinResult<T> {
+    /// Thread joined successfully with its return value.
+    Ok(T),
+    /// Timeout elapsed, thread still running. Handle returned for potential retry.
+    Timeout(JoinHandle<T>),
+    /// Thread panicked. It has been joined (finished) but did not return a value.
+    Panicked,
+}
+
 /// Join a thread with a timeout.
 ///
-/// Returns `Ok(())` if the thread joined successfully within the timeout,
-/// or `Err(JoinHandle)` if the timeout elapsed (returning the handle for potential retry).
+/// Returns `JoinResult::Ok(T)` if the thread joined successfully within the timeout,
+/// `JoinResult::Timeout(JoinHandle)` if the timeout elapsed (returning the handle for retry),
+/// or `JoinResult::Panicked` if the thread panicked (it is finished but produced no value).
 ///
 /// This uses polling with `is_finished()` since Rust's standard library doesn't
 /// provide a `join_timeout()` method on `JoinHandle`.
@@ -75,7 +86,7 @@ fn join_with_timeout<T>(
     handle: JoinHandle<T>,
     timeout: Duration,
     thread_name: &str,
-) -> Result<T, JoinHandle<T>> {
+) -> JoinResult<T> {
     let start = std::time::Instant::now();
     let poll_interval = Duration::from_millis(10);
 
@@ -86,18 +97,22 @@ fn join_with_timeout<T>(
                 "Thread '{}' did not terminate within {:?}, continuing shutdown",
                 thread_name, timeout
             );
-            return Err(handle);
+            return JoinResult::Timeout(handle);
         }
         std::thread::sleep(poll_interval);
     }
 
     // Thread is finished, join should be immediate
     match handle.join() {
-        Ok(result) => Ok(result),
+        Ok(result) => JoinResult::Ok(result),
         Err(e) => {
-            warn!("Thread '{}' panicked during shutdown: {:?}", thread_name, e);
-            // Thread panicked, but we still "joined" it - just report and continue
-            std::panic::resume_unwind(e);
+            // Thread panicked - log it but don't propagate.
+            // During shutdown, we want to continue cleaning up other resources.
+            warn!(
+                "Thread '{}' panicked during shutdown: {:?}",
+                thread_name, e
+            );
+            JoinResult::Panicked
         }
     }
 }
@@ -603,13 +618,14 @@ where
         let mut jh = self.jh.lock().unwrap();
         if let Some(handle) = jh.take() {
             // Use timeout to prevent indefinite hang if thread is deadlocked
-            if let Err(abandoned_handle) =
+            if let JoinResult::Timeout(abandoned_handle) =
                 join_with_timeout(handle, THREAD_JOIN_TIMEOUT, "fjall-provider-writer")
             {
                 // Thread didn't terminate - store handle back for potential retry in Drop
                 // but don't block shutdown
                 *jh = Some(abandoned_handle);
             }
+            // JoinResult::Ok and JoinResult::Panicked both mean the thread is finished
         }
 
         Ok(())
@@ -943,12 +959,13 @@ impl SequenceWriter {
         let mut jh = self.jh.lock().unwrap();
         if let Some(handle) = jh.take() {
             // Use timeout to prevent indefinite hang if thread is deadlocked
-            if let Err(abandoned_handle) =
+            if let JoinResult::Timeout(abandoned_handle) =
                 join_with_timeout(handle, THREAD_JOIN_TIMEOUT, "moor-seq-writer")
             {
                 // Thread didn't terminate - store handle back for potential retry in Drop
                 *jh = Some(abandoned_handle);
             }
+            // JoinResult::Ok and JoinResult::Panicked both mean the thread is finished
         }
     }
 }

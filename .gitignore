@@ -56,3 +56,11 @@ cores/cowbell/
 # LambdaMOO sources (fetched by setup script for comparative testing)
 lambdamoo/
 certs/
+
+# Local development files
+.DS_Store
+.crush/
+.mcp.json
+.private-journal/
+.worktrees/
+openspec/
