@@ -53,6 +53,7 @@ mod resources;
 mod tools;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use clap::Parser;
 use clap_derive::Parser;
@@ -195,20 +196,38 @@ async fn main() -> Result<()> {
         _ => None,
     };
 
-    // Create the connection manager
+    // Create the connection manager (wrapped in Arc for sharing)
     let connection_config = ConnectionConfig {
         client_config,
         programmer_credentials,
         wizard_credentials,
     };
-    let connections = ConnectionManager::new(connection_config);
+    let connections = Arc::new(tokio::sync::Mutex::new(ConnectionManager::new(connection_config)));
 
-    // Create MCP server
-    let mut server = McpServer::new(connections);
+    // Start LSP server if configured
+    let lsp_handle = if let (Some(port), Some(workspace)) = (args.lsp_port, args.lsp_workspace) {
+        let lsp_config = lsp::LspConfig { port, workspace };
+        let lsp_server = lsp::LspServer::new(lsp_config, Arc::clone(&connections));
+        Some(tokio::spawn(async move {
+            if let Err(e) = lsp_server.run().await {
+                tracing::error!("LSP server error: {}", e);
+            }
+        }))
+    } else {
+        None
+    };
+
+    // Create MCP server with Arc clone
+    let mut server = McpServer::new(Arc::clone(&connections));
 
     // Run the MCP server
     info!("MCP server ready, listening on stdio");
     server.run_stdio().await?;
+
+    // Stop LSP server if running
+    if let Some(handle) = lsp_handle {
+        handle.abort();
+    }
 
     info!("MCP server shutting down");
     Ok(())

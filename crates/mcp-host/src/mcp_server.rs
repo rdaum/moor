@@ -34,7 +34,7 @@ const PROTOCOL_VERSION: &str = "2024-11-05";
 
 /// MCP Server state
 pub struct McpServer {
-    connections: ConnectionManager,
+    connections: std::sync::Arc<tokio::sync::Mutex<ConnectionManager>>,
     initialized: bool,
     shutdown_requested: bool,
     /// Dynamically-defined tools fetched from the MOO world
@@ -49,7 +49,7 @@ pub struct McpServer {
 
 impl McpServer {
     /// Create a new MCP server with a connection manager
-    pub fn new(connections: ConnectionManager) -> Self {
+    pub fn new(connections: std::sync::Arc<tokio::sync::Mutex<ConnectionManager>>) -> Self {
         Self {
             connections,
             initialized: false,
@@ -66,8 +66,8 @@ impl McpServer {
     /// Calls #0:external_agent_tools() and updates the stored tool list.
     async fn refresh_dynamic_tools(&mut self) -> Result<usize, String> {
         // Use programmer connection for fetching tools
-        let client = self
-            .connections
+        let mut connections = self.connections.lock().await;
+        let client = connections
             .programmer()
             .await
             .map_err(|e| e.to_string())?;
@@ -92,8 +92,8 @@ impl McpServer {
     ///
     /// Calls #0:external_agent_resources() and updates the stored resource list.
     async fn refresh_dynamic_resources(&mut self) -> Result<usize, String> {
-        let client = self
-            .connections
+        let mut connections = self.connections.lock().await;
+        let client = connections
             .programmer()
             .await
             .map_err(|e| e.to_string())?;
@@ -178,7 +178,7 @@ impl McpServer {
         }
 
         // Gracefully disconnect from daemon
-        self.connections.disconnect_all().await;
+        self.connections.lock().await.disconnect_all().await;
 
         Ok(())
     }
@@ -260,11 +260,14 @@ impl McpServer {
         info!("Initializing MCP server");
 
         // Log configured connections (connections are established lazily on first use)
-        if self.connections.has_programmer_credentials() {
-            info!("Programmer connection configured (will connect on first use)");
-        }
-        if self.connections.has_wizard_credentials() {
-            info!("Wizard connection configured (will connect on first use)");
+        {
+            let connections = self.connections.lock().await;
+            if connections.has_programmer_credentials() {
+                info!("Programmer connection configured (will connect on first use)");
+            }
+            if connections.has_wizard_credentials() {
+                info!("Wizard connection configured (will connect on first use)");
+            }
         }
 
         let result = InitializeResult {
@@ -376,7 +379,7 @@ impl McpServer {
     /// Reconnects all established connections (both programmer and wizard).
     async fn handle_reconnect(&mut self) -> Result<Value, JsonRpcError> {
         info!("Manual reconnect requested for all connections");
-        let result = match self.connections.reconnect_all().await {
+        let result = match self.connections.lock().await.reconnect_all().await {
             Ok(msg) => ToolCallResult::text(msg),
             Err(e) => ToolCallResult::error(format!("Reconnect failed: {}", e)),
         };
@@ -390,13 +393,15 @@ impl McpServer {
         dynamic_tool: Option<&DynamicTool>,
         wizard: bool,
     ) -> Result<Value, JsonRpcError> {
-        let client = self
-            .connections
-            .get(wizard)
-            .await
-            .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
-
-        let result = Self::execute_tool_dispatch(client, call_params, dynamic_tool).await;
+        // First attempt with current connection
+        let result = {
+            let mut connections = self.connections.lock().await;
+            let client = connections
+                .get(wizard)
+                .await
+                .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+            Self::execute_tool_dispatch(client, call_params, dynamic_tool).await
+        };
 
         match result {
             Ok(result) => Ok(serde_json::to_value(result).unwrap()),
@@ -411,21 +416,23 @@ impl McpServer {
                     error_str
                 );
 
-                self.connections
-                    .reconnect(wizard)
-                    .await
-                    .map_err(|reconnect_err| {
+                // Reconnect
+                {
+                    let mut connections = self.connections.lock().await;
+                    connections.reconnect(wizard).await.map_err(|reconnect_err| {
                         error!("Reconnection failed: {}", reconnect_err);
                         JsonRpcError::internal_error(format!(
                             "Connection lost and reconnection failed: {}. Original error: {}",
                             reconnect_err, error_str
                         ))
                     })?;
+                }
 
                 info!("Reconnected successfully, retrying tool call");
 
-                let client = self
-                    .connections
+                // Retry with new connection
+                let mut connections = self.connections.lock().await;
+                let client = connections
                     .get(wizard)
                     .await
                     .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
@@ -509,8 +516,8 @@ impl McpServer {
         }
 
         // Fall back to static resource handling
-        let client = self
-            .connections
+        let mut connections = self.connections.lock().await;
+        let client = connections
             .programmer()
             .await
             .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;

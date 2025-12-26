@@ -28,7 +28,7 @@ pub struct LspServer {
 }
 
 impl LspServer {
-    pub fn new(config: LspConfig, connections: Arc<ConnectionManager>) -> Self {
+    pub fn new(config: LspConfig, connections: Arc<tokio::sync::Mutex<ConnectionManager>>) -> Self {
         let state = Arc::new(LspState::new(config, connections));
         Self { state }
     }

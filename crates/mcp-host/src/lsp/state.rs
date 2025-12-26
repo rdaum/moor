@@ -32,11 +32,11 @@ pub struct LspState {
     /// Configuration.
     pub config: LspConfig,
     /// Connection manager for mooR RPC.
-    pub connections: Arc<ConnectionManager>,
+    pub connections: Arc<tokio::sync::Mutex<ConnectionManager>>,
 }
 
 impl LspState {
-    pub fn new(config: LspConfig, connections: Arc<ConnectionManager>) -> Self {
+    pub fn new(config: LspConfig, connections: Arc<tokio::sync::Mutex<ConnectionManager>>) -> Self {
         Self { config, connections }
     }
 }
