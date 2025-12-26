@@ -13,6 +13,7 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { InputMetadata } from "../types/input";
+import { stringToCurie, uuObjIdToString } from "../lib/var";
 import { getCommandEchoEnabled } from "./CommandEchoToggle";
 import { InputArea } from "./InputArea";
 import { LinkPreview } from "./LinkPreviewCard";
@@ -31,6 +32,14 @@ export interface EventMetadata {
     timestamp?: number;
 }
 
+export interface RewritableInfo {
+    id: string;
+    owner: string;
+    ttl: number;
+    fallback?: string;
+    expiresAt: number;
+}
+
 export interface NarrativeMessage {
     id: string;
     content: string | string[];
@@ -45,6 +54,8 @@ export interface NarrativeMessage {
     thumbnail?: { contentType: string; data: string };
     linkPreview?: LinkPreview;
     eventMetadata?: EventMetadata;
+    rewritable?: RewritableInfo;
+    rewriteTarget?: string;
 }
 
 interface NarrativeProps {
@@ -75,6 +86,8 @@ export interface NarrativeRef {
         thumbnail?: { contentType: string; data: string },
         linkPreview?: LinkPreview,
         eventMetadata?: EventMetadata,
+        rewritable?: { id: string; owner: string; ttl: number; fallback?: string },
+        rewriteTarget?: string,
     ) => void;
     addSystemMessage: (content: string | string[]) => void;
     addErrorMessage: (content: string | string[]) => void;
@@ -125,6 +138,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     const lastMessageTimestampRef = useRef<number>(0);
     const lastDisconnectMessageTimestampRef = useRef<number>(0);
     const currentStorageKey = getCommandHistoryStorageKey(playerOid);
+    const rewritableIndexRef = useRef<Map<string, string>>(new Map());
 
     if (storageKeyRef.current !== currentStorageKey) {
         previousStorageKeyRef.current = storageKeyRef.current;
@@ -161,7 +175,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         });
     }, []);
 
-    // Add a new message to the narrative
+    // Add a new message to the narrative (or rewrite an existing one)
     const addMessage = useCallback((
         content: string | string[],
         type: NarrativeMessage["type"] = "narrative",
@@ -173,8 +187,59 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         thumbnail?: { contentType: string; data: string },
         linkPreview?: LinkPreview,
         eventMetadata?: EventMetadata,
+        rewritable?: { id: string; owner: string; ttl: number; fallback?: string },
+        rewriteTarget?: string,
     ) => {
         const now = Date.now();
+
+        // Handle rewrite: replace an existing message
+        if (rewriteTarget) {
+            const targetMessageId = rewritableIndexRef.current.get(rewriteTarget);
+            if (targetMessageId) {
+                setMessages(prev =>
+                    prev.map(msg => {
+                        if (msg.id !== targetMessageId) return msg;
+                        // Validate owner matches (security check)
+                        // Normalize both to CURIE format for comparison
+                        const actorCurie = (() => {
+                            const actor = eventMetadata?.actor;
+                            if (!actor) return undefined;
+                            if (typeof actor === "string") return stringToCurie(actor);
+                            if (actor.oid !== undefined) return `oid:${actor.oid}`;
+                            if (actor.uuid !== undefined) return `uuid:${uuObjIdToString(BigInt(actor.uuid))}`;
+                            return undefined;
+                        })();
+                        const ownerCurie = msg.rewritable?.owner;
+                        if (ownerCurie !== actorCurie) {
+                            console.warn("[Narrative] Rewrite rejected: owner mismatch", {
+                                expected: ownerCurie,
+                                got: actorCurie,
+                            });
+                            return msg;
+                        }
+                        // Check TTL hasn't expired
+                        if (msg.rewritable && now > msg.rewritable.expiresAt) {
+                            console.warn("[Narrative] Rewrite rejected: TTL expired");
+                            return msg;
+                        }
+                        // Replace the message content, clear rewritable status
+                        return {
+                            ...msg,
+                            content,
+                            contentType: contentType || msg.contentType,
+                            presentationHint: presentationHint, // Clear processing hint
+                            rewritable: undefined,
+                        };
+                    })
+                );
+                // Remove from index (one-shot rewrite)
+                rewritableIndexRef.current.delete(rewriteTarget);
+                return; // Successfully rewrote, don't add new message
+            }
+            // Target not found - log and fall through to add as new message
+            console.warn("[Narrative] Rewrite target not found, adding as new message:", rewriteTarget);
+        }
+
         const newMessage: NarrativeMessage = {
             id: `msg_${now}_${Math.random()}`,
             content,
@@ -188,7 +253,18 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             thumbnail,
             linkPreview,
             eventMetadata,
+            rewritable: rewritable
+                ? {
+                    ...rewritable,
+                    expiresAt: now + (rewritable.ttl * 1000),
+                }
+                : undefined,
         };
+
+        // If this message is rewritable, register it in the index
+        if (rewritable) {
+            rewritableIndexRef.current.set(rewritable.id, newMessage.id);
+        }
 
         // Track the latest message timestamp (update even for input echo)
         lastMessageTimestampRef.current = now;
@@ -268,6 +344,8 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             thumbnail?: { contentType: string; data: string },
             linkPreview?: LinkPreview,
             eventMetadata?: EventMetadata,
+            rewritable?: { id: string; owner: string; ttl: number; fallback?: string },
+            rewriteTarget?: string,
         ) => {
             addMessage(
                 content,
@@ -280,6 +358,8 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
                 thumbnail,
                 linkPreview,
                 eventMetadata,
+                rewritable,
+                rewriteTarget,
             );
         },
         [addMessage],
@@ -330,7 +410,52 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         setMessages([]);
         setCommandHistory([]);
         setStaleMessageIds(new Set());
+        rewritableIndexRef.current.clear();
     }, [clearStoredHistory]);
+
+    // TTL expiry effect: check for expired rewritable messages periodically
+    useEffect(() => {
+        const checkExpiry = () => {
+            const now = Date.now();
+            const expiredIds: string[] = [];
+
+            setMessages(prev => {
+                let hasChanges = false;
+                const updated = prev.map(msg => {
+                    if (!msg.rewritable) return msg;
+                    if (now <= msg.rewritable.expiresAt) return msg;
+                    // Message has expired
+                    hasChanges = true;
+                    expiredIds.push(msg.rewritable.id);
+                    if (msg.rewritable.fallback) {
+                        // Replace with fallback content
+                        return {
+                            ...msg,
+                            content: msg.rewritable.fallback,
+                            presentationHint: undefined, // Clear processing animation
+                            rewritable: undefined,
+                        };
+                    }
+                    // No fallback - just mark as expired (will fade via CSS)
+                    return {
+                        ...msg,
+                        presentationHint: "expired",
+                        rewritable: undefined,
+                    };
+                });
+                return hasChanges ? updated : prev;
+            });
+
+            // Clean up index for expired IDs
+            if (expiredIds.length > 0) {
+                expiredIds.forEach(id => rewritableIndexRef.current.delete(id));
+            }
+        };
+
+        // Check every second for expired messages
+        const interval = setInterval(checkExpiry, 1000);
+        return () => clearInterval(interval);
+    }, []);
 
     // Expose methods to parent component
     useImperativeHandle(ref, () => ({

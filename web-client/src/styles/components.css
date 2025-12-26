@@ -51,6 +51,56 @@
   background-color: var(--color-bg-secondary);
 }
 
+/* Processing presentation styling - for rewritable events awaiting update */
+.presentation_processing {
+  position: relative;
+  padding-left: 0.75rem;
+  animation: processing-pulse 1.5s ease-in-out infinite;
+}
+
+.presentation_processing::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(
+    180deg,
+    var(--color-text-accent) 0%,
+    var(--color-text-secondary) 50%,
+    var(--color-text-accent) 100%
+  );
+  background-size: 100% 200%;
+  animation: processing-bar 1.2s ease-in-out infinite;
+  border-radius: 2px;
+}
+
+@keyframes processing-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes processing-bar {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 0% 200%;
+  }
+}
+
+/* Expired presentation styling - for messages that timed out without rewrite */
+.presentation_expired {
+  opacity: 0.5;
+  font-style: italic;
+  transition: opacity 0.3s ease;
+}
+
 /* Collapsed summary for look events (shows when description is collapsed) */
 .look_collapsed_summary {
   display: flex;

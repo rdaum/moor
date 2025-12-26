@@ -40,6 +40,8 @@ export const useWebSocket = (
         thumbnail?: { contentType: string; data: string },
         linkPreview?: LinkPreview,
         eventMetadata?: EventMetadata,
+        rewritable?: { id: string; owner: string; ttl: number; fallback?: string },
+        rewriteTarget?: string,
     ) => void,
     onPresentMessage?: (presentData: PresentationData) => void,
     onUnpresentMessage?: (id: string) => void,

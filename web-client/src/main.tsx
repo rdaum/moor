@@ -2056,6 +2056,8 @@ function AppWrapper() {
             thumbnail?: { contentType: string; data: string };
             linkPreview?: import("./lib/rpc-fb").LinkPreview;
             eventMetadata?: import("./lib/rpc-fb").EventMetadata;
+            rewritable?: { id: string; owner: string; ttl: number; fallback?: string };
+            rewriteTarget?: string;
         }>
     >([]);
 
@@ -2071,6 +2073,8 @@ function AppWrapper() {
         thumbnail?: { contentType: string; data: string },
         linkPreview?: import("./lib/rpc-fb").LinkPreview,
         eventMetadata?: import("./lib/rpc-fb").EventMetadata,
+        rewritable?: { id: string; owner: string; ttl: number; fallback?: string },
+        rewriteTarget?: string,
     ) => {
         // Handle array content by processing each line
         if (Array.isArray(content)) {
@@ -2096,6 +2100,8 @@ function AppWrapper() {
                         thumbnail,
                         linkPreview,
                         eventMetadata,
+                        rewritable,
+                        rewriteTarget,
                     );
                 } else {
                     setPendingMessages(
@@ -2109,6 +2115,8 @@ function AppWrapper() {
                             thumbnail,
                             linkPreview,
                             eventMetadata,
+                            rewritable,
+                            rewriteTarget,
                         }],
                     );
                 }
@@ -2128,6 +2136,8 @@ function AppWrapper() {
                         thumbnail,
                         linkPreview,
                         eventMetadata,
+                        rewritable,
+                        rewriteTarget,
                     );
                 } else {
                     setPendingMessages(
@@ -2141,6 +2151,8 @@ function AppWrapper() {
                             thumbnail,
                             linkPreview,
                             eventMetadata,
+                            rewritable,
+                            rewriteTarget,
                         }],
                     );
                 }
@@ -2171,6 +2183,8 @@ function AppWrapper() {
                         thumbnail,
                         linkPreview,
                         eventMetadata,
+                        rewritable,
+                        rewriteTarget,
                     },
                 ) => {
                     node.addNarrativeContent(
@@ -2183,6 +2197,8 @@ function AppWrapper() {
                         thumbnail,
                         linkPreview,
                         eventMetadata,
+                        rewritable,
+                        rewriteTarget,
                     );
                 },
             );

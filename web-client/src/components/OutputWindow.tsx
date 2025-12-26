@@ -516,9 +516,13 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                             const isCollapsible = showLookTitle && groupId;
                             const isThisCollapsed = isCollapsible && collapsedLooks.has(collapseKey);
 
-                            const wrapperClassName = message.presentationHint === "inset"
-                                ? "presentation_inset"
-                                : "";
+                            const wrapperClassName = (() => {
+                                const classes: string[] = [];
+                                if (message.presentationHint === "inset") classes.push("presentation_inset");
+                                if (message.presentationHint === "processing") classes.push("presentation_processing");
+                                if (message.presentationHint === "expired") classes.push("presentation_expired");
+                                return classes.join(" ");
+                            })();
 
                             result.push(
                                 <div key={message.id} className={wrapperClassName}>
@@ -661,9 +665,19 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                 const isCollapsible = showLookTitle && groupId;
                                 const isThisCollapsed = isCollapsible && collapsedLooks.has(collapseKey);
 
-                                const wrapperClassName = firstMessage.presentationHint === "inset"
-                                    ? "presentation_inset"
-                                    : "";
+                                const wrapperClassName = (() => {
+                                    const classes: string[] = [];
+                                    if (firstMessage.presentationHint === "inset") classes.push("presentation_inset");
+                                    if (firstMessage.presentationHint === "processing") {
+                                        classes.push("presentation_processing");
+                                    }
+                                    if (firstMessage.presentationHint === "expired") {
+                                        classes.push(
+                                            "presentation_expired",
+                                        );
+                                    }
+                                    return classes.join(" ");
+                                })();
 
                                 result.push(
                                     <div

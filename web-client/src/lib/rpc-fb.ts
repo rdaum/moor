@@ -81,6 +81,7 @@ import { decryptEventBlob } from "./age-decrypt.js";
 import { buildAuthHeaders } from "./authHeaders";
 import { parseInputMetadata } from "./input-metadata.js";
 import { MoorVar } from "./MoorVar.js";
+import { uuObjIdToString } from "./var.js";
 
 export interface ServerFeatureSet {
     persistentTasks: boolean;
@@ -740,6 +741,10 @@ function handleTaskError(
         groupId?: string,
         ttsText?: string,
         thumbnail?: { contentType: string; data: string },
+        linkPreview?: LinkPreview,
+        eventMetadata?: EventMetadata,
+        rewritable?: { id: string; owner: string; ttl: number; fallback?: string },
+        rewriteTarget?: string,
     ) => void,
 ): void {
     const errorType = schedulerError.errorType();
@@ -897,6 +902,8 @@ export function handleClientEventFlatBuffer(
         thumbnail?: { contentType: string; data: string },
         linkPreview?: LinkPreview,
         eventMetadata?: EventMetadata,
+        rewritable?: { id: string; owner: string; ttl: number; fallback?: string },
+        rewriteTarget?: string,
     ) => void,
     onPresentMessage?: (presentData: any) => void,
     onUnpresentMessage?: (id: string) => void,
@@ -990,6 +997,11 @@ export function handleClientEventFlatBuffer(
                         let ttsText: string | undefined;
                         let thumbnail: { contentType: string; data: string } | undefined;
                         let linkPreview: LinkPreview | undefined;
+                        let rewritableId: string | undefined;
+                        let rewritableOwner: string | undefined;
+                        let rewritableTtl: number | undefined;
+                        let rewritableFallback: string | undefined;
+                        let rewriteTarget: string | undefined;
                         const eventMeta: EventMetadata = {};
                         const metadataLength = notify.metadataLength();
                         for (let i = 0; i < metadataLength; i++) {
@@ -1049,6 +1061,21 @@ export function handleClientEventFlatBuffer(
                                         image: value.image || undefined,
                                         site_name: value.site_name || undefined,
                                     };
+                                } else if (keyValue === "rewritable_id" && typeof value === "string") {
+                                    rewritableId = value;
+                                } else if (keyValue === "rewritable_owner" && value && typeof value === "object") {
+                                    // Object reference - convert to CURIE format
+                                    if (value.oid !== undefined) {
+                                        rewritableOwner = `oid:${value.oid}`;
+                                    } else if (value.uuid !== undefined) {
+                                        rewritableOwner = `uuid:${uuObjIdToString(BigInt(value.uuid))}`;
+                                    }
+                                } else if (keyValue === "rewritable_ttl" && typeof value === "number") {
+                                    rewritableTtl = value;
+                                } else if (keyValue === "rewritable_fallback" && typeof value === "string") {
+                                    rewritableFallback = value;
+                                } else if (keyValue === "rewrite_target" && typeof value === "string") {
+                                    rewriteTarget = value;
                                 }
                             }
                         }
@@ -1078,10 +1105,24 @@ export function handleClientEventFlatBuffer(
                                 groupId,
                                 ttsText,
                                 thumbnail: thumbnail ? "(present)" : undefined,
+                                rewritableId,
+                                rewritableOwner,
+                                rewritableTtl,
+                                rewriteTarget,
                             },
                         });
 
                         if (onNarrativeMessage) {
+                            // Build rewritable info if all required fields are present
+                            const rewritable = rewritableId && rewritableOwner && rewritableTtl !== undefined
+                                ? {
+                                    id: rewritableId,
+                                    owner: rewritableOwner,
+                                    ttl: rewritableTtl,
+                                    fallback: rewritableFallback,
+                                }
+                                : undefined;
+
                             onNarrativeMessage(
                                 content,
                                 timestamp,
@@ -1094,6 +1135,8 @@ export function handleClientEventFlatBuffer(
                                 thumbnail,
                                 linkPreview,
                                 Object.keys(eventMeta).length > 0 ? eventMeta : undefined,
+                                rewritable,
+                                rewriteTarget,
                             );
                         }
                         break;
