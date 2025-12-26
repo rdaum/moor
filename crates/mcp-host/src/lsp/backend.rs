@@ -13,16 +13,19 @@
 
 //! LSP backend implementing the LanguageServer trait.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
+use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
-    DocumentSymbolParams, DocumentSymbolResponse, InitializeParams, InitializeResult,
-    InitializedParams, MessageType, OneOf, ServerCapabilities, TextDocumentSyncCapability,
-    TextDocumentSyncKind,
+    DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentSymbolParams,
+    DocumentSymbolResponse, InitializeParams, InitializeResult, InitializedParams, MessageType,
+    OneOf, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, Url,
 };
 use tower_lsp::{Client, LanguageServer};
 
+use crate::lsp::diagnostics;
 use crate::lsp::state::LspState;
 use crate::lsp::symbols;
 
@@ -31,11 +34,23 @@ pub struct MooLanguageServer {
     client: Client,
     #[allow(dead_code)]
     state: Arc<LspState>,
+    /// In-memory document storage for open files.
+    documents: Arc<RwLock<HashMap<Url, String>>>,
 }
 
 impl MooLanguageServer {
     pub fn new(client: Client, state: Arc<LspState>) -> Self {
-        Self { client, state }
+        Self {
+            client,
+            state,
+            documents: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Publish diagnostics for a document.
+    async fn publish_diagnostics(&self, uri: Url, content: &str) {
+        let diags = diagnostics::get_diagnostics(content);
+        self.client.publish_diagnostics(uri, diags, None).await;
     }
 }
 
@@ -64,20 +79,54 @@ impl LanguageServer for MooLanguageServer {
         Ok(())
     }
 
+    async fn did_open(&self, params: DidOpenTextDocumentParams) {
+        let uri = params.text_document.uri;
+        let content = params.text_document.text;
+
+        self.documents
+            .write()
+            .await
+            .insert(uri.clone(), content.clone());
+        self.publish_diagnostics(uri, &content).await;
+    }
+
+    async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        let uri = params.text_document.uri;
+        if let Some(change) = params.content_changes.into_iter().last() {
+            let content = change.text;
+            self.documents
+                .write()
+                .await
+                .insert(uri.clone(), content.clone());
+            self.publish_diagnostics(uri, &content).await;
+        }
+    }
+
     async fn document_symbol(
         &self,
         params: DocumentSymbolParams,
     ) -> Result<Option<DocumentSymbolResponse>> {
         let uri = params.text_document.uri;
 
-        // Read file content
-        let path = uri.to_file_path().map_err(|_| {
-            tower_lsp::jsonrpc::Error::invalid_params("Invalid file URI")
-        })?;
+        // Try to get content from our document store first
+        let content = {
+            let docs = self.documents.read().await;
+            docs.get(&uri).cloned()
+        };
 
-        let content = tokio::fs::read_to_string(&path).await.map_err(|_| {
-            tower_lsp::jsonrpc::Error::internal_error()
-        })?;
+        let content = match content {
+            Some(c) => c,
+            None => {
+                // Fall back to reading from disk
+                let path = uri.to_file_path().map_err(|_| {
+                    tower_lsp::jsonrpc::Error::invalid_params("Invalid file URI")
+                })?;
+
+                tokio::fs::read_to_string(&path).await.map_err(|_| {
+                    tower_lsp::jsonrpc::Error::internal_error()
+                })?
+            }
+        };
 
         let symbols = symbols::extract_symbols(&content);
         Ok(Some(DocumentSymbolResponse::Nested(symbols)))

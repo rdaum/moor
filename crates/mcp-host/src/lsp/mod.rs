@@ -14,6 +14,7 @@
 //! LSP server implementation for MOO language support.
 
 mod backend;
+mod diagnostics;
 mod server;
 mod state;
 mod symbols;
