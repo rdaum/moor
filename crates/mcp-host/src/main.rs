@@ -51,6 +51,8 @@ mod prompts;
 mod resources;
 mod tools;
 
+use std::path::PathBuf;
+
 use clap::Parser;
 use clap_derive::Parser;
 use connection::{ConnectionConfig, ConnectionManager, Credentials};
@@ -97,6 +99,14 @@ struct Args {
     /// YAML config file to use (overrides CLI args)
     #[arg(long)]
     config_file: Option<String>,
+
+    /// TCP port for LSP server (enables LSP mode when set)
+    #[arg(long)]
+    lsp_port: Option<u16>,
+
+    /// Workspace directory for LSP file scanning (required if --lsp-port is set)
+    #[arg(long)]
+    lsp_workspace: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -112,12 +122,35 @@ async fn main() -> Result<()> {
     }
     let args: Args = args_figment.extract()?;
 
+    // Validate LSP arguments
+    if args.lsp_port.is_some() && args.lsp_workspace.is_none() {
+        eprintln!("Error: --lsp-workspace is required when --lsp-port is specified");
+        std::process::exit(1);
+    }
+    if let Some(ref workspace) = args.lsp_workspace {
+        if !workspace.exists() {
+            eprintln!(
+                "Error: LSP workspace directory does not exist: {}",
+                workspace.display()
+            );
+            std::process::exit(1);
+        }
+    }
+
     // Setup logging to stderr (so it doesn't interfere with MCP on stdout)
     setup_logging(args.debug)?;
 
     info!("mooR MCP Host starting...");
     info!("RPC address: {}", args.client_args.rpc_address);
     info!("Events address: {}", args.client_args.events_address);
+
+    if let Some(port) = args.lsp_port {
+        info!("LSP port: {}", port);
+        info!(
+            "LSP workspace: {}",
+            args.lsp_workspace.as_ref().unwrap().display()
+        );
+    }
 
     // Setup CURVE authentication if needed
     let curve_keys = match setup_curve_auth(&args.client_args).await {
