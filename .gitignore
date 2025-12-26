@@ -56,3 +56,6 @@ cores/cowbell/
 # LambdaMOO sources (fetched by setup script for comparative testing)
 lambdamoo/
 certs/
+
+# Git worktrees for isolated development
+.worktrees/
