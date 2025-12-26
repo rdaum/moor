@@ -3326,6 +3326,7 @@ dependencies = [
  "arc-swap",
  "byteview",
  "criterion",
+ "dashmap",
  "edn-format",
  "eyre",
  "fjall",

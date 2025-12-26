@@ -55,6 +55,7 @@ oneshot.workspace = true
 
 # Collections & Data Structures
 ahash.workspace = true
+dashmap.workspace = true
 imbl.workspace = true
 indexmap.workspace = true
 

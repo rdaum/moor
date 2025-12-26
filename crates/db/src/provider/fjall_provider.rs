@@ -46,15 +46,15 @@ use crate::{
     tx_management::{EncodeFor, Error, Timestamp},
 };
 use byteview::ByteView;
+use dashmap::{DashMap, DashSet};
 use fjall::UserValue;
 use flume::Sender;
 use gdt_cpus::ThreadPriority;
 use moor_common::util::PerfTimerGuard;
 use planus::{ReadAsRoot, WriteAsOffset};
 use std::{
-    collections::{HashMap, HashSet},
     sync::{
-        Arc, Mutex, RwLock,
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicU64},
     },
     thread::JoinHandle,
@@ -162,31 +162,6 @@ pub(crate) mod test_hooks {
     }
 }
 
-/// Tracks operations that have been submitted to the background thread but not yet completed
-struct PendingOperations<Domain, Codomain>
-where
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
-    Codomain: Clone + PartialEq + Send + Sync,
-{
-    /// Keys that have been deleted but delete hasn't flushed to backing store yet
-    pending_deletes: HashSet<Domain>,
-    /// Keys that have been written but write hasn't flushed to backing store yet
-    pending_writes: HashMap<Domain, (Timestamp, Codomain)>,
-}
-
-impl<Domain, Codomain> Default for PendingOperations<Domain, Codomain>
-where
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
-    Codomain: Clone + PartialEq + Send + Sync,
-{
-    fn default() -> Self {
-        Self {
-            pending_deletes: HashSet::new(),
-            pending_writes: HashMap::new(),
-        }
-    }
-}
-
 // Background thread operations work with pre-encoded bytes
 enum WriteOp<Domain>
 where
@@ -210,11 +185,16 @@ where
     fjall_partition: fjall::PartitionHandle,
     ops: Sender<WriteOp<Domain>>,
     kill_switch: Arc<AtomicBool>,
-    /// Shared state tracking operations in-flight to background thread
-    pending_ops: Arc<RwLock<PendingOperations<Domain, Codomain>>>,
-    /// Set of domains that have been checked and found to not exist (tombstones/misses)
-    /// This is shared across all transactions to avoid redundant database lookups
-    tombstones: Arc<RwLock<HashSet<Domain>>>,
+    /// Keys that have been written but write hasn't flushed to backing store yet.
+    /// Uses lock-free DashMap for high-frequency concurrent reads.
+    pending_writes: Arc<DashMap<Domain, (Timestamp, Codomain)>>,
+    /// Keys that have been deleted but delete hasn't flushed to backing store yet.
+    /// Uses lock-free DashSet for high-frequency concurrent reads.
+    pending_deletes: Arc<DashSet<Domain>>,
+    /// Set of domains that have been checked and found to not exist (tombstones/misses).
+    /// This is shared across all transactions to avoid redundant database lookups.
+    /// Uses lock-free DashSet for high-frequency concurrent reads.
+    tombstones: Arc<DashSet<Domain>>,
     /// Atomic tracking of the highest completed barrier timestamp
     completed_barrier: Arc<AtomicU64>,
     jh: Arc<Mutex<Option<JoinHandle<()>>>>,
@@ -260,13 +240,15 @@ where
     {
         let kill_switch = Arc::new(AtomicBool::new(false));
         let (ops_tx, ops_rx) = flume::unbounded::<WriteOp<Domain>>();
-        let pending_ops = Arc::new(RwLock::new(PendingOperations::default()));
-        let tombstones = Arc::new(RwLock::new(HashSet::new()));
+        let pending_writes = Arc::new(DashMap::new());
+        let pending_deletes = Arc::new(DashSet::new());
+        let tombstones = Arc::new(DashSet::new());
         let completed_barrier = Arc::new(AtomicU64::new(0));
 
         let fj = fjall_partition.clone();
         let ks = kill_switch.clone();
-        let pending_ops_bg = pending_ops.clone();
+        let pending_writes_bg = pending_writes.clone();
+        let pending_deletes_bg = pending_deletes.clone();
         let completed_barrier_bg = completed_barrier.clone();
         let thread_name = format!("moor-w-{relation_name}");
         let tb = std::thread::Builder::new().name(thread_name);
@@ -313,9 +295,8 @@ where
                             let write_result = fj.insert(ByteView::from(key_bytes), value);
 
                             // Remove from pending operations after completion (success or failure)
-                            if let Ok(mut pending) = pending_ops_bg.write() {
-                                pending.pending_writes.remove(&domain);
-                            }
+                            // DashMap::remove is lock-free
+                            pending_writes_bg.remove(&domain);
 
                             if let Err(e) = write_result {
                                 error!("failed to insert into database: {}", e);
@@ -327,9 +308,8 @@ where
                             let delete_result = fj.remove(ByteView::from(key_bytes));
 
                             // Remove from pending operations after completion (success or failure)
-                            if let Ok(mut pending) = pending_ops_bg.write() {
-                                pending.pending_deletes.remove(&domain);
-                            }
+                            // DashSet::remove is lock-free
+                            pending_deletes_bg.remove(&domain);
 
                             if let Err(e) = delete_result {
                                 error!("failed to delete from database: {}", e);
@@ -354,7 +334,8 @@ where
             fjall_partition,
             ops: ops_tx,
             kill_switch,
-            pending_ops,
+            pending_writes,
+            pending_deletes,
             tombstones,
             completed_barrier,
             jh: Arc::new(Mutex::new(Some(jh))),
@@ -467,29 +448,33 @@ where
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
         let _t = PerfTimerGuard::new(&db_counters().provider_tuple_check);
 
-        // 1. Check both pending operations and tombstones together for consistency
-        {
-            let pending = self.pending_ops.read().map_err(|_| {
-                Error::StorageFailure("Failed to acquire pending ops read lock".to_string())
-            })?;
-            let tombstones = self.tombstones.read().map_err(|_| {
-                Error::StorageFailure("Failed to acquire tombstones read lock".to_string())
-            })?;
+        // Check pending operations and tombstones using lock-free lookups.
+        //
+        // ORDERING SAFETY: Although these are separate operations without a shared lock,
+        // the ordering is correct because mutations maintain these invariants:
+        // - put(): inserts to pending_writes, THEN removes from pending_deletes
+        // - del(): inserts to pending_deletes, THEN removes from pending_writes
+        // - background thread: removes from pending_writes/pending_deletes after DB write
+        //
+        // By checking deletes first, then writes, we get correct last-write-wins semantics:
+        // - If del() is in progress: we see the delete (correct)
+        // - If put() is in progress: we see the write (correct)
+        // - If put() races with del(): either order gives a valid snapshot
 
-            // If pending delete, definitely doesn't exist
-            if pending.pending_deletes.contains(domain) {
-                return Ok(None);
-            }
+        // If pending delete, definitely doesn't exist
+        if self.pending_deletes.contains(domain) {
+            return Ok(None);
+        }
 
-            // If pending write, return that value
-            if let Some((ts, value)) = pending.pending_writes.get(domain) {
-                return Ok(Some((*ts, value.clone())));
-            }
+        // If pending write, return that value
+        if let Some(entry) = self.pending_writes.get(domain) {
+            let (ts, value) = entry.value();
+            return Ok(Some((*ts, value.clone())));
+        }
 
-            // If tombstoned, we know it doesn't exist - no need to hit database
-            if tombstones.contains(domain) {
-                return Ok(None);
-            }
+        // If tombstoned, we know it doesn't exist - no need to hit database
+        if self.tombstones.contains(domain) {
+            return Ok(None);
         }
 
         // 2. Only hit backing store if not in pending ops or tombstones
@@ -501,14 +486,12 @@ where
             .map_err(|e| Error::RetrievalFailure(e.to_string()))?
         else {
             // Database miss - add to tombstones to avoid future lookups
-            let mut tombstones = self.tombstones.write().map_err(|_| {
-                Error::StorageFailure("Failed to acquire tombstones write lock".to_string())
-            })?;
-            tombstones.insert(domain.clone());
+            // DashSet::insert is lock-free
+            self.tombstones.insert(domain.clone());
 
             // If tombstones set gets too large, clear it to bound memory usage
-            if tombstones.len() > MAX_TOMBSTONE_COUNT {
-                tombstones.clear();
+            if self.tombstones.len() > MAX_TOMBSTONE_COUNT {
+                self.tombstones.clear();
             }
 
             return Ok(None);
@@ -518,23 +501,13 @@ where
     }
 
     fn put(&self, timestamp: Timestamp, domain: &Domain, codomain: &Codomain) -> Result<(), Error> {
-        // Add to pending writes and clear from tombstones immediately
-        {
-            let mut pending = self.pending_ops.write().map_err(|_| {
-                Error::StorageFailure("Failed to acquire pending ops write lock".to_string())
-            })?;
-            let mut tombstones = self.tombstones.write().map_err(|_| {
-                Error::StorageFailure("Failed to acquire tombstones write lock".to_string())
-            })?;
-
-            pending
-                .pending_writes
-                .insert(domain.clone(), (timestamp, codomain.clone()));
-            // Also remove from pending deletes if it was there (overwriting a deleted key)
-            pending.pending_deletes.remove(domain);
-            // Remove from tombstones since this key now exists
-            tombstones.remove(domain);
-        }
+        // Add to pending writes and clear from tombstones immediately (lock-free operations)
+        self.pending_writes
+            .insert(domain.clone(), (timestamp, codomain.clone()));
+        // Also remove from pending deletes if it was there (overwriting a deleted key)
+        self.pending_deletes.remove(domain);
+        // Remove from tombstones since this key now exists
+        self.tombstones.remove(domain);
 
         // Encode using per-type EncodeFor impl before sending to background thread
         let key_bytes = <Self as EncodeFor<Domain>>::encode(self, domain)?;
@@ -546,9 +519,7 @@ where
             .send(WriteOp::Insert(key_bytes.to_vec(), value, domain.clone()))
         {
             // If sending fails, remove from pending operations
-            if let Ok(mut pending) = self.pending_ops.write() {
-                pending.pending_writes.remove(domain);
-            }
+            self.pending_writes.remove(domain);
             return Err(Error::StorageFailure(format!(
                 "failed to insert into database: {e}"
             )));
@@ -557,15 +528,10 @@ where
     }
 
     fn del(&self, _timestamp: Timestamp, domain: &Domain) -> Result<(), Error> {
-        // Add to pending deletes immediately
-        {
-            let mut pending = self.pending_ops.write().map_err(|_| {
-                Error::StorageFailure("Failed to acquire pending ops write lock".to_string())
-            })?;
-            pending.pending_deletes.insert(domain.clone());
-            // Also remove from pending writes if it was there
-            pending.pending_writes.remove(domain);
-        }
+        // Add to pending deletes immediately (lock-free operations)
+        self.pending_deletes.insert(domain.clone());
+        // Also remove from pending writes if it was there
+        self.pending_writes.remove(domain);
 
         // Encode using per-type EncodeFor impl before sending to background thread
         let key_bytes = <Self as EncodeFor<Domain>>::encode(self, domain)?;
@@ -576,9 +542,7 @@ where
             .send(WriteOp::Delete(key_bytes.to_vec(), domain.clone()))
         {
             // If sending fails, remove from pending operations
-            if let Ok(mut pending) = self.pending_ops.write() {
-                pending.pending_deletes.remove(domain);
-            }
+            self.pending_deletes.remove(domain);
             return Err(Error::StorageFailure(format!(
                 "failed to delete from database: {e}"
             )));
@@ -592,18 +556,13 @@ where
     {
         let mut result = Vec::new();
 
-        // Get snapshot of pending operations
-        let pending = self.pending_ops.read().map_err(|_| {
-            Error::StorageFailure("Failed to acquire pending ops read lock".to_string())
-        })?;
-
         // Scan backing store first
         for entry in self.fjall_partition.iter() {
             let (key, value) = entry.map_err(|e| Error::RetrievalFailure(e.to_string()))?;
             let domain = <Self as EncodeFor<Domain>>::decode(self, key.clone().into())?;
 
-            // Skip if this domain is pending deletion
-            if pending.pending_deletes.contains(&domain) {
+            // Skip if this domain is pending deletion (lock-free check)
+            if self.pending_deletes.contains(&domain) {
                 continue;
             }
 
@@ -613,8 +572,10 @@ where
             }
         }
 
-        // Add pending writes that match the predicate
-        for (domain, (ts, codomain)) in &pending.pending_writes {
+        // Add pending writes that match the predicate (lock-free iteration)
+        for entry in self.pending_writes.iter() {
+            let domain = entry.key();
+            let (ts, codomain) = entry.value();
             if predicate(domain, codomain) {
                 result.push((*ts, domain.clone(), codomain.clone()));
             }
