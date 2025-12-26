@@ -60,7 +60,107 @@ use std::{
     thread::JoinHandle,
     time::Duration,
 };
-use tracing::error;
+use tracing::{error, warn};
+
+use crate::THREAD_JOIN_TIMEOUT;
+
+/// Join a thread with a timeout.
+///
+/// Returns `Ok(())` if the thread joined successfully within the timeout,
+/// or `Err(JoinHandle)` if the timeout elapsed (returning the handle for potential retry).
+///
+/// This uses polling with `is_finished()` since Rust's standard library doesn't
+/// provide a `join_timeout()` method on `JoinHandle`.
+fn join_with_timeout<T>(
+    handle: JoinHandle<T>,
+    timeout: Duration,
+    thread_name: &str,
+) -> Result<T, JoinHandle<T>> {
+    let start = std::time::Instant::now();
+    let poll_interval = Duration::from_millis(10);
+
+    // Poll until thread finishes or timeout elapses
+    while !handle.is_finished() {
+        if start.elapsed() >= timeout {
+            warn!(
+                "Thread '{}' did not terminate within {:?}, continuing shutdown",
+                thread_name, timeout
+            );
+            return Err(handle);
+        }
+        std::thread::sleep(poll_interval);
+    }
+
+    // Thread is finished, join should be immediate
+    match handle.join() {
+        Ok(result) => Ok(result),
+        Err(e) => {
+            warn!("Thread '{}' panicked during shutdown: {:?}", thread_name, e);
+            // Thread panicked, but we still "joined" it - just report and continue
+            std::panic::resume_unwind(e);
+        }
+    }
+}
+
+// ==================== Test Hooks ====================
+// These hooks allow tests to control barrier processing for deterministic failure testing.
+
+#[cfg(test)]
+pub(crate) mod test_hooks {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{Condvar, Mutex};
+
+    /// When true, background threads will block before processing barriers
+    static BLOCK_BARRIERS: AtomicBool = AtomicBool::new(false);
+
+    /// Condition variable for waiting/signaling
+    static BARRIER_CONDVAR: (Mutex<()>, Condvar) = (Mutex::new(()), Condvar::new());
+
+    /// Counter for how many threads are currently blocked
+    static BLOCKED_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+    /// Signal that barrier processing should be blocked.
+    /// Call this before starting operations that will trigger barriers.
+    pub fn block_barrier_processing() {
+        BLOCK_BARRIERS.store(true, Ordering::SeqCst);
+    }
+
+    /// Release all blocked barrier processing and allow normal operation.
+    pub fn unblock_barrier_processing() {
+        BLOCK_BARRIERS.store(false, Ordering::SeqCst);
+        let (_lock, cvar) = &BARRIER_CONDVAR;
+        cvar.notify_all();
+    }
+
+    /// Returns the number of threads currently blocked waiting to process barriers.
+    pub fn blocked_thread_count() -> usize {
+        BLOCKED_COUNT.load(Ordering::SeqCst)
+    }
+
+    /// Reset all test hooks to default state. Call at start of each test.
+    pub fn reset() {
+        BLOCK_BARRIERS.store(false, Ordering::SeqCst);
+        BLOCKED_COUNT.store(0, Ordering::SeqCst);
+        // Wake any lingering blocked threads
+        let (_lock, cvar) = &BARRIER_CONDVAR;
+        cvar.notify_all();
+    }
+
+    /// Called by background thread before processing a barrier.
+    /// Will block if `block_barrier_processing()` was called.
+    pub(super) fn wait_if_blocked() {
+        if BLOCK_BARRIERS.load(Ordering::SeqCst) {
+            BLOCKED_COUNT.fetch_add(1, Ordering::SeqCst);
+            let (lock, cvar) = &BARRIER_CONDVAR;
+            let guard = lock.lock().unwrap();
+            // Wait until unblocked
+            let _guard = cvar
+                .wait_while(guard, |_| BLOCK_BARRIERS.load(Ordering::SeqCst))
+                .unwrap();
+            BLOCKED_COUNT.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+}
 
 /// Tracks operations that have been submitted to the background thread but not yet completed
 struct PendingOperations<Domain, Codomain>
@@ -186,6 +286,10 @@ where
                                     let _ = fj.remove(ByteView::from(key_bytes));
                                 }
                                 WriteOp::Barrier(timestamp, reply) => {
+                                    // Test hook: allow tests to block barrier processing
+                                    #[cfg(test)]
+                                    test_hooks::wait_if_blocked();
+
                                     completed_barrier_bg
                                         .store(timestamp.0, std::sync::atomic::Ordering::SeqCst);
                                     reply.send(()).ok();
@@ -232,6 +336,10 @@ where
                             }
                         }
                         WriteOp::Barrier(timestamp, reply) => {
+                            // Test hook: allow tests to block barrier processing
+                            #[cfg(test)]
+                            test_hooks::wait_if_blocked();
+
                             // Mark this barrier as completed and reply
                             completed_barrier_bg
                                 .store(timestamp.0, std::sync::atomic::Ordering::SeqCst);
@@ -280,39 +388,71 @@ where
         Ok(())
     }
 
-    /// Wait for all writes up to the specified barrier timestamp to be completed.
-    /// This ensures that all pending writes submitted before this barrier are flushed
-    /// to the backing store, providing a consistent point for snapshots.
-    /// Note: This only waits, it doesn't send the barrier - barriers must be sent separately.
-    pub fn wait_for_write_barrier(
+    /// Send a barrier and return the receiver for waiting.
+    ///
+    /// This is used for parallel barrier waiting: the caller can collect receivers
+    /// from multiple providers and wait on them concurrently.
+    ///
+    /// Returns `Ok(None)` if the barrier was already completed, `Ok(Some(receiver))`
+    /// if a barrier message was sent, or an error if sending failed.
+    pub fn send_barrier_with_reply(
         &self,
         barrier_timestamp: Timestamp,
-        timeout: Duration,
-    ) -> Result<(), Error> {
+    ) -> Result<Option<oneshot::Receiver<()>>, Error> {
         // Check if we've already processed this barrier or a later one
         let completed = self
             .completed_barrier
             .load(std::sync::atomic::Ordering::Acquire);
         if completed >= barrier_timestamp.0 {
-            return Ok(());
+            return Ok(None);
         }
 
-        // Wait by polling the completed barrier timestamp
-        let start = std::time::Instant::now();
-        while start.elapsed() < timeout {
-            let completed = self
-                .completed_barrier
-                .load(std::sync::atomic::Ordering::Acquire);
-            if completed >= barrier_timestamp.0 {
-                return Ok(());
-            }
-            std::thread::sleep(Duration::from_millis(1));
+        // Send a new barrier and return the receiver
+        let (send, recv) = oneshot::channel();
+
+        if let Err(e) = self.ops.send(WriteOp::Barrier(barrier_timestamp, send)) {
+            return Err(Error::StorageFailure(format!(
+                "failed to send barrier message: {e}"
+            )));
         }
 
-        Err(Error::StorageFailure(format!(
-            "Timeout waiting for write barrier {}",
-            barrier_timestamp.0
-        )))
+        Ok(Some(recv))
+    }
+
+    /// Wait for all writes up to the specified barrier timestamp to be completed.
+    /// This ensures that all pending writes submitted before this barrier are flushed
+    /// to the backing store, providing a consistent point for snapshots.
+    ///
+    /// This function sends a new barrier and waits for it to be processed, rather than
+    /// just polling for a previously-sent barrier. This ensures reliable synchronization
+    /// even if the original barrier was lost or never sent.
+    ///
+    /// Note: The Relations layer now uses send_barrier_with_reply for parallel waiting,
+    /// but this method is kept for individual provider testing and debugging.
+    #[allow(dead_code)]
+    pub fn wait_for_write_barrier(
+        &self,
+        barrier_timestamp: Timestamp,
+        timeout: Duration,
+    ) -> Result<(), Error> {
+        // Use the new send_barrier_with_reply method
+        let recv = match self.send_barrier_with_reply(barrier_timestamp)? {
+            Some(recv) => recv,
+            None => return Ok(()), // Already completed
+        };
+
+        // Wait for the barrier to be processed with timeout
+        match recv.recv_timeout(timeout) {
+            Ok(()) => Ok(()),
+            Err(oneshot::RecvTimeoutError::Timeout) => Err(Error::StorageFailure(format!(
+                "Timeout waiting for write barrier {}",
+                barrier_timestamp.0
+            ))),
+            Err(oneshot::RecvTimeoutError::Disconnected) => Err(Error::StorageFailure(format!(
+                "Provider thread disconnected while waiting for barrier {}",
+                barrier_timestamp.0
+            ))),
+        }
     }
 }
 
@@ -498,10 +638,17 @@ where
         self.kill_switch
             .store(true, std::sync::atomic::Ordering::SeqCst);
 
-        // Join the background thread - it will wake up from recv_timeout and see kill_switch
+        // Join the background thread with timeout - it will wake up from recv_timeout and see kill_switch
         let mut jh = self.jh.lock().unwrap();
-        if let Some(jh) = jh.take() {
-            jh.join().unwrap();
+        if let Some(handle) = jh.take() {
+            // Use timeout to prevent indefinite hang if thread is deadlocked
+            if let Err(abandoned_handle) =
+                join_with_timeout(handle, THREAD_JOIN_TIMEOUT, "fjall-provider-writer")
+            {
+                // Thread didn't terminate - store handle back for potential retry in Drop
+                // but don't block shutdown
+                *jh = Some(abandoned_handle);
+            }
         }
 
         Ok(())
@@ -514,10 +661,13 @@ where
     Codomain: Clone + PartialEq + Send + Sync,
 {
     fn drop(&mut self) {
-        self.stop_internal().unwrap();
+        // stop_internal already handles the join with timeout
+        self.stop_internal().ok();
+        // If thread still exists (timeout during stop), try one more time with shorter timeout
         let mut jh = self.jh.lock().unwrap();
-        if let Some(jh) = jh.take() {
-            jh.join().unwrap();
+        if let Some(handle) = jh.take() {
+            // Final attempt - if still hanging, let the thread be abandoned
+            let _ = join_with_timeout(handle, Duration::from_secs(1), "fjall-provider-writer-drop");
         }
     }
 }
@@ -830,8 +980,14 @@ impl SequenceWriter {
             .store(true, std::sync::atomic::Ordering::SeqCst);
 
         let mut jh = self.jh.lock().unwrap();
-        if let Some(jh) = jh.take() {
-            jh.join().unwrap();
+        if let Some(handle) = jh.take() {
+            // Use timeout to prevent indefinite hang if thread is deadlocked
+            if let Err(abandoned_handle) =
+                join_with_timeout(handle, THREAD_JOIN_TIMEOUT, "moor-seq-writer")
+            {
+                // Thread didn't terminate - store handle back for potential retry in Drop
+                *jh = Some(abandoned_handle);
+            }
         }
     }
 }
@@ -839,5 +995,10 @@ impl SequenceWriter {
 impl Drop for SequenceWriter {
     fn drop(&mut self) {
         self.stop();
+        // If thread still exists after stop(), try one more time with shorter timeout
+        let mut jh = self.jh.lock().unwrap();
+        if let Some(handle) = jh.take() {
+            let _ = join_with_timeout(handle, Duration::from_secs(1), "moor-seq-writer-drop");
+        }
     }
 }

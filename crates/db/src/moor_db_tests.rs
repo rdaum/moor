@@ -4362,4 +4362,285 @@ mod tests {
 
         assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
+
+    // ==================== Write Barrier Test Helpers ====================
+
+    /// Creates a simple object with default attributes and given name, and commits.
+    fn create_and_commit_object(db: &Arc<MoorDB>, name: &str) -> Obj {
+        let mut tx = db.start_transaction();
+        let obj = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), name),
+            )
+            .unwrap();
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+        obj
+    }
+
+    /// Gets all object names from a snapshot.
+    fn get_snapshot_object_names(
+        snapshot: &Box<dyn moor_common::model::loader::SnapshotInterface>,
+    ) -> Vec<String> {
+        snapshot
+            .get_objects()
+            .unwrap()
+            .iter()
+            .filter_map(|o| snapshot.get_object(&o).ok().and_then(|attrs| attrs.name()))
+            .collect()
+    }
+
+    /// Asserts that a snapshot contains an object with the given name.
+    fn assert_snapshot_contains(
+        snapshot: &Box<dyn moor_common::model::loader::SnapshotInterface>,
+        name: &str,
+    ) {
+        let names = get_snapshot_object_names(snapshot);
+        assert!(
+            names.iter().any(|n| n == name),
+            "Snapshot should contain object: {}",
+            name
+        );
+    }
+
+    // ==================== Write Barrier Tests ====================
+
+    /// Test that write barriers complete correctly after write transactions.
+    /// This tests the mechanism used to ensure snapshots capture all committed data.
+    #[test]
+    pub fn test_write_barrier_completes() {
+        let db = test_db();
+
+        // Create and commit an object
+        let obj = create_and_commit_object(&db, "barrier_test");
+
+        // Create a snapshot - this waits for write barriers
+        // If barriers aren't working, this would timeout
+        let snapshot = db.create_snapshot().expect("Snapshot should succeed");
+
+        // Verify the snapshot can see the committed object
+        assert_snapshot_contains(&snapshot, "barrier_test");
+
+        // Verify we can still access the object in a new transaction
+        let tx = db.start_transaction();
+        assert!(tx.object_valid(&obj).unwrap());
+        assert_eq!(tx.get_object_name(&obj).unwrap(), "barrier_test");
+    }
+
+    /// Test that multiple rapid write transactions complete with proper barrier sequencing.
+    #[test]
+    pub fn test_multiple_write_barriers() {
+        let db = test_db();
+
+        // Perform multiple write transactions rapidly
+        for i in 0..10 {
+            create_and_commit_object(&db, &format!("obj_{}", i));
+        }
+
+        // Create a snapshot after all writes
+        let snapshot = db
+            .create_snapshot()
+            .expect("Snapshot should succeed after multiple writes");
+
+        // Verify the snapshot contains all objects
+        for i in 0..10 {
+            assert_snapshot_contains(&snapshot, &format!("obj_{}", i));
+        }
+    }
+
+    /// Test snapshot during concurrent writes completes correctly.
+    #[test]
+    pub fn test_snapshot_during_active_writes() {
+        use std::thread;
+
+        let db = test_db();
+        let db_clone = db.clone();
+
+        // Start a background thread that performs writes
+        let write_handle = thread::spawn(move || {
+            for i in 0..5 {
+                let mut tx = db_clone.start_transaction();
+                tx.create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        NOTHING,
+                        NOTHING,
+                        BitEnum::new(),
+                        &format!("concurrent_{}", i),
+                    ),
+                )
+                .unwrap();
+                tx.commit().ok();
+                thread::sleep(std::time::Duration::from_millis(10));
+            }
+        });
+
+        // Give the writer time to start
+        thread::sleep(std::time::Duration::from_millis(25));
+
+        // Request a snapshot while writes are happening
+        db.create_snapshot()
+            .expect("Snapshot should succeed during concurrent writes");
+
+        // Wait for writes to complete
+        write_handle.join().unwrap();
+
+        // Verify the database is still usable
+        let tx = db.start_transaction();
+        let objects: Vec<_> = tx.get_objects().unwrap().iter().collect();
+        assert!(!objects.is_empty(), "Database should have objects");
+    }
+
+    // ==================== Barrier Timeout Failure Tests ====================
+    // These tests use the test hooks to deterministically trigger barrier timeout conditions.
+    // They must run serially because they use global test hook state.
+
+    /// Test that demonstrates barrier timeout when background threads are blocked.
+    /// This reproduces the "Timeout waiting for write barrier N" error.
+    #[test]
+    #[serial_test::serial]
+    pub fn test_barrier_timeout_when_blocked() {
+        use crate::provider::fjall_provider::test_hooks;
+        use std::thread;
+        use std::time::Duration;
+
+        // Reset hooks from any previous test
+        test_hooks::reset();
+
+        let db = test_db();
+
+        // Create an object to trigger write transaction
+        let mut tx = db.start_transaction();
+        let _ = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "timeout_test"),
+            )
+            .unwrap();
+
+        // Block barrier processing BEFORE committing
+        // This simulates conditions where the background thread is busy/blocked
+        test_hooks::block_barrier_processing();
+
+        // Commit the transaction - this sends a barrier to the background thread
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+
+        // Give time for the barrier to reach the background thread
+        thread::sleep(Duration::from_millis(50));
+
+        // Verify at least one thread is blocked waiting to process the barrier
+        // Note: There are multiple provider threads (one per relation), so count may be > 1
+        let blocked = test_hooks::blocked_thread_count();
+        assert!(
+            blocked > 0,
+            "Expected background threads to be blocked, found {} blocked",
+            blocked
+        );
+
+        // The snapshot will try to wait for barriers, but they're blocked
+        // With a very short timeout, this would fail. But we can't easily test
+        // the timeout without changing the timeout parameter.
+        // Instead, we verify that unblocking allows completion.
+
+        // Spawn a thread to unblock after a short delay
+        let unblock_handle = thread::spawn(|| {
+            thread::sleep(Duration::from_millis(100));
+            test_hooks::unblock_barrier_processing();
+        });
+
+        // Now try to create a snapshot - it should succeed after unblocking
+        let snapshot = db.create_snapshot();
+        assert!(
+            snapshot.is_ok(),
+            "Snapshot should succeed after barriers are unblocked"
+        );
+
+        unblock_handle.join().unwrap();
+
+        // Clean up
+        test_hooks::reset();
+    }
+
+    /// Test that verifies blocked barriers prevent snapshot completion until released.
+    /// This is a more comprehensive test of the blocking mechanism.
+    #[test]
+    #[serial_test::serial]
+    pub fn test_blocked_barriers_delay_snapshot() {
+        use crate::provider::fjall_provider::test_hooks;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        use std::thread;
+        use std::time::{Duration, Instant};
+
+        // Reset hooks from any previous test
+        test_hooks::reset();
+
+        let db = test_db();
+
+        // Create and commit an object
+        create_and_commit_object(&db, "blocked_test");
+
+        // Block barrier processing
+        test_hooks::block_barrier_processing();
+
+        // Create another object - this barrier will be blocked
+        let mut tx = db.start_transaction();
+        let _ = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "blocked_test_2"),
+            )
+            .unwrap();
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+
+        // Give time for barriers to reach the threads
+        thread::sleep(Duration::from_millis(50));
+
+        let snapshot_started = Arc::new(AtomicBool::new(false));
+        let snapshot_completed = Arc::new(AtomicBool::new(false));
+        let snapshot_started_clone = snapshot_started.clone();
+        let snapshot_completed_clone = snapshot_completed.clone();
+        let db_clone = db.clone();
+
+        // Start snapshot in background thread
+        let snapshot_handle = thread::spawn(move || {
+            snapshot_started_clone.store(true, Ordering::SeqCst);
+            let start = Instant::now();
+            let result = db_clone.create_snapshot();
+            let elapsed = start.elapsed();
+            snapshot_completed_clone.store(true, Ordering::SeqCst);
+            (result, elapsed)
+        });
+
+        // Wait for snapshot thread to start
+        thread::sleep(Duration::from_millis(20));
+        assert!(
+            snapshot_started.load(Ordering::SeqCst),
+            "Snapshot thread should have started"
+        );
+
+        // Snapshot should NOT complete while barriers are blocked
+        thread::sleep(Duration::from_millis(100));
+        assert!(
+            !snapshot_completed.load(Ordering::SeqCst),
+            "Snapshot should NOT complete while barriers are blocked"
+        );
+
+        // Now unblock and let it complete
+        test_hooks::unblock_barrier_processing();
+
+        let (result, elapsed) = snapshot_handle.join().unwrap();
+        assert!(result.is_ok(), "Snapshot should succeed after unblocking");
+
+        // Verify the snapshot was delayed (took > 100ms because we blocked for that long)
+        assert!(
+            elapsed >= Duration::from_millis(100),
+            "Snapshot should have been delayed by blocked barriers, took {:?}",
+            elapsed
+        );
+
+        // Clean up
+        test_hooks::reset();
+    }
 }

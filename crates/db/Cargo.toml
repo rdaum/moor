@@ -28,6 +28,7 @@ criterion.workspace = true
 edn-format.workspace = true
 eyre.workspace = true
 moor-bench-utils = { path = "../testing/bench-utils" }
+serial_test.workspace = true
 shuttle.workspace = true
 tempfile.workspace = true
 

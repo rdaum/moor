@@ -53,6 +53,8 @@ use std::{
 use tempfile::TempDir;
 use tracing::{error, info, warn};
 
+use crate::THREAD_JOIN_TIMEOUT;
+
 define_relations! {
     object_location == Obj, Obj,
     object_parent == Obj, Obj,
@@ -285,10 +287,37 @@ impl MoorDB {
         self.kill_switch
             .store(true, std::sync::atomic::Ordering::SeqCst);
 
+        // Join the processing thread with timeout to prevent indefinite hang
         let mut jh_lock = self.jh.lock().unwrap();
-        if let Some(jh) = jh_lock.take() {
-            jh.join().unwrap();
+        if let Some(handle) = jh_lock.take() {
+            let start = std::time::Instant::now();
+            let poll_interval = Duration::from_millis(10);
+
+            // Poll until thread finishes or timeout elapses
+            let mut timed_out = false;
+            while !handle.is_finished() {
+                if start.elapsed() >= THREAD_JOIN_TIMEOUT {
+                    warn!(
+                        "MoorDB processing thread did not terminate within {:?}, continuing shutdown",
+                        THREAD_JOIN_TIMEOUT
+                    );
+                    timed_out = true;
+                    break;
+                }
+                std::thread::sleep(poll_interval);
+            }
+
+            if timed_out {
+                // Store handle back - we'll try again in Drop if needed
+                *jh_lock = Some(handle);
+            } else {
+                // Thread finished, join it
+                if let Err(e) = handle.join() {
+                    warn!("MoorDB processing thread panicked during shutdown: {:?}", e);
+                }
+            }
         }
+        drop(jh_lock);
 
         // Wait for all pending write transactions to flush before stopping
         let last_write_timestamp = Timestamp(

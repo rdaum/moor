@@ -298,8 +298,56 @@ macro_rules! define_relations {
                 /// This ensures that all relation providers have fully processed writes up to
                 /// the barrier before returning. Critical for ensuring snapshots capture a
                 /// consistent view of the database at a specific point in time.
+                ///
+                /// Uses parallel waiting: sends barrier messages to all providers simultaneously
+                /// and waits for all of them within a single shared timeout. This is more efficient
+                /// than sequential waiting, where one slow provider could exhaust the timeout before
+                /// other providers are even checked.
                 pub fn wait_for_write_barrier(&self, barrier_timestamp: Timestamp, timeout: std::time::Duration) -> Result<(), crate::tx_management::Error> {
-                    $( self.$field.source().wait_for_write_barrier(barrier_timestamp, timeout)?; )*
+                    use minstant::Instant;
+
+                    // Phase 1: Send barrier messages to all providers, collect receivers
+                    let mut receivers: Vec<(&'static str, oneshot::Receiver<()>)> = Vec::new();
+                    $(
+                        if let Some(recv) = self.$field.source().send_barrier_with_reply(barrier_timestamp)? {
+                            receivers.push((stringify!($field), recv));
+                        }
+                    )*
+
+                    // If all barriers were already completed, we're done
+                    if receivers.is_empty() {
+                        return Ok(());
+                    }
+
+                    // Phase 2: Wait for all receivers with a shared deadline
+                    let deadline = Instant::now() + timeout;
+
+                    for (relation_name, recv) in receivers {
+                        let remaining = deadline.saturating_duration_since(Instant::now());
+                        if remaining.is_zero() {
+                            return Err(crate::tx_management::Error::StorageFailure(format!(
+                                "Timeout waiting for write barrier {} (exceeded while waiting for {})",
+                                barrier_timestamp.0, relation_name
+                            )));
+                        }
+
+                        match recv.recv_timeout(remaining) {
+                            Ok(()) => {}
+                            Err(oneshot::RecvTimeoutError::Timeout) => {
+                                return Err(crate::tx_management::Error::StorageFailure(format!(
+                                    "Timeout waiting for write barrier {} in {}",
+                                    barrier_timestamp.0, relation_name
+                                )));
+                            }
+                            Err(oneshot::RecvTimeoutError::Disconnected) => {
+                                return Err(crate::tx_management::Error::StorageFailure(format!(
+                                    "Provider {} disconnected while waiting for barrier {}",
+                                    relation_name, barrier_timestamp.0
+                                )));
+                            }
+                        }
+                    }
+
                     Ok(())
                 }
 

@@ -57,6 +57,11 @@ pub use gc::{GCError, GCInterface};
 use moor_common::util::ConcurrentCounter;
 pub use tx_management::{Error, Relation, RelationTransaction, Timestamp, Tx, WorkingSet};
 
+/// Default timeout for thread joins during shutdown.
+/// If a background thread doesn't terminate within this time, shutdown continues
+/// with a warning rather than blocking indefinitely.
+pub(crate) const THREAD_JOIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 // Re-export sequence constants for use in VM
 pub use moor_db::SEQUENCE_MAX_OBJECT;
 pub use provider::Provider;

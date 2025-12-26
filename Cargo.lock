@@ -3345,6 +3345,7 @@ dependencies = [
  "rand 0.9.2",
  "semver",
  "serde",
+ "serial_test",
  "shuttle",
  "tempfile",
  "thiserror 2.0.17",
