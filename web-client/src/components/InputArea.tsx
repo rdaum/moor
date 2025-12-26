@@ -60,6 +60,9 @@ export const InputArea: React.FC<InputAreaProps> = ({
 }) => {
     const [input, setInput] = useState("");
     const [historyOffset, setHistoryOffset] = useState(0);
+    // Working buffer for history edits - preserves changes when navigating away
+    // Key: historyOffset (0 = new input, 1+ = history entries)
+    const [historyBuffer, setHistoryBuffer] = useState<Record<number, string>>({});
     const [placeholderIndex, setPlaceholderIndex] = useState(() =>
         Math.floor(Math.random() * ENCOURAGING_PLACEHOLDERS.length)
     );
@@ -203,18 +206,30 @@ export const InputArea: React.FC<InputAreaProps> = ({
     // Navigate through command history (caller handles cursor/multiline checks)
     const navigateHistory = useCallback((direction: "up" | "down") => {
         const newOffset = direction === "up" ? historyOffset + 1 : historyOffset - 1;
+
+        // Compute the updated buffer (need to use it immediately, not wait for state)
+        const updatedBuffer = { ...historyBuffer, [historyOffset]: input };
+        setHistoryBuffer(updatedBuffer);
+
         setHistoryOffset(newOffset);
 
-        const historyIndex = commandHistory.length - newOffset;
-        if (historyIndex >= 0 && historyIndex < commandHistory.length) {
-            const historyValue = commandHistory[historyIndex];
-            setInput(historyValue ? historyValue.trimEnd() : "");
-            setSayPillActive(false);
+        // Check if we have a buffered (edited) version for this position
+        if (newOffset in updatedBuffer) {
+            setInput(updatedBuffer[newOffset]);
+            setSayPillActive(newOffset === 0 ? sayModeEnabled : false);
         } else {
-            setInput("");
-            setSayPillActive(sayModeEnabled);
+            // No buffered version - use original history or empty for new input
+            const historyIndex = commandHistory.length - newOffset;
+            if (historyIndex >= 0 && historyIndex < commandHistory.length) {
+                const historyValue = commandHistory[historyIndex];
+                setInput(historyValue ? historyValue.trimEnd() : "");
+                setSayPillActive(false);
+            } else {
+                setInput("");
+                setSayPillActive(sayModeEnabled);
+            }
         }
-    }, [historyOffset, commandHistory, sayModeEnabled]);
+    }, [historyOffset, commandHistory, sayModeEnabled, input, historyBuffer]);
 
     // Send input to server
     const sendInput = useCallback(() => {
@@ -253,6 +268,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
         // Clear input and reset state
         setInput("");
         setHistoryOffset(0);
+        setHistoryBuffer({}); // Clear working buffer on send
         setVerbPill(null);
         setVerbPillPlaceholder(null);
         setSayPillActive(sayModeEnabled);
