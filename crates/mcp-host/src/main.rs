@@ -44,6 +44,7 @@
 //! operations) always require wizard privileges.
 
 mod connection;
+mod lsp;
 mod mcp_server;
 mod mcp_types;
 mod moor_client;
