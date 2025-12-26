@@ -17,12 +17,14 @@ use std::sync::Arc;
 
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
-    InitializeParams, InitializeResult, InitializedParams, MessageType, ServerCapabilities,
-    TextDocumentSyncCapability, TextDocumentSyncKind,
+    DocumentSymbolParams, DocumentSymbolResponse, InitializeParams, InitializeResult,
+    InitializedParams, MessageType, OneOf, ServerCapabilities, TextDocumentSyncCapability,
+    TextDocumentSyncKind,
 };
 use tower_lsp::{Client, LanguageServer};
 
 use crate::lsp::state::LspState;
+use crate::lsp::symbols;
 
 /// LSP backend that handles protocol messages.
 pub struct MooLanguageServer {
@@ -45,7 +47,7 @@ impl LanguageServer for MooLanguageServer {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
-                // More capabilities will be added in future tasks
+                document_symbol_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -60,5 +62,24 @@ impl LanguageServer for MooLanguageServer {
 
     async fn shutdown(&self) -> Result<()> {
         Ok(())
+    }
+
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<Option<DocumentSymbolResponse>> {
+        let uri = params.text_document.uri;
+
+        // Read file content
+        let path = uri.to_file_path().map_err(|_| {
+            tower_lsp::jsonrpc::Error::invalid_params("Invalid file URI")
+        })?;
+
+        let content = tokio::fs::read_to_string(&path).await.map_err(|_| {
+            tower_lsp::jsonrpc::Error::internal_error()
+        })?;
+
+        let symbols = symbols::extract_symbols(&content);
+        Ok(Some(DocumentSymbolResponse::Nested(symbols)))
     }
 }

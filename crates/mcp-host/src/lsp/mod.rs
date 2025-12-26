@@ -16,6 +16,7 @@
 mod backend;
 mod server;
 mod state;
+mod symbols;
 
 pub use server::LspServer;
 pub use state::LspConfig;
