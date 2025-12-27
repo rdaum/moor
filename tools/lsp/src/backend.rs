@@ -20,10 +20,12 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
-    CompletionOptions, CompletionParams, CompletionResponse, DidChangeTextDocumentParams,
-    DidOpenTextDocumentParams, DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams,
-    GotoDefinitionResponse, Hover, HoverParams, HoverProviderCapability, InitializeParams,
-    InitializeResult, InitializedParams, MessageType, OneOf, ServerCapabilities, SymbolInformation,
+    CodeAction, CodeActionKind, CodeActionOptions, CodeActionOrCommand, CodeActionParams,
+    CodeActionProviderCapability, CodeActionResponse, Command, CompletionOptions, CompletionParams,
+    CompletionResponse, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
+    DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse,
+    Hover, HoverParams, HoverProviderCapability, InitializeParams, InitializeResult,
+    InitializedParams, MessageType, OneOf, ServerCapabilities, SymbolInformation,
     TextDocumentSyncCapability, TextDocumentSyncKind, Url, WorkspaceSymbolParams,
 };
 use tower_lsp::{Client, LanguageServer};
@@ -35,6 +37,7 @@ use crate::diagnostics;
 use crate::hover;
 use crate::objects::ObjectNameRegistry;
 use crate::symbols;
+use crate::sync;
 use crate::workspace;
 use crate::workspace_index::WorkspaceIndex;
 
@@ -104,7 +107,44 @@ impl MooLanguageServer {
 
     /// Publish diagnostics for a document.
     async fn publish_diagnostics(&self, uri: Url, content: &str) {
-        let diags = diagnostics::get_diagnostics(content);
+        use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
+
+        // Get compilation diagnostics
+        let mut diags = diagnostics::get_diagnostics(content);
+
+        // If connected to server, also check for sync differences
+        if let Some(moor_client) = &self.moor_client {
+            let mut client = moor_client.write().await;
+            let sync_infos = sync::check_sync_status(content, &mut client).await;
+
+            for info in sync_infos {
+                let diagnostic = Diagnostic {
+                    range: Range {
+                        start: Position {
+                            line: info.start_line,
+                            character: 0,
+                        },
+                        end: Position {
+                            line: info.end_line,
+                            character: 0,
+                        },
+                    },
+                    severity: Some(DiagnosticSeverity::WARNING),
+                    code: None,
+                    code_description: None,
+                    source: Some("moor-sync".to_string()),
+                    message: format!(
+                        "Object '{}' differs from database: {}",
+                        info.obj_name, info.summary
+                    ),
+                    related_information: None,
+                    tags: None,
+                    data: None,
+                };
+                diags.push(diagnostic);
+            }
+        }
+
         self.client.publish_diagnostics(uri, diags, None).await;
     }
 }
@@ -122,6 +162,15 @@ impl LanguageServer for MooLanguageServer {
                 definition_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
+                code_action_provider: Some(CodeActionProviderCapability::Options(
+                    CodeActionOptions {
+                        code_action_kinds: Some(vec![
+                            CodeActionKind::SOURCE,
+                            CodeActionKind::QUICKFIX,
+                        ]),
+                        ..Default::default()
+                    },
+                )),
                 ..Default::default()
             },
             ..Default::default()
@@ -408,5 +457,110 @@ impl LanguageServer for MooLanguageServer {
         // Fall back to builtin completions
         let items = completion::get_builtin_completions();
         Ok(Some(CompletionResponse::Array(items)))
+    }
+
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        // Only provide sync actions if connected to a mooR server
+        let Some(moor_client) = &self.moor_client else {
+            return Ok(None);
+        };
+
+        let uri = params.text_document.uri.clone();
+
+        // Get the document content
+        let content = {
+            let docs = self.documents.read().await;
+            docs.get(&uri).cloned()
+        };
+
+        let Some(content) = content else {
+            return Ok(None);
+        };
+
+        // Parse the file to get object definitions
+        let Some(object_defs) = sync::parse_object_definitions(&content) else {
+            return Ok(None);
+        };
+
+        // For now, provide sync actions for each object in the file
+        let mut actions = Vec::new();
+
+        for obj_def in &object_defs {
+            // Try to resolve the object in the database
+            let obj_id = obj_def.oid;
+
+            // Compare with database
+            let mut client = moor_client.write().await;
+            let diff = sync::compare_object(obj_def, &mut client, obj_id).await;
+            drop(client);
+
+            if diff.has_differences() {
+                // Add "Upload to database" action
+                let upload_action = CodeAction {
+                    title: format!("Upload {} to database ({})", obj_def.name, diff.summary()),
+                    kind: Some(CodeActionKind::SOURCE),
+                    diagnostics: None,
+                    edit: None,
+                    command: Some(Command {
+                        title: "Upload to database".to_string(),
+                        command: "moor.uploadToDatabase".to_string(),
+                        arguments: Some(vec![
+                            serde_json::to_value(uri.to_string()).unwrap(),
+                            serde_json::to_value(obj_id.id().0).unwrap(),
+                        ]),
+                    }),
+                    is_preferred: None,
+                    disabled: None,
+                    data: None,
+                };
+                actions.push(CodeActionOrCommand::CodeAction(upload_action));
+
+                // Add "Download from database" action
+                let download_action = CodeAction {
+                    title: format!("Download {} from database", obj_def.name),
+                    kind: Some(CodeActionKind::SOURCE),
+                    diagnostics: None,
+                    edit: None,
+                    command: Some(Command {
+                        title: "Download from database".to_string(),
+                        command: "moor.downloadFromDatabase".to_string(),
+                        arguments: Some(vec![
+                            serde_json::to_value(uri.to_string()).unwrap(),
+                            serde_json::to_value(obj_id.id().0).unwrap(),
+                        ]),
+                    }),
+                    is_preferred: None,
+                    disabled: None,
+                    data: None,
+                };
+                actions.push(CodeActionOrCommand::CodeAction(download_action));
+
+                // Add "Show diff" action
+                let show_diff_action = CodeAction {
+                    title: format!("Show diff for {}", obj_def.name),
+                    kind: Some(CodeActionKind::SOURCE),
+                    diagnostics: None,
+                    edit: None,
+                    command: Some(Command {
+                        title: "Show diff".to_string(),
+                        command: "moor.showDiff".to_string(),
+                        arguments: Some(vec![
+                            serde_json::to_value(uri.to_string()).unwrap(),
+                            serde_json::to_value(obj_id.id().0).unwrap(),
+                        ]),
+                    }),
+                    is_preferred: None,
+                    disabled: None,
+                    data: None,
+                };
+                actions.push(CodeActionOrCommand::CodeAction(show_diff_action));
+            }
+        }
+
+        if actions.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(actions))
+        }
     }
 }

@@ -52,6 +52,7 @@ mod diagnostics;
 mod hover;
 mod objects;
 mod symbols;
+mod sync;
 mod workspace;
 mod workspace_index;
 
