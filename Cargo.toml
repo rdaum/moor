@@ -218,7 +218,7 @@ vergen-gitcl = { version = "1", default-features = false }
 zerocopy = { version = "0.8", features = ["derive"] }
 
 # Testing & Development
-criterion = { version = "0.6", features = ["async_tokio"] }
+criterion = { version = "0.8", features = ["async_tokio"] }
 escargot = "0.5"
 pretty_assertions = "1.4"
 serial_test = "3.2"
