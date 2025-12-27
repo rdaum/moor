@@ -50,6 +50,7 @@ mod diagnostics;
 mod objects;
 mod symbols;
 mod workspace;
+mod workspace_index;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
