@@ -36,9 +36,9 @@ use moor_db::Database;
 use crate::{
     config::Config,
     tasks::{
-        DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS,
-        DEFAULT_GC_INTERVAL_SECONDS, DEFAULT_MAX_STACK_DEPTH, DEFAULT_MAX_TASK_RETRIES,
-        ServerOptions, TaskHandle, TaskNotification, TaskStart,
+        DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_COMPACT_INTERVAL_SECONDS, DEFAULT_FG_SECONDS,
+        DEFAULT_FG_TICKS, DEFAULT_GC_INTERVAL_SECONDS, DEFAULT_MAX_STACK_DEPTH,
+        DEFAULT_MAX_TASK_RETRIES, ServerOptions, TaskHandle, TaskNotification, TaskStart,
         gc_thread::spawn_gc_mark_phase,
         sched_counters,
         scheduler_client::{SchedulerClient, SchedulerClientMsg},
@@ -146,6 +146,9 @@ pub struct Scheduler {
 
     /// Tracks whether a checkpoint operation is currently in progress to prevent overlapping checkpoints
     checkpoint_in_progress: Arc<AtomicBool>,
+
+    /// Time of last tasks DB compaction (independent of GC)
+    last_compact_time: std::time::Instant,
 }
 
 fn load_int_sysprop(server_options_obj: &Obj, name: Symbol, tx: &dyn WorldState) -> Option<u64> {
@@ -215,6 +218,7 @@ impl Scheduler {
             gc_last_cycle_time: std::time::Instant::now(),
             last_mutation_timestamp: None,
             checkpoint_in_progress: Arc::new(AtomicBool::new(false)),
+            last_compact_time: std::time::Instant::now(),
         };
         s.reload_server_options();
         s
@@ -246,6 +250,15 @@ impl Scheduler {
                 && self.should_run_gc()
             {
                 self.run_gc_cycle();
+            }
+
+            // Periodic tasks DB compaction (independent of GC)
+            if self.last_compact_time.elapsed()
+                >= Duration::from_secs(DEFAULT_COMPACT_INTERVAL_SECONDS)
+            {
+                debug!("Triggering periodic tasks database compaction");
+                self.task_q.compact();
+                self.last_compact_time = std::time::Instant::now();
             }
 
             // Skip task processing only if GC sweep is in progress
@@ -1990,9 +2003,6 @@ impl Scheduler {
 
         // Update the timestamp AFTER GC completes, not before
         self.gc_last_cycle_time = std::time::Instant::now();
-
-        // Compact the tasks database to reclaim space
-        self.task_q.compact();
     }
 
     /// Run concurrent mark & sweep GC

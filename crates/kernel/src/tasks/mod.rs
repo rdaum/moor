@@ -46,6 +46,8 @@ pub const DEFAULT_BG_SECONDS: u64 = 3;
 pub const DEFAULT_MAX_STACK_DEPTH: usize = 50;
 pub const DEFAULT_GC_INTERVAL_SECONDS: u64 = 30;
 pub const DEFAULT_MAX_TASK_RETRIES: u8 = 10;
+/// Interval for tasks DB compaction (independent of GC)
+pub const DEFAULT_COMPACT_INTERVAL_SECONDS: u64 = 300;
 
 lazy_static! {
     static ref SCHED_COUNTERS: SchedulerPerfCounters = SchedulerPerfCounters::new();

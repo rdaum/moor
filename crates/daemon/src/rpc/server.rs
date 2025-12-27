@@ -131,17 +131,30 @@ impl RpcServer {
             .spawn(move || {
                 const COMPACT_INTERVAL: u64 = 60; // Every 60 iterations = 5 minutes (5s * 60)
                 let mut iteration: u64 = 0;
+                // Guard to prevent overlapping compaction runs if persist() stalls
+                let compaction_in_progress = Arc::new(AtomicBool::new(false));
                 loop {
                     std::thread::sleep(Duration::from_secs(5));
                     if let Err(e) = ping_pong_handler.ping_pong() {
                         error!(error = ?e, "Unable to ping-pong");
                     }
 
-                    // Trigger compaction periodically
+                    // Trigger compaction periodically on a separate thread
+                    // so disk I/O doesn't delay ping-pong cycles
                     iteration += 1;
-                    if iteration % COMPACT_INTERVAL == 0 {
-                        tracing::debug!("Triggering periodic connections database compaction");
-                        ping_pong_handler.compact();
+                    if iteration.is_multiple_of(COMPACT_INTERVAL) {
+                        // Skip if previous compaction is still running
+                        if compaction_in_progress.swap(true, Ordering::SeqCst) {
+                            tracing::warn!("Skipping compaction - previous run still in progress");
+                            continue;
+                        }
+                        let handler = ping_pong_handler.clone();
+                        let guard = compaction_in_progress.clone();
+                        std::thread::spawn(move || {
+                            tracing::debug!("Triggering periodic connections database compaction");
+                            handler.compact();
+                            guard.store(false, Ordering::SeqCst);
+                        });
                     }
                 }
             })?;

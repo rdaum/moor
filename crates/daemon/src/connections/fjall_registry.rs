@@ -14,7 +14,7 @@
 //! Direct fjall-backed connection registry with no in-memory caching
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::Path,
     sync::{Arc, Mutex},
     time::SystemTime,
@@ -25,7 +25,6 @@ use crate::connections::{
     conversions::{connections_records_from_bytes, connections_records_to_bytes},
     registry::{CONNECTION_TIMEOUT_DURATION, ConnectionRegistry, NewConnectionParams},
 };
-use byteview::ByteView;
 use eyre::{Error, bail};
 use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use moor_common::tasks::SessionError;
@@ -45,8 +44,10 @@ struct ClientTimestamps {
 /// Direct fjall-backed connection registry
 pub struct FjallConnectionRegistry {
     inner: Arc<Mutex<FjallInner>>,
-    // In-memory cache for timestamps (hot path optimization)
+    /// In-memory cache for timestamps (hot path optimization)
     timestamps: Arc<Mutex<HashMap<Uuid, ClientTimestamps>>>,
+    /// Clients whose timestamps have been modified since last flush
+    dirty_clients: Arc<Mutex<HashSet<Uuid>>>,
 }
 
 struct FjallInner {
@@ -154,82 +155,102 @@ impl FjallConnectionRegistry {
         Ok(Self {
             inner: Arc::new(Mutex::new(inner)),
             timestamps: Arc::new(Mutex::new(timestamps_cache)),
+            dirty_clients: Arc::new(Mutex::new(HashSet::new())),
         })
     }
 
-    // Helper function to persist a timestamp update to disk (called async)
-    fn persist_timestamp_update_async(
-        inner: Arc<Mutex<FjallInner>>,
-        client_id: Uuid,
-        now: SystemTime,
-        is_activity: bool, // true for last_activity, false for last_ping
-    ) {
-        let guard = match inner.lock() {
+    /// Flush all dirty timestamps to the database.
+    /// Called periodically from compact() to batch writes.
+    ///
+    /// To avoid deadlocks with code paths that take inner → timestamps (e.g., new_connection,
+    /// ping_check), we snapshot data from each lock independently rather than holding both.
+    fn flush_dirty_timestamps(&self) {
+        // Step 1: Take the dirty set (brief lock, then release)
+        let dirty: HashSet<Uuid> = {
+            let mut dirty_guard = match self.dirty_clients.lock() {
+                Ok(g) => g,
+                Err(_) => return,
+            };
+            std::mem::take(&mut *dirty_guard)
+        };
+
+        if dirty.is_empty() {
+            return;
+        }
+
+        // Step 2: Snapshot timestamp data for dirty clients (brief lock, then release)
+        let timestamps_snapshot: HashMap<Uuid, ClientTimestamps> = {
+            let timestamps = match self.timestamps.lock() {
+                Ok(g) => g,
+                Err(_) => return,
+            };
+            dirty
+                .iter()
+                .filter_map(|id| timestamps.get(id).map(|ts| (*id, ts.clone())))
+                .collect()
+        };
+
+        if timestamps_snapshot.is_empty() {
+            return;
+        }
+
+        // Step 3: Now take inner lock and do DB writes (no other locks held)
+        let inner = match self.inner.lock() {
             Ok(g) => g,
             Err(_) => return,
         };
 
-        // Try to update connection_records
-        if let Ok(conn_obj_bytes) = Self::get_connection_obj_for_client_sync(&guard, client_id)
-            && let Ok(Some(bytes)) = guard.connection_records_table.get(&conn_obj_bytes)
-            && let Ok(mut connections_record) = connections_records_from_bytes(&bytes)
-            && let Some(cr) = connections_record
-                .connections
-                .iter_mut()
-                .find(|cr| cr.client_id == client_id.as_u128())
-        {
-            if is_activity {
-                cr.last_activity = now;
-            } else {
-                cr.last_ping = now;
+        let mut flushed = 0;
+        for (client_id, ts) in &timestamps_snapshot {
+            // Update connection_records
+            if let Ok(Some(conn_obj_bytes)) = inner
+                .client_connection_table
+                .get(client_id.as_u128().to_le_bytes())
+                && let Ok(Some(bytes)) = inner.connection_records_table.get(&conn_obj_bytes)
+                && let Ok(mut connections_record) = connections_records_from_bytes(&bytes)
+                && let Some(cr) = connections_record
+                    .connections
+                    .iter_mut()
+                    .find(|cr| cr.client_id == client_id.as_u128())
+            {
+                cr.last_activity = ts.last_activity;
+                cr.last_ping = ts.last_ping;
+
+                if let Ok(encoded) = connections_records_to_bytes(&connections_record) {
+                    let _ = inner
+                        .connection_records_table
+                        .insert(&*conn_obj_bytes, &encoded);
+                }
             }
 
-            if let Ok(encoded) = connections_records_to_bytes(&connections_record) {
-                let _ = guard
-                    .connection_records_table
-                    .insert(conn_obj_bytes, &encoded);
+            // Update player_clients if logged in
+            if let Ok(Some(bytes)) = inner
+                .client_player_table
+                .get(client_id.as_u128().to_le_bytes())
+                && let Ok(player_obj) = Obj::from_bytes(bytes.as_ref())
+                && let Ok(Some(bytes)) = inner.player_clients_table.get(player_obj.as_bytes())
+                && let Ok(mut player_connections) = connections_records_from_bytes(&bytes)
+                && let Some(cr) = player_connections
+                    .connections
+                    .iter_mut()
+                    .find(|cr| cr.client_id == client_id.as_u128())
+            {
+                cr.last_activity = ts.last_activity;
+                cr.last_ping = ts.last_ping;
+
+                if let Ok(encoded) = connections_records_to_bytes(&player_connections) {
+                    let _ = inner
+                        .player_clients_table
+                        .insert(player_obj.as_bytes(), &encoded);
+                }
             }
+
+            flushed += 1;
         }
 
-        // Try to update player_clients if logged in
-        if let Ok(Some(bytes)) = guard
-            .client_player_table
-            .get(client_id.as_u128().to_le_bytes())
-            && let Ok(player_obj) = Obj::from_bytes(bytes.as_ref())
-            && let Ok(Some(bytes)) = guard.player_clients_table.get(player_obj.as_bytes())
-            && let Ok(mut player_connections) = connections_records_from_bytes(&bytes)
-            && let Some(cr) = player_connections
-                .connections
-                .iter_mut()
-                .find(|cr| cr.client_id == client_id.as_u128())
-        {
-            if is_activity {
-                cr.last_activity = now;
-            } else {
-                cr.last_ping = now;
-            }
-
-            if let Ok(encoded) = connections_records_to_bytes(&player_connections) {
-                let _ = guard
-                    .player_clients_table
-                    .insert(player_obj.as_bytes(), &encoded);
-            }
+        if flushed > 0 {
+            tracing::debug!("Flushed {} dirty client timestamps to database", flushed);
         }
-    }
-
-    fn get_connection_obj_for_client_sync(
-        guard: &FjallInner,
-        client_id: Uuid,
-    ) -> Result<ByteView, Error> {
-        let v = guard
-            .client_connection_table
-            .get(client_id.as_u128().to_le_bytes())?;
-
-        let Some(conn_obj_bytes) = v else {
-            bail!("No connection found for {client_id}")
-        };
-
-        Ok(conn_obj_bytes.into())
     }
 
     fn remove_from_player_connections(inner: &FjallInner, client_uuid: Uuid, client_id: u128) {
@@ -604,11 +625,10 @@ impl ConnectionRegistry for FjallConnectionRegistry {
                 });
         }
 
-        // Async write-through to database (fire and forget)
-        let inner_clone = Arc::clone(&self.inner);
-        std::thread::spawn(move || {
-            Self::persist_timestamp_update_async(inner_clone, client_id, now, true);
-        });
+        // Mark as dirty for periodic flush (no thread spawn, no immediate DB write)
+        if let Ok(mut dirty) = self.dirty_clients.lock() {
+            dirty.insert(client_id);
+        }
 
         Ok(())
     }
@@ -628,11 +648,10 @@ impl ConnectionRegistry for FjallConnectionRegistry {
                 });
         }
 
-        // Async write-through to database (fire and forget)
-        let inner_clone = Arc::clone(&self.inner);
-        std::thread::spawn(move || {
-            Self::persist_timestamp_update_async(inner_clone, client_id, now, false);
-        });
+        // Mark as dirty for periodic flush (no thread spawn, no immediate DB write)
+        if let Ok(mut dirty) = self.dirty_clients.lock() {
+            dirty.insert(client_id);
+        }
 
         Ok(())
     }
@@ -689,12 +708,24 @@ impl ConnectionRegistry for FjallConnectionRegistry {
     }
 
     fn compact(&self) {
-        let inner = match self.inner.lock() {
-            Ok(inner) => inner,
-            Err(_) => return,
+        // Flush any dirty timestamps before compacting
+        self.flush_dirty_timestamps();
+
+        // Clone the keyspace (it's Arc-based, so cheap) and release the lock
+        // before calling persist to avoid blocking connection operations during disk I/O.
+        //
+        // Note: fjall::Keyspace::persist() is safe to call concurrently with normal
+        // partition operations (insert/get/remove). Keyspace is Arc<KeyspaceInner>
+        // and uses internal synchronization for WAL flushing.
+        let keyspace = {
+            let inner = match self.inner.lock() {
+                Ok(inner) => inner,
+                Err(_) => return,
+            };
+            inner.keyspace.clone()
         };
 
-        if let Err(e) = inner.keyspace.persist(fjall::PersistMode::SyncAll) {
+        if let Err(e) = keyspace.persist(fjall::PersistMode::SyncAll) {
             tracing::warn!(error = ?e, "Failed to compact connections database");
         }
     }

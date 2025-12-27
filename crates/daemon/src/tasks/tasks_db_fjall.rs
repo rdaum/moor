@@ -21,12 +21,20 @@ use moor_kernel::{
     },
 };
 use planus::{ReadAsRoot, WriteAsOffset};
-use std::path::Path;
-use tracing::error;
+use std::{
+    path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
+use tracing::{debug, error, warn};
 
 pub struct FjallTasksDB {
     keyspace: Keyspace,
     tasks_partition: PartitionHandle,
+    /// Guard to prevent overlapping compaction runs
+    compaction_in_progress: Arc<AtomicBool>,
 }
 
 impl FjallTasksDB {
@@ -40,6 +48,7 @@ impl FjallTasksDB {
             Self {
                 keyspace,
                 tasks_partition,
+                compaction_in_progress: Arc::new(AtomicBool::new(false)),
             },
             fresh,
         )
@@ -123,9 +132,21 @@ impl TasksDb for FjallTasksDB {
     }
 
     fn compact(&self) {
-        if let Err(e) = self.keyspace.persist(fjall::PersistMode::SyncAll) {
-            error!("Failed to compact tasks database: {:?}", e);
+        // Skip if previous compaction is still running
+        if self.compaction_in_progress.swap(true, Ordering::SeqCst) {
+            warn!("Skipping tasks DB compaction - previous run still in progress");
+            return;
         }
+
+        let keyspace = self.keyspace.clone();
+        let guard = self.compaction_in_progress.clone();
+        std::thread::spawn(move || {
+            debug!("Tasks database compaction starting");
+            if let Err(e) = keyspace.persist(fjall::PersistMode::SyncAll) {
+                error!("Failed to compact tasks database: {:?}", e);
+            }
+            guard.store(false, Ordering::SeqCst);
+        });
     }
 }
 
