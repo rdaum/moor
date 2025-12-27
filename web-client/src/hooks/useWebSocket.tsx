@@ -58,6 +58,7 @@ export const useWebSocket = (
 
     const socketRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<number | null>(null);
+    const keepaliveIntervalRef = useRef<number | null>(null);
     const lastEventTimestampRef = useRef<bigint | null>(null);
     const processingRef = useRef<Promise<void>>(Promise.resolve());
     const isDisconnectingRef = useRef(false);
@@ -65,6 +66,12 @@ export const useWebSocket = (
     const hasEverConnectedRef = useRef(false);
     // Ref to current connect function - used by reconnect timeout to avoid stale closures
     const connectRef = useRef<((mode: "connect" | "create") => Promise<void>) | null>(null);
+
+    // Application-level keepalive interval (45s) to prevent proxy idle timeouts
+    // WebSocket-level pings don't count as traffic for proxies like Cloudflare
+    const KEEPALIVE_INTERVAL_MS = 45000;
+    // Single zero byte marker - definitely not a valid FlatBuffer (needs >= 4 bytes)
+    const KEEPALIVE_MARKER = new Uint8Array([0x00]);
 
     useEffect(() => {
         connectionStatusRef.current = wsState.connectionStatus;
@@ -194,6 +201,16 @@ export const useWebSocket = (
                     clearTimeout(reconnectTimeoutRef.current);
                     reconnectTimeoutRef.current = null;
                 }
+
+                // Start application-level keepalive to prevent proxy idle timeouts
+                if (keepaliveIntervalRef.current) {
+                    clearInterval(keepaliveIntervalRef.current);
+                }
+                keepaliveIntervalRef.current = window.setInterval(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(KEEPALIVE_MARKER);
+                    }
+                }, KEEPALIVE_INTERVAL_MS);
             };
 
             ws.onmessage = handleMessage;
@@ -211,6 +228,12 @@ export const useWebSocket = (
                     connectionStatus: "disconnected",
                 }));
                 socketRef.current = null;
+
+                // Stop keepalive interval
+                if (keepaliveIntervalRef.current) {
+                    clearInterval(keepaliveIntervalRef.current);
+                    keepaliveIntervalRef.current = null;
+                }
 
                 if (event.reason === "LOGOUT") {
                     localStorage.setItem("client_session_active", "false");
@@ -274,6 +297,11 @@ export const useWebSocket = (
             reconnectTimeoutRef.current = null;
         }
 
+        if (keepaliveIntervalRef.current) {
+            clearInterval(keepaliveIntervalRef.current);
+            keepaliveIntervalRef.current = null;
+        }
+
         if (socketRef.current) {
             const oldSocket = socketRef.current;
             socketRef.current = null;
@@ -326,6 +354,9 @@ export const useWebSocket = (
         return () => {
             if (reconnectTimeoutRef.current) {
                 clearTimeout(reconnectTimeoutRef.current);
+            }
+            if (keepaliveIntervalRef.current) {
+                clearInterval(keepaliveIntervalRef.current);
             }
             if (socketRef.current) {
                 socketRef.current.close(1000, "Component unmounting");

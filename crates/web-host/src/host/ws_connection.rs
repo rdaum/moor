@@ -133,6 +133,12 @@ impl WebSocketConnection {
                     // Filter out WebSocket control frames (ping, pong, close)
                     // Only process actual data messages (text/binary)
                     match msg {
+                        Message::Binary(ref data) if data.len() == 1 && data[0] == 0x00 => {
+                            // Application-level keepalive (single zero byte)
+                            // Used to prevent proxy idle timeouts (e.g., Cloudflare)
+                            trace!("Received keepalive from client");
+                            continue;
+                        }
                         Message::Text(_) | Message::Binary(_) => {
                             if !expecting_input.is_empty() {
                                 return ReadEvent::InputReply(msg);
