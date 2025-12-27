@@ -38,7 +38,7 @@ pub use crate::{
     decompile::program_to_tree,
     objdef::{
         ObjDefParseError, ObjFileContext, ObjPropDef, ObjPropOverride, ObjVerbDef,
-        ObjectDefinition, compile_object_definitions, parse_literal_value,
+        ObjectDefinition, SyspropResolver, compile_object_definitions, parse_literal_value,
     },
     parse::CompileOptions,
     unparse::{to_literal, to_literal_objsub, unparse},

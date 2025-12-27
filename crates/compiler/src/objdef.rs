@@ -37,8 +37,33 @@ use pest::{
     iterators::{Pair, Pairs},
 };
 use std::collections::HashMap;
+use std::sync::Arc;
 
-pub struct ObjFileContext(HashMap<Symbol, Var>);
+/// Trait for resolving system property ($name) lookups.
+///
+/// System properties are resolved by looking up properties on #0 (the system object).
+/// For example, `$root` resolves to `#0.root`, and `$root.foo` would first resolve
+/// `#0.root` to get an object, then look up `.foo` on that object.
+///
+/// This trait allows the objdef parser to delegate property resolution to the caller,
+/// which may have access to a live database (server) or pre-cached values (LSP).
+pub trait SyspropResolver: Send + Sync {
+    /// Resolve a sysprop path like `$name` or `$name.prop.chain`.
+    ///
+    /// # Arguments
+    /// * `path` - The property path components. For `$root.foo`, this would be `["root", "foo"]`.
+    ///
+    /// # Returns
+    /// * `Ok(Var)` - The resolved value
+    /// * `Err(String)` - Error message if resolution fails
+    fn resolve(&self, path: &[Symbol]) -> Result<Var, String>;
+}
+
+pub struct ObjFileContext {
+    constants: HashMap<Symbol, Var>,
+    sysprop_resolver: Option<Arc<dyn SyspropResolver>>,
+}
+
 impl Default for ObjFileContext {
     fn default() -> Self {
         Self::new()
@@ -47,15 +72,36 @@ impl Default for ObjFileContext {
 
 impl ObjFileContext {
     pub fn new() -> Self {
-        Self(HashMap::new())
+        Self {
+            constants: HashMap::new(),
+            sysprop_resolver: None,
+        }
+    }
+
+    /// Create a new context with a sysprop resolver.
+    pub fn with_resolver(resolver: Arc<dyn SyspropResolver>) -> Self {
+        Self {
+            constants: HashMap::new(),
+            sysprop_resolver: Some(resolver),
+        }
+    }
+
+    /// Set the sysprop resolver.
+    pub fn set_resolver(&mut self, resolver: Arc<dyn SyspropResolver>) {
+        self.sysprop_resolver = Some(resolver);
+    }
+
+    /// Get the sysprop resolver if set.
+    pub fn resolver(&self) -> Option<&Arc<dyn SyspropResolver>> {
+        self.sysprop_resolver.as_ref()
     }
 
     pub fn add_constant(&mut self, name: Symbol, value: Var) {
-        self.0.insert(name, value);
+        self.constants.insert(name, value);
     }
 
     pub fn constants(&self) -> &HashMap<Symbol, Var> {
-        &self.0
+        &self.constants
     }
 }
 
@@ -106,6 +152,10 @@ pub enum ObjDefParseError {
     BadPropFlags(String),
     #[error("Constant not found: {0}")]
     ConstantNotFound(String),
+    #[error("Sysprop resolution failed: {0}")]
+    SyspropResolutionFailed(String),
+    #[error("No sysprop resolver configured")]
+    NoSyspropResolver,
     #[error("Bad attribute type: {0:?}")]
     BadAttributeType(VarType),
     #[error("Invalid object ID: {0}")]
@@ -547,7 +597,7 @@ fn parse_literal_atom(
         }
         Rule::ident | Rule::variable => {
             let sym = Symbol::mk(pair.as_str());
-            let Some(value) = context.0.get(&sym) else {
+            let Some(value) = context.constants.get(&sym) else {
                 return Err(ObjDefParseError::ConstantNotFound(sym.to_string()));
             };
             Ok(value.clone())
@@ -596,6 +646,34 @@ fn parse_literal_atom(
                 })?;
 
             Ok(v_binary(decoded))
+        }
+        Rule::sysprop_path => {
+            // Parse $name.path.chain - sysprop with optional dotted property path
+            let mut path = Vec::new();
+            for inner in pair.into_inner() {
+                match inner.as_rule() {
+                    Rule::sysprop => {
+                        // $name -> extract "name" (remove the $ prefix)
+                        let sysprop_str = inner.as_str();
+                        let name = &sysprop_str[1..]; // Remove leading $
+                        path.push(Symbol::mk(name));
+                    }
+                    Rule::ident => {
+                        // .prop -> extract "prop"
+                        path.push(Symbol::mk(inner.as_str()));
+                    }
+                    _ => unreachable!("Unexpected rule in sysprop_path: {:?}", inner.as_rule()),
+                }
+            }
+
+            // Use the resolver to look up the sysprop path
+            let resolver = context
+                .resolver()
+                .ok_or_else(|| ObjDefParseError::NoSyspropResolver)?;
+
+            resolver
+                .resolve(&path)
+                .map_err(ObjDefParseError::SyspropResolutionFailed)
         }
         _ => {
             panic!("Unimplemented atom: {pair:?}");
@@ -703,7 +781,7 @@ pub fn compile_object_definitions(
                 let constant = pairs.next().unwrap().as_str();
                 let value = pairs.next().unwrap();
                 let value = parse_literal(context, value)?;
-                context.0.insert(Symbol::mk(constant), value);
+                context.constants.insert(Symbol::mk(constant), value);
             }
             Rule::EOI => {
                 break;
@@ -719,8 +797,13 @@ pub fn compile_object_definitions(
 
 fn parse_obj_attr(
     context: &mut ObjFileContext,
-    inner: Pair<Rule>,
+    pair: Pair<Rule>,
 ) -> Result<Obj, ObjDefParseError> {
+    // If this is an obj_ref, unwrap to get the inner value
+    let inner = match pair.as_rule() {
+        Rule::obj_ref => pair.into_inner().next().unwrap(),
+        _ => pair,
+    };
     let value = parse_literal_atom(context, inner)?;
     let Some(obj) = value.as_object() else {
         return Err(ObjDefParseError::BadAttributeType(value.type_code()));
@@ -1543,5 +1626,171 @@ mod tests {
 
         // Verify the decoded content is correct (this is a tiny 1x1 PNG)
         assert!(!binary_data.is_empty(), "Binary data should not be empty");
+    }
+
+    /// Test sysprop resolution with a mock resolver
+    #[test]
+    fn test_sysprop_resolution() {
+
+        /// A simple mock resolver for testing
+        struct MockResolver {
+            values: HashMap<Symbol, Var>,
+        }
+
+        impl SyspropResolver for MockResolver {
+            fn resolve(&self, path: &[Symbol]) -> Result<Var, String> {
+                if path.is_empty() {
+                    return Err("Empty sysprop path".to_string());
+                }
+                // Just look up the first element for this simple test
+                self.values
+                    .get(&path[0])
+                    .cloned()
+                    .ok_or_else(|| format!("Sysprop not found: {}", path[0]))
+            }
+        }
+
+        let mut values = HashMap::new();
+        values.insert(Symbol::mk("root"), v_obj(Obj::mk_id(1)));
+        values.insert(Symbol::mk("system"), v_obj(Obj::mk_id(0)));
+
+        let resolver = Arc::new(MockResolver { values });
+        let mut context = ObjFileContext::with_resolver(resolver);
+
+        let spec = r#"
+            object $root
+                parent: $system
+                name: "Root Object"
+                location: #-1
+                wizard: false
+                programmer: false
+                player: false
+                fertile: true
+                readable: true
+            endobject
+        "#;
+
+        let objs =
+            compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
+        let obj = &objs[0];
+
+        assert_eq!(obj.oid, Obj::mk_id(1));
+        assert_eq!(obj.parent, Obj::mk_id(0));
+        assert_eq!(obj.name, "Root Object");
+        assert_eq!(obj.location, NOTHING); // Verify mixed sysprop + literal parsing
+    }
+
+    /// Test sysprop without resolver configured should error
+    #[test]
+    fn test_sysprop_no_resolver() {
+        let mut context = ObjFileContext::new();
+
+        let spec = r#"
+            object $root
+                parent: #0
+                name: "Test"
+                location: #-1
+                wizard: false
+                programmer: false
+                player: false
+                fertile: true
+                readable: true
+            endobject
+        "#;
+
+        let result = compile_object_definitions(spec, &CompileOptions::default(), &mut context);
+        assert!(result.is_err());
+        match result {
+            Err(ObjDefParseError::NoSyspropResolver) => {}
+            Err(e) => panic!("Expected NoSyspropResolver error, got: {:?}", e),
+            Ok(_) => panic!("Expected error for sysprop without resolver"),
+        }
+    }
+
+    /// Test sysprop resolution failure returns proper error
+    #[test]
+    fn test_sysprop_resolution_fails() {
+        /// A resolver that always fails
+        struct FailingResolver;
+
+        impl SyspropResolver for FailingResolver {
+            fn resolve(&self, path: &[Symbol]) -> Result<Var, String> {
+                Err(format!("Property not found: {:?}", path))
+            }
+        }
+
+        let resolver = Arc::new(FailingResolver);
+        let mut context = ObjFileContext::with_resolver(resolver);
+
+        let spec = r#"
+            object $nonexistent
+                parent: #0
+                name: "Test"
+                location: #-1
+                wizard: false
+                programmer: false
+                player: false
+                fertile: true
+                readable: true
+            endobject
+        "#;
+
+        let result = compile_object_definitions(spec, &CompileOptions::default(), &mut context);
+        assert!(result.is_err());
+        match result {
+            Err(ObjDefParseError::SyspropResolutionFailed(msg)) => {
+                assert!(msg.contains("nonexistent"), "Error should mention the sysprop name");
+            }
+            Err(e) => panic!("Expected SyspropResolutionFailed error, got: {:?}", e),
+            Ok(_) => panic!("Expected error for failed sysprop resolution"),
+        }
+    }
+
+    /// Test sysprop with dotted path
+    #[test]
+    fn test_sysprop_dotted_path() {
+
+        /// A resolver that handles dotted paths
+        struct DottedResolver;
+
+        impl SyspropResolver for DottedResolver {
+            fn resolve(&self, path: &[Symbol]) -> Result<Var, String> {
+                // Simulate $player_class.default_home
+                if path.len() >= 2
+                    && path[0] == Symbol::mk("player_class")
+                    && path[1] == Symbol::mk("default_home")
+                {
+                    return Ok(v_obj(Obj::mk_id(5)));
+                }
+                // Single sysprop
+                if path.len() == 1 && path[0] == Symbol::mk("root") {
+                    return Ok(v_obj(Obj::mk_id(1)));
+                }
+                Err(format!("Unknown sysprop path: {:?}", path))
+            }
+        }
+
+        let resolver = Arc::new(DottedResolver);
+        let mut context = ObjFileContext::with_resolver(resolver);
+
+        let spec = r#"
+            object $root
+                parent: #0
+                name: "Test"
+                location: $player_class.default_home
+                wizard: false
+                programmer: false
+                player: false
+                fertile: true
+                readable: true
+            endobject
+        "#;
+
+        let objs =
+            compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
+        let obj = &objs[0];
+
+        assert_eq!(obj.oid, Obj::mk_id(1));
+        assert_eq!(obj.location, Obj::mk_id(5));
     }
 }

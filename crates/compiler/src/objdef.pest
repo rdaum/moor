@@ -21,13 +21,15 @@ objects_file = { SOI ~ (object_definition | constant_decl)* ~ EOI }
 
 constant_decl = { "define" ~ ident ~ "=" ~ literal ~ ";"? }
 
-object_definition = {  ^"object" ~ (object | variable) ~ object_attributes ~ (verb_decl | prop_def | prop_set)* ~ "endobject"  }
+// Object reference: can be #id, a variable (constant lookup), or $sysprop.path
+obj_ref = { object | sysprop_path | variable }
+object_definition = {  ^"object" ~ obj_ref ~ object_attributes ~ (verb_decl | prop_def | prop_set)* ~ "endobject"  }
 object_attributes = { object_attribute+ }
 object_attribute = { name_attr | parent_attr | owner_attr | location_attr | wizard_attr | prog_attr | player_attr | fertile_attr | read_attr | write_attr }
 name_attr = { "name" ~ ":" ~ (string | variable )}
-owner_attr = { "owner" ~ ":" ~ ( object | variable ) }
-parent_attr = { "parent" ~ ":" ~ ( object | variable ) }
-location_attr = { "location" ~ ":" ~ ( object | variable ) }
+owner_attr = { "owner" ~ ":" ~ obj_ref }
+parent_attr = { "parent" ~ ":" ~ obj_ref }
+location_attr = { "location" ~ ":" ~ obj_ref }
 wizard_attr = { "wizard" ~ ":" ~ boolean}
 prog_attr = { "programmer" ~ ":" ~ boolean}
 player_attr = { "player" ~ ":" ~ boolean}
@@ -51,7 +53,10 @@ flags_attr = {"flags" ~ ":" ~ "\"" ~ flagchars ~ "\"" }
 
 literal = { literal_atom | literal_map | literal_lambda | literal_list | literal_flyweight | variable }
 variable = { ident }
-literal_atom = { integer | float | string | object | err | boolean | symbol | literal_binary | ident  }
+// Sysprop path for $foo or $foo.bar.baz - property lookup on #0 with optional dotted path
+// Method calls ($foo:bar()) are NOT allowed - only property access
+sysprop_path = { sysprop ~ ("." ~ ident)* }
+literal_atom = { integer | float | string | object | err | sysprop_path | boolean | symbol | literal_binary | ident  }
 literal_map =  { ("[" ~ (literal ~ "->" ~ literal) ~ ("," ~ literal ~ "->" ~ literal)* ~ "]") | ( "[" ~ "]") }
 literal_list     = { ("{" ~ literal ~ ("," ~ literal)* ~ "}" ~ !"=>") | "{}" }
 literal_flyweight = { "<" ~ literal ~ ("," ~ literal_flyweight_slot)* ~ ("," ~ literal_flyweight_contents)? ~ ">" }
