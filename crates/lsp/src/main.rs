@@ -14,36 +14,38 @@
 //! mooR LSP Server
 //!
 //! Language Server Protocol implementation for MOO language support.
-//! Provides document symbols, diagnostics, and workspace scanning.
+//! Connects to a running mooR server for live features.
 //!
-//! # Current Features (Offline Mode)
+//! # Features
 //!
 //! - Document symbols (objects, verbs, properties)
 //! - Parse error diagnostics
 //! - Workspace scanning for .moo files
+//! - Server-connected operations (via RPC)
 //!
 //! # Usage
 //!
 //! TCP mode (for IDE integration):
 //! ```bash
-//! moor-lsp --port 8888 --workspace /path/to/moo/files
+//! moor-lsp --port 8888 --workspace /path/to/moo/files \
+//!     --rpc-address tcp://127.0.0.1:7899 \
+//!     --username wizard --password wizard
 //! ```
 //!
 //! Stdio mode (for editor plugins):
 //! ```bash
-//! moor-lsp --stdio --workspace /path/to/moo/files
+//! moor-lsp --stdio --workspace /path/to/moo/files \
+//!     --rpc-address tcp://127.0.0.1:7899 \
+//!     --username wizard --password wizard
 //! ```
 //!
-//! # Future: Live Server Mode
-//!
-//! Future versions will support connecting to a running mooR server for:
-//! - Sysprop resolution ($name lookups)
-//! - Live object/verb/property validation
-//! - Code completion from live database
-//!
-//! This will use the mooR RPC interface (ZMQ-based, not telnet).
+//! Environment variables can also be used:
+//! - MOOR_RPC_ADDRESS
+//! - MOOR_USERNAME
+//! - MOOR_PASSWORD
 
 mod backend;
+mod client;
 mod diagnostics;
 mod symbols;
 mod workspace;
@@ -60,6 +62,7 @@ use tower_lsp::{LspService, Server};
 use tracing::{info, warn};
 
 use backend::MooLanguageServer;
+use client::{MoorClientConfig, MoorLspClient};
 
 /// mooR LSP Server - Language Server Protocol for MOO
 #[derive(Parser, Debug)]
@@ -82,6 +85,23 @@ struct Args {
     /// Enable debug logging
     #[arg(long, default_value = "false")]
     debug: bool,
+
+    // RPC connection options
+    /// mooR daemon RPC address
+    #[arg(long, env = "MOOR_RPC_ADDRESS", default_value = "tcp://127.0.0.1:7899")]
+    rpc_address: String,
+
+    /// mooR daemon events address (for pub/sub)
+    #[arg(long, env = "MOOR_EVENTS_ADDRESS", default_value = "tcp://127.0.0.1:7898")]
+    events_address: String,
+
+    /// Username for mooR authentication
+    #[arg(long, env = "MOOR_USERNAME")]
+    username: Option<String>,
+
+    /// Password for mooR authentication
+    #[arg(long, env = "MOOR_PASSWORD")]
+    password: Option<String>,
 }
 
 #[tokio::main]
@@ -103,24 +123,65 @@ async fn main() -> Result<()> {
 
     let workspace = args.workspace.unwrap_or_else(|| PathBuf::from("."));
 
+    // Create mooR client config
+    let client_config = MoorClientConfig {
+        rpc_address: args.rpc_address.clone(),
+        events_address: args.events_address.clone(),
+        curve_keys: None, // TODO: support CURVE encryption
+    };
+
+    // Connect to mooR daemon if credentials provided
+    let moor_client = if let (Some(username), Some(password)) = (&args.username, &args.password) {
+        match create_moor_client(&client_config, username, password).await {
+            Ok(client) => {
+                info!("Connected to mooR daemon at {}", args.rpc_address);
+                Some(Arc::new(tokio::sync::RwLock::new(client)))
+            }
+            Err(e) => {
+                warn!("Failed to connect to mooR daemon: {}. Running in offline mode.", e);
+                None
+            }
+        }
+    } else {
+        info!("No credentials provided. Running in offline mode.");
+        None
+    };
+
     if let Some(port) = args.port {
         // TCP mode
-        run_tcp_server(port, workspace).await
+        run_tcp_server(port, workspace, moor_client).await
     } else {
         // Stdio mode
-        run_stdio_server(workspace).await
+        run_stdio_server(workspace, moor_client).await
     }
 }
 
+/// Create and connect a mooR client
+async fn create_moor_client(
+    config: &MoorClientConfig,
+    username: &str,
+    password: &str,
+) -> Result<MoorLspClient> {
+    let mut client = MoorLspClient::new(config.clone())?;
+    client.connect().await?;
+    client.login(username, password).await?;
+    Ok(client)
+}
+
 /// Run LSP server over stdio
-async fn run_stdio_server(workspace: PathBuf) -> Result<()> {
+async fn run_stdio_server(
+    workspace: PathBuf,
+    moor_client: Option<Arc<tokio::sync::RwLock<MoorLspClient>>>,
+) -> Result<()> {
     info!("Starting MOO LSP server on stdio");
     info!("Workspace: {}", workspace.display());
 
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) = LspService::new(|client| MooLanguageServer::new(client, workspace));
+    let (service, socket) = LspService::new(|client| {
+        MooLanguageServer::new(client, workspace, moor_client)
+    });
 
     Server::new(stdin, stdout, socket).serve(service).await;
 
@@ -128,7 +189,11 @@ async fn run_stdio_server(workspace: PathBuf) -> Result<()> {
 }
 
 /// Run LSP server over TCP, accepting one client at a time
-async fn run_tcp_server(port: u16, workspace: PathBuf) -> Result<()> {
+async fn run_tcp_server(
+    port: u16,
+    workspace: PathBuf,
+    moor_client: Option<Arc<tokio::sync::RwLock<MoorLspClient>>>,
+) -> Result<()> {
     let addr = format!("127.0.0.1:{}", port);
     let listener = TcpListener::bind(&addr).await?;
     info!("MOO LSP server listening on {}", addr);
@@ -152,12 +217,14 @@ async fn run_tcp_server(port: u16, workspace: PathBuf) -> Result<()> {
         info!("LSP client connected from {}", client_addr);
 
         let workspace = workspace.clone();
+        let moor_client = moor_client.clone();
         let client_active_clone = Arc::clone(&client_active);
 
         let (read, write) = tokio::io::split(stream);
 
-        let (service, socket) =
-            LspService::new(|client| MooLanguageServer::new(client, workspace));
+        let (service, socket) = LspService::new(|client| {
+            MooLanguageServer::new(client, workspace, moor_client)
+        });
 
         // Run the LSP server for this client
         Server::new(read, write, socket).serve(service).await;

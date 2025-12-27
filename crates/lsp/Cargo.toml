@@ -19,6 +19,12 @@ path = "src/main.rs"
 # Core mooR dependencies
 moor-common = { path = "../common" }
 moor-compiler = { path = "../compiler" }
+moor-var = { path = "../var" }
+moor-schema = { path = "../schema" }
+rpc-async-client = { path = "../rpc/rpc-async-client" }
+rpc-common = { path = "../rpc/rpc-common" }
+tmq.workspace = true
+uuid = { workspace = true }
 
 # LSP
 tower-lsp.workspace = true
@@ -27,6 +33,9 @@ tower-lsp.workspace = true
 clap = { workspace = true, features = ["env"] }
 clap_derive.workspace = true
 dotenvy = "0.15"
+figment = { workspace = true }
+serde = { workspace = true }
+serde_derive = { workspace = true }
 
 # Error handling
 color-eyre.workspace = true

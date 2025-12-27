@@ -3520,12 +3520,21 @@ dependencies = [
  "color-eyre",
  "dotenvy",
  "eyre",
+ "figment",
  "moor-common",
  "moor-compiler",
+ "moor-schema",
+ "moor-var",
+ "rpc-async-client",
+ "rpc-common",
+ "serde",
+ "serde_derive",
+ "tmq",
  "tokio",
  "tower-lsp",
  "tracing",
  "tracing-subscriber",
+ "uuid 1.19.0",
 ]
 
 [[package]]
