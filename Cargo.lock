@@ -3503,6 +3503,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "moor-lsp"
+version = "1.0.0-beta5"
+dependencies = [
+ "clap",
+ "clap_derive",
+ "color-eyre",
+ "eyre",
+ "moor-common",
+ "moor-compiler",
+ "tokio",
+ "tower-lsp",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "moor-mcp-host"
 version = "1.0.0-beta5"
 dependencies = [

@@ -1,0 +1,39 @@
+[package]
+name = "moor-lsp"
+version = "1.0.0-beta5"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Language Server Protocol implementation for MOO language"
+
+[[bin]]
+name = "moor-lsp"
+path = "src/main.rs"
+
+[dependencies]
+# Core mooR dependencies
+moor-common = { path = "../common" }
+moor-compiler = { path = "../compiler" }
+
+# LSP
+tower-lsp.workspace = true
+
+# CLI & Configuration
+clap.workspace = true
+clap_derive.workspace = true
+
+# Error handling
+color-eyre.workspace = true
+eyre.workspace = true
+
+# Async Runtime
+tokio = { workspace = true, features = ["full"] }
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
