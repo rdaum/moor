@@ -16,6 +16,12 @@
 //! Language Server Protocol implementation for MOO language support.
 //! Provides document symbols, diagnostics, and workspace scanning.
 //!
+//! # Current Features (Offline Mode)
+//!
+//! - Document symbols (objects, verbs, properties)
+//! - Parse error diagnostics
+//! - Workspace scanning for .moo files
+//!
 //! # Usage
 //!
 //! TCP mode (for IDE integration):
@@ -27,6 +33,15 @@
 //! ```bash
 //! moor-lsp --stdio --workspace /path/to/moo/files
 //! ```
+//!
+//! # Future: Live Server Mode
+//!
+//! Future versions will support connecting to a running mooR server for:
+//! - Sysprop resolution ($name lookups)
+//! - Live object/verb/property validation
+//! - Code completion from live database
+//!
+//! This will use the mooR RPC interface (ZMQ-based, not telnet).
 
 mod backend;
 mod diagnostics;
@@ -72,6 +87,14 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
+
+    // Load .env file if present
+    if let Err(e) = dotenvy::dotenv() {
+        // Not an error if .env doesn't exist
+        if !matches!(e, dotenvy::Error::Io(_)) {
+            warn!("Error loading .env file: {}", e);
+        }
+    }
 
     let args = Args::parse();
 

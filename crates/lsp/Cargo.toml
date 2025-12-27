@@ -24,8 +24,9 @@ moor-compiler = { path = "../compiler" }
 tower-lsp.workspace = true
 
 # CLI & Configuration
-clap.workspace = true
+clap = { workspace = true, features = ["env"] }
 clap_derive.workspace = true
+dotenvy = "0.15"
 
 # Error handling
 color-eyre.workspace = true
