@@ -27,6 +27,7 @@ use tower_lsp::lsp_types::{
 use tower_lsp::{Client, LanguageServer};
 
 use crate::client::MoorClient;
+use crate::objects::ObjectNameRegistry;
 use crate::diagnostics;
 use crate::symbols;
 use crate::workspace;
@@ -38,8 +39,9 @@ pub struct MooLanguageServer {
     /// In-memory document storage for open files.
     documents: Arc<RwLock<HashMap<Url, String>>>,
     /// Optional mooR daemon client for server-connected features.
-    #[allow(dead_code)]
     moor_client: Option<Arc<RwLock<MoorClient>>>,
+    /// Object name registry ($name → Obj mapping from #0 properties).
+    object_names: Arc<RwLock<ObjectNameRegistry>>,
 }
 
 impl MooLanguageServer {
@@ -53,7 +55,42 @@ impl MooLanguageServer {
             workspace,
             documents: Arc::new(RwLock::new(HashMap::new())),
             moor_client,
+            object_names: Arc::new(RwLock::new(ObjectNameRegistry::new())),
         }
+    }
+
+    /// Load object names from the mooR server if connected.
+    async fn load_object_names(&self) {
+        let Some(moor_client) = &self.moor_client else {
+            return;
+        };
+
+        match ObjectNameRegistry::load_from_server(moor_client).await {
+            Ok(registry) => {
+                let count = registry.len();
+                *self.object_names.write().await = registry;
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        format!("Loaded {} object names from #0", count),
+                    )
+                    .await;
+            }
+            Err(e) => {
+                self.client
+                    .log_message(
+                        MessageType::WARNING,
+                        format!("Failed to load object names from server: {}", e),
+                    )
+                    .await;
+            }
+        }
+    }
+
+    /// Resolve a symbolic name (without $) to an object ID.
+    #[allow(dead_code)]
+    pub async fn resolve_object_name(&self, name: &str) -> Option<moor_var::Obj> {
+        self.object_names.read().await.resolve(name)
     }
 
     /// Publish diagnostics for a document.
@@ -82,6 +119,9 @@ impl LanguageServer for MooLanguageServer {
         self.client
             .log_message(MessageType::INFO, "MOO LSP server initialized")
             .await;
+
+        // Load object names from server if connected
+        self.load_object_names().await;
 
         // Scan workspace for .moo files and publish initial diagnostics
         let files = workspace::scan_workspace(&self.workspace).await;

@@ -20,6 +20,7 @@ path = "src/main.rs"
 moor-client = { path = "../../crates/rpc/moor-client" }
 moor-common = { path = "../../crates/common" }
 moor-compiler = { path = "../../crates/compiler" }
+moor-var = { path = "../../crates/var" }
 
 # LSP
 tower-lsp.workspace = true

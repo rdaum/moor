@@ -3514,6 +3514,7 @@ dependencies = [
  "moor-client",
  "moor-common",
  "moor-compiler",
+ "moor-var",
  "serde",
  "serde_json",
  "tempfile",
