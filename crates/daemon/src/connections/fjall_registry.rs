@@ -51,7 +51,7 @@ pub struct FjallConnectionRegistry {
 
 struct FjallInner {
     _tmpdir: Option<tempfile::TempDir>,
-    _keyspace: Keyspace,
+    keyspace: Keyspace,
     client_connection_table: PartitionHandle, // client_id (u128) -> connection_obj (Obj bytes)
     client_player_table: PartitionHandle, // client_id (u128) -> player_obj (Obj bytes), only after login
     connection_records_table: PartitionHandle, // connection_obj (Obj bytes) -> ConnectionsRecords
@@ -99,7 +99,7 @@ impl FjallConnectionRegistry {
 
         let inner = FjallInner {
             _tmpdir: tmpdir,
-            _keyspace: keyspace,
+            keyspace,
             client_connection_table,
             client_player_table,
             connection_records_table,
@@ -685,6 +685,17 @@ impl ConnectionRegistry for FjallConnectionRegistry {
 
             // Remove timestamp cache entry
             let _ = self.timestamps.lock().unwrap().remove(&client_uuid);
+        }
+    }
+
+    fn compact(&self) {
+        let inner = match self.inner.lock() {
+            Ok(inner) => inner,
+            Err(_) => return,
+        };
+
+        if let Err(e) = inner.keyspace.persist(fjall::PersistMode::SyncAll) {
+            tracing::warn!(error = ?e, "Failed to compact connections database");
         }
     }
 

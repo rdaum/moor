@@ -809,13 +809,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             ],
             true,
         ),
-        mk_builtin(
-            "parse_objdef_constants",
-            Q(1),
-            Q(1),
-            vec![Any],
-            true,
-        ),
+        mk_builtin("parse_objdef_constants", Q(1), Q(1), vec![Any], true),
     ]
 }
 

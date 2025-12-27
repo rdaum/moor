@@ -125,13 +125,23 @@ impl RpcServer {
         let ping_pong_handler = self.message_handler.clone();
 
         // Start up the ping-ponger timer in a background thread...
+        // Also handles periodic database compaction (every 5 minutes)
         std::thread::Builder::new()
             .name("rpc-ping-pong".to_string())
             .spawn(move || {
+                const COMPACT_INTERVAL: u64 = 60; // Every 60 iterations = 5 minutes (5s * 60)
+                let mut iteration: u64 = 0;
                 loop {
                     std::thread::sleep(Duration::from_secs(5));
                     if let Err(e) = ping_pong_handler.ping_pong() {
                         error!(error = ?e, "Unable to ping-pong");
+                    }
+
+                    // Trigger compaction periodically
+                    iteration += 1;
+                    if iteration % COMPACT_INTERVAL == 0 {
+                        tracing::debug!("Triggering periodic connections database compaction");
+                        ping_pong_handler.compact();
                     }
                 }
             })?;

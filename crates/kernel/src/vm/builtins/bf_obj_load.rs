@@ -23,8 +23,7 @@ use lazy_static::lazy_static;
 use moor_common::builtins::offset_for_builtin;
 use moor_common::model::{ObjectKind, obj_flags_string, prop_flags_string};
 use moor_compiler::{
-    CompileOptions, DiagnosticRenderOptions, ObjDefParseError, ObjFileContext,
-    format_compile_error,
+    CompileOptions, DiagnosticRenderOptions, ObjDefParseError, ObjFileContext, format_compile_error,
 };
 use moor_objdef::{
     ConflictEntity, ConflictMode, Constants, Entity, ObjDefLoaderOptions, ObjdefLoaderError,
@@ -128,28 +127,26 @@ fn bf_parse_objdef_constants(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfE
             let mut lines = Vec::new();
             for line_val in lines_list.iter() {
                 let Some(line_str) = line_val.as_string() else {
-                    return Err(BfErr::ErrValue(
-                        E_TYPE.msg("parse_objdef_constants() requires a string or list of strings"),
-                    ));
+                    return Err(BfErr::ErrValue(E_TYPE.msg(
+                        "parse_objdef_constants() requires a string or list of strings",
+                    )));
                 };
                 lines.push(line_str.to_string());
             }
             lines.join("\n")
         }
         _ => {
-            return Err(BfErr::ErrValue(
-                E_TYPE.msg("parse_objdef_constants() requires a string or list of strings"),
-            ));
+            return Err(BfErr::ErrValue(E_TYPE.msg(
+                "parse_objdef_constants() requires a string or list of strings",
+            )));
         }
     };
 
     let mut context = ObjFileContext::new();
     let compile_options = CompileOptions::default();
-    if let Err(err) = moor_compiler::compile_object_definitions(
-        &source,
-        &compile_options,
-        &mut context,
-    ) {
+    if let Err(err) =
+        moor_compiler::compile_object_definitions(&source, &compile_options, &mut context)
+    {
         let diagnostic_options = DiagnosticRenderOptions::default();
         match err {
             ObjDefParseError::ParseError(compile_error) => {

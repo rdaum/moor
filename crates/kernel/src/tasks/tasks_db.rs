@@ -31,6 +31,10 @@ pub trait TasksDb: Send {
     fn save_task(&self, task: &SuspendedTask) -> Result<(), TasksDbError>;
     fn delete_task(&self, task_id: TaskId) -> Result<(), TasksDbError>;
     fn delete_all_tasks(&self) -> Result<(), TasksDbError>;
+
+    /// Trigger database compaction to reclaim space and reduce journal size.
+    /// Should be called periodically (e.g., every few minutes).
+    fn compact(&self);
 }
 
 pub struct NoopTasksDb {}
@@ -50,5 +54,9 @@ impl TasksDb for NoopTasksDb {
 
     fn delete_all_tasks(&self) -> Result<(), TasksDbError> {
         Ok(())
+    }
+
+    fn compact(&self) {
+        // No-op for in-memory implementation
     }
 }

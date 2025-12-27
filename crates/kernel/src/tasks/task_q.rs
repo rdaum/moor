@@ -163,6 +163,11 @@ impl TaskQ {
 
         refs
     }
+
+    /// Trigger database compaction to reclaim space and reduce journal size.
+    pub fn compact(&self) {
+        self.suspended.compact();
+    }
 }
 
 /// State a suspended task sits in inside the `suspended` side of the task queue.
@@ -684,5 +689,10 @@ impl SuspensionQ {
         for task_id in to_remove {
             self.remove_task(task_id);
         }
+    }
+
+    /// Trigger database compaction to reclaim space and reduce journal size.
+    pub(crate) fn compact(&self) {
+        self.tasks_database.compact();
     }
 }

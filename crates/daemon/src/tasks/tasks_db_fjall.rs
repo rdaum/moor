@@ -25,7 +25,7 @@ use std::path::Path;
 use tracing::error;
 
 pub struct FjallTasksDB {
-    _keyspace: Keyspace,
+    keyspace: Keyspace,
     tasks_partition: PartitionHandle,
 }
 
@@ -38,7 +38,7 @@ impl FjallTasksDB {
             .unwrap();
         (
             Self {
-                _keyspace: keyspace,
+                keyspace,
                 tasks_partition,
             },
             fresh,
@@ -120,6 +120,12 @@ impl TasksDb for FjallTasksDB {
             })?;
         }
         Ok(())
+    }
+
+    fn compact(&self) {
+        if let Err(e) = self.keyspace.persist(fjall::PersistMode::SyncAll) {
+            error!("Failed to compact tasks database: {:?}", e);
+        }
     }
 }
 

@@ -84,8 +84,7 @@ fn run_concurrent_workload(
                 for iter in 0..iters {
                     let mut tx = db.new_world_state().unwrap();
                     for op in 0..ops_per_tx {
-                        let prop_name =
-                            prop_names[rng.random_range(0..prop_names.len())];
+                        let prop_name = prop_names[rng.random_range(0..prop_names.len())];
                         if rng.random_range(0..100) < write_percent {
                             let value = v_int(
                                 (thread_id as i64) * 1_000_000
@@ -99,11 +98,7 @@ fn run_concurrent_workload(
                                 &value,
                             );
                         } else {
-                            let _ = tx.retrieve_property(
-                                &SYSTEM_OBJECT,
-                                &SYSTEM_OBJECT,
-                                prop_name,
-                            );
+                            let _ = tx.retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, prop_name);
                         }
                     }
                     let _ = tx.commit();

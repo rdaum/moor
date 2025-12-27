@@ -136,6 +136,9 @@ pub trait MessageHandler: Send + Sync {
 
     fn ping_pong(&self) -> Result<(), SessionError>;
 
+    /// Trigger database compaction to reclaim space and reduce journal size.
+    fn compact(&self);
+
     fn handle_session_event(&self, session_event: SessionActions) -> Result<(), Error>;
 
     /// Switch the player for the given connection object to the new player.
@@ -548,6 +551,10 @@ impl MessageHandler for RpcMessageHandler {
         let mut hosts = self.hosts.write().unwrap();
         hosts.ping_check(HOST_TIMEOUT);
         Ok(())
+    }
+
+    fn compact(&self) {
+        self.connections.compact();
     }
 
     fn handle_session_event(&self, session_event: SessionActions) -> Result<(), Error> {

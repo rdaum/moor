@@ -1990,6 +1990,9 @@ impl Scheduler {
 
         // Update the timestamp AFTER GC completes, not before
         self.gc_last_cycle_time = std::time::Instant::now();
+
+        // Compact the tasks database to reclaim space
+        self.task_q.compact();
     }
 
     /// Run concurrent mark & sweep GC
