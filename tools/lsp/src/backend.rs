@@ -22,15 +22,17 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentSymbolParams,
     DocumentSymbolResponse, InitializeParams, InitializeResult, InitializedParams, MessageType,
-    OneOf, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, Url,
+    OneOf, ServerCapabilities, SymbolInformation, TextDocumentSyncCapability, TextDocumentSyncKind,
+    Url, WorkspaceSymbolParams,
 };
 use tower_lsp::{Client, LanguageServer};
 
 use crate::client::MoorClient;
-use crate::objects::ObjectNameRegistry;
 use crate::diagnostics;
+use crate::objects::ObjectNameRegistry;
 use crate::symbols;
 use crate::workspace;
+use crate::workspace_index::WorkspaceIndex;
 
 /// LSP backend that handles protocol messages.
 pub struct MooLanguageServer {
@@ -42,6 +44,8 @@ pub struct MooLanguageServer {
     moor_client: Option<Arc<RwLock<MoorClient>>>,
     /// Object name registry ($name → Obj mapping from #0 properties).
     object_names: Arc<RwLock<ObjectNameRegistry>>,
+    /// Workspace-wide symbol index for workspace/symbol requests.
+    workspace_index: Arc<RwLock<WorkspaceIndex>>,
 }
 
 impl MooLanguageServer {
@@ -56,6 +60,7 @@ impl MooLanguageServer {
             documents: Arc::new(RwLock::new(HashMap::new())),
             moor_client,
             object_names: Arc::new(RwLock::new(ObjectNameRegistry::new())),
+            workspace_index: Arc::new(RwLock::new(WorkspaceIndex::new())),
         }
     }
 
@@ -109,6 +114,7 @@ impl LanguageServer for MooLanguageServer {
                     TextDocumentSyncKind::FULL,
                 )),
                 document_symbol_provider: Some(OneOf::Left(true)),
+                workspace_symbol_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -145,8 +151,28 @@ impl LanguageServer for MooLanguageServer {
                 .write()
                 .await
                 .insert(uri.clone(), content.clone());
+
+            // Index the file for workspace symbol search
+            self.workspace_index
+                .write()
+                .await
+                .index_file(file.clone(), &content);
+
             self.publish_diagnostics(uri, &content).await;
         }
+
+        // Log index stats
+        let index = self.workspace_index.read().await;
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!(
+                    "Indexed {} symbols across {} files",
+                    index.symbol_count(),
+                    index.file_count()
+                ),
+            )
+            .await;
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -161,6 +187,12 @@ impl LanguageServer for MooLanguageServer {
             .write()
             .await
             .insert(uri.clone(), content.clone());
+
+        // Update workspace index
+        if let Ok(path) = uri.to_file_path() {
+            self.workspace_index.write().await.index_file(path, &content);
+        }
+
         self.publish_diagnostics(uri, &content).await;
     }
 
@@ -172,6 +204,12 @@ impl LanguageServer for MooLanguageServer {
                 .write()
                 .await
                 .insert(uri.clone(), content.clone());
+
+            // Update workspace index
+            if let Ok(path) = uri.to_file_path() {
+                self.workspace_index.write().await.index_file(path, &content);
+            }
+
             self.publish_diagnostics(uri, &content).await;
         }
     }
@@ -204,5 +242,13 @@ impl LanguageServer for MooLanguageServer {
 
         let symbols = symbols::extract_symbols(&content);
         Ok(Some(DocumentSymbolResponse::Nested(symbols)))
+    }
+
+    async fn symbol(
+        &self,
+        params: WorkspaceSymbolParams,
+    ) -> Result<Option<Vec<SymbolInformation>>> {
+        let index = self.workspace_index.read().await;
+        Ok(Some(index.search(&params.query)))
     }
 }
