@@ -47,6 +47,7 @@
 mod backend;
 mod client;
 mod completion;
+mod definition;
 mod diagnostics;
 mod hover;
 mod objects;
@@ -55,8 +56,8 @@ mod workspace;
 mod workspace_index;
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use clap::Parser;
 use clap_derive::Parser;
@@ -96,7 +97,11 @@ struct Args {
     rpc_address: String,
 
     /// mooR daemon events address (for pub/sub)
-    #[arg(long, env = "MOOR_EVENTS_ADDRESS", default_value = "tcp://127.0.0.1:7898")]
+    #[arg(
+        long,
+        env = "MOOR_EVENTS_ADDRESS",
+        default_value = "tcp://127.0.0.1:7898"
+    )]
     events_address: String,
 
     /// Username for mooR authentication
@@ -142,7 +147,10 @@ async fn main() -> Result<()> {
                 Some(Arc::new(tokio::sync::RwLock::new(client)))
             }
             Err(e) => {
-                warn!("Failed to connect to mooR daemon: {}. Running in offline mode.", e);
+                warn!(
+                    "Failed to connect to mooR daemon: {}. Running in offline mode.",
+                    e
+                );
                 None
             }
         }
@@ -183,9 +191,8 @@ async fn run_stdio_server(
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) = LspService::new(|client| {
-        MooLanguageServer::new(client, workspace, moor_client)
-    });
+    let (service, socket) =
+        LspService::new(|client| MooLanguageServer::new(client, workspace, moor_client));
 
     Server::new(stdin, stdout, socket).serve(service).await;
 
@@ -226,9 +233,8 @@ async fn run_tcp_server(
 
         let (read, write) = tokio::io::split(stream);
 
-        let (service, socket) = LspService::new(|client| {
-            MooLanguageServer::new(client, workspace, moor_client)
-        });
+        let (service, socket) =
+            LspService::new(|client| MooLanguageServer::new(client, workspace, moor_client));
 
         // Run the LSP server for this client
         Server::new(read, write, socket).serve(service).await;

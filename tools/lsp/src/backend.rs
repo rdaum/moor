@@ -21,15 +21,16 @@ use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
     CompletionOptions, CompletionParams, CompletionResponse, DidChangeTextDocumentParams,
-    DidOpenTextDocumentParams, DocumentSymbolParams, DocumentSymbolResponse, Hover, HoverParams,
-    HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, MessageType,
-    OneOf, ServerCapabilities, SymbolInformation, TextDocumentSyncCapability, TextDocumentSyncKind,
-    Url, WorkspaceSymbolParams,
+    DidOpenTextDocumentParams, DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams,
+    GotoDefinitionResponse, Hover, HoverParams, HoverProviderCapability, InitializeParams,
+    InitializeResult, InitializedParams, MessageType, OneOf, ServerCapabilities, SymbolInformation,
+    TextDocumentSyncCapability, TextDocumentSyncKind, Url, WorkspaceSymbolParams,
 };
 use tower_lsp::{Client, LanguageServer};
 
 use crate::client::MoorClient;
 use crate::completion;
+use crate::definition;
 use crate::diagnostics;
 use crate::hover;
 use crate::objects::ObjectNameRegistry;
@@ -118,6 +119,7 @@ impl LanguageServer for MooLanguageServer {
                 )),
                 completion_provider: Some(CompletionOptions::default()),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
+                definition_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
                 ..Default::default()
@@ -195,7 +197,10 @@ impl LanguageServer for MooLanguageServer {
 
         // Update workspace index
         if let Ok(path) = uri.to_file_path() {
-            self.workspace_index.write().await.index_file(path, &content);
+            self.workspace_index
+                .write()
+                .await
+                .index_file(path, &content);
         }
 
         self.publish_diagnostics(uri, &content).await;
@@ -212,7 +217,10 @@ impl LanguageServer for MooLanguageServer {
 
             // Update workspace index
             if let Ok(path) = uri.to_file_path() {
-                self.workspace_index.write().await.index_file(path, &content);
+                self.workspace_index
+                    .write()
+                    .await
+                    .index_file(path, &content);
             }
 
             self.publish_diagnostics(uri, &content).await;
@@ -235,9 +243,9 @@ impl LanguageServer for MooLanguageServer {
             Some(c) => c,
             None => {
                 // Fall back to reading from disk
-                let path = uri.to_file_path().map_err(|_| {
-                    tower_lsp::jsonrpc::Error::invalid_params("Invalid file URI")
-                })?;
+                let path = uri
+                    .to_file_path()
+                    .map_err(|_| tower_lsp::jsonrpc::Error::invalid_params("Invalid file URI"))?;
 
                 tokio::fs::read_to_string(&path)
                     .await
@@ -284,10 +292,45 @@ impl LanguageServer for MooLanguageServer {
         Ok(hover::get_hover(&content, position))
     }
 
-    async fn completion(
+    async fn goto_definition(
         &self,
-        _params: CompletionParams,
-    ) -> Result<Option<CompletionResponse>> {
+        params: GotoDefinitionParams,
+    ) -> Result<Option<GotoDefinitionResponse>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        // Try to get content from our document store first
+        let content = {
+            let docs = self.documents.read().await;
+            docs.get(&uri).cloned()
+        };
+
+        let content = match content {
+            Some(c) => c,
+            None => {
+                // Fall back to reading from disk
+                let Ok(path) = uri.to_file_path() else {
+                    return Ok(None);
+                };
+                match tokio::fs::read_to_string(&path).await {
+                    Ok(c) => c,
+                    Err(_) => return Ok(None),
+                }
+            }
+        };
+
+        // Get the object names and workspace index
+        let object_names = self.object_names.read().await;
+        let workspace_index = self.workspace_index.read().await;
+
+        // Find the definition
+        let location =
+            definition::find_definition(&content, position, &workspace_index, &object_names);
+
+        Ok(location.map(GotoDefinitionResponse::Scalar))
+    }
+
+    async fn completion(&self, _params: CompletionParams) -> Result<Option<CompletionResponse>> {
         // For now, return all builtin completions regardless of context.
         // Future enhancements could filter based on cursor position and context.
         let items = completion::get_builtin_completions();

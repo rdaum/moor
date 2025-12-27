@@ -86,9 +86,10 @@ fn parse_error_to_diagnostic(error: &ObjDefParseError) -> Option<Diagnostic> {
         | ObjDefParseError::BadPropFlags(msg)
         | ObjDefParseError::ConstantNotFound(msg)
         | ObjDefParseError::InvalidObjectId(msg) => (Range::default(), msg.clone()),
-        ObjDefParseError::BadAttributeType(var_type) => {
-            (Range::default(), format!("Bad attribute type: {:?}", var_type))
-        }
+        ObjDefParseError::BadAttributeType(var_type) => (
+            Range::default(),
+            format!("Bad attribute type: {:?}", var_type),
+        ),
     };
     Some(error_diagnostic(range, message))
 }

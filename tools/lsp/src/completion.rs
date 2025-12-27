@@ -17,7 +17,12 @@ use moor_common::builtins::{ArgCount, ArgType, BUILTINS};
 use tower_lsp::lsp_types::{CompletionItem, CompletionItemKind, Documentation};
 
 /// Generate documentation string for a builtin function.
-fn format_builtin_doc(name: &str, min_args: &ArgCount, max_args: &ArgCount, types: &[ArgType]) -> String {
+fn format_builtin_doc(
+    name: &str,
+    min_args: &ArgCount,
+    max_args: &ArgCount,
+    types: &[ArgType],
+) -> String {
     let args_str = match (min_args, max_args) {
         (ArgCount::Q(min), ArgCount::Q(max)) if min == max => format!("{} args", min),
         (ArgCount::Q(min), ArgCount::Q(max)) => format!("{}-{} args", min, max),
@@ -40,7 +45,10 @@ fn format_builtin_doc(name: &str, min_args: &ArgCount, max_args: &ArgCount, type
         format!("\n\nArgument types: {}", type_hints.join(", "))
     };
 
-    format!("**{}**\n\nBuiltin function ({}){}", name, args_str, types_str)
+    format!(
+        "**{}**\n\nBuiltin function ({}){}",
+        name, args_str, types_str
+    )
 }
 
 /// Get completion items for all MOO builtin functions.
@@ -50,8 +58,9 @@ pub fn get_builtin_completions() -> Vec<CompletionItem> {
         .filter(|b| b.implemented)
         .map(|builtin| {
             let name = builtin.name.to_string();
-            let doc = format_builtin_doc(&name, &builtin.min_args, &builtin.max_args, &builtin.types);
-            
+            let doc =
+                format_builtin_doc(&name, &builtin.min_args, &builtin.max_args, &builtin.types);
+
             CompletionItem {
                 label: name.clone(),
                 kind: Some(CompletionItemKind::FUNCTION),
@@ -71,10 +80,13 @@ mod tests {
     #[test]
     fn test_get_builtin_completions() {
         let completions = get_builtin_completions();
-        
+
         // Should have many completions
-        assert!(completions.len() > 50, "Should have many builtin completions");
-        
+        assert!(
+            completions.len() > 50,
+            "Should have many builtin completions"
+        );
+
         // Check that common builtins are present
         let names: Vec<&str> = completions.iter().map(|c| c.label.as_str()).collect();
         assert!(names.contains(&"typeof"), "Should contain typeof");
@@ -87,10 +99,13 @@ mod tests {
     #[test]
     fn test_completion_item_structure() {
         let completions = get_builtin_completions();
-        
+
         // Find the 'length' builtin
-        let length = completions.iter().find(|c| c.label == "length").expect("length should exist");
-        
+        let length = completions
+            .iter()
+            .find(|c| c.label == "length")
+            .expect("length should exist");
+
         assert_eq!(length.kind, Some(CompletionItemKind::FUNCTION));
         assert!(length.detail.is_some());
         assert!(length.documentation.is_some());

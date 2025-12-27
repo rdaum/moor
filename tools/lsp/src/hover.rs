@@ -101,7 +101,12 @@ fn object_hover(obj: &ObjectDefinition) -> String {
          | Owner | `{}` |\n\
          | Location | `{}` |\n\
          | Flags | {} |",
-        obj.name, obj.oid, obj.parent, obj.owner, obj.location, format_obj_flags(obj.flags)
+        obj.name,
+        obj.oid,
+        obj.parent,
+        obj.owner,
+        obj.location,
+        format_obj_flags(obj.flags)
     )
 }
 
@@ -259,8 +264,14 @@ mod tests {
     #[test]
     fn test_classify_line() {
         assert_eq!(classify_line("object #1"), LineType::Object);
-        assert_eq!(classify_line("  verb \"look\" (this none this)"), LineType::Verb);
-        assert_eq!(classify_line("    property description"), LineType::Property);
+        assert_eq!(
+            classify_line("  verb \"look\" (this none this)"),
+            LineType::Verb
+        );
+        assert_eq!(
+            classify_line("    property description"),
+            LineType::Property
+        );
         assert_eq!(classify_line("    return 1;"), LineType::Other);
     }
 
@@ -278,7 +289,13 @@ object #1
     readable: true
 endobject
 "#;
-        let hover = get_hover(source, Position { line: 1, character: 0 });
+        let hover = get_hover(
+            source,
+            Position {
+                line: 1,
+                character: 0,
+            },
+        );
         assert!(hover.is_some());
         let content = match hover.unwrap().contents {
             HoverContents::Markup(m) => m.value,
@@ -306,7 +323,13 @@ object #1
     endverb
 endobject
 "#;
-        let hover = get_hover(source, Position { line: 11, character: 5 });
+        let hover = get_hover(
+            source,
+            Position {
+                line: 11,
+                character: 5,
+            },
+        );
         assert!(hover.is_some());
         let content = match hover.unwrap().contents {
             HoverContents::Markup(m) => m.value,
@@ -333,7 +356,13 @@ object #1
 endobject
 "#;
         // Line 11 is the property line (0-indexed)
-        let hover = get_hover(source, Position { line: 11, character: 5 });
+        let hover = get_hover(
+            source,
+            Position {
+                line: 11,
+                character: 5,
+            },
+        );
         assert!(hover.is_some());
         let content = match hover.unwrap().contents {
             HoverContents::Markup(m) => m.value,
@@ -361,7 +390,13 @@ object #1
     endverb
 endobject
 "#;
-        let hover = get_hover(source, Position { line: 12, character: 10 });
+        let hover = get_hover(
+            source,
+            Position {
+                line: 12,
+                character: 10,
+            },
+        );
         assert!(hover.is_none());
     }
 }
