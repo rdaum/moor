@@ -47,6 +47,7 @@
 mod backend;
 mod client;
 mod diagnostics;
+mod hover;
 mod objects;
 mod symbols;
 mod workspace;

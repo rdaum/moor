@@ -21,14 +21,15 @@ use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentSymbolParams,
-    DocumentSymbolResponse, InitializeParams, InitializeResult, InitializedParams, MessageType,
-    OneOf, ServerCapabilities, SymbolInformation, TextDocumentSyncCapability, TextDocumentSyncKind,
-    Url, WorkspaceSymbolParams,
+    DocumentSymbolResponse, Hover, HoverParams, HoverProviderCapability, InitializeParams,
+    InitializeResult, InitializedParams, MessageType, OneOf, ServerCapabilities, SymbolInformation,
+    TextDocumentSyncCapability, TextDocumentSyncKind, Url, WorkspaceSymbolParams,
 };
 use tower_lsp::{Client, LanguageServer};
 
 use crate::client::MoorClient;
 use crate::diagnostics;
+use crate::hover;
 use crate::objects::ObjectNameRegistry;
 use crate::symbols;
 use crate::workspace;
@@ -113,6 +114,7 @@ impl LanguageServer for MooLanguageServer {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
+                hover_provider: Some(HoverProviderCapability::Simple(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
                 ..Default::default()
@@ -250,5 +252,32 @@ impl LanguageServer for MooLanguageServer {
     ) -> Result<Option<Vec<SymbolInformation>>> {
         let index = self.workspace_index.read().await;
         Ok(Some(index.search(&params.query)))
+    }
+
+    async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        // Try to get content from our document store first
+        let content = {
+            let docs = self.documents.read().await;
+            docs.get(&uri).cloned()
+        };
+
+        let content = match content {
+            Some(c) => c,
+            None => {
+                // Fall back to reading from disk
+                let Ok(path) = uri.to_file_path() else {
+                    return Ok(None);
+                };
+                match tokio::fs::read_to_string(&path).await {
+                    Ok(c) => c,
+                    Err(_) => return Ok(None),
+                }
+            }
+        };
+
+        Ok(hover::get_hover(&content, position))
     }
 }
