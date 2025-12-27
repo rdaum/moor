@@ -22,10 +22,10 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOptions, CodeActionOrCommand, CodeActionParams,
     CodeActionProviderCapability, CodeActionResponse, Command, CompletionOptions, CompletionParams,
-    CompletionResponse, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
-    DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse,
-    Hover, HoverParams, HoverProviderCapability, InitializeParams, InitializeResult,
-    InitializedParams, MessageType, OneOf, ServerCapabilities, SymbolInformation,
+    CompletionResponse, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
+    DidOpenTextDocumentParams, DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams,
+    GotoDefinitionResponse, Hover, HoverParams, HoverProviderCapability, InitializeParams,
+    InitializeResult, InitializedParams, MessageType, OneOf, ServerCapabilities, SymbolInformation,
     TextDocumentSyncCapability, TextDocumentSyncKind, Url, WorkspaceSymbolParams,
 };
 use tower_lsp::{Client, LanguageServer};
@@ -157,7 +157,14 @@ impl LanguageServer for MooLanguageServer {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
-                completion_provider: Some(CompletionOptions::default()),
+                completion_provider: Some(CompletionOptions {
+                    trigger_characters: Some(vec![
+                        ":".to_string(), // $obj:verb
+                        ".".to_string(), // $obj.prop
+                        "$".to_string(), // $name
+                    ]),
+                    ..Default::default()
+                }),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
@@ -274,6 +281,19 @@ impl LanguageServer for MooLanguageServer {
 
             self.publish_diagnostics(uri, &content).await;
         }
+    }
+
+    async fn did_close(&self, params: DidCloseTextDocumentParams) {
+        let uri = params.text_document.uri;
+
+        // Remove from document store to free memory
+        self.documents.write().await.remove(&uri);
+
+        // Note: We intentionally keep the file in the workspace index since
+        // it's still part of the workspace (just not open in the editor).
+        // This allows workspace symbol search to still find symbols in closed files.
+
+        tracing::debug!("Document closed: {}", uri);
     }
 
     async fn document_symbol(
@@ -485,14 +505,15 @@ impl LanguageServer for MooLanguageServer {
         // For now, provide sync actions for each object in the file
         let mut actions = Vec::new();
 
+        // Acquire the lock once outside the loop to reduce contention
+        let mut client = moor_client.write().await;
+
         for obj_def in &object_defs {
             // Try to resolve the object in the database
             let obj_id = obj_def.oid;
 
             // Compare with database
-            let mut client = moor_client.write().await;
             let diff = sync::compare_object(obj_def, &mut client, obj_id).await;
-            drop(client);
 
             if diff.has_differences() {
                 // Add "Upload to database" action
