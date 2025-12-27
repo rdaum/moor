@@ -257,6 +257,221 @@ pub fn get_hover(source: &str, position: Position) -> Option<Hover> {
     })
 }
 
+/// Represents a parsed verb/property reference from code like `$foo:bar` or `$foo.baz`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ObjectMemberRef {
+    /// A verb reference: $object:verb_name
+    Verb {
+        object_name: String,
+        verb_name: String,
+    },
+    /// A property reference: $object.prop_name
+    Property {
+        object_name: String,
+        prop_name: String,
+    },
+}
+
+/// Parse a line to extract a verb or property reference at the given position.
+///
+/// Looks for patterns like:
+/// - `$foo:bar_verb` (verb reference)
+/// - `$foo.some_prop` (property reference)
+///
+/// Returns Some if the cursor position is on or after such a reference.
+pub fn parse_object_member_ref(line: &str, position: Position) -> Option<ObjectMemberRef> {
+    let char_pos = position.character as usize;
+
+    // Find the start of a $name reference before or at cursor
+    let before_cursor = if char_pos <= line.len() {
+        &line[..char_pos]
+    } else {
+        line
+    };
+
+    // Find the last $ before cursor
+    let dollar_pos = before_cursor.rfind('$')?;
+
+    // Extract the full reference from the $ position
+    let rest = &line[dollar_pos..];
+
+    // Match $name:verb or $name.prop pattern
+    // Object names can contain letters, digits, underscores
+    // Verb/prop names can contain letters, digits, underscores
+    let mut chars = rest.chars().peekable();
+
+    // Skip the $
+    chars.next()?;
+
+    // Collect object name
+    let mut object_name = String::new();
+    while let Some(&c) = chars.peek() {
+        if c.is_alphanumeric() || c == '_' {
+            object_name.push(c);
+            chars.next();
+        } else {
+            break;
+        }
+    }
+
+    if object_name.is_empty() {
+        return None;
+    }
+
+    // Check for : or .
+    let separator = chars.next()?;
+    let is_verb = separator == ':';
+    let is_property = separator == '.';
+
+    if !is_verb && !is_property {
+        return None;
+    }
+
+    // Collect member name
+    let mut member_name = String::new();
+    for c in chars {
+        if c.is_alphanumeric() || c == '_' {
+            member_name.push(c);
+        } else {
+            break;
+        }
+    }
+
+    // If we have at least a partial member name, return the reference
+    if member_name.is_empty() {
+        return None;
+    }
+
+    if is_verb {
+        Some(ObjectMemberRef::Verb {
+            object_name,
+            verb_name: member_name,
+        })
+    } else {
+        Some(ObjectMemberRef::Property {
+            object_name,
+            prop_name: member_name,
+        })
+    }
+}
+
+/// Get hover information from the mooR server for a verb or property reference.
+///
+/// When hovering over `$foo:bar_verb`, this resolves `$foo` via the ObjectNameRegistry,
+/// then queries the server for verb information.
+///
+/// Returns None if:
+/// - The line doesn't contain a recognized object member reference
+/// - The object name can't be resolved
+/// - The server query fails
+pub async fn get_hover_from_server(
+    line: &str,
+    position: Position,
+    client: &mut crate::client::MoorClient,
+    object_names: &crate::objects::ObjectNameRegistry,
+) -> Option<Hover> {
+    let member_ref = parse_object_member_ref(line, position)?;
+
+    let (object_name, is_verb) = match &member_ref {
+        ObjectMemberRef::Verb { object_name, .. } => (object_name.as_str(), true),
+        ObjectMemberRef::Property { object_name, .. } => (object_name.as_str(), false),
+    };
+
+    // Resolve the object name to an Obj
+    let obj = object_names.resolve(object_name)?;
+    let object_ref = moor_common::model::ObjectRef::Id(obj);
+
+    let content = if is_verb {
+        let verb_name = match &member_ref {
+            ObjectMemberRef::Verb { verb_name, .. } => verb_name,
+            _ => return None,
+        };
+
+        // First, get verb info from the list to show argspec, flags, owner
+        let verbs = client.list_verbs(&object_ref, true).await.ok()?;
+        let verb_info = verbs.iter().find(|v| {
+            // Verb names can be space-separated aliases
+            v.name.split_whitespace().any(|n| n == verb_name)
+        })?;
+
+        // Try to get the verb code for a preview
+        let code_preview = match client.get_verb(&object_ref, verb_name).await {
+            Ok(verb_code) => {
+                let preview_lines: Vec<&str> =
+                    verb_code.code.iter().take(5).map(|s| s.as_str()).collect();
+                if verb_code.code.len() > 5 {
+                    format!(
+                        "```moo\n{}\n... ({} more lines)\n```",
+                        preview_lines.join("\n"),
+                        verb_code.code.len() - 5
+                    )
+                } else if !preview_lines.is_empty() {
+                    format!("```moo\n{}\n```", preview_lines.join("\n"))
+                } else {
+                    String::new()
+                }
+            }
+            Err(_) => String::new(),
+        };
+
+        let mut result = format!(
+            "**verb** `${}:{}`\n\n\
+             | Property | Value |\n\
+             |----------|-------|\n\
+             | Names | `{}` |\n\
+             | Argspec | `{}` |\n\
+             | Owner | `{}` |\n\
+             | Flags | `{}` |",
+            object_name,
+            verb_name,
+            verb_info.name,
+            verb_info.args,
+            verb_info.owner,
+            verb_info.flags,
+        );
+
+        if !code_preview.is_empty() {
+            result.push_str("\n\n**Code Preview:**\n\n");
+            result.push_str(&code_preview);
+        }
+
+        result
+    } else {
+        let prop_name = match &member_ref {
+            ObjectMemberRef::Property { prop_name, .. } => prop_name,
+            _ => return None,
+        };
+
+        // Get property info
+        let props = client.list_properties(&object_ref, true).await.ok()?;
+        let prop_info = props.iter().find(|p| p.name == *prop_name)?;
+
+        // Try to get the property value
+        let value_str = match client.get_property(&object_ref, prop_name).await {
+            Ok(value) => format!("`{:?}`", value),
+            Err(_) => "(unable to retrieve)".to_string(),
+        };
+
+        format!(
+            "**property** `${}.{}`\n\n\
+             | Property | Value |\n\
+             |----------|-------|\n\
+             | Owner | `{}` |\n\
+             | Flags | `{}` |\n\
+             | Value | {} |",
+            object_name, prop_name, prop_info.owner, prop_info.flags, value_str,
+        )
+    };
+
+    Some(Hover {
+        contents: HoverContents::Markup(MarkupContent {
+            kind: MarkupKind::Markdown,
+            value: content,
+        }),
+        range: None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -289,6 +289,24 @@ impl LanguageServer for MooLanguageServer {
             }
         };
 
+        // Get the line at the cursor position
+        let lines: Vec<&str> = content.lines().collect();
+        let line_idx = position.line as usize;
+        let line = lines.get(line_idx).copied().unwrap_or("");
+
+        // If connected to a server, try server-based hover first for $obj:verb or $obj.prop
+        if let Some(moor_client) = &self.moor_client {
+            let object_names = self.object_names.read().await;
+            let mut client = moor_client.write().await;
+
+            if let Some(hover) =
+                hover::get_hover_from_server(line, position, &mut client, &object_names).await
+            {
+                return Ok(Some(hover));
+            }
+        }
+
+        // Fall back to file-based hover
         Ok(hover::get_hover(&content, position))
     }
 
@@ -330,9 +348,64 @@ impl LanguageServer for MooLanguageServer {
         Ok(location.map(GotoDefinitionResponse::Scalar))
     }
 
-    async fn completion(&self, _params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        // For now, return all builtin completions regardless of context.
-        // Future enhancements could filter based on cursor position and context.
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+
+        // Try to get the current line content
+        let line = {
+            let docs = self.documents.read().await;
+            if let Some(content) = docs.get(&uri) {
+                let lines: Vec<&str> = content.lines().collect();
+                lines.get(position.line as usize).map(|s| s.to_string())
+            } else {
+                None
+            }
+        };
+
+        // If we have a line, check for completion context
+        if let Some(line) = line {
+            let context = completion::parse_completion_context(&line, position.character);
+
+            match context {
+                completion::CompletionContext::VerbCompletion {
+                    object_name,
+                    partial,
+                } => {
+                    if let Some(moor_client) = &self.moor_client {
+                        let object_names = self.object_names.read().await;
+                        if let Some(obj) = object_names.resolve(&object_name) {
+                            let mut client = moor_client.write().await;
+                            let items =
+                                completion::get_verb_completions(&mut client, obj, &partial).await;
+                            if !items.is_empty() {
+                                return Ok(Some(CompletionResponse::Array(items)));
+                            }
+                        }
+                    }
+                }
+                completion::CompletionContext::PropertyCompletion {
+                    object_name,
+                    partial,
+                } => {
+                    if let Some(moor_client) = &self.moor_client {
+                        let object_names = self.object_names.read().await;
+                        if let Some(obj) = object_names.resolve(&object_name) {
+                            let mut client = moor_client.write().await;
+                            let items =
+                                completion::get_property_completions(&mut client, obj, &partial)
+                                    .await;
+                            if !items.is_empty() {
+                                return Ok(Some(CompletionResponse::Array(items)));
+                            }
+                        }
+                    }
+                }
+                completion::CompletionContext::None => {}
+            }
+        }
+
+        // Fall back to builtin completions
         let items = completion::get_builtin_completions();
         Ok(Some(CompletionResponse::Array(items)))
     }
