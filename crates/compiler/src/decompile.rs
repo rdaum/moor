@@ -1369,7 +1369,7 @@ mod tests {
     #[test]
     fn test_multi_statement_lambda_parses_compiles_and_decompiles() {
         let program = r#"f = fn ()
-            x = 1;
+            let x = 1;
             return x + 1;
         endfn;
         return f();"#;
@@ -1628,8 +1628,9 @@ return 0 && "Automatically Added Return";
     #[test]
     fn test_multi_statement_lambda_decompile() {
         // Multi-statement lambda using named fn syntax
+        // Note: Must use `let` for local variables inside lambdas
         let program = r#"fn f()
-            x = 1;
+            let x = 1;
             return x + 1;
         endfn
         return f();"#;
@@ -1640,8 +1641,9 @@ return 0 && "Automatically Added Return";
     #[test]
     fn test_multi_statement_lambda_with_params_decompile() {
         // Multi-statement lambda with parameters
+        // Note: Must use `let` for local variables inside lambdas
         let program = r#"fn f(a, b)
-            sum = a + b;
+            let sum = a + b;
             return sum * 2;
         endfn
         return f(1, 2);"#;
@@ -1681,13 +1683,15 @@ return 0 && "Automatically Added Return";
     fn test_lambda_in_list_with_multi_statements_decompile() {
         // Lambda stored in a list (common pattern in OMeta parsers)
         // Using anonymous fn syntax inside list literal
+        // Note: Must use `let` for local variables inside lambdas since bare
+        // assignments create global variables which would be flagged as captured
         let program = r#"handlers = {
             fn ()
-                x = 1;
+                let x = 1;
                 return x + 1;
             endfn,
             fn ()
-                y = 2;
+                let y = 2;
                 return y + 2;
             endfn
         };

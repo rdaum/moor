@@ -114,6 +114,8 @@ pub enum CompileError {
     InvalidAssignmentTarget(CompileContext),
     #[error("Cannot assign to type constant literal `{0}` @ {1}")]
     InvalidTypeLiteralAssignment(String, CompileContext),
+    #[error("Cannot assign to captured variable `{1}` @ {0}; lambdas capture by value")]
+    AssignmentToCapturedVariable(CompileContext, Symbol),
 }
 
 impl CompileError {
@@ -137,6 +139,7 @@ impl CompileError {
             CompileError::BadSlotName(context, _) => context,
             CompileError::InvalidAssignmentTarget(context) => context,
             CompileError::InvalidTypeLiteralAssignment(_, context) => context,
+            CompileError::AssignmentToCapturedVariable(context, _) => context,
         }
     }
 }

@@ -1484,4 +1484,96 @@ mod tests {
         let program = r#"{x} = y = z;"#;
         compile(program, CompileOptions::default()).unwrap();
     }
+
+    /// Test that assigning to a captured variable in a lambda produces a compile error.
+    /// Lambdas capture by value, so mutation would not propagate to the outer scope.
+    #[test]
+    fn test_lambda_assign_to_captured_variable_error() {
+        use moor_common::model::CompileError;
+
+        // Arrow lambda assigning to captured variable
+        let program = r#"x = 5; let f = {} => x = 10;"#;
+        let result = compile(program, CompileOptions::default());
+        assert!(
+            result.is_err(),
+            "Should error when assigning to captured variable"
+        );
+        if let Err(CompileError::AssignmentToCapturedVariable(_, sym)) = result {
+            assert_eq!(sym.as_string(), "x");
+        } else {
+            panic!(
+                "Expected AssignmentToCapturedVariable error, got {:?}",
+                result
+            );
+        }
+
+        // fn-style lambda assigning to captured variable
+        let program = r#"x = 5; let f = fn() x = 10; endfn;"#;
+        let result = compile(program, CompileOptions::default());
+        assert!(
+            result.is_err(),
+            "Should error when assigning to captured variable in fn lambda"
+        );
+        if let Err(CompileError::AssignmentToCapturedVariable(_, sym)) = result {
+            assert_eq!(sym.as_string(), "x");
+        } else {
+            panic!(
+                "Expected AssignmentToCapturedVariable error, got {:?}",
+                result
+            );
+        }
+
+        // Scatter assignment to captured variable
+        let program = r#"x = 5; let f = fn() {x} = {10}; endfn;"#;
+        let result = compile(program, CompileOptions::default());
+        assert!(
+            result.is_err(),
+            "Should error when scatter-assigning to captured variable"
+        );
+        if let Err(CompileError::AssignmentToCapturedVariable(_, sym)) = result {
+            assert_eq!(sym.as_string(), "x");
+        } else {
+            panic!(
+                "Expected AssignmentToCapturedVariable error, got {:?}",
+                result
+            );
+        }
+    }
+
+    /// Test that reading a captured variable (without assignment) still works.
+    #[test]
+    fn test_lambda_read_captured_variable_ok() {
+        // Reading captured variable should be fine
+        let program = r#"x = 5; let f = {} => x + 1;"#;
+        compile(program, CompileOptions::default()).unwrap();
+
+        // Multiple reads should be fine
+        let program = r#"x = 5; y = 10; let f = {} => x + y;"#;
+        compile(program, CompileOptions::default()).unwrap();
+    }
+
+    /// Test that assigning to local variables inside a lambda is fine.
+    #[test]
+    fn test_lambda_assign_to_local_variable_ok() {
+        // Assigning to a lambda parameter is fine
+        let program = r#"let f = {x} => x = x + 1;"#;
+        compile(program, CompileOptions::default()).unwrap();
+
+        // Assigning to a local variable declared inside the lambda is fine (using let)
+        let program = r#"let f = fn() let local = 5; local = 10; endfn;"#;
+        compile(program, CompileOptions::default()).unwrap();
+    }
+
+    /// Test that shadowing a captured variable with `let` allows assignment to the shadow.
+    #[test]
+    fn test_lambda_shadow_captured_variable_ok() {
+        // Outer x exists, but lambda declares its own x with let, then assigns to it
+        let program = r#"x = 5; let f = fn() let x = 1; x = 2; return x; endfn;"#;
+        compile(program, CompileOptions::default()).unwrap();
+
+        // Multiple levels of shadowing
+        let program =
+            r#"x = 5; let f = fn() let x = 1; let g = fn() let x = 2; x = 3; endfn; endfn;"#;
+        compile(program, CompileOptions::default()).unwrap();
+    }
 }

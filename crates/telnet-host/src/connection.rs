@@ -292,6 +292,9 @@ fn describe_compile_error(compile_error: CompileError) -> String {
         CompileError::InvalidTypeLiteralAssignment(t, _) => {
             format!("Illegal type literal `{t}` as assignment target")
         }
+        CompileError::AssignmentToCapturedVariable(_, var) => {
+            format!("Cannot assign to captured variable `{var}`; lambdas capture by value")
+        }
     }
 }
 

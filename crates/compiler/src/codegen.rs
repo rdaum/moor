@@ -1368,7 +1368,7 @@ impl CodegenState {
         let program_offset = self.add_lambda_program(lambda_program, base_line_offset);
 
         // Analyze which variables this lambda captures
-        let captured_symbols = analyze_lambda_captures(params, body, &self.var_names);
+        let captured_symbols = analyze_lambda_captures(params, body, &self.var_names)?;
         let captured_names: Vec<Name> = captured_symbols
             .iter()
             .filter_map(|sym| self.var_names.name_for_ident(*sym))
@@ -1440,11 +1440,16 @@ use std::collections::HashSet;
 /// A visitor that finds all variable references in lambda bodies for capture analysis
 struct CaptureAnalyzer<'a> {
     captures: HashSet<Symbol>,
+    /// Variables from outer scope that are assigned to (an error condition).
+    /// Tracks (symbol, line_col) for better error messages.
+    assigned_captures: Vec<(Symbol, (usize, usize))>,
     param_names: HashSet<Symbol>,
     outer_names: &'a Names,
     /// The scope level at which the lambda is defined (parameter scope level).
     /// Only variables at this scope level or lower can be captured.
     outer_scope_level: u8,
+    /// Current statement's line_col for error reporting
+    current_line_col: (usize, usize),
 }
 
 impl<'a> CaptureAnalyzer<'a> {
@@ -1463,9 +1468,11 @@ impl<'a> CaptureAnalyzer<'a> {
 
         Self {
             captures: HashSet::new(),
+            assigned_captures: Vec::new(),
             param_names,
             outer_names,
             outer_scope_level,
+            current_line_col: (0, 0),
         }
     }
 
@@ -1484,6 +1491,20 @@ impl<'a> CaptureAnalyzer<'a> {
         // Variables at higher scope levels are local to the lambda body.
         name.1 <= self.outer_scope_level
     }
+
+    /// Check if a Variable is from outer scope (for assignment error detection).
+    /// Unlike should_capture, this checks the Variable's actual scope_id,
+    /// so shadowed variables (e.g., `let x = 1; x = 2;`) won't trigger false positives.
+    fn is_outer_scope_variable(&self, var: &Variable) -> bool {
+        // Skip if it's a lambda parameter
+        if self.param_names.contains(&var.to_symbol()) {
+            return false;
+        }
+
+        // Check if this variable's scope_id indicates it's from outer scope.
+        // Variables declared inside the lambda body have higher scope_ids.
+        var.scope_id as u8 <= self.outer_scope_level
+    }
 }
 
 impl<'a> AstVisitor for CaptureAnalyzer<'a> {
@@ -1497,23 +1518,26 @@ impl<'a> AstVisitor for CaptureAnalyzer<'a> {
                 }
             }
             Expr::Assign { left, right: _ } => {
-                // For assignments, we need to check both sides
-                // The left side might be a variable assignment that needs capture
-                if let Expr::Id(var) = left.as_ref() {
-                    let var_symbol = var.to_symbol();
-                    if self.should_capture(&var_symbol) {
-                        self.captures.insert(var_symbol);
-                    }
+                // For assignments, check if the target Variable is from outer scope (an error).
+                // We use is_outer_scope_variable which checks the Variable's scope_id directly,
+                // so shadowed variables (let x = 1; x = 2;) won't trigger false positives.
+                if let Expr::Id(var) = left.as_ref()
+                    && self.is_outer_scope_variable(var)
+                {
+                    // Assignment to captured variable is an error - track it with location
+                    self.assigned_captures
+                        .push((var.to_symbol(), self.current_line_col));
                 }
                 // Continue walking for right side and other assignment targets
                 self.walk_expr(expr);
             }
             Expr::Scatter(items, _) => {
-                // Check scatter items for variable assignments
+                // Check scatter items for variable assignments to captured variables (an error)
                 for item in items {
-                    let var_symbol = item.id.to_symbol();
-                    if self.should_capture(&var_symbol) {
-                        self.captures.insert(var_symbol);
+                    if self.is_outer_scope_variable(&item.id) {
+                        // Assignment to captured variable is an error - track it with location
+                        self.assigned_captures
+                            .push((item.id.to_symbol(), self.current_line_col));
                     }
                 }
                 // Continue walking for the expression part
@@ -1536,6 +1560,8 @@ impl<'a> AstVisitor for CaptureAnalyzer<'a> {
     }
 
     fn visit_stmt(&mut self, stmt: &Stmt) {
+        // Track the current statement's line_col for error reporting
+        self.current_line_col = stmt.line_col;
         self.walk_stmt(stmt);
     }
 
@@ -1544,13 +1570,23 @@ impl<'a> AstVisitor for CaptureAnalyzer<'a> {
     }
 }
 
-/// Analyze a lambda AST to find which variables it references from the outer scope
+/// Analyze a lambda AST to find which variables it references from the outer scope.
+/// Returns an error if the lambda attempts to assign to a captured variable.
 fn analyze_lambda_captures(
     lambda_params: &[ScatterItem],
     lambda_body: &Stmt,
     outer_names: &Names,
-) -> Vec<Symbol> {
+) -> Result<Vec<Symbol>, CompileError> {
     let mut analyzer = CaptureAnalyzer::new(lambda_params, outer_names);
     analyzer.visit_stmt(lambda_body);
-    analyzer.captures.into_iter().collect()
+
+    // Check if any captured variables were assigned to (an error)
+    if let Some((assigned_var, line_col)) = analyzer.assigned_captures.first() {
+        return Err(CompileError::AssignmentToCapturedVariable(
+            CompileContext::new(*line_col),
+            *assigned_var,
+        ));
+    }
+
+    Ok(analyzer.captures.into_iter().collect())
 }

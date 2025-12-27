@@ -315,6 +315,12 @@ pub fn compilation_error_from_ref(
             let literal = fb_read!(e, literal).to_string();
             Ok(CompileError::InvalidTypeLiteralAssignment(literal, ctx))
         }
+        CompileErrorUnionRef::AssignmentToCapturedVariable(e) => {
+            let ctx = compile_context_from_ref(fb_read!(e, context))?;
+            let var_ref = fb_read!(e, var_name);
+            let var_name = symbol_from_ref(var_ref)?;
+            Ok(CompileError::AssignmentToCapturedVariable(ctx, var_name))
+        }
     }
 }
 
@@ -410,6 +416,14 @@ pub fn compilation_error_to_flatbuffer_struct(
                 common::InvalidTypeLiteralAssignment {
                     context: Box::new(compile_context_to_flatbuffer(ctx)),
                     literal: literal.clone(),
+                },
+            ))
+        }
+        CompileError::AssignmentToCapturedVariable(ctx, var_name) => {
+            common::CompileErrorUnion::AssignmentToCapturedVariable(Box::new(
+                common::AssignmentToCapturedVariable {
+                    context: Box::new(compile_context_to_flatbuffer(ctx)),
+                    var_name: Box::new(symbol_to_flatbuffer_struct(var_name)),
                 },
             ))
         }

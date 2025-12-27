@@ -239,6 +239,11 @@ table InvalidTypeLiteralAssignment {
     literal: string (required);
 }
 
+table AssignmentToCapturedVariable {
+    context: CompileContext (required);
+    var_name: Symbol (required);
+}
+
 union CompileErrorUnion {
     StringLexError,
     ParseError,
@@ -250,7 +255,8 @@ union CompileErrorUnion {
     DisabledFeature,
     BadSlotName,
     InvalidAssignment,
-    InvalidTypeLiteralAssignment
+    InvalidTypeLiteralAssignment,
+    AssignmentToCapturedVariable
 }
 
 table CompileError {

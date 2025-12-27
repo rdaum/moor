@@ -186,6 +186,13 @@ fn offset_compile_error(error: CompileError, line_offset: usize) -> CompileError
                 CompileContext::new((line + line_offset, col)),
             )
         }
+        CompileError::AssignmentToCapturedVariable(context, var) => {
+            let (line, col) = context.line_col;
+            CompileError::AssignmentToCapturedVariable(
+                CompileContext::new((line + line_offset, col)),
+                var,
+            )
+        }
     }
 }
 
