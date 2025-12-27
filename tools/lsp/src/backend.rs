@@ -20,14 +20,16 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
-    DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentSymbolParams,
-    DocumentSymbolResponse, Hover, HoverParams, HoverProviderCapability, InitializeParams,
-    InitializeResult, InitializedParams, MessageType, OneOf, ServerCapabilities, SymbolInformation,
-    TextDocumentSyncCapability, TextDocumentSyncKind, Url, WorkspaceSymbolParams,
+    CompletionOptions, CompletionParams, CompletionResponse, DidChangeTextDocumentParams,
+    DidOpenTextDocumentParams, DocumentSymbolParams, DocumentSymbolResponse, Hover, HoverParams,
+    HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, MessageType,
+    OneOf, ServerCapabilities, SymbolInformation, TextDocumentSyncCapability, TextDocumentSyncKind,
+    Url, WorkspaceSymbolParams,
 };
 use tower_lsp::{Client, LanguageServer};
 
 use crate::client::MoorClient;
+use crate::completion;
 use crate::diagnostics;
 use crate::hover;
 use crate::objects::ObjectNameRegistry;
@@ -114,6 +116,7 @@ impl LanguageServer for MooLanguageServer {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
+                completion_provider: Some(CompletionOptions::default()),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
@@ -279,5 +282,15 @@ impl LanguageServer for MooLanguageServer {
         };
 
         Ok(hover::get_hover(&content, position))
+    }
+
+    async fn completion(
+        &self,
+        _params: CompletionParams,
+    ) -> Result<Option<CompletionResponse>> {
+        // For now, return all builtin completions regardless of context.
+        // Future enhancements could filter based on cursor position and context.
+        let items = completion::get_builtin_completions();
+        Ok(Some(CompletionResponse::Array(items)))
     }
 }

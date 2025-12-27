@@ -46,6 +46,7 @@
 
 mod backend;
 mod client;
+mod completion;
 mod diagnostics;
 mod hover;
 mod objects;
