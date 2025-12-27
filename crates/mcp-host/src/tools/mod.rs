@@ -35,7 +35,7 @@ mod util;
 mod verbs;
 
 use crate::mcp_types::{Tool, ToolCallResult};
-use crate::moor_client::MoorClient;
+use moor_client::MoorClient;
 use eyre::Result;
 use helpers::{with_wizard_param, wizard_required};
 use serde_json::Value;

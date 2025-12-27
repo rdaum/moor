@@ -17,7 +17,7 @@
 //! as a hierarchical structure.
 
 use crate::mcp_types::{Resource, ResourceContents, ResourceReadResult};
-use crate::moor_client::MoorClient;
+use moor_client::MoorClient;
 use eyre::Result;
 use moor_common::model::ObjectRef;
 use serde_json::json;

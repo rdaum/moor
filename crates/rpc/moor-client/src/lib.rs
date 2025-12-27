@@ -18,10 +18,13 @@
 //!
 //! - [`in_memory`] - Direct in-memory access without network RPC,
 //!   suitable for tooling like LSP servers.
+//! - [`rpc`] - RPC-based client for connecting to a running mooR daemon.
 //! - [`traits`] - Common traits for client implementations.
 
 pub mod in_memory;
+pub mod rpc;
 pub mod traits;
 
 pub use in_memory::{InMemoryConfig, InMemoryWorldState};
+pub use rpc::{MoorClient, MoorClientConfig, MoorResult, ObjectInfo, PropertyInfo, TaskResult, VerbCode, VerbInfo};
 pub use traits::{IntrospectionError, IntrospectionResult, MoorIntrospection};

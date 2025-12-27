@@ -62,7 +62,7 @@ use tower_lsp::{LspService, Server};
 use tracing::{info, warn};
 
 use backend::MooLanguageServer;
-use client::{MoorClientConfig, MoorLspClient};
+use client::{MoorClient, MoorClientConfig};
 
 /// mooR LSP Server - Language Server Protocol for MOO
 #[derive(Parser, Debug)]
@@ -161,8 +161,8 @@ async fn create_moor_client(
     config: &MoorClientConfig,
     username: &str,
     password: &str,
-) -> Result<MoorLspClient> {
-    let mut client = MoorLspClient::new(config.clone())?;
+) -> Result<MoorClient> {
+    let mut client = MoorClient::new(config.clone())?;
     client.connect().await?;
     client.login(username, password).await?;
     Ok(client)
@@ -171,7 +171,7 @@ async fn create_moor_client(
 /// Run LSP server over stdio
 async fn run_stdio_server(
     workspace: PathBuf,
-    moor_client: Option<Arc<tokio::sync::RwLock<MoorLspClient>>>,
+    moor_client: Option<Arc<tokio::sync::RwLock<MoorClient>>>,
 ) -> Result<()> {
     info!("Starting MOO LSP server on stdio");
     info!("Workspace: {}", workspace.display());
@@ -192,7 +192,7 @@ async fn run_stdio_server(
 async fn run_tcp_server(
     port: u16,
     workspace: PathBuf,
-    moor_client: Option<Arc<tokio::sync::RwLock<MoorLspClient>>>,
+    moor_client: Option<Arc<tokio::sync::RwLock<MoorClient>>>,
 ) -> Result<()> {
     let addr = format!("127.0.0.1:{}", port);
     let listener = TcpListener::bind(&addr).await?;

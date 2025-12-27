@@ -14,7 +14,7 @@
 //! Verb tools: list, get, program, add, delete, find_definition, set_verb_info, set_verb_args
 
 use crate::mcp_types::{Tool, ToolCallResult};
-use crate::moor_client::{MoorClient, MoorResult};
+use moor_client::{MoorClient, MoorResult};
 use eyre::Result;
 use moor_var::Sequence;
 use serde_json::{Value, json};

@@ -26,7 +26,7 @@ use tower_lsp::lsp_types::{
 };
 use tower_lsp::{Client, LanguageServer};
 
-use crate::client::MoorLspClient;
+use crate::client::MoorClient;
 use crate::diagnostics;
 use crate::symbols;
 use crate::workspace;
@@ -39,14 +39,14 @@ pub struct MooLanguageServer {
     documents: Arc<RwLock<HashMap<Url, String>>>,
     /// Optional mooR daemon client for server-connected features.
     #[allow(dead_code)]
-    moor_client: Option<Arc<RwLock<MoorLspClient>>>,
+    moor_client: Option<Arc<RwLock<MoorClient>>>,
 }
 
 impl MooLanguageServer {
     pub fn new(
         client: Client,
         workspace: PathBuf,
-        moor_client: Option<Arc<RwLock<MoorLspClient>>>,
+        moor_client: Option<Arc<RwLock<MoorClient>>>,
     ) -> Self {
         Self {
             client,
@@ -95,15 +95,17 @@ impl LanguageServer for MooLanguageServer {
 
         // Parse each file and publish initial diagnostics
         for file in files {
-            if let Ok(content) = tokio::fs::read_to_string(&file).await
-                && let Ok(uri) = Url::from_file_path(&file)
-            {
-                self.documents
-                    .write()
-                    .await
-                    .insert(uri.clone(), content.clone());
-                self.publish_diagnostics(uri, &content).await;
-            }
+            let Ok(content) = tokio::fs::read_to_string(&file).await else {
+                continue;
+            };
+            let Ok(uri) = Url::from_file_path(&file) else {
+                continue;
+            };
+            self.documents
+                .write()
+                .await
+                .insert(uri.clone(), content.clone());
+            self.publish_diagnostics(uri, &content).await;
         }
     }
 

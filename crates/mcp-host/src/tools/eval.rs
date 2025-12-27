@@ -14,7 +14,7 @@
 //! Execution tools: eval, command, invoke_verb
 
 use crate::mcp_types::{Tool, ToolCallResult};
-use crate::moor_client::{MoorClient, MoorResult};
+use moor_client::{MoorClient, MoorResult};
 use eyre::Result;
 use moor_var::Var;
 use serde_json::{Value, json};

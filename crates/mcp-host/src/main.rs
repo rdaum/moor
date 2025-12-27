@@ -46,7 +46,6 @@
 mod connection;
 mod mcp_server;
 mod mcp_types;
-mod moor_client;
 mod prompts;
 mod resources;
 mod tools;
