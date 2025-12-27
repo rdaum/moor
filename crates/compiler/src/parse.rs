@@ -561,6 +561,12 @@ impl TreeTransformer {
                         let lambda_params = inner.next().unwrap();
                         let body_part = inner.next().unwrap();
 
+                        // Enter a scope BEFORE parsing lambda parameters.
+                        // This prevents DuplicateVariable errors when multiple lambdas
+                        // in the same expression use the same parameter name.
+                        // e.g., {{s} => s + 1, {s} => s + 2}
+                        primary_self.enter_scope();
+
                         let params = primary_self
                             .clone()
                             .parse_lambda_params(lambda_params.into_inner())?;
@@ -601,6 +607,11 @@ impl TreeTransformer {
                                 });
                             }
                         };
+
+                        // Exit the lambda's parameter scope.
+                        // Arrow lambdas don't create a Scope node in the AST, so we
+                        // discard the binding count. The scope was just for isolation.
+                        let _ = primary_self.exit_scope();
 
                         Ok(Expr::Lambda {
                             params,
@@ -3972,12 +3983,11 @@ mod tests {
         parse_program(empty_lambda, CompileOptions::default()).unwrap();
     }
 
-    /// Regression test: multiple arrow lambdas with same parameter name.
-    /// Currently fails with DuplicateVariable because arrow lambdas don't
-    /// isolate their parameter scope during parsing.
+    /// Test that multiple lambdas can use the same parameter name.
+    /// Each lambda should have its own scope for parameters.
     #[test]
-    #[ignore] // Known failure - fix pending
-    fn test_multiple_arrow_lambdas_same_param_name() {
+    fn test_multiple_lambdas_same_param_name() {
+        // Arrow lambdas with same parameter name
         let program = r#"let funcs = {{s} => s + 1, {s} => s + 2};"#;
         let result = parse_program(program, CompileOptions::default());
         assert!(
