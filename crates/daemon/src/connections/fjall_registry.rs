@@ -152,11 +152,15 @@ impl FjallConnectionRegistry {
             timestamps_cache.len()
         );
 
-        Ok(Self {
+        let registry = Self {
             inner: Arc::new(Mutex::new(inner)),
             timestamps: Arc::new(Mutex::new(timestamps_cache)),
             dirty_clients: Arc::new(Mutex::new(HashSet::new())),
-        })
+        };
+
+        registry.prune_stale_records();
+
+        Ok(registry)
     }
 
     /// Flush all dirty timestamps to the database.
@@ -167,9 +171,9 @@ impl FjallConnectionRegistry {
     fn flush_dirty_timestamps(&self) {
         // Step 1: Take the dirty set (brief lock, then release)
         let dirty: HashSet<Uuid> = {
-            let mut dirty_guard = match self.dirty_clients.lock() {
-                Ok(g) => g,
-                Err(_) => return,
+            let Ok(mut dirty_guard) = self.dirty_clients.lock() else {
+                tracing::warn!("Poisoned dirty clients lock during timestamp flush");
+                return;
             };
             std::mem::take(&mut *dirty_guard)
         };
@@ -180,9 +184,9 @@ impl FjallConnectionRegistry {
 
         // Step 2: Snapshot timestamp data for dirty clients (brief lock, then release)
         let timestamps_snapshot: HashMap<Uuid, ClientTimestamps> = {
-            let timestamps = match self.timestamps.lock() {
-                Ok(g) => g,
-                Err(_) => return,
+            let Ok(timestamps) = self.timestamps.lock() else {
+                tracing::warn!("Poisoned timestamps lock during timestamp flush");
+                return;
             };
             dirty
                 .iter()
@@ -195,9 +199,9 @@ impl FjallConnectionRegistry {
         }
 
         // Step 3: Now take inner lock and do DB writes (no other locks held)
-        let inner = match self.inner.lock() {
-            Ok(g) => g,
-            Err(_) => return,
+        let Ok(inner) = self.inner.lock() else {
+            tracing::warn!("Poisoned connections inner lock during timestamp flush");
+            return;
         };
 
         let mut flushed = 0;
@@ -250,6 +254,270 @@ impl FjallConnectionRegistry {
 
         if flushed > 0 {
             tracing::debug!("Flushed {} dirty client timestamps to database", flushed);
+        }
+    }
+
+    /// Prune stale or invalid records from the connections database.
+    /// Called on startup and periodically from compact().
+    fn prune_stale_records(&self) {
+        let now = SystemTime::now();
+
+        let timestamps_snapshot = {
+            let Ok(timestamps) = self.timestamps.lock() else {
+                tracing::warn!("Poisoned timestamps lock during connections prune");
+                return;
+            };
+            timestamps.clone()
+        };
+
+        let Ok(inner) = self.inner.lock() else {
+            tracing::warn!("Poisoned connections inner lock during connections prune");
+            return;
+        };
+
+        let mut client_to_connection: HashMap<u128, Vec<u8>> = HashMap::new();
+        let mut client_to_player: HashMap<u128, Vec<u8>> = HashMap::new();
+        let mut invalid_mapping_keys: Vec<Vec<u8>> = Vec::new();
+
+        for entry in inner.client_connection_table.iter() {
+            let Ok((key, value)) = entry else {
+                continue;
+            };
+            let Ok(bytes) = key.as_ref().try_into() else {
+                invalid_mapping_keys.push(key.as_ref().to_vec());
+                continue;
+            };
+            let client_id = u128::from_le_bytes(bytes);
+            if Obj::from_bytes(value.as_ref()).is_err() {
+                invalid_mapping_keys.push(key.as_ref().to_vec());
+                continue;
+            }
+            client_to_connection.insert(client_id, value.as_ref().to_vec());
+        }
+
+        for entry in inner.client_player_table.iter() {
+            let Ok((key, value)) = entry else {
+                continue;
+            };
+            let Ok(bytes) = key.as_ref().try_into() else {
+                invalid_mapping_keys.push(key.as_ref().to_vec());
+                continue;
+            };
+            let client_id = u128::from_le_bytes(bytes);
+            if Obj::from_bytes(value.as_ref()).is_err() {
+                invalid_mapping_keys.push(key.as_ref().to_vec());
+                continue;
+            }
+            client_to_player.insert(client_id, value.as_ref().to_vec());
+        }
+
+        let mut stale_records_removed = 0usize;
+        let mut invalid_entries_removed = 0usize;
+        let mut orphan_mappings_removed = 0usize;
+        let mut removed_client_ids: HashSet<u128> = HashSet::new();
+        let mut kept_client_ids: HashSet<u128> = HashSet::new();
+
+        for key in invalid_mapping_keys {
+            let _ = inner.client_connection_table.remove(&key);
+            let _ = inner.client_player_table.remove(&key);
+            invalid_entries_removed += 1;
+        }
+
+        let mut connection_updates: Vec<(Vec<u8>, ConnectionsRecords)> = Vec::new();
+        let mut connection_removals: Vec<Vec<u8>> = Vec::new();
+
+        for entry in inner.connection_records_table.iter() {
+            let Ok((key, value)) = entry else {
+                continue;
+            };
+
+            if Obj::from_bytes(key.as_ref()).is_err() {
+                connection_removals.push(key.as_ref().to_vec());
+                invalid_entries_removed += 1;
+                continue;
+            }
+
+            let Ok(connections_record) = connections_records_from_bytes(&value) else {
+                connection_removals.push(key.as_ref().to_vec());
+                invalid_entries_removed += 1;
+                continue;
+            };
+
+            let mut changed = false;
+            let mut kept = Vec::with_capacity(connections_record.connections.len());
+
+            for record in connections_record.connections {
+                let client_id = record.client_id;
+                let mapping = client_to_connection.get(&client_id);
+                let mut stale = mapping.is_none();
+                if let Some(mapping_bytes) = mapping
+                    && mapping_bytes.as_slice() != key.as_ref() {
+                        stale = true;
+                    }
+
+                if !stale {
+                    let last_activity = timestamps_snapshot
+                        .get(&Uuid::from_u128(client_id))
+                        .map(|ts| ts.last_activity)
+                        .unwrap_or(record.last_activity);
+                    if let Ok(idle) = now.duration_since(last_activity)
+                        && idle >= CONNECTION_TIMEOUT_DURATION {
+                            stale = true;
+                        }
+                }
+
+                if stale {
+                    stale_records_removed += 1;
+                    removed_client_ids.insert(client_id);
+                    changed = true;
+                } else {
+                    kept_client_ids.insert(client_id);
+                    kept.push(record);
+                }
+            }
+
+            if kept.is_empty() {
+                connection_removals.push(key.as_ref().to_vec());
+            }
+
+            if changed && !kept.is_empty() {
+                connection_updates.push((
+                    key.as_ref().to_vec(),
+                    ConnectionsRecords { connections: kept },
+                ));
+            }
+        }
+
+        for key in connection_removals {
+            let _ = inner.connection_records_table.remove(&key);
+        }
+
+        for (key, record) in connection_updates {
+            if let Ok(encoded) = connections_records_to_bytes(&record) {
+                let _ = inner.connection_records_table.insert(&key, &encoded);
+            }
+        }
+
+        for client_id in &removed_client_ids {
+            let _ = inner
+                .client_connection_table
+                .remove(client_id.to_le_bytes());
+            let _ = inner.client_player_table.remove(client_id.to_le_bytes());
+            client_to_connection.remove(client_id);
+            client_to_player.remove(client_id);
+        }
+
+        let mut mapping_removals: Vec<Vec<u8>> = Vec::new();
+        for entry in inner.client_connection_table.iter() {
+            let Ok((key, _)) = entry else {
+                continue;
+            };
+            let Ok(bytes) = key.as_ref().try_into() else {
+                mapping_removals.push(key.as_ref().to_vec());
+                continue;
+            };
+            let client_id = u128::from_le_bytes(bytes);
+            if !kept_client_ids.contains(&client_id) {
+                mapping_removals.push(key.as_ref().to_vec());
+            }
+        }
+
+        for key in mapping_removals {
+            let _ = inner.client_connection_table.remove(&key);
+            let _ = inner.client_player_table.remove(&key);
+            orphan_mappings_removed += 1;
+        }
+
+        let mut player_updates: Vec<(Vec<u8>, ConnectionsRecords)> = Vec::new();
+        let mut player_removals: Vec<Vec<u8>> = Vec::new();
+
+        for entry in inner.player_clients_table.iter() {
+            let Ok((key, value)) = entry else {
+                continue;
+            };
+
+            if Obj::from_bytes(key.as_ref()).is_err() {
+                player_removals.push(key.as_ref().to_vec());
+                invalid_entries_removed += 1;
+                continue;
+            }
+
+            let Ok(connections_record) = connections_records_from_bytes(&value) else {
+                player_removals.push(key.as_ref().to_vec());
+                invalid_entries_removed += 1;
+                continue;
+            };
+
+            let mut changed = false;
+            let mut kept = Vec::with_capacity(connections_record.connections.len());
+
+            for record in connections_record.connections {
+                let client_id = record.client_id;
+                let player_mapping = client_to_player.get(&client_id);
+                let mut stale = player_mapping.is_none();
+                if let Some(mapping_bytes) = player_mapping
+                    && mapping_bytes.as_slice() != key.as_ref() {
+                        stale = true;
+                    }
+
+                if !stale && !client_to_connection.contains_key(&client_id) {
+                    stale = true;
+                }
+
+                if stale {
+                    stale_records_removed += 1;
+                    changed = true;
+                } else {
+                    kept.push(record);
+                }
+            }
+
+            if kept.is_empty() {
+                player_removals.push(key.as_ref().to_vec());
+            }
+
+            if changed && !kept.is_empty() {
+                player_updates.push((
+                    key.as_ref().to_vec(),
+                    ConnectionsRecords { connections: kept },
+                ));
+            }
+        }
+
+        for key in player_removals {
+            let _ = inner.player_clients_table.remove(&key);
+        }
+
+        for (key, record) in player_updates {
+            if let Ok(encoded) = connections_records_to_bytes(&record) {
+                let _ = inner.player_clients_table.insert(&key, &encoded);
+            }
+        }
+
+        drop(inner);
+
+        if !removed_client_ids.is_empty() || orphan_mappings_removed > 0 {
+            if let Ok(mut timestamps) = self.timestamps.lock() {
+                for client_id in &removed_client_ids {
+                    let _ = timestamps.remove(&Uuid::from_u128(*client_id));
+                }
+            }
+            if let Ok(mut dirty) = self.dirty_clients.lock() {
+                for client_id in &removed_client_ids {
+                    dirty.remove(&Uuid::from_u128(*client_id));
+                }
+            }
+        }
+
+        if stale_records_removed > 0 || invalid_entries_removed > 0 || orphan_mappings_removed > 0 {
+            tracing::info!(
+                stale_records_removed,
+                invalid_entries_removed,
+                orphan_mappings_removed,
+                "Deleted {} stale records and {} invalid records during connections DB prune",
+                stale_records_removed,
+                invalid_entries_removed
+            );
         }
     }
 
@@ -657,9 +925,9 @@ impl ConnectionRegistry for FjallConnectionRegistry {
     }
 
     fn ping_check(&self) {
-        let inner = match self.inner.lock() {
-            Ok(inner) => inner,
-            Err(_) => return,
+        let Ok(inner) = self.inner.lock() else {
+            tracing::warn!("Poisoned connections inner lock during ping check");
+            return;
         };
 
         // Check timestamps in-memory cache for stale connections
@@ -669,9 +937,8 @@ impl ConnectionRegistry for FjallConnectionRegistry {
 
         for (&client_uuid, ts) in timestamps.iter() {
             // Keep connections around unless they've been idle for a very long time.
-            let idle_duration = match now.duration_since(ts.last_activity) {
-                Ok(duration) => duration,
-                Err(_) => continue,
+            let Ok(idle_duration) = now.duration_since(ts.last_activity) else {
+                continue;
             };
             if idle_duration < CONNECTION_TIMEOUT_DURATION {
                 continue;
@@ -710,6 +977,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
     fn compact(&self) {
         // Flush any dirty timestamps before compacting
         self.flush_dirty_timestamps();
+        self.prune_stale_records();
 
         // Clone the keyspace (it's Arc-based, so cheap) and release the lock
         // before calling persist to avoid blocking connection operations during disk I/O.
@@ -718,9 +986,9 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         // partition operations (insert/get/remove). Keyspace is Arc<KeyspaceInner>
         // and uses internal synchronization for WAL flushing.
         let keyspace = {
-            let inner = match self.inner.lock() {
-                Ok(inner) => inner,
-                Err(_) => return,
+            let Ok(inner) = self.inner.lock() else {
+                tracing::warn!("Poisoned connections inner lock during compact");
+                return;
             };
             inner.keyspace.clone()
         };
@@ -829,9 +1097,9 @@ impl ConnectionRegistry for FjallConnectionRegistry {
     }
 
     fn connections(&self) -> Vec<Obj> {
-        let inner = match self.inner.lock() {
-            Ok(inner) => inner,
-            Err(_) => return vec![],
+        let Ok(inner) = self.inner.lock() else {
+            tracing::warn!("Poisoned connections inner lock during connections list");
+            return vec![];
         };
 
         let mut connections = Vec::new();
