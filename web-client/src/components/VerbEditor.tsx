@@ -20,6 +20,7 @@ import { useTouchDevice } from "../hooks/useTouchDevice";
 import { registerMooLanguage } from "../lib/monaco-moo";
 import { registerMooCompletionProvider } from "../lib/monaco-moo-completions";
 import { performEvalFlatBuffer } from "../lib/rpc-fb.js";
+import { DialogSheet } from "./DialogSheet";
 import { EditorWindow, useTitleBarDrag } from "./EditorWindow";
 import { useTheme } from "./ThemeProvider";
 import { monacoThemeFor } from "./themeSupport";
@@ -30,6 +31,7 @@ interface VerbEditorProps {
     title: string;
     objectCurie: string;
     verbName: string;
+    verbNames?: string;
     initialContent: string;
     authToken: string;
     uploadAction?: string; // For MCP-triggered editors
@@ -76,6 +78,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     title,
     objectCurie,
     verbName,
+    verbNames,
     initialContent,
     authToken,
     uploadAction,
@@ -147,6 +150,10 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     // Verb metadata editing state
     const [isEditingOwner, setIsEditingOwner] = useState(false);
     const [editOwnerValue, setEditOwnerValue] = useState(owner ? `#${owner}` : "");
+    const [editVerbNames, setEditVerbNames] = useState(verbNames?.trim() || verbName);
+    const [editArgspec, setEditArgspec] = useState(argspec || { dobj: "", prep: "", iobj: "" });
+    const [argspecDraft, setArgspecDraft] = useState(argspec || { dobj: "", prep: "", iobj: "" });
+    const [showArgspecDialog, setShowArgspecDialog] = useState(false);
     const [editPermissions, setEditPermissions] = useState(
         permissions || { readable: false, writable: false, executable: false, debug: false },
     );
@@ -156,9 +163,13 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     // Sync local state when props change, but don't clear the success state
     useEffect(() => {
         setEditOwnerValue(owner ? `#${owner}` : "");
+        setEditVerbNames(verbNames?.trim() || verbName);
+        const normalizedArgspec = argspec || { dobj: "", prep: "", iobj: "" };
+        setEditArgspec(normalizedArgspec);
+        setArgspecDraft(normalizedArgspec);
         setEditPermissions(permissions || { readable: false, writable: false, executable: false, debug: false });
         // Don't clear metadataSaveSuccess - let the timeout handle it
-    }, [owner, permissions]);
+    }, [owner, permissions, verbNames, verbName, argspec]);
 
     // Parse actual object ID from uploadAction and create enhanced title
     const enhancedTitle = React.useMemo(() => {
@@ -227,15 +238,57 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             // Use the provided utility to normalize object references
             const objExpr = normalizeObjectInput(objectCurie);
             const ownerExpr = normalizeObjectInput(editOwnerValue);
+            const normalizedVerbNames = editVerbNames.trim();
+            const normalizedArgspec = {
+                dobj: editArgspec.dobj.trim(),
+                prep: editArgspec.prep.trim(),
+                iobj: editArgspec.iobj.trim(),
+            };
 
             if (!objExpr || !ownerExpr) {
                 throw new Error("Invalid object reference");
             }
+            if (!normalizedVerbNames) {
+                throw new Error("Verb names cannot be empty");
+            }
+            if (!normalizedArgspec.dobj || !normalizedArgspec.prep || !normalizedArgspec.iobj) {
+                throw new Error("Argspec values cannot be empty");
+            }
 
-            // Call: set_verb_info(obj, verbname, {owner, "perms", verbname})
-            // Note: We keep the same verb name for now (not editing names yet)
-            const expr =
-                `return set_verb_info(${objExpr}, "${verbName}", {${ownerExpr}, "${permsStr}", "${verbName}"});`;
+            const escapeMooString = (value: string) => value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+            const statements: string[] = [];
+            const hasInfoChanges = (owner ? `#${owner}` : "") !== editOwnerValue
+                || (verbNames?.trim() || verbName) !== normalizedVerbNames
+                || permissions?.readable !== editPermissions.readable
+                || permissions?.writable !== editPermissions.writable
+                || permissions?.executable !== editPermissions.executable
+                || permissions?.debug !== editPermissions.debug;
+            const hasArgspecChanges = argspec
+                ? (argspec.dobj !== normalizedArgspec.dobj
+                    || argspec.prep !== normalizedArgspec.prep
+                    || argspec.iobj !== normalizedArgspec.iobj)
+                : true;
+
+            if (hasInfoChanges) {
+                statements.push(
+                    `set_verb_info(${objExpr}, "${verbName}", {${ownerExpr}, "${permsStr}", "${
+                        escapeMooString(normalizedVerbNames)
+                    }"})`,
+                );
+            }
+            if (hasArgspecChanges) {
+                statements.push(
+                    `set_verb_args(${objExpr}, "${verbName}", "${escapeMooString(normalizedArgspec.dobj)}", `
+                        + `"${escapeMooString(normalizedArgspec.prep)}", "${escapeMooString(normalizedArgspec.iobj)}")`,
+                );
+            }
+
+            if (statements.length === 0) {
+                setIsSavingMetadata(false);
+                return;
+            }
+
+            const expr = `${statements.join("; ")}; return 1;`;
 
             console.debug("Evaluating set_verb_info expression:", expr);
             await performEvalFlatBuffer(authToken, expr);
@@ -262,10 +315,39 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     // Track if metadata has changed
     const hasMetadataChanges = isEditingOwner
         || (owner ? `#${owner}` : "") !== editOwnerValue
+        || (verbNames?.trim() || verbName) !== editVerbNames.trim()
+        || (argspec
+            ? (argspec.dobj !== editArgspec.dobj.trim()
+                || argspec.prep !== editArgspec.prep.trim()
+                || argspec.iobj !== editArgspec.iobj.trim())
+            : true)
         || permissions?.readable !== editPermissions.readable
         || permissions?.writable !== editPermissions.writable
         || permissions?.executable !== editPermissions.executable
         || permissions?.debug !== editPermissions.debug;
+
+    const dobjOptions = ["none", "any", "this"];
+    const iobjOptions = ["none", "any", "this"];
+    const prepOptions = [
+        "none",
+        "any",
+        "with",
+        "at",
+        "in-front-of",
+        "in",
+        "on",
+        "from",
+        "over",
+        "through",
+        "under",
+        "behind",
+        "beside",
+        "for",
+        "is",
+        "as",
+        "off",
+        "named",
+    ];
 
     useEffect(() => {
         if (editorRef.current) {
@@ -856,13 +938,15 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             {isInSplitMode ? "🪟" : "⬌"}
                         </button>
                     )}
-                    <button
-                        onClick={onClose}
-                        aria-label="Close verb editor"
-                        className="editor-btn-close"
-                    >
-                        <span aria-hidden="true">×</span>
-                    </button>
+                    {!splitMode && (
+                        <button
+                            onClick={onClose}
+                            aria-label="Close verb editor"
+                            className="editor-btn-close"
+                        >
+                            <span aria-hidden="true">×</span>
+                        </button>
+                    )}
                 </div>
             </div>
         );
@@ -992,6 +1076,26 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     {/* Separator bar */}
                     {definer && (owner || permissions || argspec) && <div className="verb-metadata-separator" />}
 
+                    {/* Names - editable */}
+                    <div className="verb-metadata-item">
+                        <span className="verb-metadata-label">
+                            Names:
+                        </span>
+                        <input
+                            type="text"
+                            value={editVerbNames}
+                            onChange={(e) => setEditVerbNames(e.target.value)}
+                            className="verb-metadata-input"
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                    handleSaveMetadata();
+                                } else if (e.key === "Escape") {
+                                    setEditVerbNames(verbNames?.trim() || verbName);
+                                }
+                            }}
+                        />
+                    </div>
+
                     {/* Owner - editable */}
                     {owner && (
                         <div className="verb-metadata-item">
@@ -1073,15 +1177,22 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         </div>
                     )}
 
-                    {/* Argspec - read-only for now */}
+                    {/* Argspec - editable via dialog */}
                     {argspec && (
                         <div className="verb-metadata-item">
                             <span className="verb-metadata-label">
                                 Argspec:
                             </span>
-                            <span className="verb-metadata-value">
-                                {argspec.dobj} {argspec.prep} {argspec.iobj}
-                            </span>
+                            <button
+                                type="button"
+                                className="verb-metadata-button"
+                                onClick={() => {
+                                    setArgspecDraft(editArgspec);
+                                    setShowArgspecDialog(true);
+                                }}
+                            >
+                                {editArgspec.dobj} {editArgspec.prep} {editArgspec.iobj}
+                            </button>
                         </div>
                     )}
 
@@ -1111,6 +1222,10 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                                 <button
                                     onClick={() => {
                                         setEditOwnerValue(owner ? `#${owner}` : "");
+                                        setEditVerbNames(verbNames?.trim() || verbName);
+                                        const normalizedArgspec = argspec || { dobj: "", prep: "", iobj: "" };
+                                        setEditArgspec(normalizedArgspec);
+                                        setArgspecDraft(normalizedArgspec);
                                         setEditPermissions(
                                             permissions
                                                 || {
@@ -1140,6 +1255,83 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         </>
                     )}
                 </div>
+            )}
+
+            {showArgspecDialog && (
+                <DialogSheet
+                    title="Edit Verb Argspec"
+                    titleId="edit-verb-argspec"
+                    onCancel={() => {
+                        setArgspecDraft(editArgspec);
+                        setShowArgspecDialog(false);
+                    }}
+                >
+                    <form
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            setEditArgspec(argspecDraft);
+                            setShowArgspecDialog(false);
+                        }}
+                        className="dialog-sheet-content form-stack"
+                    >
+                        <div className="form-group">
+                            <span className="form-group-label">Verb argument specification</span>
+                            <div className="verb-argspec-grid">
+                                <label className="verb-argspec-column">
+                                    <span className="verb-argspec-label">dobj</span>
+                                    <select
+                                        value={argspecDraft.dobj}
+                                        onChange={(e) => setArgspecDraft(prev => ({ ...prev, dobj: e.target.value }))}
+                                        className="verb-argspec-select"
+                                    >
+                                        {dobjOptions.map((option) => (
+                                            <option key={option} value={option}>{option}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <label className="verb-argspec-column">
+                                    <span className="verb-argspec-label">prep</span>
+                                    <select
+                                        value={argspecDraft.prep}
+                                        onChange={(e) => setArgspecDraft(prev => ({ ...prev, prep: e.target.value }))}
+                                        className="verb-argspec-select"
+                                    >
+                                        {prepOptions.map((option) => (
+                                            <option key={option} value={option}>{option}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <label className="verb-argspec-column">
+                                    <span className="verb-argspec-label">iobj</span>
+                                    <select
+                                        value={argspecDraft.iobj}
+                                        onChange={(e) => setArgspecDraft(prev => ({ ...prev, iobj: e.target.value }))}
+                                        className="verb-argspec-select"
+                                    >
+                                        {iobjOptions.map((option) => (
+                                            <option key={option} value={option}>{option}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+                        <div className="button-group">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setArgspecDraft(editArgspec);
+                                    setShowArgspecDialog(false);
+                                }}
+                                className="btn btn-secondary"
+                            >
+                                Cancel
+                            </button>
+                            <button type="submit" className="btn btn-primary">
+                                Update Argspec
+                            </button>
+                        </div>
+                    </form>
+                </DialogSheet>
             )}
 
             {/* Monaco Editor */}

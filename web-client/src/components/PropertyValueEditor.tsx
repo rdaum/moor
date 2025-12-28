@@ -513,13 +513,15 @@ export function PropertyValueEditor({
                         </button>
                     )}
                     {/* Close button */}
-                    <button
-                        onClick={onCancel}
-                        aria-label="Close property editor"
-                        className="editor-btn-close"
-                    >
-                        <span aria-hidden="true">×</span>
-                    </button>
+                    {!_splitMode && (
+                        <button
+                            onClick={onCancel}
+                            aria-label="Close property editor"
+                            className="editor-btn-close"
+                        >
+                            <span aria-hidden="true">×</span>
+                        </button>
+                    )}
                 </div>
             </div>
 

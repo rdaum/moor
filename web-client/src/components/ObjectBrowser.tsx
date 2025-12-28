@@ -74,6 +74,7 @@ interface VerbData {
     readable: boolean;
     writable: boolean;
     executable: boolean;
+    debug: boolean;
     dobj: string; // ArgSpec string (none/any/this)
     prep: string; // PrepSpec string (none/any/with/at/etc.)
     iobj: string; // ArgSpec string (none/any/this)
@@ -636,6 +637,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     readable: verbInfo.r(),
                     writable: verbInfo.w(),
                     executable: verbInfo.x(),
+                    debug: verbInfo.d(),
                     dobj,
                     prep,
                     iobj,
@@ -2170,7 +2172,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                             >
                                                                 ({verb.readable ? "r" : ""}
                                                                 {verb.writable ? "w" : ""}
-                                                                {verb.executable ? "x" : ""})
+                                                                {verb.executable ? "x" : ""}
+                                                                {verb.debug ? "d" : ""})
                                                                 {verbLabels.duplicateNames.has(
                                                                     `${location}:${verb.indexInLocation}`,
                                                                 ) && " (duplicate name)"}
@@ -2304,6 +2307,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     }`}
                                     objectCurie={stringToCurie(selectedVerb.location)}
                                     verbName={selectedVerb.names[0]}
+                                    verbNames={selectedVerb.names.join(" ")}
                                     initialContent={verbCode}
                                     authToken={authToken}
                                     splitMode={true}
@@ -2315,7 +2319,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         readable: selectedVerb.readable,
                                         writable: selectedVerb.writable,
                                         executable: selectedVerb.executable,
-                                        debug: false,
+                                        debug: selectedVerb.debug,
                                     }}
                                     argspec={{
                                         dobj: selectedVerb.dobj,
