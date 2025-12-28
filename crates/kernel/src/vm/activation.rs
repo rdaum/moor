@@ -304,6 +304,31 @@ impl Activation {
             }
         }
 
+        // Ensure enough scopes exist for nested lambda execution.
+        //
+        // At compile time, each lambda gets TWO scopes:
+        //   - Parameter isolation scope (prevents param names colliding with outer vars)
+        //   - Body scope (for let bindings, created by BeginScope in bytecode)
+        //
+        // For nested lambdas, captured variables may reference high scope depths (0, 2, 4, ...)
+        // while the captured_env only contains entries for those specific depths. We need to
+        // ensure scopes exist up to (max_captured_depth + 1) so that BeginScope can create
+        // the body scope at the next level.
+        //
+        // Example: If captured vars are at scopes 0 and 2, we need scopes 0, 1, 2, 3 to exist,
+        // and BeginScope will create scope 4 for the lambda body.
+        let max_captured_depth = lambda
+            .0
+            .captured_env
+            .len()
+            .saturating_sub(1);
+
+        // Ensure we have scopes 0 through (max_captured_depth + 1) for param isolation
+        let required_scopes = max_captured_depth + 2;
+        while temp_env.len() < required_scopes {
+            temp_env.push(vec![]);
+        }
+
         // Lambda parameters go into their designated scopes
         // Group parameters by scope depth using a Vec (scope depths are sequential from 0)
         let param_depths: Vec<usize> = lambda
@@ -375,6 +400,7 @@ impl Activation {
         // Handle self-reference for recursive lambdas
         if let Some(self_var_name) = lambda.0.self_var {
             let var_idx = self_var_name.0 as usize;
+            let scope_depth = self_var_name.1 as usize;
 
             // Create a deep copy of the lambda to avoid cycles
             let self_lambda = lambda.for_self_reference();
@@ -386,12 +412,18 @@ impl Activation {
                 self_lambda.0.self_var,
             );
 
-            // Now set the self-reference in the environment
-            if let Some(env) = temp_env.last_mut()
-                && var_idx < env.len()
-            {
-                env[var_idx] = lambda_var;
+            // Ensure the target scope exists
+            while temp_env.len() <= scope_depth {
+                temp_env.push(vec![]);
             }
+
+            // Ensure the scope has enough space for the variable
+            if temp_env[scope_depth].len() <= var_idx {
+                temp_env[scope_depth].resize(var_idx + 1, v_none());
+            }
+
+            // Set the self-reference in the correct scope (not last scope)
+            temp_env[scope_depth][var_idx] = lambda_var;
         }
 
         // Create frame with the built environment

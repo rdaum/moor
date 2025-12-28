@@ -73,6 +73,9 @@ pub struct CodegenState {
     pub(crate) fork_line_number_spans: Vec<Vec<(usize, usize)>>,
     pub(crate) current_line_col: (usize, usize),
     pub(crate) compile_options: CompileOptions,
+    /// Current scope depth for lambda capture analysis.
+    /// Tracks nesting level when entering lambda bodies.
+    pub(crate) lambda_scope_depth: u8,
 }
 
 impl CodegenState {
@@ -98,6 +101,7 @@ impl CodegenState {
             list_comprehensions: vec![],
             error_operands: vec![],
             lambda_programs: vec![],
+            lambda_scope_depth: 0,
         }
     }
 
@@ -1243,6 +1247,14 @@ impl CodegenState {
         body: &Stmt,
         base_line_offset: usize,
     ) -> Result<(), CompileError> {
+        // Save the current scope depth - this is the depth at which the lambda is defined.
+        // Variables at this depth or lower are from the outer context and can be captured.
+        let outer_scope_depth = self.lambda_scope_depth;
+
+        // Increment scope depth by 2 for the lambda's param isolation scope and body scope.
+        // This ensures nested lambdas have the correct outer scope level.
+        self.lambda_scope_depth = self.lambda_scope_depth.saturating_add(2);
+
         // Create scatter specification for lambda parameters
         let labels: Vec<ScatterLabel> = params
             .iter()
@@ -1367,8 +1379,13 @@ impl CodegenState {
         // Store compiled Program in lambda_programs table with adjusted line numbers
         let program_offset = self.add_lambda_program(lambda_program, base_line_offset);
 
+        // Restore scope depth after lambda compilation
+        self.lambda_scope_depth = outer_scope_depth;
+
         // Analyze which variables this lambda captures
-        let captured_symbols = analyze_lambda_captures(params, body, &self.var_names)?;
+        // Pass outer_scope_depth so parameterless lambdas know what depth they're at
+        let captured_symbols =
+            analyze_lambda_captures(params, body, &self.var_names, outer_scope_depth)?;
         let captured_names: Vec<Name> = captured_symbols
             .iter()
             .filter_map(|sym| self.var_names.name_for_ident(*sym))
@@ -1453,18 +1470,21 @@ struct CaptureAnalyzer<'a> {
 }
 
 impl<'a> CaptureAnalyzer<'a> {
-    fn new(lambda_params: &[ScatterItem], outer_names: &'a Names) -> Self {
+    fn new(lambda_params: &[ScatterItem], outer_names: &'a Names, outer_scope_depth: u8) -> Self {
         let param_names: HashSet<Symbol> = lambda_params
             .iter()
             .map(|param| param.id.to_symbol())
             .collect();
 
-        // Determine the outer scope level from the parameter scope_id.
-        // Parameters are at the lambda's scope, so anything at higher scopes is local to the body.
+        // Determine the outer scope level.
+        // For lambdas with parameters, use the parameter's scope_id.
+        // For parameterless lambdas, use the passed outer_scope_depth from the codegen state.
+        // This ensures variables at the definition site's depth or lower can be captured,
+        // while variables defined inside the lambda body (at higher depths) are not captured.
         let outer_scope_level = lambda_params
             .first()
             .map(|p| p.id.scope_id as u8)
-            .unwrap_or(0);
+            .unwrap_or(outer_scope_depth);
 
         Self {
             captures: HashSet::new(),
@@ -1543,13 +1563,34 @@ impl<'a> AstVisitor for CaptureAnalyzer<'a> {
                 // Continue walking for the expression part
                 self.walk_expr(expr);
             }
-            Expr::Lambda { params, .. } => {
-                // Nested lambdas are compiled separately with their own capture analysis.
-                // Only visit parameter default expressions, not the lambda body.
+            Expr::Lambda { params, body, .. } => {
+                // Visit parameter default expressions first
                 for param in params {
                     if let Some(default_expr) = &param.expr {
                         self.visit_expr(default_expr);
                     }
+                }
+
+                // For transitive capture: visit the nested lambda's body to find
+                // outer variables it references that we must also capture.
+                //
+                // The nested lambda's own params shadow outer variables with the same
+                // name, so temporarily add them to param_names to exclude them.
+                let nested_params: Vec<Symbol> = params.iter().map(|p| p.id.to_symbol()).collect();
+
+                for sym in &nested_params {
+                    self.param_names.insert(*sym);
+                }
+
+                // Visit the nested lambda body - should_capture will correctly filter:
+                // - Nested lambda params: now in param_names, so excluded
+                // - Nested lambda body locals: not in outer_names, so excluded
+                // - Outer variables: in outer_names with lower scope, so captured
+                self.visit_stmt(body);
+
+                // Remove the nested params
+                for sym in &nested_params {
+                    self.param_names.remove(sym);
                 }
             }
             _ => {
@@ -1576,8 +1617,9 @@ fn analyze_lambda_captures(
     lambda_params: &[ScatterItem],
     lambda_body: &Stmt,
     outer_names: &Names,
+    outer_scope_depth: u8,
 ) -> Result<Vec<Symbol>, CompileError> {
-    let mut analyzer = CaptureAnalyzer::new(lambda_params, outer_names);
+    let mut analyzer = CaptureAnalyzer::new(lambda_params, outer_names, outer_scope_depth);
     analyzer.visit_stmt(lambda_body);
 
     // Check if any captured variables were assigned to (an error)

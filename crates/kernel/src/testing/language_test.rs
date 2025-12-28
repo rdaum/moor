@@ -21,6 +21,7 @@ mod tests {
     use moor_common::model::{ObjectKind, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource};
     use moor_common::tasks::NoopClientSession;
     use moor_common::util::BitEnum;
+    use moor_common::model::CompileError;
     use moor_compiler::{CompileOptions, Program, compile};
     use moor_db::{DatabaseConfig, TxDB};
     use moor_var::program::ProgramType;
@@ -1329,6 +1330,174 @@ mod tests {
     }
 
     #[test]
+    fn test_parameterless_lambda_captures_outer_variable() {
+        // This is the core bug fix test: parameterless lambdas must capture outer variables.
+        // Previously, CaptureAnalyzer used .unwrap_or(0) for parameterless lambdas,
+        // so variables at scope depth > 0 weren't captured.
+        assert_eq!(
+            run_moo(
+                r#"
+                let value = 42;
+                let get_value = fn ()
+                    return value;
+                endfn;
+                return get_value();
+                "#
+            ),
+            Ok(v_int(42))
+        );
+    }
+
+    #[test]
+    fn test_nested_parameterless_lambda_capture() {
+        // Verify lambda_scope_depth tracking works for nested parameterless lambdas.
+        // The outer lambda creates `inner`, and the nested parameterless lambda
+        // must capture both `outer` (from grandparent scope) and `inner` (from parent scope).
+        assert_eq!(
+            run_moo(
+                r#"
+                let outer = 10;
+                let make_getter = fn ()
+                    let inner = 5;
+                    return fn ()
+                        return outer + inner;
+                    endfn;
+                endfn;
+                let getter = make_getter();
+                return getter();
+                "#
+            ),
+            Ok(v_int(15))
+        );
+    }
+
+    #[test]
+    fn test_triple_nested_lambda_capture() {
+        // Verify transitive capture works at deeper nesting levels.
+        assert_eq!(
+            run_moo(
+                r#"
+                let a = 1;
+                let f1 = fn ()
+                    let b = 2;
+                    let f2 = fn ()
+                        let c = 3;
+                        return fn ()
+                            return a + b + c;
+                        endfn;
+                    endfn;
+                    return f2();
+                endfn;
+                let r1 = f1();
+                return r1();
+                "#
+            ),
+            Ok(v_int(6))
+        );
+    }
+
+    #[test]
+    fn test_lambda_with_param_containing_nested_parameterless() {
+        // Lambda with params containing a nested parameterless lambda.
+        // The nested lambda must capture both `outer` and `x` (from wrapper's param).
+        assert_eq!(
+            run_moo(
+                r#"
+                let outer = 10;
+                let wrapper = fn (x)
+                    return fn ()
+                        return outer + x;
+                    endfn;
+                endfn;
+                let inner = wrapper(5);
+                return inner();
+                "#
+            ),
+            Ok(v_int(15))
+        );
+    }
+
+    /// Generate MOO code for N levels of nested parameterless lambdas.
+    /// Each level creates a local variable with value (level), and the innermost
+    /// lambda returns the sum of all captured variables.
+    fn generate_nested_lambda_code(depth: usize) -> String {
+        assert!(depth >= 1, "depth must be at least 1");
+
+        let mut code = String::new();
+
+        // Create variables at each level: v0 = 1, then nested lambdas with v1 = 2, v2 = 3, etc.
+        code.push_str("let v0 = 1;\n");
+
+        // Generate nested lambda structure
+        for level in 1..depth {
+            code.push_str(&format!("let f{} = fn ()\n", level - 1));
+            code.push_str(&format!("    let v{} = {};\n", level, level + 1));
+        }
+
+        // Innermost lambda returns sum of all variables
+        code.push_str(&format!("let f{} = fn ()\n", depth - 1));
+        code.push_str("    return ");
+        for i in 0..depth {
+            if i > 0 {
+                code.push_str(" + ");
+            }
+            code.push_str(&format!("v{}", i));
+        }
+        code.push_str(";\nendfn;\n");
+
+        // Close all the outer lambdas and return their results
+        for level in (1..depth).rev() {
+            code.push_str(&format!("    return f{}();\n", level));
+            code.push_str("endfn;\n");
+        }
+
+        // Call the outermost lambda
+        code.push_str("return f0();\n");
+
+        code
+    }
+
+    // Parametric test for nested lambda capture at various depths.
+    // Expected result is triangular number: depth * (depth + 1) / 2
+    #[test_case(1, 1; "depth 1 - single lambda")]
+    #[test_case(2, 3; "depth 2 - double nested")]
+    #[test_case(3, 6; "depth 3 - triple nested")]
+    #[test_case(4, 10; "depth 4")]
+    #[test_case(5, 15; "depth 5")]
+    #[test_case(10, 55; "depth 10 - stress test")]
+    fn test_nested_lambda_capture_depth(depth: usize, expected_sum: i64) {
+        let code = generate_nested_lambda_code(depth);
+        assert_eq!(run_moo(&code), Ok(v_int(expected_sum)));
+    }
+
+    #[test]
+    fn test_lambda_counter_generator_blocked() {
+        // Counter generator pattern requires mutable capture, which is intentionally blocked.
+        // Assigning to a captured variable is a compile error because:
+        // 1. Captures are by-value (copied at lambda creation time)
+        // 2. Mutations wouldn't persist across calls anyway (env is copied each activation)
+        // 3. The error prevents confusing semantics
+        //
+        // For a working counter pattern, use flyweights (see test_flyweight_counter_pattern)
+        // or store state in an object property.
+        let program = r#"
+            fn make_counter(initial)
+                let count = initial;
+                return fn ()
+                    count = count + 1;
+                    return count;
+                endfn;
+            endfn
+        "#;
+        let result = compile(program, CompileOptions::default());
+        assert!(
+            matches!(result, Err(CompileError::AssignmentToCapturedVariable(_, _))),
+            "Expected AssignmentToCapturedVariable error, got: {:?}",
+            result
+        );
+    }
+
+    #[test]
     fn test_lambda_higher_order_map() {
         assert_eq!(
             run_moo(
@@ -2220,5 +2389,26 @@ mod tests {
         );
 
         assert_eq!(result, Ok(v_int(42)));
+    }
+
+    #[test]
+    fn test_flyweight_counter_pattern() {
+        // Test flyweight-based counter using self parameter
+        // Flyweights are immutable, so each call returns a new flyweight
+        // Need to extract the lambda and call it with the flyweight as argument
+        let result = run_moo(
+            r#"
+            let counter = <#1, .count = 0, .inc = fn(self)
+                return <self.delegate, .count = self.count + 1, .inc = self.inc>;
+            endfn>;
+            let inc_fn = counter.inc;
+            let c1 = inc_fn(counter);
+            let c2 = inc_fn(c1);
+            let c3 = inc_fn(c2);
+            return {counter.count, c1.count, c2.count, c3.count};
+            "#
+        );
+        // Expected: {0, 1, 2, 3} - each flyweight has its own count
+        assert_eq!(result, Ok(v_list(&[v_int(0), v_int(1), v_int(2), v_int(3)])));
     }
 }
