@@ -33,6 +33,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pronouns selection and thumbnail/avatar pic upload
 - Add ability to force reload/import from objdef files in object browser
 - Application-level WebSocket keep-alive messages to prevent proxy timeouts
+- Object browser verb editor can now edit verb names and argument specs
 
 ### Changed
 
@@ -63,6 +64,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   arrow lambdas use the same parameter name)
 - Assignment into captured variables in lambdas now forbidden to reduce confusion
 - Multi-statement lambdas now handled correctly in decompile and unparse (#583)
+- Transitive capture for nested lambdas (outer lambdas now correctly capture variables needed by
+  inner lambdas)
 
 `daemon`:
 
@@ -76,6 +79,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 `web-client`:
 
 - Light theme popup styling
+- Object browser verb editor: fixed 'd' flag not rendering/editing properly
+- Object browser verb editor: fixed multi-aliased verb names getting lost when editing
 
 ## [1.0.0-beta5] - 2025-12-20
 
