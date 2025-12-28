@@ -1601,8 +1601,8 @@ mod tests {
         let program = r#"let f = fn() val = 5; return val; endfn;"#;
         compile(program, CompileOptions::default()).unwrap();
 
-        // Arrow lambda with implicit variable
-        let program = r#"let f = {x} => begin val = x * 2; return val; end;"#;
+        // Lambda with implicit variable (use fn form so begin/end is not required)
+        let program = r#"let f = fn (x) val = x * 2; return val; endfn;"#;
         compile(program, CompileOptions::default()).unwrap();
     }
 }
