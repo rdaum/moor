@@ -102,6 +102,26 @@ impl VarScope {
         Some(unbound_name)
     }
 
+    /// Find a variable name in any scope, or declare it in the current scope.
+    pub fn find_or_add_name_scoped(&mut self, name: &str, decl_type: DeclType) -> Option<Variable> {
+        let name = Symbol::mk(name);
+
+        for scope in self.scopes.iter().rev() {
+            for v in scope {
+                if let Named(sym) = v.nr
+                    && sym == name
+                {
+                    return Some(*v);
+                }
+            }
+        }
+
+        let scope_depth = self.scopes.len() - 1;
+        let unbound_name =
+            self.new_unbound_variable(name, scope_depth, false, BindMode::Reuse, decl_type)?;
+        Some(unbound_name)
+    }
+
     pub fn find_decl(&self, p0: &Variable) -> Option<&Decl> {
         self.variables
             .iter()

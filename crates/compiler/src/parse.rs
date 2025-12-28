@@ -13,7 +13,7 @@
 
 /// Kicks off the Pest parser and converts it into our AST.
 /// This is the main entry point for parsing.
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::{rc::Rc, str::FromStr};
 
 use moor_var::{ErrorCode, SYSTEM_OBJECT, Symbol, Var, VarType, v_none};
@@ -287,6 +287,7 @@ pub struct TreeTransformer {
     //   borrowing issues, see: https://github.com/pest-parser/pest/discussions/1030
     names: RefCell<VarScope>,
     options: CompileOptions,
+    lambda_body_depth: Cell<usize>,
 }
 
 impl TreeTransformer {
@@ -294,7 +295,20 @@ impl TreeTransformer {
         Rc::new(Self {
             names: RefCell::new(VarScope::new()),
             options,
+            lambda_body_depth: Cell::new(0),
         })
+    }
+
+    fn enter_lambda_body(&self) {
+        self.lambda_body_depth.set(self.lambda_body_depth.get() + 1);
+    }
+
+    fn exit_lambda_body(&self) {
+        self.lambda_body_depth.set(self.lambda_body_depth.get() - 1);
+    }
+
+    fn in_lambda_body(&self) -> bool {
+        self.lambda_body_depth.get() > 0
     }
 
     fn compile_context(&self, pair: &Pair<Rule>) -> CompileContext {
@@ -304,11 +318,17 @@ impl TreeTransformer {
     fn parse_atom(self: Rc<Self>, pair: Pair<Rule>) -> Result<Expr, CompileError> {
         match pair.as_rule() {
             Rule::ident => {
-                let name = self
-                    .names
-                    .borrow_mut()
-                    .find_or_add_name_global(pair.as_str().trim(), DeclType::Unknown)
-                    .unwrap();
+                let name = if self.in_lambda_body() {
+                    self.names
+                        .borrow_mut()
+                        .find_or_add_name_scoped(pair.as_str().trim(), DeclType::Unknown)
+                        .unwrap()
+                } else {
+                    self.names
+                        .borrow_mut()
+                        .find_or_add_name_global(pair.as_str().trim(), DeclType::Unknown)
+                        .unwrap()
+                };
                 Ok(Expr::Id(name))
             }
             Rule::type_constant => {
@@ -571,6 +591,10 @@ impl TreeTransformer {
                             .clone()
                             .parse_lambda_params(lambda_params.into_inner())?;
 
+                        // Enter a scope for the lambda body to keep locals distinct from params.
+                        primary_self.enter_scope();
+                        primary_self.enter_lambda_body();
+
                         let body = match body_part.as_rule() {
                             Rule::begin_statement => {
                                 // Parse begin statement directly
@@ -608,6 +632,11 @@ impl TreeTransformer {
                             }
                         };
 
+                        primary_self.exit_lambda_body();
+
+                        // Exit the lambda's body scope.
+                        let _ = primary_self.exit_scope();
+
                         // Exit the lambda's parameter scope.
                         // Arrow lambdas don't create a Scope node in the AST, so we
                         // discard the binding count. The scope was just for isolation.
@@ -631,9 +660,11 @@ impl TreeTransformer {
                         // Parse the statements and wrap them in a scope with proper binding tracking
                         let scope_line_col = statements_part.line_col();
                         primary_self.enter_scope();
+                        primary_self.enter_lambda_body();
                         let statements = primary_self
                             .clone()
                             .parse_statements(statements_part.into_inner())?;
+                        primary_self.exit_lambda_body();
                         let num_total_bindings = primary_self.exit_scope();
                         let body = Box::new(Stmt::new(
                             StmtNode::Scope {
@@ -1574,9 +1605,11 @@ impl TreeTransformer {
                         // Parse the function body with proper scope tracking
                         let scope_line_col = statements_part.line_col();
                         self.enter_scope();
+                        self.enter_lambda_body();
                         let statements = self
                             .clone()
                             .parse_statements(statements_part.into_inner())?;
+                        self.exit_lambda_body();
                         let num_total_bindings = self.exit_scope();
                         let body = Box::new(Stmt::new(
                             StmtNode::Scope {
@@ -1626,9 +1659,11 @@ impl TreeTransformer {
                         // Parse the function body with proper scope tracking
                         let scope_line_col = statements_part.line_col();
                         self.enter_scope();
+                        self.enter_lambda_body();
                         let statements = self
                             .clone()
                             .parse_statements(statements_part.into_inner())?;
+                        self.exit_lambda_body();
                         let num_total_bindings = self.exit_scope();
                         let body = Box::new(Stmt::new(
                             StmtNode::Scope {

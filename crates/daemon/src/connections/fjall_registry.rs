@@ -351,9 +351,10 @@ impl FjallConnectionRegistry {
                 let mapping = client_to_connection.get(&client_id);
                 let mut stale = mapping.is_none();
                 if let Some(mapping_bytes) = mapping
-                    && mapping_bytes.as_slice() != key.as_ref() {
-                        stale = true;
-                    }
+                    && mapping_bytes.as_slice() != key.as_ref()
+                {
+                    stale = true;
+                }
 
                 if !stale {
                     let last_activity = timestamps_snapshot
@@ -361,9 +362,10 @@ impl FjallConnectionRegistry {
                         .map(|ts| ts.last_activity)
                         .unwrap_or(record.last_activity);
                     if let Ok(idle) = now.duration_since(last_activity)
-                        && idle >= CONNECTION_TIMEOUT_DURATION {
-                            stale = true;
-                        }
+                        && idle >= CONNECTION_TIMEOUT_DURATION
+                    {
+                        stale = true;
+                    }
                 }
 
                 if stale {
@@ -456,9 +458,10 @@ impl FjallConnectionRegistry {
                 let player_mapping = client_to_player.get(&client_id);
                 let mut stale = player_mapping.is_none();
                 if let Some(mapping_bytes) = player_mapping
-                    && mapping_bytes.as_slice() != key.as_ref() {
-                        stale = true;
-                    }
+                    && mapping_bytes.as_slice() != key.as_ref()
+                {
+                    stale = true;
+                }
 
                 if !stale && !client_to_connection.contains_key(&client_id) {
                     stale = true;

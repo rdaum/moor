@@ -1576,4 +1576,33 @@ mod tests {
             r#"x = 5; let f = fn() let x = 1; let g = fn() let x = 2; x = 3; endfn; endfn;"#;
         compile(program, CompileOptions::default()).unwrap();
     }
+
+    /// Test that implicitly-declared variables (via assignment without `let`) inside
+    /// a lambda are NOT treated as captured variables.
+    /// Regression test for issue where `val = expr` inside a lambda was incorrectly
+    /// flagged as "assignment to captured variable" when `val` didn't exist in outer scope.
+    #[test]
+    fn test_lambda_implicit_local_variable_ok() {
+        // Variable implicitly declared via assignment inside lambda body
+        let program = r#"
+            fn get_sysref(o)
+                for prop in (properties(#0))
+                    val = `#0.(prop) ! ANY => 0';
+                    if (val == o)
+                        return prop;
+                    endif
+                endfor
+                return "";
+            endfn
+        "#;
+        compile(program, CompileOptions::default()).unwrap();
+
+        // Simpler case: just assign to a new variable inside lambda
+        let program = r#"let f = fn() val = 5; return val; endfn;"#;
+        compile(program, CompileOptions::default()).unwrap();
+
+        // Arrow lambda with implicit variable
+        let program = r#"let f = {x} => begin val = x * 2; return val; end;"#;
+        compile(program, CompileOptions::default()).unwrap();
+    }
 }
