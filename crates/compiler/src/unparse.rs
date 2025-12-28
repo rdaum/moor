@@ -1715,6 +1715,24 @@ end"#; "complex scatter declaration with optional and rest")]
     }
 
     #[test]
+    fn test_chained_lambda_call_unparse() {
+        // Test that chained lambda calls like make_getter()() round-trip correctly
+        let program = r#"return make_getter()();"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_chained_lambda_call_with_args_unparse() {
+        // Test chained calls with arguments
+        let program = r#"return make_adder(5)(10);"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
     fn test_operator_precedence_and_or_regression_minimal() {
         // Minimal test case for operator precedence bug
         // The issue is that parentheses are being removed when they shouldn't be

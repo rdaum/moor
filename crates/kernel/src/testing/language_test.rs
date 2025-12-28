@@ -1397,6 +1397,24 @@ mod tests {
     }
 
     #[test]
+    fn test_lambda_double_call_syntax() {
+        // Verify that make_getter()() syntax works (calling a returned lambda immediately)
+        assert_eq!(
+            run_moo(
+                r#"
+                let make_getter = fn ()
+                    return fn ()
+                        return 42;
+                    endfn;
+                endfn;
+                return make_getter()();
+                "#
+            ),
+            Ok(v_int(42))
+        );
+    }
+
+    #[test]
     fn test_lambda_with_param_containing_nested_parameterless() {
         // Lambda with params containing a nested parameterless lambda.
         // The nested lambda must capture both `outer` and `x` (from wrapper's param).

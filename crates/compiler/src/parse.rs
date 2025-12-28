@@ -242,7 +242,7 @@ define_operators! {
         prefix(left): [neg, not, bitnot],
     ],
     Postfix => [
-        postfix(left): [index_range, index_single, verb_call, verb_expr_call, prop, prop_expr],
+        postfix(left): [index_range, index_single, verb_call, verb_expr_call, prop, prop_expr, call],
     ],
     Atomic => [], // DEFAULT: Everything else
 }
@@ -1173,6 +1173,16 @@ impl TreeTransformer {
                             condition: Box::new(lhs?),
                             consequence: Box::new(true_expr),
                             alternative: Box::new(false_expr),
+                        })
+                    }
+                    Rule::call => {
+                        // Call an expression as a function, e.g. make_getter()()
+                        let mut parts = op.into_inner();
+                        let args_expr = parts.next().unwrap();
+                        let args = postfix_self.clone().parse_arglist(args_expr.into_inner())?;
+                        Ok(Expr::Call {
+                            function: CallTarget::Expr(Box::new(lhs?)),
+                            args,
                         })
                     }
                     _ => todo!("Unimplemented postfix: {:?}", op.as_rule()),

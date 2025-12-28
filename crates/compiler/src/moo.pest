@@ -150,12 +150,13 @@ scatter_optional =  { "?" ~ ident ~ (ASSIGN ~ expr)? }
 scatter_target   =  { ident }
 scatter_rest     =  { "@" ~ ident }
 
-postfix        = _{ index_range | index_single | verb_call | verb_expr_call | prop | prop_expr | cond_expr | assign }
+postfix        = _{ index_range | index_single | verb_call | verb_expr_call | prop | prop_expr | cond_expr | assign | call }
+call           =  { arglist }
 index_range    =  { "[" ~ expr ~ ".." ~ expr ~ "]" }
 index_single   =  { "[" ~ expr ~ "]" }
 pass_expr      =  { ^"pass" ~ "(" ~ (exprlist)? ~ ")" }
 verb_call      =  { ":" ~ ident ~ arglist }
-verb_expr_call =  { ":" ~ expr ~ arglist }
+verb_expr_call =  { ":" ~ "(" ~ expr ~ ")" ~ arglist }
 prop           =  { "." ~ ident }
 prop_expr      =  { "." ~ "(" ~ expr ~ ")" }
 assign         =  { "=" ~ !(">" | "=") ~ expr }
