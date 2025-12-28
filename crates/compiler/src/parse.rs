@@ -653,6 +653,9 @@ impl TreeTransformer {
                         let lambda_params = inner.next().unwrap();
                         let statements_part = inner.next().unwrap();
 
+                        // Enter a scope for parameter isolation.
+                        primary_self.enter_scope();
+
                         let params = primary_self
                             .clone()
                             .parse_lambda_params(lambda_params.into_inner())?;
@@ -665,10 +668,13 @@ impl TreeTransformer {
                             .clone()
                             .parse_statements(statements_part.into_inner())?;
                         primary_self.exit_lambda_body();
-                        let num_total_bindings = primary_self.exit_scope();
+                        let num_body_bindings = primary_self.exit_scope();
+
+                        // Exit the parameter isolation scope.
+                        let _ = primary_self.exit_scope();
                         let body = Box::new(Stmt::new(
                             StmtNode::Scope {
-                                num_bindings: num_total_bindings,
+                                num_bindings: num_body_bindings,
                                 body: statements,
                             },
                             scope_line_col, // Use actual line numbers from statements
@@ -1599,6 +1605,9 @@ impl TreeTransformer {
                         let params_part = parts.next().unwrap();
                         let statements_part = parts.next().unwrap();
 
+                        // Enter a scope for parameter isolation.
+                        self.enter_scope();
+
                         // Parse the lambda parameters
                         let params = self.clone().parse_lambda_params(params_part.into_inner())?;
 
@@ -1610,10 +1619,13 @@ impl TreeTransformer {
                             .clone()
                             .parse_statements(statements_part.into_inner())?;
                         self.exit_lambda_body();
-                        let num_total_bindings = self.exit_scope();
+                        let num_body_bindings = self.exit_scope();
+
+                        // Exit the parameter isolation scope.
+                        let _ = self.exit_scope();
                         let body = Box::new(Stmt::new(
                             StmtNode::Scope {
-                                num_bindings: num_total_bindings,
+                                num_bindings: num_body_bindings,
                                 body: statements,
                             },
                             scope_line_col, // Use actual line numbers from statements
@@ -1652,6 +1664,9 @@ impl TreeTransformer {
                         let lambda_params = func_parts.next().unwrap();
                         let statements_part = func_parts.next().unwrap();
 
+                        // Enter a scope for parameter isolation.
+                        self.enter_scope();
+
                         let params = self
                             .clone()
                             .parse_lambda_params(lambda_params.into_inner())?;
@@ -1664,10 +1679,13 @@ impl TreeTransformer {
                             .clone()
                             .parse_statements(statements_part.into_inner())?;
                         self.exit_lambda_body();
-                        let num_total_bindings = self.exit_scope();
+                        let num_body_bindings = self.exit_scope();
+
+                        // Exit the parameter isolation scope.
+                        let _ = self.exit_scope();
                         let body = Box::new(Stmt::new(
                             StmtNode::Scope {
-                                num_bindings: num_total_bindings,
+                                num_bindings: num_body_bindings,
                                 body: statements,
                             },
                             scope_line_col, // Use actual line numbers from statements
