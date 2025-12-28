@@ -3972,6 +3972,21 @@ mod tests {
         parse_program(empty_lambda, CompileOptions::default()).unwrap();
     }
 
+    /// Regression test: multiple arrow lambdas with same parameter name.
+    /// Currently fails with DuplicateVariable because arrow lambdas don't
+    /// isolate their parameter scope during parsing.
+    #[test]
+    #[ignore] // Known failure - fix pending
+    fn test_multiple_arrow_lambdas_same_param_name() {
+        let program = r#"let funcs = {{s} => s + 1, {s} => s + 2};"#;
+        let result = parse_program(program, CompileOptions::default());
+        assert!(
+            result.is_ok(),
+            "Multiple arrow lambdas with same param name should compile: {:?}",
+            result.err()
+        );
+    }
+
     /// Regression test for auditDB verb parsing issue
     /// This verb from JHCore-DEV-2.db was failing to parse after lambda implementation
     #[test]
