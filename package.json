@@ -1,6 +1,6 @@
 {
   "name": "moor-web-client",
-  "version": "1.0.0-beta5",
+  "version": "1.0.0-beta6",
   "description": "Modern web client for mooR - a 21st century LambdaMOO implementation",
   "main": "dist/index.js",
   "type": "module",

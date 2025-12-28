@@ -13,6 +13,70 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.0.0-beta6] - 2025-12-28
+
+### Added
+
+`daemon`:
+
+- New `event_log` builtin for explicitly logging to player event history without immediate output
+- New `urlencode` and `urldecode` builtins for URL encoding/decoding
+- ASCII art banner at launch
+
+`web-client`:
+
+- **Rewritable prompt events** - send placeholder messages that can be replaced later (useful for
+  background processing or multi-step workflows)
+- **Inline command links** - MOO output can now include clickable links and inspection operations
+- **Collapsible look headings** - look output sections can be collapsed
+- **Player creation wizard** - improved new player flow with an (optional) privacy policy stage and
+  pronouns selection and thumbnail/avatar pic upload
+- Add ability to force reload/import from objdef files in object browser
+- Application-level WebSocket keep-alive messages to prevent proxy timeouts
+
+### Changed
+
+`daemon`:
+
+- Connections and tasks databases now compact every 5 minutes to prevent journal bloat
+- Stale connections pruned from connections DB at startup and periodically
+- Connection timestamp updates batched and compaction runs asynchronously
+
+`db`:
+
+- Exponential backoff added to transaction start spin-loop to reduce CPU waste under contention
+  (#586)
+
+`web-client`:
+
+- Improved colour system for both dark and light themes
+- Code editors now use comic-mono font
+- General object browser look & feel improvements
+- Command history preserves edits when navigating with arrow keys
+- Auto-say mode disabled by default
+
+### Fixed
+
+`compiler`:
+
+- Arrow lambda parameter scopes now properly isolated (fixes DuplicateVariable errors when multiple
+  arrow lambdas use the same parameter name)
+- Assignment into captured variables in lambdas now forbidden to reduce confusion
+- Multi-statement lambdas now handled correctly in decompile and unparse (#583)
+
+`daemon`:
+
+- Textdump writer crash on UUID objects (#584)
+
+`tooling`:
+
+- Objdef dump bug where flyweight delegates were not being substituted with symbolic constants
+- Import/export ID names now validated and de-duplicated on dump
+
+`web-client`:
+
+- Light theme popup styling
+
 ## [1.0.0-beta5] - 2025-12-20
 
 ### Added

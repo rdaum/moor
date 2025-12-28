@@ -2,7 +2,7 @@
   "name": "moot-lang",
   "displayName": "moot-lang",
   "description": "Syntax highlighting for .moot test files",
-  "version": "1.0.0-beta5",
+  "version": "1.0.0-beta6",
   "engines": {
     "vscode": "^1.92.0"
   },

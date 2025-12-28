@@ -1,6 +1,6 @@
 [package]
 name = "moor-mcp-host"
-version = "1.0.0-beta5"
+version = "1.0.0-beta6"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true

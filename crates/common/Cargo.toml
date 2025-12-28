@@ -1,6 +1,6 @@
 [package]
 name = "moor-common"
-version = "1.0.0-beta5"
+version = "1.0.0-beta6"
 authors.workspace = true
 build = "build.rs"
 categories.workspace = true
