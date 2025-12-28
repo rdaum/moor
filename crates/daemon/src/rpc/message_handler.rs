@@ -554,7 +554,7 @@ impl MessageHandler for RpcMessageHandler {
     }
 
     fn compact(&self) {
-        self.connections.compact();
+        self.connections.flush();
     }
 
     fn handle_session_event(&self, session_event: SessionActions) -> Result<(), Error> {

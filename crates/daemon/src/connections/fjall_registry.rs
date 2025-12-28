@@ -977,7 +977,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         }
     }
 
-    fn compact(&self) {
+    fn flush(&self) {
         // Flush any dirty timestamps before compacting
         self.flush_dirty_timestamps();
         self.prune_stale_records();

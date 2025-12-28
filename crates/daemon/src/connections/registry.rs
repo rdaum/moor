@@ -69,10 +69,6 @@ pub trait ConnectionRegistry {
     /// Prune any connections that have not been active for longer than the required duration.
     fn ping_check(&self);
 
-    /// Trigger database compaction to reclaim space and reduce journal size.
-    /// Should be called periodically (e.g., every few minutes).
-    fn compact(&self);
-
     fn last_activity_for(&self, connection: Obj) -> Result<SystemTime, SessionError>;
 
     fn connection_name_for(&self, player: Obj) -> Result<String, SessionError>;
@@ -109,6 +105,9 @@ pub trait ConnectionRegistry {
     /// If obj is a player object (positive id): returns attributes from first connection
     /// If obj is a connection object (negative id): returns attributes for that connection
     fn get_client_attributes(&self, obj: Obj) -> Result<HashMap<Symbol, Var>, SessionError>;
+
+    /// Perform cleanup operations + maybe-database flush to encourage persistence.
+    fn flush(&self);
 }
 
 /// Factory for creating connections database instances
