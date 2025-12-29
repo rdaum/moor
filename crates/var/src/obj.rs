@@ -69,6 +69,7 @@ pub struct Obj(u64);
 const OBJID_TYPE_CODE: u8 = 0;
 const UUOBJID_TYPE_CODE: u8 = 1;
 const ANONYMOUS_TYPE_CODE: u8 = 2;
+const EDEN_TYPE_CODE: u8 = 3;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Objid(pub i32);
@@ -78,6 +79,9 @@ pub struct UuObjid(pub u64);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct AnonymousObjid(pub u64);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct EdenId(pub u32);
 
 // Internal representation varies by type:
 // - Objid: lower 32 bits contain i32 DB object id, upper 30 bits unused
@@ -126,6 +130,16 @@ impl Obj {
     fn encode_as_anonymous(anonymous: AnonymousObjid) -> Self {
         // Pack the 62-bit anonymous ID value into the lower 62 bits with type code
         Self((anonymous.0 & 0x3FFF_FFFF_FFFF_FFFF) | ((ANONYMOUS_TYPE_CODE as u64) << 62))
+    }
+
+    fn decode_as_eden(&self) -> u32 {
+        // Extract the 32-bit eden ID from the lower bits
+        (self.0 & 0xFFFF_FFFF) as u32
+    }
+
+    fn encode_as_eden(id: u32) -> Self {
+        // Pack the 32-bit eden ID into the lower bits with type code 3
+        Self((id as u64) | ((EDEN_TYPE_CODE as u64) << 62))
     }
 
     fn object_type_code(&self) -> u8 {
@@ -200,6 +214,12 @@ impl Display for UuObjid {
 impl Display for AnonymousObjid {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("*anonymous*:{}", self.0))
+    }
+}
+
+impl Display for EdenId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#<eden:{}>", self.0)
     }
 }
 
@@ -301,6 +321,25 @@ impl Obj {
     /// Checks if this Obj is an anonymous object
     pub fn is_anonymous(&self) -> bool {
         self.object_type_code() == ANONYMOUS_TYPE_CODE
+    }
+
+    /// Creates a new Obj with an eden ID (task-local temporary object)
+    pub fn mk_eden(id: u32) -> Self {
+        Self::encode_as_eden(id)
+    }
+
+    /// Gets the eden ID from this Obj if it's an eden type
+    pub fn eden_id(&self) -> Option<u32> {
+        if self.object_type_code() == EDEN_TYPE_CODE {
+            Some(self.decode_as_eden())
+        } else {
+            None
+        }
+    }
+
+    /// Checks if this Obj is an eden object (task-local temporary)
+    pub fn is_eden(&self) -> bool {
+        self.object_type_code() == EDEN_TYPE_CODE
     }
 
     /// Checks if this Obj contains a valid object reference (not special values like NOTHING, AMBIGUOUS, etc.)
@@ -708,5 +747,34 @@ mod tests {
         assert_eq!(gen_auto, 42);
         assert!(gen_rng <= 0x3F);
         assert!(gen_epoch > 0); // Should be recent timestamp
+    }
+
+    #[test]
+    fn test_eden_objects() {
+        let eden_id = 42u32;
+        let obj = Obj::mk_eden(eden_id);
+        assert!(obj.is_eden());
+        assert!(!obj.is_anonymous());
+        assert!(!obj.is_uuobjid());
+        assert!(!obj.is_sysobj());
+        assert_eq!(obj.eden_id(), Some(eden_id));
+    }
+
+    #[test]
+    fn test_eden_distinct_from_anonymous() {
+        let eden = Obj::mk_eden(1);
+        let anon = Obj::mk_anonymous_generated();
+        assert!(eden.is_eden());
+        assert!(!eden.is_anonymous());
+        assert!(anon.is_anonymous());
+        assert!(!anon.is_eden());
+        assert_ne!(eden, anon);
+    }
+
+    #[test]
+    fn test_eden_max_id() {
+        let obj = Obj::mk_eden(u32::MAX);
+        assert!(obj.is_eden());
+        assert_eq!(obj.eden_id(), Some(u32::MAX));
     }
 }
