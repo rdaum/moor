@@ -180,6 +180,7 @@ impl Debug for Obj {
                 let anonymous = self.decode_as_anonymous();
                 f.write_fmt(format_args!("Obj(*anonymous*:{})", anonymous.0))
             }
+            EDEN_TYPE_CODE => write!(f, "Eden({})", self.decode_as_eden()),
             _ => f.write_fmt(format_args!("Obj(UnknownType:{})", self.object_type_code())),
         }
     }
@@ -194,6 +195,7 @@ impl Display for Obj {
                 f.write_fmt(format_args!("#{}", uuid.to_uuid_string()))
             }
             ANONYMOUS_TYPE_CODE => f.write_fmt(format_args!("*anonymous*")),
+            EDEN_TYPE_CODE => write!(f, "#<eden:{}>", self.decode_as_eden()),
             _ => f.write_fmt(format_args!("UnknownType:{}", self.object_type_code())),
         }
     }
@@ -776,5 +778,16 @@ mod tests {
         let obj = Obj::mk_eden(u32::MAX);
         assert!(obj.is_eden());
         assert_eq!(obj.eden_id(), Some(u32::MAX));
+    }
+
+    #[test]
+    fn test_eden_debug_display() {
+        let eden = Obj::mk_eden(42);
+        let debug_str = format!("{:?}", eden);
+        let display_str = format!("{}", eden);
+
+        assert!(debug_str.contains("Eden"));
+        assert!(debug_str.contains("42"));
+        assert_eq!(display_str, "#<eden:42>");
     }
 }

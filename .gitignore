@@ -56,3 +56,4 @@ cores/cowbell/
 # LambdaMOO sources (fetched by setup script for comparative testing)
 lambdamoo/
 certs/
+.worktrees/
