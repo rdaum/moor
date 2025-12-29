@@ -15,6 +15,7 @@
 
 pub mod language_test;
 pub mod mock_scheduler;
+pub mod proptest_opcodes;
 pub mod scheduler_test_utils;
 pub mod vm_test;
 pub mod vm_test_utils;

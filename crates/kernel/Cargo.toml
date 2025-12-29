@@ -18,6 +18,7 @@ trace_events = []
 
 [dev-dependencies]
 moor-db = { path = "../db" }
+proptest = "1.5"
 tempfile.workspace = true
 
 criterion.workspace = true
