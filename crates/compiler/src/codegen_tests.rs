@@ -544,6 +544,20 @@ mod tests {
     }
 
     #[test]
+    fn test_list_get_last() {
+        let program = "return {1,2,3}[$];";
+        let binary = compile(program, CompileOptions::default()).unwrap();
+        assert!(
+            binary
+                .main_vector()
+                .to_vec()
+                .iter()
+                .any(|op| matches!(op, Length(_))),
+            "Expected $ index to emit Length opcode"
+        );
+    }
+
+    #[test]
     fn test_range_length() {
         let program = "a = {1, 2, 3}; b = a[2..$];";
         let binary = compile(program, CompileOptions::default()).unwrap();
@@ -588,6 +602,21 @@ mod tests {
                 Pop,
                 Done
             ]
+        );
+    }
+
+    #[test]
+    fn test_range_length_end_expression() {
+        let program = "a = {1, 2, 3}; b = a[1..$ - 2];";
+        let binary = compile(program, CompileOptions::default()).unwrap();
+
+        assert!(
+            binary
+                .main_vector()
+                .to_vec()
+                .iter()
+                .any(|op| matches!(op, Length(_))),
+            "Expected range end expression to emit Length opcode"
         );
     }
 
@@ -1483,6 +1512,18 @@ mod tests {
     fn regression_scatter_prec() {
         let program = r#"{x} = y = z;"#;
         compile(program, CompileOptions::default()).unwrap();
+    }
+
+    #[test]
+    fn regression_invalid_range_end_expression() {
+        use moor_common::model::CompileError;
+
+        let result = compile("$;", CompileOptions::default());
+        assert!(result.is_err(), "Expected parse error for bare '$'");
+        assert!(
+            matches!(result, Err(CompileError::ParseError { .. })),
+            "Expected ParseError for bare '$', got {result:?}"
+        );
     }
 
     /// Test that assigning to a captured variable in a lambda produces a compile error.

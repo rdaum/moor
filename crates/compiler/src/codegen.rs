@@ -525,8 +525,13 @@ impl CodegenState {
                 self.pop_stack(2);
             }
             Expr::Length => {
-                let saved = self.saved_stack_top();
-                self.emit(Op::Length(saved.expect("Missing saved stack for '$'")));
+                let saved = self.saved_stack_top().ok_or_else(|| {
+                    CompileError::StringLexError(
+                        CompileContext::new(self.current_line_col),
+                        "Invalid use of '$'".to_string(),
+                    )
+                })?;
+                self.emit(Op::Length(saved));
                 self.push_stack(1);
             }
             Expr::Unary(op, expr) => {

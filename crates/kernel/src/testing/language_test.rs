@@ -18,10 +18,10 @@
 mod tests {
     use std::sync::Arc;
 
+    use moor_common::model::CompileError;
     use moor_common::model::{ObjectKind, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource};
     use moor_common::tasks::NoopClientSession;
     use moor_common::util::BitEnum;
-    use moor_common::model::CompileError;
     use moor_compiler::{CompileOptions, Program, compile};
     use moor_db::{DatabaseConfig, TxDB};
     use moor_var::program::ProgramType;
@@ -1491,7 +1491,10 @@ mod tests {
         "#;
         let result = compile(program, CompileOptions::default());
         assert!(
-            matches!(result, Err(CompileError::AssignmentToCapturedVariable(_, _))),
+            matches!(
+                result,
+                Err(CompileError::AssignmentToCapturedVariable(_, _))
+            ),
             "Expected AssignmentToCapturedVariable error, got: {:?}",
             result
         );
@@ -2406,9 +2409,12 @@ mod tests {
             let c2 = inc_fn(c1);
             let c3 = inc_fn(c2);
             return {counter.count, c1.count, c2.count, c3.count};
-            "#
+            "#,
         );
         // Expected: {0, 1, 2, 3} - each flyweight has its own count
-        assert_eq!(result, Ok(v_list(&[v_int(0), v_int(1), v_int(2), v_int(3)])));
+        assert_eq!(
+            result,
+            Ok(v_list(&[v_int(0), v_int(1), v_int(2), v_int(3)]))
+        );
     }
 }

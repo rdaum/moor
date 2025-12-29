@@ -317,11 +317,7 @@ impl Activation {
         //
         // Example: If captured vars are at scopes 0 and 2, we need scopes 0, 1, 2, 3 to exist,
         // and BeginScope will create scope 4 for the lambda body.
-        let max_captured_depth = lambda
-            .0
-            .captured_env
-            .len()
-            .saturating_sub(1);
+        let max_captured_depth = lambda.0.captured_env.len().saturating_sub(1);
 
         // Ensure we have scopes 0 through (max_captured_depth + 1) for param isolation
         let required_scopes = max_captured_depth + 2;

@@ -288,6 +288,7 @@ pub struct TreeTransformer {
     names: RefCell<VarScope>,
     options: CompileOptions,
     lambda_body_depth: Cell<usize>,
+    dollars_ok: Cell<usize>,
 }
 
 impl TreeTransformer {
@@ -296,6 +297,7 @@ impl TreeTransformer {
             names: RefCell::new(VarScope::new()),
             options,
             lambda_body_depth: Cell::new(0),
+            dollars_ok: Cell::new(0),
         })
     }
 
@@ -309,6 +311,18 @@ impl TreeTransformer {
 
     fn in_lambda_body(&self) -> bool {
         self.lambda_body_depth.get() > 0
+    }
+
+    fn enter_dollars_ok(&self) {
+        self.dollars_ok.set(self.dollars_ok.get() + 1);
+    }
+
+    fn exit_dollars_ok(&self) {
+        self.dollars_ok.set(self.dollars_ok.get() - 1);
+    }
+
+    fn dollars_allowed(&self) -> bool {
+        self.dollars_ok.get() > 0
     }
 
     fn compile_context(&self, pair: &Pair<Rule>) -> CompileContext {
@@ -799,7 +813,19 @@ impl TreeTransformer {
                         };
                         Ok(Expr::Pass { args })
                     }
-                    Rule::range_end => Ok(Expr::Length),
+                    Rule::range_end => {
+                        if !primary_self.dollars_allowed() {
+                            let line_col = primary.line_col();
+                            return Err(CompileError::ParseError {
+                                error_position: CompileContext::new(line_col),
+                                end_line_col: Some(line_col),
+                                context: "range expression".to_string(),
+                                message: "Illegal context for `$' expression.".to_string(),
+                                details: Box::new(ParseErrorDetails::default()),
+                            });
+                        }
+                        Ok(Expr::Length)
+                    }
                     Rule::try_expr => {
                         let mut inner = primary.into_inner();
                         let try_expr = primary_self
@@ -1106,24 +1132,34 @@ impl TreeTransformer {
                     }
                     Rule::index_single => {
                         let mut parts = op.into_inner();
-                        let index = postfix_self
-                            .clone()
-                            .parse_expr(parts.next().unwrap().into_inner())?;
-                        Ok(Expr::Index(Box::new(lhs?), Box::new(index)))
+                        postfix_self.enter_dollars_ok();
+                        let index_result = (|| {
+                            let index = postfix_self
+                                .clone()
+                                .parse_expr(parts.next().unwrap().into_inner())?;
+                            Ok(Expr::Index(Box::new(lhs?), Box::new(index)))
+                        })();
+                        postfix_self.exit_dollars_ok();
+                        index_result
                     }
                     Rule::index_range => {
                         let mut parts = op.into_inner();
-                        let start = postfix_self
-                            .clone()
-                            .parse_expr(parts.next().unwrap().into_inner())?;
-                        let end = postfix_self
-                            .clone()
-                            .parse_expr(parts.next().unwrap().into_inner())?;
-                        Ok(Expr::Range {
-                            base: Box::new(lhs?),
-                            from: Box::new(start),
-                            to: Box::new(end),
-                        })
+                        postfix_self.enter_dollars_ok();
+                        let range_result = (|| {
+                            let start = postfix_self
+                                .clone()
+                                .parse_expr(parts.next().unwrap().into_inner())?;
+                            let end = postfix_self
+                                .clone()
+                                .parse_expr(parts.next().unwrap().into_inner())?;
+                            Ok(Expr::Range {
+                                base: Box::new(lhs?),
+                                from: Box::new(start),
+                                to: Box::new(end),
+                            })
+                        })();
+                        postfix_self.exit_dollars_ok();
+                        range_result
                     }
                     Rule::cond_expr => {
                         let mut parts = op.into_inner();
