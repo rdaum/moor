@@ -8,3 +8,7 @@ cc 7635ceb6abd14119d6577198d19a78deeeab1bb4c36612787b3c2c6d356b44bd # shrinks to
 cc fc97df3750a2d2820106f60d150ee00f9cbe2b4d27527718a89944c54a407026 # shrinks to expr = Range { base: Value(Integer(0)), from: Cond { condition: Cond { condition: Value(Integer(0)), consequence: Value(Integer(0)), alternative: Value(Integer(0)) }, consequence: Value(Integer(0)), alternative: Value(Integer(0)) }, to: Value(Integer(0)) }
 cc 50ebe9dcafceb0bdcbd728e096cdf91063f76381fb32e4d5aaf47029b21cf1b2 # shrinks to expr = Unary(Neg, Unary(Neg, Range { base: Value(Float(0)), from: Value(Integer(0)), to: Value(Integer(0)) }))
 cc 39c16ad637495ad814b2823a3e1f07f1da39a734b74b613d14c6b34f3893a9b3 # shrinks to expr = Index(Unary(Neg, Index(Value(Float(0)), Value(Integer(0)))), Value(Integer(0)))
+cc ffc13853302c4102ed818db684349d95f9b52b81b0a0a6fa3411aef9ef992786 # shrinks to expr = Map([(Prop { location: Value(Integer(0)), property: Value(String("")) }, Value(Integer(0)))])
+cc 0df6900a02802a6570811d6908489505c8bc345cf28f31d6c6520f75f37f3d22 # shrinks to expr = Or(Prop { location: Value(Integer(0)), property: Value(String("_0")) }, Value(Integer(0)))
+cc d12caf541c4b691cd98c41c9cf061b01fdb0bccfe80b1927e2da20bef4bf48a8 # shrinks to expr = Cond { condition: Verb { location: Value(Integer(0)), verb: Value(String("e_a")), args: [Normal(Value(Integer(0)))] }, consequence: Value(Integer(0)), alternative: Value(Integer(0)) }
+cc cd25ebb3bbbcfb3c157fede5ca6e55834a932361cc53a4fa8066ee653f5091dc # shrinks to expr = Verb { location: Value(Object(#0)), verb: Value(Integer(0)), args: [] }

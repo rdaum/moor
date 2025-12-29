@@ -250,9 +250,14 @@ impl<'a> Unparse<'a> {
                     (Expr::Value(var), Expr::Value(_)) if var.is_sysobj() => String::from("$"),
                     _ => {
                         let loc_str = brace_if_needed(location, ParenPosition::Left);
-                        // Wrap in parens if location starts with '-' to prevent ambiguity with
-                        // negative literals. See comment in Expr::Unary for details.
-                        if loc_str.starts_with('-') {
+                        // Wrap in parens if location starts with '-' (negative literal) or
+                        // looks like a numeric literal (ends with digit, doesn't start with #).
+                        // E.g., `123.prop` looks like float `123.p...` which fails to parse.
+                        // But `#1.prop` is fine since # distinguishes object refs.
+                        let looks_like_number = loc_str.ends_with(|c: char| c.is_ascii_digit())
+                            && !loc_str.starts_with('#');
+                        let needs_parens = loc_str.starts_with('-') || looks_like_number;
+                        if needs_parens {
                             format!("({}).", loc_str)
                         } else {
                             format!("{}.", loc_str)
@@ -260,7 +265,20 @@ impl<'a> Unparse<'a> {
                     }
                 };
                 let prop = match &**property {
-                    Expr::Value(var) => self.unparse_var(var, true).to_string(),
+                    Expr::Value(var) => {
+                        let s = self.unparse_var(var, true).to_string();
+                        // Property access with non-identifier values needs parens.
+                        // `obj.propname` is valid when propname is an identifier-like string.
+                        // `obj.(expr)` is needed for dynamic properties (numbers, negative, etc).
+                        // Check if s could be a valid identifier.
+                        let needs_parens = s.is_empty()
+                            || s.starts_with(|c: char| c == '-' || c == '"' || c == '#' || c.is_ascii_digit());
+                        if needs_parens {
+                            format!("({})", s)
+                        } else {
+                            s
+                        }
+                    }
                     _ => format!("({})", brace_if_needed(property, ParenPosition::Right)),
                 };
                 Ok(format!("{location}{prop}"))
@@ -270,22 +288,48 @@ impl<'a> Unparse<'a> {
                 verb,
                 args,
             } => {
-                let location = match (&**location, &**verb) {
-                    (Expr::Value(var), Expr::Value(_)) if var.is_sysobj() => String::from("$"),
+                // First, determine what the verb string looks like and if it needs parens
+                // Also track if the $-shorthand can be used (only for identifier verbs)
+                let (verb_str, verb_needs_parens, can_use_dollar) = match &**verb {
+                    Expr::Value(var) => {
+                        let s = self.unparse_var(var, true);
+                        // Per LambdaMOO spec, verb names are identifiers or string expressions.
+                        // `obj:verbname(...)` - identifier (can use $verbname())
+                        // `obj:(expr)(...)` - dynamic expression needs parens (NO $ shorthand)
+                        // Only need parens for: empty, negative, object refs, or non-identifier values
+                        let needs_parens = s.is_empty() || s.starts_with(['-', '#']);
+                        // $ shorthand only works for identifier-like verbs
+                        let is_identifier = !s.is_empty()
+                            && !s.starts_with(|c: char| c == '-' || c == '"' || c == '#' || c.is_ascii_digit());
+                        (s, needs_parens, is_identifier)
+                    }
+                    _ => (brace_if_needed(verb, ParenPosition::Right), true, false),
+                };
+
+                // Now determine location string. Only use `$` shorthand for sysobj when
+                // verb is a valid identifier. Otherwise use full object ref.
+                let location = match &**location {
+                    Expr::Value(var) if var.is_sysobj() && can_use_dollar => String::from("$"),
                     _ => {
                         let loc_str = brace_if_needed(location, ParenPosition::Left);
-                        // Wrap in parens if location starts with '-' to prevent ambiguity with
-                        // negative literals. See comment in Expr::Unary for details.
-                        if loc_str.starts_with('-') {
+                        // Wrap in parens if location starts with '-' (negative literal) or
+                        // looks like a numeric literal (ends with digit, doesn't start with #).
+                        // But `#1:verb()` is fine since # distinguishes object refs.
+                        let looks_like_number = loc_str.ends_with(|c: char| c.is_ascii_digit())
+                            && !loc_str.starts_with('#');
+                        let needs_parens = loc_str.starts_with('-') || looks_like_number;
+                        if needs_parens {
                             format!("({}):", loc_str)
                         } else {
                             format!("{}:", loc_str)
                         }
                     }
                 };
-                let verb = match &**verb {
-                    Expr::Value(var) => self.unparse_var(var, true),
-                    _ => format!("({})", brace_if_needed(verb, ParenPosition::Right)),
+
+                let verb = if verb_needs_parens {
+                    format!("({})", verb_str)
+                } else {
+                    verb_str
                 };
                 let mut buffer = String::new();
                 buffer.push_str(format!("{location}{verb}").as_str());

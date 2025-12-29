@@ -13,9 +13,9 @@
 
 //! Proptest strategies for generating MOO AST nodes.
 
-use crate::ast::{Arg, BinaryOp, Expr, UnaryOp};
+use crate::ast::{Arg, BinaryOp, CallTarget, CatchCodes, Expr, UnaryOp};
 use moor_var::program::names::{VarName, Variable};
-use moor_var::{ErrorCode, Obj, Symbol, Var};
+use moor_var::{ErrorCode, Obj, Symbol, Var, VarType};
 use proptest::prelude::*;
 use proptest::strategy::BoxedStrategy;
 
@@ -112,7 +112,9 @@ const MOO_KEYWORDS: &[&str] = &[
 /// Returns false if it's exactly a keyword.
 fn is_valid_moo_identifier(s: &str) -> bool {
     let lower = s.to_lowercase();
-    !MOO_KEYWORDS.contains(&lower.as_str())
+    // Must not be a keyword, must not end with underscore (parser requires more chars after _),
+    // and must not start with e_ (error code prefix which causes parsing ambiguity)
+    !MOO_KEYWORDS.contains(&lower.as_str()) && !s.ends_with('_') && !lower.starts_with("e_")
 }
 
 /// Generate a valid MOO identifier string.
@@ -266,6 +268,184 @@ pub fn arb_cond<S: Strategy<Value = Expr> + Clone + 'static>(
         })
 }
 
+/// Generate an And expression: left && right
+pub fn arb_and<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+) -> impl Strategy<Value = Expr> {
+    (expr_strategy.clone(), expr_strategy)
+        .prop_map(|(left, right)| Expr::And(Box::new(left), Box::new(right)))
+}
+
+/// Generate an Or expression: left || right
+pub fn arb_or<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+) -> impl Strategy<Value = Expr> {
+    (expr_strategy.clone(), expr_strategy)
+        .prop_map(|(left, right)| Expr::Or(Box::new(left), Box::new(right)))
+}
+
+/// Generate a property access expression: location.property
+/// Location must be something that could have properties (objects, variables) - not numbers.
+/// We use object literals and variables as locations since they're semantically valid.
+pub fn arb_prop<S: Strategy<Value = Expr> + Clone + 'static>(
+    _expr_strategy: S,
+) -> impl Strategy<Value = Expr> {
+    // Location should be object-like: object refs or variables
+    let location_strategy = prop_oneof![
+        arb_objref(),
+        arb_variable().prop_map(Expr::Id),
+    ];
+    (location_strategy, arb_identifier_string()).prop_map(|(location, prop_name)| Expr::Prop {
+        location: Box::new(location),
+        property: Box::new(Expr::Value(Var::mk_str(&prop_name))),
+    })
+}
+
+/// Generate a verb call expression: location:verb(args)
+/// Location must be something that could have verbs (objects, variables) - not numbers.
+/// We use object literals and variables as locations since they're semantically valid.
+/// Verb names must be identifiers or string expressions (per LambdaMOO spec).
+pub fn arb_verb<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_args: usize,
+) -> impl Strategy<Value = Expr> {
+    // Location should be object-like: object refs or variables
+    let location_strategy = prop_oneof![
+        arb_objref(),
+        arb_variable().prop_map(Expr::Id),
+    ];
+
+    // Verb names can be: identifier strings or dynamic expressions (which must return strings)
+    // Per LambdaMOO spec: obj:name() or obj:(expr)() where expr returns a string
+    let verb_strategy = prop_oneof![
+        // String verb name (most common): obj:foo() - stored as string literal
+        arb_identifier_string().prop_map(|s| Expr::Value(Var::mk_str(&s))),
+        // Dynamic verb name: obj:(expr)() - use a variable for simplicity
+        arb_variable().prop_map(Expr::Id),
+    ];
+
+    (
+        location_strategy,
+        verb_strategy,
+        proptest::collection::vec(expr_strategy.prop_map(Arg::Normal), 0..=max_args),
+    )
+        .prop_map(|(location, verb, args)| Expr::Verb {
+            location: Box::new(location),
+            verb: Box::new(verb),
+            args,
+        })
+}
+
+/// Generate a builtin function call: func(args)
+pub fn arb_call<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_args: usize,
+) -> impl Strategy<Value = Expr> {
+    // Common builtin function names
+    let builtin_names = prop_oneof![
+        Just("length"),
+        Just("typeof"),
+        Just("tostr"),
+        Just("toint"),
+        Just("tofloat"),
+        Just("min"),
+        Just("max"),
+        Just("abs"),
+        Just("sqrt"),
+        Just("random"),
+        Just("time"),
+        Just("ctime"),
+        Just("encode_binary"),
+        Just("decode_binary"),
+        Just("listappend"),
+        Just("listinsert"),
+        Just("listdelete"),
+        Just("listset"),
+        Just("setadd"),
+        Just("setremove"),
+        Just("strcmp"),
+        Just("strsub"),
+        Just("index"),
+        Just("rindex"),
+    ];
+
+    let args_strategy = proptest::collection::vec(arb_arg(expr_strategy), 0..=max_args);
+
+    (builtin_names, args_strategy).prop_map(|(name, args)| Expr::Call {
+        function: CallTarget::Builtin(Symbol::mk(name)),
+        args,
+    })
+}
+
+/// Generate a try-catch expression: `expr ! codes => fallback`
+pub fn arb_try_catch<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+) -> impl Strategy<Value = Expr> {
+    let codes_strategy = prop_oneof![
+        // ANY
+        Just(CatchCodes::Any),
+        // Specific error codes
+        proptest::collection::vec(
+            prop_oneof![
+                Just(ErrorCode::E_TYPE),
+                Just(ErrorCode::E_DIV),
+                Just(ErrorCode::E_PERM),
+                Just(ErrorCode::E_PROPNF),
+                Just(ErrorCode::E_VERBNF),
+                Just(ErrorCode::E_VARNF),
+                Just(ErrorCode::E_INVIND),
+                Just(ErrorCode::E_RANGE),
+                Just(ErrorCode::E_ARGS),
+                Just(ErrorCode::E_NACC),
+                Just(ErrorCode::E_INVARG),
+            ],
+            1..=3
+        )
+        .prop_map(|codes| {
+            CatchCodes::Codes(codes.into_iter().map(|c| Arg::Normal(Expr::Error(c, None))).collect())
+        }),
+    ];
+
+    prop_oneof![
+        // Without fallback: `expr ! codes'
+        (expr_strategy.clone(), codes_strategy.clone()).prop_map(|(trye, codes)| Expr::TryCatch {
+            trye: Box::new(trye),
+            codes,
+            except: None,
+        }),
+        // With fallback: `expr ! codes => fallback'
+        (expr_strategy.clone(), codes_strategy, expr_strategy).prop_map(
+            |(trye, codes, fallback)| Expr::TryCatch {
+                trye: Box::new(trye),
+                codes,
+                except: Some(Box::new(fallback)),
+            }
+        ),
+    ]
+}
+
+/// Generate the length expression: $ (used in range contexts)
+/// Note: $ only makes sense inside range expressions like `list[1..$]`.
+/// It's not included in layer2_complete since it's a contextual expression.
+#[allow(dead_code)]
+pub fn arb_length() -> impl Strategy<Value = Expr> {
+    Just(Expr::Length)
+}
+
+/// Generate a type constant: INT, STR, FLOAT, OBJ, LIST, MAP, ERR, BOOL
+pub fn arb_type_constant() -> impl Strategy<Value = Expr> {
+    prop_oneof![
+        Just(Expr::TypeConstant(VarType::TYPE_INT)),
+        Just(Expr::TypeConstant(VarType::TYPE_FLOAT)),
+        Just(Expr::TypeConstant(VarType::TYPE_STR)),
+        Just(Expr::TypeConstant(VarType::TYPE_OBJ)),
+        Just(Expr::TypeConstant(VarType::TYPE_LIST)),
+        Just(Expr::TypeConstant(VarType::TYPE_MAP)),
+        Just(Expr::TypeConstant(VarType::TYPE_ERR)),
+        Just(Expr::TypeConstant(VarType::TYPE_BOOL)),
+    ]
+}
+
 // =============================================================================
 // Expression Generators (Layered)
 // =============================================================================
@@ -375,6 +555,65 @@ pub fn arb_expr_layer2b(depth: usize) -> BoxedStrategy<Expr> {
             1 => arb_range(elem_strategy.clone()),
             // 10% conditional
             1 => arb_cond(elem_strategy),
+        ]
+        .boxed()
+    }
+}
+
+/// Layer 2 Complete: All expression types except statements and lambdas.
+///
+/// Adds to Layer 2b:
+/// - And/Or logical operators
+/// - Property access (obj.prop, obj.(expr))
+/// - Verb calls (obj:verb(args))
+/// - Builtin function calls (func(args))
+/// - Try-catch expressions
+/// - Type constants (INT, STR, etc.)
+/// - Length ($)
+pub fn arb_expr_layer2_complete(depth: usize) -> BoxedStrategy<Expr> {
+    if depth == 0 {
+        // At depth 0: literals, identifiers, and type constants
+        prop_oneof![
+            8 => arb_literal(),
+            2 => arb_variable().prop_map(Expr::Id),
+            1 => arb_type_constant(),
+        ]
+        .boxed()
+    } else {
+        let elem_strategy = arb_expr_layer2_complete(depth - 1);
+
+        prop_oneof![
+            // Base types (20%)
+            2 => arb_literal(),
+            1 => arb_variable().prop_map(Expr::Id),
+            1 => arb_type_constant(),
+            // Binary/unary ops (15%)
+            1 => (arb_binary_op(), arb_expr_layer2_complete(depth - 1), arb_expr_layer2_complete(depth - 1))
+                .prop_map(|(op, left, right)| {
+                    Expr::Binary(op, Box::new(left), Box::new(right))
+                }),
+            1 => (arb_unary_op(), arb_expr_layer2_complete(depth - 1))
+                .prop_map(|(op, expr)| {
+                    Expr::Unary(op, Box::new(expr))
+                }),
+            // Logical ops (10%)
+            1 => arb_and(elem_strategy.clone()),
+            1 => arb_or(elem_strategy.clone()),
+            // Collections (10%)
+            1 => arb_list(elem_strategy.clone(), 3),
+            1 => arb_map(elem_strategy.clone(), 2),
+            // Indexing (10%)
+            1 => arb_index(elem_strategy.clone()),
+            1 => arb_range(elem_strategy.clone()),
+            // Conditional (5%)
+            1 => arb_cond(elem_strategy.clone()),
+            // Property/verb access (10%)
+            1 => arb_prop(elem_strategy.clone()),
+            1 => arb_verb(elem_strategy.clone(), 3),
+            // Function calls (5%)
+            1 => arb_call(elem_strategy.clone(), 3),
+            // Try-catch (5%)
+            1 => arb_try_catch(elem_strategy),
         ]
         .boxed()
     }

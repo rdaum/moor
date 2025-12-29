@@ -16,7 +16,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use crate::ast::{Arg, BinaryOp, Expr, UnaryOp};
+use crate::ast::{Arg, BinaryOp, CallTarget, CatchCodes, Expr, UnaryOp};
 use crate::parse::parse_program;
 use crate::unparse::unparse;
 use crate::CompileOptions;
@@ -25,7 +25,7 @@ use moor_var::Variant;
 use moor_var::{ErrorCode, Var};
 use proptest::prelude::*;
 
-use super::generators::{arb_expr_layer1, arb_expr_layer2, arb_expr_layer2b};
+use super::generators::{arb_expr_layer1, arb_expr_layer2, arb_expr_layer2_complete, arb_expr_layer2b};
 
 /// Format an expression to MOO source code.
 /// This is a simplified unparser just for testing - we'll use it to generate
@@ -133,6 +133,118 @@ fn format_expr_to_source(expr: &Expr) -> String {
                 format_expr_to_source(consequence),
                 format_expr_to_source(alternative)
             )
+        }
+        Expr::Prop { location, property } => {
+            // Check if property is a string literal for static property access
+            if let Expr::Value(v) = property.as_ref()
+                && let Variant::Str(s) = v.variant()
+            {
+                return format!("({}).{}", format_expr_to_source(location), s.as_str());
+            }
+            // Dynamic property access
+            format!(
+                "({}).({})",
+                format_expr_to_source(location),
+                format_expr_to_source(property)
+            )
+        }
+        Expr::Verb {
+            location,
+            verb,
+            args,
+        } => {
+            let args_str: Vec<String> = args
+                .iter()
+                .map(|arg| match arg {
+                    Arg::Normal(e) => format_expr_to_source(e),
+                    Arg::Splice(e) => format!("@{}", format_expr_to_source(e)),
+                })
+                .collect();
+            // Check if verb is a string literal for static verb call
+            // Per LambdaMOO spec: verb names are identifiers or string expressions
+            if let Expr::Value(v) = verb.as_ref()
+                && let Variant::Str(s) = v.variant()
+            {
+                return format!(
+                    "({}):{}({})",
+                    format_expr_to_source(location),
+                    s.as_str(),
+                    args_str.join(", ")
+                );
+            }
+            // Dynamic verb call - needs parentheses around expression
+            format!(
+                "({}):({})({})",
+                format_expr_to_source(location),
+                format_expr_to_source(verb),
+                args_str.join(", ")
+            )
+        }
+        Expr::Call { function, args } => {
+            let args_str: Vec<String> = args
+                .iter()
+                .map(|arg| match arg {
+                    Arg::Normal(e) => format_expr_to_source(e),
+                    Arg::Splice(e) => format!("@{}", format_expr_to_source(e)),
+                })
+                .collect();
+            match function {
+                CallTarget::Builtin(sym) => {
+                    format!("{}({})", sym, args_str.join(", "))
+                }
+                CallTarget::Expr(expr) => {
+                    format!("call({}, {})", format_expr_to_source(expr), args_str.join(", "))
+                }
+            }
+        }
+        Expr::TryCatch {
+            trye,
+            codes,
+            except,
+        } => {
+            let codes_str = match codes {
+                CatchCodes::Any => "ANY".to_string(),
+                CatchCodes::Codes(code_list) => {
+                    let cs: Vec<String> = code_list
+                        .iter()
+                        .map(|arg| match arg {
+                            Arg::Normal(e) => format_expr_to_source(e),
+                            Arg::Splice(e) => format!("@{}", format_expr_to_source(e)),
+                        })
+                        .collect();
+                    cs.join(", ")
+                }
+            };
+            match except {
+                Some(fallback) => {
+                    format!(
+                        "(`{} ! {} => {}')",
+                        format_expr_to_source(trye),
+                        codes_str,
+                        format_expr_to_source(fallback)
+                    )
+                }
+                None => {
+                    format!("`{} ! {}'", format_expr_to_source(trye), codes_str)
+                }
+            }
+        }
+        Expr::Length => "$".to_string(),
+        Expr::TypeConstant(var_type) => {
+            use moor_var::VarType;
+            match *var_type {
+                VarType::TYPE_INT => "INT".to_string(),
+                VarType::TYPE_FLOAT => "FLOAT".to_string(),
+                VarType::TYPE_STR => "STR".to_string(),
+                VarType::TYPE_OBJ => "OBJ".to_string(),
+                VarType::TYPE_LIST => "LIST".to_string(),
+                VarType::TYPE_MAP => "MAP".to_string(),
+                VarType::TYPE_ERR => "ERR".to_string(),
+                VarType::TYPE_BOOL => "BOOL".to_string(),
+                VarType::TYPE_FLYWEIGHT => "FLYWEIGHT".to_string(),
+                VarType::TYPE_LABEL => "LABEL".to_string(),
+                _ => panic!("Unknown VarType: {:?}", var_type),
+            }
         }
         _ => panic!("Unsupported expression type: {:?}", expr),
     }
@@ -333,6 +445,11 @@ proptest! {
 
     #[test]
     fn roundtrip_layer2b_expr(expr in arb_expr_layer2b(3)) {
+        run_roundtrip(&expr)?;
+    }
+
+    #[test]
+    fn roundtrip_layer2_complete_expr(expr in arb_expr_layer2_complete(2)) {
         run_roundtrip(&expr)?;
     }
 }
