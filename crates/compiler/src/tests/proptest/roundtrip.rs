@@ -25,7 +25,7 @@ use moor_var::Variant;
 use moor_var::{ErrorCode, Var};
 use proptest::prelude::*;
 
-use super::generators::{arb_expr_layer1, arb_expr_layer2};
+use super::generators::{arb_expr_layer1, arb_expr_layer2, arb_expr_layer2b};
 
 /// Format an expression to MOO source code.
 /// This is a simplified unparser just for testing - we'll use it to generate
@@ -110,6 +110,29 @@ fn format_expr_to_source(expr: &Expr) -> String {
                 })
                 .collect();
             format!("[{}]", elements.join(", "))
+        }
+        Expr::Index(base, index) => {
+            format!("({}[{}])", format_expr_to_source(base), format_expr_to_source(index))
+        }
+        Expr::Range { base, from, to } => {
+            format!(
+                "({}[{}..{}])",
+                format_expr_to_source(base),
+                format_expr_to_source(from),
+                format_expr_to_source(to)
+            )
+        }
+        Expr::Cond {
+            condition,
+            consequence,
+            alternative,
+        } => {
+            format!(
+                "({} ? {} | {})",
+                format_expr_to_source(condition),
+                format_expr_to_source(consequence),
+                format_expr_to_source(alternative)
+            )
         }
         _ => panic!("Unsupported expression type: {:?}", expr),
     }
@@ -305,6 +328,11 @@ proptest! {
 
     #[test]
     fn roundtrip_layer2_expr(expr in arb_expr_layer2(3)) {
+        run_roundtrip(&expr)?;
+    }
+
+    #[test]
+    fn roundtrip_layer2b_expr(expr in arb_expr_layer2b(3)) {
         run_roundtrip(&expr)?;
     }
 }

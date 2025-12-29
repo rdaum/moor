@@ -221,6 +221,52 @@ pub fn arb_map<S: Strategy<Value = Expr> + Clone + 'static>(
 }
 
 // =============================================================================
+// Indexing Generators
+// =============================================================================
+
+/// Generate a single index expression: base[index]
+pub fn arb_index<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+) -> impl Strategy<Value = Expr> {
+    (expr_strategy.clone(), expr_strategy).prop_map(|(base, index)| {
+        Expr::Index(Box::new(base), Box::new(index))
+    })
+}
+
+/// Generate a range index expression: base[from..to]
+pub fn arb_range<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+) -> impl Strategy<Value = Expr> {
+    (expr_strategy.clone(), expr_strategy.clone(), expr_strategy).prop_map(|(base, from, to)| {
+        Expr::Range {
+            base: Box::new(base),
+            from: Box::new(from),
+            to: Box::new(to),
+        }
+    })
+}
+
+// =============================================================================
+// Conditional Generators
+// =============================================================================
+
+/// Generate a conditional (ternary) expression: condition ? consequence | alternative
+pub fn arb_cond<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+) -> impl Strategy<Value = Expr> {
+    (
+        expr_strategy.clone(),
+        expr_strategy.clone(),
+        expr_strategy,
+    )
+        .prop_map(|(condition, consequence, alternative)| Expr::Cond {
+            condition: Box::new(condition),
+            consequence: Box::new(consequence),
+            alternative: Box::new(alternative),
+        })
+}
+
+// =============================================================================
 // Expression Generators (Layered)
 // =============================================================================
 
@@ -284,6 +330,51 @@ pub fn arb_expr_layer2(depth: usize) -> BoxedStrategy<Expr> {
             1 => arb_list(elem_strategy.clone(), 4),
             // 10% maps (0-3 entries)
             1 => arb_map(elem_strategy, 3),
+        ]
+        .boxed()
+    }
+}
+
+/// Layer 2b: Layer 2 + indexing and conditionals.
+///
+/// Adds:
+/// - Single indexing: expr[index]
+/// - Range indexing: expr[from..to]
+/// - Conditional (ternary): condition ? consequence | alternative
+pub fn arb_expr_layer2b(depth: usize) -> BoxedStrategy<Expr> {
+    if depth == 0 {
+        // At depth 0: literals and identifiers only
+        prop_oneof![8 => arb_literal(), 2 => arb_variable().prop_map(Expr::Id),]
+            .boxed()
+    } else {
+        // Create boxed strategies that can be cloned
+        let elem_strategy = arb_expr_layer2b(depth - 1);
+
+        prop_oneof![
+            // 30% literals
+            3 => arb_literal(),
+            // 10% identifiers
+            1 => arb_variable().prop_map(Expr::Id),
+            // 15% binary ops
+            2 => (arb_binary_op(), arb_expr_layer2b(depth - 1), arb_expr_layer2b(depth - 1))
+                .prop_map(|(op, left, right)| {
+                    Expr::Binary(op, Box::new(left), Box::new(right))
+                }),
+            // 5% unary ops
+            1 => (arb_unary_op(), arb_expr_layer2b(depth - 1))
+                .prop_map(|(op, expr)| {
+                    Expr::Unary(op, Box::new(expr))
+                }),
+            // 10% lists (0-4 elements)
+            1 => arb_list(elem_strategy.clone(), 4),
+            // 5% maps (0-3 entries)
+            1 => arb_map(elem_strategy.clone(), 3),
+            // 10% single index
+            1 => arb_index(elem_strategy.clone()),
+            // 5% range index
+            1 => arb_range(elem_strategy.clone()),
+            // 10% conditional
+            1 => arb_cond(elem_strategy),
         ]
         .boxed()
     }
@@ -379,5 +470,32 @@ mod tests {
         }
         assert!(found_list, "Layer 2 should generate lists");
         assert!(found_map, "Layer 2 should generate maps");
+    }
+
+    #[test]
+    fn test_expr_layer2b_generates_index_and_cond() {
+        let mut runner = TestRunner::default();
+        let strategy = arb_expr_layer2b(2);
+        let mut found_index = false;
+        let mut found_range = false;
+        let mut found_cond = false;
+        for _ in 0..300 {
+            let expr = strategy.new_tree(&mut runner).unwrap().current();
+            if matches!(expr, Expr::Index(_, _)) {
+                found_index = true;
+            }
+            if matches!(expr, Expr::Range { .. }) {
+                found_range = true;
+            }
+            if matches!(expr, Expr::Cond { .. }) {
+                found_cond = true;
+            }
+            if found_index && found_range && found_cond {
+                break;
+            }
+        }
+        assert!(found_index, "Layer 2b should generate index expressions");
+        assert!(found_range, "Layer 2b should generate range expressions");
+        assert!(found_cond, "Layer 2b should generate conditional expressions");
     }
 }

@@ -220,15 +220,44 @@ impl<'a> Unparse<'a> {
                 brace_if_needed(left, ParenPosition::Left),
                 brace_if_needed(right, ParenPosition::Right)
             )),
-            Expr::Unary(op, expr) => Ok(format!(
-                "{}{}",
-                op,
-                brace_if_needed(expr, ParenPosition::Right)
-            )),
+            Expr::Unary(op, expr) => {
+                let inner_str = brace_if_needed(expr, ParenPosition::Right);
+                // The MOO grammar has:
+                //   neg = { "-" ~ !ASCII_DIGIT }
+                // So `-0.0` parses as a negative float literal, not unary negation of 0.0.
+                //
+                // We need parentheses in two cases:
+                // 1. Inner starts with '-' (e.g., `--0.0` is ambiguous)
+                // 2. When op is Neg and inner starts with a digit/dot (e.g., `-0.0[0]` would be
+                //    parsed as `(-0.0)[0]` not `-(0.0[0])`)
+                //
+                // The second case handles: Unary(Neg, Index(Float(0), 0)) -> should be `-(0.0[0])`
+                // not `-0.0[0]` which parses as Index(Float(-0.0), 0).
+                let needs_parens = inner_str.starts_with('-')
+                    || (matches!(op, crate::ast::UnaryOp::Neg)
+                        && inner_str
+                            .chars()
+                            .next()
+                            .is_some_and(|c| c.is_ascii_digit() || c == '.'));
+                if needs_parens {
+                    Ok(format!("{}({})", op, inner_str))
+                } else {
+                    Ok(format!("{}{}", op, inner_str))
+                }
+            }
             Expr::Prop { location, property } => {
                 let location = match (&**location, &**property) {
                     (Expr::Value(var), Expr::Value(_)) if var.is_sysobj() => String::from("$"),
-                    _ => format!("{}.", brace_if_needed(location, ParenPosition::Left)),
+                    _ => {
+                        let loc_str = brace_if_needed(location, ParenPosition::Left);
+                        // Wrap in parens if location starts with '-' to prevent ambiguity with
+                        // negative literals. See comment in Expr::Unary for details.
+                        if loc_str.starts_with('-') {
+                            format!("({}).", loc_str)
+                        } else {
+                            format!("{}.", loc_str)
+                        }
+                    }
                 };
                 let prop = match &**property {
                     Expr::Value(var) => self.unparse_var(var, true).to_string(),
@@ -243,7 +272,16 @@ impl<'a> Unparse<'a> {
             } => {
                 let location = match (&**location, &**verb) {
                     (Expr::Value(var), Expr::Value(_)) if var.is_sysobj() => String::from("$"),
-                    _ => format!("{}:", brace_if_needed(location, ParenPosition::Left)),
+                    _ => {
+                        let loc_str = brace_if_needed(location, ParenPosition::Left);
+                        // Wrap in parens if location starts with '-' to prevent ambiguity with
+                        // negative literals. See comment in Expr::Unary for details.
+                        if loc_str.starts_with('-') {
+                            format!("({}):", loc_str)
+                        } else {
+                            format!("{}:", loc_str)
+                        }
+                    }
                 };
                 let verb = match &**verb {
                     Expr::Value(var) => self.unparse_var(var, true),
@@ -271,22 +309,53 @@ impl<'a> Unparse<'a> {
                 buffer.push(')');
                 Ok(buffer)
             }
-            Expr::Range { base, from, to } => Ok(format!(
-                "{}[{}..{}]",
-                brace_if_needed(base, ParenPosition::Left),
-                self.unparse_expr(from).unwrap(),
-                self.unparse_expr(to).unwrap()
-            )),
+            Expr::Range { base, from, to } => {
+                // Conditionals inside range bounds need parentheses because without them,
+                // `base[(a ? b | c)..(d ? e | f)]` would be unparsed as
+                // `base[a ? b | c..d ? e | f]` which parses differently - the parser
+                // sees `c..d` as part of the conditional alternative, breaking the range.
+                let paren_if_conditional = |expr: &Expr| -> String {
+                    if matches!(expr, Expr::Cond { .. }) {
+                        format!("({})", self.unparse_expr(expr).unwrap())
+                    } else {
+                        self.unparse_expr(expr).unwrap()
+                    }
+                };
+                let base_str = brace_if_needed(base, ParenPosition::Left);
+                // Wrap in parens if base starts with '-' to prevent ambiguity with
+                // negative literals. See comment in Expr::Unary for details.
+                let base_str = if base_str.starts_with('-') {
+                    format!("({})", base_str)
+                } else {
+                    base_str
+                };
+                Ok(format!(
+                    "{}[{}..{}]",
+                    base_str,
+                    paren_if_conditional(from),
+                    paren_if_conditional(to)
+                ))
+            }
             Expr::Cond {
                 condition,
                 consequence,
                 alternative,
-            } => Ok(format!(
-                "{} ? {} | {}",
-                brace_if_needed(condition, ParenPosition::Left),
-                self.unparse_expr(consequence)?,
-                brace_if_needed(alternative, ParenPosition::Right)
-            )),
+            } => {
+                // For conditionals, the condition part needs special handling.
+                // If the condition is itself a conditional, it needs parentheses because
+                // `a ? b | c ? d | e` parses as `a ? b | (c ? d | e)`, not `(a ? b | c) ? d | e`.
+                let condition_str = if matches!(condition.as_ref(), Expr::Cond { .. }) {
+                    format!("({})", self.unparse_expr(condition)?)
+                } else {
+                    brace_if_needed(condition, ParenPosition::Left)
+                };
+                Ok(format!(
+                    "{} ? {} | {}",
+                    condition_str,
+                    self.unparse_expr(consequence)?,
+                    brace_if_needed(alternative, ParenPosition::Right)
+                ))
+            }
             Expr::TryCatch {
                 trye,
                 codes,
@@ -310,6 +379,13 @@ impl<'a> Unparse<'a> {
             }),
             Expr::Index(lvalue, index) => {
                 let left = brace_if_needed(lvalue, ParenPosition::Left);
+                // Wrap in parens if left starts with '-' to prevent ambiguity with
+                // negative literals. See comment in Expr::Unary for details.
+                let left = if left.starts_with('-') {
+                    format!("({})", left)
+                } else {
+                    left
+                };
                 let right = self.unparse_expr(index).unwrap();
                 Ok(format!("{left}[{right}]"))
             }
