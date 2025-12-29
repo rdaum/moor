@@ -3213,6 +3213,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "moor-client"
+version = "1.0.0-beta5"
+dependencies = [
+ "eyre",
+ "moor-common",
+ "moor-db",
+ "moor-var",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tracing",
+ "uuid 1.19.0",
+]
+
+[[package]]
 name = "moor-common"
 version = "1.0.0-beta5"
 dependencies = [

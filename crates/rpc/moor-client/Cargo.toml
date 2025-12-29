@@ -1,0 +1,29 @@
+[package]
+name = "moor-client"
+version = "1.0.0-beta5"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Client interfaces for mooR world state access, including in-memory mode for tooling"
+
+[dependencies]
+# Internal Dependencies
+moor-common = { path = "../../common" }
+moor-db = { path = "../../db" }
+moor-var = { path = "../../var" }
+
+# Error Handling & Logging
+eyre.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+# Utilities
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
