@@ -1,0 +1,32 @@
+[package]
+name = "moor-mdmoot"
+version = "1.0.0-beta5"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Markdown-based MOO testing framework with multi-implementation comparison"
+
+[dependencies]
+# Internal Dependencies
+moor-moot = { path = "../moot" }
+moor-var = { path = "../../var" }
+
+# Markdown & Parsing
+pulldown-cmark = "0.12"
+
+# Config & Serialization
+serde = { workspace = true, features = ["derive"] }
+toml = "0.8"
+
+# Error Handling & Logging
+eyre.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+pretty_assertions.workspace = true

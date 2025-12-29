@@ -19,6 +19,7 @@ members = [
     "crates/testing/bench-utils",
     "crates/testing/lambdamoo-harness",
     "crates/testing/load-tools",
+    "crates/testing/mdmoot",
     "crates/testing/moot",
     "crates/textdump",
     "crates/var",
