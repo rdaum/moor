@@ -277,6 +277,32 @@ The `mdmoot migrate` command converts existing `.moot` files:
 - Related tests grouped under markdown headings
 - Frontmatter with tags inferred from directory structure
 
+**Tabular Pattern Detection:**
+
+The migrator detects repetitive patterns that should become tables:
+
+1. **Type checking patterns** - `typeof(x) == TYPE` becomes:
+   | _ | typeof(_)? |
+   |---|------------|
+   | `3` | `INT` |
+   | `"abc"` | `STR` |
+
+2. **Conversion function patterns** - `tostr(x)`, `toint(x)`, etc. become:
+   | _ | tostr(_)? | toliteral(_)? |
+   |---|-----------|---------------|
+   | `17` | `"17"` | `"17"` |
+   | `{1,2}` | `"{list}"` | `"{1, 2}"` |
+
+3. **Comparison patterns** - `equal(a, b)` becomes:
+   | a | b | equal(a, b)? |
+   |---|---|--------------|
+   | `1 + 1` | `2` | `1` |
+   | `"Foo"` | `"foo"` | `0` |
+
+4. **Boolean result patterns** - Repeated `; return expr; 1` or `; return expr; 0` suggests a decision table
+
+The migrator groups consecutive similar patterns into tables automatically.
+
 **Behavior:**
 - Creates new `.spec.md` files alongside `.moot` files
 - Never deletes original files (user decides via git)
