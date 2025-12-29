@@ -1,38 +1,149 @@
 # Accessibility
 
-The web client is designed to work well with standard browser accessibility tools, and it supports additional metadata to
-improve narration for screen readers.
+The web client is designed to work well with standard browser accessibility tools, including screen readers, keyboard
+navigation, and reduced motion preferences.
 
-## Screen Reader Narration
+## Keyboard Navigation
 
-When the server emits narrative events with metadata, the web client recognizes:
+The web client supports full keyboard navigation:
 
-- `tts_text`: Alternate narration text for output lines (used instead of richly formatted output).
-- `tts_prompt`: Alternate prompt text for rich input prompts.
+| Key       | Action                                      |
+|-----------|---------------------------------------------|
+| Tab       | Move focus to next interactive element      |
+| Shift+Tab | Move focus to previous element              |
+| Enter     | Activate focused button or link             |
+| Escape    | Close dialogs, dismiss prompts              |
+| Up/Down   | Navigate command history (in command input) |
 
-This lets you provide clear spoken text even when the visual presentation is highly formatted.
+### Editor Shortcuts
 
-## Examples
+In the verb and property editors:
+
+| Key          | Action           |
+|--------------|------------------|
+| Ctrl+S       | Save and compile |
+| Ctrl+Z       | Undo             |
+| Ctrl+Shift+Z | Redo             |
+| Escape       | Close editor     |
+
+## Screen Reader Support
+
+The web client uses ARIA attributes and live regions to communicate with screen readers effectively.
+
+### Live Regions
+
+- **Narrative output**: Announced as new content arrives
+- **Status changes**: Connection state, loading progress
+- **Prompts**: Rich input prompts announced when they appear
+- **Errors**: Compile errors and validation messages
+
+### TTS Text Alternatives
+
+When rich visual output would be difficult for screen readers to parse, MOO code can provide alternative text via
+metadata:
+
+| Metadata Key | Purpose                                        |
+|--------------|------------------------------------------------|
+| `tts_text`   | Alternative narration for complex output       |
+| `tts_prompt` | Alternative prompt text for rich input prompts |
+
+#### Using raw notify()
+
+The `notify()` builtin accepts metadata as its final argument:
 
 ```moo
-// Use a short narration for complex HTML output in logged history
+// Simple TTS alternative with notify()
 metadata = ["tts_text" -> "Gate status: open"];
-event_log(player, "<div class='badge'><strong>Gate</strong><span>Open</span></div>", 'text_html, metadata);
+notify(player, "<div class='status'><strong>Gate</strong> OPEN</div>", 0, 0, "text/html", metadata);
 
-// Provide a simpler spoken prompt for rich input
-metadata = ["tts_prompt" -> "Name your ship:"];
-event_log(player, "<p><strong>Name your ship</strong></p>", 'text_html, metadata);
+// Table with accessible summary
+html = "<table><tr><th>Player</th><th>Score</th></tr><tr><td>Alice</td><td>100</td></tr></table>";
+metadata = ["tts_text" -> "Player scores: Alice has 100 points"];
+notify(player, html, 0, 0, "text/html", metadata);
 ```
 
-In most cores, helper verbs pair `notify()` with `event_log()` so the same metadata applies to both live output and
-history.
+#### Using cowbell's event system
 
-## Practical Guidance
+The `cowbell` core provides higher-level helpers that work with `notify()` and the web client to make it easier to
+provide accessible output:
 
-- Prefer short, descriptive `tts_text` values for complex HTML or djot output.
-- Use `tts_prompt` when presenting rich input prompts that would otherwise be read poorly.
+```moo
+// Using $format helpers with metadata
+content = $format.table:mk({"Player", "Score"}, {{"Alice", 100}, {"Bob", 85}});
+event = $event:mk_info(player, content:compose(player, 'text_html));
+event = event:with_tts("Player scores: Alice 100 points, Bob 85 points");
+player:inform_current(event);
+```
 
-Related docs:
+The `:with_tts()` builder method sets the `tts_text` metadata key.
 
+## Rich Input Prompt Accessibility
+
+Rich input prompts are fully accessible:
+
+- Prompts are announced when they appear
+- Buttons have explicit labels
+- Form inputs have associated labels
+- Focus is automatically managed
+- Alternative input modes are keyboard accessible
+
+### Example Accessible Prompt
+
+Rich input prompts are triggered via the `request_input()` builtin. The `tts_prompt` metadata key provides an accessible
+alternative to visually complex prompts:
+
+```moo
+// Visual prompt shows formatted SQL, screen readers hear a clear question
+request_input(player, [
+    "input_type" -> "yes_no_alternative",
+    "prompt" -> "Apply this change?\n```sql\nALTER TABLE users ADD COLUMN verified BOOLEAN;\n```",
+    "tts_prompt" -> "Apply database change to add verified column to users table?"
+]);
+```
+
+## Visual Accessibility
+
+### Color and Contrast
+
+- Light and dark themes are designed with readable contrast
+- Color is not the only indicator of meaning
+- Links are underlined in addition to being colored
+
+### Font Options
+
+Users can customize fonts for better readability:
+
+- Serif, sans-serif, or monospace fonts
+- Adjustable font size (applies to narrative area)
+
+### Reduced Motion
+
+The web client respects the `prefers-reduced-motion` media query:
+
+- Animations are minimized or disabled
+- Transitions become instant
+- Loading spinners become static indicators
+
+## Content Authoring Guidelines
+
+When creating MOO content for accessibility:
+
+### DO
+
+- Provide `tts_text` for tables, complex formatting, ASCII art
+- Use semantic markup (headings, lists) in Djot and HTML
+- Write descriptive link text ("View inventory" not "Click here")
+- Include image alt text in event metadata
+
+### DON'T
+
+- Rely on color alone to convey meaning
+- Use tables for layout (only for tabular data)
+- Put essential information only in images
+- Create rapidly flashing content
+
+## Related Docs
+
+- [Client Output and Presentations](./client-output-and-presentations.md)
 - [Networking](../the-moo-programming-language/networking.md)
 - [Server Builtins](../the-moo-programming-language/built-in-functions/server.md)
