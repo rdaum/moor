@@ -3304,6 +3304,57 @@ mod tests {
     }
 
     #[test]
+    fn test_elseif_keyword_not_ident() {
+        // Regression test: `elseif` must be recognized as a keyword, not as the
+        // identifier "else" + "if" (which would happen if `^"else"` came before
+        // `^"elseif"` in the keyword rule).
+        let program = r#"
+if (x)
+    y = 1;
+elseif (z)
+    w = 2;
+endif
+        "#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        // If this parses correctly, elseif is being recognized as a keyword.
+        // If elseif were parsed as a builtin call, it would either fail or produce wrong AST.
+        assert_eq!(parse.stmts.len(), 1);
+        match &parse.stmts[0].node {
+            StmtNode::Cond { arms, .. } => {
+                // Should have 2 arms: if and elseif
+                assert_eq!(arms.len(), 2, "Expected 2 condition arms (if + elseif)");
+            }
+            _ => panic!("Expected Cond statement"),
+        }
+    }
+
+    #[test]
+    fn test_fork_keyword_not_for_ident() {
+        use pest::Parser;
+        use crate::parse::moo::{MooParser, Rule};
+
+        // Verify that 'fork' is parsed correctly as a keyword
+        let keyword_result = MooParser::parse(Rule::keyword, "fork");
+
+        // Fork should match as keyword with full "fork", not just "for"
+        assert!(
+            keyword_result.is_ok(),
+            "fork should match as keyword"
+        );
+        let matched = keyword_result.unwrap().next().unwrap().as_str();
+        assert_eq!(matched, "fork", "keyword rule should match full 'fork', not just 'for'");
+
+        // Also test endfork
+        let keyword_result = MooParser::parse(Rule::keyword, "endfork");
+        assert!(
+            keyword_result.is_ok(),
+            "endfork should match as keyword"
+        );
+        let matched = keyword_result.unwrap().next().unwrap().as_str();
+        assert_eq!(matched, "endfork", "keyword rule should match full 'endfork', not just 'endfor'");
+    }
+
+    #[test]
     fn try_catch_expr() {
         let program = "return {`x ! e_varnf => 666'};";
         let parse = parse_program(program, CompileOptions::default()).unwrap();

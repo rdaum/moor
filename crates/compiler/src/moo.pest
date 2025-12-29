@@ -217,19 +217,19 @@ object  = @{ "#" ~ (anonymous_uuid | uuid | integer) }
 uuid    = @{ ASCII_HEX_DIGIT{6} ~ "-" ~ ASCII_HEX_DIGIT{10} }
 anonymous_uuid = @{ "anon_" ~ ASCII_HEX_DIGIT{6} ~ "-" ~ ASCII_HEX_DIGIT{10} }
 keyword = @{
-    ^"for"
+    ^"fork"
+  | ^"for"
+  | ^"endfork"
   | ^"endfor"
   | ^"if"
+  | ^"elseif"
   | ^"else"
   | ^"return"
   | ^"endif"
-  | ^"elseif"
   | ^"while"
   | ^"endwhile"
   | ^"continue"
   | ^"break"
-  | ^"fork"
-  | ^"endfork"
   | ^"try"
   | ^"except"
   | ^"endtry"
