@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 7635ceb6abd14119d6577198d19a78deeeab1bb4c36612787b3c2c6d356b44bd # shrinks to expr = Binary(Add, Id(Variable { id: 0, scope_id: 0, nr: Named(Symbol { value: "in0", cmp_id: 35561, repr_id: 317 }) }), Value(Integer(0)))

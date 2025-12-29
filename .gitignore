@@ -56,3 +56,9 @@ cores/cowbell/
 # LambdaMOO sources (fetched by setup script for comparative testing)
 lambdamoo/
 certs/
+
+# macOS
+.DS_Store
+
+# Proptest failure snapshots (regenerated on failure)
+proptest-failures/

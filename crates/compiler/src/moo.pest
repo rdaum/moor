@@ -138,8 +138,10 @@ bitlshr  =  { ">>>" }
 bitshr   =  { ">>" }
 
 prefix = _{ neg | not | bitnot | scatter_assign }
-neg    =  { "-" }
-// 
+// neg only matches when NOT followed by a digit - this allows `-5` to parse as a signed
+// integer literal rather than unary negation of 5. Enables `~-5` to parse as `~(-5)`.
+neg    =  { "-" ~ !ASCII_DIGIT }
+//
 not = { "!" }
 bitnot = { "~" }
 
@@ -262,8 +264,9 @@ type_constant = @{ (^"int"| ^"num" | ^"float"
 ident = @{
   // The usual case, identifiers that *don't* start with a keyword
     ((!keyword ~ ident_start) ~ ident_continue* ~ !ident_continue)
-  // Identifiers can also start with a reserved keyword
-  | (keyword ~ ident_start ~ ident_continue* ~ !ident_continue)
+  // Identifiers can also start with a reserved keyword followed by more characters
+  // This allows "in0", "for1", "if_var", etc.
+  | (keyword ~ ident_continue+ ~ !ident_continue)
 }
 
 string    = @{ "\"" ~ str_inner ~ "\"" }

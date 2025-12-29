@@ -11,7 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub mod operand_parsing_tests;
-pub mod proptest;
-pub mod test_macros;
-pub mod test_utils;
+//! Property-based testing for the MOO compiler's parser and unparser.
+//!
+//! This module provides proptest strategies for generating valid MOO AST nodes
+//! and roundtrip tests that verify: AST -> unparse -> parse -> unparse stability.
+
+mod generators;
+mod roundtrip;
