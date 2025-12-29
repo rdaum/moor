@@ -5,13 +5,14 @@ object RECYCLER
   readable: true
 
   property announce_removal_msg (owner: HACKER, flags: "rc") = "";
+  property enabled (owner: HACKER, flags: "rc") = 0;
   property history (owner: HACKER, flags: "") = {};
   property lost_souls (owner: HACKER, flags: "rc") = {};
   property nhist (owner: HACKER, flags: "") = 50;
   property orphans (owner: HACKER, flags: "r") = {};
 
   override aliases = {"Recycling Center", "Center"};
-  override description = "Object reuse. Call $recycler:_create() to create an object (semantics the same as create()), $recycler:_recycle() to recycle an object. Will create a new object if nothing available in its contents. Note underscores, to avoid builtin :recycle() verb called when objects are recycled. Uses $building_utils:recreate() to prepare objects.";
+  override description = "Object creation/recycling API. Call $recycler:_create() to create an object, $recycler:_recycle() to recycle. When .enabled is false (default), objects are created fresh and recycling destroys them. When .enabled is true, recycled objects are pooled for reuse. Pooling is disabled by default since UUID objects make it unnecessary.";
   override import_export_id = "recycler";
   override object_size = {11836, 1084848672};
 
@@ -34,8 +35,8 @@ object RECYCLER
   endverb
 
   verb _recycle (this none this) owner: #2 flags: "rxd"
-    "Take the object in args[1], and turn it into a child of #1 owned by $hacker.";
-    "If the object is a player, decline.";
+    "Recycle an object. When pooling is disabled (default), destroys it.";
+    "When enabled, adds it to the pool for later reuse.";
     item = args[1];
     if (!$perm_utils:controls(caller_perms(), item))
       raise(E_PERM);
@@ -43,26 +44,33 @@ object RECYCLER
       raise(E_INVARG);
     endif
     this:addhist(caller_perms(), item);
-    "...recreate can fail (:recycle can crash)...";
+    if (!this.enabled)
+      recycle(item);
+      return;
+    endif
+    "Pooling enabled - prepare object for reuse";
     this:add_orphan(item);
     this:kill_all_tasks(item);
     $quota_utils:preliminary_reimburse_quota(item.owner, item);
     $building_utils:recreate(item, $garbage);
     this:remove_orphan(item);
-    "...";
     $wiz_utils:set_owner(item, $hacker);
-    item.name = tostr("Recyclable ", item);
+    item.name = tostr("Pooled ", item);
     `move(item, this) ! ANY => 0';
   endverb
 
   verb _create (this none this) owner: #2 flags: "rxd"
+    "Create an object. When pooling is disabled (default), just creates fresh.";
+    "When enabled, attempts to reuse a pooled object first.";
     e = `set_task_perms(caller_perms()) ! ANY';
     if (typeof(e) == ERR)
       return e;
-    else
-      val = this:_recreate(@args);
-      return val == E_NONE ? $quota_utils:bi_create(@args) | val;
     endif
+    if (!this.enabled)
+      return $quota_utils:bi_create(@args);
+    endif
+    val = this:_recreate(@args);
+    return val == E_NONE ? $quota_utils:bi_create(@args) | val;
   endverb
 
   verb addhist (this none this) owner: #2 flags: "rxd"
