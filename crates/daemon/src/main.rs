@@ -45,7 +45,7 @@ use moor_compiler::emit_compile_error;
 use moor_db::{Database, TxDB};
 use moor_kernel::{
     SchedulerClient,
-    config::{Config, ImportExportFormat},
+    config::{Config, ImportFormat},
     tasks::{NoopTasksDb, TasksDb, scheduler::Scheduler},
 };
 use moor_objdef::ObjectDefinitionLoader;
@@ -154,7 +154,7 @@ fn perform_import(
     // legacy "textdump" format from LambdaMOO,
     // or our own exploded objdef format.
     let commit = match &config.import_export.import_format {
-        ImportExportFormat::Objdef => {
+        ImportFormat::Objdef => {
             let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
             let options = moor_objdef::ObjDefLoaderOptions::default();
             let results = match od.load_objdef_directory(
@@ -180,7 +180,7 @@ fn perform_import(
             );
             results.commit
         }
-        ImportExportFormat::Textdump => {
+        ImportFormat::Textdump => {
             textdump_load(
                 loader_interface.as_mut(),
                 import_path.clone(),
@@ -519,8 +519,8 @@ fn main() -> Result<(), Report> {
             info!("Database already exists, skipping textdump import");
         } else {
             let import_format_name = match &config.import_export.import_format {
-                ImportExportFormat::Objdef => "objdef",
-                ImportExportFormat::Textdump => "textdump",
+                ImportFormat::Objdef => "objdef",
+                ImportFormat::Textdump => "textdump",
             };
             info!("Loading {} from {:?}", import_format_name, import_path);
             let loader_interface = database

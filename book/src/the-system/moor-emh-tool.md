@@ -503,9 +503,8 @@ The tool consists of:
 
 ## Related Tools
 
-- **moor-daemon:** The main MOO server daemon
-- **moor-db-load:** Load textdump files into the database
-- **moor-db-dump:** Export database to textdump format
+- **moor-daemon:** The main MOO server daemon (handles textdump import and objdef checkpoint export)
+- **moorc:** Command-line compiler for importing textdumps or objdef directories and running tests
 
 ## See Also
 

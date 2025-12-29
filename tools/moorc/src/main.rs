@@ -28,24 +28,22 @@ use moor_compiler::emit_compile_error;
 use moor_db::{Database, DatabaseConfig, TxDB};
 use moor_kernel::{
     SchedulerClient,
-    config::{Config, FeaturesConfig, ImportExportConfig},
+    config::{Config, FeaturesConfig},
     tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
 };
 use moor_moot::MootOptions;
 use moor_objdef::{ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions};
-use moor_textdump::{
-    EncodingMode, TextdumpImportOptions, TextdumpWriter, make_textdump, textdump_load,
-};
+use moor_textdump::{TextdumpImportOptions, textdump_load};
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
 use once_cell::sync::Lazy;
 use std::{
-    fs::{self, File},
+    fs,
     io::{self, IsTerminal},
     path::PathBuf,
     sync::Arc,
     time::Duration,
 };
-use tracing::{debug, error, info, trace, warn};
+use tracing::{error, info, warn};
 
 static VERSION_STRING: Lazy<String> = Lazy::new(|| {
     format!(
@@ -74,12 +72,6 @@ pub struct Args {
         help = "If set, the source to compile lives in a textdump file, and the compiler should run over the files contained in there."
     )]
     src_textdump: Option<PathBuf>,
-
-    #[clap(
-        long,
-        help = "The output should be a LambdaMOO style 'textdump' file located at this path."
-    )]
-    out_textdump: Option<PathBuf>,
 
     #[clap(
         long,
@@ -332,46 +324,11 @@ fn main() -> Result<(), eyre::Report> {
     }
 
     info!(
-        "Database loaded. out_textdump?: {:?} out_objdef_dir?: {:?} test_directory?: {:?} run_tests?: {:?}",
-        args.out_textdump, args.out_objdef_dir, args.test_directory, args.run_tests
+        "Database loaded. out_objdef_dir?: {:?} test_directory?: {:?} run_tests?: {:?}",
+        args.out_objdef_dir, args.test_directory, args.run_tests
     );
 
     // Dump phase.
-    if let Some(textdump_path) = args.out_textdump {
-        let Ok(loader_interface) = database.create_snapshot() else {
-            error!("Unable to open database at {}", db_path.display());
-            return Ok(());
-        };
-
-        let version = semver::Version::parse(build::PKG_VERSION).expect("Invalid moor version");
-
-        let textdump_config = ImportExportConfig::default();
-        let encoding_mode = EncodingMode::UTF8;
-        let version_string = textdump_config.version_string(&version, &features);
-
-        let Ok(mut output) = File::create(&textdump_path) else {
-            error!("Could not open textdump file for writing");
-            return Ok(());
-        };
-
-        trace!("Creating textdump...");
-        let textdump = make_textdump(loader_interface.as_ref(), version_string);
-
-        debug!(?textdump_path, "Writing textdump..");
-        let mut writer = TextdumpWriter::new(&mut output, encoding_mode);
-        if let Err(e) = writer.write_textdump(&textdump) {
-            error!(?e, "Could not write textdump");
-            return Ok(());
-        }
-
-        // Now that the dump has been written, strip the in-progress suffix.
-        let final_path = textdump_path.with_extension("moo-textdump");
-        if let Err(e) = std::fs::rename(&textdump_path, &final_path) {
-            error!(?e, "Could not rename textdump to final path");
-        }
-        info!(?final_path, "Textdump written.");
-    }
-
     if let Some(dirdump_path) = args.out_objdef_dir {
         let Ok(loader_interface) = database.create_snapshot() else {
             error!("Unable to open database at {}", db_path.display());

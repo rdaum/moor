@@ -139,15 +139,12 @@ These options enable or disable various MOO language features:
 
 ## Import/Export Configuration
 
-These options control database import and export functionality:
+These options control database import and checkpoint export functionality:
 
 - `--import <PATH>`: Path to a textdump or objdef directory to import
-- `--export <PATH>`: Path to a textdump or objdef directory to export into
+- `--export <PATH>`: Path to export checkpoints into (always uses objdef format)
 - `--import-format <FORMAT>` (default: `Textdump`): Format to import from (Textdump or Objdef)
-- `--export-format <FORMAT>` (default: `Objdef`): Format to export into (Textdump or Objdef)
 - `--checkpoint-interval-seconds <SECONDS>`: Interval between database checkpoints
-- `--textdump-output-encoding <ENCODING>`: Encoding for textdump files (utf8 or iso8859-1)
-- `--textdump-version-override <STRING>`: Version string override for textdump
 
 ## Example Configuration
 
@@ -178,9 +175,7 @@ features_config:
 
 # Import/export configuration
 import_export_config:
-  output_encoding: "UTF8"
   checkpoint_interval: "60s"
-  export_format: "Objdef"
 ```
 
 ## LambdaMOO Compatibility Mode
@@ -207,9 +202,8 @@ features_config:
   use_uuobjids: false
   anonymous_objects: false
 
-# LambdaMOO compatible import/export
-import_export_config:
-  output_encoding: "ISO8859_1"
+# LambdaMOO textdump import is supported
+# Checkpoints always export in objdef format
 ```
 
 ## Anonymous Objects Configuration

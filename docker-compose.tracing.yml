@@ -21,7 +21,7 @@ services:
         --trace-output=/moor/traces/moor-trace.json
         --generate-keypair
         --import=/db/cores/lambda-moor/src --import-format=objdef
-        --export=/db/export --export-format objdef
+        --export=/db/export
 
   moor-telnet-host:
     build:

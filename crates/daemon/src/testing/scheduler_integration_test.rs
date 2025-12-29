@@ -34,7 +34,7 @@ mod tests {
     use moor_common::{model::CommitResult, tasks::Event};
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_kernel::{
-        config::{Config, ImportExportFormat},
+        config::Config,
         tasks::{NoopTasksDb, scheduler::Scheduler},
     };
     use moor_schema::rpc as moor_rpc;
@@ -241,9 +241,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         }
     }
 
-    fn setup_test_environment_with_export_format(
-        export_format: ImportExportFormat,
-    ) -> TestEnvironment {
+    fn setup_test_environment_with_checkpoint_output() -> TestEnvironment {
         // Set up tracing to capture scheduler logs
         let _ = tracing_subscriber::fmt()
             .with_max_level(tracing::Level::DEBUG)
@@ -252,13 +250,12 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         let (public_key, private_key) = create_test_keys();
 
-        // Create a config with a proper output path for textdump
+        // Create a config with a proper output path for checkpoints
         let temp_output_dir = tempfile::tempdir().expect("Failed to create temp output dir");
         let output_path = temp_output_dir.path().to_path_buf();
 
         let mut config = Config::default();
         config.import_export.output_path = Some(output_path.clone());
-        config.import_export.export_format = export_format;
         // Enable anonymous objects for GC tests
         config.features = Arc::new(moor_kernel::config::FeaturesConfig {
             anonymous_objects: true,
@@ -346,7 +343,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
     }
 
     fn setup_test_environment_with_real_scheduler() -> TestEnvironment {
-        setup_test_environment_with_export_format(ImportExportFormat::Textdump)
+        setup_test_environment_with_checkpoint_output()
     }
 
     #[test]
@@ -723,17 +720,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
     }
 
     #[test]
-    fn test_checkpoint_functionality_textdump() {
-        test_checkpoint_functionality_impl(ImportExportFormat::Textdump);
-    }
-
-    #[test]
-    fn test_checkpoint_functionality_objdef() {
-        test_checkpoint_functionality_impl(ImportExportFormat::Objdef);
-    }
-
-    fn test_checkpoint_functionality_impl(export_format: ImportExportFormat) {
-        let env = setup_test_environment_with_export_format(export_format.clone());
+    fn test_checkpoint_functionality() {
+        let env = setup_test_environment_with_checkpoint_output();
         wait_for_scheduler_ready(&env.scheduler_client);
 
         // Step 1: Verify scheduler is running and responsive
@@ -800,51 +788,46 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let entries =
             std::fs::read_dir(output_dir).expect("Should be able to read output directory");
 
-        let mut export_files: Vec<_> = entries
+        // Checkpoints are always written as objdef directories with .moo extension
+        let mut checkpoint_files: Vec<_> = entries
             .flatten()
             .filter(|entry| {
                 if let Some(filename) = entry.file_name().to_str() {
-                    // Handle both textdump and objdef formats
-                    if export_format == ImportExportFormat::Textdump {
-                        filename.starts_with("textdump-")
-                            && filename.ends_with(".moo-textdump")
-                            && !filename.contains(".in-progress")
-                    } else {
-                        filename.starts_with("textdump-")
-                            && filename.ends_with(".moo")
-                            && !filename.contains(".in-progress")
-                    }
+                    filename.starts_with("checkpoint-")
+                        && filename.ends_with(".moo")
+                        && !filename.contains(".in-progress")
                 } else {
                     false
                 }
             })
             .collect();
 
-        let format_name = if export_format == ImportExportFormat::Textdump {
-            "Textdump"
-        } else {
-            "Objdef"
-        };
         assert!(
-            !export_files.is_empty(),
-            "{} file should exist after blocking checkpoint in directory: {}",
-            format_name,
+            !checkpoint_files.is_empty(),
+            "Checkpoint file should exist after blocking checkpoint in directory: {}",
             output_dir.display()
         );
 
         // Get the most recent file (there should be exactly one from our checkpoint)
-        export_files.sort_by_key(|entry| entry.metadata().unwrap().modified().unwrap());
-        let export_path = export_files.last().unwrap().path();
+        checkpoint_files.sort_by_key(|entry| entry.metadata().unwrap().modified().unwrap());
+        let checkpoint_path = checkpoint_files.last().unwrap().path();
 
-        // Verify the file has content (JHCore should produce a non-empty export)
-        let metadata =
-            std::fs::metadata(&export_path).expect("Should be able to read export file metadata");
+        // Verify the checkpoint directory has content (JHCore should produce substantial data)
+        // For objdef format, the checkpoint is a directory containing .moo files
         assert!(
-            metadata.len() > 1000, // JHCore export should be much larger than 1KB
-            "{} file should have substantial content, got {} bytes: {}",
-            format_name,
-            metadata.len(),
-            export_path.display()
+            checkpoint_path.is_dir(),
+            "Checkpoint should be a directory: {}",
+            checkpoint_path.display()
+        );
+
+        let dir_entries: Vec<_> = std::fs::read_dir(&checkpoint_path)
+            .expect("Should be able to read checkpoint directory")
+            .flatten()
+            .collect();
+        assert!(
+            !dir_entries.is_empty(),
+            "Checkpoint directory should contain files: {}",
+            checkpoint_path.display()
         );
 
         // Step 8: Verify there are no errors in the transport events (which are unencrypted)

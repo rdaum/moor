@@ -88,7 +88,7 @@ services:
         --enrollment-listen=tcp://0.0.0.0:7900
         --generate-keypair
         --import=/db/cores/lambda-moor/src --import-format=objdef
-        --export=/db/export --export-format objdef
+        --export=/db/export
     ports:
       # ZMQ ports
       - "7899:7899" # RPC listener

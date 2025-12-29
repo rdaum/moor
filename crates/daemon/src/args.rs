@@ -21,8 +21,7 @@ use figment::{
 };
 use moor_common::util::config_path;
 use moor_db::DatabaseConfig;
-use moor_kernel::config::{Config, ImportExportConfig, ImportExportFormat, RuntimeConfig};
-use moor_textdump::EncodingMode;
+use moor_kernel::config::{Config, ImportExportConfig, ImportFormat, RuntimeConfig};
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc};
 
@@ -190,7 +189,7 @@ pub struct Args {
     pub trace_output: Option<PathBuf>,
 }
 
-/// Formats for import or export
+/// Formats for import
 #[derive(
     Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Default, Serialize, Deserialize,
 )]
@@ -211,7 +210,7 @@ pub struct ImportExportArgs {
     #[arg(
         long,
         value_name = "export",
-        help = "Path to a textdump or objdef directory to export into",
+        help = "Path to export checkpoints into (always uses objdef format)",
         value_hint = ValueHint::FilePath
     )]
     pub export: Option<PathBuf>,
@@ -228,11 +227,11 @@ pub struct ImportExportArgs {
     #[arg(
         long,
         value_name = "export-format",
-        help = "Format to export into.",
+        help = "DEPRECATED: Export format is always objdef. This option is ignored.",
         value_enum,
-        default_value_t = Format::Objdef
+        hide = true
     )]
-    pub export_format: Format,
+    pub export_format: Option<Format>,
 
     #[arg(
         long,
@@ -240,26 +239,6 @@ pub struct ImportExportArgs {
         help = "Interval in seconds between database checkpoints"
     )]
     pub checkpoint_interval_seconds: Option<u16>,
-
-    #[arg(
-        long,
-        value_name = "textdump-output-encoding",
-        help = "Encoding to use for writing textdump files. utf8 or iso8859-1. \
-          LambdaMOO textdumps that contain 8-bit strings are written using iso8859-1, so if you want to write a LambdaMOO-compatible textdump, choose iso8859-1. \
-          (But make sure your features are set to match LambdaMOO's capabilities!)"
-    )]
-    pub textdump_output_encoding: Option<EncodingMode>,
-
-    #[arg(
-        long,
-        value_name = "textdump-version-override",
-        help = "Version override string to put into the textdump. \
-          If None, the moor version + a serialization of the features config is used + the encoding. \
-          If set, this string will be used instead. \
-          This is useful for producing textdumps that are compatible with other servers, but be \
-          careful to not lie about the features (and encoding) you support."
-    )]
-    pub version_override: Option<String>,
 }
 
 impl ImportExportArgs {
@@ -270,23 +249,18 @@ impl ImportExportArgs {
         if let Some(args) = self.export.as_ref() {
             config.output_path = Some(args.clone());
         }
-        if let Some(args) = self.textdump_output_encoding {
-            config.output_encoding = args;
-        }
         if let Some(args) = self.checkpoint_interval_seconds {
             config.checkpoint_interval = Some(std::time::Duration::from_secs(u64::from(args)));
         }
-        if let Some(args) = self.version_override.as_ref() {
-            config.version_override = Some(args.clone());
-        }
         config.import_format = match self.import_format {
-            Format::Textdump => ImportExportFormat::Textdump,
-            Format::Objdef => ImportExportFormat::Objdef,
+            Format::Textdump => ImportFormat::Textdump,
+            Format::Objdef => ImportFormat::Objdef,
         };
-        config.export_format = match self.export_format {
-            Format::Textdump => ImportExportFormat::Textdump,
-            Format::Objdef => ImportExportFormat::Objdef,
-        };
+        if self.export_format.is_some() {
+            tracing::warn!(
+                "--export-format is deprecated and ignored. Checkpoints always use objdef format."
+            );
+        }
         Ok(())
     }
 }

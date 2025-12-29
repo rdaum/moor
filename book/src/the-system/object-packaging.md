@@ -50,8 +50,8 @@ the [Object Definition File Format Reference](objdef-file-format.md).
 ## Object Definition Files: A Modern Alternative to Textdumps
 
 Traditionally, MOO databases have been stored and transferred using "textdump" files - large, monolithic text files
-containing the entire database in a format that only MOO servers can easily read. While mooR can import and export
-textdumps for compatibility, it also supports a more modern approach: **object definition directories**.
+containing the entire database in a format that only MOO servers can easily read. While mooR can import textdumps
+for compatibility with LambdaMOO/ToastStunt databases, it uses a more modern approach for exports: **object definition directories**.
 
 ### What are Object Definition Files?
 
@@ -99,48 +99,51 @@ definition format for easier maintenance and customization.
 
 ### Command-Line Import and Export
 
-mooR provides command-line tools for importing and exporting entire databases as object definition directories. This is
+mooR provides command-line tools for importing databases and exporting checkpoints as object definition directories. This is
 typically how you work with cores, perform database migrations, or create comprehensive backups.
 
-#### Exporting to Object Definition Format
+#### Importing Databases
 
-To export your entire database as an object definition directory:
+To import a database into mooR:
 
 ```bash
-# Export current database to objdef format
-moor-daemon --export /path/to/export/directory --export-format objdef
+# Import from traditional textdump (LambdaMOO/ToastStunt format)
+moor-daemon --import /path/to/backup.db --import-format textdump
 
-# You can also export to traditional textdump format
-moor-daemon --export /path/to/backup.db --export-format textdump
+# Import from objdef directory
+moor-daemon --import /path/to/objdef/directory --import-format objdef
+```
+
+#### Checkpoint Exports (Always Objdef Format)
+
+mooR exports checkpoints in objdef format only. Textdump export is not supported - use objdef for all exports and backups:
+
+```bash
+# Configure checkpoint export directory
+moor-daemon --export /path/to/export/directory
 ```
 
 This creates a directory structure where each object becomes its own `.moo` file, numbered by object ID (e.g., `1.moo`,
 `2.moo`, `123.moo`).
 
-#### Importing from Object Definition Format
+#### Converting Textdump to Objdef
 
-To import an object definition directory into a new database:
+The `moorc` compiler tool is the recommended way to convert a LambdaMOO textdump to objdef format:
 
 ```bash
-# Import from objdef directory
-moor-daemon --import /path/to/objdef/directory --import-format objdef
-
-# Import from traditional textdump
-moor-daemon --import /path/to/backup.db --import-format textdump
+# Convert textdump to objdef directory
+moorc --src-textdump old_database.db --out-objdef-dir new_objdef_dir
 ```
 
-#### Format Conversion
+This processes the import and export immediately without running a live server.
 
-You can use mooR to convert between formats:
+Alternatively, if you're already running a daemon, you can import the textdump and let checkpoints produce the objdef export:
 
 ```bash
-# Convert textdump to objdef
+# Import textdump; exports occur at checkpoint intervals
 moor-daemon --import old_database.db --import-format textdump \
-            --export new_objdef_dir --export-format objdef
-
-# Convert objdef back to textdump
-moor-daemon --import objdef_directory --import-format objdef \
-            --export new_database.db --export-format textdump
+            --export new_objdef_dir \
+            --checkpoint-interval-seconds 60
 ```
 
 #### Automatic Timestamped Exports
@@ -150,7 +153,7 @@ export gets a unique filename based on Unix timestamp to prevent overwriting pre
 
 ```bash
 # Configure automatic exports with checkpoint interval
-moor-daemon --export /path/to/backups --export-format objdef \
+moor-daemon --export /path/to/backups \
             --checkpoint-interval-seconds 3600  # Export every hour
 ```
 
@@ -158,9 +161,9 @@ This creates files like:
 
 ```
 /path/to/backups/
-├── textdump-1704067200.moo         # Exported at 2024-01-01 00:00:00
-├── textdump-1704070800.moo         # Exported at 2024-01-01 01:00:00
-├── textdump-1704074400.moo         # Exported at 2024-01-01 02:00:00
+├── checkpoint-1704067200.moo         # Exported at 2024-01-01 00:00:00
+├── checkpoint-1704070800.moo         # Exported at 2024-01-01 01:00:00
+├── checkpoint-1704074400.moo         # Exported at 2024-01-01 02:00:00
 └── ...
 ```
 

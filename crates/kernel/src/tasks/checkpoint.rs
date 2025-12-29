@@ -12,7 +12,7 @@
 //
 
 use std::{
-    fs::{self, File},
+    fs,
     path::Path,
     sync::{
         Arc,
@@ -24,10 +24,9 @@ use std::{
 use moor_common::tasks::SchedulerError;
 use moor_db::Database;
 use moor_objdef::{collect_object_definitions, dump_object_definitions};
-use moor_textdump::{TextdumpWriter, make_textdump};
 use tracing::{error, info, warn};
 
-use crate::config::{Config, ImportExportFormat};
+use crate::config::Config;
 
 enum CheckpointCompletion {
     FireAndForget,
@@ -44,7 +43,7 @@ pub enum CheckpointMode {
 pub fn start_checkpoint(
     database: &dyn Database,
     config: &Config,
-    version: &semver::Version,
+    _version: &semver::Version,
     checkpoint_flag: Arc<AtomicBool>,
     mode: CheckpointMode,
 ) -> Result<(), SchedulerError> {
@@ -56,31 +55,25 @@ pub fn start_checkpoint(
         return Ok(());
     }
 
-    let Some(textdump_dir) = config.import_export.output_path.clone() else {
+    let Some(output_dir) = config.import_export.output_path.clone() else {
         checkpoint_flag.store(false, Ordering::SeqCst);
-        error!("Cannot textdump as output directory not configured");
+        error!("Cannot checkpoint as output directory not configured");
         return Err(SchedulerError::CouldNotStartTask);
     };
 
-    if let Err(e) = fs::create_dir_all(&textdump_dir) {
+    if let Err(e) = fs::create_dir_all(&output_dir) {
         checkpoint_flag.store(false, Ordering::SeqCst);
-        error!(?e, "Could not create textdump directory");
+        error!(?e, "Could not create checkpoint output directory");
         return Err(SchedulerError::CouldNotStartTask);
     }
 
-    let textdump_path = textdump_dir.join(format!(
-        "textdump-{}.in-progress",
+    let checkpoint_path = output_dir.join(format!(
+        "checkpoint-{}.in-progress",
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs()
     ));
-
-    let encoding_mode = config.import_export.output_encoding;
-    let version_string = config
-        .import_export
-        .version_string(version, &config.features);
-    let dirdump = config.import_export.export_format == ImportExportFormat::Objdef;
 
     let (completion_handler, completion_receiver) = match mode {
         CheckpointMode::NonBlocking => (CheckpointCompletion::FireAndForget, None),
@@ -93,13 +86,7 @@ pub fn start_checkpoint(
     let checkpoint_flag_on_error = checkpoint_flag.clone();
     let result = database.create_snapshot_async(Box::new(move |snapshot_result| {
         let outcome = match snapshot_result {
-            Ok(loader_client) => perform_export(
-                loader_client.as_ref(),
-                &textdump_path,
-                dirdump,
-                &version_string,
-                encoding_mode,
-            ),
+            Ok(loader_client) => perform_export(loader_client.as_ref(), &checkpoint_path),
             Err(e) => {
                 error!(?e, "Could not create snapshot for checkpoint");
                 Err(SchedulerError::CouldNotStartTask)
@@ -141,49 +128,24 @@ pub fn start_checkpoint(
 
 fn perform_export(
     loader_client: &dyn moor_common::model::loader::SnapshotInterface,
-    textdump_path: &Path,
-    dirdump: bool,
-    version_string: &str,
-    encoding_mode: moor_textdump::EncodingMode,
+    checkpoint_path: &Path,
 ) -> Result<(), SchedulerError> {
-    if dirdump {
-        info!("Collecting objects for dump...");
-        let objects = collect_object_definitions(loader_client).map_err(|e| {
-            error!(?e, "Failed to collect objects for dump");
-            SchedulerError::CouldNotStartTask
-        })?;
-        info!("Dumping objects to {textdump_path:?}");
-        dump_object_definitions(&objects, textdump_path).map_err(|e| {
-            error!(?e, "Failed to dump objects");
-            SchedulerError::CouldNotStartTask
-        })?;
-        let final_path = textdump_path.with_extension("moo");
-        fs::rename(textdump_path, &final_path).map_err(|e| {
-            error!(?e, "Could not rename objdefdump to final path");
-            SchedulerError::CouldNotStartTask
-        })?;
-        info!(?final_path, "Objdefdump written.");
-    } else {
-        let mut output = File::create(textdump_path).map_err(|e| {
-            error!(?e, "Could not open textdump file for writing");
-            SchedulerError::CouldNotStartTask
-        })?;
-
-        let textdump = make_textdump(loader_client, version_string.to_string());
-
-        let mut writer = TextdumpWriter::new(&mut output, encoding_mode);
-        writer.write_textdump(&textdump).map_err(|e| {
-            error!(?e, "Could not write textdump");
-            SchedulerError::CouldNotStartTask
-        })?;
-
-        let final_path = textdump_path.with_extension("moo-textdump");
-        fs::rename(textdump_path, &final_path).map_err(|e| {
-            error!(?e, "Could not rename textdump to final path");
-            SchedulerError::CouldNotStartTask
-        })?;
-        info!(?final_path, "Textdump written.");
-    }
+    info!("Collecting objects for checkpoint...");
+    let objects = collect_object_definitions(loader_client).map_err(|e| {
+        error!(?e, "Failed to collect objects for checkpoint");
+        SchedulerError::CouldNotStartTask
+    })?;
+    info!("Dumping objects to {checkpoint_path:?}");
+    dump_object_definitions(&objects, checkpoint_path).map_err(|e| {
+        error!(?e, "Failed to dump objects");
+        SchedulerError::CouldNotStartTask
+    })?;
+    let final_path = checkpoint_path.with_extension("moo");
+    fs::rename(checkpoint_path, &final_path).map_err(|e| {
+        error!(?e, "Could not rename checkpoint to final path");
+        SchedulerError::CouldNotStartTask
+    })?;
+    info!(?final_path, "Checkpoint written.");
 
     Ok(())
 }

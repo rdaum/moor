@@ -22,13 +22,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::str::FromStr;
 use strum::{Display, FromRepr};
-pub use write::TextdumpWriter;
-pub use write_textdump::make_textdump;
 
 mod load_textdump;
 mod read;
-mod write;
-mod write_textdump;
 
 const VF_READ: u16 = 1;
 const VF_WRITE: u16 = 2;

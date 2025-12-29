@@ -18,8 +18,6 @@ import_export:
   input_path: "/usr/share/moor/cores/lambda-moor/src"
   import_format: "Objdef"
   output_path: "/var/spool/moor-daemon/core.export"
-  export_format: "Objdef"
-  output_encoding: "UTF8"
   checkpoint_interval: "600s"
 
 # Database configuration (empty - use defaults)

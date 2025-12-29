@@ -16,8 +16,6 @@
 
 use moor_compiler::CompileOptions;
 use moor_db::DatabaseConfig;
-use moor_textdump::{EncodingMode, TextdumpVersion};
-use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -141,8 +139,9 @@ pub struct RuntimeConfig {
     pub scheduler_tick_duration: Option<Duration>,
 }
 
+/// Format for importing databases.
 #[derive(Clone, Debug, Serialize, Deserialize, Default, Eq, PartialEq)]
-pub enum ImportExportFormat {
+pub enum ImportFormat {
     /// The legacy LambdaMOO textdump format.
     #[default]
     Textdump,
@@ -150,61 +149,20 @@ pub enum ImportExportFormat {
     Objdef,
 }
 
-/// Configuration for the import/export of textdumps or objdefs.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Configuration for database import and checkpoint export.
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct ImportExportConfig {
     /// Where to read the initial import from, if any.
     pub input_path: Option<PathBuf>,
-    /// Directory to write periodic export/backups of the database, if any.
+    /// Directory to write periodic checkpoint exports of the database, if any.
+    /// Checkpoints are always written in objdef format.
     pub output_path: Option<PathBuf>,
-    /// What encoding to use for writing textdumps (ISO-8859-1 or UTF-8).
-    pub output_encoding: EncodingMode,
     /// Interval between database checkpoints.
     /// If None, no checkpoints will be made.
     #[serde(deserialize_with = "parse_duration")]
     pub checkpoint_interval: Option<Duration>,
-    /// Version override string to put into the textdump.
-    /// If None, the moor version + a serialization of the features config is used + the encoding.
-    /// If set, this string will be used instead.
-    /// This is useful for producing textdumps that are compatible with other servers, but be
-    /// careful to not lie about the features (and encoding) you support.
-    pub version_override: Option<String>,
     /// Which format to use for import.
-    pub import_format: ImportExportFormat,
-    /// Which format to use for export.
-    pub export_format: ImportExportFormat,
-}
-
-impl Default for ImportExportConfig {
-    fn default() -> Self {
-        Self {
-            input_path: None,
-            output_path: None,
-            output_encoding: EncodingMode::UTF8,
-            checkpoint_interval: None,
-            version_override: None,
-            import_format: ImportExportFormat::Textdump,
-            export_format: ImportExportFormat::Textdump,
-        }
-    }
-}
-
-impl ImportExportConfig {
-    pub fn version_string(
-        &self,
-        moor_version: &Version,
-        features_config: &FeaturesConfig,
-    ) -> String {
-        //    //      Moor 0.1.0, features: "flyweight_type=true lexical_scopes=true map_type=true", encoding: UTF8
-        self.version_override.clone().unwrap_or_else(|| {
-            let tv = TextdumpVersion::Moor(
-                moor_version.clone(),
-                features_config.compile_options(),
-                self.output_encoding,
-            );
-            tv.to_version_string()
-        })
-    }
+    pub import_format: ImportFormat,
 }
 
 // Use humantime to parse durations from strings

@@ -77,7 +77,7 @@ services:
         --workers-request-listen=ipc:///var/run/moor/workers-request.sock
         --generate-keypair
         --import=/db/cores/lambda-moor/src --import-format=objdef
-        --export=/db/export --export-format objdef
+        --export=/db/export
     networks:
       - moor_net
 
