@@ -32,7 +32,7 @@ mod tests {
     use moor_db::{DatabaseConfig, TxDB};
     use moor_var::{
         List, Symbol, Var, NOTHING, SYSTEM_OBJECT,
-        program::{ProgramType, program::PrgInner},
+        program::{ProgramType, labels::{JumpLabel, Label, Offset}, program::PrgInner},
         v_int, v_str,
     };
     use proptest::prelude::*;
@@ -41,9 +41,29 @@ mod tests {
 
     /// Create a Program from an opcode sequence
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
+        mk_program_with_labels(main_vector, literals, var_names, vec![])
+    }
+
+    /// Create a Program with jump labels for control flow
+    /// jump_offsets: list of PC offsets for each label (index = label id, value = PC offset)
+    fn mk_program_with_labels(
+        main_vector: Vec<Op>,
+        literals: Vec<Var>,
+        var_names: Names,
+        jump_offsets: Vec<u16>,
+    ) -> Program {
+        let jump_labels = jump_offsets
+            .into_iter()
+            .enumerate()
+            .map(|(i, offset)| JumpLabel {
+                id: Label(i as u16),
+                name: None,
+                position: Offset(offset),
+            })
+            .collect();
         Program(Arc::new(PrgInner {
             literals,
-            jump_labels: vec![],
+            jump_labels,
             var_names,
             scatter_tables: vec![],
             for_sequence_operands: vec![],
@@ -468,5 +488,270 @@ mod tests {
         let result = execute_program_safe(&program);
         // The key invariant: no panics - either success or exception
         assert!(result.is_ok() || result.unwrap_err().starts_with("Exception"));
+    }
+
+    // =========================================================================
+    // LAYER 5: Control Flow
+    // =========================================================================
+
+    #[test]
+    fn test_simple_if_true() {
+        // if (1) return 42; else return 0; endif
+        // Jump labels: label 0 -> PC 4 (else branch)
+        let program = mk_program_with_labels(
+            vec![
+                Op::ImmInt(1),        // 0: condition (true)
+                Op::If(0.into(), 0),  // 1: if false, jump to label 0
+                Op::ImmInt(42),       // 2: true branch value
+                Op::Return,           // 3: return from true branch
+                Op::ImmInt(0),        // 4: false branch value (label 0 target)
+                Op::Return,           // 5: return from false branch
+                Op::Done,             // 6: end
+            ],
+            vec![],
+            Names::new(64),
+            vec![4], // label 0 -> PC 4
+        );
+        let result = execute_program_safe(&program);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_simple_if_false() {
+        // if (0) return 42; else return 0; endif
+        let program = mk_program_with_labels(
+            vec![
+                Op::ImmInt(0),        // 0: condition (false)
+                Op::If(0.into(), 0),  // 1: if false, jump to label 0
+                Op::ImmInt(42),       // 2: true branch (skipped)
+                Op::Return,           // 3: return (skipped)
+                Op::ImmInt(0),        // 4: false branch (label 0 target)
+                Op::Return,           // 5: return from false branch
+                Op::Done,             // 6: end
+            ],
+            vec![],
+            Names::new(64),
+            vec![4], // label 0 -> PC 4
+        );
+        let result = execute_program_safe(&program);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_unconditional_jump() {
+        // Jump over some code
+        let program = mk_program_with_labels(
+            vec![
+                Op::Jump { label: 0.into() }, // 0: jump to label 0
+                Op::ImmInt(999),              // 1: skipped
+                Op::Return,                   // 2: skipped
+                Op::ImmInt(42),               // 3: label 0 target
+                Op::Return,                   // 4: return 42
+                Op::Done,                     // 5: end
+            ],
+            vec![],
+            Names::new(64),
+            vec![3], // label 0 -> PC 3
+        );
+        let result = execute_program_safe(&program);
+        assert!(result.is_ok());
+    }
+
+    // =========================================================================
+    // LAYER 6: Variable Access
+    // =========================================================================
+
+    #[test]
+    fn test_variable_put_push() {
+        use moor_var::program::names::Name;
+
+        // x = 42; return x;
+        // Name(offset, scope_depth, scope_id)
+        // Offset 11 is after the global variables (player, this, caller, etc.)
+        let x_name = Name(11, 0, 0);
+
+        let program = mk_program(
+            vec![
+                Op::ImmInt(42),       // 0: push 42
+                Op::Put(x_name),      // 1: x = 42
+                Op::Pop,              // 2: discard dup from Put
+                Op::Push(x_name),     // 3: push x
+                Op::Return,           // 4: return x
+                Op::Done,             // 5: end
+            ],
+            vec![],
+            Names::new(64),
+        );
+        let result = execute_program_safe(&program);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_multiple_variables() {
+        use moor_var::program::names::Name;
+
+        // a = 10; b = 20; return a + b;
+        let a_name = Name(11, 0, 0);
+        let b_name = Name(12, 0, 0);
+
+        let program = mk_program(
+            vec![
+                Op::ImmInt(10),       // 0: push 10
+                Op::Put(a_name),      // 1: a = 10
+                Op::Pop,              // 2: discard
+                Op::ImmInt(20),       // 3: push 20
+                Op::Put(b_name),      // 4: b = 20
+                Op::Pop,              // 5: discard
+                Op::Push(a_name),     // 6: push a
+                Op::Push(b_name),     // 7: push b
+                Op::Add,              // 8: a + b
+                Op::Return,           // 9: return result
+                Op::Done,             // 10: end
+            ],
+            vec![],
+            Names::new(64),
+        );
+        let result = execute_program_safe(&program);
+        assert!(result.is_ok());
+    }
+
+    // =========================================================================
+    // LAYER 7: Bitwise Operations
+    // =========================================================================
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(50))]
+
+        /// Test bitwise AND
+        #[test]
+        fn proptest_bit_and(a in any::<i32>(), b in any::<i32>()) {
+            let program = mk_program(
+                vec![Op::ImmInt(a), Op::ImmInt(b), Op::BitAnd, Op::Return, Op::Done],
+                vec![],
+                Names::new(64),
+            );
+            let result = execute_program_safe(&program);
+            prop_assert!(result.is_ok());
+        }
+
+        /// Test bitwise OR
+        #[test]
+        fn proptest_bit_or(a in any::<i32>(), b in any::<i32>()) {
+            let program = mk_program(
+                vec![Op::ImmInt(a), Op::ImmInt(b), Op::BitOr, Op::Return, Op::Done],
+                vec![],
+                Names::new(64),
+            );
+            let result = execute_program_safe(&program);
+            prop_assert!(result.is_ok());
+        }
+
+        /// Test bitwise XOR
+        #[test]
+        fn proptest_bit_xor(a in any::<i32>(), b in any::<i32>()) {
+            let program = mk_program(
+                vec![Op::ImmInt(a), Op::ImmInt(b), Op::BitXor, Op::Return, Op::Done],
+                vec![],
+                Names::new(64),
+            );
+            let result = execute_program_safe(&program);
+            prop_assert!(result.is_ok());
+        }
+
+        /// Test bit shifts
+        #[test]
+        fn proptest_bit_shift(a in any::<i32>(), b in 0i32..64) {
+            let program = mk_program(
+                vec![Op::ImmInt(a), Op::ImmInt(b), Op::BitShl, Op::Return, Op::Done],
+                vec![],
+                Names::new(64),
+            );
+            let result = execute_program_safe(&program);
+            prop_assert!(result.is_ok() || result.unwrap_err().starts_with("Exception"));
+        }
+    }
+
+    // =========================================================================
+    // LAYER 8: Logical Operations
+    // =========================================================================
+
+    #[test]
+    fn test_and_short_circuit_true() {
+        // 1 && 2 -> should evaluate both, return 2
+        let program = mk_program_with_labels(
+            vec![
+                Op::ImmInt(1),        // 0: first operand (truthy)
+                Op::And(0.into()),    // 1: if false, jump to label 0
+                Op::ImmInt(2),        // 2: second operand
+                Op::Return,           // 3: return second operand
+                Op::Return,           // 4: label 0 - return first (false case)
+                Op::Done,             // 5: end
+            ],
+            vec![],
+            Names::new(64),
+            vec![4], // label 0 -> PC 4
+        );
+        let result = execute_program_safe(&program);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_and_short_circuit_false() {
+        // 0 && 2 -> should short-circuit, return 0
+        let program = mk_program_with_labels(
+            vec![
+                Op::ImmInt(0),        // 0: first operand (falsy)
+                Op::And(0.into()),    // 1: if false, jump to label 0
+                Op::ImmInt(2),        // 2: second operand (skipped)
+                Op::Return,           // 3: return (skipped)
+                Op::Return,           // 4: label 0 - return first (0)
+                Op::Done,             // 5: end
+            ],
+            vec![],
+            Names::new(64),
+            vec![4], // label 0 -> PC 4
+        );
+        let result = execute_program_safe(&program);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_or_short_circuit_true() {
+        // 1 || 2 -> should short-circuit, return 1
+        let program = mk_program_with_labels(
+            vec![
+                Op::ImmInt(1),        // 0: first operand (truthy)
+                Op::Or(0.into()),     // 1: if true, jump to label 0
+                Op::ImmInt(2),        // 2: second operand (skipped)
+                Op::Return,           // 3: return (skipped)
+                Op::Return,           // 4: label 0 - return first (1)
+                Op::Done,             // 5: end
+            ],
+            vec![],
+            Names::new(64),
+            vec![4], // label 0 -> PC 4
+        );
+        let result = execute_program_safe(&program);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_or_short_circuit_false() {
+        // 0 || 2 -> should evaluate second, return 2
+        let program = mk_program_with_labels(
+            vec![
+                Op::ImmInt(0),        // 0: first operand (falsy)
+                Op::Or(0.into()),     // 1: if true, jump to label 0 (not taken)
+                Op::ImmInt(2),        // 2: second operand
+                Op::Return,           // 3: return second
+                Op::Return,           // 4: label 0 (not reached)
+                Op::Done,             // 5: end
+            ],
+            vec![],
+            Names::new(64),
+            vec![4], // label 0 -> PC 4
+        );
+        let result = execute_program_safe(&program);
+        assert!(result.is_ok());
     }
 }
