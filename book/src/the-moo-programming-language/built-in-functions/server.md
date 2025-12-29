@@ -89,6 +89,8 @@ event_log(player, "Important event", 'text_plain, ["category" -> "system"]);
 - Events logged with this function are stored in the player's encrypted event log
 - Use this when you need to iterate over connections with `notify()` (rendering per-connection formats)
   while still maintaining a canonical event log entry
+- Web client metadata keys include `presentation_hint` (styling hint), `group_id` (group related lines),
+  `tts_text` (screen-reader-friendly narration), and `thumbnail` (`[content_type, binary]` image data)
 - Only works with player objects, not connection objects (since event logs are per-player)
 - The event log requires the player to have a pubkey set for encryption
 
@@ -115,9 +117,14 @@ If only the first two arguments are provided, the client should "unpresent" the 
     - `"tools"`: Tools panel (right dock on desktop, bottom on mobile)
     - `"communication"`: Communication panel (left dock on desktop, top on mobile)
     - `"help"`: Help panel (right dock by default)
-    - `"verb-editor"`: Verb editor window
+    - `"verb-editor"`: Verb editor window (requires `object`/`verb` attributes)
+    - `"property-editor"`: Property editor window (requires `object`/`property` attributes)
+    - `"property-value-editor"`: Property value editor window (requires `object`/`property` attributes)
+    - `"object-browser"`: Object browser panel/window
+    - `"text-editor"`: Text editor window (requires `object`/`verb` attributes)
+    - `"profile-setup"`: Profile setup dialog
 - `content`: (Optional) The actual content to display
-- `attributes`: (Optional) Additional attributes as a list of {key, value} pairs or a map
+- `attributes`: (Optional) Additional attributes as a list of {key, value} pairs or a map. Common keys include `title`/`name` for the window title and `fields` for `profile-setup` (comma-separated: `pronouns`, `description`, `picture`).
 
 **Returns:** None
 
@@ -164,6 +171,10 @@ present(player, "chat-window", "text/html", "communication",
 // Launch verb editor (requires object and verb attributes)
 present(player, "edit-look", "text/plain", "verb-editor", "",
         {{"object", "#123"}, {"verb", "look"}, {"title", "Edit look verb"}});
+
+// Profile setup panel (fields controls which sections appear)
+present(player, "profile-setup", "text/plain", "profile-setup", "",
+        {{"title", "Set up your profile"}, {"fields", "pronouns,description,picture"}});
 ```
 
 **Notes:**

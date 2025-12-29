@@ -76,6 +76,28 @@ foreach conn in (connections())
 endfor
 ```
 
+### Web Client Inline Links
+
+When sending `text/html` or `text/djot` content, the web client converts anchors into interactive elements and recognizes
+`moo://` link schemes:
+
+- `moo://cmd/<command>`: Runs the URL-decoded command as if the player typed it.
+- `moo://inspect/<ref>`: Reserved for object inspection (currently shows a placeholder message).
+- `moo://help/<topic>`: Reserved for contextual help (currently shows a placeholder message).
+- `http(s)` links open in a new tab.
+
+```moo
+// Inline command link in djot
+notify(player, "[look](moo://cmd/look)", false, false, "text/djot");
+```
+
+### Accessibility Metadata (Web Client)
+
+If your core emits narrative or prompt metadata, the web client recognizes:
+
+- `tts_text`: Alternate narration text for screen readers (used instead of formatted output).
+- `tts_prompt`: Alternate prompt text for rich input prompts.
+
 ### Advanced notify() Options
 
 The `notify()` function supports additional optional arguments for performance control and content types:
