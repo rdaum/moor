@@ -754,4 +754,194 @@ mod tests {
         let result = execute_program_safe(&program);
         assert!(result.is_ok());
     }
+
+    // =========================================================================
+    // LAYER 9: Compiler Oracle Tests
+    // Compile MOO source, execute, verify results match expectations
+    // =========================================================================
+
+    /// Compile a MOO program from source and execute it safely
+    fn compile_and_execute(source: &str) -> Result<Var, String> {
+        use moor_compiler::{CompileOptions, compile};
+
+        let program = compile(source, CompileOptions::default())
+            .map_err(|e| format!("Compile error: {:?}", e))?;
+
+        let state_source = test_db_with_verb("test", &program);
+        let state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            call_verb(
+                state,
+                session,
+                BuiltinRegistry::new(),
+                "test",
+                List::mk_list(&[]),
+            )
+        }));
+
+        match result {
+            Ok(Ok(v)) => Ok(v),
+            Ok(Err(e)) => Err(format!("Exception: {:?}", e)),
+            Err(panic) => {
+                let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+                Err(format!("Panic: {}", msg))
+            }
+        }
+    }
+
+    #[test]
+    fn test_oracle_simple_return() {
+        let result = compile_and_execute("return 42;");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), v_int(42));
+    }
+
+    #[test]
+    fn test_oracle_arithmetic() {
+        let result = compile_and_execute("return 10 + 20 * 2;");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), v_int(50));
+    }
+
+    #[test]
+    fn test_oracle_string_concat() {
+        let result = compile_and_execute(r#"return "hello" + " " + "world";"#);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), v_str("hello world"));
+    }
+
+    #[test]
+    fn test_oracle_list_operations() {
+        let result = compile_and_execute("return {1, 2, 3}[2];");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), v_int(2));
+    }
+
+    #[test]
+    fn test_oracle_if_true() {
+        let result = compile_and_execute("if (1) return 42; else return 0; endif");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), v_int(42));
+    }
+
+    #[test]
+    fn test_oracle_if_false() {
+        let result = compile_and_execute("if (0) return 42; else return 0; endif");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), v_int(0));
+    }
+
+    #[test]
+    fn test_oracle_for_loop() {
+        let result = compile_and_execute(r#"
+            sum = 0;
+            for i in ({1, 2, 3, 4, 5})
+                sum = sum + i;
+            endfor
+            return sum;
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), v_int(15));
+    }
+
+    #[test]
+    fn test_oracle_while_loop() {
+        let result = compile_and_execute(r#"
+            i = 0;
+            while (i < 5)
+                i = i + 1;
+            endwhile
+            return i;
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), v_int(5));
+    }
+
+    #[test]
+    fn test_oracle_nested_lists() {
+        let result = compile_and_execute("return {{1, 2}, {3, 4}}[2][1];");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), v_int(3));
+    }
+
+    #[test]
+    fn test_oracle_comparison() {
+        let result = compile_and_execute("return 5 > 3 && 2 < 4;");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), v_int(1));
+    }
+
+    #[test]
+    fn test_oracle_ternary() {
+        let result = compile_and_execute("return 1 ? 42 | 0;");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), v_int(42));
+    }
+
+    #[test]
+    fn test_oracle_string_index() {
+        let result = compile_and_execute(r#"return "hello"[2];"#);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), v_str("e"));
+    }
+
+    #[test]
+    fn test_oracle_string_range() {
+        let result = compile_and_execute(r#"return "hello"[2..4];"#);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), v_str("ell"));
+    }
+
+    #[test]
+    fn test_oracle_map_literal() {
+        let result = compile_and_execute(r#"return ["a" -> 1, "b" -> 2]["a"];"#);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), v_int(1));
+    }
+
+    // Proptest: Generate random arithmetic expressions and verify no crashes
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(50))]
+
+        #[test]
+        fn proptest_oracle_arithmetic(a in -1000i32..1000, b in -1000i32..1000) {
+            let source = format!("return {} + {};", a, b);
+            let result = compile_and_execute(&source);
+            prop_assert!(result.is_ok());
+            prop_assert_eq!(result.unwrap(), v_int((a as i64) + (b as i64)));
+        }
+
+        #[test]
+        fn proptest_oracle_multiply(a in -100i32..100, b in -100i32..100) {
+            let source = format!("return {} * {};", a, b);
+            let result = compile_and_execute(&source);
+            prop_assert!(result.is_ok());
+            prop_assert_eq!(result.unwrap(), v_int((a as i64) * (b as i64)));
+        }
+
+        #[test]
+        fn proptest_oracle_comparison(a in -1000i32..1000, b in -1000i32..1000) {
+            let source = format!("return {} < {};", a, b);
+            let result = compile_and_execute(&source);
+            prop_assert!(result.is_ok());
+            prop_assert_eq!(result.unwrap(), v_int(if a < b { 1 } else { 0 }));
+        }
+
+        #[test]
+        fn proptest_oracle_list_length(len in 0usize..10) {
+            let elements: Vec<String> = (0..len).map(|i| i.to_string()).collect();
+            let source = format!("return length({{{}}});", elements.join(", "));
+            let result = compile_and_execute(&source);
+            prop_assert!(result.is_ok());
+            prop_assert_eq!(result.unwrap(), v_int(len as i64));
+        }
+    }
 }
