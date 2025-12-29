@@ -520,7 +520,7 @@ object #12345
     endif
 
     str = args[1];
-    if (typeof(str) != STR)
+    if (typeof(str) != TYPE_STR)
       return E_TYPE;
     endif
 
@@ -534,7 +534,7 @@ object #12345
   verb "split" (this none none) owner: WIZARD flags: "rxd"
     {str, ?delimiter = " "} = args;
 
-    if (typeof(str) != STR || typeof(delimiter) != STR)
+    if (typeof(str) != TYPE_STR || typeof(delimiter) != TYPE_STR)
       return E_TYPE;
     endif
 
@@ -702,3 +702,23 @@ Common parsing errors include:
 - **Invalid anonymous object IDs**: Malformed `#anon_` identifiers
 
 Error messages include file names and line numbers to help locate issues.
+
+## Migrating Legacy Code
+
+If you have objdef files that use legacy LambdaMOO/ToastStunt type constants (`INT`, `OBJ`, `STR`, etc. instead of `TYPE_INT`, `TYPE_OBJ`, `TYPE_STR`), you can migrate them using the `make migrate` target:
+
+```bash
+# In your core directory
+make migrate
+```
+
+Or invoke `moorc` directly:
+
+```bash
+moorc --legacy-type-constants true --src-objdef-dir src --out-objdef-dir gen.objdir
+cp gen.objdir/*.moo src/
+```
+
+This parses the files with legacy type constant support and outputs them in the new `TYPE_*` format. After migration, use `make rebuild` for normal development.
+
+See [Type constant literals](../the-moo-programming-language/extensions.md#type-constant-literals) for more details on this change.

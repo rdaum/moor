@@ -25,7 +25,7 @@ Sometimes an error just becomes a special value that your program can check:
 
 ```moo
 result = 5 / 0;  // This creates the error value E_DIV
-if (typeof(result) == ERR)
+if (typeof(result) == TYPE_ERR)
     player:tell("Oops, can't divide by zero!");
 else
     player:tell("The answer is: ", result);
@@ -88,7 +88,7 @@ If you're working with older code that has the `d` bit turned off:
 
 ```moo
 result = some_operation();
-if (typeof(result) == ERR)
+if (typeof(result) == TYPE_ERR)
     player:tell("That didn't work: ", error_message(result));
     return;
 endif

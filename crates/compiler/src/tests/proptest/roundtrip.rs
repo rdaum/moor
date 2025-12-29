@@ -236,16 +236,16 @@ fn format_expr_to_source(expr: &Expr) -> String {
         Expr::TypeConstant(var_type) => {
             use moor_var::VarType;
             match *var_type {
-                VarType::TYPE_INT => "INT".to_string(),
-                VarType::TYPE_FLOAT => "FLOAT".to_string(),
-                VarType::TYPE_STR => "STR".to_string(),
-                VarType::TYPE_OBJ => "OBJ".to_string(),
-                VarType::TYPE_LIST => "LIST".to_string(),
-                VarType::TYPE_MAP => "MAP".to_string(),
-                VarType::TYPE_ERR => "ERR".to_string(),
-                VarType::TYPE_BOOL => "BOOL".to_string(),
-                VarType::TYPE_FLYWEIGHT => "FLYWEIGHT".to_string(),
-                VarType::TYPE_LABEL => "LABEL".to_string(),
+                VarType::TYPE_INT => "TYPE_INT".to_string(),
+                VarType::TYPE_FLOAT => "TYPE_FLOAT".to_string(),
+                VarType::TYPE_STR => "TYPE_STR".to_string(),
+                VarType::TYPE_OBJ => "TYPE_OBJ".to_string(),
+                VarType::TYPE_LIST => "TYPE_LIST".to_string(),
+                VarType::TYPE_MAP => "TYPE_MAP".to_string(),
+                VarType::TYPE_ERR => "TYPE_ERR".to_string(),
+                VarType::TYPE_BOOL => "TYPE_BOOL".to_string(),
+                VarType::TYPE_FLYWEIGHT => "TYPE_FLYWEIGHT".to_string(),
+                VarType::TYPE_LABEL => "TYPE_LABEL".to_string(),
                 _ => panic!("Unknown VarType: {:?}", var_type),
             }
         }

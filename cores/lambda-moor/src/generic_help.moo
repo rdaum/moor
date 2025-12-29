@@ -65,7 +65,7 @@ object GENERIC_HELP
     else
       text = `this.(topic) || this.((" " + topic)) ! ANY';
     endif
-    if (typeof(text) == LIST)
+    if (typeof(text) == TYPE_LIST)
       if (text && text[1] == "*" + (vb = strsub(text[1], "*", "")) + "*")
         text = `this:(vb)(listdelete(text, 1), dblist) ! ANY';
       endif
@@ -154,7 +154,7 @@ object GENERIC_HELP
           new = new + "%" + code;
         else
           value = $no_one:eval_d(old);
-          if (value[1] && typeof(r = value[2]) == LIST)
+          if (value[1] && typeof(r = value[2]) == TYPE_LIST)
             newlines = {@newlines, @r[1..$ - 1]};
             new = tostr(r[$]);
           else

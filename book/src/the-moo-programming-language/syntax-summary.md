@@ -92,8 +92,10 @@ _Note that MOO's lists and maps have "opposite" syntax to most programming langu
 `{1, 2, 3}` and maps are `[key -> value]`._ This is a product of the age of the language, which predates the
 introduction of Python and other similar languages that used square brackets for lists and curly braces for maps.
 
-3. **Type Constants**:
-    - `INT`, `NUM`, `FLOAT`, `STR`, `ERR`, `OBJ`, `LIST`, `MAP`, `BOOL`, `FLYWEIGHT`, `SYM`
+3. **Type Constant Literals**:
+    - `TYPE_INT`, `TYPE_NUM`, `TYPE_FLOAT`, `TYPE_STR`, `TYPE_ERR`, `TYPE_OBJ`, `TYPE_LIST`, `TYPE_MAP`, `TYPE_BOOL`, `TYPE_FLYWEIGHT`, `TYPE_SYM`
+
+    These are used with `typeof()` to check value types, e.g. `typeof(x) == TYPE_STR`
 
 ## Expressions
 

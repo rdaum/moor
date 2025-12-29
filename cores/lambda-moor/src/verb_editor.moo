@@ -69,15 +69,15 @@ object VERB_EDITOR
     elseif (!args)
       object = this.objects[who];
       vname = this.verbnames[who];
-      if (typeof(vname) == LIST)
+      if (typeof(vname) == TYPE_LIST)
         vargs = listdelete(vname, 1);
         vname = vname[1];
       else
         vargs = {};
       endif
       changeverb = 0;
-    elseif (args[1] != "as" || (length(args) < 2 || (!(spec = $code_utils:parse_verbref(args[2])) || (typeof(pas = $code_utils:parse_argspec(@args[3..$])) != LIST || pas[2]))))
-      if (typeof(pas) != LIST)
+    elseif (args[1] != "as" || (length(args) < 2 || (!(spec = $code_utils:parse_verbref(args[2])) || (typeof(pas = $code_utils:parse_argspec(@args[3..$])) != TYPE_LIST || pas[2]))))
+      if (typeof(pas) != TYPE_LIST)
         player:tell(pas);
       elseif (pas[2])
         player:tell("I don't understand \"", $string_utils:from_list(pas[2], " "), "\"");
@@ -130,7 +130,7 @@ object VERB_EDITOR
       for x in (result)
         player:tell("  ", x);
       endfor
-    elseif (typeof(result) == ERR)
+    elseif (typeof(result) == TYPE_ERR)
       player:tell({result, "You do not have write permission on " + objverbname + ".", "The verb " + objverbname + " does not exist (!?!)", "The object " + tostr(object) + " does not exist (!?!)"}[1 + (result in {E_PERM, E_VERBNF, E_INVARG})]);
       if (!changeverb)
         player:tell("Do 'compile as <object>:<verb>' to write your code to another verb.");
@@ -152,7 +152,7 @@ object VERB_EDITOR
     else
       object = this.objects[who];
       verbname = this.verbnames[who];
-      if (typeof(verbname) == LIST)
+      if (typeof(verbname) == TYPE_LIST)
         return tostr(object, ":", verbname[1], " (", $string_utils:from_list(listdelete(verbname, 1), " "), ")");
       else
         return tostr(object, ":", this:verb_name(object, verbname), " (", this:verb_args(object, verbname), ")");
@@ -186,7 +186,7 @@ object VERB_EDITOR
       return;
     endif
     if (argspec = listdelete(vref, 1))
-      if (typeof(pas = $code_utils:parse_argspec(@argspec)) == LIST)
+      if (typeof(pas = $code_utils:parse_argspec(@argspec)) == TYPE_LIST)
         if (pas[2])
           player:tell("I don't understand \"", $string_utils:from_list(pas[2], " "), "\"");
           return;
@@ -212,7 +212,7 @@ object VERB_EDITOR
       else
         code = E_VERBNF;
       endif
-      if (typeof(code) == ERR)
+      if (typeof(code) == TYPE_ERR)
         player:tell(code != E_VERBNF ? code | "That object does not define that verb", argspec ? " with those args." | ".");
         return code;
       else
@@ -247,7 +247,7 @@ object VERB_EDITOR
       set_task_perms(player);
     endif
     {object, vname, code} = args;
-    if (typeof(vname) == LIST)
+    if (typeof(vname) == TYPE_LIST)
       if (vname[3] != "none")
         vname[3] = $code_utils:short_prep(vname[3]);
       endif
@@ -277,7 +277,7 @@ object VERB_EDITOR
     else
       set_task_perms(player);
       given = args[2];
-      if (typeof(info = `verb_info(args[1], given) ! ANY') == ERR)
+      if (typeof(info = `verb_info(args[1], given) ! ANY') == TYPE_ERR)
         return tostr(given, "[", info, "]");
       elseif (info[3] == given)
         return given;
@@ -307,7 +307,7 @@ object VERB_EDITOR
       return E_PERM;
     elseif (!(who = this:loaded(player)))
       player:tell(this:nothing_loaded_msg());
-    elseif (typeof(range = this:parse_range(who, {"."}, @args)) != LIST)
+    elseif (typeof(range = this:parse_range(who, {"."}, @args)) != TYPE_LIST)
       player:tell(tostr(range));
     elseif (range[3])
       player:tell_lines($code_utils:verb_documentation());
@@ -336,7 +336,7 @@ object VERB_EDITOR
       return E_PERM;
     elseif (!(who = this:loaded(player)))
       player:tell(this:nothing_loaded_msg());
-    elseif (typeof(range = this:parse_range(who, {"."}, @args)) != LIST)
+    elseif (typeof(range = this:parse_range(who, {"."}, @args)) != TYPE_LIST)
       player:tell(tostr(range));
     elseif (range[3])
       player:tell_lines($code_utils:verb_documentation());

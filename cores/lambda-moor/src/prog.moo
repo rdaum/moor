@@ -216,7 +216,7 @@ object PROG
       endif
       try
         info = verb_args(object, name);
-        if (typeof(pas = $code_utils:parse_argspec(@listdelete(args, 1))) != LIST)
+        if (typeof(pas = $code_utils:parse_argspec(@listdelete(args, 1))) != TYPE_LIST)
           "...arg spec is bogus...";
           player:notify(tostr(pas));
         elseif (!(newargs = pas[1]))
@@ -317,7 +317,7 @@ object PROG
         player:notify(tostr("Warning:  Verb `", n, "' already defined on that object."));
       endif
     endfor
-    if (typeof(pas = $code_utils:parse_argspec(@listdelete(args, 1))) != LIST)
+    if (typeof(pas = $code_utils:parse_argspec(@listdelete(args, 1))) != TYPE_LIST)
       player:notify(tostr(pas));
       return;
     endif
@@ -359,7 +359,7 @@ object PROG
       player:notify(tostr("Usage:  ", verb, " <object>:<verb>"));
     elseif ($command_utils:object_match_failed(object = player:my_match_object(spec[1]), spec[1]))
       "...bogus object...";
-    elseif (typeof(argspec = $code_utils:parse_argspec(@listdelete(args, 1))) != LIST)
+    elseif (typeof(argspec = $code_utils:parse_argspec(@listdelete(args, 1))) != TYPE_LIST)
       player:notify(tostr(argspec));
     elseif (argspec[2])
       player:notify($string_utils:from_list(argspec[2], " ") + "??");
@@ -429,7 +429,7 @@ object PROG
       endfor
     elseif ($command_utils:player_match_result(dobj = $string_utils:match_player(dobjstr), dobjstr)[1])
       return;
-    elseif (typeof(tasks = $wiz_utils:queued_tasks(dobj)) != LIST)
+    elseif (typeof(tasks = $wiz_utils:queued_tasks(dobj)) != TYPE_LIST)
       player:notify(tostr(verb, " ", dobj.name, "(", dobj, "):  ", tasks));
       return;
     endif
@@ -447,7 +447,7 @@ object PROG
         if (verbose || (index(vname, "suspend") && vloc == $command_utils))
           "Display the first (or, if verbose, every) line of the callers() list, which is gotten by taking the second through last elements of task_stack().";
           stack = `task_stack(q_id, 1) ! E_INVARG => {}';
-          for frame in (stack[2..verbose ? $ | 2])
+          for frame in (stack[2..(verbose ? $ | 2)])
             {sthis, svname, sprogger, svloc, splayer, slineno} = frame;
             player:notify(tostr("                    Called By...  ", su:left(valid(sprogger) ? sprogger.name | tostr("Dead ", sprogger), 19), "  ", svloc, ":", svname, sthis != svloc ? tostr(" [", sthis, "]") | "", " (", slineno, ")"));
           endfor
@@ -634,7 +634,7 @@ object PROG
         return;
       elseif ($perm_utils:controls(player, fobj))
         "only try to move if the player controls the verb. Otherwise, skip and treat as regular @copy";
-        if (typeof(result = $code_utils:move_verb(@from, @to)) == ERR)
+        if (typeof(result = $code_utils:move_verb(@from, @to)) == TYPE_ERR)
           player:notify(tostr("Unable to move verb from ", from[1], ":", from[2], " to ", to[1], ":", to[2], " --> ", result));
         else
           player:notify(tostr("Moved verb from ", from[1], ":", from[2], " to ", result[1], ":", result[2]));
@@ -661,14 +661,14 @@ object PROG
       if (from[2] != to[2])
         info[3] = to[2];
       endif
-      if (ERR == typeof(e = `add_verb(to[1], info, vargs) ! ANY'))
+      if (TYPE_ERR == typeof(e = `add_verb(to[1], info, vargs) ! ANY'))
         player:notify(tostr("Adding ", to[1], ":", to[2], " --> ", e));
         return;
       endif
     endif
     code = `verb_code(@from) ! ANY';
     owner = `verb_info(@from)[1] ! ANY';
-    if (typeof(code) == ERR)
+    if (typeof(code) == TYPE_ERR)
       player:notify(tostr("Couldn't retrieve code from ", from[1].name, " (", from[1], "):", from[2], " => ", code));
       return;
     endif
@@ -680,9 +680,9 @@ object PROG
       endif
     endif
     e = `set_verb_code(to[1], to_firstname, code) ! ANY';
-    if (ERR == typeof(e))
+    if (TYPE_ERR == typeof(e))
       player:notify(tostr("Copying ", from[1], ":", from[2], " to ", to[1], ":", to[2], " --> ", e));
-    elseif (typeof(e) == LIST && e)
+    elseif (typeof(e) == TYPE_LIST && e)
       player:notify(tostr("Copying ", from[1], ":", from[2], " to ", to[1], ":", to[2], " -->"));
       player:notify_lines(e);
     else
@@ -711,7 +711,7 @@ object PROG
       player:notify(tostr("Usage: ", verb, " <object>:<verb> [<dobj> <prep> <iobj>]"));
     elseif ($command_utils:object_match_failed(object = player:my_match_object(spec[1]), spec[1]))
       "...bogus object...";
-    elseif (typeof(argspec = $code_utils:parse_argspec(@listdelete(args, 1))) != LIST)
+    elseif (typeof(argspec = $code_utils:parse_argspec(@listdelete(args, 1))) != TYPE_LIST)
       player:notify(tostr(argspec));
     elseif (verb == "@program#")
       verbname = $code_utils:toint(spec[2]);
@@ -815,7 +815,7 @@ object PROG
     endif
     player:notify(tostr("Current eval environment is: ", player.eval_env));
     result = player:set_eval_env(argstr);
-    if (typeof(result) == ERR)
+    if (typeof(result) == TYPE_ERR)
       player:notify(tostr(result));
       return;
     endif
@@ -955,7 +955,7 @@ object PROG
       endfor
     else
       for w in (opivu[5])
-        if (typeof(y = $object_utils:has_verb(it, w)) == LIST)
+        if (typeof(y = $object_utils:has_verb(it, w)) == TYPE_LIST)
           vrb = setadd(vrb, {y[1], w});
         else
           this:notify(tostr("No such verb, \"", w, "\""));
@@ -980,10 +980,10 @@ object PROG
       $command_utils:suspend_if_needed(0);
       where = b[1];
       q = b[2];
-      short = typeof(q) == INT ? q | strsub(y = index(q, " ") ? q[1..y - 1] | q, "*", "");
+      short = typeof(q) == TYPE_INT ? q | strsub(y = index(q, " ") ? q[1..y - 1] | q, "*", "");
       inf = `verb_info(where, short) ! ANY';
-      if (typeof(inf) == LIST || inf == E_PERM)
-        name = typeof(inf) == LIST ? index(inf[3], " ") ? "\"" + inf[3] + "\"" | inf[3] | q;
+      if (typeof(inf) == TYPE_LIST || inf == E_PERM)
+        name = typeof(inf) == TYPE_LIST ? index(inf[3], " ") ? "\"" + inf[3] + "\"" | inf[3] | q;
         line = $string_utils:left(tostr($string_utils:right(tostr(where), 6), ":", name, " "), 32);
         if (inf == E_PERM)
           line = line + "   ** unreadable **";
@@ -1076,12 +1076,12 @@ object PROG
     elseif (!e[1])
       player:notify_lines(e[2]);
       return;
-    elseif (!(typeof(dblist = e[2]) in {OBJ, LIST}))
+    elseif (!(typeof(dblist = e[2]) in {TYPE_OBJ, TYPE_LIST}))
       player:notify(tostr(iobjstr, " => ", dblist, " -- not an object or a list"));
       return;
     else
       topic = dobjstr;
-      if (typeof(dblist) == OBJ)
+      if (typeof(dblist) == TYPE_OBJ)
         dblist = {dblist};
       endif
     endif
@@ -1090,7 +1090,7 @@ object PROG
       player:notify("Topic not found.");
     elseif (search[1] == $ambiguous_match)
       player:notify(tostr("Topic `", topic, "' ambiguous:  ", $string_utils:english_list(search[2], "none", " or ")));
-    elseif (typeof(text = (db = search[1]):dump_topic(fulltopic = search[2])) == ERR)
+    elseif (typeof(text = (db = search[1]):dump_topic(fulltopic = search[2])) == TYPE_ERR)
       "...ok...shoot me.  This is a -d verb...";
       player:notify(tostr("Cannot retrieve `", fulltopic, "' on ", $code_utils:corify_object(db), ":  ", text));
     else
@@ -1107,9 +1107,9 @@ object PROG
         player:notify(tostr("Had trouble reading `", iobjstr, "':  "));
         player:notify_lines(@objlist[2]);
         return;
-      elseif (typeof(objlist[2]) == OBJ)
+      elseif (typeof(objlist[2]) == TYPE_OBJ)
         objlist = {objlist[2..2]};
-      elseif (typeof(objlist[2]) != LIST)
+      elseif (typeof(objlist[2]) != TYPE_LIST)
         player:notify(tostr("Value of `", iobjstr, "' is not an object or list:  ", toliteral(objlist[2])));
         return;
       else
@@ -1146,7 +1146,7 @@ object PROG
       if (valid(object = player:my_match_object(spec[1])))
         return $code_utils:show_verbdef(object, spec[2]);
       endif
-    elseif (dobjstr[1] == "$" && (pname = dobjstr[2..$]) in properties(#0) && typeof(#0.(pname)) == OBJ)
+    elseif (dobjstr[1] == "$" && (pname = dobjstr[2..$]) in properties(#0) && typeof(#0.(pname)) == TYPE_OBJ)
       if (valid(object = #0.(pname)))
         return $code_utils:show_object(object);
       endif
@@ -1188,7 +1188,7 @@ object PROG
       value = $no_one:eval_d(";ticks = ticks_left();" + program + ";return ticks - ticks_left() - 2;");
       if (!value[1])
         return E_INVARG;
-      elseif (typeof(value[2]) == ERR)
+      elseif (typeof(value[2]) == TYPE_ERR)
         return value[2];
       endif
       try
@@ -1406,9 +1406,9 @@ object PROG
 
   verb eval_value_to_string (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
-    if (typeof(val = args[1]) == OBJ)
+    if (typeof(val = args[1]) == TYPE_OBJ)
       return tostr("=> ", val, "  ", valid(val) ? "(" + val.name + ")" | ((a = $list_utils:assoc(val, {{#-1, "<$nothing>"}, {#-2, "<$ambiguous_match>"}, {#-3, "<$failed_match>"}})) ? a[2] | "<invalid>"));
-    elseif (typeof(val) == ERR)
+    elseif (typeof(val) == TYPE_ERR)
       return tostr("=> ", toliteral(val), "  (", val, ")");
     else
       return tostr("=> ", toliteral(val));
@@ -1430,12 +1430,12 @@ object PROG
     if (!args)
       player:notify_lines({"Current " + what + " options:", "", @option_pkg:show(this.(options), option_pkg.names)});
       return;
-    elseif (typeof(presult = option_pkg:parse(args)) == STR)
+    elseif (typeof(presult = option_pkg:parse(args)) == TYPE_STR)
       player:notify(presult);
       return;
     else
       if (length(presult) > 1)
-        if (typeof(sresult = this:(set_option)(@presult)) == STR)
+        if (typeof(sresult = this:(set_option)(@presult)) == TYPE_STR)
           player:notify(sresult);
           return;
         elseif (!sresult)
@@ -1469,7 +1469,7 @@ object PROG
     verb[1..4] = "";
     foo_options = verb + "s";
     "...";
-    if (typeof(s = #0.(foo_options):set(this.(foo_options), @args)) == STR)
+    if (typeof(s = #0.(foo_options):set(this.(foo_options), @args)) == TYPE_STR)
       return s;
     elseif (s == this.(foo_options))
       return 0;
@@ -1528,7 +1528,7 @@ object PROG
         "... second argspec?  Not likely ...";
         player:notify(tostr(args[1], " unexpected."));
         args = E_INVARG;
-      elseif (typeof(pas = $code_utils:parse_argspec(@args)) == LIST)
+      elseif (typeof(pas = $code_utils:parse_argspec(@args)) == TYPE_LIST)
         argspec = pas[1];
         if (length(argspec) < 2)
           player:notify(tostr("Argument `", @argspec, "' malformed."));
@@ -1580,7 +1580,7 @@ object PROG
         elseif (what != object)
           player:notify(tostr("Object ", object, " does not define that verb", argspec ? " with those args" | "", ", but its ancestor ", what, " does."));
         endif
-        if (typeof(code) == ERR)
+        if (typeof(code) == TYPE_ERR)
           player:notify(tostr(what, ":", vname, " -- ", code));
         else
           info = verb_info(what, vname);
@@ -1632,11 +1632,11 @@ object PROG
     "Copied from Player Class hacked with eval that does substitutions and assorted stuff (#8855):set_eval_subs by Geust (#24442) Fri Aug  5 13:18:59 1994 PDT";
     if (!$perm_utils:controls(caller_perms(), this))
       return E_PERM;
-    elseif (typeof(subs = args[1]) != LIST)
+    elseif (typeof(subs = args[1]) != TYPE_LIST)
       return E_TYPE;
     else
       for pair in (subs)
-        if (length(pair) != 2 || typeof(pair[1] != STR) || typeof(pair[2] != STR))
+        if (length(pair) != 2 || typeof(pair[1] != TYPE_STR) || typeof(pair[2] != TYPE_STR))
           return E_INVARG;
         endif
       endfor
@@ -1684,7 +1684,7 @@ object PROG
       endfor
     elseif ($command_utils:player_match_result(dobj = $string_utils:match_player(dobjstr), dobjstr)[1])
       return;
-    elseif (typeof(tasks = $wiz_utils:queued_tasks(dobj)) != LIST)
+    elseif (typeof(tasks = $wiz_utils:queued_tasks(dobj)) != TYPE_LIST)
       player:notify(tostr(verb, " ", dobj.name, "(", dobj, "):  ", tasks));
       return;
     endif

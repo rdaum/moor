@@ -64,7 +64,7 @@ object GOPHER
     opentime = time();
     con = $network:open(host, port);
     opentime = time() - opentime;
-    if (typeof(con) == ERR)
+    if (typeof(con) == TYPE_ERR)
       return con;
     endif
     notify(con, message);
@@ -77,7 +77,7 @@ object GOPHER
     if (extra[1] == "2")
       end = "^[2-9]";
     endif
-    while (typeof(string = `read(con) ! ANY') == STR && !match(string, end) && (count = count - 1) > 0 && now + timeout > (now = time()))
+    while (typeof(string = `read(con) ! ANY') == TYPE_STR && !match(string, end) && (count = count - 1) > 0 && now + timeout > (now = time()))
       if (string && string[1] == ".")
         string = string[2..$];
       endif
@@ -123,7 +123,7 @@ object GOPHER
     endif
     {who, start, end, @args} = args;
     con = $network:open(who, start);
-    if (typeof(con) == ERR)
+    if (typeof(con) == TYPE_ERR)
       player:tell("Sorry, can't get this information now.");
       return;
     endif
@@ -131,7 +131,7 @@ object GOPHER
     line = 0;
     sent = 0;
     end = end || this.limit;
-    while ((string = `read(con) ! ANY') != "." && typeof(string) == STR)
+    while ((string = `read(con) ! ANY') != "." && typeof(string) == TYPE_STR)
       line = line + 1;
       if (line >= start && (!end || line <= end))
         sent = sent + 1;
@@ -180,7 +180,7 @@ object GOPHER
 
   verb summary (this none this) owner: #2 flags: "rxd"
     "return a 'nice' string showing the information in a gopher node";
-    if (typeof(parse = args[1]) == STR)
+    if (typeof(parse = args[1]) == TYPE_STR)
       parse = this:parse(parse);
     endif
     if (parse[1] == "!")
@@ -218,7 +218,7 @@ object GOPHER
     endif
     request = args[1..3];
     while ((index = request in this.cache_requests) && this.cache_times[index] > time())
-      if (typeof(result = this.cache_values[index]) != INT)
+      if (typeof(result = this.cache_values[index]) != TYPE_INT)
         return result;
       endif
       if ($code_utils:task_valid(result))
@@ -244,7 +244,7 @@ object GOPHER
     value = this:get_now(@args);
     $command_utils:suspend_if_needed(0);
     index = this:cache_entry(@request);
-    this.cache_times[index] = time() + (typeof(value) == ERR ? 120 | 1800);
+    this.cache_times[index] = time() + (typeof(value) == TYPE_ERR ? 120 | 1800);
     this.cache_values[index] = value;
     return value;
   endverb
@@ -279,7 +279,7 @@ object GOPHER
       return "That gopher server is not reachable or is not responding.";
     elseif (value == E_QUOTA)
       return "Gopher connections cannot be made at this time because of system resource limitations!";
-    elseif (typeof(value) == ERR)
+    elseif (typeof(value) == TYPE_ERR)
       return tostr("The gopher request results in an error: ", value);
     else
       return "The gopher request has no results.";
@@ -333,9 +333,9 @@ object GOPHER
       host = $string_utils:left(re[1] + (re[2] == 70 ? "" | tostr(" (", re[2], ")")), 24);
       expires = $string_utils:right($time_utils:dhms(tim[i] - time()), 8);
       va = val[i];
-      if (typeof(va) == LIST)
+      if (typeof(va) == TYPE_LIST)
         va = length(va);
-      elseif (typeof(va) == ERR)
+      elseif (typeof(va) == TYPE_ERR)
         va = toliteral(va);
       else
         va = tostr(va);
@@ -409,10 +409,10 @@ object GOPHER
     opentime = time();
     con = $network:open(host, port);
     opentime = time() - opentime;
-    if (typeof(con) == ERR)
+    if (typeof(con) == TYPE_ERR)
       return con;
     endif
-    if (typeof(message) == LIST)
+    if (typeof(message) == TYPE_LIST)
       for line in (message)
         notify(con, line);
       endfor
@@ -428,7 +428,7 @@ object GOPHER
     if (extra[1] == "2")
       end = "^[2-9]";
     endif
-    while (typeof(string = `read(con) ! ANY') == STR && !match(string, end) && (count = count - 1) > 0 && now + timeout > (now = time()))
+    while (typeof(string = `read(con) ! ANY') == TYPE_STR && !match(string, end) && (count = count - 1) > 0 && now + timeout > (now = time()))
       if (string && string[1] == ".")
         string = string[2..$];
       endif

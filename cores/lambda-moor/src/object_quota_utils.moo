@@ -66,7 +66,7 @@ object OBJECT_QUOTA_UTILS
     who = args[1];
     if (caller_perms() == who)
       q = who.ownership_quota;
-      total = typeof(who.owned_objects) == LIST ? length(setremove(who.owned_objects, who)) | 0;
+      total = typeof(who.owned_objects) == TYPE_LIST ? length(setremove(who.owned_objects, who)) | 0;
       if (q == 0)
         player:tell(tostr("You can't create any more objects", total < 1 ? "." | tostr(" until you recycle some of the ", total, " you already own.")));
       else

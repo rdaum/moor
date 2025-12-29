@@ -133,7 +133,7 @@ object MATRIX_UTILS
         endfor
         if (lcurr > lresult)
           for m in [lresult + 1..lcurr]
-            results = {@results, typeof(foo = args[n][m]) == INT ? 1 / foo | 1.0 / foo};
+            results = {@results, typeof(foo = args[n][m]) == TYPE_INT ? 1 / foo | 1.0 / foo};
             $command_utils:suspend_if_needed(0);
           endfor
         endif
@@ -150,7 +150,7 @@ object MATRIX_UTILS
     "Matrix addition and subtraction is simply the addition or subtraction of the vectors contained in the matrices. See 'help $matrix_utils:vector:add' for more help.";
     type = verb[$ - 2..$];
     results = args[1];
-    if (typeof(results[1][1]) == LIST)
+    if (typeof(results[1][1]) == TYPE_LIST)
       for n in [1..length(results)]
         results[n] = this:(verb)(results[n], @$list_utils:slice(args[2..$], n));
       endfor
@@ -211,8 +211,8 @@ object MATRIX_UTILS
     elseif (this:dimensions(mat)[1] == 2)
       return mat[1][1] * mat[2][2] - mat[1][2] * mat[2][1];
     else
-      result = typeof(mat[1][1]) == INT ? 0 | 0.0;
-      coeff = typeof(mat[1][1]) == INT ? 1 | 1.0;
+      result = typeof(mat[1][1]) == TYPE_INT ? 0 | 0.0;
+      coeff = typeof(mat[1][1]) == TYPE_INT ? 1 | 1.0;
       for n in [1..length(mat[1])]
         result = result + coeff * mat[1][n] * this:determinant(this:submatrix(1, n, mat));
         coeff = -coeff;
@@ -239,7 +239,7 @@ object MATRIX_UTILS
     for k in [1..i]
       sub = {};
       for l in [1..j]
-        sub = {@sub, $math_utils:pow(typeof(mat[1][1]) == INT ? -1 | -1.0, k + l) * this:determinant(this:submatrix(l, k, mat)) / det};
+        sub = {@sub, $math_utils:pow(typeof(mat[1][1]) == TYPE_INT ? -1 | -1.0, k + l) * this:determinant(this:submatrix(l, k, mat)) / det};
       endfor
       result = {@result, sub};
     endfor
@@ -394,7 +394,7 @@ object MATRIX_UTILS
       return raise("E_INVVEC", "Invalid Vector Format");
     endif
     temp = this:vector_mul(v1, v2);
-    result = typeof(temp[1]) == INT ? 0 | 0.0;
+    result = typeof(temp[1]) == TYPE_INT ? 0 | 0.0;
     for n in [1..l]
       $command_utils:suspend_if_needed(0);
       result = result + temp[n];
@@ -405,7 +405,7 @@ object MATRIX_UTILS
   verb "dimension*s" (this none this) owner: HACKER flags: "rxd"
     ":dimensions(M) => LIST of dimensional sizes.";
     l = {length(m = args[1])};
-    if (typeof(m[1]) == LIST)
+    if (typeof(m[1]) == TYPE_LIST)
       l = {@l, @this:dimensions(m[1])};
     endif
     return l;
@@ -427,7 +427,7 @@ object MATRIX_UTILS
     "";
     "Scalar-vector multiplication stretches a vector along its direction, generating points along a line. One of the more famous uses from physics is Force equals mass times acceleration. F = ma. Force and acceleration are both vectors. Mass is a scalar quantity.";
     "";
-    if (typeof(args[1]) == LIST)
+    if (typeof(args[1]) == TYPE_LIST)
       {vval, sval} = args;
     else
       {sval, vval} = args;
@@ -507,7 +507,7 @@ object MATRIX_UTILS
     "Actually, arguments can be (S, M) or (M, S). Each element of M is augmented by S. S should be either an INT or a FLOAT, as appropriate to the values in M.";
     "I can see a reason for wanting to do scalar/matrix multiplication or division, but addition and subtraction between matrix and scalar types is not done. I've included them here for novelty, and because it was easy enough to do.";
     type = verb[$ - 2..$];
-    if (typeof(args[1]) == LIST)
+    if (typeof(args[1]) == TYPE_LIST)
       {mval, sval} = args;
     else
       {sval, mval} = args;
@@ -516,7 +516,7 @@ object MATRIX_UTILS
       return raise("E_INVMAT", "Invalid Matrix Format");
     endif
     results = {};
-    if (typeof(mval[1][1] == LIST))
+    if (typeof(mval[1][1] == TYPE_LIST))
       for n in [1..length(mval)]
         results = {@results, this:(verb)(mval[n], sval)};
       endfor
@@ -531,7 +531,7 @@ object MATRIX_UTILS
   verb is_matrix (this none this) owner: HACKER flags: "rxd"
     "A matrix is defined as a list of vectors, each having the smae number of elements.";
     {m} = args;
-    if (typeof(m) != LIST || typeof(m[1]) != LIST)
+    if (typeof(m) != TYPE_LIST || typeof(m[1]) != TYPE_LIST)
       return 0;
     endif
     len = length(m[1]);
@@ -547,11 +547,11 @@ object MATRIX_UTILS
     "A vector shall be defined as a list of INTs or FLOATs. (I'm not gonna worry about them all being the same type.)";
     flag = 1;
     {v} = args;
-    if (typeof(v) != LIST)
+    if (typeof(v) != TYPE_LIST)
       return 0;
     endif
     for n in (v)
-      if ((ntype = typeof(n)) != INT && ntype != FLOAT)
+      if ((ntype = typeof(n)) != TYPE_INT && ntype != TYPE_FLOAT)
         flag = 0;
         break;
       endif

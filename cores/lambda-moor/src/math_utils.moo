@@ -526,7 +526,7 @@ object MATH_UTILS
 
   verb xsin (this none this) owner: HACKER flags: "rxd"
     "xsin(INT x) -- calculates the taylor approximation for the sine function";
-    if (typeof(x = args[1]) != INT)
+    if (typeof(x = args[1]) != TYPE_INT)
       return E_TYPE;
     endif
     if (x * x > this.taylor)
@@ -538,7 +538,7 @@ object MATH_UTILS
 
   verb xcos (this none this) owner: HACKER flags: "rxd"
     "xcos(INT x) -- calculates the taylor approximation for the cosine function";
-    if (typeof(x = args[1]) != INT)
+    if (typeof(x = args[1]) != TYPE_INT)
       return E_TYPE;
     endif
     if (x * x > this.taylor)
@@ -552,7 +552,7 @@ object MATH_UTILS
     "factorial(INT n) -- returns n factorial for 0 <= n (<= 12).";
     if ((number = args[1]) < 0)
       return E_INVARG;
-    elseif (typeof(number) != INT)
+    elseif (typeof(number) != TYPE_INT)
       return E_TYPE;
     endif
     fact = 1;
@@ -567,9 +567,9 @@ object MATH_UTILS
     "This verb was revised on 2006-03-16 by Gary (#110811) to allow for floating input of the second argument.  The help documentation had said this was allowed but actually it caused a traceback.  How many people are actually using this, I wonder? ";
     {x, n} = args;
     "if (n < 0)";
-    if (typeof(n) == INT && n < 0 || (typeof(n) == FLOAT && n < 0.0))
+    if (typeof(n) == TYPE_INT && n < 0 || (typeof(n) == TYPE_FLOAT && n < 0.0))
       return E_INVARG;
-    elseif (typeof(x) == INT && typeof(n) == FLOAT)
+    elseif (typeof(x) == TYPE_INT && typeof(n) == TYPE_FLOAT)
       return E_TYPE;
     endif
     return x ^ n;
@@ -592,7 +592,7 @@ object MATH_UTILS
   verb fibonacci (this none this) owner: HACKER flags: "rxd"
     "fibonacci(INT n) -- calculates the fibonacci numbers to the nth term";
     "and returns them in a list. n must be >= 0.";
-    if (typeof(n = args[1]) != INT)
+    if (typeof(n = args[1]) != TYPE_INT)
       return E_TYPE;
     elseif (n < 0)
       return E_INVARG;
@@ -612,12 +612,12 @@ object MATH_UTILS
     "n defaults to 5. n must be >= 0.";
     "This verb was revised on 2006-03-16 by Gary (#110811) to allow for floating point input of the first argument.  The help documentation had said this was allowed but actually it caused a traceback.  How many people are actually using this, I wonder? ";
     {n, ?order = 5} = args;
-    if (!(typeof(n) in {INT, FLOAT}) || typeof(order) != INT)
+    if (!(typeof(n) in {TYPE_INT, TYPE_FLOAT}) || typeof(order) != TYPE_INT)
       return E_TYPE;
     elseif (order <= 0)
       return E_INVARG;
     endif
-    x = typeof(n) == FLOAT ? 1.0 | 1;
+    x = typeof(n) == TYPE_FLOAT ? 1.0 | 1;
     for i in [1..order]
       x = x + n ^ i;
     endfor
@@ -628,7 +628,7 @@ object MATH_UTILS
     "divmod(INT n, INT d) => {q,r} such that n = dq + r";
     "  handles negative numbers correctly   0<=r<d if d>0, -d<r<=0 if d<0.";
     {n, d} = args;
-    if (typeof(n) != INT && typeof(d) != INT)
+    if (typeof(n) != TYPE_INT && typeof(d) != TYPE_INT)
       return E_TYPE;
     endif
     r = (n % d + d) % d;
@@ -642,7 +642,7 @@ object MATH_UTILS
     "C(n,r) = n!/[r!(n-r)!]";
     "  overflow may occur if n>29...";
     {n, r} = args;
-    if (typeof(n) != INT && typeof(r) != INT)
+    if (typeof(n) != TYPE_INT && typeof(r) != TYPE_INT)
       return E_TYPE;
     endif
     if (0 > (r = min(r, n - r)))
@@ -662,7 +662,7 @@ object MATH_UTILS
     "order r distinct objects given n locations.";
     "P(n,r) = n!/(n-r)!";
     {n, r} = args;
-    if (typeof(n) != INT && typeof(r) != INT)
+    if (typeof(n) != TYPE_INT && typeof(r) != TYPE_INT)
       return E_TYPE;
     endif
     if (r < 1 || (diff = n - r) < 0)
@@ -682,7 +682,7 @@ object MATH_UTILS
     "Entries can either be all INT or all FLOAT. Don't mix!";
     "If the optional 3rd argument is provided and true, the answer is returned as a floating point regardless of what the input was. Otherwise, if the input was all INT, the answer is returned as {integer,fraction}";
     {point, fcn, ?retfloat = 0} = args;
-    if (!retfloat && typeof(point[1]) == INT)
+    if (!retfloat && typeof(point[1]) == TYPE_INT)
       numer = (point[2] - point[1]) * (fcn[1] + 4 * fcn[2] + fcn[3]);
       return this:parts(numer, 6);
     else
@@ -697,7 +697,7 @@ object MATH_UTILS
     "warning: it is quite easy to hit maxint which results in unpredictable";
     "         results";
     {n, q, ?i = 5} = args;
-    if (typeof(n) != INT && typeof(q) != INT && typeof(i) != INT)
+    if (typeof(n) != TYPE_INT && typeof(q) != TYPE_INT && typeof(i) != TYPE_INT)
       return E_TYPE;
     endif
     parts = {n / q, n % q};
@@ -707,7 +707,7 @@ object MATH_UTILS
   verb sqrt (this none this) owner: HACKER flags: "rxd"
     "sqrt(INT|FLOAT n) => largest integer <= square root of n. Returns the same type as the input. (Backwards compatibility)";
     n = args[1];
-    return typeof(n) == INT ? toint(sqrt(tofloat(n))) | sqrt(n);
+    return typeof(n) == TYPE_INT ? toint(sqrt(tofloat(n))) | sqrt(n);
     "Old code. Newton's method";
     if (n < 0)
       return E_RANGE;
@@ -731,7 +731,7 @@ object MATH_UTILS
     "A correct mod function.";
     "mod(INT n, INT d) => r such that n = dq + r and (0<=r<d if d>0 or -d<r<=0 if d<0).";
     {n, d} = args;
-    if (typeof(n) != INT && typeof(d) != INT)
+    if (typeof(n) != TYPE_INT && typeof(d) != TYPE_INT)
       return E_TYPE;
     endif
     return (n % d + d) % d;
@@ -742,9 +742,9 @@ object MATH_UTILS
     "n defaults to 5. Any n given must be >= 0. you need to divide the result";
     "the answer will be returned as {integer part,fractional part} if the input x was an integer. If it is floating point, so will the answer (and this uses the builtin function.)";
     {x, ?n = 5} = args;
-    if (typeof(x) == FLOAT)
+    if (typeof(x) == TYPE_FLOAT)
       return exp(x);
-    elseif (typeof(x) != INT && typeof(n) != INT)
+    elseif (typeof(x) != TYPE_INT && typeof(n) != TYPE_INT)
       return E_TYPE;
     endif
     ex = nfact = 1;
@@ -788,7 +788,7 @@ object MATH_UTILS
     "random(INT n): returns a random integer in the following manner:";
     "random(n > 0) will return a integer in the range 0 to n";
     "random(n < 0) will return a integer in the range n to 0";
-    if (typeof(prob = args[1]) != INT)
+    if (typeof(prob = args[1]) != TYPE_INT)
       return E_TYPE;
     endif
     mod = prob < 0 ? -1 | 1;
@@ -800,7 +800,7 @@ object MATH_UTILS
     "e.g., random_range(10) => -10..10";
     "      random_range(10,4) => -6..14";
     {range, ?mean = 0} = args;
-    if (typeof(range) != INT && typeof(mean) != INT)
+    if (typeof(range) != TYPE_INT && typeof(mean) != TYPE_INT)
       return E_TYPE;
     endif
     return mean + (random(2) == 1 ? -1 | 1) * this:random(range);
@@ -809,7 +809,7 @@ object MATH_UTILS
   verb is_prime (this none this) owner: HACKER flags: "rxd"
     "is_prime(INT number) returns 1 if the number is prime or 0 if it isn't.";
     "of course, only positive numbers are candidates for primality.";
-    if (typeof(number = args[1]) != INT)
+    if (typeof(number = args[1]) != TYPE_INT)
       return E_TYPE;
     endif
     if (number == 2)
@@ -835,7 +835,7 @@ object MATH_UTILS
   verb "AND XOR" (this none this) owner: HACKER flags: "rxd"
     "Only useful for integer input.";
     {x, y} = args;
-    if (typeof(x) != INT && typeof(y) != INT)
+    if (typeof(x) != TYPE_INT && typeof(y) != TYPE_INT)
       return E_TYPE;
     endif
     table = this.(verb);
@@ -878,7 +878,7 @@ object MATH_UTILS
 
   verb BLFromInt (this none this) owner: HACKER flags: "rxd"
     "BlFromInt(INT x) => converts the number provided into a 32 bit binary number, which is returned via a 32 element LIST of 1's and 0's. Note that this verb was originally written to be used with the $math_utils verbs: AND, NOT, OR, XOR, but has since been taken out of them.";
-    if (typeof(x = args[1]) != INT)
+    if (typeof(x = args[1]) != TYPE_INT)
       return E_TYPE;
     endif
     l = {};
@@ -1016,12 +1016,12 @@ object MATH_UTILS
   verb sin (this none this) owner: HACKER flags: "rxd"
     "Copied from Trig_Utils (#25800):sin by Obvious (#54879) Fri Nov 17 06:07:39 1995 PST";
     theta = args[1];
-    if (typeof(theta) == FLOAT)
+    if (typeof(theta) == TYPE_FLOAT)
       return sin(theta);
-    elseif (typeof(theta) == INT)
+    elseif (typeof(theta) == TYPE_INT)
       degtheta = theta % 360;
       mintheta = 0;
-    elseif (typeof(theta) == LIST)
+    elseif (typeof(theta) == TYPE_LIST)
       degtheta = theta[1] % 360;
       mintheta = theta[2] % 60;
     else
@@ -1047,12 +1047,12 @@ object MATH_UTILS
   verb cos (this none this) owner: HACKER flags: "rxd"
     "Copied from Trig_Utils (#25800):cos by Obvious (#54879) Fri Nov 17 06:07:50 1995 PST";
     theta = args[1];
-    if (typeof(theta) == FLOAT)
+    if (typeof(theta) == TYPE_FLOAT)
       return cos(theta);
-    elseif (typeof(theta) == INT)
+    elseif (typeof(theta) == TYPE_INT)
       degtheta = 90 - theta;
       mintheta = 0;
-    elseif (typeof(theta) == LIST)
+    elseif (typeof(theta) == TYPE_LIST)
       degtheta = 89 - theta[1];
       mintheta = 60 - theta[2];
     else
@@ -1064,7 +1064,7 @@ object MATH_UTILS
   verb tan (this none this) owner: HACKER flags: "rxd"
     "Copied from Trig_Utils (#25800):tan by Obvious (#54879) Fri Nov 17 06:07:53 1995 PST";
     {theta} = args;
-    if (typeof(theta) == FLOAT)
+    if (typeof(theta) == TYPE_FLOAT)
       return tan(theta);
     endif
     sine = this:sin(theta);
@@ -1075,7 +1075,7 @@ object MATH_UTILS
   verb "arcsin asin" (this none this) owner: HACKER flags: "rxd"
     "Copied from Trig_Utils (#25800):arcsin by Obvious (#54879) Fri Nov 17 06:08:01 1995 PST";
     {given} = args;
-    if (typeof(given) == FLOAT)
+    if (typeof(given) == TYPE_FLOAT)
       return asin(given);
     endif
     given = abs(given);
@@ -1113,7 +1113,7 @@ object MATH_UTILS
   verb "arccos acos" (this none this) owner: HACKER flags: "rxd"
     "Copied from Trig_Utils (#25800):arccos by Obvious (#54879) Fri Nov 17 06:08:08 1995 PST";
     given = args[1];
-    if (typeof(given) == FLOAT)
+    if (typeof(given) == TYPE_FLOAT)
       return acos(given);
     endif
     arcsin = this:arcsin(given);
@@ -1130,7 +1130,7 @@ object MATH_UTILS
   verb "arctan atan" (this none this) owner: HACKER flags: "rxd"
     "Copied from Trig_Utils (#25800):arctan by Obvious (#54879) Fri Nov 17 06:08:18 1995 PST";
     given = args[1];
-    if (typeof(given) == FLOAT)
+    if (typeof(given) == TYPE_FLOAT)
       return atan(given);
     endif
     reciprocal = given * given / 10000 + 10000;
@@ -1170,14 +1170,14 @@ object MATH_UTILS
     "Usage: mean(INT, INT, ... )";
     "       mean({INT, INT, ...})";
     "Returns the average of all integers provided.";
-    return this:sum(rlist = typeof(args[1]) == LIST ? args[1] | args) / length(rlist);
+    return this:sum(rlist = typeof(args[1]) == TYPE_LIST ? args[1] | args) / length(rlist);
   endverb
 
   verb sum_float (this none this) owner: HACKER flags: "rxd"
     ":sum_float(FLOAT num, num, num ...) => Total of all arguments added together.";
     ":sum_float({num, num, num, ...}) will also work.";
     {?total = 0.0, @rest} = args;
-    if (typeof(total) == LIST)
+    if (typeof(total) == TYPE_LIST)
       {?total = 0.0, @rest} = total;
     endif
     for number in (rest)
@@ -1192,7 +1192,7 @@ object MATH_UTILS
     "(...also named :sum for backward compatibility).";
     "Use :sum_float to sum a list of floats.";
     {?total = 0, @rest} = args;
-    if (typeof(total) == LIST)
+    if (typeof(total) == TYPE_LIST)
       {?total = 0, @rest} = total;
     endif
     for number in (rest)

@@ -124,16 +124,16 @@ temp_obj = 0;  // Now nothing references the anonymous object
 
 ### Detecting Object Types
 
-Since all object types have `typeof(obj) == OBJ`, you need specific builtin functions to detect what kind of object you're working with:
+Since all object types have `typeof(obj) == TYPE_OBJ`, you need specific builtin functions to detect what kind of object you're working with:
 
 ```moo
 let numbered_obj = create($thing);        // Regular numbered object
 let uuid_obj = create($thing, player, 0); // UUID object (if enabled)
 let anon_obj = create($thing, player, 1); // Anonymous object (if enabled)
 
-typeof(numbered_obj);    // Returns OBJ
-typeof(uuid_obj);        // Also returns OBJ - same type!
-typeof(anon_obj);        // Also returns OBJ - same type!
+typeof(numbered_obj);    // Returns TYPE_OBJ
+typeof(uuid_obj);        // Also returns TYPE_OBJ - same type!
+typeof(anon_obj);        // Also returns TYPE_OBJ - same type!
 
 // Use specific functions to detect object types:
 is_anonymous(numbered_obj);  // Returns 0 (false)

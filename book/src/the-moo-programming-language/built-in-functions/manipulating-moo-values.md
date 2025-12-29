@@ -15,17 +15,17 @@ int typeof(value)
 
 Takes any MOO value and returns an integer representing the type of value.
 
-The result is the same as the initial value of one of these built-in variables: `INT`, `FLOAT`, `STR`, `LIST`, `OBJ`, or
-`ERR`, `BOOL`, `MAP`, `WAIF`, `ANON`. Thus, one usually writes code like this:
+The result can be compared against the type constant literals: `TYPE_INT`, `TYPE_FLOAT`, `TYPE_STR`, `TYPE_LIST`, `TYPE_OBJ`,
+`TYPE_ERR`, `TYPE_BOOL`, `TYPE_MAP`, `TYPE_FLYWEIGHT`, `TYPE_SYM`. Thus, one usually writes code like this:
 
 ```
-if (typeof(x) == LIST) ...
+if (typeof(x) == TYPE_LIST) ...
 ```
 
 and not like this:
 
 ```
-if (typeof(x) == 3) ...
+if (typeof(x) == 4) ...
 ```
 
 because the former is much more readable than the latter.

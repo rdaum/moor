@@ -53,9 +53,9 @@ object BUILD_OPTIONS
     if (raw == 1)
       "...+create_flags => create_flags=r";
       return {args[1], "r"};
-    elseif (typeof(raw) == STR)
+    elseif (typeof(raw) == TYPE_STR)
       return args[1..2];
-    elseif (typeof(raw) != LIST)
+    elseif (typeof(raw) != TYPE_LIST)
       return "???";
     elseif (length(raw) > 1)
       return tostr("I don't understand \"", $string_utils:from_list(listdelete(raw, 1), " "), "\"");
@@ -76,13 +76,13 @@ object BUILD_OPTIONS
 
   verb "parse_dig_room parse_dig_exit" (this none this) owner: HACKER flags: "rxd"
     {oname, raw, data} = args;
-    if (typeof(raw) == LIST)
+    if (typeof(raw) == TYPE_LIST)
       if (length(raw) > 1)
         return tostr("I don't understand \"", $string_utils:from_list(listdelete(raw, 1), " "), "\".");
       endif
       raw = raw[1];
     endif
-    if (typeof(raw) != STR)
+    if (typeof(raw) != TYPE_STR)
       return "You need to give an object id.";
     elseif ($command_utils:object_match_failed(value = player:my_match_object(raw), raw))
       return "Option unchanged.";

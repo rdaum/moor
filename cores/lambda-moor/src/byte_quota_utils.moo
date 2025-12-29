@@ -134,9 +134,9 @@ object BYTE_QUOTA_UTILS
       this:enable_create(who);
       value = `create(@args) ! ANY';
       this:disable_create(who);
-      if (typeof(value) != ERR)
+      if (typeof(value) != TYPE_ERR)
         this:charge_quota(who, value);
-        if (typeof(who.owned_objects) == LIST && !(value in who.owned_objects))
+        if (typeof(who.owned_objects) == TYPE_LIST && !(value in who.owned_objects))
           this:add_owned_object(who, value);
         endif
       endif
@@ -372,14 +372,14 @@ object BYTE_QUOTA_UTILS
     set_task_perms(caller_perms());
     v = args[1];
     t = typeof(v);
-    if (t == LIST)
+    if (t == TYPE_LIST)
       b = (length(v) + 1) * 2 * 4;
       for vv in (v)
         $command_utils:suspend_if_needed(2);
         b = b + this:value_bytes(vv);
       endfor
       return b;
-    elseif (t == STR)
+    elseif (t == TYPE_STR)
       return length(v) + 1;
     else
       return 0;
@@ -451,7 +451,7 @@ object BYTE_QUOTA_UTILS
     eldest = #-1;
     nuncounted = 0;
     total = 0;
-    for x in (typeof(who.owned_objects) == LIST ? who.owned_objects | {})
+    for x in (typeof(who.owned_objects) == TYPE_LIST ? who.owned_objects | {})
       if (x.owner == who)
         "Bulletproofing against recycling during suspends!";
         "Leaves us open to unsummarized creation during this period, which is unfortunate.";
@@ -614,7 +614,7 @@ object BYTE_QUOTA_UTILS
   verb add_owned_object (this none this) owner: #2 flags: "rxd"
     ":add_owned_object(who, what) -- adds what to whose .owned_objects.";
     {who, what} = args;
-    if (typeof(who.owned_objects) == LIST && what.owner == who)
+    if (typeof(who.owned_objects) == TYPE_LIST && what.owner == who)
       who.owned_objects = setadd(who.owned_objects, what);
     endif
   endverb

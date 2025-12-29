@@ -75,10 +75,10 @@ object YOU
     "excluding default {}";
     {msg, ?who = player, ?thing = caller, ?where = who.location, ?excluding = {}} = args;
     you = this;
-    if (typeof(msg) == LIST)
+    if (typeof(msg) == TYPE_LIST)
       tell = "";
       for x in (msg)
-        tell = tell + (typeof(x) == STR ? x | x[random(length(x))]);
+        tell = tell + (typeof(x) == TYPE_STR ? x | x[random(length(x))]);
       endfor
     else
       tell = msg;
@@ -138,10 +138,10 @@ object YOU
     "excluding default {}";
     {msg, ?who = player, ?thing = caller, ?where = who.location, ?excluding = {}} = args;
     you = this;
-    if (typeof(msg) == LIST)
+    if (typeof(msg) == TYPE_LIST)
       tell = "";
       for x in (msg)
-        tell = tell + (typeof(x) == STR ? x | x[random(length(x))]);
+        tell = tell + (typeof(x) == TYPE_STR ? x | x[random(length(x))]);
       endfor
     else
       tell = msg;

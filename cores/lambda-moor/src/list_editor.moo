@@ -91,7 +91,7 @@ object LIST_EDITOR
   verb "expl*ode" (any any any) owner: #96 flags: "rd"
     if (!(who = this:loaded(player)))
       player:tell(this:nothing_loaded_msg());
-    elseif (typeof(range = this:parse_range(who, {"_", "1"}, @args)) != LIST)
+    elseif (typeof(range = this:parse_range(who, {"_", "1"}, @args)) != TYPE_LIST)
       player:tell(range);
     elseif (range[3])
       player:tell("Junk at end of cmd:  ", range[3]);
@@ -99,7 +99,7 @@ object LIST_EDITOR
       text = this.texts[who];
       newins = ins = this.inserting[who];
       start = range[1];
-      if (typeof(debris = this:explode_line("", text[start])) == STR)
+      if (typeof(debris = this:explode_line("", text[start])) == TYPE_STR)
         player:tell("Line ", start, ":  ", debris);
         return;
       endif
@@ -113,7 +113,7 @@ object LIST_EDITOR
         if (ins == i)
           newins = start + length(newlines) + 1;
         endif
-        if (typeof(debris = this:explode_line(debris[dlen], line)) == STR)
+        if (typeof(debris = this:explode_line(debris[dlen], line)) == TYPE_STR)
           player:tell("Line ", i, ":  ", debris);
           return;
         endif
@@ -195,11 +195,11 @@ object LIST_EDITOR
     {object, pname, value} = args;
     set_task_perms(player);
     if ($object_utils:has_callable_verb(object, "set_" + pname))
-      if (typeof(attempt = object:(("set_" + pname))(value)) != ERR)
+      if (typeof(attempt = object:(("set_" + pname))(value)) != TYPE_ERR)
         return attempt;
       endif
     endif
-    return typeof(e = object.(pname) = value) == ERR ? e | 1;
+    return typeof(e = object.(pname) = value) == TYPE_ERR ? e | 1;
   endverb
 
   verb explode_line (this none this) owner: #96 flags: "rxd"
@@ -244,7 +244,7 @@ object LIST_EDITOR
     lines = {};
     indent = $string_utils:space(args[1]);
     for element in (args[2])
-      if (typeof(element) == STR)
+      if (typeof(element) == TYPE_STR)
         lines = {@lines, indent + "\"" + element};
       else
         lines = {@lines, indent + $string_utils:print(element)};
@@ -333,11 +333,11 @@ object LIST_EDITOR
     elseif (!(string = args[1]))
       player:tell_lines({"Usage:  " + args[2] + " <object>.<property>", "        " + args[2] + "          (continues editing an unsaved property)"});
     elseif (!(objprop = this:property_match_result(string)))
-    elseif (ERR == typeof(value = this:property(@objprop)))
+    elseif (TYPE_ERR == typeof(value = this:property(@objprop)))
       player:tell("Couldn't get property value:  ", value);
-    elseif (typeof(value) != LIST)
+    elseif (typeof(value) != TYPE_LIST)
       player:tell("Sorry... expecting a list-valued property.");
-      if (typeof(value) == STR)
+      if (typeof(value) == TYPE_STR)
         player:tell("Use @notedit to edit string-valued properties");
       else
         player:tell("Anyway, you don't need an editor to edit `", value, "'.");

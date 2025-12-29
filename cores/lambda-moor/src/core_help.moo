@@ -1708,18 +1708,18 @@ object CORE_HELP
   verb get_topic (this none this) owner: HACKER flags: "rxd"
     topic = args[1];
     if (topic == "$" + topic[2..$ - 5] + "utils" && (valid(#0.((w = strsub(topic[2..$], "-", "_")))) && (uhelp = #0.(w):description())))
-      return {tostr("General information on $", w, ":"), "----", @typeof(uhelp) == STR ? {uhelp} | uhelp};
+      return {tostr("General information on $", w, ":"), "----", @typeof(uhelp) == TYPE_STR ? {uhelp} | uhelp};
     else
       return pass(@args);
     endif
   endverb
 
   verb dump_topic (this none this) owner: #2 flags: "rxd"
-    if (E_PROPNF != (text = pass(@args)) || (args[1][1] != "$" || (!((uprop = (args[1])[2..$]) in properties(#0)) || typeof(uobj = #0.(uprop)) != OBJ)))
+    if (E_PROPNF != (text = pass(@args)) || (args[1][1] != "$" || (!((uprop = (args[1])[2..$]) in properties(#0)) || typeof(uobj = #0.(uprop)) != TYPE_OBJ)))
       return text;
     else
       udesc = uobj.description;
-      return {tostr(";;$", uprop, ".description = $command_utils:read_lines()"), @$command_utils:dump_lines(typeof(udesc) == LIST ? udesc | {udesc})};
+      return {tostr(";;$", uprop, ".description = $command_utils:read_lines()"), @$command_utils:dump_lines(typeof(udesc) == TYPE_LIST ? udesc | {udesc})};
     endif
   endverb
 endobject

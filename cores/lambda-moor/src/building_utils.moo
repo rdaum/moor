@@ -52,7 +52,7 @@ object BUILDING_UTILS
     set_task_perms(caller_perms());
     {spec, source, dest, ?use_recycler, ?exit_kind = $exit} = args;
     exit = player:_create(exit_kind);
-    if (typeof(exit) == ERR)
+    if (typeof(exit) == TYPE_ERR)
       player:notify(tostr("Cannot create new exit as a child of ", $string_utils:nn(exit_kind), ": ", exit, ".  See `help @build-options' for information on how to specify the kind of exit this command tries to create."));
       return;
     endif
@@ -215,7 +215,7 @@ object BUILDING_UTILS
     if (valid(o.location))
       loc = (o.location.owner == o.owner ? " " | "*") + "[" + o.location.name + "]";
     elseif ($object_utils:has_property(o, "dest") && $object_utils:has_property(o, "source"))
-      if (typeof(o.source) != OBJ)
+      if (typeof(o.source) != TYPE_OBJ)
         source = " <non-object> ";
       elseif (!valid(o.source))
         source = "<invalid>";
@@ -225,7 +225,7 @@ object BUILDING_UTILS
           source = "*" + source;
         endif
       endif
-      if (typeof(o.dest) != OBJ)
+      if (typeof(o.dest) != TYPE_OBJ)
         destin = " <non-object> ";
       elseif (!valid(o.dest))
         destin = "<invalid>";
@@ -242,7 +242,7 @@ object BUILDING_UTILS
       loc = "";
       try
         for x in (o.entrances)
-          if (typeof(x) == OBJ && valid(x) && x.owner != o.owner && $object_utils:has_property(x, "dest") && x.dest == o)
+          if (typeof(x) == TYPE_OBJ && valid(x) && x.owner != o.owner && $object_utils:has_property(x, "dest") && x.dest == o)
             loc = loc + (loc ? ", " | "") + "<-*" + x.name;
           endif
         endfor
@@ -270,13 +270,13 @@ object BUILDING_UTILS
     pros = verb == "do_prospectus";
     "the set_task_perms is to make the task owned by the player. There are no other security aspects";
     set_task_perms(caller_perms());
-    if (start == 0 && end == toint(max_object()) && !match && typeof(who.owned_objects) == LIST && length(who.owned_objects) > 100 && !$command_utils:yes_or_no(tostr(who.name, " has ", length(who.owned_objects), " objects.  This will be a very long list.  Do you wish to proceed?")))
+    if (start == 0 && end == toint(max_object()) && !match && typeof(who.owned_objects) == TYPE_LIST && length(who.owned_objects) > 100 && !$command_utils:yes_or_no(tostr(who.name, " has ", length(who.owned_objects), " objects.  This will be a very long list.  Do you wish to proceed?")))
       v = pros ? "@prospectus" | "@audit";
       return player:tell(v, " aborted.  Usage:  ", v, " [player] [from <start>] [to <end>] [for <match>]");
     endif
     player:tell(tostr("Objects owned by ", who.name, " (from #", start, " to #", end, match ? " matching " + match | "", ")", ":"));
     count = bytes = 0;
-    if (typeof(who.owned_objects) == LIST)
+    if (typeof(who.owned_objects) == TYPE_LIST)
       for o in (who.owned_objects)
         $command_utils:suspend_if_needed(0);
         if (!player:is_listening())
@@ -330,7 +330,7 @@ object BUILDING_UTILS
   verb size_string (this none this) owner: #2 flags: "rxd"
     "Copied from Roebare (#109000):size_string at Sat Nov 26 18:41:12 2005 PST";
     size = args[1];
-    if (typeof(size) != INT)
+    if (typeof(size) != TYPE_INT)
       return E_INVARG;
     endif
     if (`!player:build_option("audit_float") ! ANY')

@@ -61,7 +61,7 @@ object NEW_PROG_LOG
     for x in (msgs = this:messages_in_seq(args[1]))
       msgnum = $string_utils:right(last = x[1], 4, cur == x[1] ? ">" | " ");
       ldate = x[2][1];
-      if (typeof(x[2][2]) != OBJ)
+      if (typeof(x[2][2]) != TYPE_OBJ)
         hdr = this:msg_summary_line(@x[2]);
       else
         if (ldate < time() - 31536000)
@@ -89,7 +89,7 @@ object NEW_PROG_LOG
       return E_PERM;
     endif
     {plist, ?mask = {1}} = args;
-    if (typeof(plist) != LIST)
+    if (typeof(plist) != TYPE_LIST)
       plist = {plist};
     endif
     i = 1;
@@ -115,7 +115,7 @@ object NEW_PROG_LOG
       return E_PERM;
     endif
     {plist, ?mask = {1}} = args;
-    if (typeof(plist) != LIST)
+    if (typeof(plist) != TYPE_LIST)
       plist = {plist};
     endif
     i = 1;
@@ -142,7 +142,7 @@ object NEW_PROG_LOG
       return E_PERM;
     endif
     {nlist, ?mask = {1}} = args;
-    if (typeof(nlist) != LIST)
+    if (typeof(nlist) != TYPE_LIST)
       nlist = {nlist};
     endif
     i = 1;

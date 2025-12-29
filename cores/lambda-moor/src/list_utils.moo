@@ -250,7 +250,7 @@ object LIST_UTILS
     "does suspend(interval) as needed.";
     set_task_perms(caller_perms());
     interval = args[1];
-    if (typeof(interval) != INT)
+    if (typeof(interval) != TYPE_INT)
       return E_ARGS;
     endif
     lst = args[2];
@@ -274,7 +274,7 @@ object LIST_UTILS
     "    slice({{\"z\",1,3},{\"y\",2,4}},{2,1}) => {{1,\"z\"},{2,\"y\"}}";
     {thelist, ?ind = 1} = args;
     slice = {};
-    if (typeof(ind) == LIST)
+    if (typeof(ind) == TYPE_LIST)
       for elt in (thelist)
         s = {elt[ind[1]]};
         for i in (listdelete(ind, 1))
@@ -295,7 +295,7 @@ object LIST_UTILS
     "returns {} if no such element is found";
     {target, thelist, ?indx = 1} = args;
     for t in (thelist)
-      if (typeof(t) == LIST && `t[indx] == target ! E_RANGE => 0')
+      if (typeof(t) == TYPE_LIST && `t[indx] == target ! E_RANGE => 0')
         return t;
       endif
     endfor
@@ -309,7 +309,7 @@ object LIST_UTILS
     {target, thelist, ?indx = 1} = args;
     for element in (thelist)
       if (`element[indx] == target ! E_RANGE, E_TYPE => 0')
-        if (typeof(element) == LIST)
+        if (typeof(element) == TYPE_LIST)
           return element in thelist;
         endif
       endif
@@ -326,7 +326,7 @@ object LIST_UTILS
     {target, thelist, ?indx = 1, ?suspend_for = 0} = args;
     cu = $command_utils;
     for element in (thelist)
-      if (`element[indx] == target ! E_RANGE, E_TYPE => 0' && typeof(element) == LIST)
+      if (`element[indx] == target ! E_RANGE, E_TYPE => 0' && typeof(element) == TYPE_LIST)
         return element in thelist;
       endif
       cu:suspend_if_needed(suspend_for);
@@ -339,7 +339,7 @@ object LIST_UTILS
     "assoc_prefix(target,list[,index]) returns the first element of `list' whose own index-th element has target as a prefix.  Index defaults to 1.";
     {target, thelist, ?indx = 1} = args;
     for t in (thelist)
-      if (typeof(t) == LIST && (length(t) >= indx && index(t[indx], target) == 1))
+      if (typeof(t) == TYPE_LIST && (length(t) >= indx && index(t[indx], target) == 1))
         return t;
       endif
     endfor
@@ -350,7 +350,7 @@ object LIST_UTILS
     "iassoc_prefix(target,list[,index]) returns the index of the first element of `list' whose own index-th element has target as a prefix.  Index defaults to 1.";
     {target, lst, ?indx = 1} = args;
     for i in [1..length(lst)]
-      if (typeof(lsti = lst[i]) == LIST && (length(lsti) >= indx && index(lsti[indx], target) == 1))
+      if (typeof(lsti = lst[i]) == TYPE_LIST && (length(lsti) >= indx && index(lsti[indx], target) == 1))
         return i;
       endif
     endfor
@@ -494,7 +494,7 @@ object LIST_UTILS
     "$list_utils:count(item, list)";
     "Returns the number of occurrences of item in list.";
     {x, xlist} = args;
-    if (typeof(xlist) != LIST)
+    if (typeof(xlist) != TYPE_LIST)
       return E_INVARG;
     endif
     counter = 0;
@@ -510,7 +510,7 @@ object LIST_UTILS
     ":flatten(LIST list_of_lists) => LIST of all lists in given list `flattened'";
     newlist = {};
     for elm in (args[1])
-      if (typeof(elm) == LIST)
+      if (typeof(elm) == TYPE_LIST)
         newlist = {@newlist, @this:flatten(elm)};
       else
         newlist = {@newlist, elm};
@@ -524,14 +524,14 @@ object LIST_UTILS
     "$list_utils:longest(<list>)";
     "$list_utils:shortest(<list>)";
     "             - Returns the shortest or longest element in the list.  Elements may be either strings or lists.  Returns E_TYPE if passed a non-list or a list containing non-string/list elements.  Returns E_RANGE if passed an empty list.";
-    if (typeof(all = args[1]) != LIST)
+    if (typeof(all = args[1]) != TYPE_LIST)
       return E_TYPE;
     elseif (all == {})
       return E_RANGE;
     else
       result = all[1];
       for things in (all)
-        if (typeof(things) != LIST && typeof(things) != STR)
+        if (typeof(things) != TYPE_LIST && typeof(things) != TYPE_STR)
           return E_TYPE;
         else
           result = verb == "longest" && length(result) < length(things) || (verb == "shortest" && length(result) > length(things)) ? things | result;
@@ -546,7 +546,7 @@ object LIST_UTILS
     if (caller_perms().wizard)
       "don't let a nonwizard mess up our stats";
       for line in (args[1])
-        if (typeof(line) != STR)
+        if (typeof(line) != TYPE_STR)
           this.nonstring_tell_lines = listappend(this.nonstring_tell_lines, callers());
           return;
         endif
@@ -576,7 +576,7 @@ object LIST_UTILS
     "Usage:  $list_utils:swap_elements(<list/LIST>,<index/INT>,<index/INT>)";
     "        $list_utils:swap_elements({\"a\",\"b\"},1,2);";
     {l, i, j} = args;
-    if (typeof(l) == LIST && typeof(i) == INT && typeof(j) == INT)
+    if (typeof(l) == TYPE_LIST && typeof(i) == TYPE_INT && typeof(j) == TYPE_INT)
       ll = length(l);
       if (i > 0 && i <= ll && (j > 0 && j <= ll))
         t = l[i];
@@ -594,7 +594,7 @@ object LIST_UTILS
   verb "random_item random_element" (this none this) owner: HACKER flags: "rxd"
     "random_item -- returns a random element of the input list.";
     if (length(args) == 1)
-      if (typeof(l = args[1]) == LIST)
+      if (typeof(l = args[1]) == TYPE_LIST)
         if (length(l) > 0)
           return l[random($)];
         else
@@ -618,7 +618,7 @@ object LIST_UTILS
     cu = $command_utils;
     for t in (thelist)
       if (`t[indx] == target ! E_TYPE => 0')
-        if (typeof(t) == LIST && length(t) >= indx)
+        if (typeof(t) == TYPE_LIST && length(t) >= indx)
           return t;
         endif
       endif
@@ -680,7 +680,7 @@ object LIST_UTILS
     try
       for element in (thelist)
         if (element[indx] == target)
-          if (typeof(element) == LIST)
+          if (typeof(element) == TYPE_LIST)
             return element in thelist;
           endif
         endif
@@ -717,7 +717,7 @@ object LIST_UTILS
     ":flatten(LIST list_of_lists) => LIST of all lists in given list `flattened'";
     newlist = {};
     for elm in (args[1])
-      if (typeof(elm) == LIST)
+      if (typeof(elm) == TYPE_LIST)
         $command_utils:suspend_if_needed(0);
         newlist = {@newlist, @this:flatten_suspended(elm)};
       else

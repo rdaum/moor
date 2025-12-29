@@ -137,6 +137,8 @@ moorc --src-textdump old_database.db --out-objdef-dir new_objdef_dir
 
 This processes the import and export immediately without running a live server.
 
+> **Note**: When importing textdumps, legacy type constants (`INT`, `OBJ`, `STR`, etc.) are automatically converted to the new `TYPE_*` format. No special flags are needed for textdump imports.
+
 Alternatively, if you're already running a daemon, you can import the textdump and let checkpoints produce the objdef export:
 
 ```bash
@@ -1034,7 +1036,7 @@ The `load_object` function can return various errors. Always check the result:
 ```moo
 try
     result = load_object(definition, options);
-    if (typeof(result) == LIST && !result[1])
+    if (typeof(result) == TYPE_LIST && !result[1])
         // Loading failed, check conflicts
         player:tell("Load failed due to conflicts: ", result[2]);
     else

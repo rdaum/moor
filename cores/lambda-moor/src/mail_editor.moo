@@ -89,7 +89,7 @@ object MAIL_EDITOR
     "invoke(2,verb,msg,flags,replytos) for an @answer";
     if (!(which = args[1]))
       player:tell_lines({tostr("Usage:  ", args[2], " <list-of-recipients>"), tostr("        ", args[2], "                      to continue with a previous draft")});
-    elseif (typeof(which) == LIST)
+    elseif (typeof(which) == TYPE_LIST)
       "...@send...";
       if (rcpts = this:parse_recipients({}, which))
         if (replyto = player:mail_option("replyto"))
@@ -139,7 +139,7 @@ object MAIL_EDITOR
       "if (p:mail_option(\"enter\") && !args[5])";
       "Changed from above so that @reply can take advantage of @mailoption +enter. Ho_Yan 11/9/94";
       if (p:mail_option("enter"))
-        if (typeof(lines = $command_utils:read_lines()) == ERR)
+        if (typeof(lines = $command_utils:read_lines()) == TYPE_ERR)
           p:tell(lines);
         else
           this:insert_line(p in this.active, lines, 0);
@@ -156,7 +156,7 @@ object MAIL_EDITOR
     endif
     if (plyr != player && !this:readable(plyr in this.active))
       player:tell(plyr.name, "(", plyr, ") has not published anything here.");
-    elseif (typeof(msg = this:message_with_headers(plyr in this.active)) != LIST)
+    elseif (typeof(msg = this:message_with_headers(plyr in this.active)) != TYPE_LIST)
       player:tell(msg);
     else
       player:display_message({(plyr == player ? "Your" | tostr(plyr.name, "(", plyr, ")'s")) + " message so far:", ""}, player:msg_text(@msg));
@@ -172,7 +172,7 @@ object MAIL_EDITOR
       player:tell(this:nothing_loaded_msg());
     elseif (!argstr)
       player:tell(this.subjects[who]);
-    elseif (ERR == typeof(subj = this:set_subject(who, argstr)))
+    elseif (TYPE_ERR == typeof(subj = this:set_subject(who, argstr)))
       player:tell(subj);
     else
       player:tell(subj ? "Setting the subject line for your message to \"" + subj + "\"." | "Deleting the subject line for your message.");
@@ -266,8 +266,8 @@ object MAIL_EDITOR
     "parse_recipients(prev_list,list_of_strings) -- parses list of strings and adds any resulting player objects to prev_list.  Optional 3rd arg is prefixed to any mismatch error messages";
     {recips, l, ?cmd_id = ""} = args;
     cmd_id = cmd_id || "";
-    for s in (typeof(l) == LIST ? l | {l})
-      if (typeof(s) != STR)
+    for s in (typeof(l) == TYPE_LIST ? l | {l})
+      if (typeof(s) != TYPE_STR)
         if ($mail_agent:is_recipient(s))
           recips = setadd(recips, s);
         else
@@ -353,7 +353,7 @@ object MAIL_EDITOR
       else
         value = "";
       endif
-      if (typeof(a) != STR || (i = index(flaglist, "#" + a)) < 3)
+      if (typeof(a) != TYPE_STR || (i = index(flaglist, "#" + a)) < 3)
         player:tell("Unrecognized answer/reply option:  ", a);
         return 0;
       elseif (i != rindex(flaglist, "#" + a))
@@ -417,7 +417,7 @@ object MAIL_EDITOR
         previous = "(prior send) ";
       endif
       if (!(e = result[1]))
-        player:notify(tostr(previous, typeof(e) == ERR ? e | "Bogus recipients:  " + $string_utils:from_list(result[2])));
+        player:notify(tostr(previous, typeof(e) == TYPE_ERR ? e | "Bogus recipients:  " + $string_utils:from_list(result[2])));
         player:notify(tostr(previous, "Mail not sent."));
         previous || this:set_changed(who, 1);
       elseif (length(result) == 1)
@@ -483,13 +483,13 @@ object MAIL_EDITOR
     rstrs = dobjstr ? $string_utils:explode(dobjstr) | {"me"};
     recips = this:parse_recipients({}, rstrs);
     outcomes = iobj:add_forward(@recips);
-    if (typeof(outcomes) != LIST)
+    if (typeof(outcomes) != TYPE_LIST)
       player:tell(outcomes);
       return;
     endif
     added = {};
     for r in [1..length(recips)]
-      if ((t = typeof(e = outcomes[r])) == OBJ)
+      if ((t = typeof(e = outcomes[r])) == TYPE_OBJ)
         added = setadd(added, recips[r]);
       else
         player:tell(verb, " ", recips[r].name, " to ", iobj.name, ":  ", e);
@@ -510,13 +510,13 @@ object MAIL_EDITOR
     rstrs = dobjstr ? $string_utils:explode(dobjstr) | {"me"};
     recips = this:parse_recipients({}, rstrs);
     outcomes = iobj:delete_forward(@recips);
-    if (typeof(outcomes) != LIST)
+    if (typeof(outcomes) != TYPE_LIST)
       player:tell(outcomes);
       return;
     endif
     removed = {};
     for r in [1..length(recips)]
-      if (typeof(e = outcomes[r]) == ERR)
+      if (typeof(e = outcomes[r]) == TYPE_ERR)
         player:tell(verb, " ", recips[r].name, " from ", iobj.name, ":  ", e == E_INVARG ? "Not on list." | e);
       else
         removed = setadd(removed, recips[r]);

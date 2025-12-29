@@ -270,7 +270,7 @@ object PLAYER
   verb notify_lines (this none this) owner: #2 flags: "rxd"
     if ($perm_utils:controls(caller_perms(), this) || caller == this || caller_perms() == this)
       set_task_perms(caller_perms());
-      for line in (typeof(lines = args[1]) != LIST ? {lines} | lines)
+      for line in (typeof(lines = args[1]) != TYPE_LIST ? {lines} | lines)
         this:notify(tostr(line));
       endfor
     else
@@ -513,7 +513,7 @@ object PLAYER
     if (args)
       player:notify("Searching for players who may be gagging you...");
       for p in (players())
-        if (typeof(`p.gaglist ! E_PERM') == LIST && this in p.gaglist)
+        if (typeof(`p.gaglist ! E_PERM') == TYPE_LIST && this in p.gaglist)
           gl = {@gl, p};
         endif
         $command_utils:suspend_if_needed(10, "...searching gaglist...");
@@ -603,7 +603,7 @@ object PLAYER
       if (!responsible)
         player:notify("No text has been saved by the monitor.  (See `help @paranoid').");
       else
-        if (typeof(x = $code_utils:toint(argstr)) == ERR)
+        if (typeof(x = $code_utils:toint(argstr)) == TYPE_ERR)
           for line in (responsible)
             if (index(tostr(@line[$]), argstr))
               matches = {@matches, line};
@@ -663,7 +663,7 @@ object PLAYER
       if (thing in connected_players())
         this:notify(tostr(thing.name, " (", thing, ") is listening."));
         found_listener = 1;
-      elseif ($object_utils:has_callable_verb(thing, "sweep_msg") && typeof(msg = thing:sweep_msg()) == STR)
+      elseif ($object_utils:has_callable_verb(thing, "sweep_msg") && typeof(msg = thing:sweep_msg()) == TYPE_STR)
         this:notify(tostr(thing.name, " (", thing, ") ", msg, "."));
         found_listener = 1;
       elseif (tellwhere && ((owner = verb_info(tellwhere[1], "tell")[1]) != this && !owner.wizard))
@@ -682,7 +682,7 @@ object PLAYER
       endif
     endfor
     if (buggers != {})
-      if ($object_utils:has_verb(here, "sweep_msg") && typeof(msg = here:sweep_msg()) == STR)
+      if ($object_utils:has_verb(here, "sweep_msg") && typeof(msg = here:sweep_msg()) == TYPE_STR)
         this:notify(tostr(here.name, " (", here, ") ", msg, "."));
       else
         this:notify(tostr(here.name, " (", here, ") may have been bugged by ", $string_utils:english_list($list_utils:map_prop(buggers, "name")), "."));
@@ -727,7 +727,7 @@ object PLAYER
     result = text ? who:receive_page(header, text) | who:receive_page(header);
     if (result == 2)
       "not connected";
-      player:tell(typeof(msg = who:page_absent_msg()) == STR ? msg | $string_utils:pronoun_sub("%n is not currently logged in.", who));
+      player:tell(typeof(msg = who:page_absent_msg()) == TYPE_STR ? msg | $string_utils:pronoun_sub("%n is not currently logged in.", who));
     else
       player:tell(who:page_echo_msg());
     endif
@@ -782,7 +782,7 @@ object PLAYER
     if (start == this.home)
       player:tell("You're already home!");
       return;
-    elseif (typeof(this.home) != OBJ)
+    elseif (typeof(this.home) != TYPE_OBJ)
       player:tell("You've got a weird home, pal.  I've reset it to the default one.");
       this.home = $player_start;
     elseif (!valid(this.home))
@@ -995,8 +995,8 @@ object PLAYER
         "...get_topic took matters into its own hands...";
       elseif (text)
         "...these can get long...";
-        for line in (typeof(text) == LIST ? text | {text})
-          if (typeof(line) != STR)
+        for line in (typeof(text) == TYPE_LIST ? text | {text})
+          if (typeof(line) != TYPE_STR)
             player:notify("Odd results from help -- complain to a wizard.");
           else
             player:notify(line);
@@ -1042,7 +1042,7 @@ object PLAYER
     verb[1..4] = "";
     foo_options = verb + "s";
     "...";
-    if (typeof(s = #0.(foo_options):set(this.(foo_options), @args)) == STR)
+    if (typeof(s = #0.(foo_options):set(this.(foo_options), @args)) == TYPE_STR)
       return s;
     elseif (s == this.(foo_options))
       return 0;
@@ -1067,12 +1067,12 @@ object PLAYER
     if (!args)
       player:notify_lines({"Current " + what + " options:", "", @option_pkg:show(this.(options), option_pkg.names)});
       return;
-    elseif (typeof(presult = option_pkg:parse(args)) == STR)
+    elseif (typeof(presult = option_pkg:parse(args)) == TYPE_STR)
       player:notify(presult);
       return;
     else
       if (length(presult) > 1)
-        if (typeof(sresult = this:(set_option)(@presult)) == STR)
+        if (typeof(sresult = this:(set_option)(@presult)) == TYPE_STR)
           player:notify(sresult);
           return;
         elseif (!sresult)
@@ -1131,13 +1131,13 @@ object PLAYER
       return pass(@args);
     elseif ($player_db.frozen)
       return E_NACC;
-    elseif (typeof(aliases = args[1]) != LIST)
+    elseif (typeof(aliases = args[1]) != TYPE_LIST)
       return E_TYPE;
     elseif (length(aliases = setadd(aliases, this.name)) > ($object_utils:has_property($local, "max_player_aliases") ? $local.max_player_aliases | $maxint) && length(aliases) >= length(this.aliases))
       return E_INVARG;
     else
       for a in (aliases)
-        if (typeof(a) != STR)
+        if (typeof(a) != TYPE_STR)
           return E_INVARG;
         endif
         if (!(index(a, " ") || index(a, "\t")) && !($player_db:available(a, this) in {this, 1}))
@@ -1508,7 +1508,7 @@ object PLAYER
     endif
     found_one = 0;
     props = $object_utils:all_properties(dobj);
-    if (typeof(props) == ERR)
+    if (typeof(props) == TYPE_ERR)
       player:notify("You can't read the messages on that.");
       return;
     endif
@@ -1521,9 +1521,9 @@ object PLAYER
           value = "isn't readable by you.";
         elseif (!msg)
           value = "isn't set.";
-        elseif (typeof(msg) == LIST)
+        elseif (typeof(msg) == TYPE_LIST)
           value = "is a list.";
-        elseif (typeof(msg) != STR)
+        elseif (typeof(msg) != TYPE_STR)
           value = "is corrupted! **";
         else
           value = "is " + $string_utils:print(msg);
@@ -1579,7 +1579,7 @@ object PLAYER
       return E_PERM;
     else
       result = $gender_utils:set(this, args[1]);
-      this.gender = typeof(result) == STR ? result | args[1];
+      this.gender = typeof(result) == TYPE_STR ? result | args[1];
       return result;
     endif
   endverb
@@ -1594,7 +1594,7 @@ object PLAYER
       result = this:set_gender(args[1]);
       quote = result == E_NONE ? "\"" | "";
       player:notify(tostr("Gender set to ", quote, this.gender, quote, "."));
-      if (typeof(result) != ERR)
+      if (typeof(result) != TYPE_ERR)
         player:notify($string_utils:pronoun_sub("Your pronouns:  %s,%o,%p,%q,%r,%S,%O,%P,%Q,%R"));
       elseif (result != E_NONE)
         player:notify(tostr("Couldn't set pronouns:  ", result));
@@ -1773,13 +1773,13 @@ object PLAYER
     "Returns true if successful, E_INVARG if not a valid object, and E_PERM if !feature_ok or if caller doesn't have permission.";
     if (caller == this || $perm_utils:controls(caller_perms(), this))
       feature = args[1];
-      if (typeof(feature) != OBJ || !valid(feature))
+      if (typeof(feature) != TYPE_OBJ || !valid(feature))
         return E_INVARG;
         "Not a valid object.";
       endif
       if ($code_utils:verb_or_property(feature, "feature_ok", this))
         "The object is willing to be a feature.";
-        if (typeof(this.features) == LIST)
+        if (typeof(this.features) == TYPE_LIST)
           "If list, we can simply setadd the feature.";
           this.features = setadd(this.features, feature);
         else
@@ -1809,7 +1809,7 @@ object PLAYER
     "Returns true if successful, E_PERM if caller didn't have permission.";
     feature = args[1];
     if (caller == this || $perm_utils:controls(caller_perms(), this) || caller_perms() == feature.owner)
-      if (typeof(this.features) == LIST)
+      if (typeof(this.features) == TYPE_LIST)
         "If this is a list, we can just setremove...";
         this.features = setremove(this.features, feature);
         "Otherwise, we leave it alone.";
@@ -2007,7 +2007,7 @@ object PLAYER
 
   verb is_listening (this none this) owner: #2 flags: "rxd"
     "return true if player is active.";
-    return typeof(`idle_seconds(this) ! ANY') != ERR;
+    return typeof(`idle_seconds(this) ! ANY') != TYPE_ERR;
   endverb
 
   verb moveto (this none this) owner: #2 flags: "rxd"
@@ -2060,16 +2060,16 @@ object PLAYER
     if (spec = $code_utils:parse_propref(argstr))
       o = player:my_match_object(spec[1]);
       p = spec[2];
-      if ($object_utils:has_verb(o, vb = "set_" + p) && typeof(e = o:(vb)(text)) != ERR)
+      if ($object_utils:has_verb(o, vb = "set_" + p) && typeof(e = o:(vb)(text)) != TYPE_ERR)
         player:tell("Set ", p, " property of ", o.name, " (", o, ") via :", vb, ".");
       elseif (text != (e = `o.(p) = text ! ANY'))
         player:tell("Error:  ", e);
       else
         player:tell("Set ", p, " property of ", o.name, " (", o, ").");
       endif
-    elseif (typeof(note = $code_utils:toobj(argstr)) == OBJ)
+    elseif (typeof(note = $code_utils:toobj(argstr)) == TYPE_OBJ)
       e = note:set_text(text);
-      if (typeof(e) == ERR)
+      if (typeof(e) == TYPE_ERR)
         player:tell("Error:  ", e);
       else
         player:tell("Set text of ", note.name, " (", note, ").");
@@ -2098,7 +2098,7 @@ object PLAYER
 
   verb tell_lines (this none this) owner: #2 flags: "rxd"
     lines = args[1];
-    if (typeof(lines) != LIST)
+    if (typeof(lines) != TYPE_LIST)
       lines = {lines};
     endif
     if (this.gaglist || this.paranoid)
@@ -2214,7 +2214,7 @@ object PLAYER
     if (caller == this || $perm_utils:controls(caller_perms(), this))
       if ($object_utils:has_callable_verb(newhome, "accept_for_abode"))
         if (newhome:accept_for_abode(this))
-          return typeof(e = `this.home = args[1] ! ANY') != ERR || e;
+          return typeof(e = `this.home = args[1] ! ANY') != TYPE_ERR || e;
         else
           return E_INVARG;
         endif
@@ -2285,7 +2285,7 @@ object PLAYER
       who.last_password_time = time();
     else
       who:notify("No automatic reregistration: your request will be forwarded.");
-      if (typeof(curreg = $registration_db:find(email)) == LIST)
+      if (typeof(curreg = $registration_db:find(email)) == TYPE_LIST)
         additional_info = {"Current registration information for this email address:", @$registration_db:describe_registration(curreg)};
       else
         additional_info = {};
@@ -2360,7 +2360,7 @@ object PLAYER
       args[1..1] = {};
     endif
     if (args)
-      if (typeof(seq = $news:_parse(args, @cur)) == STR)
+      if (typeof(seq = $news:_parse(args, @cur)) == TYPE_STR)
         player:notify(seq);
         return;
       elseif (seq = $seq_utils:intersection(seq, $news.current_news))
@@ -2439,7 +2439,7 @@ object PLAYER
   verb notify_lines_suspended (this none this) owner: #2 flags: "rxd"
     if ($perm_utils:controls(caller_perms(), this) || caller == this || caller_perms() == this)
       set_task_perms(caller_perms());
-      for line in (typeof(lines = args[1]) != LIST ? {lines} | lines)
+      for line in (typeof(lines = args[1]) != TYPE_LIST ? {lines} | lines)
         $command_utils:suspend_if_needed(0);
         this:notify(tostr(line));
       endfor
@@ -2464,7 +2464,7 @@ object PLAYER
   endverb
 
   verb "@password" (any any any) owner: #2 flags: "rd"
-    if (typeof(player.password) != STR)
+    if (typeof(player.password) != TYPE_STR)
       if (length(args) != 1)
         return player:notify(tostr("Usage:  ", verb, " <new-password>"));
       else
@@ -2556,13 +2556,12 @@ object PLAYER
   endverb
 
   verb set_profile_picture (this none this) owner: #2 flags: "rxd"
-    ($perm_utils:controls(caller_perms(), this) || this == caller) || return E_PERM;
+    $perm_utils:controls(caller_perms(), this) || this == caller || return E_PERM;
     set_task_perms(this);
     {content_type, picbin} = args;
-    (length(picbin) > (5 * (1 << 23))) && raise(E_INVARG("Profile picture too large"));
-    (typeof(content_type) == STR && $string_utils:find_prefix("image/", {content_type})) || raise(E_TYPE);
-    typeof(picbin) == BINARY || raise(E_TYPE);
+    length(picbin) > 5 * (1 << 23) && raise(E_INVARG("Profile picture too large"));
+    typeof(content_type) == TYPE_STR && $string_utils:find_prefix("image/", {content_type}) || raise(E_TYPE);
+    typeof(picbin) == TYPE_BINARY || raise(E_TYPE);
     this.profile_picture = {content_type, picbin};
   endverb
-
 endobject

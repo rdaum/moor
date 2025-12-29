@@ -119,7 +119,7 @@ object SEQ_UTILS
   verb for (this none this) owner: #2 flags: "rxd"
     ":for([n,]seq,obj,verb,@args) => for s in (seq) obj:verb(s,@args); endfor";
     set_task_perms(caller_perms());
-    if (typeof(n = args[1]) == INT)
+    if (typeof(n = args[1]) == TYPE_INT)
       args = listdelete(args, 1);
     else
       n = 1;
@@ -130,7 +130,7 @@ object SEQ_UTILS
     endif
     for r in [1..length(seq) / 2]
       for i in [seq[2 * r - 1]..seq[2 * r] - 1]
-        if (typeof(object:(vname)(@listinsert(args, i, n))) == ERR)
+        if (typeof(object:(vname)(@listinsert(args, i, n))) == TYPE_ERR)
           return;
         endif
       endfor
@@ -138,7 +138,7 @@ object SEQ_UTILS
     if (length(seq) % 2)
       i = seq[$];
       while (1)
-        if (typeof(object:(vname)(@listinsert(args, i, n))) == ERR)
+        if (typeof(object:(vname)(@listinsert(args, i, n))) == TYPE_ERR)
           return;
         endif
         i = i + 1;

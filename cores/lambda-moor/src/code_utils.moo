@@ -93,6 +93,8 @@ object CODE_UTILS
     E_INVARG,
     E_QUOTA,
     E_FLOAT
+  
+  
   };
   property error_names (owner: HACKER, flags: "rc") = {
     "E_NONE",
@@ -283,7 +285,7 @@ object CODE_UTILS
 
   verb toerr (this none this) owner: HACKER flags: "rxd"
     "toerr(n), toerr(\"E_FOO\"), toerr(\"FOO\") => E_FOO.";
-    if (typeof(s = args[1]) != STR)
+    if (typeof(s = args[1]) != TYPE_STR)
       n = toint(s) + 1;
       if (n > length(this.error_list))
         return 1;
@@ -470,21 +472,21 @@ object CODE_UTILS
     "  returns a non-1 value if anything bad happens...";
     set_task_perms(caller_perms());
     {object, vname, text} = args;
-    if (typeof(code = `verb_code(object, vname) ! ANY') == ERR)
+    if (typeof(code = `verb_code(object, vname) ! ANY') == TYPE_ERR)
       return code;
-    elseif (typeof(vd = $code_utils:verb_documentation(object, vname)) == ERR)
+    elseif (typeof(vd = $code_utils:verb_documentation(object, vname)) == TYPE_ERR)
       return vd;
-    elseif (!(typeof(text) in {LIST, STR}))
+    elseif (!(typeof(text) in {TYPE_LIST, TYPE_STR}))
       return E_INVARG;
     else
       newdoc = {};
-      for l in (typeof(text) == LIST ? text | {text})
-        if (typeof(l) != STR)
+      for l in (typeof(text) == TYPE_LIST ? text | {text})
+        if (typeof(l) != TYPE_STR)
           return E_INVARG;
         endif
         newdoc = {@newdoc, $string_utils:print(l) + ";"};
       endfor
-      if (ERR == typeof(svc = `set_verb_code(object, vname, {@newdoc, @code[length(vd) + 1..$]}) ! ANY'))
+      if (TYPE_ERR == typeof(svc = `set_verb_code(object, vname, {@newdoc, @code[length(vd) + 1..$]}) ! ANY'))
         "... this shouldn't happen.  I'm not setting this code -d just yet...";
         return svc;
       else
@@ -504,7 +506,7 @@ object CODE_UTILS
         return 0;
       elseif (object[1] == "$")
         object = `#0.(object[2..$]) ! ANY';
-        if (typeof(object) != OBJ)
+        if (typeof(object) != TYPE_OBJ)
           return 0;
         endif
         object = tostr(object);
@@ -529,7 +531,7 @@ object CODE_UTILS
         return 0;
       elseif (object[1] == "$")
         pname = object[2..$];
-        if (!(pname in properties(#0)) || typeof(object = #0.(pname)) != OBJ)
+        if (!(pname in properties(#0)) || typeof(object = #0.(pname)) != TYPE_OBJ)
           return 0;
         endif
         object = tostr(object);
@@ -634,7 +636,7 @@ object CODE_UTILS
     orig_args = verb_args(this, verb);
     multis = nothers = others = shorts = longs = {};
     i = 0;
-    while (typeof(`set_verb_args(this, verb, {"this", tostr(i), "this"}) ! ANY') != ERR)
+    while (typeof(`set_verb_args(this, verb, {"this", tostr(i), "this"}) ! ANY') != TYPE_ERR)
       l = verb_args(this, verb)[2];
       all = $string_utils:explode(l, "/");
       s = all[1];
@@ -759,11 +761,11 @@ object CODE_UTILS
     {pattern, ?where = 0, ?casematters = 0} = args;
     count = 0;
     _find_verbs = "_" + verb;
-    if (typeof(where) == INT)
+    if (typeof(where) == TYPE_INT)
       for o in [toobj(where)..max_object()]
         count = count + this:(_find_verbs)(pattern, o, casematters);
       endfor
-    elseif (typeof(where) == LIST)
+    elseif (typeof(where) == TYPE_LIST)
       for o in (where)
         count = count + this:(_find_verbs)(pattern, o, casematters);
       endfor
@@ -792,7 +794,7 @@ object CODE_UTILS
     count = 0;
     verbs = $object_utils:accessible_verbs(o);
     _grep_verb_code = verb == "_find_verbs_matching" ? "_egrep_verb_code" | "_grep_verb_code";
-    if (typeof(verbs) != LIST)
+    if (typeof(verbs) != TYPE_LIST)
       return player:notify(tostr("verbs(", o, ") => ", tostr(verbs)));
     endif
     for vnum in [1..length(verbs)]
@@ -816,7 +818,7 @@ object CODE_UTILS
     {pattern, object, vname, ?casematters = 0} = args;
     "The following gross kluge is due to Quade (#82589).  tostr is fast, and so we can check for nonexistence of a pattern very quickly this way rather than checking line by line.  MOO needs a compiler.  --Nosredna";
     vc = `verb_code(object, vname) ! ANY';
-    if (typeof(vc) == ERR || !index(tostr(@vc), pattern, casematters))
+    if (typeof(vc) == TYPE_ERR || !index(tostr(@vc), pattern, casematters))
       return 0;
     else
       for line in (vc)
@@ -888,12 +890,12 @@ object CODE_UTILS
     dbs = {};
     for o in (olist)
       h = `o.help ! ANY => 0';
-      if (typeof(h) == OBJ)
+      if (typeof(h) == TYPE_OBJ)
         h = {h};
       endif
-      if (typeof(h) == LIST)
+      if (typeof(h) == TYPE_LIST)
         for db in (h)
-          if (typeof(db) == OBJ && (valid(db) && !(db in dbs)))
+          if (typeof(db) == TYPE_OBJ && (valid(db) && !(db in dbs)))
             dbs = {@dbs, db};
           endif
         endfor
@@ -913,7 +915,7 @@ object CODE_UTILS
       $command_utils:suspend_if_needed(0);
       if ({what} == (ts = `db:find_topics(what) ! ANY => 0'))
         return {db, ts[1]};
-      elseif (ts && typeof(ts) == LIST)
+      elseif (ts && typeof(ts) == TYPE_LIST)
         if (help)
           help = db;
         endif
@@ -1077,7 +1079,7 @@ object CODE_UTILS
     for p in (more_plist)
       if (!valid(p))
         caller:notify(tostr(p, " <invalid>"));
-      elseif (typeof(t = `p.last_disconnect_time ! E_PROPNF') == INT)
+      elseif (typeof(t = `p.last_disconnect_time ! E_PROPNF') == TYPE_INT)
         if (!(p in offs))
           offs = {@offs, p};
           otimes = {@otimes, {-t, -t, p}};
@@ -1092,12 +1094,12 @@ object CODE_UTILS
       if (p in offs)
       elseif (!valid(p))
         caller:notify(tostr(p, " <invalid>"));
-      elseif (typeof(i = `idle_seconds(p) ! ANY') != ERR)
+      elseif (typeof(i = `idle_seconds(p) ! ANY') != TYPE_ERR)
         if (!(p in idles))
           idles = {@idles, p};
           itimes = {@itimes, {i, connected_seconds(p), p}};
         endif
-      elseif (typeof(t = `p.last_disconnect_time ! E_PROPNF') == INT)
+      elseif (typeof(t = `p.last_disconnect_time ! E_PROPNF') == TYPE_INT)
         offs = {@offs, p};
         otimes = {@otimes, {-t, -t, p}};
       elseif (is_player(p))
@@ -1125,7 +1127,7 @@ object CODE_UTILS
       namestr = tostr((p.name)[1..min(max_name, $)], " (", p, ")");
       name_width = max(length(namestr), name_width);
       names = {@names, namestr};
-      if (typeof(wlm = `p.location:who_location_msg(p) ! ANY') != STR)
+      if (typeof(wlm = `p.location:who_location_msg(p) ! ANY') != TYPE_STR)
         wlm = valid(p.location) ? p.location.name | tostr("** Nowhere ** (", p.location, ")");
       endif
       locations = {@locations, wlm};
@@ -1237,7 +1239,7 @@ object CODE_UTILS
     set_task_perms(caller_perms());
     c = callers()[1];
     {?object = c[4], ?vname = c[2]} = args;
-    if (typeof(code = `verb_code(object, vname) ! ANY') == ERR)
+    if (typeof(code = `verb_code(object, vname) ! ANY') == TYPE_ERR)
       return code;
     else
       doc = {};
@@ -1289,7 +1291,7 @@ object CODE_UTILS
     "Should handle verbnames with aliases and wildcards correctly.";
     who = caller_perms();
     {from, origverb, to, ?destverb = origverb} = args;
-    if (typeof(from) != OBJ || typeof(to) != OBJ || typeof(origverb) != STR || typeof(destverb) != STR)
+    if (typeof(from) != TYPE_OBJ || typeof(to) != TYPE_OBJ || typeof(origverb) != TYPE_STR || typeof(destverb) != TYPE_STR)
       "check this first so we can parse out long verb names next";
       return E_TYPE;
     endif
@@ -1316,7 +1318,7 @@ object CODE_UTILS
       vcode = verb_code(from, origverb_first);
       vargs = verb_args(from, origverb_first);
       vinfo[3] = destverb == origverb ? vinfo[3] | destverb;
-      if (typeof(res = `add_verb(to, vinfo, vargs) ! ANY') == ERR)
+      if (typeof(res = `add_verb(to, vinfo, vargs) ! ANY') == TYPE_ERR)
         return res;
       else
         set_verb_code(to, destverb_first, vcode);
@@ -1330,7 +1332,7 @@ object CODE_UTILS
     ":move_prop(OBJ from, STR prop name, OBJ to, [STR new prop name]) -> Moves the specified property and its contents from one object to another. Returns {OBJ, property name} where the property now resides if successful, error if not. To succeed, caller_perms() must control both objects and own the property, unless called with wizard perms. Supplying a fourth argument gives the property a new name on the new object.";
     who = caller_perms();
     {from, origprop, to, ?destprop = origprop} = args;
-    if (typeof(from) != OBJ || typeof(to) != OBJ || typeof(origprop) != STR || typeof(destprop) != STR)
+    if (typeof(from) != TYPE_OBJ || typeof(to) != TYPE_OBJ || typeof(origprop) != TYPE_STR || typeof(destprop) != TYPE_STR)
       return E_TYPE;
     elseif (!valid(from) || !valid(to))
       return E_INVARG;
@@ -1352,7 +1354,7 @@ object CODE_UTILS
       "we now know that the caller's perms control the objects or the objects are writable, and we know that the caller's perms control the prospective property owner (by more traditional means)";
       pdata = from.(origprop);
       pname = destprop == origprop ? origprop | destprop;
-      if (typeof(res = `add_property(to, pname, pdata, pinfo) ! ANY') == ERR)
+      if (typeof(res = `add_property(to, pname, pdata, pinfo) ! ANY') == TYPE_ERR)
         return res;
       else
         delete_property(from, origprop);
@@ -1398,7 +1400,7 @@ object CODE_UTILS
       for bit in [1..5]
         $command_utils:suspend_if_needed(3);
         "bit == 2 below for verb: append line number.";
-        output = {@output, su:left(typeof(word = line[bit]) == STR ? bit == 2 ? tostr(word, "(", `line[6] ! ANY => 0', ")") | word | tostr(word, "(", valid(word) ? lu:shortest({word.name, @word.aliases}) | (word == $nothing ? "invalid" | (word == $ambiguous_match ? "ambiguous match" | "Error")), ")"), -widths[bit]), " "};
+        output = {@output, su:left(typeof(word = line[bit]) == TYPE_STR ? bit == 2 ? tostr(word, "(", `line[6] ! ANY => 0', ")") | word | tostr(word, "(", valid(word) ? lu:shortest({word.name, @word.aliases}) | (word == $nothing ? "invalid" | (word == $ambiguous_match ? "ambiguous match" | "Error")), ")"), -widths[bit]), " "};
       endfor
       text = listappend(text, su:trimr(tostr(@output)));
     endfor
@@ -1413,11 +1415,11 @@ object CODE_UTILS
     set_task_perms(caller_perms());
     if (length(args) != 3)
       return E_ARGS;
-    elseif (typeof(o = args[1]) != OBJ)
+    elseif (typeof(o = args[1]) != TYPE_OBJ)
       return E_INVARG;
     elseif (!$recycler:valid(o))
       return E_INVIND;
-    elseif (typeof(p = args[2]) != STR)
+    elseif (typeof(p = args[2]) != TYPE_STR)
       return E_INVARG;
     elseif ($object_utils:has_callable_verb(o, v = "set_" + p))
       return o:(v)(args[3]);
@@ -1468,7 +1470,7 @@ object CODE_UTILS
         continue p;
       endtry
       if (create)
-        uvalue = typeof(value) == LIST ? "{}" | 0;
+        uvalue = typeof(value) == TYPE_LIST ? "{}" | 0;
         result = {@result, tostr("@prop ", targname, ".", pquoted, " ", uvalue || toliteral(value), " ", info[2] || "\"\"", info[1] == dobj.owner ? "" | tostr(" ", info[1]))};
         if (uvalue && value)
           result = {@result, tostr(";;", targname, ".(", pquoted, ") = ", toliteral(value))};
@@ -1495,7 +1497,7 @@ object CODE_UTILS
           continue p;
         endtry
         avalue = `a.(p) ! ANY';
-        if (typeof(avalue) == ERR || value != avalue)
+        if (typeof(avalue) == TYPE_ERR || value != avalue)
           result = {@result, tostr(";;", targname, ".(", pquoted, ") = ", toliteral(value))};
         endif
       endfor
@@ -1528,7 +1530,7 @@ object CODE_UTILS
         "Thought about skipping (old) verbs...";
         player:tell("Skipping ", dobj, ":\"", info[3], "\"...");
       else
-        if (typeof(info) == ERR)
+        if (typeof(info) == TYPE_ERR)
           result = {@result, tostr("\"", dobj, ":", v, " --- ", info, "\";")};
         else
           if (i = index(vname = info[3], " "))
@@ -1589,7 +1591,7 @@ object CODE_UTILS
     endif
     count = 0;
     verbs = $object_utils:accessible_verbs(o);
-    if (typeof(verbs) != LIST)
+    if (typeof(verbs) != TYPE_LIST)
       return player:notify(tostr("verbs(", o, ") => ", tostr(verbs)));
     endif
     _grep_verb_code_all = verb == "_find_verb_lines_matching" ? "_egrep_verb_code_all" | "_grep_verb_code_all";

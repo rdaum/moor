@@ -78,9 +78,9 @@ object NOTE_EDITOR
     if (strmode)
       text = text ? text[1] | "";
     endif
-    if (ERR == typeof(result = this:set_note_text(note, text)))
+    if (TYPE_ERR == typeof(result = this:set_note_text(note, text)))
       player:tell("Text not saved to ", this:working_on(who), ":  ", result);
-      if (result == E_TYPE && typeof(note) == OBJ)
+      if (result == E_TYPE && typeof(note) == TYPE_OBJ)
         player:tell("Do `mode list' and try saving again.");
       elseif (!dobjstr)
         player:tell("Use `save' with an argument to save the text elsewhere.");
@@ -93,7 +93,7 @@ object NOTE_EDITOR
 
   verb init_session (this none this) owner: #96 flags: "rxd"
     if (this:ok(who = args[1]))
-      this.strmode[who] = strmode = typeof(text = args[3]) == STR;
+      this.strmode[who] = strmode = typeof(text = args[3]) == TYPE_STR;
       this:load(who, strmode ? text ? {text} | {} | text);
       this.objects[who] = args[2];
       player:tell("Now editing ", this:working_on(who), ".", strmode ? "  [string mode]" | "");
@@ -105,7 +105,7 @@ object NOTE_EDITOR
       return "????";
     endif
     spec = this.objects[who];
-    if (typeof(spec) == LIST)
+    if (typeof(spec) == TYPE_LIST)
       object = spec[1];
       prop = spec[2];
     else
@@ -124,7 +124,7 @@ object NOTE_EDITOR
     elseif (!(string = args[1]))
       player:tell_lines({"Usage:  " + args[2] + " <note>   (where <note> is some note object)", "        " + args[2] + "          (continues editing an unsaved note)"});
     elseif (1 == (note = this:note_match_failed(string)))
-    elseif (ERR == typeof(text = this:note_text(note)))
+    elseif (TYPE_ERR == typeof(text = this:note_text(note)))
       player:tell("Couldn't retrieve text:  ", text);
     else
       return {note, text};
@@ -138,12 +138,12 @@ object NOTE_EDITOR
       return E_PERM;
     endif
     set_task_perms(player);
-    if (typeof(spec = args[1]) == OBJ)
+    if (typeof(spec = args[1]) == TYPE_OBJ)
       text = spec:text();
     else
       text = `spec[1].((spec[2])) ! ANY';
     endif
-    if ((tt = typeof(text)) in {ERR, STR} || (tt == LIST && (!text || typeof(text[1]) == STR)))
+    if ((tt = typeof(text)) in {TYPE_ERR, TYPE_STR} || (tt == TYPE_LIST && (!text || typeof(text[1]) == TYPE_STR)))
       return text;
     else
       return E_TYPE;
@@ -157,12 +157,12 @@ object NOTE_EDITOR
     endif
     set_task_perms(player);
     attempt = E_NONE;
-    if (typeof(spec = args[1]) == OBJ)
+    if (typeof(spec = args[1]) == TYPE_OBJ)
       return spec:set_text(args[2]);
     elseif ($object_utils:has_callable_verb(spec[1], "set_" + spec[2]))
       attempt = spec[1]:(("set_" + spec[2]))(args[2]);
     endif
-    if (typeof(attempt) == ERR)
+    if (typeof(attempt) == TYPE_ERR)
       return `spec[1].((spec[2])) = args[2] ! ANY';
     else
       return attempt;
@@ -229,9 +229,9 @@ object NOTE_EDITOR
 
   verb local_editing_info (this none this) owner: HACKER flags: "rxd"
     {what, text} = args;
-    cmd = typeof(text) == STR ? "@set-note-string" | "@set-note-text";
-    name = typeof(what) == OBJ ? what.name | tostr(what[1].name, ".", what[2]);
-    note = typeof(what) == OBJ ? what | tostr(what[1], ".", what[2]);
+    cmd = typeof(text) == TYPE_STR ? "@set-note-string" | "@set-note-text";
+    name = typeof(what) == TYPE_OBJ ? what.name | tostr(what[1].name, ".", what[2]);
+    note = typeof(what) == TYPE_OBJ ? what | tostr(what[1], ".", what[2]);
     return {name, text, tostr(cmd, " ", note)};
   endverb
 

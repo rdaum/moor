@@ -104,11 +104,11 @@ object LOGIN
       msg = this.welcome_message;
       content_type = $object_utils:has_property(this, "welcome_message_content_type") ? this.welcome_message_content_type | "text/plain";
       version = server_version();
-      if (typeof(msg) == STR)
+      if (typeof(msg) == TYPE_STR)
         notify(player, strsub(msg, "%v", version), 0, 0, content_type);
       else
         for line in (msg)
-          if (typeof(line) == STR)
+          if (typeof(line) == TYPE_STR)
             notify(player, strsub(line, "%v", version));
           endif
         endfor
@@ -173,7 +173,7 @@ object LOGIN
       endif
       "=================================================================";
       "=== Check password";
-      if (typeof(cp = candidate.password) == STR)
+      if (typeof(cp = candidate.password) == TYPE_STR)
         "=== Candidate requires a password";
         if (password)
           "=== Candidate requires a password, and one was provided";
@@ -419,7 +419,7 @@ object LOGIN
       return 0;
     endif
     server_log(tostr("OAUTH2 CONNECT: found candidate ", candidate, " password_type=", typeof(candidate.password)));
-    if (typeof(cp = candidate.password) == STR)
+    if (typeof(cp = candidate.password) == TYPE_STR)
       "=== Candidate has a password, verify it";
       if (!argon2_verify(cp, existing_password))
         server_log(tostr("OAUTH2 CONNECT FAILED PASSWORD: ", existing_name, " (", candidate, ")"));
@@ -438,7 +438,7 @@ object LOGIN
     endif
     if ($object_utils:has_property(candidate, "oauth2_identities"))
       for identity in (candidate.oauth2_identities)
-        if (typeof(identity) == LIST && length(identity) == 2)
+        if (typeof(identity) == TYPE_LIST && length(identity) == 2)
           if (identity[1] == provider && identity[2] == external_id)
             notify(player, "This OAuth2 identity is already linked to this account.");
             this:record_connection(candidate);
@@ -581,7 +581,7 @@ object LOGIN
     for candidate in (players())
       if ($object_utils:has_property(candidate, "oauth2_identities"))
         for identity in (candidate.oauth2_identities)
-          if (typeof(identity) == LIST && length(identity) == 2)
+          if (typeof(identity) == TYPE_LIST && length(identity) == 2)
             if (identity[1] == provider && identity[2] == external_id)
               return candidate;
             endif
@@ -799,7 +799,7 @@ object LOGIN
 
   verb max_connections (this none this) owner: #2 flags: "rxd"
     max = this.max_connections;
-    if (typeof(max) == LIST)
+    if (typeof(max) == TYPE_LIST)
       if (this:is_lagging())
         max = max[1];
       else
@@ -906,11 +906,11 @@ object LOGIN
     else
       msg = this.help_message;
       content_type = $object_utils:has_property(this, "help_message_content_type") ? this.help_message_content_type | "text/plain";
-      if (typeof(msg) == STR)
+      if (typeof(msg) == TYPE_STR)
         notify(player, msg, 0, 0, content_type);
       else
         for line in (msg)
-          if (typeof(line) == STR)
+          if (typeof(line) == TYPE_STR)
             notify(player, line);
           endif
         endfor
@@ -955,7 +955,7 @@ object LOGIN
         knocks = 1;
         "...sweep idle connections...";
         for p in (this.current_connections)
-          if (typeof(`idle_seconds(p) ! ANY') == ERR)
+          if (typeof(`idle_seconds(p) ! ANY') == TYPE_ERR)
             n = p in this.current_connections;
             this.current_connections = listdelete(this.current_connections, n);
             this.current_numcommands = listdelete(this.current_numcommands, n);

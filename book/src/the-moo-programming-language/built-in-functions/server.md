@@ -718,7 +718,7 @@ eval("return 1 + ;", [], 2);
 
 // Get structured error data for custom handling
 result = eval("return 1 + ;", [], 3);
-if (typeof(result[1]) == MAP)
+if (typeof(result[1]) == TYPE_MAP)
   // result[1] is the error map, result[2] is structured data
   formatted = format_compile_error(result[2], 0);
 endif

@@ -266,6 +266,11 @@ pub struct CompileOptions {
     /// Whether to turn unsupported builtins into `call_function` invocations.
     /// Useful for textdump imports from other MOO dialects.
     pub call_unsupported_builtins: bool,
+    /// Whether to parse legacy type constant names (INT, OBJ, STR, etc.) as type literals.
+    /// When false (default), these become valid variable identifiers.
+    /// When true (textdump import mode), these are parsed as type literals.
+    /// Note: The new TYPE_* forms (TYPE_INT, TYPE_OBJ, etc.) are always recognized.
+    pub legacy_type_constants: bool,
 }
 
 impl Default for CompileOptions {
@@ -278,6 +283,7 @@ impl Default for CompileOptions {
             symbol_type: true,
             custom_errors: true,
             call_unsupported_builtins: false,
+            legacy_type_constants: false,
         }
     }
 }
@@ -332,15 +338,24 @@ impl TreeTransformer {
     fn parse_atom(self: Rc<Self>, pair: Pair<Rule>) -> Result<Expr, CompileError> {
         match pair.as_rule() {
             Rule::ident => {
+                let ident_str = pair.as_str().trim();
+
+                // In legacy mode, check if this identifier is actually a legacy type constant
+                if self.options.legacy_type_constants {
+                    if let Some(type_id) = VarType::parse_legacy(ident_str) {
+                        return Ok(Expr::TypeConstant(type_id));
+                    }
+                }
+
                 let name = if self.in_lambda_body() {
                     self.names
                         .borrow_mut()
-                        .find_or_add_name_scoped(pair.as_str().trim(), DeclType::Unknown)
+                        .find_or_add_name_scoped(ident_str, DeclType::Unknown)
                         .unwrap()
                 } else {
                     self.names
                         .borrow_mut()
-                        .find_or_add_name_global(pair.as_str().trim(), DeclType::Unknown)
+                        .find_or_add_name_global(ident_str, DeclType::Unknown)
                         .unwrap()
                 };
                 Ok(Expr::Id(name))

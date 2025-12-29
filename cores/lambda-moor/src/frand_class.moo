@@ -473,7 +473,7 @@ object FRAND_CLASS
     x = args[1];
     if (!x)
       return {};
-    elseif (typeof(x) == LIST)
+    elseif (typeof(x) == TYPE_LIST)
       return x;
     else
       return {x};
@@ -490,7 +490,7 @@ object FRAND_CLASS
       return;
     elseif ($command_utils:object_match_failed(dobj = player:my_match_object(dobjstr), dobjstr))
       return;
-    elseif (typeof(props = $object_utils:all_properties(dobj)) == ERR)
+    elseif (typeof(props = $object_utils:all_properties(dobj)) == TYPE_ERR)
       player:notify("Permission denied to read properties on that object.");
       return;
     endif
@@ -509,24 +509,24 @@ object FRAND_CLASS
       return;
     endif
     for data in (props)
-      if (typeof(dd = `dobj.(data) ! ANY') == LIST)
+      if (typeof(dd = `dobj.(data) ! ANY') == TYPE_LIST)
         text = {};
         for linenum in (dd)
           text = listappend(text, linenum);
         endfor
-      elseif (typeof(dd) == OBJ || typeof(dd) == INT || typeof(dd) == ERR || typeof(dd) == FLOAT)
+      elseif (typeof(dd) == TYPE_OBJ || typeof(dd) == TYPE_INT || typeof(dd) == TYPE_ERR || typeof(dd) == TYPE_FLOAT)
         text = "";
-      elseif (typeof(dd) == STR)
+      elseif (typeof(dd) == TYPE_STR)
         text = dd;
       endif
-      if (typeof(text) == STR)
+      if (typeof(text) == TYPE_STR)
         text = {text};
       endif
       linenumber = 0;
       for thisline in (text)
         $command_utils:suspend_if_needed(0);
         linenumber = linenumber + 1;
-        if (typeof(thisline) != LIST && typeof(thisline) != OBJ && typeof(thisline) != INT && typeof(thisline) != FLOAT && typeof(thisline) != ERR)
+        if (typeof(thisline) != TYPE_LIST && typeof(thisline) != TYPE_OBJ && typeof(thisline) != TYPE_INT && typeof(thisline) != TYPE_FLOAT && typeof(thisline) != TYPE_ERR)
           i = $string_utils:strip_chars(thisline, "!@#$%^&*()_+1234567890={}[]<>?:;,./|\"~'");
           if (i)
             i = $string_utils:words(i);
@@ -736,7 +736,7 @@ object FRAND_CLASS
               else
                 player:notify(tostr("Already in dictionary:  " + line[ii]));
               endif
-            elseif (typeof(result) == ERR)
+            elseif (typeof(result) == TYPE_ERR)
               player:notify(tostr(result));
             elseif (result)
               player:notify(tostr("Word added:  ", line[ii]));
@@ -838,7 +838,7 @@ object FRAND_CLASS
     result = $spell:remove_word(argstr);
     if (result == E_PERM)
       player:notify("You may not remove words from the main dictionary. Use `@rmword' to remove words from your personal dictionary.");
-    elseif (typeof(result) == ERR)
+    elseif (typeof(result) == TYPE_ERR)
       player:notify(tostr(result));
     elseif (result)
       player:notify(tostr("`", argstr, "' removed."));
@@ -905,7 +905,7 @@ object FRAND_CLASS
     endif
     stuff = this:parse_refuse_arguments(argstr);
     if (stuff)
-      if (typeof(who = stuff[1]) == OBJ && who != $nothing && !is_player(who))
+      if (typeof(who = stuff[1]) == TYPE_OBJ && who != $nothing && !is_player(who))
         player:tell("You must give the name of some player.");
       else
         "'stuff' is now in the form {<origin>, <actions>, <duration>}.";
@@ -937,7 +937,7 @@ object FRAND_CLASS
     "'stuff' is now in the form {<origin>, <actions>, <duration>}.";
     origins = stuff[1];
     actions = stuff[2];
-    if (typeof(origins) != LIST)
+    if (typeof(origins) != TYPE_LIST)
       origins = {origins};
     endif
     n = 0;
@@ -1010,7 +1010,7 @@ object FRAND_CLASS
         "Modified to allow refusals from all guests at once. 5-27-94, Gelfin";
         if (words[i + 1] == "guests")
           who = "all guests";
-        elseif (!(typeof(who = $code_utils:toobj(words[i + 1])) == OBJ))
+        elseif (!(typeof(who = $code_utils:toobj(words[i + 1])) == TYPE_OBJ))
           who = $string_utils:match_player(words[i + 1]);
           if ($command_utils:player_match_failed(who, words[i + 1]))
             return 0;
@@ -1137,7 +1137,7 @@ object FRAND_CLASS
     "'player_to_refusal_origin (<player>)' -> <origin> - Convert a player to a unique identifier called the player's 'refusal origin'. For most players, it's just their object number. For guests, it is a hash of the site they are connecting from. Converting an origin to an origin is a safe no-op--the code relies on this.";
     set_task_perms(caller_perms());
     {who} = args;
-    if (typeof(who) == OBJ && valid(who) && parent(who) == `$local.guest ! E_PROPNF, E_INVIND => $guest')
+    if (typeof(who) == TYPE_OBJ && valid(who) && parent(who) == `$local.guest ! E_PROPNF, E_INVIND => $guest')
       return who:connection_name_hash("xx");
     else
       return who;
@@ -1149,9 +1149,9 @@ object FRAND_CLASS
     origin = args[1];
     if (origin in {"all guests", "everybody"})
       return origin;
-    elseif (typeof(origin) == STR && origin == "Permission denied")
+    elseif (typeof(origin) == TYPE_STR && origin == "Permission denied")
       return "an errorful origin";
-    elseif (typeof(origin) != OBJ)
+    elseif (typeof(origin) != TYPE_OBJ)
       return "a certain guest";
     elseif (origin == #-1)
       return "Everybody";
@@ -1179,10 +1179,10 @@ object FRAND_CLASS
     endif
     {orig, actions, ?duration = this.default_refusal_time, ?extra = 0} = args;
     origins = this:player_to_refusal_origin(orig);
-    if (typeof(origins) != LIST)
+    if (typeof(origins) != TYPE_LIST)
       origins = {origins};
     endif
-    if (typeof(actions) != LIST)
+    if (typeof(actions) != TYPE_LIST)
       actions = {actions};
     endif
     if (!this:check_refusal_actions(actions))
@@ -1215,7 +1215,7 @@ object FRAND_CLASS
       return E_PERM;
     endif
     {origin, actions} = args;
-    if (typeof(actions) != LIST)
+    if (typeof(actions) != TYPE_LIST)
       actions = {actions};
     endif
     count = 0;
@@ -1243,7 +1243,7 @@ object FRAND_CLASS
     origins = {};
     "Before removing any refusals, figure out which ones to remove. Removing one changes the indices and invalidates the loop invariant.";
     for i in [1..length(this.refused_origins)]
-      if (time() >= this.refused_until[i] || (typeof(this.refused_origins[i]) == OBJ && !$recycler:valid(this.refused_origins[i])))
+      if (time() >= this.refused_until[i] || (typeof(this.refused_origins[i]) == TYPE_OBJ && !$recycler:valid(this.refused_origins[i])))
         origins = {@origins, this.refused_origins[i]};
       endif
     endfor
@@ -1260,7 +1260,7 @@ object FRAND_CLASS
     rorigin = this:player_to_refusal_origin(origin);
     if ((which = rorigin in this.refused_origins) && action in this.refused_actions[which] && this:(("refuses_action_" + action))(which, @extra_args))
       return 1;
-    elseif (typeof(rorigin) == OBJ && valid(rorigin) && (which = rorigin.owner in this.refused_origins) && action in this.refused_actions[which] && this:(("refuses_action_" + action))(which, @extra_args))
+    elseif (typeof(rorigin) == TYPE_OBJ && valid(rorigin) && (which = rorigin.owner in this.refused_origins) && action in this.refused_actions[which] && this:(("refuses_action_" + action))(which, @extra_args))
       return 1;
     elseif ((which = $nothing in this.refused_origins) && rorigin != this && action in this.refused_actions[which] && this:(("refuses_action_" + action))(which, @extra_args))
       return 1;
@@ -1347,7 +1347,7 @@ object FRAND_CLASS
       endif
     endfor
     "Coded added 11/8/98 by TheCat, to refuse spurned objects.";
-    if (act == "accept" && typeof(this.spurned_objects) == LIST)
+    if (act == "accept" && typeof(this.spurned_objects) == TYPE_LIST)
       for item in (this.spurned_objects)
         if ($object_utils:isa(args[1], item))
           return 0;
@@ -1531,7 +1531,7 @@ object FRAND_CLASS
     {spurned_objects} = args;
     if ($perm_utils:controls(caller_perms(), this))
       "Note, the final result must be a list of objects, otherwise there's no point.";
-      if (typeof(spurned_objects) != LIST)
+      if (typeof(spurned_objects) != TYPE_LIST)
         spurned_objects = {spurned_objects};
       endif
       this.spurned_objects = spurned_objects;
@@ -1575,7 +1575,7 @@ object FRAND_CLASS
                 $spell.submitted = setremove($spell.submitted, candidate);
               elseif (result == E_PERM)
                 return player:notify("Permissions error. Command cancelled.");
-              elseif (typeof(result) == ERR)
+              elseif (typeof(result) == TYPE_ERR)
                 num_errors = num_errors + 1;
                 player:notify(tostr(result));
               else

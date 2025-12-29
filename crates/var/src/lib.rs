@@ -71,28 +71,64 @@ pub enum VarType {
 }
 
 impl VarType {
+    /// Convert to the canonical MOO source literal form (TYPE_INT, TYPE_OBJ, etc.)
     pub fn to_literal(&self) -> &str {
         match self {
-            VarType::TYPE_INT => "INT",
-            VarType::TYPE_OBJ => "OBJ",
-            VarType::TYPE_FLOAT => "FLOAT",
-            VarType::TYPE_STR => "STR",
-            VarType::TYPE_ERR => "ERR",
-            VarType::TYPE_LIST => "LIST",
-            VarType::TYPE_MAP => "MAP",
-            VarType::TYPE_BOOL => "BOOL",
-            VarType::TYPE_FLYWEIGHT => "FLYWEIGHT",
-            VarType::TYPE_SYMBOL => "SYM",
-            VarType::TYPE_BINARY => "BINARY",
-            VarType::TYPE_LAMBDA => "LAMBDA",
+            VarType::TYPE_INT => "TYPE_INT",
+            VarType::TYPE_OBJ => "TYPE_OBJ",
+            VarType::TYPE_FLOAT => "TYPE_FLOAT",
+            VarType::TYPE_STR => "TYPE_STR",
+            VarType::TYPE_ERR => "TYPE_ERR",
+            VarType::TYPE_LIST => "TYPE_LIST",
+            VarType::TYPE_MAP => "TYPE_MAP",
+            VarType::TYPE_BOOL => "TYPE_BOOL",
+            VarType::TYPE_FLYWEIGHT => "TYPE_FLYWEIGHT",
+            VarType::TYPE_SYMBOL => "TYPE_SYM",
+            VarType::TYPE_BINARY => "TYPE_BINARY",
+            VarType::TYPE_LAMBDA => "TYPE_LAMBDA",
             _ => "INVALID-TYPE",
         }
     }
 
+    /// Parse type constant from source. Accepts both new (TYPE_*) and legacy (*) forms.
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_uppercase().as_str() {
-            "NUM" => Some(VarType::TYPE_INT),
-            "INT" => Some(VarType::TYPE_INT),
+            // New canonical forms
+            "TYPE_NUM" | "TYPE_INT" => Some(VarType::TYPE_INT),
+            "TYPE_FLOAT" => Some(VarType::TYPE_FLOAT),
+            "TYPE_OBJ" => Some(VarType::TYPE_OBJ),
+            "TYPE_STR" => Some(VarType::TYPE_STR),
+            "TYPE_ERR" => Some(VarType::TYPE_ERR),
+            "TYPE_LIST" => Some(VarType::TYPE_LIST),
+            "TYPE_MAP" => Some(VarType::TYPE_MAP),
+            "TYPE_BOOL" => Some(VarType::TYPE_BOOL),
+            "TYPE_FLYWEIGHT" => Some(VarType::TYPE_FLYWEIGHT),
+            "TYPE_SYM" => Some(VarType::TYPE_SYMBOL),
+            "TYPE_BINARY" => Some(VarType::TYPE_BINARY),
+            "TYPE_LAMBDA" => Some(VarType::TYPE_LAMBDA),
+            // Legacy forms (for backwards compatibility)
+            "NUM" | "INT" => Some(VarType::TYPE_INT),
+            "FLOAT" => Some(VarType::TYPE_FLOAT),
+            "OBJ" => Some(VarType::TYPE_OBJ),
+            "STR" => Some(VarType::TYPE_STR),
+            "ERR" => Some(VarType::TYPE_ERR),
+            "LIST" => Some(VarType::TYPE_LIST),
+            "MAP" => Some(VarType::TYPE_MAP),
+            "BOOL" => Some(VarType::TYPE_BOOL),
+            "FLYWEIGHT" => Some(VarType::TYPE_FLYWEIGHT),
+            "SYM" => Some(VarType::TYPE_SYMBOL),
+            "BINARY" => Some(VarType::TYPE_BINARY),
+            "LAMBDA" => Some(VarType::TYPE_LAMBDA),
+            _ => None,
+        }
+    }
+
+    /// Parse only legacy (short) type constant names (INT, OBJ, STR, etc.)
+    /// Returns None for new-style TYPE_* names.
+    /// Used by the parser when legacy_type_constants mode is enabled.
+    pub fn parse_legacy(s: &str) -> Option<Self> {
+        match s.to_uppercase().as_str() {
+            "NUM" | "INT" => Some(VarType::TYPE_INT),
             "FLOAT" => Some(VarType::TYPE_FLOAT),
             "OBJ" => Some(VarType::TYPE_OBJ),
             "STR" => Some(VarType::TYPE_STR),

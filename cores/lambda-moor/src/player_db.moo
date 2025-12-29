@@ -65,7 +65,7 @@ object PLAYER_DB
       "... note that if a player is recycled or toaded during the suspension,...";
       "... it won't be removed from the for loop iteration; thus this test:     ";
       if (valid(p) && is_player(p))
-        if (typeof(po = this:find_exact(p.name)) == ERR)
+        if (typeof(po = this:find_exact(p.name)) == TYPE_ERR)
           player:tell(p.name, ":  ", po);
           return;
         elseif (po != p)
@@ -78,7 +78,7 @@ object PLAYER_DB
           this:suspend_restart(p);
           if (index(a, " ") || index(a, "\t"))
             "don't bother, space or tab";
-          elseif (typeof(ao = this:find_exact(a)) == ERR)
+          elseif (typeof(ao = this:find_exact(a)) == TYPE_ERR)
             player:tell(a, ":  ", ao);
             return;
           elseif (!(valid(ao) && is_player(ao)))

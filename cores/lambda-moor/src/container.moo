@@ -127,7 +127,7 @@ object CONTAINER
   verb "@lock_for_open @lock-for-open" (this with any) owner: #2 flags: "rd"
     set_task_perms(player);
     key = $lock_utils:parse_keyexp(iobjstr, player);
-    if (typeof(key) == STR)
+    if (typeof(key) == TYPE_STR)
       player:tell("That key expression is malformed:");
       player:tell("  ", key);
     else
@@ -201,7 +201,7 @@ object CONTAINER
   verb set_opaque (this none this) owner: #2 flags: "rxd"
     if (!$perm_utils:controls(caller.owner, this))
       return E_PERM;
-    elseif (typeof(number = args[1]) != INT)
+    elseif (typeof(number = args[1]) != TYPE_INT)
       return E_INVARG;
     else
       number = number < 0 ? 0 | (number > 2 ? 2 | number);

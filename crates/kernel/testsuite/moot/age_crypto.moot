@@ -5,12 +5,12 @@
 
 // Test age_generate_keypair() returns strings by default
 ; kp = age_generate_keypair();
-> return typeof(kp[1]) == STR && typeof(kp[2]) == STR;
+> return typeof(kp[1]) == TYPE_STR && typeof(kp[2]) == TYPE_STR;
 1
 
 // Test age_generate_keypair(false) returns strings
 ; kp = age_generate_keypair(false);
-> return typeof(kp[1]) == STR && typeof(kp[2]) == STR;
+> return typeof(kp[1]) == TYPE_STR && typeof(kp[2]) == TYPE_STR;
 1
 
 // Test age_generate_keypair(true) returns bytes (BINARY = 17)
@@ -20,7 +20,7 @@
 
 // Test age_generate_keypair(0) returns strings
 ; kp = age_generate_keypair(0);
-> return typeof(kp[1]) == STR && typeof(kp[2]) == STR;
+> return typeof(kp[1]) == TYPE_STR && typeof(kp[2]) == TYPE_STR;
 1
 
 // Test age_generate_keypair(1) returns bytes (BINARY = 17)

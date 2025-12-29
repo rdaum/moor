@@ -1167,7 +1167,7 @@ object HELP
     if (text != E_PROPNF || !valid(object))
       return text;
     elseif (ohelp = `object:help_msg() ! ANY' || `object.help_msg ! ANY')
-      return {tostr(object.name, " (", object, "):"), "----", @typeof(ohelp) == LIST ? ohelp | {ohelp}};
+      return {tostr(object.name, " (", object, "):"), "----", @typeof(ohelp) == TYPE_LIST ? ohelp | {ohelp}};
     else
       about = $object_utils:has_verb(object, "about");
       return {tostr("Sorry, but no help is available on ", object.name, " (", object, ")."), tostr("Try `examine ", what, "'", @about ? {" or `about ", what, "'"} | {}, ".")};
@@ -1237,7 +1237,7 @@ object HELP
     if ((text = pass(@args)) != E_PROPNF || (!valid(object = $string_utils:match_object(what = args[1], player.location)) || !$object_utils:has_property(object, "help_msg")))
       return text;
     else
-      return {tostr(";;", $code_utils:corify_object(object), ".help_msg = $command_utils:read_lines()"), @$command_utils:dump_lines(typeof(text = object.help_msg) == LIST ? text | {text})};
+      return {tostr(";;", $code_utils:corify_object(object), ".help_msg = $command_utils:read_lines()"), @$command_utils:dump_lines(typeof(text = object.help_msg) == TYPE_LIST ? text | {text})};
     endif
   endverb
 

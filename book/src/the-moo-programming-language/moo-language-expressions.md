@@ -88,15 +88,6 @@ has no such declarations.) The following variables always have values:
 
 | Variable |
 |----------|
-| INT      |
-| NUM      |
-| FLOAT    |
-| OBJ      |
-| STR      |
-| LIST     |
-| ERR      |
-| BOOL     |
-| MAP      |
 | true     |
 | false    |
 | player   |
@@ -111,26 +102,33 @@ has no such declarations.) The following variables always have values:
 | iobj     |
 | iobjstr  |
 
-> Note: `num` is a deprecated reference to `int` and has been presented only for completeness.
-
 The values of some of these variables always start out the same:
 
 | Variable               | Value | Description                                          |
 |------------------------|-------|------------------------------------------------------|
-| <code>INT</code>       | 0     | an integer, the type code for integers               |
-| <code>NUM</code>       | 0     | (deprecated) an integer, the type code for integers  |
-| <code>OBJ</code>       | 1     | an integer, the type code for objects                |
-| <code>STR</code>       | 2     | an integer, the type code for strings                |
-| <code>ERR</code>       | 3     | an integer, the type code for error values           |
-| <code>LIST</code>      | 4     | an integer, the type code for lists                  |
-| <code>FLOAT</code>     | 9     | an integer, the type code for floating-point numbers |
-| <code>MAP</code>       | 10    | an integer, the type code for map values             |
-| <code>BOOL</code>      | 14    | an integer, the type code for bool values            |
-| <code>FLYWEIGHT</code> | 15    | an integer, the type code for flyweight values       |
 | <code>true</code>      | true  | the boolean true                                     |
 | <code>false</code>     | false | the boolean false                                    |
 
-> Note: The `typeof` function can is of note here and is described in the built-ins section.
+In addition to `true` and `false`, MOO has **type constant literals** that represent type codes. These are used with the `typeof()` function to check the type of a value:
+
+| Type Constant              | Value | Description                                          |
+|----------------------------|-------|------------------------------------------------------|
+| <code>TYPE_INT</code>      | 0     | the type code for integers                           |
+| <code>TYPE_OBJ</code>      | 1     | the type code for objects                            |
+| <code>TYPE_STR</code>      | 2     | the type code for strings                            |
+| <code>TYPE_ERR</code>      | 3     | the type code for error values                       |
+| <code>TYPE_LIST</code>     | 4     | the type code for lists                              |
+| <code>TYPE_FLOAT</code>    | 9     | the type code for floating-point numbers             |
+| <code>TYPE_MAP</code>      | 10    | the type code for map values                         |
+| <code>TYPE_BOOL</code>     | 14    | the type code for bool values                        |
+| <code>TYPE_FLYWEIGHT</code>| 15    | the type code for flyweight values                   |
+| <code>TYPE_SYM</code>      | 16    | the type code for symbol values                      |
+
+> Note: `TYPE_NUM` is accepted as an alias for `TYPE_INT` for backwards compatibility.
+
+> Note: The `typeof` function is described in the built-ins section.
+
+> **Porting from LambdaMOO/ToastStunt**: These type constants use the `TYPE_` prefix, which differs from LambdaMOO's `INT`, `OBJ`, `STR`, etc. See [Type constant literals](extensions.md#type-constant-literals) for migration details.
 
 For others, the general meaning of the value is consistent, though the value itself is different for different
 situations:
@@ -349,7 +347,7 @@ All other values are false:
 - the bool 'false'
 
 > Note: Objects are considered false. If you need to evaluate if a value is of the type object, you can use
-`typeof(potential_object) == OBJ` however, keep in mind that this does not mean that the object referenced actually
+`typeof(potential_object) == TYPE_OBJ` however, keep in mind that this does not mean that the object referenced actually
 > exists. IE: #100000000 will return true, but that does not mean that object exists in your MOO.
 
 > Note: Don't get confused between values evaluating to true or false, and the boolean values of `true` and `false`.

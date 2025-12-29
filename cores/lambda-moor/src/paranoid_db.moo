@@ -85,7 +85,7 @@ object PARANOID_DB
     who = args[1];
     if ($perm_utils:controls(caller_perms(), who))
       d = tostr(who, "pdata");
-      if (typeof(`this.(d) ! ANY') == LIST)
+      if (typeof(`this.(d) ! ANY') == TYPE_LIST)
         return this.(d);
       else
         return {};
@@ -133,14 +133,14 @@ object PARANOID_DB
           delete_property(this, x);
         else
           if (index(x, "lines"))
-            if (typeof(this.(x)) != INT)
+            if (typeof(this.(x)) != TYPE_INT)
               this.(x) = 10;
             endif
           elseif (index(x, "pdata"))
             if (!$object_utils:connected(who) && who.last_disconnect_time < time() - threshold && who.last_connect_time < time() - threshold)
               this.(x) = {};
             endif
-            if (typeof(this.(x)) != LIST)
+            if (typeof(this.(x)) != TYPE_LIST)
               this.(x) = {};
             endif
           endif

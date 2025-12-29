@@ -53,7 +53,7 @@ object WIZ
         info = `verb_info(object, vname) ! ANY';
         if (info == E_VERBNF)
           player:notify("That object does not define that verb.");
-        elseif (typeof(info) == ERR)
+        elseif (typeof(info) == TYPE_ERR)
           player:notify(tostr(info));
         else
           try
@@ -125,9 +125,9 @@ object WIZ
         player:notify(tostr("Had trouble reading `", dobjstr, "': "));
         player:notify_lines(@objlist[2]);
         return;
-      elseif (typeof(objlist[2]) == OBJ)
+      elseif (typeof(objlist[2]) == TYPE_OBJ)
         objlist = objlist[2..2];
-      elseif (typeof(objlist[2]) != LIST)
+      elseif (typeof(objlist[2]) != TYPE_LIST)
         player:notify(tostr("Value of `", dobjstr, "' is not an object or list:  ", toliteral(objlist[2])));
         return;
       else
@@ -677,14 +677,14 @@ object WIZ
     qstr = iobjstr[1..(n = index(iobjstr + " ", " ")) - 1];
     new = $code_utils:toint(qstr[1] == "+" ? qstr[2..$] | qstr);
     reason = iobjstr[n + 1..$] || "(none)";
-    if (typeof(new) != INT)
+    if (typeof(new) != TYPE_INT)
       player:notify(tostr("Set ", dobj.name, "'s quota to what?"));
       return;
     elseif (qstr[1] == "+")
       new = old + new;
     endif
     result = $quota_utils:set_quota(dobj, new);
-    if (typeof(result) == ERR)
+    if (typeof(result) == TYPE_ERR)
       player:notify(tostr(result));
     else
       player:notify(tostr(dobj.name, "'s quota set to ", new, "."));
@@ -826,7 +826,7 @@ object WIZ
     endif
     if (everyone == "everyone")
       everyone = 1;
-    elseif (typeof(everyone) == STR)
+    elseif (typeof(everyone) == TYPE_STR)
       result = $string_utils:match_player(everyone);
       if ($command_utils:player_match_failed(result, everyone))
         player:notify(tostr("Usage:  ", callers()[1][2], " soon [number of seconds] [\"everyone\" | player name]"));
@@ -914,7 +914,7 @@ object WIZ
     "   string             msg for all occasions";
     "   list of 2 strings  {we-are-there-msg,we-are-elsewhere-msg}";
     m = this.(verb);
-    if (typeof(m) != LIST)
+    if (typeof(m) != TYPE_LIST)
       return $string_utils:pronoun_sub(m);
     elseif (this.location == dobj.location || length(m) < 2)
       return $string_utils:pronoun_sub(m[1]);
@@ -1136,7 +1136,7 @@ object WIZ
     endif
     target = fw[1];
     if (fw[2] && (parse = this:parse_templist_duration(fw[2]))[1])
-      if (typeof(parse[3]) == ERR || !parse[3])
+      if (typeof(parse[3]) == TYPE_ERR || !parse[3])
         player:notify(tostr("Could not parse the duration for @", which, "ing site \"", target, "\""));
         return;
       endif
@@ -1415,7 +1415,7 @@ object WIZ
     endif
     fw = $string_utils:first_word(argstr);
     if (fw[2] && (parse = this:parse_templist_duration(fw[2]))[1])
-      if (typeof(parse[3]) == ERR || !parse[3])
+      if (typeof(parse[3]) == TYPE_ERR || !parse[3])
         player:notify(tostr("Could not parse the duration for restricting programming for ", fw[1], "."));
         return;
       endif

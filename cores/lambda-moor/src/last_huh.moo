@@ -29,7 +29,7 @@ object LAST_HUH
     elseif (pos == nargs)
       if (E_PROPNF == (get = `dobj.((msg_name + "_msg")) ! ANY'))
         player:notify(tostr(dobj.name, " (", dobj, ") has no \"", msg_name, "\" message."));
-      elseif (typeof(get) == ERR)
+      elseif (typeof(get) == TYPE_ERR)
         player:notify(tostr(get));
       elseif (!get)
         player:notify("Message is not set.");
@@ -40,14 +40,14 @@ object LAST_HUH
     else
       set = dobj:set_message(msg_name, message);
       if (set)
-        if (typeof(set) == STR)
+        if (typeof(set) == TYPE_STR)
           player:notify(set);
         else
           player:notify(tostr("You set the \"", msg_name, "\" message of ", dobj.name, " (", dobj, ")."));
         endif
       elseif (set == E_PROPNF)
         player:notify(tostr(dobj.name, " (", dobj, ") has no \"", msg_name, "\" message to set."));
-      elseif (typeof(set) == ERR)
+      elseif (typeof(set) == TYPE_ERR)
         player:notify(tostr(set));
       else
         player:notify(tostr("You clear the \"", msg_name, "\" message of ", dobj.name, " (", dobj, ")."));

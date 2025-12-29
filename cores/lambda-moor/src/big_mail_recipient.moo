@@ -187,7 +187,7 @@ object BIG_MAIL_RECIPIENT
   verb messages_in_seq (this none this) owner: HACKER flags: "rxd"
     if (!this:ok(caller, caller_perms()))
       return E_PERM;
-    elseif (typeof(seq = args[1]) != LIST)
+    elseif (typeof(seq = args[1]) != TYPE_LIST)
       x = this._mgr:find_nth(this.messages, seq);
       return {this:_message_num(@x), this:_message_text(@x)};
     else
@@ -271,7 +271,7 @@ object BIG_MAIL_RECIPIENT
     len = 0;
     getmsg = this.summary_uses_body ? "_message_text" | "_message_hdr";
     going = this.messages_going;
-    if (going && (!going[1] || typeof(going[1][2]) == INT))
+    if (going && (!going[1] || typeof(going[1][2]) == TYPE_INT))
       kept = {@going[1], $maxint};
       going = going[2];
     else
@@ -312,7 +312,7 @@ object BIG_MAIL_RECIPIENT
     "OLD: {{n,msgs},{n,msgs},...}";
     "NEW: {kept_seq, {{n,msgs},{n,msgs},...}}";
     going = this.messages_going;
-    if (going && (!going[1] || typeof(going[1][2]) == INT))
+    if (going && (!going[1] || typeof(going[1][2]) == TYPE_INT))
       kept = going[1];
       going = going[2];
     else
@@ -335,7 +335,7 @@ object BIG_MAIL_RECIPIENT
     endif
     len = 0;
     going = this.messages_going;
-    if (going && (!going[1] || typeof(going[1][2]) == INT))
+    if (going && (!going[1] || typeof(going[1][2]) == TYPE_INT))
       going = going[2];
     endif
     for s in (going)
@@ -481,7 +481,7 @@ object BIG_MAIL_RECIPIENT
       return {};
     endif
     {plist, ?mask = {1, this.messages[2] + 1}} = args;
-    if (typeof(plist) != LIST)
+    if (typeof(plist) != TYPE_LIST)
       plist = {plist};
     endif
     fseq = {};
@@ -513,7 +513,7 @@ object BIG_MAIL_RECIPIENT
       return {};
     endif
     {nlist, ?mask = {1, this.messages[2] + 1}} = args;
-    if (typeof(nlist) != LIST)
+    if (typeof(nlist) != TYPE_LIST)
       nlist = {nlist};
     endif
     fseq = {};
@@ -544,7 +544,7 @@ object BIG_MAIL_RECIPIENT
       return {};
     endif
     {plist, ?mask = {1, this.messages[2] + 1}} = args;
-    if (typeof(plist) != LIST)
+    if (typeof(plist) != TYPE_LIST)
       plist = {plist};
     endif
     seq = {};
@@ -576,7 +576,7 @@ object BIG_MAIL_RECIPIENT
       return {};
     endif
     {nlist, ?mask = {1, this.messages[2] + 1}} = args;
-    if (typeof(nlist) != LIST)
+    if (typeof(nlist) != TYPE_LIST)
       nlist = {nlist};
     endif
     seq = {};
@@ -730,7 +730,7 @@ object BIG_MAIL_RECIPIENT
         $command_utils:suspend_if_needed(0);
         if (index(prop, " ") == 1)
           val = biglist.(prop);
-          if (typeof(val[1]) == INT)
+          if (typeof(val[1]) == TYPE_INT)
             if (bestlevel < val[1])
               bestlevel = val[1];
               best = {prop};
@@ -769,7 +769,7 @@ object BIG_MAIL_RECIPIENT
         $command_utils:suspend_if_needed(0);
         if (prop && prop[1] == " ")
           val = biglist.(prop);
-          if (typeof(val) == LIST && typeof(level = val[1]) == INT && level < maxlevel)
+          if (typeof(val) == TYPE_LIST && typeof(level = val[1]) == TYPE_INT && level < maxlevel)
             items[level + 1] = {@items[level + 1], prop};
           endif
         endif
@@ -778,7 +778,7 @@ object BIG_MAIL_RECIPIENT
         $command_utils:suspend_if_needed(0);
         if (prop && prop[1] == " ")
           val = biglist.(prop);
-          if (typeof(val) == LIST && typeof(level = val[1]) == INT && level > 0)
+          if (typeof(val) == TYPE_LIST && typeof(level = val[1]) == TYPE_INT && level > 0)
             for item in (val[2])
               items[level] = setremove(items[level], item[1]);
             endfor
@@ -804,16 +804,16 @@ object BIG_MAIL_RECIPIENT
     toplevel = "(top level)";
     context = args[2] || toplevel;
     "This stuff is just paranoia in case something unexpected is in the data structure.  Normally there should be no blowouts here. --Minnie";
-    if (typeof(propname) != STR)
+    if (typeof(propname) != TYPE_STR)
       player:notify(tostr("Context=", context, " Prop Name=", toliteral(propname), " -- bad property name."));
       raise(E_INVARG);
     endif
     val = biglist.(propname);
-    if (typeof(val) != LIST)
+    if (typeof(val) != TYPE_LIST)
       player:notify(tostr("Context=", context, " Prop Name=", toliteral(propname), " -- contents invalid."));
       raise(E_INVARG);
     endif
-    if (typeof(level = val[1]) != INT)
+    if (typeof(level = val[1]) != TYPE_INT)
       player:notify(tostr("Context=", context, " Prop Name=", toliteral(propname), " -- contents invalid (bad first argument)."));
       raise(E_INVARG);
     endif
@@ -904,7 +904,7 @@ object BIG_MAIL_RECIPIENT
       raise(E_PERM);
     elseif (!$object_utils:isa(old, $big_mail_recipient))
       raise(E_TYPE, "First argument must be a $big_mail_recipient.");
-    elseif (typeof(lost_body) != STR)
+    elseif (typeof(lost_body) != TYPE_STR)
       raise(E_TYPE, "Second argument, if given, must be a string.");
     endif
     mgr = this._mgr;
@@ -968,7 +968,7 @@ object BIG_MAIL_RECIPIENT
         this._mgr:set_nth(this.messages, i, {0, @rest});
       endif
     elseif (bodyprop)
-      if (typeof(body) != LIST)
+      if (typeof(body) != TYPE_LIST)
         raise(E_TYPE);
       endif
       this.(bodyprop) = body;

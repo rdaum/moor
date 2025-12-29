@@ -130,7 +130,7 @@ object GENDER_UTILS
     prons = this.pronouns;
     for p in (prons)
       save = {@save, e = `object.(p) ! ANY'};
-      if (typeof(e) != STR || typeof(e = `object.(p) = this.(p)[gnum] ! ANY') == ERR)
+      if (typeof(e) != TYPE_STR || typeof(e = `object.(p) = this.(p)[gnum] ! ANY') == TYPE_ERR)
         for i in [1..length(save) - 1]
           object.((prons[i])) = save[i];
         endfor
@@ -151,18 +151,18 @@ object GENDER_UTILS
     for p in (prons)
       if (!$object_utils:has_property(object, p))
         e = `add_property(object, p, "", {owner, perms}) ! ANY';
-        if (typeof(e) == ERR)
+        if (typeof(e) == TYPE_ERR)
           player:tell("Couldn't add ", object, ".", p, ":  ", e);
           return;
         endif
-      elseif (typeof(object.(p)) != STR && typeof(e = `object.(p) = "" ! ANY') == ERR)
+      elseif (typeof(object.(p)) != TYPE_STR && typeof(e = `object.(p) = "" ! ANY') == TYPE_ERR)
         player:tell("Couldn't reset ", object, ".", p, ":  ", e);
         return;
       elseif (!object.(p))
         e = 0;
       endif
     endfor
-    if (!e && ERR == typeof(e = this:set(object, "neuter")))
+    if (!e && TYPE_ERR == typeof(e = this:set(object, "neuter")))
       player:tell("Couldn't initialize pronouns:  ", e);
     endif
   endverb
@@ -188,9 +188,9 @@ object GENDER_UTILS
     endif
     if (!valid(object))
       return $player.(prop);
-    elseif (STR == typeof(p = `object.(prop) ! ANY'))
+    elseif (TYPE_STR == typeof(p = `object.(prop) ! ANY'))
       return p;
-    elseif (STR == typeof(g = `object.gender ! ANY') && (i = g in this.genders))
+    elseif (TYPE_STR == typeof(g = `object.gender ! ANY') && (i = g in this.genders))
       return this.(prop)[i];
     else
       return $player.(prop);
@@ -210,7 +210,7 @@ object GENDER_UTILS
       plur = "";
     endif
     cap = strcmp("a", i == 1 ? spec[2] | spec) > 0;
-    if (valid(object) && STR == typeof(g = `object.gender ! ANY') && (i = g in this.genders) && this.is_plural[i])
+    if (valid(object) && TYPE_STR == typeof(g = `object.gender ! ANY') && (i = g in this.genders) && this.is_plural[i])
       vb = plur || this:_verb_plural(sing, i);
     else
       vb = sing || this:_verb_singular(plur, i);
@@ -224,7 +224,7 @@ object GENDER_UTILS
 
   verb _verb_plural (this none this) owner: HACKER flags: "rxd"
     {st, idx} = args;
-    if (typeof(st) != STR)
+    if (typeof(st) != TYPE_STR)
       return E_INVARG;
     endif
     len = length(st);
@@ -258,7 +258,7 @@ object GENDER_UTILS
 
   verb _verb_singular (this none this) owner: HACKER flags: "rxd"
     {st, ?idx = 1} = args;
-    if (typeof(st) != STR)
+    if (typeof(st) != TYPE_STR)
       return E_INVARG;
     endif
     len = length(st);
@@ -281,7 +281,7 @@ object GENDER_UTILS
     "_do(cap,object,modifiers...)";
     {cap, object, modifiers} = args;
     if (!modifiers)
-      if (typeof(object) != OBJ)
+      if (typeof(object) != TYPE_OBJ)
         return tostr(object);
       elseif (!valid(object))
         return (cap ? "N" | "n") + "othing";
@@ -294,13 +294,13 @@ object GENDER_UTILS
       elseif (!(i = index(modifiers, ":") || index(modifiers, "#") || index(modifiers, "!")))
         i = length(modifiers) + 1;
       endif
-      if (typeof(o = `object.(modifiers[2..i - 1]) ! ANY') == ERR)
+      if (typeof(o = `object.(modifiers[2..i - 1]) ! ANY') == TYPE_ERR)
         return tostr("%(", o, ")");
       else
         return this:_do(cap || strcmp("a", modifiers[2]) > 0, o, modifiers[i..$]);
       endif
     elseif (modifiers[1] == ":")
-      if (typeof(object) != OBJ)
+      if (typeof(object) != TYPE_OBJ)
         return tostr("%(", E_TYPE, ")");
       elseif (p = this:get_pronoun(modifiers, object))
         return p;
@@ -328,7 +328,7 @@ object GENDER_UTILS
     "experimental version that accomodates Aladdin's style...";
     set_task_perms($no_one);
     {old, ?who = player} = args;
-    if (typeof(old) == LIST)
+    if (typeof(old) == TYPE_LIST)
       plines = {};
       for line in (old)
         plines = {@plines, this:pronoun_sub(line, who)};
@@ -371,7 +371,7 @@ object GENDER_UTILS
       elseif (s != "%")
         s = "%" + s;
       endif
-      new = new + old[1..prcnt - 1] + (!cp_args ? s | (typeof(sub = $string_utils:_cap_property(@cp_args)) != ERR ? sub | "%(" + tostr(sub) + ")"));
+      new = new + old[1..prcnt - 1] + (!cp_args ? s | (typeof(sub = $string_utils:_cap_property(@cp_args)) != TYPE_ERR ? sub | "%(" + tostr(sub) + ")"));
       old = old[k + 1..oldlen];
       oldlen = oldlen - k;
     endwhile

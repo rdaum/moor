@@ -141,22 +141,22 @@ int is_anonymous(obj object)
 Returns a non-zero integer (i.e., a true value) if object is an anonymous object and zero (i.e., a false value)
 otherwise.
 
-Since anonymous objects have `typeof(obj) == OBJ` (same as regular objects), this is the only way to distinguish them
+Since anonymous objects have `typeof(obj) == TYPE_OBJ` (same as regular objects), this is the only way to distinguish them
 programmatically.
 
 ```
-let regular_obj = create($thing);         // Regular numbered/UUID object  
+let regular_obj = create($thing);         // Regular numbered/UUID object
 let anon_obj = create($thing, player, 1); // Anonymous object
 
 is_anonymous(regular_obj);  =>  0   // false - not anonymous
 is_anonymous(anon_obj);     =>  1   // true - is anonymous
-typeof(anon_obj);          =>  1   // OBJ - same as regular objects!
+typeof(anon_obj);          =>  1   // TYPE_OBJ - same as regular objects!
 ```
 
 If object is not a valid object, `E_INVARG` is raised.
 
 > **Porting from ToastStunt**: In ToastStunt, anonymous objects had `typeof(anon_obj) == ANON`. In mooR,
-> anonymous objects have `typeof(anon_obj) == OBJ` and you must use `is_anonymous()` to detect them.
+> anonymous objects have `typeof(anon_obj) == TYPE_OBJ` and you must use `is_anonymous()` to detect them.
 
 ### `is_uuobjid`
 
@@ -167,7 +167,7 @@ int is_uuobjid(obj object)
 Returns a non-zero integer (i.e., a true value) if object is a UUID object (like `#048D05-1234567890`) and zero (i.e., a
 false value) otherwise.
 
-Since UUID objects have `typeof(obj) == OBJ` (same as numbered and anonymous objects), this is the way to distinguish
+Since UUID objects have `typeof(obj) == TYPE_OBJ` (same as numbered and anonymous objects), this is the way to distinguish
 them programmatically.
 
 ```
@@ -176,7 +176,7 @@ let uuid_obj = create($thing, player, 0); // UUID object (if enabled)
 
 is_uuobjid(numbered_obj);  =>  0   // false - not UUID
 is_uuobjid(uuid_obj);      =>  1   // true - is UUID
-typeof(uuid_obj);         =>  1   // OBJ - same as other objects!
+typeof(uuid_obj);         =>  1   // TYPE_OBJ - same as other objects!
 ```
 
 If object is not a valid object, `E_INVARG` is raised.

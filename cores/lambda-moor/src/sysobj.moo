@@ -180,7 +180,7 @@ object SYSOBJ
     if (callers())
       return E_PERM;
     endif
-    if (typeof(h = $network:incoming_connection(player)) == OBJ)
+    if (typeof(h = $network:incoming_connection(player)) == TYPE_OBJ)
       "connected to an object";
       return h;
     elseif (h)
@@ -234,7 +234,7 @@ object SYSOBJ
       o_props = {};
       for p in (props_to_follow)
         v = o.(p);
-        if (typeof(v) != OBJ || !valid(v))
+        if (typeof(v) != TYPE_OBJ || !valid(v))
           continue p;
         endif
         o_props = {@o_props, p};
@@ -248,7 +248,7 @@ object SYSOBJ
           proxy_original[1..0] = {v};
           try
             vnew = v:proxy_for_core(core_variant, in_mcd);
-            if (typeof(vnew) != OBJ)
+            if (typeof(vnew) != TYPE_OBJ)
               raise(E_TYPE, "returned non-object");
             elseif (vnew in proxy_original > 1)
               raise(E_RECMOVE, "proxy loop");
@@ -273,7 +273,7 @@ object SYSOBJ
           "...to be searched for additional core objects.";
           try
             v_props = v:include_for_core(core_variant);
-            if (typeof(v_props) != LIST)
+            if (typeof(v_props) != TYPE_LIST)
               raise(E_TYPE, "returned non-list");
             endif
             if (v_props)
@@ -369,11 +369,11 @@ object SYSOBJ
     "chparent(object, new-parent) -- see help on the builtin.";
     who = caller_perms();
     {what, papa} = args;
-    if (typeof(what) != OBJ)
+    if (typeof(what) != TYPE_OBJ)
       retval = E_TYPE;
     elseif (!valid(what))
       retval = E_INVARG;
-    elseif (typeof(papa) != OBJ)
+    elseif (typeof(papa) != TYPE_OBJ)
       retval = E_TYPE;
     elseif (!valid(papa) && papa != #-1)
       retval = E_INVIND;
@@ -394,7 +394,7 @@ object SYSOBJ
     else
       retval = E_PERM;
     endif
-    return typeof(retval) == ERR && $code_utils:dflag_on() ? raise(retval) | retval;
+    return typeof(retval) == TYPE_ERR && $code_utils:dflag_on() ? raise(retval) | retval;
   endverb
 
   verb "bf_add_verb add_verb" (this none this) owner: #2 flags: "rxd"
@@ -402,7 +402,7 @@ object SYSOBJ
     who = caller_perms();
     what = args[1];
     info = args[2];
-    if (typeof(what) != OBJ)
+    if (typeof(what) != TYPE_OBJ)
       retval = E_TYPE;
     elseif (!valid(what))
       retval = E_INVARG;
@@ -424,14 +424,14 @@ object SYSOBJ
       "we now know that the caller's perms control the object or the object is writable, and we know that the caller's perms control the prospective verb owner (by more traditional means)";
       retval = `add_verb(@args) ! ANY';
     endif
-    return typeof(retval) == ERR && $code_utils:dflag_on() ? raise(retval) | retval;
+    return typeof(retval) == TYPE_ERR && $code_utils:dflag_on() ? raise(retval) | retval;
   endverb
 
   verb "bf_add_property add_property" (this none this) owner: #2 flags: "rxd"
     "add_property() -- see help on the builtin for more information. This verb is called by the server when $server_options.protect_add_property exists and is true and caller_perms() are not wizardly.";
     who = caller_perms();
     {what, propname, value, info} = args;
-    if (typeof(what) != OBJ)
+    if (typeof(what) != TYPE_OBJ)
       retval = E_TYPE;
     elseif (!valid(what))
       retval = E_INVARG;
@@ -451,7 +451,7 @@ object SYSOBJ
       "we now know that the caller's perms control the object (or the object is writable), and that the caller's perms are permitted to control the new property's owner.";
       retval = `add_property(@args) ! ANY';
     endif
-    return typeof(retval) == ERR && $code_utils:dflag_on() ? raise(retval) | retval;
+    return typeof(retval) == TYPE_ERR && $code_utils:dflag_on() ? raise(retval) | retval;
   endverb
 
   verb "bf_recycle recycle" (this none this) owner: #2 flags: "rxd"
@@ -472,7 +472,7 @@ object SYSOBJ
       $recycler:kill_all_tasks(what);
       retval = `recycle(what) ! ANY';
     endif
-    return typeof(retval) == ERR && $code_utils:dflag_on() ? raise(retval) | retval;
+    return typeof(retval) == TYPE_ERR && $code_utils:dflag_on() ? raise(retval) | retval;
   endverb
 
   verb user_reconnected (this none this) owner: #2 flags: "rxd"
@@ -502,13 +502,13 @@ object SYSOBJ
   verb "bf_set_verb_info set_verb_info" (this none this) owner: #2 flags: "rxd"
     "set_verb_info() -- see help on the builtin for more information. This verb is called by the server when $server_options.protect_set_verb_info exists and is true and caller_perms() are not wizardly.";
     {o, v, i} = args;
-    if (typeof(vi = `verb_info(o, v) ! ANY') == ERR)
+    if (typeof(vi = `verb_info(o, v) ! ANY') == TYPE_ERR)
       "probably verb doesn't exist";
       retval = vi;
     elseif (!$perm_utils:controls(cp = caller_perms(), vi[1]))
       "perms don't control the current verb owner";
       retval = E_PERM;
-    elseif (typeof(i) != LIST || typeof(no = i[1]) != OBJ)
+    elseif (typeof(i) != TYPE_LIST || typeof(no = i[1]) != TYPE_OBJ)
       "info is malformed";
       retval = E_TYPE;
     elseif (!valid(no) || !is_player(no))
@@ -522,12 +522,12 @@ object SYSOBJ
     else
       retval = `set_verb_info(o, v, i) ! ANY';
     endif
-    return typeof(retval) == ERR && $code_utils:dflag_on() ? raise(retval) | retval;
+    return typeof(retval) == TYPE_ERR && $code_utils:dflag_on() ? raise(retval) | retval;
   endverb
 
   verb "bf_match match" (this none this) owner: #2 flags: "rxd"
     m = `match(@args) ! ANY';
-    return typeof(m) == ERR && $code_utils:dflag_on() ? raise(m) | m;
+    return typeof(m) == TYPE_ERR && $code_utils:dflag_on() ? raise(m) | m;
     if (length(args[1]) > 256 && index(args[2], "*"))
       return E_INVARG;
     else
@@ -537,7 +537,7 @@ object SYSOBJ
 
   verb "bf_rmatch rmatch" (this none this) owner: #2 flags: "rxd"
     r = `rmatch(@args) ! ANY';
-    return typeof(r) == ERR && $code_utils:dflag_on() ? raise(r) | r;
+    return typeof(r) == TYPE_ERR && $code_utils:dflag_on() ? raise(r) | r;
     if (length(args[1]) > 256 && index(args[2], "*"))
       return E_INVARG;
     else
@@ -597,7 +597,7 @@ object SYSOBJ
       retval = `force_input(@args) ! ANY';
       this.force_input_count = this.force_input_count + 1;
     endif
-    return typeof(retval) == ERR && $code_utils:dflag_on() ? raise(retval) | retval;
+    return typeof(retval) == TYPE_ERR && $code_utils:dflag_on() ? raise(retval) | retval;
   endverb
 
   verb moveto (this none this) owner: #2 flags: "rxd"
@@ -627,7 +627,7 @@ object SYSOBJ
       set_task_perms(who);
       retval = `set_property_info(@args) ! ANY';
     endif
-    return typeof(retval) == ERR && $code_utils:dflag_on() ? raise(retval) | retval;
+    return typeof(retval) == TYPE_ERR && $code_utils:dflag_on() ? raise(retval) | retval;
   endverb
 
   verb include_for_core (this none this) owner: #2 flags: "rxd"

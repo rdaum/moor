@@ -230,12 +230,12 @@ object WIZ_UTILS
       return E_NONE;
     elseif (this:check_prog_restricted(victim))
       return E_INVARG;
-    elseif (typeof(e = `victim.programmer = 1 ! ANY') == ERR)
+    elseif (typeof(e = `victim.programmer = 1 ! ANY') == TYPE_ERR)
       return e;
     else
       $quota_utils:adjust_quota_for_programmer(victim);
       if (!$object_utils:isa(victim, $prog))
-        if (typeof(e = `chparent(victim, $prog) ! ANY') == ERR)
+        if (typeof(e = `chparent(victim, $prog) ! ANY') == TYPE_ERR)
           "...this isn't really supposed to happen but it could...";
           player:notify(tostr("chparent(", victim, ",", $prog, ") failed:  ", e));
           player:notify("Check for common properties.");
@@ -317,7 +317,7 @@ object WIZ_UTILS
       if (is_player(oldowner) && object != oldowner)
         $quota_utils:reimburse_quota(oldowner, object);
       endif
-      if (typeof(oldowner.owned_objects) == LIST)
+      if (typeof(oldowner.owned_objects) == TYPE_LIST)
         oldowner.owned_objects = setremove(oldowner.owned_objects, object);
       endif
     endif
@@ -325,7 +325,7 @@ object WIZ_UTILS
       if (object != newowner)
         $quota_utils:charge_quota(newowner, object);
       endif
-      if (typeof(newowner.owned_objects) == LIST)
+      if (typeof(newowner.owned_objects) == TYPE_LIST)
         newowner.owned_objects = setadd(newowner.owned_objects, object);
       endif
     endif
@@ -375,7 +375,7 @@ object WIZ_UTILS
     elseif (!is_player(victim))
       return E_NONE;
     endif
-    if (typeof(newowner) == OBJ)
+    if (typeof(newowner) == TYPE_OBJ)
       $wiz_utils:set_owner(victim, newowner);
     endif
     victim.programmer = 0;
@@ -441,7 +441,7 @@ object WIZ_UTILS
       suspend(0);
     endif
     object = args[1];
-    if (typeof(args[3]) != LIST)
+    if (typeof(args[3]) != TYPE_LIST)
       set_property_info(object, args[2], {object.owner, args[3]});
     else
       set_property_info(@args[1..3]);
@@ -475,7 +475,7 @@ object WIZ_UTILS
     ":queued_tasks(player) => list of queued tasks for that player.";
     "shouldn't the server builtin should work this way?  oh well";
     set_task_perms(caller_perms());
-    if (typeof(e = `set_task_perms(who = args[1]) ! ANY') == ERR)
+    if (typeof(e = `set_task_perms(who = args[1]) ! ANY') == TYPE_ERR)
       return e;
     elseif (who.wizard)
       tasks = {};
@@ -507,7 +507,7 @@ object WIZ_UTILS
       player:tell("Beginning initialize_owned:  ", ctime());
       for o in [#0..max_object()]
         if (valid(o))
-          if ($object_utils:isa(owner = o.owner, $player) && typeof(owner.owned_objects) == LIST)
+          if ($object_utils:isa(owner = o.owner, $player) && typeof(owner.owned_objects) == TYPE_LIST)
             owner.owned_objects = setadd(owner.owned_objects, o);
           endif
         endif
@@ -524,12 +524,12 @@ object WIZ_UTILS
       return E_PERM;
     else
       for p in (players())
-        if (typeof(p.owned_objects) == LIST)
+        if (typeof(p.owned_objects) == TYPE_LIST)
           for o in (p.owned_objects)
-            if (typeof(o) != OBJ || !valid(o) || o.owner != p)
+            if (typeof(o) != TYPE_OBJ || !valid(o) || o.owner != p)
               p.owned_objects = setremove(p.owned_objects, o);
               player:tell("Removed ", $string_utils:nn(o), " from ", $string_utils:nn(p), "'s .owned_objects list.");
-              if (typeof(o) == OBJ && valid(o) && typeof(o.owner.owned_objects) == LIST)
+              if (typeof(o) == TYPE_OBJ && valid(o) && typeof(o.owner.owned_objects) == TYPE_LIST)
                 o.owner.owned_objects = setadd(o.owner.owned_objects, o);
               endif
             endif
@@ -748,7 +748,7 @@ object WIZ_UTILS
           "Temporary kluge until $site_db is repaired. --Nosredna";
           for b in ($site_db:find_exact(domain) || {})
             $command_utils:suspend_if_needed(0, "..netwho..");
-            if (typeof(b) == STR)
+            if (typeof(b) == TYPE_STR)
               sites = setadd(sites, b + "." + domain);
             else
               bozos = setadd(bozos, b);
@@ -1047,7 +1047,7 @@ object WIZ_UTILS
       if (is_player(oldowner) && object != oldowner)
         $quota_utils:reimburse_quota(oldowner, object);
       endif
-      if (typeof(oldowner.owned_objects) == LIST)
+      if (typeof(oldowner.owned_objects) == TYPE_LIST)
         oldowner.owned_objects = setremove(oldowner.owned_objects, object);
       endif
     endif
@@ -1055,7 +1055,7 @@ object WIZ_UTILS
       if (object != newowner)
         $quota_utils:charge_quota(newowner, object);
       endif
-      if (typeof(newowner.owned_objects) == LIST)
+      if (typeof(newowner.owned_objects) == TYPE_LIST)
         newowner.owned_objects = setadd(newowner.owned_objects, object);
       endif
     endif
@@ -1168,7 +1168,7 @@ object WIZ_UTILS
       $error:raise(E_PERM);
     elseif (length(args) < 1)
       $error:raise(E_ARGS);
-    elseif (typeof(who = args[1]) != OBJ || !is_player(who))
+    elseif (typeof(who = args[1]) != TYPE_OBJ || !is_player(who))
       $error:raise(E_INVARG);
     else
       if (!comment)
@@ -1212,7 +1212,7 @@ object WIZ_UTILS
           this.programmer_restricted_temp = setadd(this.programmer_restricted_temp, {victim, start, duration});
         endif
       endif
-      $mail_agent:send_message(caller_perms(), {$newt_log}, tostr("@deprogrammer ", victim.name, " (", victim, ")"), reason ? typeof(reason) == STR ? {reason} | reason | {});
+      $mail_agent:send_message(caller_perms(), {$newt_log}, tostr("@deprogrammer ", victim.name, " (", victim, ")"), reason ? typeof(reason) == TYPE_STR ? {reason} | reason | {});
       return 1;
     endif
   endverb
@@ -1303,7 +1303,7 @@ object WIZ_UTILS
     for x in ($object_utils:leaves_suspended($mail_recipient))
       this.expiration_progress = x;
       temp = x:expire_old_messages();
-      if (typeof(temp) == INT)
+      if (typeof(temp) == TYPE_INT)
         sum = sum + temp;
       endif
       "just suspend for every fucker, I'm tired of losing.";
@@ -1345,7 +1345,7 @@ object WIZ_UTILS
   verb set_email_address (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     {who, email} = args;
-    if (typeof(who.email_address) == LIST)
+    if (typeof(who.email_address) == TYPE_LIST)
       who.email_address[1] = email;
     else
       who.email_address = email;
@@ -1355,7 +1355,7 @@ object WIZ_UTILS
   verb get_email_address (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     {who} = args;
-    if (typeof(who.email_address) == LIST)
+    if (typeof(who.email_address) == TYPE_LIST)
       return who.email_address[1];
     else
       return who.email_address;

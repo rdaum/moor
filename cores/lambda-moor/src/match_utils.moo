@@ -184,7 +184,7 @@ object MATCH_UTILS
     elseif (match_result == $failed_match)
       player:(tell)(tostr("There is no \"", string, "\" that you can see."));
     elseif (match_result == $ambiguous_match)
-      if (typeof(ambigs) != LIST)
+      if (typeof(ambigs) != TYPE_LIST)
         player:(tell)(tostr("I don't know which \"", string, "\" you mean."));
         return 1;
       endif

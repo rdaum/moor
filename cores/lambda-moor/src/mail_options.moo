@@ -108,12 +108,12 @@ object MAIL_OPTIONS
 
   verb "parse_sticky parse_manymsgs" (this none this) owner: HACKER flags: "rxd"
     {oname, raw, data} = args;
-    if (typeof(raw) == LIST)
+    if (typeof(raw) == TYPE_LIST)
       if (length(raw) > 1)
         return "Too many arguments.";
       endif
       raw = raw[1];
-    elseif (typeof(raw) == INT)
+    elseif (typeof(raw) == TYPE_INT)
       return {oname, raw && (oname == "manymsgs" ? 20 | 1)};
     endif
     if ((value = $code_utils:toint(raw)) == E_TYPE)
@@ -124,9 +124,9 @@ object MAIL_OPTIONS
 
   verb parse_replyto (this none this) owner: HACKER flags: "rxd"
     {oname, raw, data} = args;
-    if (typeof(raw) == STR)
+    if (typeof(raw) == TYPE_STR)
       raw = $string_utils:explode(raw, ",");
-    elseif (typeof(raw) == INT)
+    elseif (typeof(raw) == TYPE_INT)
       return raw ? "You need to give one or more recipients." | {oname, 0};
     endif
     value = $mail_editor:parse_recipients({}, raw);
@@ -157,10 +157,10 @@ object MAIL_OPTIONS
 
   verb "show_@mail" (this none this) owner: HACKER flags: "rxd"
     if (value = this:get(@args))
-      return {"", {tostr("Default message sequence for @mail:  ", typeof(value) == STR ? value | $string_utils:from_list(value, " "))}};
+      return {"", {tostr("Default message sequence for @mail:  ", typeof(value) == TYPE_STR ? value | $string_utils:from_list(value, " "))}};
     else
       default = $mail_agent.("player_default_@mail");
-      return {0, {tostr("Default message sequence for @mail:  ", typeof(default) == STR ? default | $string_utils:from_list(default, " "))}};
+      return {0, {tostr("Default message sequence for @mail:  ", typeof(default) == TYPE_STR ? default | $string_utils:from_list(default, " "))}};
     endif
   endverb
 
@@ -184,9 +184,9 @@ object MAIL_OPTIONS
   verb check_replyto (this none this) owner: HACKER flags: "rxd"
     "... must be object, list of objects, or false...";
     value = args[1];
-    if (typeof(value) == OBJ)
+    if (typeof(value) == TYPE_OBJ)
       return {{value}};
-    elseif (!this:istype(value, {{OBJ}}))
+    elseif (!this:istype(value, {{TYPE_OBJ}}))
       return $string_utils:capitalize("Object or list of objects expected.");
     else
       return {value};
@@ -227,7 +227,7 @@ object MAIL_OPTIONS
 
   verb parse_expire (this none this) owner: HACKER flags: "rxd"
     {oname, value, data} = args;
-    if (typeof(value) == STR && index(value, " "))
+    if (typeof(value) == TYPE_STR && index(value, " "))
       value = $string_utils:explode(value, " ");
       if (!value)
         return {oname, 0};
@@ -235,10 +235,10 @@ object MAIL_OPTIONS
     endif
     if (value == 1)
       return {oname, -1};
-    elseif (typeof(value) == LIST)
+    elseif (typeof(value) == TYPE_LIST)
       if (length(value) > 1)
         nval = $time_utils:parse_english_time_interval(@value);
-        if (typeof(nval) == ERR)
+        if (typeof(nval) == TYPE_ERR)
           return "Time interval should be of a form like \"30 days, 10 hours and 43 minutes\".";
         else
           return {oname, nval};
@@ -277,10 +277,10 @@ object MAIL_OPTIONS
   endverb
 
   verb parse_news (this none this) owner: HACKER flags: "rxd"
-    if (typeof(args[2]) == INT)
+    if (typeof(args[2]) == TYPE_INT)
       return tostr(strsub(verb, "parse_", ""), " is not a boolean option.");
     else
-      return {args[1], typeof(args[2]) == STR ? args[2] | $string_utils:from_list(args[2], " ")};
+      return {args[1], typeof(args[2]) == TYPE_STR ? args[2] | $string_utils:from_list(args[2], " ")};
     endif
   endverb
 
@@ -298,9 +298,9 @@ object MAIL_OPTIONS
 
   verb "parse_@unsend" (this none this) owner: #2 flags: "rxd"
     {name, value, bleh} = args;
-    if (typeof(value) == INT)
+    if (typeof(value) == TYPE_INT)
       return tostr(name, " is not a boolean option.");
-    elseif (typeof(value) == STR)
+    elseif (typeof(value) == TYPE_STR)
       value = {value};
     endif
     ok = this.unsend_sequences;
@@ -316,10 +316,10 @@ object MAIL_OPTIONS
 
   verb "show_@unsend" (this none this) owner: #2 flags: "rxd"
     if (value = this:get(@args))
-      return {"", {tostr("Default message sequence for @unsend:  ", typeof(value) == STR ? value | $string_utils:from_list(value, " "))}};
+      return {"", {tostr("Default message sequence for @unsend:  ", typeof(value) == TYPE_STR ? value | $string_utils:from_list(value, " "))}};
     else
       default = $mail_agent.("player_default_@unsend");
-      return {0, {tostr("Default message sequence for @unsend:  ", typeof(default) == STR ? default | $string_utils:from_list(default, " "))}};
+      return {0, {tostr("Default message sequence for @unsend:  ", typeof(default) == TYPE_STR ? default | $string_utils:from_list(default, " "))}};
     endif
   endverb
 endobject

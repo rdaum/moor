@@ -261,7 +261,7 @@ object NEWS
     "Display the given msg_seq as a collection of news items";
     set_task_perms(caller_perms());
     desc = this:description();
-    player:notify(typeof(desc) == LIST ? desc[1] | desc);
+    player:notify(typeof(desc) == TYPE_LIST ? desc[1] | desc);
     player:notify("");
     msgs = this:messages_in_seq(args[1]);
     for i in [-(n = length(msgs))..-1]
@@ -321,7 +321,7 @@ object NEWS
     set_task_perms(player);
     if (!this:is_writable_by(player))
       player:notify("You can't write the news.");
-    elseif (typeof(result = this:add_news(args[1..(prepstr in args) - 1], player:get_current_message(this) || {0, 0})) == STR)
+    elseif (typeof(result = this:add_news(args[1..(prepstr in args) - 1], player:get_current_message(this) || {0, 0})) == TYPE_STR)
       player:notify(result);
     else
       new = this.current_news;
@@ -341,7 +341,7 @@ object NEWS
     set_task_perms(player);
     if (!this:is_writable_by(player))
       player:notify("You can't write the news.");
-    elseif (typeof(result = this:rm_news(args[1..(prepstr in args) - 1], player:get_current_message(this) || {0, 0})) == STR)
+    elseif (typeof(result = this:rm_news(args[1..(prepstr in args) - 1], player:get_current_message(this) || {0, 0})) == TYPE_STR)
       player:notify(result);
     else
       new = this.current_news;
@@ -358,7 +358,7 @@ object NEWS
     set_task_perms(player);
     if (!this:is_writable_by(player))
       player:notify("You can't write the news.");
-    elseif (typeof(seq = this:_parse(strings = args[(prepstr in args) + 1..$], @player:get_current_message(this) || {0, 0})) == STR)
+    elseif (typeof(seq = this:_parse(strings = args[(prepstr in args) + 1..$], @player:get_current_message(this) || {0, 0})) == TYPE_STR)
       player:notify(seq);
     else
       old = this.current_news;
@@ -379,9 +379,9 @@ object NEWS
   verb _parse (this none this) owner: HACKER flags: "rxd"
     if (!(strings = args[1]))
       return "You need to specify a message sequence";
-    elseif (typeof(pms = this:parse_message_seq(@args)) == STR)
+    elseif (typeof(pms = this:parse_message_seq(@args)) == TYPE_STR)
       return $string_utils:substitute(pms, {{"%f", "The news"}, {"%<has>", "has"}, {"%%", "%"}});
-    elseif (typeof(pms) != LIST)
+    elseif (typeof(pms) != TYPE_LIST)
       return tostr(pms);
     elseif (length(pms) > 1)
       return tostr("I don't understand `", pms[2], "'.");
@@ -414,7 +414,7 @@ object NEWS
     endif
     {specs, ?cur = {0, 0}} = args;
     seq = this:_parse(specs, @cur);
-    if (typeof(seq) == STR)
+    if (typeof(seq) == TYPE_STR)
       return seq;
     endif
     old = this.current_news;
@@ -432,7 +432,7 @@ object NEWS
     endif
     {specs, ?cur = {0, 0}} = args;
     seq = this:_parse(specs, @cur);
-    if (typeof(seq) == STR)
+    if (typeof(seq) == TYPE_STR)
       return seq;
     endif
     old = this.current_news;

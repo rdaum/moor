@@ -60,6 +60,11 @@ fn compile_verb_source(
     names_str: &str,
     start_line: usize,
 ) -> VerbCompileResult {
+    // Enable legacy type constants for all textdump imports, since textdumps
+    // come from LambdaMOO/ToastStunt which use the old INT, OBJ, STR, etc. forms.
+    let mut compile_options = compile_options;
+    compile_options.legacy_type_constants = true;
+
     match compile(source, compile_options) {
         Ok(program) => VerbCompileResult::Ok(program),
         Err(e) => {

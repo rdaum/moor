@@ -66,7 +66,7 @@ object NOTE
   verb encrypt (this with any) owner: #2 flags: "rd"
     set_task_perms(player);
     key = $lock_utils:parse_keyexp(iobjstr, player);
-    if (typeof(key) == STR)
+    if (typeof(key) == TYPE_STR)
       player:tell("That key expression is malformed:");
       player:tell("  ", key);
     else
@@ -108,7 +108,7 @@ object NOTE
     cp = caller_perms();
     newtext = args[1];
     if ($perm_utils:controls(cp, this) || this:is_writable_by(cp))
-      if (typeof(newtext) == LIST)
+      if (typeof(newtext) == TYPE_LIST)
         this.text = newtext;
       else
         return E_TYPE;
@@ -123,7 +123,7 @@ object NOTE
     wr = this.writers;
     if ($perm_utils:controls(who, this))
       return 1;
-    elseif (typeof(wr) == LIST)
+    elseif (typeof(wr) == TYPE_LIST)
       return who in wr;
     else
       return wr;

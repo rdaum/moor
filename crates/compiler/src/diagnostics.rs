@@ -325,7 +325,12 @@ fn extract_expected_tokens<R: RuleType + std::fmt::Debug>(error: &Error<R>) -> V
                     // Normalize all-caps keywords to lowercase, but keep type literals uppercase
                     let is_type_literal = matches!(
                         token.as_str(),
-                        "STR" | "OBJ" | "NUM" | "INT" | "FLOAT" | "LIST" | "ERR"
+                        // New TYPE_* forms
+                        "TYPE_STR" | "TYPE_OBJ" | "TYPE_NUM" | "TYPE_INT" | "TYPE_FLOAT"
+                            | "TYPE_LIST" | "TYPE_ERR" | "TYPE_MAP" | "TYPE_BOOL"
+                            | "TYPE_FLYWEIGHT" | "TYPE_BINARY" | "TYPE_LAMBDA" | "TYPE_SYM"
+                            // Legacy forms (for error messages about legacy code)
+                            | "STR" | "OBJ" | "NUM" | "INT" | "FLOAT" | "LIST" | "ERR"
                     );
                     if !is_type_literal && token.chars().all(|c| c.is_ascii_uppercase() || c == '_')
                     {

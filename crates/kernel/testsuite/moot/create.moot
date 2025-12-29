@@ -69,7 +69,7 @@ E_PERM
 
 // test_that_creating_an_object_creates_an_object
 ; return typeof(create($object));
-OBJ
+TYPE_OBJ
 
 // test_that_creating_an_object_increments_max_object
 ; $tmp1 = max_object();
@@ -83,7 +83,7 @@ OBJ
 ; add_verb($tmp2, {player, "xd", "initialize"}, {"this", "none", "this"});
 
 ; set_verb_code($tmp2, "initialize", {
->   "typeof(this) == OBJ || raise(E_INVARG);",
+>   "typeof(this) == TYPE_OBJ || raise(E_INVARG);",
 >   "$tmp2.initialize_called = 1;"
 > });
 

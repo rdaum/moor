@@ -22,7 +22,7 @@ object FEATURE
 
   verb help_msg (this none this) owner: HACKER flags: "rxd"
     all_help = this.help_msg;
-    if (typeof(all_help) == STR)
+    if (typeof(all_help) == TYPE_STR)
       all_help = {all_help};
     endif
     helpless = {};

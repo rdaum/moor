@@ -29,7 +29,7 @@ object GENDERED_OBJECT
       return E_PERM;
     else
       result = $gender_utils:set(this, args[1]);
-      this.gender = typeof(result) == STR ? result | args[1];
+      this.gender = typeof(result) == TYPE_STR ? result | args[1];
       return result;
     endif
   endverb

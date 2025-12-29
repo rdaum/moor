@@ -122,6 +122,14 @@ pub struct Args {
         help = "Path to database directory (if not specified, uses a temporary directory)"
     )]
     db_path: Option<PathBuf>,
+
+    #[clap(
+        long,
+        help = "Parse legacy type constant names (INT, OBJ, STR, etc.) as type literals. \
+                Use this when importing code that uses the old-style type constants. \
+                The code will be migrated to the new TYPE_* format on output."
+    )]
+    legacy_type_constants: Option<bool>,
 }
 
 fn emit_objdef_compile_error(
@@ -249,6 +257,13 @@ fn main() -> Result<(), eyre::Report> {
     }
     info!("Importing with features: {features:?}");
 
+    // Create compile options from features, then apply legacy flag if set
+    let make_compile_options = || {
+        let mut opts = features.compile_options();
+        opts.legacy_type_constants = args.legacy_type_constants.unwrap_or(false);
+        opts
+    };
+
     // Compile phase.
     if let Some(textdump) = args.src_textdump {
         info!("Loading textdump from {:?}", textdump);
@@ -263,7 +278,7 @@ fn main() -> Result<(), eyre::Report> {
             loader_interface.as_mut(),
             textdump.clone(),
             version.clone(),
-            features.compile_options(),
+            make_compile_options(),
             import_options,
         ) {
             error!("Failed to load textdump: {e}");
@@ -281,7 +296,7 @@ fn main() -> Result<(), eyre::Report> {
 
         let options = moor_objdef::ObjDefLoaderOptions::default();
         let commit = match od.load_objdef_directory(
-            features.compile_options(),
+            make_compile_options(),
             objdef_dir.as_ref(),
             options,
         ) {

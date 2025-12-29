@@ -114,9 +114,9 @@ object TIME_UTILS
 
   verb day (none none none) owner: HACKER flags: "rxd"
     "Given a time() or ctime()-style date, this returns the full name of the day.";
-    if (typeof(args[1]) == INT)
+    if (typeof(args[1]) == TYPE_INT)
       time = ctime(args[1]);
-    elseif (typeof(args[1]) == STR)
+    elseif (typeof(args[1]) == TYPE_STR)
       time = args[1];
     else
       return E_TYPE;
@@ -128,9 +128,9 @@ object TIME_UTILS
   verb month (none none none) owner: HACKER flags: "rxd"
     "Given a time() or ctime()-style date, this returns the full name";
     "of the month.";
-    if (typeof(args[1]) == INT)
+    if (typeof(args[1]) == TYPE_INT)
       time = ctime(args[1]);
-    elseif (typeof(args[1]) == STR)
+    elseif (typeof(args[1]) == TYPE_STR)
       time = args[1];
     else
       return E_TYPE;
@@ -145,9 +145,9 @@ object TIME_UTILS
     "[2]   (optional) the precision desired--1 for hours, 2 for minutes,";
     "        3 for seconds.  If not given, precision defaults to minutes";
     {time, ?precision = 2} = args;
-    if (typeof(time) == INT)
+    if (typeof(time) == TYPE_INT)
       time = ctime(time);
-    elseif (typeof(time) != STR)
+    elseif (typeof(time) != TYPE_STR)
       return E_TYPE;
     endif
     time = $string_utils:explode(time)[4];
@@ -233,7 +233,7 @@ object TIME_UTILS
     if (_time < 1)
       return "0 seconds";
     endif
-    _ctime = typeof(reftime) == INT ? ctime(reftime) | reftime;
+    _ctime = typeof(reftime) == TYPE_INT ? ctime(reftime) | reftime;
     seclist = {60, 60, 24};
     units = {"year", "month", "day", "hour", "minute", "second"};
     timelist = {};
@@ -341,7 +341,7 @@ object TIME_UTILS
     "This verb stolen from Ozymandias's #4835:time_subst.";
     res = "";
     {thestr, ?thetime = time()} = args;
-    if (typeof(thestr) != STR || typeof(thetime) != INT)
+    if (typeof(thestr) != TYPE_STR || typeof(thetime) != TYPE_INT)
       player:tell("Bad arguments to time_subst.");
       return;
     endif
@@ -413,9 +413,9 @@ object TIME_UTILS
     "Copied from Archer (#52775):mmddyy Tue Apr  6 17:04:26 1993 PDT";
     "Given a time() or ctime()-style date and an optional separator, this returns the MM/DD/YY or DD/MM/YY form of the date (depending on the verb called.)  The default seperator is '/'";
     {time, ?divstr = "/"} = args;
-    if (typeof(time) == INT)
+    if (typeof(time) == TYPE_INT)
       time = ctime(time);
-    elseif (typeof(time) != STR)
+    elseif (typeof(time) != TYPE_STR)
       return E_TYPE;
     endif
     date = $string_utils:explode(time);
@@ -527,9 +527,9 @@ object TIME_UTILS
   verb "mmddyyyy ddmmyyyy" (this none this) owner: HACKER flags: "rxd"
     "Given a time() or ctime()-style date and an optional separator, this returns the MM/DD/YYYY or DD/MM/YYYY form of the date (depending on the verb called.)  The default seperator is '/'";
     {time, ?divstr = "/"} = args;
-    if (typeof(time) == INT)
+    if (typeof(time) == TYPE_INT)
       time = ctime(time);
-    elseif (typeof(time) != STR)
+    elseif (typeof(time) != TYPE_STR)
       return E_TYPE;
     endif
     date = $string_utils:explode(time);

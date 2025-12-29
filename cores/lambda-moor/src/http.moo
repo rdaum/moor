@@ -73,7 +73,7 @@ object HTTP
             player = new_player;
             html = `objid:html(@keys) ! ANY';
             player = old_player;
-            if (typeof(html) == ERR)
+            if (typeof(html) == TYPE_ERR)
               html = {"HTTP/1.1 500 Internal Server Error", "Content-Type: text/plain", "", "", "ERROR:", tostr(objid) + ":html()", tostr(html)};
             endif
           elseif ($object_utils:has_readable_property(objid, "html"))
@@ -86,18 +86,18 @@ object HTTP
         endif
         "Default header is HTML";
         html_header = {"HTTP/1.1 200 OK", "Content-Type: text/html", "", ""};
-        if (typeof(html) == STR)
+        if (typeof(html) == TYPE_STR)
           html = {html};
         endif
         if (`(html[1])[1..6] == "<HTML>" ! ANY => 0')
           html = {@html_header, @html};
         endif
-        if (typeof(html) == LIST && length(html) == 0)
+        if (typeof(html) == TYPE_LIST && length(html) == 0)
           html = html_header;
         endif
-        if (html && typeof(html) == LIST)
+        if (html && typeof(html) == TYPE_LIST)
           for h in (html)
-            if (typeof(h) == STR)
+            if (typeof(h) == TYPE_STR)
               notify(player, h);
             endif
           endfor

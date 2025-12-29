@@ -94,7 +94,7 @@ object GENERIC_EDITOR
       player:tell(this:nothing_loaded_msg());
     else
       lines = $command_utils:read_lines();
-      if (typeof(lines) == ERR)
+      if (typeof(lines) == TYPE_ERR)
         player:notify(tostr(lines));
         return;
       endif
@@ -140,7 +140,7 @@ object GENERIC_EDITOR
     else
       default = {tostr(window, "_-", window, "^"), tostr(2 * window, "$-$")};
     endif
-    if (typeof(range = this:parse_range(who, default, @args)) != LIST)
+    if (typeof(range = this:parse_range(who, default, @args)) != TYPE_LIST)
       player:tell(tostr(range));
     elseif (range[3] && !(nonum = "nonum" == $string_utils:trim(range[3])))
       player:tell("Don't understand this:  ", range[3]);
@@ -182,7 +182,7 @@ object GENERIC_EDITOR
     endif
     if (!(who = this:loaded(player)))
       player:tell(this:nothing_loaded_msg());
-    elseif (ERR == typeof(number = this:parse_insert(who, spec)))
+    elseif (TYPE_ERR == typeof(number = this:parse_insert(who, spec)))
       if (verb in {"next", "prev"})
         player:tell("Argument must be a number.");
       else
@@ -192,7 +192,7 @@ object GENERIC_EDITOR
       player:tell("That would take you out of range (to line ", number, "?).");
     else
       this.inserting[who] = number;
-      if (typeof(text) == STR)
+      if (typeof(text) == TYPE_STR)
         this:insert_line(who, text);
       else
         if (verb != "next")
@@ -208,7 +208,7 @@ object GENERIC_EDITOR
   verb "del*ete" (any any any) owner: #96 flags: "rd"
     if (!(who = this:loaded(player)))
       player:tell(this:nothing_loaded_msg());
-    elseif (typeof(range = this:parse_range(who, {"_", "1"}, @args)) != LIST)
+    elseif (typeof(range = this:parse_range(who, {"_", "1"}, @args)) != TYPE_LIST)
       player:tell(range);
     elseif (range[3])
       player:tell("Junk at end of cmd:  ", range[3]);
@@ -230,9 +230,9 @@ object GENERIC_EDITOR
     endif
     if (!(who = this:loaded(player)))
       player:tell(this:nothing_loaded_msg());
-    elseif (typeof(subst = this:parse_subst(argstr && argstr[1] + argstr, "c", "Empty search string?")) != LIST)
+    elseif (typeof(subst = this:parse_subst(argstr && argstr[1] + argstr, "c", "Empty search string?")) != TYPE_LIST)
       player:tell(tostr(subst));
-    elseif (typeof(start = subst[4] ? this:parse_insert(who, subst[4]) | this.inserting[who]) == ERR)
+    elseif (typeof(start = subst[4] ? this:parse_insert(who, subst[4]) | this.inserting[who]) == TYPE_ERR)
       player:tell("Starting from where?", subst[4] ? "  (can't parse " + subst[4] + ")" | "");
     else
       search = subst[2];
@@ -263,13 +263,13 @@ object GENERIC_EDITOR
       to_pos = to_pos + t;
     endwhile
     range_args = args[1..to_pos - 1];
-    if (!to_pos || ERR == typeof(dest = this:parse_insert(who, $string_utils:from_list(wargs, " "))))
+    if (!to_pos || TYPE_ERR == typeof(dest = this:parse_insert(who, $string_utils:from_list(wargs, " "))))
       player:tell(verb, " to where? ");
     elseif (dest < 1 || dest > (last = length(this.texts[who])) + 1)
       player:tell("Destination (", dest, ") out of range.");
     elseif ("from" in range_args || "to" in range_args)
       player:tell("Don't use that kind of range specification with this command.");
-    elseif (typeof(range = this:parse_range(who, {"_", "^"}, @args[1..to_pos - 1])) != LIST)
+    elseif (typeof(range = this:parse_range(who, {"_", "^"}, @args[1..to_pos - 1])) != TYPE_LIST)
       player:tell(range);
     elseif (range[3])
       player:tell("Junk before `to':  ", range[3]);
@@ -312,7 +312,7 @@ object GENERIC_EDITOR
   verb "join*literal" (any any any) owner: #96 flags: "rd"
     if (!(who = this:loaded(player)))
       player:tell(this:nothing_loaded_msg());
-    elseif (typeof(range = this:parse_range(who, {"_-^", "_", "^"}, @args)) != LIST)
+    elseif (typeof(range = this:parse_range(who, {"_-^", "_", "^"}, @args)) != TYPE_LIST)
       player:tell(range);
     elseif (range[3])
       player:tell("Junk at end of cmd:  ", range[3]);
@@ -327,7 +327,7 @@ object GENERIC_EDITOR
     fill_column = 70;
     if (!(who = this:loaded(player)))
       player:tell(this:nothing_loaded_msg());
-    elseif (typeof(range = this:parse_range(who, {"_", "1"}, @args)) != LIST)
+    elseif (typeof(range = this:parse_range(who, {"_", "1"}, @args)) != TYPE_LIST)
       player:tell(range);
     elseif (range[3] && (range[3][1] != "@" || (fill_column = toint((range[3])[2..$])) < 10))
       player:tell("Usage:  fill [<range>] [@ column]   (where column >= 10).");
@@ -355,7 +355,7 @@ object GENERIC_EDITOR
       player:tell(this:nothing_loaded_msg());
       return;
     endif
-    if (typeof(e = this:set_readable(who, index("publish", verb) == 1)) == ERR)
+    if (typeof(e = this:set_readable(who, index("publish", verb) == 1)) == TYPE_ERR)
       player:tell(e);
     elseif (e)
       player:tell("Your text is now globally readable.");
@@ -365,7 +365,7 @@ object GENERIC_EDITOR
   endverb
 
   verb "w*hat" (none none none) owner: #96 flags: "rxd"
-    if (!(this:ok(who = player in this.active) && typeof(this.texts[who]) == LIST))
+    if (!(this:ok(who = player in this.active) && typeof(this.texts[who]) == TYPE_LIST))
       player:tell(this:nothing_loaded_msg());
     else
       player:tell("You are editing ", this:working_on(who), ".");
@@ -476,9 +476,9 @@ object GENERIC_EDITOR
     texts = args[2];
     if (!(fuckup = this:ok(who = args[1])))
       return fuckup;
-    elseif (typeof(texts) == STR)
+    elseif (typeof(texts) == TYPE_STR)
       texts = {texts};
-    elseif (typeof(texts) != LIST || (length(texts) && typeof(texts[1]) != STR))
+    elseif (typeof(texts) != TYPE_LIST || (length(texts) && typeof(texts[1]) != TYPE_STR))
       return E_TYPE;
     endif
     this.texts[who] = texts;
@@ -505,7 +505,7 @@ object GENERIC_EDITOR
   endverb
 
   verb loaded (this none this) owner: #96 flags: "rxd"
-    return (who = args[1] in this.active) && typeof(this.texts[who]) == LIST && who;
+    return (who = args[1] in this.active) && typeof(this.texts[who]) == TYPE_LIST && who;
   endverb
 
   verb list_line (this none this) owner: #96 flags: "rxd"
@@ -519,16 +519,16 @@ object GENERIC_EDITOR
     ":insert_line([who,] line or list of lines [,quiet])";
     "  inserts the given text at the insertion point.";
     "  returns E_NONE if the session has no text loaded yet.";
-    if (typeof(args[1]) != INT)
+    if (typeof(args[1]) != TYPE_INT)
       args = {player in this.active, @args};
     endif
     {who, lines, ?quiet = this.active[who]:edit_option("quiet_insert")} = args;
     if (!(fuckup = this:ok(who)))
       return fuckup;
-    elseif (typeof(text = this.texts[who]) != LIST)
+    elseif (typeof(text = this.texts[who]) != TYPE_LIST)
       return E_NONE;
     else
-      if (typeof(lines) != LIST)
+      if (typeof(lines) != TYPE_LIST)
         lines = {lines};
       endif
       p = this.active[who];
@@ -557,7 +557,7 @@ object GENERIC_EDITOR
     ":append_line([who,] string)";
     "  appends the given string to the line before the insertion point.";
     "  returns E_NONE if the session has no text loaded yet.";
-    if (typeof(args[1]) != INT)
+    if (typeof(args[1]) != TYPE_INT)
       args = {player in this.active, @args};
     endif
     {who, string} = args;
@@ -565,7 +565,7 @@ object GENERIC_EDITOR
       return fuckup;
     elseif ((append = this.inserting[who] - 1) < 1)
       return this:insert_line(who, {string});
-    elseif (typeof(text = this.texts[who]) != LIST)
+    elseif (typeof(text = this.texts[who]) != TYPE_LIST)
       return E_NONE;
     else
       this.texts[who][append] = text[append] + string;
@@ -650,10 +650,10 @@ object GENERIC_EDITOR
     endif
     default = args[2];
     r = 0;
-    while (default && LIST != typeof(r = this:parse_range(who, {}, default[1])))
+    while (default && TYPE_LIST != typeof(r = this:parse_range(who, {}, default[1])))
       default = listdelete(default, 1);
     endwhile
-    if (typeof(r) == LIST)
+    if (typeof(r) == TYPE_LIST)
       from = r[1];
       to = r[2];
     else
@@ -796,7 +796,7 @@ object GENERIC_EDITOR
       this:kill_session(player in this.active);
     endif
     spec = this:parse_invoke(@args);
-    if (typeof(spec) == LIST)
+    if (typeof(spec) == TYPE_LIST)
       if (player:edit_option("local") && $object_utils:has_verb(this, "local_editing_info") && (info = this:local_editing_info(@spec)))
         this:invoke_local_editor(@info);
       elseif (this:suck_in(player))
@@ -985,7 +985,7 @@ object GENERIC_EDITOR
       default = 0;
       prop = dobjstr;
     endif
-    if (typeof(result = this:set_stateprops(prop, default)) == ERR)
+    if (typeof(result = this:set_stateprops(prop, default)) == TYPE_ERR)
       player:tell(result == E_RANGE ? tostr(".", prop, " needs to hold a list of the same length as .active (", length(this.active), ").") | (result != E_NACC ? result | prop + " is already a property on an ancestral editor."));
     else
       player:tell("Property added.");
@@ -995,7 +995,7 @@ object GENERIC_EDITOR
   verb "@rmstateprop" (any from this) owner: #96 flags: "rd"
     if (!$perm_utils:controls(player, this))
       player:tell(E_PERM);
-    elseif (typeof(result = this:set_stateprops(dobjstr)) == ERR)
+    elseif (typeof(result = this:set_stateprops(dobjstr)) == TYPE_ERR)
       player:tell(result != E_NACC ? result | dobjstr + " is already a property on an ancestral editor.");
     else
       player:tell("Property removed.");
@@ -1028,7 +1028,7 @@ object GENERIC_EDITOR
       return E_PERM;
     elseif (!(length(args) in {1, 2}))
       return E_ARGS;
-    elseif (typeof(prop = args[1]) != STR)
+    elseif (typeof(prop = args[1]) != TYPE_STR)
       return E_TYPE;
     elseif (i = $list_utils:iassoc(prop, this.stateprops))
       if (!remove)
@@ -1117,7 +1117,7 @@ object GENERIC_EDITOR
     who = args[1];
     where = {#-1, @this.original}[1 + (who in this.active)];
     wherestr = `where:who_location_msg(who) ! ANY => "An Editor"';
-    if (typeof(wherestr) != STR)
+    if (typeof(wherestr) != TYPE_STR)
       wherestr = "broken who_location_msg";
     endif
     return strsub(this.who_location_msg, "%L", wherestr);
@@ -1238,7 +1238,7 @@ object GENERIC_EDITOR
       return;
     endif
     {name, text, upload} = args;
-    if (typeof(text) == STR)
+    if (typeof(text) == TYPE_STR)
       text = {text};
     endif
     notify(player, tostr("#$# edit name: ", name, " upload: ", upload));
@@ -1259,7 +1259,7 @@ object GENERIC_EDITOR
 
   verb print (none none none) owner: #2 flags: "rd"
     txt = this:text(player in this.active);
-    if (typeof(txt) == LIST)
+    if (typeof(txt) == TYPE_LIST)
       player:tell_lines(txt);
     else
       player:tell("Text unreadable:  ", txt);
@@ -1306,15 +1306,15 @@ object GENERIC_EDITOR
       elseif (lines == E_PERM)
         player:notify(tostr("Error: Permission denied reading ", iobjstr));
         return;
-      elseif (typeof(lines) == ERR)
+      elseif (typeof(lines) == TYPE_ERR)
         player:notify(tostr("Error: ", lines, " reading ", iobjstr));
         return;
-      elseif (typeof(lines) == STR)
+      elseif (typeof(lines) == TYPE_STR)
         this:insert_line(this:loaded(player), lines, 0);
         return;
-      elseif (typeof(lines) == LIST)
+      elseif (typeof(lines) == TYPE_LIST)
         for x in (lines)
-          if (typeof(x) != STR)
+          if (typeof(x) != TYPE_STR)
             player:notify(tostr("Error: ", iobjstr, " does not contain a ", verb, "-able value."));
             return;
           endif
@@ -1348,7 +1348,7 @@ object GENERIC_EDITOR
       return;
     elseif (lines == E_VERBNF)
       player:notify(tostr($string_utils:nn(iobj), " doesn't seem to be a note."));
-    elseif (typeof(lines) == ERR)
+    elseif (typeof(lines) == TYPE_ERR)
       player:notify(tostr("Error: ", lines, " reading ", iobjstr));
       return;
     else
@@ -1378,9 +1378,9 @@ object GENERIC_EDITOR
       return E_PERM;
     elseif (!(who = this:loaded(player)))
       player:tell(this:nothing_loaded_msg());
-    elseif (typeof(subst = this:parse_subst(argstr)) != LIST)
+    elseif (typeof(subst = this:parse_subst(argstr)) != TYPE_LIST)
       player:tell(tostr(subst));
-    elseif (typeof(range = this:parse_range(who, {"_", "1"}, @$string_utils:explode(subst[4]))) != LIST)
+    elseif (typeof(range = this:parse_range(who, {"_", "1"}, @$string_utils:explode(subst[4]))) != TYPE_LIST)
       player:tell(range);
     elseif (range[3])
       player:tell("Junk at end of cmd:  ", range[3]);

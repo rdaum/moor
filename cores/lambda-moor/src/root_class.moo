@@ -11,7 +11,7 @@ object ROOT_CLASS
   property object_size (owner: HACKER, flags: "r") = {22038, 1084848672};
 
   verb initialize (this none this) owner: #2 flags: "rxd"
-    if (typeof(this.owner.owned_objects) == LIST)
+    if (typeof(this.owner.owned_objects) == TYPE_LIST)
       this.owner.owned_objects = setadd(this.owner.owned_objects, this);
     endif
     if (caller == this || $perm_utils:controls(caller_perms(), this))
@@ -28,7 +28,7 @@ object ROOT_CLASS
   verb recycle (this none this) owner: #2 flags: "rxd"
     if (caller == this || $perm_utils:controls(caller_perms(), this))
       try
-        if (typeof(this.owner.owned_objects) == LIST && !is_clear_property(this.owner, "owned_objects"))
+        if (typeof(this.owner.owned_objects) == TYPE_LIST && !is_clear_property(this.owner, "owned_objects"))
           this.owner.owned_objects = setremove(this.owner.owned_objects, this);
           $recycler.lost_souls = setadd($recycler.lost_souls, this);
         endif
@@ -47,7 +47,7 @@ object ROOT_CLASS
     if (!caller_perms().wizard && (is_player(this) || (caller_perms() != this.owner && this != caller)))
       return E_PERM;
     else
-      return typeof(e = `this.name = args[1] ! ANY') != ERR || e;
+      return typeof(e = `this.name = args[1] ! ANY') != TYPE_ERR || e;
     endif
   endverb
 
@@ -69,11 +69,11 @@ object ROOT_CLASS
     "              (children with custom :set_aliases should be aware of this)";
     if (!($perm_utils:controls(caller_perms(), this) || this == caller))
       return E_PERM;
-    elseif (typeof(aliases = args[1]) != LIST)
+    elseif (typeof(aliases = args[1]) != TYPE_LIST)
       return E_TYPE;
     else
       for s in (aliases)
-        if (typeof(s) != STR)
+        if (typeof(s) != TYPE_STR)
           return E_INVARG;
         endif
       endfor
@@ -96,8 +96,8 @@ object ROOT_CLASS
   verb set_description (this none this) owner: #2 flags: "rxd"
     "set_description(newdesc) attempts to change this.description to newdesc";
     "  => E_PERM   if you don't own this or aren't its parent";
-    ($perm_utils:controls(caller_perms(), this) || this == caller) || return E_PERM;
-    (typeof(desc = args[1]) in {LIST, STR}) || return E_TYPE;
+    $perm_utils:controls(caller_perms(), this) || this == caller || return E_PERM;
+    typeof(desc = args[1]) in {TYPE_LIST, TYPE_STR} || return E_TYPE;
     this.description = desc;
     return 1;
   endverb
@@ -127,7 +127,7 @@ object ROOT_CLASS
 
   verb tell_lines (this none this) owner: #2 flags: "rxd"
     lines = args[1];
-    if (typeof(lines) == LIST)
+    if (typeof(lines) == TYPE_LIST)
       for line in (lines)
         this:tell(line);
       endfor
@@ -157,7 +157,7 @@ object ROOT_CLASS
     elseif (!(what in this.contents) || what.wizard)
       return 0;
     endif
-    if (nice && $object_utils:has_property(what, "home") && typeof(where = what.home) == OBJ && where != this && (is_player(what) ? `where:accept_for_abode(what) ! ANY' | `where:acceptable(what) ! ANY'))
+    if (nice && $object_utils:has_property(what, "home") && typeof(where = what.home) == TYPE_OBJ && where != this && (is_player(what) ? `where:accept_for_abode(what) ! ANY' | `where:acceptable(what) ! ANY'))
     else
       where = is_player(what) ? $player_start | $nothing;
     endif
@@ -240,7 +240,7 @@ object ROOT_CLASS
     "this should probably go away";
     desc = this:description();
     if (desc)
-      if (typeof(desc) != LIST)
+      if (typeof(desc) != TYPE_LIST)
         desc = {desc};
       endif
       return desc;
@@ -335,7 +335,7 @@ object ROOT_CLASS
     "=> {E_NONE, error message} ";
     if (!(caller == this || $perm_utils:controls(caller_perms(), this)))
       return E_PERM;
-    elseif ((t = typeof(msg = `this.((args[1] + "_msg")) ! ANY')) in {ERR, STR} || (t == LIST && msg && typeof(msg[1]) == STR))
+    elseif ((t = typeof(msg = `this.((args[1] + "_msg")) ! ANY')) in {TYPE_ERR, TYPE_STR} || (t == TYPE_LIST && msg && typeof(msg[1]) == TYPE_STR))
       return msg;
     else
       return {1, msg};
@@ -429,7 +429,7 @@ object ROOT_CLASS
 
   verb tell_lines_suspended (this none this) owner: #2 flags: "rxd"
     lines = args[1];
-    if (typeof(lines) == LIST)
+    if (typeof(lines) == TYPE_LIST)
       for line in (lines)
         this:tell(line);
         $command_utils:suspend_if_needed(0);

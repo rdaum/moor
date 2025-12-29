@@ -107,6 +107,7 @@ impl FeaturesConfig {
             symbol_type: self.symbol_type,
             custom_errors: self.custom_errors,
             call_unsupported_builtins: false,
+            legacy_type_constants: false,
         }
     }
 

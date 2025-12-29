@@ -177,7 +177,7 @@ object GENERIC_DB
       return E_PERM;
     endif
     has_datum = this.data > 3;
-    if (typeof(sofar = args[1]) == INT)
+    if (typeof(sofar = args[1]) == TYPE_INT)
       search = args[2];
       datum = has_datum ? args[3] | 0;
     else

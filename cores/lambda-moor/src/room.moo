@@ -163,7 +163,7 @@ object ROOM
 
   verb acceptable (this none this) owner: #2 flags: "rxd"
     what = args[1];
-    return this:is_unlocked_for(what) && (this:free_entry(@args) || (what == this.blessed_object && task_id() == this.blessed_task) || what.owner == this.owner || (typeof(this.residents) == LIST && (what in this.residents || what.owner in this.residents)));
+    return this:is_unlocked_for(what) && (this:free_entry(@args) || (what == this.blessed_object && task_id() == this.blessed_task) || what.owner == this.owner || (typeof(this.residents) == TYPE_LIST && (what in this.residents || what.owner in this.residents)));
   endverb
 
   verb add_entrance (this none this) owner: #2 flags: "rxd"
@@ -345,7 +345,7 @@ object ROOM
     elseif (source != this)
       player:tell("That exit wasn't made to be attached here; it was made as an exit from ", source.name, " (", source, ").");
       return;
-    elseif (typeof(dest) != OBJ || !valid(dest) || !($room in $object_utils:ancestors(dest)))
+    elseif (typeof(dest) != TYPE_OBJ || !valid(dest) || !($room in $object_utils:ancestors(dest)))
       player:tell("That exit doesn't lead to a room!");
       return;
     endif
@@ -403,7 +403,7 @@ object ROOM
       "... try sending them home...";
       for x in (this.contents)
         if (is_player(x))
-          if (typeof(x.home) == OBJ && valid(x.home))
+          if (typeof(x.home) == TYPE_OBJ && valid(x.home))
             try
               x:moveto(x.home);
             except (ANY)
@@ -477,13 +477,13 @@ object ROOM
     if (!$perm_utils:controls(player, this))
       player:tell("You must own this room to manipulate the legal residents list.  Try contacting ", this.owner.name, ".");
     else
-      if (typeof(this.residents) != LIST)
+      if (typeof(this.residents) != TYPE_LIST)
         this.residents = {this.residents};
       endif
       if (!dobjstr)
         "First, remove !valid objects from this room...";
         for x in (this.residents)
-          if (typeof(x) != OBJ || !$recycler:valid(x))
+          if (typeof(x) != TYPE_OBJ || !$recycler:valid(x))
             player:tell("Warning: removing ", x, ", an invalid object, from the residents list.");
             this.residents = setremove(this.residents, x);
           endif
@@ -673,6 +673,6 @@ object ROOM
 
   verb basic_accept_for_abode (this none this) owner: #2 flags: "rxd"
     who = args[1];
-    return valid(who) && (this.free_home || $perm_utils:controls(who, this) || (typeof(residents = this.residents) == LIST ? who in this.residents | who == this.residents));
+    return valid(who) && (this.free_home || $perm_utils:controls(who, this) || (typeof(residents = this.residents) == TYPE_LIST ? who in this.residents | who == this.residents));
   endverb
 endobject

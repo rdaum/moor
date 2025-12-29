@@ -104,7 +104,7 @@ xml_parse(xml_string [, result_type [, tag_map]])
 ### Parameters
 
 - **xml_string**: The XML text to parse
-- **result_type**: Output format (LIST, MAP, or FLYWEIGHT)
+- **result_type**: Output format (`TYPE_LIST`, `TYPE_MAP`, or `TYPE_FLYWEIGHT`)
 - **tag_map**: For flyweight format, maps tag names to delegate objects
 
 ### List Format (default)
@@ -124,7 +124,7 @@ let result = xml_parse(xml);
 Same structure, but attributes are stored in a map:
 
 ```moo
-let result = xml_parse(xml, MAP);
+let result = xml_parse(xml, TYPE_MAP);
 
 // result = {"div", ["class" -> "main", "id" -> "content"],
 //           "Hello ", {"b", [], "World"}}
@@ -136,7 +136,7 @@ Returns flyweight objects that can have verbs called on them:
 
 ```moo
 let tag_map = ["div" -> $html_div, "b" -> $html_bold];
-let result = xml_parse(xml, FLYWEIGHT, tag_map);
+let result = xml_parse(xml, TYPE_FLYWEIGHT, tag_map);
 
 // result is a flyweight with $html_div as delegate
 result:render();  // calls $html_div:render(result)

@@ -53,9 +53,9 @@ object VERB_HELP
       return 1;
     elseif (!(hv = $object_utils:has_verb(object, spec[2])))
       return "That object does not define that verb.";
-    elseif (typeof(verbdoc = $code_utils:verb_documentation(object = hv[1], spec[2])) == ERR)
+    elseif (typeof(verbdoc = $code_utils:verb_documentation(object = hv[1], spec[2])) == TYPE_ERR)
       return tostr(verbdoc);
-    elseif (typeof(info = `verb_info(object, spec[2]) ! ANY') == ERR)
+    elseif (typeof(info = `verb_info(object, spec[2]) ! ANY') == TYPE_ERR)
       return tostr(info);
     else
       objverb = tostr(object.name, "(", object, "):", strsub(info[3], " ", "/"));
@@ -75,7 +75,7 @@ object VERB_HELP
       return E_INVARG;
     elseif (!(hv = $object_utils:has_verb(object, spec[2])))
       return E_VERBNF;
-    elseif (typeof(vd = $code_utils:verb_documentation(hv[1], spec[2])) != LIST)
+    elseif (typeof(vd = $code_utils:verb_documentation(hv[1], spec[2])) != TYPE_LIST)
       return vd;
     else
       return {tostr(";$code_utils:set_verb_documentation(", $code_utils:corify_object(hv[1]), ",", $string_utils:print(spec[2]), ",$command_utils:read_lines())"), @$command_utils:dump_lines(vd)};

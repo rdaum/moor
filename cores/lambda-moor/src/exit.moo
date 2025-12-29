@@ -84,7 +84,7 @@ object EXIT
 
   verb set_name (this none this) owner: #2 flags: "rxd"
     if ($perm_utils:controls(cp = caller_perms(), this) || (valid(this.source) && this.source.owner == cp))
-      return typeof(e = `this.name = args[1] ! ANY') != ERR || e;
+      return typeof(e = `this.name = args[1] ! ANY') != TYPE_ERR || e;
     else
       return E_PERM;
     endif
@@ -92,7 +92,7 @@ object EXIT
 
   verb set_aliases (this none this) owner: #2 flags: "rxd"
     if ($perm_utils:controls(cp = caller_perms(), this) || (valid(this.source) && this.source.owner == cp))
-      if (typeof(e = `this.aliases = args[1] ! ANY') == ERR)
+      if (typeof(e = `this.aliases = args[1] ! ANY') == TYPE_ERR)
         return e;
       else
         return 1;
@@ -107,7 +107,7 @@ object EXIT
     where = args[1];
     whobut = args[2];
     last = args[$];
-    if (typeof(last) == LIST)
+    if (typeof(last) == TYPE_LIST)
       where:announce_all_but(whobut, @args[3..$ - 1], last[1]);
       for line in (last[2..$])
         where:announce_all_but(whobut, line);

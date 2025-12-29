@@ -101,10 +101,10 @@ object LOCK_UTILS
 
   verb parse_E (this none this) owner: #2 flags: "rxd"
     exp = this:parse_A();
-    if (typeof(exp) != STR)
+    if (typeof(exp) != TYPE_STR)
       while ((token = this:scan_token()) in {"&&", "||"})
         rhs = this:parse_A();
-        if (typeof(rhs) == STR)
+        if (typeof(rhs) == TYPE_STR)
           return rhs;
         endif
         exp = {token, exp, rhs};
@@ -119,14 +119,14 @@ object LOCK_UTILS
     token = this:scan_token();
     if (token == "(")
       exp = this:parse_E();
-      if (typeof(exp) != STR && this:scan_token() != ")")
+      if (typeof(exp) != TYPE_STR && this:scan_token() != ")")
         return "Missing ')'";
       else
         return exp;
       endif
     elseif (token == "!")
       exp = this:parse_A();
-      if (typeof(exp) == STR)
+      if (typeof(exp) == TYPE_STR)
         return exp;
       else
         return {"!", exp};
@@ -139,7 +139,7 @@ object LOCK_UTILS
         return "Missing object-name at end of key expression";
       else
         what = this:match_object(next);
-        if (typeof(what) == OBJ)
+        if (typeof(what) == TYPE_OBJ)
           return {"?", this:match_object(next)};
         else
           return what;
@@ -158,9 +158,9 @@ object LOCK_UTILS
     "eval_key(LIST|OBJ coded key, OBJ testobject) => returns true if testobject will solve the provided key.";
     {key, who} = args;
     type = typeof(key);
-    if (!(type in {LIST, OBJ}))
+    if (!(type in {TYPE_LIST, TYPE_OBJ}))
       return 1;
-    elseif (typeof(key) == OBJ)
+    elseif (typeof(key) == TYPE_OBJ)
       return who == key || $object_utils:contains(who, key);
     endif
     op = key[1];
@@ -206,9 +206,9 @@ object LOCK_UTILS
     "$lock_utils:unparse_key({\"||\", $hacker, $housekeeper}) => \"#18105[Hacker] || #36830[housekeeper]\"";
     key = args[1];
     type = typeof(key);
-    if (!(type in {LIST, OBJ}))
+    if (!(type in {TYPE_LIST, TYPE_OBJ}))
       return "(None.)";
-    elseif (type == OBJ)
+    elseif (type == TYPE_OBJ)
       if (valid(key))
         return tostr(key, "[", key.name, "]");
       else
@@ -220,7 +220,7 @@ object LOCK_UTILS
       if (op == "?")
         return "?" + arg1;
       elseif (op == "!")
-        if (typeof(key[2]) == LIST)
+        if (typeof(key[2]) == TYPE_LIST)
           return "!(" + arg1 + ")";
         else
           return "!" + arg1;
@@ -229,13 +229,13 @@ object LOCK_UTILS
         other = op == "&&" ? "||" | "&&";
         lhs = arg1;
         rhs = this:unparse_key(key[3]);
-        if (typeof(key[2]) == OBJ || key[2][1] != other)
+        if (typeof(key[2]) == TYPE_OBJ || key[2][1] != other)
           exp = lhs;
         else
           exp = "(" + lhs + ")";
         endif
         exp = exp + " " + op + " ";
-        if (typeof(key[3]) == OBJ || key[3][1] != other)
+        if (typeof(key[3]) == TYPE_OBJ || key[3][1] != other)
           exp = exp + rhs;
         else
           exp = exp + "(" + rhs + ")";
@@ -251,9 +251,9 @@ object LOCK_UTILS
     set_task_perms($no_one);
     {key, who} = args;
     type = typeof(key);
-    if (!(type in {LIST, OBJ}))
+    if (!(type in {TYPE_LIST, TYPE_OBJ}))
       return 1;
-    elseif (typeof(key) == OBJ)
+    elseif (typeof(key) == TYPE_OBJ)
       return who == key || $object_utils:contains(who, key);
     endif
     op = key[1];
@@ -296,14 +296,14 @@ object LOCK_UTILS
     token = this:scan_token();
     if (token == "(")
       exp = this:parse_E();
-      if (typeof(exp) != STR && this:scan_token() != ")")
+      if (typeof(exp) != TYPE_STR && this:scan_token() != ")")
         return "Missing ')'";
       else
         return exp;
       endif
     elseif (token == "!")
       exp = this:parse_A();
-      if (typeof(exp) == STR)
+      if (typeof(exp) == TYPE_STR)
         return exp;
       else
         return {"!", exp};
@@ -316,7 +316,7 @@ object LOCK_UTILS
         return "Missing object-name at end of key expression";
       else
         what = this:match_object(next);
-        if (typeof(what) == OBJ)
+        if (typeof(what) == TYPE_OBJ)
           return {"?", this:match_object(next)};
         else
           return what;
@@ -328,7 +328,7 @@ object LOCK_UTILS
         return "Missing verb-or-property-name before '" + token + "'";
       elseif (next == "")
         return "Missing verb-or-property-name at end of key expression";
-      elseif (typeof(next) != STR)
+      elseif (typeof(next) != TYPE_STR)
         return "Non-string verb-or-property-name at end of key expression";
       else
         return {token, next};

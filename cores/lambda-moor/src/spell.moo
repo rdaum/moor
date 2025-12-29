@@ -13132,14 +13132,14 @@ object SPELL
         data = $failed_match;
       else
         data = `thing.(tostr(prop)) ! ANY';
-        if (typeof(data) == STR)
+        if (typeof(data) == TYPE_STR)
           data = {data};
         endif
         $command_utils:suspend_if_needed(3);
-        if (typeof(data) == ERR)
+        if (typeof(data) == TYPE_ERR)
           player:tell("Error: ", tostr(data));
           data = $failed_match;
-        elseif (typeof(data) != LIST)
+        elseif (typeof(data) != TYPE_LIST)
           player:tell("Spellchecker needs a string or list as input.");
           data = $failed_match;
         endif
@@ -13187,7 +13187,7 @@ object SPELL
     endif
     for i in [1..length(data)]
       $command_utils:suspend_if_needed(1);
-      if (typeof(data[i]) != STR)
+      if (typeof(data[i]) != TYPE_STR)
         data[i] = "";
       endif
       data[i] = $string_utils:strip_chars(data[i], "!@#$%^&*()_+1234567890={}[]`<>?:;,./|\"~'");
@@ -13246,7 +13246,7 @@ object SPELL
       endif
     endfor
     "Get some close matches from the database verbs themselves";
-    if ((foo = this:find_all(nastyword)) != ERR)
+    if ((foo = this:find_all(nastyword)) != TYPE_ERR)
       if (foo != $failed_match && foo != $ambiguous_match)
         if (length(foo) < 6)
           for i in (foo)

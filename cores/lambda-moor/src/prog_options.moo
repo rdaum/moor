@@ -68,7 +68,7 @@ object PROG_OPTIONS
 
   verb check_verb_args (this none this) owner: HACKER flags: "rxd"
     value = args[1];
-    if (typeof(value) != LIST)
+    if (typeof(value) != TYPE_LIST)
       return "List expected";
     elseif (length(value) != 3)
       return "List of length 3 expected";
@@ -88,13 +88,13 @@ object PROG_OPTIONS
 
   verb parse_verb_args (this none this) owner: HACKER flags: "rxd"
     {oname, raw, data} = args;
-    if (typeof(raw) == STR)
+    if (typeof(raw) == TYPE_STR)
       raw = $string_utils:explode(raw, " ");
-    elseif (typeof(raw) == INT)
+    elseif (typeof(raw) == TYPE_INT)
       return raw ? {oname, {"this", "none", "this"}} | {oname, 0};
     endif
     value = $code_utils:parse_argspec(@raw);
-    if (typeof(value) != LIST)
+    if (typeof(value) != TYPE_LIST)
       return tostr(value);
     elseif (value[2])
       return tostr("I don't understand \"", $string_utils:from_list(value[2], " "), "\"");
@@ -118,7 +118,7 @@ object PROG_OPTIONS
 
   verb "parse_@prop_flags" (this none this) owner: #2 flags: "rxd"
     {oname, raw, data} = args;
-    if (typeof(raw) != STR)
+    if (typeof(raw) != TYPE_STR)
       return "Must be a string composed of the characters `rwc'.";
     endif
     len = length(raw);

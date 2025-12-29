@@ -43,7 +43,7 @@ object MAIL_AGENT
     "Given either an address (i.e., objectid) or a list of such, traces down all .mail_forward lists and .mail_notify to determine where a message should actually go and who should be told about it.  Both forms take previous lists of recipients/notifications and add only those addresses that weren't there before.  `seen' is the stack of addresses we are currently resolving (for detecting loops).  The first form returns E_INVARG if `name' is invalid.  The second form returns all invalid addresses in the `bogus' list but still does the appropriate search on the remaining addresses.";
     {recip, from, ?seen = {}, ?prevrcpts = {}, ?prevnotifs = {}} = args;
     sofar = {prevrcpts, prevnotifs};
-    if (typeof(recip) == LIST)
+    if (typeof(recip) == TYPE_LIST)
       bogus = {};
       for r in (recip)
         result = this:resolve_addr(r, from, seen, @sofar);
@@ -58,9 +58,9 @@ object MAIL_AGENT
       fwd = include_recip = 0;
       if (recip == $nothing || recip in seen)
         return sofar;
-      elseif (!valid(recip) || (!(is_player(recip) || $object_utils:isa(recip, $mail_recipient)) || typeof(fwd = recip:mail_forward(from)) != LIST))
+      elseif (!valid(recip) || (!(is_player(recip) || $object_utils:isa(recip, $mail_recipient)) || typeof(fwd = recip:mail_forward(from)) != TYPE_LIST))
         "recip is a non-player non-mailing-list/folder or forwarding is screwed.";
-        if (typeof(fwd) == STR)
+        if (typeof(fwd) == TYPE_STR)
           player:tell(fwd);
         endif
         return E_INVARG;
@@ -107,7 +107,7 @@ object MAIL_AGENT
       return 1;
     elseif (!(addr in seen))
       seen = {@seen, addr};
-      for a in (typeof(fwd = this:mail_forward(addr, @from ? {} | {from})) == LIST ? fwd | {})
+      for a in (typeof(fwd = this:mail_forward(addr, @from ? {} | {from})) == TYPE_LIST ? fwd | {})
         if (this:sends_to(addr, a, rcpt, seen))
           return 1;
         endif
@@ -126,7 +126,7 @@ object MAIL_AGENT
     "...";
     "... remove bogus Resent-To/Resent-By headers...";
     "...";
-    if (typeof(orig_hdrs) == LIST && length(orig_hdrs) > 2)
+    if (typeof(orig_hdrs) == TYPE_LIST && length(orig_hdrs) > 2)
       hdrs = orig_hdrs[1..2];
       orig_hdrs[1..2] = {};
       strip = {"Resent-To", "Resent-By"};
@@ -155,7 +155,7 @@ object MAIL_AGENT
     "Return {0, @invalid_rcpts} if rcpts contains any invalid addresses.  No mail is sent in this case.";
     "Return {1, @actual_rcpts} if successful.";
     {text, rcpts, from} = args;
-    if (typeof(rcpts) != LIST)
+    if (typeof(rcpts) != TYPE_LIST)
       rcpts = {rcpts};
     endif
     if (!(caller in {$mail_agent, $mail_editor}))
@@ -173,7 +173,7 @@ object MAIL_AGENT
           player:notify(tostr("...", recip));
           suspend(1);
         endif
-        if (typeof(e = recip:receive_message(text, from)) in {ERR, STR})
+        if (typeof(e = recip:receive_message(text, from)) in {TYPE_ERR, TYPE_STR})
           "...receive_message bombed...";
           player:notify(tostr(recip, ":receive_message:  ", e));
           e = 0;
@@ -223,7 +223,7 @@ object MAIL_AGENT
   verb touch (this none this) owner: HACKER flags: "rxd"
     "touch(name or list,seen) => does .last_used_time = time() if we haven't already touched this in the last hour";
     {recip, ?seen = {}} = args;
-    if (typeof(recip) == LIST)
+    if (typeof(recip) == TYPE_LIST)
       for r in (recip)
         result = this:touch(r, seen);
         $command_utils:suspend_if_needed(0);
@@ -260,7 +260,7 @@ object MAIL_AGENT
     "...make sure the list has at least one usable name.";
     "...make sure none of the aliases are already taken.";
     {object, @aliases} = args;
-    if (typeof(object) == STR)
+    if (typeof(object) == TYPE_STR)
       "... legacy; old version of this verb did not take on OBJ argument";
       aliases = args;
     endif
@@ -310,7 +310,7 @@ object MAIL_AGENT
     elseif (rp = this:reserved_pattern(string))
       return rp[2]:match_mail_recipient(string);
     else
-      if (valid(who = {@args, player}[2]) && typeof(use = `who.mail_lists ! E_PROPNF, E_PERM') == LIST)
+      if (valid(who = {@args, player}[2]) && typeof(use = `who.mail_lists ! E_PROPNF, E_PERM') == TYPE_LIST)
         use = {@this.contents, @use};
       else
         use = this.contents;
@@ -388,13 +388,13 @@ object MAIL_AGENT
       raise(E_PERM);
     endtry
     fromline = this:name_list(from);
-    if (typeof(recips) != LIST)
+    if (typeof(recips) != TYPE_LIST)
       recips = {recips};
     endif
     recips = this:name_list(@recips);
     others = {};
     replyto = 0;
-    if (typeof(hdrs) != LIST)
+    if (typeof(hdrs) != TYPE_LIST)
       hdrs = {hdrs};
     endif
     subj = hdrs[1];
@@ -416,7 +416,7 @@ object MAIL_AGENT
         endif
       endfor
     endif
-    if (typeof(body) != LIST)
+    if (typeof(body) != TYPE_LIST)
       body = body ? {body} | {};
     endif
     return {this:time(), fromline, recips, subj || " ", @replyto ? {"Reply-to: " + replyto} | {}, @others, "", @body};
@@ -542,7 +542,7 @@ object MAIL_AGENT
     "there are two possible formats here:";
     "OLD: {{n,msgs},{n,msgs},...}";
     "NEW: {kept_seq, {{n,msgs},{n,msgs},...}}";
-    if (going && (!going[1] || typeof(going[1][2]) == INT))
+    if (going && (!going[1] || typeof(going[1][2]) == TYPE_INT))
       kept = going[1];
       going = going[2];
     else
@@ -568,7 +568,7 @@ object MAIL_AGENT
     "... both return the number of messages in .messages_going.";
     set_task_perms(caller_perms());
     cmg = caller.messages_going;
-    if (cmg && (!cmg[1] || typeof(cmg[1][2]) == INT))
+    if (cmg && (!cmg[1] || typeof(cmg[1][2]) == TYPE_INT))
       kept = cmg[1];
       cmg = cmg[2];
     else
@@ -690,7 +690,7 @@ object MAIL_AGENT
     {strings, ?cur = 0, ?last_old = 0} = args;
     if (!(nummsgs = caller:length_all_msgs()))
       return "%f %<has> no messages.";
-    elseif (typeof(strings) != LIST)
+    elseif (typeof(strings) != TYPE_LIST)
       strings = {strings};
     endif
     seq = result = {};
@@ -717,12 +717,12 @@ object MAIL_AGENT
             pattern = $string_utils:explode(pattern, "|");
           else
             pattern = this:((keywd == "to" ? "_parse_to" | "_parse_from"))(pattern);
-            if (typeof(pattern) == STR)
+            if (typeof(pattern) == TYPE_STR)
               return pattern;
             endif
           endif
           seq = caller:((keywd + "_msg_seq"))(pattern, seq);
-          if (typeof(seq) == STR)
+          if (typeof(seq) == TYPE_STR)
             if (strnum == 1)
               return seq;
             else
@@ -731,7 +731,7 @@ object MAIL_AGENT
           endif
         elseif (k <= 51)
           "...before, since, after, until...";
-          if (typeof(date = this:_parse_date(string[c + 1..$])) != INT)
+          if (typeof(date = this:_parse_date(string[c + 1..$])) != TYPE_INT)
             return tostr("Bad date `", string, "':  ", date);
           endif
           s = caller:length_date_le(keywd in {"before", "since"} ? date - 1 | date + 86399);
@@ -878,7 +878,7 @@ object MAIL_AGENT
         time = $time_utils:dst_midnight(time() - time() % 86400 - 86400);
       elseif (index("today", words[1]) == 1)
         time = $time_utils:dst_midnight(time() - time() % 86400);
-      elseif (typeof(time = $time_utils:from_day(words[1], -1)) == ERR)
+      elseif (typeof(time = $time_utils:from_day(words[1], -1)) == TYPE_ERR)
         time = "weekday, `Today', `Yesterday', or date expected.";
       endif
     elseif (!words || (length(words) > 3 || (!toint(words[1]) || E_TYPE == (year = $code_utils:toint({@words, "-1"}[3])))))
@@ -902,7 +902,7 @@ object MAIL_AGENT
     set_task_perms(caller_perms());
     new = (msgs = caller.messages) ? msgs[$][1] + 1 | 1;
     if (rmsgs = caller.messages_going)
-      if (!rmsgs[1] || typeof(rmsgs[1][2]) == INT)
+      if (!rmsgs[1] || typeof(rmsgs[1][2]) == TYPE_INT)
         rmsgs = rmsgs[2];
       endif
       lbrm = rmsgs[$][2];
@@ -983,7 +983,7 @@ object MAIL_AGENT
     " => msg_seq of messages from any of these senders";
     set_task_perms(caller_perms());
     {plist, ?mask = {1}} = args;
-    if (typeof(plist) != LIST)
+    if (typeof(plist) != TYPE_LIST)
       plist = {plist};
     endif
     i = 1;
@@ -1011,7 +1011,7 @@ object MAIL_AGENT
     " => msg_seq of messages with one of these strings in the from line";
     set_task_perms(caller_perms());
     {nlist, ?mask = {1}} = args;
-    if (typeof(nlist) != LIST)
+    if (typeof(nlist) != TYPE_LIST)
       nlist = {nlist};
     endif
     i = 1;
@@ -1038,7 +1038,7 @@ object MAIL_AGENT
     ":to_msg_seq(object or list[,mask]) => msg_seq of messages to those people";
     set_task_perms(caller_perms());
     {plist, ?mask = {1}} = args;
-    if (typeof(plist) != LIST)
+    if (typeof(plist) != TYPE_LIST)
       plist = {plist};
     endif
     i = 1;
@@ -1066,7 +1066,7 @@ object MAIL_AGENT
     " => msg_seq of messages containing one of strings in the to line";
     set_task_perms(caller_perms());
     {nlist, ?mask = {1}} = args;
-    if (typeof(nlist) != LIST)
+    if (typeof(nlist) != TYPE_LIST)
       nlist = {nlist};
     endif
     i = 1;
@@ -1141,7 +1141,7 @@ object MAIL_AGENT
   verb messages_in_seq (this none this) owner: #2 flags: "rxd"
     ":messages_in_seq(msg_seq) => list of messages in msg_seq on folder (caller)";
     set_task_perms(caller_perms());
-    if (typeof(msgs = args[1]) != LIST)
+    if (typeof(msgs = args[1]) != TYPE_LIST)
       return caller.messages[msgs];
     elseif (length(msgs) == 2)
       return (caller.messages)[msgs[1]..msgs[2] - 1];
@@ -1155,7 +1155,7 @@ object MAIL_AGENT
     "               ^ don't forget the @ here.";
     "If the msg is already in the new format it passes through unchanged.";
     "If the msg format is unrecognizable, warnings are printed.";
-    if (typeof(date = args[1]) != INT)
+    if (typeof(date = args[1]) != TYPE_INT)
       date = 0;
       start = 1;
     else
@@ -1342,7 +1342,7 @@ object MAIL_AGENT
     "Return {0, @invalid_rcpts} if new_rcpts contains any invalid addresses.  No mail is sent in this case.";
     "Return {1, @actual_rcpts} if successful.";
     {new_sender, new_rcpts, from, to, hdrs, body} = args;
-    if (typeof(hdrs) != LIST)
+    if (typeof(hdrs) != TYPE_LIST)
       hdrs = {hdrs, 0};
     elseif (length(hdrs) < 2)
       hdrs = {@hdrs || {""}, 0};
@@ -1408,6 +1408,6 @@ object MAIL_AGENT
     {i} = args;
     msg = caller:messages_in_seq({i, i + 1})[1][2];
     bstart = "" in msg;
-    return msg[bstart ? bstart + 1 | $ + 1..$];
+    return msg[(bstart ? bstart + 1 | $ + 1)..$];
   endverb
 endobject

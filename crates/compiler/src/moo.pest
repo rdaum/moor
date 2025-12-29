@@ -257,17 +257,19 @@ symbol = @{ "'" ~ ident }
 ident_start    = _{ "_" | ASCII_ALPHA }
 ident_continue = _{ "_" | ASCII_ALPHANUMERIC }
 
-type_constant = @{ (^"int"| ^"num" | ^"float"
-                  | ^"str"
-                  | ^"err"
-                  | ^"obj"
-                  | ^"list"
-                  | ^"map"
-                  | ^"bool"
-                  | ^"flyweight"
-                  | ^"binary"
-                  | ^"lambda"
-                  | ^"sym") ~ !(ident_continue) }
+// Type constants use the TYPE_* prefix to avoid conflicts with variable names.
+// Legacy forms (INT, OBJ, STR, etc.) are handled by the parser when legacy_type_constants is enabled.
+type_constant = @{ (^"type_int" | ^"type_num" | ^"type_float"
+                  | ^"type_str"
+                  | ^"type_err"
+                  | ^"type_obj"
+                  | ^"type_list"
+                  | ^"type_map"
+                  | ^"type_bool"
+                  | ^"type_flyweight"
+                  | ^"type_binary"
+                  | ^"type_lambda"
+                  | ^"type_sym") ~ !(ident_continue) }
 
 ident = @{
   // The usual case, identifiers that *don't* start with a keyword

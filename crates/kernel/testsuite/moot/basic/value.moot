@@ -1,16 +1,16 @@
-; return typeof(3) == INT;
+; return typeof(3) == TYPE_INT;
 1
 
-; return typeof("abc") == STR;
+; return typeof("abc") == TYPE_STR;
 1
 
-; return typeof(1.0) == FLOAT;
+; return typeof(1.0) == TYPE_FLOAT;
 1
 
-; return typeof({"foo"}) == LIST;
+; return typeof({"foo"}) == TYPE_LIST;
 1
 
-; return typeof(#0) == OBJ;
+; return typeof(#0) == TYPE_OBJ;
 1
 
 ; return tostr(17);

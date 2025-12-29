@@ -49,7 +49,7 @@ E_PERM
 ; add_property($object, "recycle_called", 0, {player, ""});
 ; add_verb($object, {player, "xd", "recycle"}, {"this", "none", "this"});
 ; set_verb_code($object, "recycle", {
->    "typeof(this) == OBJ || raise(E_INVARG);",
+>    "typeof(this) == TYPE_OBJ || raise(E_INVARG);",
 >    "$object.recycle_called = $object.recycle_called + 1;"
 > });
 ; return $object.recycle_called;
@@ -66,7 +66,7 @@ E_PERM
 ; add_property($object, "recycle_called", 0, {player, ""});
 ; add_verb($object, {player, "xd", "recycle"}, {"this", "none", "this"});
 ; set_verb_code($object, "recycle", {
->    "typeof(this) == OBJ || raise(E_INVARG);",
+>    "typeof(this) == TYPE_OBJ || raise(E_INVARG);",
 >    "$object.recycle_called = $object.recycle_called + 1;"
 > });
 ; return $object.recycle_called;
@@ -78,14 +78,14 @@ E_PERM
 ; add_property($object, "keep", 0, {player, ""});
 ; add_verb($object, {player, "xd", "recycle"}, {"this", "none", "this"});
 ; set_verb_code($object, "recycle", {
->   "typeof(this) == OBJ || raise(E_INVARG);",
+>   "typeof(this) == TYPE_OBJ || raise(E_INVARG);",
 >   "$object.keep = this;"
 > });
-; return typeof($object.keep) == INT;
+; return typeof($object.keep) == TYPE_INT;
 1
 ; return recycle(create($object));
 0
-; return typeof($object.keep) == OBJ;
+; return typeof($object.keep) == TYPE_OBJ;
 1
 ; recycle($object.keep);
 E_INVARG

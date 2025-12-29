@@ -57,7 +57,7 @@ object BUILDER
     endif
     if (parentstr[1] == "$")
       parent = $string_utils:literal_object(parentstr);
-      if (parent == $failed_match || typeof(parent) != OBJ)
+      if (parent == $failed_match || typeof(parent) != TYPE_OBJ)
         player:notify(tostr("\"", parentstr, "\" does not name an object."));
         return;
       endif
@@ -68,7 +68,7 @@ object BUILDER
       endif
     endif
     object = player:_create(parent);
-    if (typeof(object) == ERR)
+    if (typeof(object) == TYPE_ERR)
       player:notify(tostr(object));
       return;
     endif
@@ -100,7 +100,7 @@ object BUILDER
     else
       name = dobj.name;
       result = player:_recycle(dobj);
-      if (typeof(result) == ERR)
+      if (typeof(result) == TYPE_ERR)
         player:notify(tostr(result));
       else
         player:notify(tostr(name, " (", dobj, ") recycled."));
@@ -130,7 +130,7 @@ object BUILDER
     namestr = $string_utils:from_list(args[named + 1..$], " ");
     if (parentstr[1] == "$")
       parent = $string_utils:literal_object(parentstr);
-      if (parent == $failed_match || typeof(parent) != OBJ)
+      if (parent == $failed_match || typeof(parent) != TYPE_OBJ)
         player:notify(tostr("\"", parentstr, "\" does not name an object."));
         return;
       endif
@@ -181,7 +181,7 @@ object BUILDER
         room_kind = $room;
       endif
       other_room = player:_create(room_kind);
-      if (typeof(other_room) == ERR)
+      if (typeof(other_room) == TYPE_ERR)
         player:notify(tostr("Cannot create new room as a child of ", $string_utils:nn(room_kind), ": ", other_room, ".  See `help @build-options' for information on how to specify the kind of room this command tries to create."));
         return;
       endif
@@ -249,7 +249,7 @@ object BUILDER
       return;
     endif
     set_task_perms(player);
-    if (typeof(dobj.owned_objects) == LIST)
+    if (typeof(dobj.owned_objects) == TYPE_LIST)
       count = length(dobj.owned_objects);
       player:notify(tostr(dobj.name, " currently owns ", count, " object", count == 1 ? "." | "s."));
       if ($quota_utils.byte_based)
@@ -286,13 +286,13 @@ object BUILDER
     if (player != this)
       return E_PERM;
     endif
-    if (typeof(player.owned_objects) == LIST)
+    if (typeof(player.owned_objects) == TYPE_LIST)
       if (!dobjstr || index("object", dobjstr) == 1)
         ret = $list_utils:sort_suspended(0, player.owned_objects);
       elseif (index("size", dobjstr) == 1)
         ret = $list_utils:reverse_suspended($list_utils:sort_suspended(0, player.owned_objects, $list_utils:slice($list_utils:map_prop(player.owned_objects, "object_size"))));
       endif
-      if (typeof(ret) == LIST)
+      if (typeof(ret) == TYPE_LIST)
         player.owned_objects = ret;
         player:tell("Your .owned_objects list has been sorted.");
         return 1;
@@ -358,7 +358,7 @@ object BUILDER
       return;
     endif
     key = $lock_utils:parse_keyexp(iobjstr, player);
-    if (typeof(key) == STR)
+    if (typeof(key) == TYPE_STR)
       player:notify("That key expression is malformed:");
       player:notify(tostr("  ", key));
     else
@@ -389,7 +389,7 @@ object BUILDER
     value = dobjstr[length(dobjwords[1]) + 2..$];
     nickname = "@" + name[1..$ - 4];
     e = `add_property(object, name, value, {player, "rc"}) ! ANY';
-    if (typeof(e) != ERR)
+    if (typeof(e) != TYPE_ERR)
       player:notify(tostr(nickname, " on ", object.name, " is now \"", object.(name), "\"."));
     elseif (e != E_INVARG)
       player:notify(tostr(e));
@@ -627,7 +627,7 @@ object BUILDER
       "...bogus new parent...";
     elseif (player != this)
       player:notify(tostr(E_PERM));
-    elseif (typeof(result = $object_utils:property_conflicts(object, parent)) == ERR)
+    elseif (typeof(result = $object_utils:property_conflicts(object, parent)) == TYPE_ERR)
       player:notify(tostr(result));
     elseif (result)
       su = $string_utils;
@@ -719,7 +719,7 @@ object BUILDER
     verb[1..4] = "";
     foo_options = verb + "s";
     "...";
-    if (typeof(s = #0.(foo_options):set(this.(foo_options), @args)) == STR)
+    if (typeof(s = #0.(foo_options):set(this.(foo_options), @args)) == TYPE_STR)
       return s;
     elseif (s == this.(foo_options))
       return 0;
@@ -744,12 +744,12 @@ object BUILDER
     if (!args)
       player:notify_lines({"Current " + what + " options:", "", @option_pkg:show(this.(options), option_pkg.names)});
       return;
-    elseif (typeof(presult = option_pkg:parse(args)) == STR)
+    elseif (typeof(presult = option_pkg:parse(args)) == TYPE_STR)
       player:notify(presult);
       return;
     else
       if (length(presult) > 1)
-        if (typeof(sresult = this:(set_option)(@presult)) == STR)
+        if (typeof(sresult = this:(set_option)(@presult)) == TYPE_STR)
           player:notify(sresult);
           return;
         elseif (!sresult)
@@ -809,7 +809,7 @@ object BUILDER
       unmeasured_index = 4;
       unmeasured_multiplier = 100;
       nunmeasured = 0;
-      if (typeof(what.owned_objects) == LIST)
+      if (typeof(what.owned_objects) == TYPE_LIST)
         for x in (what.owned_objects)
           if (!$object_utils:has_property(x, "object_size"))
             nunmeasured = nunmeasured + 1;
@@ -843,7 +843,7 @@ object BUILDER
       else
         who = player;
       endif
-      if (typeof(who.owned_objects) == LIST)
+      if (typeof(who.owned_objects) == TYPE_LIST)
         player:tell("Re-measuring objects of ", $string_utils:nn(who), " which have not been measured in the past ", days, " days.");
         when = time() - days * 86400;
         which = {};
@@ -869,7 +869,7 @@ object BUILDER
           player:tell("Result will be mailed.");
         endif
         info = $byte_quota_utils:do_breakdown(what);
-        if (typeof(info) == ERR)
+        if (typeof(info) == TYPE_ERR)
           player:tell(info);
         endif
         if (mail)

@@ -17,7 +17,7 @@ object FTP
       return E_PERM;
     endif
     {host, ?user = "", ?pass = ""} = args;
-    if (typeof(conn = $network:open(host, this.port)) == ERR)
+    if (typeof(conn = $network:open(host, this.port)) == TYPE_ERR)
       return {"Unable to connect to host."};
     endif
     this.connections = {@this.connections, {conn, caller_perms(), {}, 0, {}}};
@@ -62,13 +62,13 @@ object FTP
     matchstr = first_only ? "^[1-9][0-9][0-9] " | "^[2-9][0-9][0-9] ";
     messages = {};
     result = "";
-    while (typeof(result) == STR && !match(result, matchstr))
+    while (typeof(result) == TYPE_STR && !match(result, matchstr))
       result = $network:read(conn);
       messages = {@messages, result};
     endwhile
     i = $list_utils:iassoc(conn, this.connections);
     this.connections[i][3] = {@this.connections[i][3], @messages};
-    if (typeof(result) == STR)
+    if (typeof(result) == TYPE_STR)
       if (result[1] in {"4", "5"})
         player:tell(result);
         return E_NONE;
@@ -110,7 +110,7 @@ object FTP
         return E_TYPE;
       elseif (!(match = match(msg, "(%([0-9]+%),%([0-9]+%),%([0-9]+%),%([0-9]+%),%([0-9]+%),%([0-9]+%))")))
         return E_TYPE;
-      elseif (typeof(dconn = $network:open(substitute("%1.%2.%3.%4", match), toint(substitute("%5", match)) * 256 + toint(substitute("%6", match)))) == ERR)
+      elseif (typeof(dconn = $network:open(substitute("%1.%2.%3.%4", match), toint(substitute("%5", match)) * 256 + toint(substitute("%6", match)))) == TYPE_ERR)
         return dconn;
       else
         this.connections[i][4] = dconn;
@@ -156,7 +156,7 @@ object FTP
   endverb
 
   verb trusted (this none this) owner: #2 flags: "rxd"
-    return args[1].wizard || (typeof(this.trusted) == LIST ? args[1] in this.trusted | this.trusted);
+    return args[1].wizard || (typeof(this.trusted) == TYPE_LIST ? args[1] in this.trusted | this.trusted);
   endverb
 
   verb listen (this none this) owner: #2 flags: "rxd"
@@ -166,7 +166,7 @@ object FTP
     {conn, dconn} = args;
     data = {};
     line = `read(dconn) ! ANY';
-    while (typeof(line) == STR)
+    while (typeof(line) == TYPE_STR)
       data = {@data, line};
       line = read(dconn);
       $command_utils:suspend_if_needed(0);
@@ -196,7 +196,7 @@ object FTP
     if (!this:trusted(caller_perms()))
       return E_PERM;
     endif
-    if (typeof(conn = this:open(@args[1..3])) != OBJ)
+    if (typeof(conn = this:open(@args[1..3])) != TYPE_OBJ)
       return E_NACC;
     else
       result = this:open_data(conn) && this:do_command(conn, "RETR " + args[4]) && this:get_data(conn);
@@ -218,7 +218,7 @@ object FTP
     if (!this:trusted(caller_perms()))
       return E_PERM;
     endif
-    if (typeof(conn = this:open(@args[1..3])) != OBJ)
+    if (typeof(conn = this:open(@args[1..3])) != TYPE_OBJ)
       return E_NACC;
     else
       result = this:open_data(conn) && this:do_command(conn, "STOR " + args[4], 1) && this:put_data(conn, args[5]);

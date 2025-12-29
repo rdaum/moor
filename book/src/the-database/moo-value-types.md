@@ -292,7 +292,7 @@ you can type directly.
 - When you call verbs or access properties, you use the object reference: `#495:tell("Hello!")`,
   `#048D05-1234567890:tell("Hello!")`, or `anon_obj:tell("Hello!")`
 - Traditional object numbers can be negative for special purposes, but UUID and anonymous objects never are
-- Use `is_anonymous(obj)` and `is_uuobjid(obj)` to detect object types (all have `typeof(obj) == OBJ`)
+- Use `is_anonymous(obj)` and `is_uuobjid(obj)` to detect object types (all have `typeof(obj) == TYPE_OBJ`)
 
 ### Special & negative traditional object numbers:
 

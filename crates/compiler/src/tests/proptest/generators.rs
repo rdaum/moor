@@ -457,7 +457,7 @@ pub fn arb_length() -> impl Strategy<Value = Expr> {
     Just(Expr::Length)
 }
 
-/// Generate a type constant: INT, STR, FLOAT, OBJ, LIST, MAP, ERR, BOOL
+/// Generate a type constant: TYPE_INT, TYPE_STR, TYPE_FLOAT, TYPE_OBJ, TYPE_LIST, TYPE_MAP, TYPE_ERR, TYPE_BOOL
 pub fn arb_type_constant() -> impl Strategy<Value = Expr> {
     prop_oneof![
         Just(Expr::TypeConstant(VarType::TYPE_INT)),
@@ -593,7 +593,7 @@ pub fn arb_expr_layer2b(depth: usize) -> BoxedStrategy<Expr> {
 /// - Verb calls (obj:verb(args))
 /// - Builtin function calls (func(args))
 /// - Try-catch expressions
-/// - Type constants (INT, STR, etc.)
+/// - Type constants (TYPE_INT, TYPE_STR, etc.)
 /// - Length ($)
 pub fn arb_expr_layer2_complete(depth: usize) -> BoxedStrategy<Expr> {
     if depth == 0 {

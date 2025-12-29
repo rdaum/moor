@@ -48,14 +48,14 @@ object GENERIC_OPTIONS
     {options, oname, value} = args;
     if (!(oname in this.names || oname in this.extras))
       return "Unknown option:  " + oname;
-    elseif (typeof(value) == ERR)
+    elseif (typeof(value) == TYPE_ERR)
       "... no option should have an error value...";
       return "Error value";
-    elseif (!value && typeof(value) != OBJ)
+    elseif (!value && typeof(value) != TYPE_OBJ)
       "... always accept FALSE (0, blankstring, emptylist)...";
     elseif ($object_utils:has_callable_verb(this, check = "check_" + oname))
       "... a :check_foo verb exists; use it to typecheck the value...";
-      if (typeof(c = this:(check)(value)) == STR)
+      if (typeof(c = this:(check)(value)) == TYPE_STR)
         return c;
       endif
       value = c[1];
@@ -83,14 +83,14 @@ object GENERIC_OPTIONS
     "... then we need to call :actual to see what it really means.";
     if (oname in this.names)
       nvlist = {{oname, value}};
-    elseif (typeof(nvlist = this:actual(oname, value)) != LIST || !nvlist)
+    elseif (typeof(nvlist = this:actual(oname, value)) != TYPE_LIST || !nvlist)
       return nvlist || "Not implemented.";
     endif
     "... :actual returns a list of pairs...";
     for nv in (nvlist)
       {oname, value} = nv;
       if (i = oname in options || $list_utils:iassoc(oname, options))
-        if (!value && typeof(value) != OBJ)
+        if (!value && typeof(value) != TYPE_OBJ)
           "value == 0, blank string, empty list";
           options[i..i] = {};
         elseif (value == 1)
@@ -98,7 +98,7 @@ object GENERIC_OPTIONS
         else
           options[i] = {oname, value};
         endif
-      elseif (value || typeof(value) == OBJ)
+      elseif (value || typeof(value) == TYPE_OBJ)
         options[1..0] = {value == 1 ? oname | {oname, value}};
       endif
     endfor
@@ -247,7 +247,7 @@ object GENERIC_OPTIONS
     ":show(options,name or list of names)";
     " => text describing current value of option and what it means";
     name = args[2];
-    if (typeof(name) == LIST)
+    if (typeof(name) == TYPE_LIST)
       text = {};
       for n in (name)
         text = {@text, @this:show(@listset(args, n, 2))};
@@ -261,7 +261,7 @@ object GENERIC_OPTIONS
       desc = r[2];
     elseif ($object_utils:has_property(this, sverb) && (value = this:get(args[1], name)) in {0, 1})
       desc = this.(sverb)[value + 1];
-      if (typeof(desc) == STR)
+      if (typeof(desc) == TYPE_STR)
         desc = {desc};
       endif
     elseif ($object_utils:has_property(this, cprop = "choices_" + name))
@@ -277,14 +277,14 @@ object GENERIC_OPTIONS
     else
       value = this:get(args[1], name);
       desc = {"not documented (complain)"};
-      if (typeof(value) in {LIST, STR})
+      if (typeof(value) in {TYPE_LIST, TYPE_STR})
         desc[1..0] = toliteral(value);
         value = "";
       endif
     endif
     if (value in {0, 1})
       which = "-+"[value + 1] + name;
-    elseif (typeof(value) in {OBJ, STR, INT} && value != "")
+    elseif (typeof(value) in {TYPE_OBJ, TYPE_STR, TYPE_INT} && value != "")
       which = tostr(" ", name, "=", value);
     else
       which = " " + name;
@@ -308,11 +308,11 @@ object GENERIC_OPTIONS
     ":istype(value,types) => whether value is one of the given types";
     if ((vtype = typeof(value = args[1])) in (types = args[2]))
       return 1;
-    elseif (vtype != LIST)
+    elseif (vtype != TYPE_LIST)
       return 0;
     else
       for t in (types)
-        if (typeof(t) == LIST && this:islistof(value, t))
+        if (typeof(t) == TYPE_LIST && this:islistof(value, t))
           return 1;
         endif
       endfor
@@ -335,13 +335,13 @@ object GENERIC_OPTIONS
     ":desc_type(types) => string description of types";
     nlist = {};
     for t in (types = args[1])
-      if (typeof(t) == LIST)
+      if (typeof(t) == TYPE_LIST)
         if (length(t) > 1)
           nlist = {@nlist, tostr("(", this:desc_type(t), ")-list")};
         else
           nlist = {@nlist, tostr(this:desc_type(t), "-list")};
         endif
-      elseif (t in {INT, OBJ, STR, LIST})
+      elseif (t in {TYPE_INT, TYPE_OBJ, TYPE_STR, TYPE_LIST})
         nlist = {@nlist, {"number", "object", "string", "?", "list"}[t + 1]};
       else
         return "Bad type list";
@@ -357,12 +357,12 @@ object GENERIC_OPTIONS
     rawval = args[2];
     choices = $list_utils:slice(args[3], 1);
     errmsg = tostr("Allowed values for this flag: ", $string_utils:english_list(choices, "(??)", " or "));
-    if (typeof(rawval) == LIST)
+    if (typeof(rawval) == TYPE_LIST)
       if (length(rawval) > 1)
         return errmsg;
       endif
       rawval = rawval[1];
-    elseif (typeof(rawval) != STR)
+    elseif (typeof(rawval) != TYPE_STR)
       return errmsg;
     endif
     for c in (choices)

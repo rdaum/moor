@@ -96,7 +96,7 @@ object COMMAND_UTILS
     "...";
     {match_results, strings, ?cmdid = ""} = args;
     pmf = verb == "player_match_failed";
-    if (typeof(match_results) == OBJ)
+    if (typeof(match_results) == TYPE_OBJ)
       match_results = {match_results};
       strings = {strings};
     endif
@@ -218,12 +218,12 @@ object COMMAND_UTILS
     {escapes, ?help = "You are currently in a read loop."} = args;
     c = callers();
     p = c[$][5];
-    escapes = {".", "@abort", @typeof(escapes) == LIST ? escapes | {escapes}};
+    escapes = {".", "@abort", @typeof(escapes) == TYPE_LIST ? escapes | {escapes}};
     p:notify(tostr("[Type lines of input; `?' for help; end with `", $string_utils:english_list(escapes, "", "' or `", "', `", ""), "'.]"));
     ans = {};
     escapes[1..0] = {"?"};
     "... set up the help text...";
-    if (typeof(help) != LIST)
+    if (typeof(help) != TYPE_LIST)
       help = {help};
     endif
     help[2..1] = {"Type `.' on a line by itself to finish.", "Anything else with a leading period is entered with the period removed.", "Type `@abort' to abort the command completely."};
@@ -279,7 +279,7 @@ object COMMAND_UTILS
     if (!output)
       suspend(time);
     else
-      if (typeof(output) == LIST)
+      if (typeof(output) == TYPE_LIST)
         PREFIX = output[1];
         SUFFIX = output[2];
         if (PREFIX)
@@ -289,7 +289,7 @@ object COMMAND_UTILS
         if (SUFFIX)
           player:tell(output[1]);
         endif
-      elseif (typeof(output) == STR)
+      elseif (typeof(output) == TYPE_STR)
         if (output)
           player:tell(output);
         endif
@@ -315,7 +315,6 @@ object COMMAND_UTILS
     "Usage:  $command_utils:suspend_if_needed(<time>[, @<announcement>])";
     "See if we're running out of ticks or seconds, and if so suspend(<time>) and return true.  If more than one arg is given, print the remainder with player:tell.";
     {?time = 10, @ann} = args;
-
     "Use the builtin for efficient commit when time is 0";
     if (time == 0)
       "Builtin defaults to 4000 tick threshold";

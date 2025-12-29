@@ -1768,10 +1768,48 @@ end"#; "complex scatter declaration with optional and rest")]
 
     #[test]
     fn test_type_literals() {
-        let progrma = r#"return {INT, STR, OBJ, LIST, MAP, SYM, FLYWEIGHT};"#;
-        let stripped = unindent(progrma);
+        let program = r#"return {TYPE_INT, TYPE_STR, TYPE_OBJ, TYPE_LIST, TYPE_MAP, TYPE_SYM, TYPE_FLYWEIGHT};"#;
+        let stripped = unindent(program);
         let result = parse_and_unparse(&stripped).unwrap();
         assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_legacy_type_literals_migration() {
+        // Test that legacy type constants (INT, OBJ, STR, etc.) are parsed correctly
+        // when legacy_type_constants is enabled, and that they output as TYPE_* forms.
+        use crate::parse::{parse_program, CompileOptions};
+
+        let legacy_options = CompileOptions {
+            legacy_type_constants: true,
+            ..Default::default()
+        };
+
+        // Parse with legacy mode - should parse INT as type constant
+        let legacy_program = r#"return typeof(x) == INT;"#;
+        let tree = parse_program(legacy_program, legacy_options.clone());
+        assert!(tree.is_ok(), "Legacy type constant should parse: {:?}", tree);
+
+        // Parse legacy and unparse - should output TYPE_INT
+        let tree = tree.unwrap();
+        let unparsed = unparse(&tree, false, true).expect("Failed to unparse").join("\n");
+        assert!(
+            unparsed.contains("TYPE_INT"),
+            "Legacy INT should unparse as TYPE_INT, got: {}",
+            unparsed
+        );
+
+        // Without legacy mode, INT should be treated as a variable
+        let normal_options = CompileOptions::default();
+        let normal_tree = parse_program(legacy_program, normal_options);
+        assert!(normal_tree.is_ok(), "INT as variable should parse");
+        let unparsed = unparse(&normal_tree.unwrap(), false, true).expect("Unparse").join("\n");
+        // INT should appear as a variable name (lowercase), not TYPE_INT
+        assert!(
+            !unparsed.contains("TYPE_INT"),
+            "Without legacy mode, INT should be a variable, got: {}",
+            unparsed
+        );
     }
 
     #[test]

@@ -56,7 +56,7 @@ This will give you an `E_TYPE` error when your program runs, because MOO can't a
 
 2. **Check types when you're unsure**:
    ```moo
-   if (typeof(user_input) == STR)
+   if (typeof(user_input) == TYPE_STR)
        player:tell("You said: " + user_input);
    else
        player:tell("I expected you to say something!");
@@ -253,7 +253,7 @@ endfor
 
 6. **Check variable types** when working with user input or uncertain data:
    ```moo
-   if (typeof(user_input) == STR && length(user_input) > 0)
+   if (typeof(user_input) == TYPE_STR && length(user_input) > 0)
        // Safe to work with user_input as a non-empty string
    endif
    ```

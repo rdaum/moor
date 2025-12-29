@@ -60,7 +60,7 @@ object MAIL_RECIPIENT
     "Returns full name and mail aliases for this list, read and write status by the player, and a short description. Calling :look_self(1) will omit the description.";
     {?brief = 0} = args;
     namelist = "*" + ((names = this:mail_names()) ? $string_utils:from_list(names, ", *") | tostr(this));
-    if (typeof(fwd = this:mail_forward()) != LIST)
+    if (typeof(fwd = this:mail_forward()) != TYPE_LIST)
       fwd = {};
     endif
     if (this:is_writable_by(player))
@@ -88,7 +88,7 @@ object MAIL_RECIPIENT
     player:tell(namelist, "  (", this, ")", read, mod);
     if (!brief)
       d = this:description();
-      if (typeof(d) == STR)
+      if (typeof(d) == TYPE_STR)
         d = {d};
       endif
       for l in (d)
@@ -110,7 +110,7 @@ object MAIL_RECIPIENT
   endverb
 
   verb is_readable_by (this none this) owner: HACKER flags: "rxd"
-    return typeof(this.readers) != LIST || ((who = args[1]) in this.readers || (this:is_writable_by(who) || $mail_agent:sends_to(1, this, who)));
+    return typeof(this.readers) != TYPE_LIST || ((who = args[1]) in this.readers || (this:is_writable_by(who) || $mail_agent:sends_to(1, this, who)));
   endverb
 
   verb is_usable_by (this none this) owner: HACKER flags: "rxd"
@@ -133,7 +133,7 @@ object MAIL_RECIPIENT
   verb mail_forward (this none this) owner: HACKER flags: "rxd"
     if (args && !this:is_usable_by(args[1]) && !args[1].wizard)
       return this:moderator_forward(@args);
-    elseif (typeof(mf = this.(verb)) == STR)
+    elseif (typeof(mf = this.(verb)) == TYPE_STR)
       return $string_utils:pronoun_sub(mf, @args);
     else
       return mf;
@@ -141,7 +141,7 @@ object MAIL_RECIPIENT
   endverb
 
   verb moderator_forward (this none this) owner: HACKER flags: "rxd"
-    if (typeof(mf = this.(verb)) == STR)
+    if (typeof(mf = this.(verb)) == TYPE_STR)
       return $string_utils:pronoun_sub(mf, args ? args[1] | $player);
     else
       return mf;
@@ -160,7 +160,7 @@ object MAIL_RECIPIENT
     for recip in (args)
       if (!valid(recip) || (!is_player(recip) && !($mail_recipient in $object_utils:ancestors(recip))))
         r = E_INVARG;
-      elseif ($perm_utils:controls(perms, this) || (typeof(this.readers) != LIST && $perm_utils:controls(perms, recip)))
+      elseif ($perm_utils:controls(perms, this) || (typeof(this.readers) != TYPE_LIST && $perm_utils:controls(perms, recip)))
         this.mail_forward = setadd(this.mail_forward, recip);
         r = recip;
       else
@@ -350,7 +350,7 @@ object MAIL_RECIPIENT
     ":own_messages_filter(who,msg_seq) => subsequence of msg_seq consisting of those messages that <who> is actually allowed to remove (on the assumption that <who> is not one of the allowed writers of this folder.";
     if (!this.rmm_own_msgs)
       return E_PERM;
-    elseif (typeof(seq = this:from_msg_seq({args[1]}, args[2])) != LIST || seq != args[2])
+    elseif (typeof(seq = this:from_msg_seq({args[1]}, args[2])) != TYPE_LIST || seq != args[2])
       return {};
     else
       return seq;
@@ -537,7 +537,7 @@ object MAIL_RECIPIENT
       return player:tell(E_PERM);
     elseif (!iobjstr)
       return player:tell(this.expire_period ? tostr("Messages will automatically expire from ", this:mail_name(), " after ", $time_utils:english_time(this.expire_period), ".") | tostr("Messages will not expire from ", this:mail_name()));
-    elseif (typeof(time = $time_utils:parse_english_time_interval(iobjstr)) == ERR)
+    elseif (typeof(time = $time_utils:parse_english_time_interval(iobjstr)) == TYPE_ERR)
       return player:tell(time);
     elseif (time == 0 && !player.wizard)
       return player:tell("Only wizards may set a mailing list to not expire.");

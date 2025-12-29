@@ -171,14 +171,14 @@ object NETWORK
     {address, port, ?connect_to} = args;
     if (length(args) < 3)
       connect_to = $nothing;
-    elseif (typeof(connect_to) == OBJ && valid(connect_to) && is_player(connect_to))
+    elseif (typeof(connect_to) == TYPE_OBJ && valid(connect_to) && is_player(connect_to))
       if (!$perm_utils:controls(caller_perms(), connect_to))
         return E_PERM;
       endif
     else
       return E_INVARG;
     endif
-    if (typeof(connection = `open_network_connection(address, port) ! ANY') != ERR)
+    if (typeof(connection = `open_network_connection(address, port) ! ANY') != TYPE_ERR)
       if (valid(connect_to))
         this.connect_connections_to = {@this.connect_connections_to, {connection, connect_to}};
       endif
@@ -261,7 +261,7 @@ object NETWORK
     if (!this.active)
       return "Networking is disabled.";
     endif
-    if (typeof(this.debugging) == LIST)
+    if (typeof(this.debugging) == TYPE_LIST)
       "who to notify";
       debugging = this.debugging;
     else
@@ -285,13 +285,13 @@ object NETWORK
     data = {@data, ".", "QUIT", ""};
     suspend(0);
     target = E_NONE;
-    for maildrop in (typeof(this.maildrop) == LIST ? this.maildrop | {this.maildrop})
+    for maildrop in (typeof(this.maildrop) == TYPE_LIST ? this.maildrop | {this.maildrop})
       target = $network:open(maildrop, 25);
-      if (typeof(target) != ERR)
+      if (typeof(target) != TYPE_ERR)
         break;
       endif
     endfor
-    if (typeof(target) == ERR)
+    if (typeof(target) == TYPE_ERR)
       return tostr(@target == E_NONE ? {"No maildrop specified"} | {"Cannot open connection to maildrop ", maildrop, ": ", target});
     endif
     set_connection_option(target, "hold-input", 1);
@@ -301,7 +301,7 @@ object NETWORK
     for line in (data)
       if (!blast)
         reply = this:tcp_wait(target);
-        if (typeof(reply) == ERR)
+        if (typeof(reply) == TYPE_ERR)
           msg = "Connection dropped or timed out.";
           break;
         elseif (!match(reply[1..3], expects[1]))
@@ -375,7 +375,7 @@ object NETWORK
       msg = tostr("Your email address (", email, ") is not a usable account.");
     elseif ((result = this:verify_email_address(email)) == E_INVARG)
       msg = tostr("Unable to connect to ", this:parse_address(email)[2], ".");
-    elseif (typeof(result) == STR)
+    elseif (typeof(result) == TYPE_STR)
       msg = tostr("The site ", (parse = this:parse_address(email))[2], " does not recognize ", parse[1], " as a valid account.");
     else
       return 0;
@@ -405,7 +405,7 @@ object NETWORK
   verb is_open (this none this) owner: HACKER flags: "rxd"
     ":is_open(object)";
     "return true if the object is somehow connected, false otherwise.";
-    return typeof(`idle_seconds(@args) ! ANY') == INT;
+    return typeof(`idle_seconds(@args) ! ANY') == TYPE_INT;
     "Relies on test in idle_seconds, and the error catching";
   endverb
 
@@ -545,7 +545,7 @@ object NETWORK
       endfork
     endif
     while (1)
-      if (typeof(line = `read(conn) ! ANY') == ERR)
+      if (typeof(line = `read(conn) ! ANY') == TYPE_ERR)
         break;
       elseif (match(line, "^[0-9][0-9][0-9] "))
         timeout && `kill_task(task) ! ANY';

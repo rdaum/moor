@@ -118,7 +118,7 @@ object HOUSEKEEPER
     try
       requestor:tell("As you requested, the housekeeper tidies ", $string_utils:nn(object), " from ", $string_utils:nn(loc), " to ", $string_utils:nn(place), ".");
       if ($object_utils:has_verb(loc, "announce_all_but"))
-        loc:announce_all_but({requestor, object}, "At ", requestor.name, "'s request, the ", this.name, " sneaks in, picks up ", object.name, " and hurries off to put ", $object_utils:has_property(object, "po") && typeof(object.po) == STR ? object.po | "it", " away.");
+        loc:announce_all_but({requestor, object}, "At ", requestor.name, "'s request, the ", this.name, " sneaks in, picks up ", object.name, " and hurries off to put ", $object_utils:has_property(object, "po") && typeof(object.po) == TYPE_STR ? object.po | "it", " away.");
       endif
     except (ANY)
       "Ignore errors";

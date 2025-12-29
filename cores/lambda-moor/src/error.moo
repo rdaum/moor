@@ -21,6 +21,8 @@ object ERROR
     E_INVARG,
     E_QUOTA,
     E_FLOAT
+  
+  
   };
   property names (owner: HACKER, flags: "rc") = {
     "E_NONE",
@@ -142,13 +144,13 @@ object ERROR
   verb toerr (this none this) owner: HACKER flags: "rxd"
     "toerr -- given a string or a number, return the corresponding ERR.";
     "If not found or an execution error, return -1.";
-    if (typeof(string = args[1]) == STR)
+    if (typeof(string = args[1]) == TYPE_STR)
       for e in (this.all_errors)
         if (tostr(e) == string)
           return e;
         endif
       endfor
-    elseif (typeof(number = args[1]) == INT)
+    elseif (typeof(number = args[1]) == TYPE_INT)
       for e in (this.all_errors)
         if (toint(e) == number)
           return e;

@@ -120,7 +120,7 @@ object STRING_UTILS
   verb space (this none this) owner: HACKER flags: "rxd"
     "space(len,fill) returns a string of length abs(len) consisting of copies of fill.  If len is negative, fill is anchored on the right instead of the left.";
     {n, ?fill = " "} = args;
-    if (typeof(n) == STR)
+    if (typeof(n) == TYPE_STR)
       n = length(n);
     endif
     if (n > 1000)
@@ -260,7 +260,7 @@ object STRING_UTILS
     "Return a string of the names and object numbers of the objects in a list.";
     line = "";
     for item in (args[1])
-      if (typeof(item) == OBJ && valid(item))
+      if (typeof(item) == TYPE_OBJ && valid(item))
         line = line + item.name + "(" + tostr(item) + ")   ";
       endif
     endfor
@@ -387,13 +387,13 @@ object STRING_UTILS
     elseif (string[1] == "$")
       string[1..1] = "";
       object = #0;
-      while (pn = string[1..(dot = index(string, ".")) ? dot - 1 | $])
-        if (!$object_utils:has_property(object, pn) || typeof(object = object.(pn)) != OBJ)
+      while (pn = string[1..((dot = index(string, ".")) ? dot - 1 | $)])
+        if (!$object_utils:has_property(object, pn) || typeof(object = object.(pn)) != TYPE_OBJ)
           return $failed_match;
         endif
         string = string[length(pn) + 2..$];
       endwhile
-      if (object == #0 || typeof(object) == ERR)
+      if (object == #0 || typeof(object) == TYPE_ERR)
         return $failed_match;
       else
         return object;
@@ -417,9 +417,9 @@ object STRING_UTILS
     no_exact_match = no_partial_match = 1;
     for i in [1..length(args) / 2]
       prop_name = args[2 * i + 1];
-      for object in (typeof(olist = args[2 * i]) == LIST ? olist | {olist})
+      for object in (typeof(olist = args[2 * i]) == TYPE_LIST ? olist | {olist})
         if (valid(object))
-          if (typeof(str_list = `object.(prop_name) ! E_PERM, E_PROPNF => {}') != LIST)
+          if (typeof(str_list = `object.(prop_name) ! E_PERM, E_PROPNF => {}') != TYPE_LIST)
             str_list = {str_list};
           endif
           if (subject in str_list)
@@ -454,9 +454,9 @@ object STRING_UTILS
     what = what + "&^%$";
     targ = targ + "&^%$";
     for y in (rest)
-      if (typeof(y) == STR)
+      if (typeof(y) == TYPE_STR)
         wild = y;
-      elseif (typeof(y) == INT)
+      elseif (typeof(y) == TYPE_INT)
         case = {y};
       endif
     endfor
@@ -518,9 +518,9 @@ object STRING_UTILS
     "meobj (what to return for instances of `me') defaults to player; if given and isn't actually a player, `me' => $failed_match";
     retstr = 0;
     me = player;
-    if (length(args) < 2 || typeof(me = args[2]) == OBJ)
+    if (length(args) < 2 || typeof(me = args[2]) == TYPE_OBJ)
       me = valid(me) && is_player(me) ? me | $failed_match;
-      if (typeof(args[1]) == STR)
+      if (typeof(args[1]) == TYPE_STR)
         strings = {args[1]};
         retstr = 1;
         "return a string, not a list";
@@ -634,12 +634,12 @@ object STRING_UTILS
     "";
     "Converts N to a string, inserting commas (or copies of SEP_CHAR, if given) every three digits, counting from the right.  For example, $string_utils:group_number(1234567890) returns the string \"1,234,567,890\".";
     "For floats, the arguements precision (defaulting to 4 in this verb) and scientific are the same as given in floatstr().";
-    if (typeof(args[1]) == INT)
+    if (typeof(args[1]) == TYPE_INT)
       {n, ?comma = ","} = args;
       result = "";
       sign = n < 0 ? "-" | "";
       n = tostr(abs(n));
-    elseif (typeof(args[1]) == FLOAT)
+    elseif (typeof(args[1]) == TYPE_FLOAT)
       {n, ?prec = 4, ?scien = 0, ?comma = ","} = args;
       sign = n < 0.0 ? "-" | "";
       n = floatstr(abs(n), prec, scien);
@@ -737,7 +737,7 @@ object STRING_UTILS
     "subst(\"hoahooaho\",{{\"ho\",\"XhooX\"},{\"hoo\",\"mama\"}}) => \"XhooXamamaaXhooX\"";
     "subst(\"Cc: banana\",{{\"a\",\"b\"},{\"b\",\"c\"},{\"c\",\"a\"}},1) => \"Ca: cbnbnb\"";
     {ostr, subs, ?case = 0} = args;
-    if (typeof(ostr) != STR)
+    if (typeof(ostr) != TYPE_STR)
       return ostr;
     endif
     len = length(ostr);
@@ -784,7 +784,7 @@ object STRING_UTILS
     "subst(string,{{redex1,repl1},{redex2,repl2},{redex3,repl3}...}[,case])";
     "Just like :substitute() but it uses index_delimited() instead of index()";
     {ostr, subs, ?case = 0} = args;
-    if (typeof(ostr) != STR)
+    if (typeof(ostr) != TYPE_STR)
       return ostr;
     endif
     len = length(ostr);
@@ -835,7 +835,7 @@ object STRING_UTILS
     "If args[1] is a list, calls itself on each element of the list and returns $string_utils:english_list(those results).";
     {what, prop, ?ucase = 0} = args;
     set_task_perms(caller_perms());
-    if (typeof(what) == LIST)
+    if (typeof(what) == TYPE_LIST)
       result = {};
       for who in (what)
         result = {@result, this:_cap_property(who, prop, ucase)};
@@ -845,18 +845,18 @@ object STRING_UTILS
     ucase = prop && strcmp(prop, "a") < 0 || ucase;
     if (!prop)
       return valid(what) ? ucase ? what:titlec() | what:title() | (ucase ? "N" | "n") + "othing";
-    elseif (!ucase || typeof(s = `what.((prop + "c")) ! ANY') == ERR)
+    elseif (!ucase || typeof(s = `what.((prop + "c")) ! ANY') == TYPE_ERR)
       if (prop == "name")
         s = valid(what) ? what.name | "nothing";
         ucase = ucase && !is_player(what);
       else
         s = `$object_utils:has_property(what, prop) ? what.(prop) | $player.(prop) ! ANY';
       endif
-      if (ucase && (s && (typeof(s) == STR && ((z = index(this.alphabet, s[1], 1)) < 27 && z > 0))))
+      if (ucase && (s && (typeof(s) == TYPE_STR && ((z = index(this.alphabet, s[1], 1)) < 27 && z > 0))))
         s[1] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[z];
       endif
     endif
-    return typeof(s) == ERR ? s | tostr(s);
+    return typeof(s) == TYPE_ERR ? s | tostr(s);
   endverb
 
   verb pronoun_sub (this none this) owner: #2 flags: "rxd"
@@ -873,7 +873,7 @@ object STRING_UTILS
     {string, ?who = player, ?thing = caller, ?where = $nothing, ?dobject = dobj, ?iobject = iobj} = args;
     where = valid(where) ? where | (valid(who) ? who.location | where);
     set_task_perms($no_one);
-    if (typeof(string) == LIST)
+    if (typeof(string) == TYPE_LIST)
       plines = {};
       for line in (string)
         plines = {@plines, this:(verb)(line, who, thing, where)};
@@ -931,7 +931,7 @@ object STRING_UTILS
         elseif (s != "%")
           s = "%" + s;
         endif
-        new = new + old[1..prcnt - 1] + (!cp_args ? s | (typeof(sub = $string_utils:_cap_property(@cp_args)) != ERR ? sub | "%(" + tostr(sub) + ")"));
+        new = new + old[1..prcnt - 1] + (!cp_args ? s | (typeof(sub = $string_utils:_cap_property(@cp_args)) != TYPE_ERR ? sub | "%(" + tostr(sub) + ")"));
       endif
       old = old[k + 1..oldlen];
       oldlen = oldlen - k;
@@ -962,12 +962,12 @@ object STRING_UTILS
     "";
     "  msg=$string_utils:substitute(msg,$string_utils:pronoun_quote(your_substs));";
     "  msg=$string_utils:pronoun_sub(msg);";
-    if (typeof(what = args[1]) == STR)
+    if (typeof(what = args[1]) == TYPE_STR)
       return strsub(what, "%", "%%");
     else
       ret = {};
       for w in (what)
-        if (typeof(w) == LIST)
+        if (typeof(w) == TYPE_LIST)
           ret = listappend(ret, listset(w, strsub(w[2], "%", "%%"), 2));
         else
           ret = listappend(ret, strsub(w, "%", "%%"));
@@ -990,7 +990,7 @@ object STRING_UTILS
     set_task_perms($no_one);
     {string, ?who = player, ?thing = caller, ?where = $nothing} = args;
     where = valid(who) ? who.location | where;
-    if (typeof(string) == LIST)
+    if (typeof(string) == TYPE_LIST)
       plines = {};
       for line in (string)
         plines = {@plines, this:(verb)(line, who, thing, where)};
@@ -1048,7 +1048,7 @@ object STRING_UTILS
         elseif (s != "%")
           s = "%" + s;
         endif
-        new = new + old[1..prcnt - 1] + (!cp_args ? s | (typeof(sub = $string_utils:_cap_property(@cp_args)) != ERR ? sub | "%(" + tostr(sub) + ")"));
+        new = new + old[1..prcnt - 1] + (!cp_args ? s | (typeof(sub = $string_utils:_cap_property(@cp_args)) != TYPE_ERR ? sub | "%(" + tostr(sub) + ")"));
       endif
       old = old[k + 1..oldlen];
       oldlen = oldlen - k;
@@ -1147,7 +1147,7 @@ object STRING_UTILS
     result = this:_tolist(string = args[1] + "}");
     if (result[1] && result[1] != $string_utils:space(result[1]))
       return {0, tostr("after char ", length(string) - result[1], ":  ", result[2])};
-    elseif (typeof(result[1]) == INT)
+    elseif (typeof(result[1]) == TYPE_INT)
       return {0, "missing } or \""};
     elseif (length(result[2]) > 1)
       return {0, "comma unexpected."};
@@ -1167,7 +1167,7 @@ object STRING_UTILS
       return {0, "empty string"};
     elseif (w = index("{\"", string[1]))
       result = this:(({"_tolist", "_unquote"}[w]))(string[2..slen]);
-      if (typeof(result[1]) != INT)
+      if (typeof(result[1]) != TYPE_INT)
         return result;
       elseif (result[1] == 0)
         return {0, "missing } or \""};
@@ -1176,7 +1176,7 @@ object STRING_UTILS
       endif
     else
       thing = string[1..tlen = index(string + " ", " ") - 1];
-      if (typeof(s = this:_toscalar(thing)) != STR)
+      if (typeof(s = this:_toscalar(thing)) != TYPE_STR)
         return {string[tlen + 1..slen], s};
       else
         return {0, s, alen - slen + 1};
@@ -1197,14 +1197,14 @@ object STRING_UTILS
       rlen = length(rest);
       if (w = index("{\"", rest[1]))
         result = this:(({"_tolist", "_unquote"}[w]))(rest[2..rlen]);
-        if (typeof(result[1]) == INT)
+        if (typeof(result[1]) == TYPE_INT)
           return result;
         endif
         vlist = {@vlist, result[2]};
         rest = result[1];
       else
         thing = rest[1..tlen = min(index(rest + ",", ","), index(rest + "}", "}")) - 1];
-        if (typeof(s = this:_toscalar(thing)) == STR)
+        if (typeof(s = this:_toscalar(thing)) == TYPE_STR)
           return {rlen, s};
         endif
         vlist = {@vlist, s};
@@ -1313,7 +1313,7 @@ object STRING_UTILS
     "$string_utils:from_value(value [, quote_strings = 0 [, list_depth = 1]])";
     "Print the given value into a string.";
     {value, ?quote_strings = 0, ?list_depth = 1} = args;
-    if (typeof(value) == LIST)
+    if (typeof(value) == TYPE_LIST)
       if (value)
         if (list_depth)
           result = "{" + this:from_value(value[1], quote_strings, list_depth - 1);
@@ -1328,7 +1328,7 @@ object STRING_UTILS
         return "{}";
       endif
     elseif (quote_strings)
-      if (typeof(value) == STR)
+      if (typeof(value) == TYPE_STR)
         result = "\"";
         while (q = index(value, "\"") || index(value, "\\"))
           if (value[q] == "\"")
@@ -1338,7 +1338,7 @@ object STRING_UTILS
           value = value[q + 1..$];
         endwhile
         return result + value + "\"";
-      elseif (typeof(value) == ERR)
+      elseif (typeof(value) == TYPE_ERR)
         return $code_utils:error_name(value);
       else
         return tostr(value);
@@ -1353,7 +1353,7 @@ object STRING_UTILS
     "Print the given value into a string. == from_value(value,1,-1)";
     return toliteral(args[1]);
     value = args[1];
-    if (typeof(value) == LIST)
+    if (typeof(value) == TYPE_LIST)
       if (value)
         result = "{" + this:print(value[1]);
         for val in (listdelete(value, 1))
@@ -1363,9 +1363,9 @@ object STRING_UTILS
       else
         return "{}";
       endif
-    elseif (typeof(value) == STR)
+    elseif (typeof(value) == TYPE_STR)
       return tostr("\"", strsub(strsub(value, "\\", "\\\\"), "\"", "\\\""), "\"");
-    elseif (typeof(value) == ERR)
+    elseif (typeof(value) == TYPE_ERR)
       return $code_utils:error_name(value);
     else
       return tostr(value);
@@ -1431,7 +1431,7 @@ object STRING_UTILS
     "This verb suspends as necessary for large values.";
     set_task_perms(caller_perms());
     {value, ?quote_strings = 0, ?list_depth = 1} = args;
-    if (typeof(value) == LIST)
+    if (typeof(value) == TYPE_LIST)
       if (value)
         if (list_depth)
           result = "{" + this:from_value(value[1], quote_strings, list_depth - 1);
@@ -1447,7 +1447,7 @@ object STRING_UTILS
         return "{}";
       endif
     elseif (quote_strings)
-      if (typeof(value) == STR)
+      if (typeof(value) == TYPE_STR)
         result = "\"";
         while (q = index(value, "\"") || index(value, "\\"))
           $command_utils:suspend_if_needed(0);
@@ -1458,7 +1458,7 @@ object STRING_UTILS
           value = value[q + 1..$];
         endwhile
         return result + value + "\"";
-      elseif (typeof(value) == ERR)
+      elseif (typeof(value) == TYPE_ERR)
         return $code_utils:error_name(value);
       else
         return tostr(value);
@@ -1584,7 +1584,7 @@ object STRING_UTILS
     "Return name and number for OBJECT.  Second argument is optional separator (for those who want no space, use \"\").  If OBJECT is a list of objects, this maps the above function over the list and then passes it to $string_utils:english_list.";
     "The third through nth arguments to nn_list corresponds to the second through nth arguments to English_list, and are passed along untouched.";
     {objs, ?sepr = " ", @eng_args} = args;
-    if (typeof(objs) != LIST)
+    if (typeof(objs) != TYPE_LIST)
       objs = {objs};
     endif
     name_list = {};
@@ -1650,7 +1650,7 @@ object STRING_UTILS
     "Usage: $string_utils:index_all(<string,pattern>)";
     "       $string_utils:index_all(\"aaabacadae\",\"a\")";
     {line, pattern} = args;
-    if (typeof(line) != STR || typeof(pattern) != STR)
+    if (typeof(line) != TYPE_STR || typeof(pattern) != TYPE_STR)
       return E_TYPE;
     else
       where = {};
@@ -1741,7 +1741,7 @@ object STRING_UTILS
     "Copied from Mickey (#52413):_abbreviated_value Fri Sep  9 08:52:44 1994 PDT";
     "Internal to :abbreviated_value.  Do not call this directly.";
     {value, max_reslen, max_lstlev, max_lstlen, max_strlen, max_toklen} = args;
-    if ((type = typeof(value)) == LIST)
+    if ((type = typeof(value)) == TYPE_LIST)
       if (!value)
         return "{}";
       elseif (max_lstlev == 0)
@@ -1784,7 +1784,7 @@ object STRING_UTILS
           return tostr(result, "}");
         endif
       endif
-    elseif (type == STR)
+    elseif (type == TYPE_STR)
       result = "\"";
       while ((q = index(value, "\"")) ? q = min(q, index(value, "\\")) | (q = index(value, "\\")))
         result = result + value[1..q - 1] + "\\" + value[q];
@@ -1802,7 +1802,7 @@ object STRING_UTILS
         return tostr(result, "\"");
       endif
     else
-      v = type == ERR ? $code_utils:error_name(value) | tostr(value);
+      v = type == TYPE_ERR ? $code_utils:error_name(value) | tostr(value);
       len = max(4, min(max_reslen, max_toklen));
       return length(v) > len ? v[1..len - 3] + "..." | v;
     endif
@@ -1824,9 +1824,9 @@ object STRING_UTILS
     no_exact_match = no_partial_match = 1;
     for i in [1..length(args) / 2]
       prop_name = args[2 * i + 1];
-      for object in (typeof(olist = args[2 * i]) == LIST ? olist | {olist})
+      for object in (typeof(olist = args[2 * i]) == TYPE_LIST ? olist | {olist})
         if (valid(object))
-          if (typeof(str_list = `object.(prop_name) ! E_PERM, E_PROPNF => {}') != LIST)
+          if (typeof(str_list = `object.(prop_name) ! E_PERM, E_PROPNF => {}') != TYPE_LIST)
             str_list = {str_list};
           endif
           if (subject in str_list)

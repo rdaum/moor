@@ -29,7 +29,7 @@ object PASSWORD_VERIFIER
   override object_size = {10921, 1084848672};
 
   verb help_msg (this none this) owner: HACKER flags: "rxd"
-    if (typeof(base = this.(verb)) == STR)
+    if (typeof(base = this.(verb)) == TYPE_STR)
       base = {base};
     endif
     base = {@base, "", tostr(".minimum_password_length = ", toliteral(x = this.minimum_password_length)), x ? tostr("Passwords are required to be a minimum of ", $string_utils:english_number(x), " characters in length.") | "There is no minimum length requirement for passwords."};
@@ -37,7 +37,7 @@ object PASSWORD_VERIFIER
     base = {@base, "", tostr(".check_against_name = ", toliteral(x = this.check_against_name)), tostr("Passwords ", x ? "may not" | "may", " be variants on the player's MOO name and/or aliases.")};
     base = {@base, "", tostr(".check_against_email = ", toliteral(x = this.check_against_email)), x ? "Passwords may not be variants on the player's email address." | "Passwords are not checked against the player's email address."};
     base = {@base, "", tostr(".check_against_hosts = ", toliteral(x = this.check_against_hosts)), x ? "Passwords may not be variants on the player's hostname(s)." | "Passwords are not checked against the player's hostname(s)."};
-    base = {@base, "", tostr(".check_against_dictionary = ", toliteral(x = this.check_against_dictionary)), tostr("Passwords ", typeof(x) in {LIST, OBJ} ? "may not" | "may", " be dictionary words.", x && !$network.active ? "  (This option is set but unavailable.)" | "")};
+    base = {@base, "", tostr(".check_against_dictionary = ", toliteral(x = this.check_against_dictionary)), tostr("Passwords ", typeof(x) in {TYPE_LIST, TYPE_OBJ} ? "may not" | "may", " be dictionary words.", x && !$network.active ? "  (This option is set but unavailable.)" | "")};
     base = {@base, "", tostr(".require_funky_characters = ", toliteral(x = this.require_funky_characters)), tostr("Non-alphabetic characters are ", x ? "" | "not ", "required in passwords.")};
     base = {@base, "", tostr(".check_obscure_stuff = ", toliteral(x = this.check_obscure_stuff)), x ? "Misc. obscure checks enabled" | "No obscure checks in use."};
     return base;
@@ -57,16 +57,16 @@ object PASSWORD_VERIFIER
       endif
     endif
     "this is gonna be huge";
-    return this:trivial_check(@args) || (this.minimum_password_length && this:check_length(@args)) || (this.check_against_name && trust && this:check_name(@args)) || (this.check_against_email && trust && this:check_email(@args)) || (this.check_against_hosts && trust && this:check_hosts(@args)) || (typeof(this.check_against_dictionary) in {LIST, OBJ} && this:check_dictionary(@args)) || (this.require_funky_characters && this:check_for_funky_characters(@args)) || (this.check_against_moo && this:check_against_moo(@args)) || (this.check_obscure_stuff && this:check_obscure_combinations(@args));
+    return this:trivial_check(@args) || (this.minimum_password_length && this:check_length(@args)) || (this.check_against_name && trust && this:check_name(@args)) || (this.check_against_email && trust && this:check_email(@args)) || (this.check_against_hosts && trust && this:check_hosts(@args)) || (typeof(this.check_against_dictionary) in {TYPE_LIST, TYPE_OBJ} && this:check_dictionary(@args)) || (this.require_funky_characters && this:check_for_funky_characters(@args)) || (this.check_against_moo && this:check_against_moo(@args)) || (this.check_obscure_stuff && this:check_obscure_combinations(@args));
   endverb
 
   verb trivial_check (this none this) owner: HACKER flags: "rxd"
-    if (typeof(pwd = args[1]) != STR)
+    if (typeof(pwd = args[1]) != TYPE_STR)
       return "Passwords must be strings.";
     elseif (index(pwd, " "))
       return "Passwords may not contain spaces.";
     elseif (length(args) == 2)
-      if (typeof(who = args[2]) != OBJ || !valid(who) || !is_player(who))
+      if (typeof(who = args[2]) != TYPE_OBJ || !valid(who) || !is_player(who))
         return "That's not a player.";
       elseif (!$perm_utils:controls(caller_perms(), who))
         return "You can't set the password for that player.";
@@ -121,17 +121,17 @@ object PASSWORD_VERIFIER
 
   verb check_dictionary (this none this) owner: HACKER flags: "rxd"
     pwd = args[1];
-    if (typeof(dict = this.check_against_dictionary) == LIST && $network.active)
+    if (typeof(dict = this.check_against_dictionary) == TYPE_LIST && $network.active)
       "assume we're checking an on-line dictionary";
       dict[3] = dict[3] + pwd;
       result = $gopher:get(@dict);
-      if (typeof(result) == ERR)
+      if (typeof(result) == TYPE_ERR)
         "we probably can't check the dictionary anyway";
         return;
       elseif (result[1] && result[1][1] != "0" && !this:_is_funky_case(pwd))
         return "Dictionary words are not permitted for passwords.";
       endif
-    elseif (typeof(dict) == OBJ)
+    elseif (typeof(dict) == TYPE_OBJ)
       "assume we're checking mr spell";
       try
         if (dict:find_exact(pwd) && !this:_is_funky_case(pwd))

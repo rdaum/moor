@@ -149,7 +149,7 @@ object SITE_DB
         dialup = index(sitename, "dialup");
         "Don't keep around dialups.";
         for y in (items)
-          if (typeof(y) == OBJ && (!valid(y) || !is_player(y) || (dialup && !(sitename in y.all_connect_places))))
+          if (typeof(y) == TYPE_OBJ && (!valid(y) || !is_player(y) || (dialup && !(sitename in y.all_connect_places))))
             verbose && player:tell("removing ", $string_utils:nn(y), " from ", sitename);
             items = setremove(items, y);
           endif
@@ -158,7 +158,7 @@ object SITE_DB
         useless = 1;
         "If no player has this site in eir .all_connect_places, nuke it anyway.";
         for y in (items)
-          if (typeof(y) != OBJ || sitename in y.all_connect_places)
+          if (typeof(y) != TYPE_OBJ || sitename in y.all_connect_places)
             useless = 0;
             break;
             "unfortunately this can get kinna O(n^2).";
@@ -195,7 +195,7 @@ object SITE_DB
   verb report_prune_progress (this none this) owner: #2 flags: "rxd"
     player:tell("Prune is up to ", toliteral(this.prune_progress), ".");
     mine = 0;
-    if (typeof(this.prune_progress) == STR)
+    if (typeof(this.prune_progress) == TYPE_STR)
       alphalen = length(this.alphabet);
       total = alphalen * alphalen * alphalen;
       for x in [1..3]
@@ -239,7 +239,7 @@ object SITE_DB
     $site_db.prune_progress = root;
     $site_db.prune_task = task_id();
     for item in (items)
-      if (typeof(item) == STR)
+      if (typeof(item) == TYPE_STR)
         if (this:prune_fixup(item + "." + root))
           items = setremove(items, item);
         endif
@@ -275,7 +275,7 @@ object SITE_DB
         items = this:find_exact(sitename);
         orig = items;
         for y in (items)
-          if (typeof(y) == OBJ && (!valid(y) || !is_player(y)))
+          if (typeof(y) == TYPE_OBJ && (!valid(y) || !is_player(y)))
             items = setremove(items, y);
           endif
           $command_utils:suspend_if_needed(0);

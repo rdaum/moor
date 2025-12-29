@@ -3,7 +3,7 @@
 
 // basic literal
 ; return typeof(<#0>);
-FLYWEIGHT
+TYPE_FLYWEIGHT
 
 ; return toliteral(<#0>);
 "<#0>"
@@ -23,7 +23,7 @@ FLYWEIGHT
 ['name -> "sword", 'power -> 10]
 
 ; return typeof(flyslots($tmp));
-MAP
+TYPE_MAP
 
 // flycontents() exposes list contents
 ; $tmp = <#0, .name = "sword", {"edge", "balanced"}>;
@@ -31,7 +31,7 @@ MAP
 {"edge", "balanced"}
 
 ; return typeof(flycontents($tmp));
-LIST
+TYPE_LIST
 
 // flyslotset() updates or adds a slot without mutating the original
 ; $tmp = <#0, .name = "sword">;

@@ -22,7 +22,7 @@ object MAIL_RECIPIENT_CLASS
   override object_size = {71323, 1084848672};
 
   verb mail_forward (this none this) owner: #2 flags: "rxd"
-    if (typeof(mf = this.(verb)) == STR)
+    if (typeof(mf = this.(verb)) == TYPE_STR)
       return $string_utils:pronoun_sub(mf, @args);
     else
       return mf;
@@ -68,7 +68,7 @@ object MAIL_RECIPIENT_CLASS
     ":display_message(preamble,msg) --- prints msg to player.";
     vb = this._mail_task == task_id() || caller == $mail_editor ? "notify_lines_suspended" | "tell_lines_suspended";
     preamble = args[1];
-    player:(vb)({@typeof(preamble) == LIST ? preamble | {preamble}, @args[2], "--------------------------"});
+    player:(vb)({@typeof(preamble) == TYPE_LIST ? preamble | {preamble}, @args[2], "--------------------------"});
   endverb
 
   verb "parse_message_seq from_msg_seq %from_msg_seq to_msg_seq %to_msg_seq subject_msg_seq body_msg_seq kept_msg_seq unkept_msg_seq display_seq_headers display_seq_full messages_in_seq list_rmm new_message_num length_num_le length_date_le length_date_gt length_all_msgs exists_num_eq msg_seq_to_msg_num_list msg_seq_to_msg_num_string rm_message_seq undo_rmm expunge_rmm renumber keep_message_seq" (this none this) owner: #2 flags: "rxd"
@@ -288,7 +288,7 @@ object MAIL_RECIPIENT_CLASS
     {verb, args, default, prep, ?extra = 0} = args;
     folder = pfs[1];
     cur = this:get_current_message(folder) || {0};
-    if (typeof(pms = folder:parse_message_seq(pfs[2], @cur)) == LIST)
+    if (typeof(pms = folder:parse_message_seq(pfs[2], @cur)) == TYPE_LIST)
       rest = {@listdelete(pms, 1), @pfs[3]};
       if (!extra && rest)
         "...everything should have been gobbled by :parse_message_seq...";
@@ -300,11 +300,11 @@ object MAIL_RECIPIENT_CLASS
       elseif (used = length(pfs[2]) + 1 - length(pms))
         "...:parse_message_seq used some words, but didn't get anything out of it";
         pms = "%f %<has> no `" + $string_utils:from_list((pfs[2])[1..used], " ") + "' messages.";
-      elseif (typeof(pms = folder:parse_message_seq(default, @cur)) == LIST)
+      elseif (typeof(pms = folder:parse_message_seq(default, @cur)) == TYPE_LIST)
         "...:parse_message_seq used nothing, try the default; wow it worked";
         return {folder, pms[1], cur, rest};
       endif
-    elseif (typeof(pms) == ERR)
+    elseif (typeof(pms) == TYPE_ERR)
       player:tell($mail_agent:name(folder), " is not readable by you.");
       if (!$object_utils:isa(folder, $mail_recipient))
         player:tell("Use * to indicate a non-player mail recipient.");
@@ -385,7 +385,7 @@ object MAIL_RECIPIENT_CLASS
     else
       this:set_current_folder(folder = p[1]);
       e = folder:rm_message_seq(p[2]);
-      if (typeof(e) == ERR)
+      if (typeof(e) == TYPE_ERR)
         player:notify(tostr($mail_agent:name(folder), ":  ", e));
       else
         count = (n = $seq_utils:size(p[2])) == 1 ? "." | tostr(" (", n, " messages).");
@@ -404,7 +404,7 @@ object MAIL_RECIPIENT_CLASS
     endif
     cur = this:current_message(folder);
     fname = $mail_agent:name(folder);
-    if (typeof(h = folder:renumber(cur)) == ERR)
+    if (typeof(h = folder:renumber(cur)) == TYPE_ERR)
       player:notify(tostr(h));
     else
       if (!h[1])
@@ -445,7 +445,7 @@ object MAIL_RECIPIENT_CLASS
       else
         player:notify(tostr(msg_seq, " zombie message", msg_seq == 1 ? " " | "s ", do == "expunge_rmm" ? "expunged from " | "on ", $mail_agent:name(folder), "."));
       endif
-    elseif (typeof(msg_seq) == ERR)
+    elseif (typeof(msg_seq) == TYPE_ERR)
       player:notify(tostr($mail_agent:name(folder), ":  ", msg_seq));
     else
       player:notify(tostr("No messages to ", do == "expunge_rmm" ? "expunge from " | "restore to ", $mail_agent:name(folder)));
@@ -473,7 +473,7 @@ object MAIL_RECIPIENT_CLASS
     if (p = this:parse_mailread_cmd(verb, args, "cur", "on", 1))
       if ($seq_utils:size(p[2]) != 1)
         player:notify("You can only answer *one* message at a time.");
-      elseif (LIST != typeof(flags_replytos = $mail_editor:check_answer_flags(@p[4])))
+      elseif (TYPE_LIST != typeof(flags_replytos = $mail_editor:check_answer_flags(@p[4])))
         player:notify_lines({tostr("Usage:  ", verb, " [message-# [on <recipient>]] [flags...]"), "where flags include any of:", "  all        reply to everyone", "  sender     reply to sender only", "  include    include the original message in your reply", "  noinclude  don't include the original in your reply"});
       else
         this:set_current_folder(p[1]);
@@ -677,7 +677,7 @@ object MAIL_RECIPIENT_CLASS
     sort = this:mail_option("rn_order") || "read";
     for n in (this.current_message)
       $command_utils:suspend_if_needed(0);
-      if (typeof(n) != LIST)
+      if (typeof(n) != TYPE_LIST)
         head = {@head, n};
       elseif ($object_utils:isa(folder = n[1], $mail_recipient) && folder:is_readable_by(this))
         "...set current msg to be the last one you could possibly have read.";
@@ -793,7 +793,7 @@ object MAIL_RECIPIENT_CLASS
           player:notify(tostr("You weren't subscribed to ", $mail_agent:name(folder)));
           if ($object_utils:isa(folder, $mail_recipient))
             result = folder:delete_notify(this);
-            if (typeof(result) == LIST && result[1] == this)
+            if (typeof(result) == TYPE_LIST && result[1] == this)
               player:notify("Removed you from the mail notifications list.");
             endif
           endif
@@ -943,7 +943,7 @@ object MAIL_RECIPIENT_CLASS
           player:notify(tostr("Mail actually went to ", $mail_agent:name_list(@listdelete(result, 1)), "."));
         endif
       else
-        player:notify(tostr(typeof(e) == ERR ? e | "Bogus recipients:  " + $string_utils:from_list(result[2])));
+        player:notify(tostr(typeof(e) == TYPE_ERR ? e | "Bogus recipients:  " + $string_utils:from_list(result[2])));
         player:notify("Mail not sent.");
       endif
     endif
@@ -979,7 +979,7 @@ object MAIL_RECIPIENT_CLASS
       this:set_current_folder(folder);
       if (e = folder:keep_message_seq(msg_seq = p[2]))
         player:notify(tostr("Message", match(e, "[.,]") ? "s " | " ", e, " now marked as kept."));
-      elseif (typeof(e) == ERR)
+      elseif (typeof(e) == TYPE_ERR)
         player:notify(tostr(e));
       else
         player:notify(tostr((seq_size = $seq_utils:size(msg_seq)) == 1 ? "That message is" | "Those messages are", " already marked as kept."));
@@ -1126,7 +1126,7 @@ object MAIL_RECIPIENT_CLASS
       maxmsg = maxmsg ? max(msg[1], maxmsg) | msg[1];
       lines = {tostr("Message ", msg[1], folderstr, ":"), tostr("Date:     ", ctime(msg[2][1])), "From:     " + msg[2][2], "To:       " + msg[2][3], @length(subj = msg[2][4]) > 1 ? {"Subject:  " + subj} | {}};
       for line in ((msg[2])[5..$])
-        if (typeof(line) != STR)
+        if (typeof(line) != TYPE_STR)
           "I don't know how this can happen, but apparently non-strings can end up in the mail message.  So, cope.";
           line = tostr(line);
         endif
@@ -1151,7 +1151,7 @@ object MAIL_RECIPIENT_CLASS
       maxmsg = maxmsg ? max(msg[1], maxmsg) | msg[1];
       lines = {tostr("Message ", msg[1], folderstr, ":"), tostr("Date:     ", ctime(msg[2][1])), "From:     " + msg[2][2], "To:       " + msg[2][3], @length(subj = msg[2][4]) > 1 ? {"Subject:  " + subj} | {}};
       for line in ((msg[2])[5..$])
-        if (typeof(line) != STR)
+        if (typeof(line) != TYPE_STR)
           "I don't know how this can happen, but apparently non-strings can end up in the mail message.  So, cope.";
           line = tostr(line);
         endif
@@ -1230,7 +1230,7 @@ object MAIL_RECIPIENT_CLASS
         $command_utils:suspend_if_needed(0);
       endfor
       if (refile = verb == "@refile")
-        if (typeof(e = source:rm_message_seq(msg_seq)) == ERR)
+        if (typeof(e = source:rm_message_seq(msg_seq)) == TYPE_ERR)
           player:notify(tostr("Deleting from ", source, ":  ", e));
         endif
       endif
@@ -1250,7 +1250,7 @@ object MAIL_RECIPIENT_CLASS
       "...garbled...";
     elseif ($seq_utils:size(p[2]) != 1)
       player:notify("You can only answer *one* message at a time.");
-    elseif (LIST != typeof(flags_replytos = $mail_editor:check_answer_flags("noinclude", @p[4])))
+    elseif (TYPE_LIST != typeof(flags_replytos = $mail_editor:check_answer_flags("noinclude", @p[4])))
       player:notify_lines({tostr("Usage:  ", verb, " [message-# [on <recipient>]] [flags...]"), "where flags include any of:", "  all        reply to everyone", "  sender     reply to sender only", tostr("  include    include the original message in reply (can't do this for ", verb, ")"), "  noinclude  don't include the original in your reply"});
     elseif ("include" in flags_replytos[1])
       player:notify(tostr("Can't include message on a ", verb));
@@ -1267,7 +1267,7 @@ object MAIL_RECIPIENT_CLASS
         hdrs = {to_subj[2], replytos || {}};
         player:notify("Enter lines of message:");
         message = $command_utils:read_lines_escape((active = player in $mail_editor.active) ? {} | {"@edit"}, {tostr("You are composing mail to ", $mail_agent:name_list(@to_subj[1]), "."), @active ? {} | {"Type `@edit' to take this into the mail editor."}});
-        if (typeof(message) == ERR)
+        if (typeof(message) == TYPE_ERR)
           player:notify(tostr(message));
         elseif (message[1] == "@edit")
           $mail_editor:invoke(1, verb, to_subj[1], @hdrs, message[2]);
@@ -1297,7 +1297,7 @@ object MAIL_RECIPIENT_CLASS
     for f in (cm)
       if (!($object_utils:isa(folder = f[1], $player) || $object_utils:isa(folder, $mail_recipient)))
         player:notify(tostr(folder, " is neither a $player nor a $mail_recipient"));
-      elseif (typeof(flen = folder:length_all_msgs()) == ERR)
+      elseif (typeof(flen = folder:length_all_msgs()) == TYPE_ERR)
         player:notify(tostr($mail_agent:name(folder), " ", flen));
       elseif (msg_seq = $seq_utils:range(folder:length_date_le(f[3]) + 1, flen))
         nomail = 0;
@@ -1335,7 +1335,7 @@ object MAIL_RECIPIENT_CLASS
     for f in (cm)
       if (!($object_utils:isa(folder = f[1], $player) || $object_utils:isa(folder, $mail_recipient)))
         player:notify(tostr(folder, " is neither a $player nor a $mail_recipient"));
-      elseif (typeof(flen = folder:length_all_msgs()) == ERR)
+      elseif (typeof(flen = folder:length_all_msgs()) == TYPE_ERR)
         player:notify(tostr($mail_agent:name(folder), " ", flen));
       elseif (msg_seq = $seq_utils:range(folder:length_date_le(f[3]) + 1, flen))
         nomail = 0;
@@ -1394,7 +1394,7 @@ object MAIL_RECIPIENT_CLASS
         subject = "";
       endif
       if (length(args) > 1)
-        unbroken = argstr[argstr[1] == "\"" ? length(args[1]) + 4 | length(args[1]) + 2..$] + "^";
+        unbroken = argstr[(argstr[1] == "\"" ? length(args[1]) + 4 | length(args[1]) + 2)..$] + "^";
         message = {};
         while (unbroken)
           if (i = index(unbroken, "^"))
@@ -1409,7 +1409,7 @@ object MAIL_RECIPIENT_CLASS
         endif
         player:notify("Enter lines of message:");
         message = $command_utils:read_lines_escape((active = player in $mail_editor.active) ? {} | {"@edit"}, {tostr("You are composing mail to ", $mail_agent:name_list(@recipients), "."), @active ? {} | {"Type `@edit' to take this into the mail editor."}});
-        if (typeof(message) == ERR)
+        if (typeof(message) == TYPE_ERR)
           player:notify(tostr(message));
           return;
         elseif (message[1] == "@edit")
@@ -1484,7 +1484,7 @@ object MAIL_RECIPIENT_CLASS
   endverb
 
   verb mail_notify (this none this) owner: #2 flags: "rxd"
-    if (length(this.mail_notify) > 0 && typeof(this.mail_notify[1]) == LIST)
+    if (length(this.mail_notify) > 0 && typeof(this.mail_notify[1]) == TYPE_LIST)
       return this.mail_notify[1];
     else
       return this.mail_notify;
@@ -1509,7 +1509,7 @@ object MAIL_RECIPIENT_CLASS
     base = dobjstr || this:mail_option(verb) || $mail_agent.("player_default_@unsend");
     if (player != this)
       return player:tell(E_PERM);
-    elseif (typeof(base) == STR)
+    elseif (typeof(base) == TYPE_STR)
       seq = $string_utils:words(base);
     else
       seq = base;
@@ -1518,7 +1518,7 @@ object MAIL_RECIPIENT_CLASS
     fail_msg = "Message(s) were not removed as expected. As per *B:Unsend, I cannot elaborate on why.";
     if ($command_utils:player_match_failed(who, iobjstr))
       return;
-    elseif (typeof(res = $mail_options:parse({verb, @seq})) == STR)
+    elseif (typeof(res = $mail_options:parse({verb, @seq})) == TYPE_STR)
       return player:notify(res);
     elseif (who:mail_option("no_unsend") || $object_utils:has_callable_verb(who, "do_unsend") != {$mail_recipient_class})
       "Author's note: I'm not checking for +netmail. The player could have turned it on (or off) later. Netmailed messages are not saved on the player, so they can't be removed, anyway.";
@@ -1539,7 +1539,7 @@ object MAIL_RECIPIENT_CLASS
       seq = {@seq, tostr("last:", last)};
     endif
     ok = who:parse_message_seq(seq, who:current_message());
-    if (typeof(ok) != LIST)
+    if (typeof(ok) != TYPE_LIST)
       return player:notify(fail_msg);
     endif
     allmsgs = length($seq_utils:tolist(@ok));
@@ -1547,7 +1547,7 @@ object MAIL_RECIPIENT_CLASS
     for position in ($list_utils:reverse($list_utils:range(allmsgs)))
       time = time() + 60;
       ok = position == allmsgs ? ok | who:parse_message_seq(seq, who:current_message());
-      if (typeof(ok) == STR || !ok[1])
+      if (typeof(ok) == TYPE_STR || !ok[1])
         break;
       elseif (time() > time)
         player:notify("Due to a mysterious time delay (probably incredible lag), your @unsend command has been aborted. Try again later.");
@@ -1574,7 +1574,7 @@ object MAIL_RECIPIENT_CLASS
         "This runs on the principle that the same message text will be sent to each person. If their .messages is in a non-standard format, this will probably bomb. Such people should set themselves +no_unsend, anyway.";
         for y in (setremove(recips, who))
           time = time() + 60;
-          if (!is_player(y) || y:mail_option("no_unsend") || $object_utils:has_callable_verb(y, "do_unsend") != {$mail_recipient_class} || typeof(z = y:parse_message_seq({"new", "unkept:"}, y:current_message())) == STR || !z)
+          if (!is_player(y) || y:mail_option("no_unsend") || $object_utils:has_callable_verb(y, "do_unsend") != {$mail_recipient_class} || typeof(z = y:parse_message_seq({"new", "unkept:"}, y:current_message())) == TYPE_STR || !z)
             bad = 1;
           elseif (time() > time)
             player:notify("Due to a mysterious time delay (probably incredible lag), your @unsend command has been aborted. Try again later.");
@@ -1643,7 +1643,7 @@ object MAIL_RECIPIENT_CLASS
       {target, message_sequence, _, trailing_args} = p;
       annotation = trailing_args[2..$];
       annotation[1] = tostr("[", player.name, " (", player, "):  ", annotation[1], "]");
-      if (typeof(e = target:annotate_message_seq(annotation, "prepend", message_sequence)) in {ERR, STR})
+      if (typeof(e = target:annotate_message_seq(annotation, "prepend", message_sequence)) in {TYPE_ERR, TYPE_STR})
         player:notify(tostr("Annotation Failed:  ", e));
       else
         count = $seq_utils:size(message_sequence);

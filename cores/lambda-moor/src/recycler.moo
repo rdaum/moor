@@ -63,7 +63,7 @@ object RECYCLER
     "Create an object. When pooling is disabled (default), just creates fresh.";
     "When enabled, attempts to reuse a pooled object first.";
     e = `set_task_perms(caller_perms()) ! ANY';
-    if (typeof(e) == ERR)
+    if (typeof(e) == TYPE_ERR)
       return e;
     endif
     if (!this.enabled)
@@ -114,7 +114,7 @@ object RECYCLER
     elseif ($object_utils:has_callable_verb(this, "request_refused") && (msg = this:request_refused(player, dobj)))
       player:tell("Sorry, can't do that:  ", msg);
     else
-      if (typeof(emsg = this:setup_toad(dobj, player, $root_class)) != ERR)
+      if (typeof(emsg = this:setup_toad(dobj, player, $root_class)) != TYPE_ERR)
         dobj:moveto(player);
         dobj.aliases = {dobj.name = "Object " + tostr(dobj)};
         player:tell("You now have ", dobj, " ready for @recreation.");
@@ -183,7 +183,7 @@ object RECYCLER
       return E_INVARG;
     elseif (!who.wizard)
       return E_PERM;
-    elseif (typeof(o = renumber($quota_utils:bi_create(parent, $hacker))) == ERR)
+    elseif (typeof(o = renumber($quota_utils:bi_create(parent, $hacker))) == TYPE_ERR)
       "..death...";
     elseif (parent == $garbage)
       $recycler:_recycle(o);
@@ -205,7 +205,7 @@ object RECYCLER
     endfork
     for x in (this.lost_souls)
       this.lost_souls = setremove(this.lost_souls, x);
-      if (valid(x) && typeof(x.owner.owned_objects) == LIST && !(x in x.owner.owned_objects))
+      if (valid(x) && typeof(x.owner.owned_objects) == TYPE_LIST && !(x in x.owner.owned_objects))
         x.owner.owned_objects = setadd(x.owner.owned_objects, x);
         $quota_utils:summarize_one_user(x.owner);
       endif
@@ -237,7 +237,7 @@ object RECYCLER
     cheater = 0;
     other_cheaters = {};
     for x in (this.lost_souls)
-      if (valid(x) && (owner = x.owner) != $hacker && typeof(owner.owned_objects) == LIST && !(x in owner.owned_objects))
+      if (valid(x) && (owner = x.owner) != $hacker && typeof(owner.owned_objects) == TYPE_LIST && !(x in owner.owned_objects))
         if (owner == who)
           who.owned_objects = setadd(who.owned_objects, x);
           cheater = 1;
@@ -281,7 +281,7 @@ object RECYCLER
     " -- kill all tasks involving this now-recycled object";
     caller == this || caller == #0 || raise(E_PERM);
     {object} = args;
-    typeof(object) == OBJ || raise(E_INVARG);
+    typeof(object) == TYPE_OBJ || raise(E_INVARG);
     if (!valid(object) || parent(object) != $garbage)
       fork (0)
         for t in (queued_tasks())

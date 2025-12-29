@@ -293,3 +293,65 @@ return multiply_by_five(10);  // Returns 50
 Functions support all MOO parameter patterns including optional parameters (`?param`) and rest parameters (`@args`). They can be called like regular functions and are particularly useful for organizing code, event handling, and data processing.
 
 > **Historical Note**: Despite its name suggesting otherwise, the original LambdaMOO never actually had lambda functions! mooR brings this useful programming tool to MOO as part of our mission of dragging the future into the past.
+
+### Type constant literals
+
+`mooR` changes how type constants are represented in the language.
+
+**The Problem**: In LambdaMOO and ToastStunt, type constants like `INT`, `OBJ`, `STR`, `LIST`, etc. were pre-populated variables in every verb's stack frame. This caused two issues:
+
+1. **Variable name conflicts**: Legacy code that used these names as variables (e.g., `NUM = 123` or `STR = "hello"`) would fail because they couldn't be assigned to.
+2. **Decompilation inconsistency**: The decompiler would output lowercase `int`, `obj`, etc. which didn't match the uppercase convention.
+
+**The Solution**: In `mooR`, type constants are now **literals** (like `true` and `false`), not variables. They use a new `TYPE_` prefix:
+
+| Old Form | New Form |
+|----------|----------|
+| `INT` / `NUM` | `TYPE_INT` |
+| `OBJ` | `TYPE_OBJ` |
+| `STR` | `TYPE_STR` |
+| `LIST` | `TYPE_LIST` |
+| `MAP` | `TYPE_MAP` |
+| `ERR` | `TYPE_ERR` |
+| `FLOAT` | `TYPE_FLOAT` |
+| `BOOL` | `TYPE_BOOL` |
+| `FLYWEIGHT` | `TYPE_FLYWEIGHT` |
+| `SYM` | `TYPE_SYM` |
+
+**Usage**:
+
+```moo
+if (typeof(x) == TYPE_STR)
+    player:tell("x is a string");
+endif
+
+if (typeof(obj) == TYPE_OBJ && valid(obj))
+    obj:tell("Hello!");
+endif
+```
+
+#### Migrating Legacy Code
+
+**Textdump imports**: When importing LambdaMOO or ToastStunt textdumps, the legacy forms (`INT`, `OBJ`, etc.) are automatically recognized and converted to the new `TYPE_*` format. No action is required.
+
+**Objdef format sources**: If you have existing objdef-format MOO sources that use the old type constant names, use the `moorc` migration command:
+
+```bash
+# In your core directory (e.g., cores/lambda-moor or cores/cowbell)
+make migrate
+```
+
+This will:
+1. Parse your sources with legacy type constant support
+2. Output them with the new `TYPE_*` format
+3. Copy the migrated files back to your `src/` directory
+
+After migration, use `make rebuild` for normal development.
+
+You can also invoke `moorc` directly with the `--legacy-type-constants true` flag:
+
+```bash
+moorc --legacy-type-constants true --src-objdef-dir src --out-objdef-dir gen.objdir
+```
+
+> **Note**: This migration only needs to be done once per codebase. After migration, all code will use the new `TYPE_*` format and the legacy flag is no longer needed.
