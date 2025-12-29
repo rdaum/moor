@@ -28,10 +28,10 @@ statement  = {
   | try_finally_statement
   | fn_statement
   | global_assignment
+  | begin_statement
   | expr_statement
   | local_assignment
   | const_assignment
-  | begin_statement
   }
 
 if_statement  = { ^"if" ~ "(" ~ expr ~ ")" ~ statements ~ (elseif_clause)* ~ (else_clause)? ~ endif_clause }
@@ -63,7 +63,9 @@ except                = { ^"except" ~ (labelled_except | unlabelled_except) ~ st
 labelled_except       = { ident ~ "(" ~ codes ~ ")" }
 unlabelled_except     = { "(" ~ codes ~ ")" }
 
-begin_statement       = { ^"begin" ~ statements ~ ^"end" }
+begin_statement       = { begin_keyword ~ statements ~ end_keyword }
+begin_keyword         = @{ ^"begin" ~ !ident_continue }
+end_keyword           = @{ ^"end" ~ !ident_continue }
 
 
 // Function definitions using fn/endfn
@@ -223,8 +225,8 @@ anonymous_uuid = @{ "anon_" ~ ASCII_HEX_DIGIT{6} ~ "-" ~ ASCII_HEX_DIGIT{10} }
 // Keywords must be ordered so that longer keywords come before shorter prefixes.
 // PEG parsers try alternatives in order, so "else" before "elseif" would match
 // the "else" prefix of "elseif" incorrectly. Similarly for if/endif, for/endfor, etc.
-// Note: "end" is intentionally NOT a keyword to preserve backward compatibility
-// with existing MOO code that uses "end" as a variable name (e.g., JHCore).
+// Note: "begin" and "end" are intentionally NOT keywords to preserve backward
+// compatibility with existing MOO code that uses them as variable names (e.g., JHCore).
 keyword = @{
     ^"endfork"
   | ^"endfor"
@@ -247,7 +249,6 @@ keyword = @{
   | ^"let"
   | ^"endfn"
   | ^"fn"
-  | ^"begin"
   | err
 }
 

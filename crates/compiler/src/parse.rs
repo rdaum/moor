@@ -1556,12 +1556,16 @@ impl TreeTransformer {
                 }
                 let mut parts = pair.into_inner();
 
+                // Skip begin_keyword
+                parts.next();
+
                 self.enter_scope();
 
                 let body = self
                     .clone()
                     .parse_statements(parts.next().unwrap().into_inner())?;
                 let num_total_bindings = self.exit_scope();
+                // end_keyword is implicitly consumed by the grammar
                 Ok(Some(Stmt::new(
                     Scope {
                         num_bindings: num_total_bindings,
@@ -3534,6 +3538,67 @@ endif
                 }],
             }]
         );
+    }
+
+    #[test]
+    fn test_begin_end_with_paren_expr() {
+        // Test begin/end with a parenthesized expression inside
+        let program = "begin\n(0);\nend";
+        let result = parse_program(program, CompileOptions::default());
+        assert!(result.is_ok(), "begin/end with paren expr should parse: {:?}", result);
+    }
+
+    #[test]
+    fn test_begin_as_function_call() {
+        // "begin" and "end" are not keywords, so they can be used as identifiers.
+        // This allows legacy MOO code that uses "begin" or "end" as variable names.
+        // begin(0) should parse as a function call, not as a begin_statement.
+        let program = "begin(0);";
+        let result = parse_program(program, CompileOptions::default());
+        assert!(result.is_ok(), "begin(0) should parse as function call: {:?}", result);
+    }
+
+    #[test]
+    fn test_begin_end_as_identifiers() {
+        // "begin" and "end" are not keywords to preserve backward compatibility
+        // with legacy MOO code (e.g., JHCore) that uses them as variable names.
+
+        // Test "end" as a variable name
+        let program = "end = 5;";
+        let result = parse_program(program, CompileOptions::default());
+        assert!(result.is_ok(), "end should be valid as identifier: {:?}", result);
+
+        // Test "begin" as a variable name
+        let program = "begin = 10;";
+        let result = parse_program(program, CompileOptions::default());
+        assert!(result.is_ok(), "begin should be valid as identifier: {:?}", result);
+
+        // Test "ending" as a variable name (identifier starting with "end")
+        let program = "ending = 1;";
+        let result = parse_program(program, CompileOptions::default());
+        assert!(result.is_ok(), "ending should be valid as identifier: {:?}", result);
+
+        // Test "beginning" as a variable name (identifier starting with "begin")
+        let program = "beginning = 1;";
+        let result = parse_program(program, CompileOptions::default());
+        assert!(result.is_ok(), "beginning should be valid as identifier: {:?}", result);
+
+        // Test that begin/end block still works
+        let program = "begin\n  x = 1;\nend";
+        let result = parse_program(program, CompileOptions::default());
+        assert!(result.is_ok(), "begin/end block should still work: {:?}", result);
+
+        // Test begin/end identifiers mixed with begin/end block
+        let program = r#"
+            ending = 0;
+            begin
+                beginning = 1;
+                end = 2;
+            end
+            begin = ending;
+        "#;
+        let result = parse_program(program, CompileOptions::default());
+        assert!(result.is_ok(), "mixed begin/end usage should work: {:?}", result);
     }
 
     /// Test that lexical block scopes parse and that the inner scope variables can shadow outer scope
