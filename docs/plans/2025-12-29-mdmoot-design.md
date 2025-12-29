@@ -293,13 +293,38 @@ The migrator detects repetitive patterns that should become tables:
    | `17` | `"17"` | `"17"` |
    | `{1,2}` | `"{list}"` | `"{1, 2}"` |
 
-3. **Comparison patterns** - `equal(a, b)` becomes:
-   | a | b | equal(a, b)? |
-   |---|---|--------------|
-   | `1 + 1` | `2` | `1` |
-   | `"Foo"` | `"foo"` | `0` |
+3. **Comparison patterns** - `equal(a, b)`, `==`, `<`, `>`, etc. become:
+   | a | b | equal(a, b)? | a < b? | a > b? |
+   |---|---|--------------|--------|--------|
 
-4. **Boolean result patterns** - Repeated `; return expr; 1` or `; return expr; 0` suggests a decision table
+4. **Arithmetic patterns** - binary operations with consistent structure:
+   | a | b | a + b? | a - b? | a * b? | a / b? | a % b? |
+   |---|---|--------|--------|--------|--------|--------|
+
+5. **Bitwise operations** - `&.`, `|.`, `^.`, `<<`, `>>`:
+   | a | b | a &. b? | a \|. b? | a ^. b? |
+   |---|---|---------|----------|---------|
+
+6. **String function patterns** - `index`, `rindex`, `strsub`, `strcmp`:
+   | haystack | needle | index(haystack, needle)? |
+   |----------|--------|--------------------------|
+   | `"foobar"` | `"bar"` | `4` |
+
+7. **List operation patterns** - `listappend`, `listdelete`, `setadd`:
+   | list | listappend(list, 3)? | length(list)? |
+   |------|----------------------|---------------|
+
+8. **Object property patterns** - consecutive property/builtin access on same object type:
+   | obj | obj.owner? | parent(obj)? | children(obj)? |
+   |-----|------------|--------------|----------------|
+
+9. **Error case patterns** - repeated calls expecting errors:
+   | expr | expected? |
+   |------|-----------|
+   | `random(0)` | `E_INVARG` |
+   | `random(-1)` | `E_INVARG` |
+
+10. **Boolean result patterns** - Repeated `; return expr; 1` or `; return expr; 0` suggests a decision table
 
 The migrator groups consecutive similar patterns into tables automatically.
 
