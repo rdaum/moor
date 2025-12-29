@@ -13,7 +13,10 @@
 
 //! Proptest strategies for generating MOO AST nodes.
 
-use crate::ast::{Arg, BinaryOp, CallTarget, CatchCodes, Expr, UnaryOp};
+use crate::ast::{
+    Arg, BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, Expr, ScatterItem, ScatterKind, Stmt,
+    StmtNode, UnaryOp,
+};
 use moor_var::program::names::{VarName, Variable};
 use moor_var::{ErrorCode, Obj, Symbol, Var, VarType};
 use proptest::prelude::*;
@@ -617,6 +620,242 @@ pub fn arb_expr_layer2_complete(depth: usize) -> BoxedStrategy<Expr> {
         ]
         .boxed()
     }
+}
+
+// =============================================================================
+// Scatter Assignment Generators
+// =============================================================================
+
+/// Generate a scatter assignment expression: {a, ?b = 1, @rest} = expr
+/// Constraints:
+/// - Must have at least one item
+/// - At most one Rest item (and it's typically last)
+/// - Required items come first, then Optional, then Rest
+pub fn arb_scatter<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+) -> impl Strategy<Value = Expr> {
+    // Generate 1-4 required items, 0-2 optional items, and optionally a rest item
+    let required_items = proptest::collection::vec(
+        arb_variable().prop_map(|id| ScatterItem {
+            kind: ScatterKind::Required,
+            id,
+            expr: None,
+        }),
+        1..=3,
+    );
+    let optional_items = proptest::collection::vec(
+        (arb_variable(), expr_strategy.clone()).prop_map(|(id, default_expr)| ScatterItem {
+            kind: ScatterKind::Optional,
+            id,
+            expr: Some(default_expr),
+        }),
+        0..=2,
+    );
+    let rest_item = proptest::option::of(arb_variable().prop_map(|id| ScatterItem {
+        kind: ScatterKind::Rest,
+        id,
+        expr: None,
+    }));
+
+    (required_items, optional_items, rest_item, expr_strategy).prop_map(
+        |(mut items, opt_items, rest, rhs)| {
+            items.extend(opt_items);
+            if let Some(rest_item) = rest {
+                items.push(rest_item);
+            }
+            Expr::Scatter(items, Box::new(rhs))
+        },
+    )
+}
+
+// =============================================================================
+// Statement Generators
+// =============================================================================
+
+/// Create a Stmt wrapper with default line info.
+fn make_stmt(node: StmtNode) -> Stmt {
+    Stmt {
+        node,
+        line_col: (1, 1),
+        tree_line_no: 0,
+    }
+}
+
+/// Generate a simple return statement: return expr;
+#[allow(dead_code)]
+pub fn arb_stmt_return<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+) -> impl Strategy<Value = Stmt> {
+    prop_oneof![
+        // pass; (no value)
+        Just(make_stmt(StmtNode::Expr(Expr::Pass { args: vec![] }))),
+        // expr;
+        expr_strategy.prop_map(|expr| make_stmt(StmtNode::Expr(expr))),
+    ]
+}
+
+/// Generate an expression statement: expr;
+pub fn arb_stmt_expr<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+) -> impl Strategy<Value = Stmt> {
+    expr_strategy.prop_map(|expr| make_stmt(StmtNode::Expr(expr)))
+}
+
+/// Generate a simple if statement: if (cond) body endif
+pub fn arb_stmt_if<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_body_len: usize,
+) -> impl Strategy<Value = Stmt> {
+    let body_strategy =
+        proptest::collection::vec(arb_stmt_expr(expr_strategy.clone()), 1..=max_body_len);
+
+    (expr_strategy, body_strategy).prop_map(|(condition, statements)| {
+        make_stmt(StmtNode::Cond {
+            arms: vec![CondArm {
+                condition,
+                statements,
+                environment_width: 0,
+            }],
+            otherwise: None,
+        })
+    })
+}
+
+/// Generate an if-else statement: if (cond) body else body endif
+pub fn arb_stmt_if_else<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_body_len: usize,
+) -> impl Strategy<Value = Stmt> {
+    let body_strategy =
+        proptest::collection::vec(arb_stmt_expr(expr_strategy.clone()), 1..=max_body_len);
+    let else_body_strategy =
+        proptest::collection::vec(arb_stmt_expr(expr_strategy.clone()), 1..=max_body_len);
+
+    (expr_strategy, body_strategy, else_body_strategy).prop_map(
+        |(condition, statements, else_statements)| {
+            make_stmt(StmtNode::Cond {
+                arms: vec![CondArm {
+                    condition,
+                    statements,
+                    environment_width: 0,
+                }],
+                otherwise: Some(ElseArm {
+                    statements: else_statements,
+                    environment_width: 0,
+                }),
+            })
+        },
+    )
+}
+
+/// Generate a for-list statement: for x in (expr) body endfor
+pub fn arb_stmt_for_list<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_body_len: usize,
+) -> impl Strategy<Value = Stmt> {
+    let body_strategy =
+        proptest::collection::vec(arb_stmt_expr(expr_strategy.clone()), 1..=max_body_len);
+
+    (arb_variable(), expr_strategy, body_strategy).prop_map(|(var, list_expr, body)| {
+        make_stmt(StmtNode::ForList {
+            value_binding: var,
+            key_binding: None,
+            expr: list_expr,
+            body,
+            environment_width: 0,
+        })
+    })
+}
+
+/// Generate a for-range statement: for x in [from..to] body endfor
+/// Note: $ (Length) is only valid in indexing contexts like list[1..$],
+/// not in for-range statements.
+pub fn arb_stmt_for_range<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_body_len: usize,
+) -> impl Strategy<Value = Stmt> {
+    let body_strategy =
+        proptest::collection::vec(arb_stmt_expr(expr_strategy.clone()), 1..=max_body_len);
+
+    (
+        arb_variable(),
+        expr_strategy.clone(),
+        expr_strategy,
+        body_strategy,
+    )
+        .prop_map(|(var, from, to, body)| {
+            make_stmt(StmtNode::ForRange {
+                id: var,
+                from,
+                to,
+                body,
+                environment_width: 0,
+            })
+        })
+}
+
+/// Generate a while statement: while (cond) body endwhile
+pub fn arb_stmt_while<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_body_len: usize,
+) -> impl Strategy<Value = Stmt> {
+    let body_strategy =
+        proptest::collection::vec(arb_stmt_expr(expr_strategy.clone()), 1..=max_body_len);
+
+    (expr_strategy, body_strategy).prop_map(|(condition, body)| {
+        make_stmt(StmtNode::While {
+            id: None,
+            condition,
+            body,
+            environment_width: 0,
+        })
+    })
+}
+
+/// Layer 3: Statements layer - simple statements and scatter assignments.
+///
+/// Generates:
+/// - Expression statements
+/// - Scatter assignments
+pub fn arb_stmt_layer3(depth: usize) -> BoxedStrategy<Stmt> {
+    let expr_strategy = arb_expr_layer2_complete(depth);
+
+    prop_oneof![
+        // Expression statement (most common)
+        3 => arb_stmt_expr(expr_strategy.clone()),
+        // Scatter assignment
+        1 => arb_scatter(expr_strategy).prop_map(|scatter| make_stmt(StmtNode::Expr(scatter))),
+    ]
+    .boxed()
+}
+
+/// Layer 4: Control flow statements.
+///
+/// Generates:
+/// - All of Layer 3
+/// - If statements (simple and with else)
+/// - For loops (list and range)
+/// - While loops
+pub fn arb_stmt_layer4(depth: usize) -> BoxedStrategy<Stmt> {
+    let expr_strategy = arb_expr_layer2_complete(depth);
+
+    prop_oneof![
+        // Expression statement
+        3 => arb_stmt_expr(expr_strategy.clone()),
+        // Scatter assignment
+        1 => arb_scatter(expr_strategy.clone()).prop_map(|scatter| make_stmt(StmtNode::Expr(scatter))),
+        // If statement (simple)
+        1 => arb_stmt_if(expr_strategy.clone(), 2),
+        // If-else statement
+        1 => arb_stmt_if_else(expr_strategy.clone(), 2),
+        // For-list loop
+        1 => arb_stmt_for_list(expr_strategy.clone(), 2),
+        // For-range loop
+        1 => arb_stmt_for_range(expr_strategy.clone(), 2),
+        // While loop
+        1 => arb_stmt_while(expr_strategy, 2),
+    ]
+    .boxed()
 }
 
 // =============================================================================

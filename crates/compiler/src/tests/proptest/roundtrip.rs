@@ -16,7 +16,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use crate::ast::{Arg, BinaryOp, CallTarget, CatchCodes, Expr, UnaryOp};
+use crate::ast::{Arg, BinaryOp, CallTarget, CatchCodes, Expr, ScatterKind, Stmt, StmtNode, UnaryOp};
 use crate::parse::parse_program;
 use crate::unparse::unparse;
 use crate::CompileOptions;
@@ -25,7 +25,10 @@ use moor_var::Variant;
 use moor_var::{ErrorCode, Var};
 use proptest::prelude::*;
 
-use super::generators::{arb_expr_layer1, arb_expr_layer2, arb_expr_layer2_complete, arb_expr_layer2b};
+use super::generators::{
+    arb_expr_layer1, arb_expr_layer2, arb_expr_layer2_complete, arb_expr_layer2b,
+    arb_stmt_layer3, arb_stmt_layer4,
+};
 
 /// Format an expression to MOO source code.
 /// This is a simplified unparser just for testing - we'll use it to generate
@@ -246,6 +249,31 @@ fn format_expr_to_source(expr: &Expr) -> String {
                 _ => panic!("Unknown VarType: {:?}", var_type),
             }
         }
+        Expr::Scatter(items, rhs) => {
+            let items_str: Vec<String> = items
+                .iter()
+                .map(|item| {
+                    let var_name = match &item.id.nr {
+                        VarName::Named(sym) => sym.to_string(),
+                        VarName::Register(n) => format!("_r{}", n),
+                    };
+                    match item.kind {
+                        ScatterKind::Required => var_name,
+                        ScatterKind::Optional => {
+                            if let Some(ref default) = item.expr {
+                                format!("?{} = {}", var_name, format_expr_to_source(default))
+                            } else {
+                                format!("?{}", var_name)
+                            }
+                        }
+                        ScatterKind::Rest => format!("@{}", var_name),
+                    }
+                })
+                .collect();
+            // Scatter assignment: {a, b, c} = rhs (not {a, b, c = rhs})
+            format!("{{{}}} = {}", items_str.join(", "), format_expr_to_source(rhs))
+        }
+        Expr::Pass { args: _ } => "pass".to_string(),
         _ => panic!("Unsupported expression type: {:?}", expr),
     }
 }
@@ -322,6 +350,89 @@ fn format_error_code(code: &ErrorCode) -> String {
         ErrCustom(sym) => return format!("E_CUSTOM({})", sym),
     }
     .to_string()
+}
+
+/// Format a statement to MOO source code.
+fn format_stmt_to_source(stmt: &Stmt) -> String {
+    match &stmt.node {
+        StmtNode::Expr(expr) => format!("{};", format_expr_to_source(expr)),
+        StmtNode::Cond { arms, otherwise } => {
+            let mut result = String::new();
+            for (i, arm) in arms.iter().enumerate() {
+                if i == 0 {
+                    result.push_str(&format!("if ({})\n", format_expr_to_source(&arm.condition)));
+                } else {
+                    result.push_str(&format!(
+                        "elseif ({})\n",
+                        format_expr_to_source(&arm.condition)
+                    ));
+                }
+                for stmt in &arm.statements {
+                    result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
+                }
+            }
+            if let Some(else_arm) = otherwise {
+                result.push_str("else\n");
+                for stmt in &else_arm.statements {
+                    result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
+                }
+            }
+            result.push_str("endif");
+            result
+        }
+        StmtNode::ForList {
+            value_binding,
+            key_binding: _,
+            expr,
+            body,
+            ..
+        } => {
+            let var_name = match &value_binding.nr {
+                VarName::Named(sym) => sym.to_string(),
+                VarName::Register(n) => format!("_r{}", n),
+            };
+            let mut result = format!("for {} in ({})\n", var_name, format_expr_to_source(expr));
+            for stmt in body {
+                result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
+            }
+            result.push_str("endfor");
+            result
+        }
+        StmtNode::ForRange {
+            id, from, to, body, ..
+        } => {
+            let var_name = match &id.nr {
+                VarName::Named(sym) => sym.to_string(),
+                VarName::Register(n) => format!("_r{}", n),
+            };
+            // For-range uses [from..to] brackets, not (from..to) parentheses
+            let mut result = format!(
+                "for {} in [{}..{}]\n",
+                var_name,
+                format_expr_to_source(from),
+                format_expr_to_source(to)
+            );
+            for stmt in body {
+                result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
+            }
+            result.push_str("endfor");
+            result
+        }
+        StmtNode::While {
+            id: _,
+            condition,
+            body,
+            ..
+        } => {
+            let mut result = format!("while ({})\n", format_expr_to_source(condition));
+            for stmt in body {
+                result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
+            }
+            result.push_str("endwhile");
+            result
+        }
+        _ => panic!("Unsupported statement type: {:?}", stmt.node),
+    }
 }
 
 /// Save a failure snapshot to disk for debugging.
@@ -430,6 +541,83 @@ fn run_roundtrip(expr: &Expr) -> Result<(), TestCaseError> {
     Ok(())
 }
 
+/// Run a roundtrip test on the given statement.
+fn run_stmt_roundtrip(stmt: &Stmt) -> Result<(), TestCaseError> {
+    // 1. Format the statement to source code
+    let source = format_stmt_to_source(stmt);
+
+    // 2. Parse the source
+    let parse_result = parse_program(&source, CompileOptions::default());
+    let parsed = match parse_result {
+        Ok(p) => p,
+        Err(e) => {
+            let error = format!("Parse error: {:?}", e);
+            save_failure(&source, &error, "unknown");
+            return Err(TestCaseError::fail(format!(
+                "Failed to parse generated source:\n{}\nError: {:?}",
+                source, e
+            )));
+        }
+    };
+
+    // 3. Unparse back to source
+    let unparse_result = unparse(&parsed, false, true);
+    let unparsed = match unparse_result {
+        Ok(lines) => lines.join("\n"),
+        Err(e) => {
+            let error = format!("Unparse error: {:?}", e);
+            save_failure(&source, &error, "unknown");
+            return Err(TestCaseError::fail(format!(
+                "Failed to unparse:\n{}\nError: {:?}",
+                source, e
+            )));
+        }
+    };
+
+    // 4. Parse the unparsed source again
+    let reparse_result = parse_program(&unparsed, CompileOptions::default());
+    let reparsed = match reparse_result {
+        Ok(p) => p,
+        Err(e) => {
+            let error = format!(
+                "Reparse error: {:?}\nOriginal: {}\nUnparsed: {}",
+                e, source, unparsed
+            );
+            save_failure(&source, &error, "unknown");
+            return Err(TestCaseError::fail(format!(
+                "Failed to reparse unparsed source:\nOriginal: {}\nUnparsed: {}\nError: {:?}",
+                source, unparsed, e
+            )));
+        }
+    };
+
+    // 5. Unparse the reparsed version
+    let reunparse_result = unparse(&reparsed, false, true);
+    let reunparsed = match reunparse_result {
+        Ok(lines) => lines.join("\n"),
+        Err(e) => {
+            let error = format!("Reunparse error: {:?}", e);
+            save_failure(&source, &error, "unknown");
+            return Err(TestCaseError::fail(format!(
+                "Failed to reunparse:\n{}\nError: {:?}",
+                source, e
+            )));
+        }
+    };
+
+    // 6. Assert the two unparsed versions are identical (stable roundtrip)
+    if unparsed.trim() != reunparsed.trim() {
+        let error = format!(
+            "Roundtrip not stable!\nFirst unparse: {}\nSecond unparse: {}",
+            unparsed, reunparsed
+        );
+        save_failure(&source, &error, "unknown");
+        return Err(TestCaseError::fail(error));
+    }
+
+    Ok(())
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(1000))]
 
@@ -451,6 +639,16 @@ proptest! {
     #[test]
     fn roundtrip_layer2_complete_expr(expr in arb_expr_layer2_complete(2)) {
         run_roundtrip(&expr)?;
+    }
+
+    #[test]
+    fn roundtrip_stmt_layer3(stmt in arb_stmt_layer3(2)) {
+        run_stmt_roundtrip(&stmt)?;
+    }
+
+    #[test]
+    fn roundtrip_stmt_layer4(stmt in arb_stmt_layer4(1)) {
+        run_stmt_roundtrip(&stmt)?;
     }
 }
 
@@ -536,5 +734,21 @@ mod manual_tests {
         let reparsed = parse_program(&unparsed, CompileOptions::default()).unwrap();
         let reunparsed = unparse(&reparsed, false, true).unwrap().join("\n");
         assert_eq!(unparsed.trim(), reunparsed.trim());
+    }
+
+    #[test]
+    fn test_for_range_basic() {
+        // Basic for-range statement
+        let source = "for x in [1..10]\n  x;\nendfor";
+        let result = parse_program(source, CompileOptions::default());
+        assert!(result.is_ok(), "for x in [1..10] should parse: {:?}", result);
+    }
+
+    #[test]
+    fn test_scatter_assignment() {
+        // Basic scatter assignment
+        let source = "{a, b, c} = {1, 2, 3};";
+        let result = parse_program(source, CompileOptions::default());
+        assert!(result.is_ok(), "scatter should parse: {:?}", result);
     }
 }
