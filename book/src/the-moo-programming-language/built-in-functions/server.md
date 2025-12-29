@@ -49,6 +49,8 @@ notify(player, "= Welcome\nThis is {em}djot{/em}!", false, false, "text/djot");
 - Content types help rich clients (web, mobile) render content appropriately
 - Telnet clients receive formatted plain text regardless of content type
 
+**See Also:** [Web Client Output and Presentations](../../web-client/client-output-and-presentations.md)
+
 ### `event_log`
 
 **Description:** Logs an event to a player's persistent event log without broadcasting to their connections.
@@ -184,6 +186,8 @@ present(player, "profile-setup", "text/plain", "profile-setup", "",
 - Web and mobile clients can render presentations as appropriate UI elements
 - The `id` parameter allows updating or removing presentations later
 - With only 2 arguments (player, id), removes/unpresents the specified presentation
+
+**See Also:** [Web Client Presentations](../../web-client/presentations.md), [Authoring Tools](../../web-client/authoring-tools.md)
 
 ### `connected_players`
 
@@ -585,11 +589,45 @@ connections()
 
 ### `read`
 
-**Description:** Reads data from a specified source, likely a file or database entry.  
+**Description:** Suspends the current task until the player enters a line of input. Supports optional metadata for rich
+input prompts in web clients.
+
+**Syntax:** `str read([obj player [, map metadata]])`
+
 **Arguments:**
 
-- `source`: The source to read from (file path, database key, etc.)
-- `options`: Optional parameters controlling the read operation
+- `player`: (Optional) The player to read input from. Must be the current player.
+- `metadata`: (Optional) Map of UI hints for rich clients. Supported keys:
+    - `input_type`: Type of input control (`"text"`, `"text_area"`, `"number"`, `"choice"`, `"yes_no"`,
+      `"yes_no_alternative"`, `"yes_no_alternative_all"`, `"confirmation"`, `"image"`, `"file"`)
+    - `prompt`: Prompt text to display (supports Djot formatting)
+    - `tts_prompt`: Accessible alternative prompt for screen readers
+    - `placeholder`: Placeholder text for text inputs
+    - `default`: Default value
+    - `choices`: List of options for `choice` input type
+    - `min` / `max`: Constraints for `number` input type
+    - `rows`: Number of rows for `text_area`
+    - `accept_content_types`: Allowed MIME types for `image`/`file` inputs
+    - `max_file_size`: Maximum file size in bytes for uploads
+    - `alternative_label`: Label for alternative input in `yes_no_alternative*` types
+
+**Returns:** The string entered by the player
+
+**Examples:**
+
+```moo
+// Simple read
+input = read();
+
+// Read with rich prompt
+input = read(player, [
+    "input_type" -> "choice",
+    "prompt" -> "Choose a direction:",
+    "choices" -> {"North", "South", "East", "West"}
+]);
+```
+
+**See Also:** [Web Client Rich Input Prompts](../../web-client/client-output-and-presentations.md#rich-input-prompts)
 
 ### `dump_database`
 

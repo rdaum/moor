@@ -15,17 +15,6 @@ The web client supports full keyboard navigation:
 | Escape    | Close dialogs, dismiss prompts              |
 | Up/Down   | Navigate command history (in command input) |
 
-### Editor Shortcuts
-
-In the verb and property editors:
-
-| Key          | Action           |
-|--------------|------------------|
-| Ctrl+S       | Save and compile |
-| Ctrl+Z       | Undo             |
-| Ctrl+Shift+Z | Redo             |
-| Escape       | Close editor     |
-
 ## Screen Reader Support
 
 The web client uses ARIA attributes and live regions to communicate with screen readers effectively.
@@ -54,12 +43,12 @@ The `notify()` builtin accepts metadata as its final argument:
 ```moo
 // Simple TTS alternative with notify()
 metadata = ["tts_text" -> "Gate status: open"];
-notify(player, "<div class='status'><strong>Gate</strong> OPEN</div>", 0, 0, "text/html", metadata);
+notify(player, "<div class='status'><strong>Gate</strong> OPEN</div>", false, false, "text/html", metadata);
 
 // Table with accessible summary
 html = "<table><tr><th>Player</th><th>Score</th></tr><tr><td>Alice</td><td>100</td></tr></table>";
 metadata = ["tts_text" -> "Player scores: Alice has 100 points"];
-notify(player, html, 0, 0, "text/html", metadata);
+notify(player, html, false, false, "text/html", metadata);
 ```
 
 #### Using cowbell's event system
@@ -89,12 +78,12 @@ Rich input prompts are fully accessible:
 
 ### Example Accessible Prompt
 
-Rich input prompts are triggered via the `request_input()` builtin. The `tts_prompt` metadata key provides an accessible
-alternative to visually complex prompts:
+Rich input prompts are triggered via the `read()` builtin with metadata. The `tts_prompt` metadata key provides an
+accessible alternative to visually complex prompts:
 
 ```moo
 // Visual prompt shows formatted SQL, screen readers hear a clear question
-request_input(player, [
+read(player, [
     "input_type" -> "yes_no_alternative",
     "prompt" -> "Apply this change?\n```sql\nALTER TABLE users ADD COLUMN verified BOOLEAN;\n```",
     "tts_prompt" -> "Apply database change to add verified column to users table?"
@@ -133,7 +122,6 @@ When creating MOO content for accessibility:
 - Provide `tts_text` for tables, complex formatting, ASCII art
 - Use semantic markup (headings, lists) in Djot and HTML
 - Write descriptive link text ("View inventory" not "Click here")
-- Include image alt text in event metadata
 
 ### DON'T
 

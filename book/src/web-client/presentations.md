@@ -5,6 +5,8 @@ asks the client to display structured UI elements beyond plain text output, deli
 
 ## The `present()` Builtin
 
+See also: [Builtin Reference](../the-moo-programming-language/built-in-functions/server.md#present)
+
 ```moo
 present(player, id, content_type, target, content, attributes)
 present(player, id)  // Dismiss presentation

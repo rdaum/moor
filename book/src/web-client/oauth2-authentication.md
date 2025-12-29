@@ -35,14 +35,12 @@ When creating a new account via OAuth2, the wizard guides the player through:
 1. **Credentials**: Choose a character name (username is pre-filled from OAuth2 profile)
 2. **Privacy Policy**: Accept site privacy policy (if configured)
 3. **Encryption Info**: Learn about event log encryption (if enabled)
-4. **Encryption Password**: Choose whether to use OAuth2 login password or a separate encryption password
+4. **Encryption Password**: Set an encryption password for event log encryption
 
-### Encryption Password Options
+### Encryption Password
 
-If event logging is enabled, players can choose:
-
-- **Use login password**: Convenient but ties encryption to the OAuth2 provider
-- **Separate password**: Independent encryption key, more secure but requires remembering two passwords
+If event logging is enabled, players must create an encryption password. This password is separate from the OAuth2
+identity and is used to encrypt the player's event log history.
 
 ## Linking to Existing Account
 
@@ -81,9 +79,9 @@ Each provider has its own developer console for creating OAuth2 applications:
 
 | Provider | Developer Console | Redirect URI Path |
 |----------|-------------------|-------------------|
-| Discord | discord.com/developers | `/auth/discord/callback` |
-| GitHub | github.com/settings/developers | `/auth/github/callback` |
-| Google | console.cloud.google.com | `/auth/google/callback` |
+| Discord | discord.com/developers | `/auth/oauth2/discord/callback` |
+| GitHub | github.com/settings/developers | `/auth/oauth2/github/callback` |
+| Google | console.cloud.google.com | `/auth/oauth2/google/callback` |
 
 ### Security Considerations
 

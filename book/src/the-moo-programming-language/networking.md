@@ -81,15 +81,19 @@ endfor
 When sending `text/html` or `text/djot` content, the web client converts anchors into interactive elements and recognizes
 `moo://` link schemes:
 
-- `moo://cmd/<command>`: Runs the URL-decoded command as if the player typed it.
-- `moo://inspect/<ref>`: Reserved for object inspection (currently shows a placeholder message).
-- `moo://help/<topic>`: Reserved for contextual help (currently shows a placeholder message).
-- `http(s)` links open in a new tab.
+| Link Pattern | Action |
+|--------------|--------|
+| `moo://cmd/<command>` | Run the URL-decoded command as if typed by the player |
+| `moo://inspect/<ref>` | Show object info popover (calls `<ref>:inspection`) |
+
+Standard `http(s)` links open in a new tab.
 
 ```moo
 // Inline command link in djot
 notify(player, "[look](moo://cmd/look)", false, false, "text/djot");
 ```
+
+For more details on web client output features, see [Client Output and Presentations](../web-client/client-output-and-presentations.md).
 
 ### Accessibility Metadata (Web Client)
 
@@ -97,6 +101,8 @@ If your core emits narrative or prompt metadata, the web client recognizes:
 
 - `tts_text`: Alternate narration text for screen readers (used instead of formatted output).
 - `tts_prompt`: Alternate prompt text for rich input prompts.
+
+For full accessibility guidelines, see [Web Client Accessibility](../web-client/accessibility.md).
 
 ### Advanced notify() Options
 

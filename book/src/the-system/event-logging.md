@@ -339,3 +339,9 @@ If you're building custom clients or tools, the event logging system exposes the
 
 All endpoints require PASETO authentication tokens. The client generates age keypairs from passwords and decrypts
 history locally in the browser. Private keys never leave the client.
+
+## See Also
+
+- [Web Client Overview](../web-client/index.md)
+- [Web Client Output and Presentations](../web-client/client-output-and-presentations.md)
+- [Server Builtins: event_log](../the-moo-programming-language/built-in-functions/server.md#event_log)

@@ -31,17 +31,22 @@ docker compose -f deploy/web-ssl/docker-compose.yml up -d
 
 ### Debian Packages
 
-For Debian/Ubuntu systems, install the packages and use the provided nginx configuration:
+For Debian/Ubuntu systems, install the packages and configure nginx:
 
 ```bash
-# Install packages
-apt install moor-daemon moor-web-host moor-frontend
+# Install from APT repository (recommended)
+sudo apt install moor-daemon moor-web-host moor-web-client
 
-# Copy nginx configuration
-cp /usr/share/moor/nginx-for-debian.conf /etc/nginx/sites-available/moor
-ln -s /etc/nginx/sites-available/moor /etc/nginx/sites-enabled/
-nginx -t && systemctl reload nginx
+# Or install from downloaded .deb files
+sudo dpkg -i moor-daemon_*.deb moor-web-host_*.deb moor-web-client_*.deb
+
+# Configure nginx (copy from deploy/debian-packages/)
+sudo cp nginx-for-debian.conf /etc/nginx/sites-available/moor
+sudo ln -s /etc/nginx/sites-available/moor /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
 ```
+
+Web client files are installed to `/usr/share/moor/web-client/`.
 
 ### Kubernetes
 
@@ -178,7 +183,7 @@ For load balancers and orchestrators:
 
 | Endpoint | Service | Expected Response |
 |----------|---------|-------------------|
-| `/api/health` | moor-web-host | 200 OK |
+| `/health` | moor-web-host | 200 OK |
 | `/` | Static assets | 200 OK with index.html |
 
 ## Related Docs

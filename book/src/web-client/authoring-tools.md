@@ -17,7 +17,7 @@ clients cannot bypass server-side access checks.
 
 ## Object Browser
 
-The object browser lets builders inspect objects, browse properties and verbs, and navigate object hierarchies. It is
+The object browser lets programmers inspect objects, browse properties and verbs, and navigate object hierarchies. It is
 shown when the logged-in player has the programmer flag.
 
 ### Opening the Object Browser
@@ -28,8 +28,9 @@ shown when the logged-in player has the programmer flag.
 
 ### Features
 
-- **Object Search**: Find objects by name pattern, parent type, or object number
-- **Object Details**: View name, parent, owner, location, flags (player, programmer, wizard, fertile, readable)
+- **Object List**: Browse accessible objects
+- **Object Details**: View name, parent, owner, location, flags (player, programmer, wizard, readable, writable,
+  fertile)
 - **Property List**: Browse all properties with owner, permissions, and values
 - **Verb List**: Browse all verbs with owner, permissions, and argument specifications
 - **Navigation**: Click on object references to navigate (parent, owner, location)
@@ -46,7 +47,7 @@ The browser shows object flags as compact letter codes:
 | Wizard     | `w`    | Has wizard privileges     |
 | Readable   | `r`    | Object is readable        |
 | Writable   | `W`    | Object is writable        |
-| Fertile    | `f`    | Can create children       |
+| Fertile    | `f`    | Can be used as a parent   |
 
 ## Verb Editor
 
@@ -56,9 +57,9 @@ experience.
 ### Features
 
 - **Syntax Highlighting**: MOO-specific highlighting for keywords, builtins, strings, comments
-- **Autocompletion**: Suggestions for builtin functions, keywords, and common patterns
+- **Autocompletion**: Suggestions for builtin functions, keywords, and—when the target can be statically determined (e.g., `this` or `#123`)—property and verb names
 - **Error Display**: Compile errors shown inline with line/column markers
-- **Compile on Save**: Press Ctrl+S (Cmd+S on Mac) or click Save to compile and save
+- **Save and Compile**: Click the Save button to compile and save
 - **Word Wrap**: Toggle word wrapping for long lines
 - **Minimap**: Optional code minimap for navigation (hidden on mobile)
 - **Font Size**: Adjustable font size (10-24px)
@@ -80,16 +81,6 @@ The verb editor also supports editing verb metadata:
 ### Navigation
 
 When multiple verbs are open for editing, use the navigation arrows in the title bar to switch between them.
-
-### Keyboard Shortcuts
-
-| Shortcut     | Action              |
-|--------------|---------------------|
-| Ctrl+S       | Save and compile    |
-| Ctrl+/       | Toggle line comment |
-| Ctrl+D       | Duplicate line      |
-| Ctrl+Shift+K | Delete line         |
-| F5           | Toggle word wrap    |
 
 ## Property Editor
 
@@ -140,10 +131,9 @@ through the server eval endpoint (the same underlying capability as the `eval()`
 
 ### Usage
 
-1. Open the eval panel from the object browser or via keyboard shortcut
-2. Enter a full MOO statement. Note that unlike `eval` inside a typical MOO core, you should include the
-   `return` keyword and trailing semicolons. Your statement should evaluate to a single value.
-3. Press Enter or click Evaluate
+1. Open the eval panel by clicking the "λ" button in the top navigation bar
+2. Enter MOO code. To return a value, use an explicit `return` statement (e.g., `return 1 + 1;`)
+3. Press Ctrl+Enter (Cmd+Enter on Mac) or click the Evaluate button
 4. See the result displayed below
 
 The eval panel is only shown when the player has the programmer flag.

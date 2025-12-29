@@ -58,14 +58,14 @@
     - [Emergency Medical Hologram Tool (moor-emh)](the-system/moor-emh-tool.md)
     - [Networking](./the-moo-programming-language/networking.md)
     - [Controlling the Execution of Tasks](the-system/controlling-the-execution-of-tasks.md)
-- [The architecture of mooR](moor-architecture.md)
-- [Web Client](web-client/index.md)
+- [The packaged web client](web-client/index.md)
     - [Deployment](web-client/deployment.md)
     - [OAuth2 Authentication](web-client/oauth2-authentication.md)
     - [Authoring and Programming Tools](web-client/authoring-tools.md)
     - [Client Output and Presentations](web-client/client-output-and-presentations.md)
     - [Accessibility](web-client/accessibility.md)
     - [Presentations](web-client/presentations.md)
+- [mooR architecture overview](moor-architecture.md)
 - [MOO Resources](./moo-resources.md)
 
 ---

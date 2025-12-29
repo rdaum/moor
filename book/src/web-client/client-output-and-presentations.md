@@ -45,7 +45,8 @@ The iframe is sandboxed and intended for trusted, static content.
 
 ## notify() Content Types
 
-The `notify()` builtin can specify a `content_type` in rich mode. The web client understands:
+The [`notify()`](../the-moo-programming-language/built-in-functions/server.md#notify) builtin can specify a
+`content_type` in rich mode. The web client understands:
 
 | Content Type     | Description                       |
 |------------------|-----------------------------------|
@@ -74,8 +75,7 @@ links for client-side actions:
 | Link Pattern          | Action                                                |
 |-----------------------|-------------------------------------------------------|
 | `moo://cmd/<command>` | Run the URL-decoded command as if typed by the player |
-| `moo://inspect/<ref>` | Open object inspector (if programmer)                 |
-| `moo://help/<topic>`  | Show help for topic                                   |
+| `moo://inspect/<ref>` | Show object info popover (calls `<ref>:inspection`)   |
 
 ```moo
 notify(player, "[look](moo://cmd/look)", false, false, "text/djot");
@@ -100,9 +100,12 @@ message body.
 **notify() targeting:**
 
 - `notify(player, ...)` — sends to **all** of that player's connections AND writes to the event log (persistent history)
-- `notify(connection, ...)` — sends only to that specific connection (negative object number), does NOT write to event log or other connections
+- `notify(connection, ...)` — sends only to that specific connection (negative object number), does NOT write to event
+  log or other connections
 
-The `event_log()` builtin writes to the persistent event log without displaying anything—useful for background logging.
+The [`event_log()`](../the-moo-programming-language/built-in-functions/server.md#event_log) builtin explicitly writes to
+the event log without displaying anything—useful when you've only notified a specific connection but still want the
+message recorded in history.
 
 ### Presentation Hints
 
@@ -116,7 +119,7 @@ The `event_log()` builtin writes to the persistent event log without displaying 
 
 ```moo
 metadata = ["presentation_hint" -> "processing"];
-notify(player, "Calibrating sensors...", 0, 0, "text/plain", metadata);
+notify(player, "Calibrating sensors...", false, false, "text/plain", metadata);
 ```
 
 ### Grouping with group_id
@@ -131,8 +134,8 @@ client visually groups them together. This enables:
 ```moo
 // Grouped look description
 metadata = ["presentation_hint" -> "inset", "group_id" -> "look:#123"];
-notify(player, "You are in the Observatory.", 0, 0, "text/plain", metadata);
-notify(player, "A brass telescope points skyward.", 0, 0, "text/plain", metadata);
+notify(player, "You are in the Observatory.", false, false, "text/plain", metadata);
+notify(player, "A brass telescope points skyward.", false, false, "text/plain", metadata);
 ```
 
 ### Message Staleness
@@ -150,26 +153,31 @@ rewritable messages.
 // Initial message with rewritable ID
 metadata = [
     "presentation_hint" -> "processing",
-    "rewritable" -> ["id" -> "task-123", "owner" -> tostr(this), "ttl" -> 30]
+    "rewritable_id" -> "task-123",
+    "rewritable_owner" -> this,
+    "rewritable_ttl" -> 30
 ];
-notify(player, "Processing...", 0, 0, "text/plain", metadata);
+notify(player, "Processing...", false, false, "text/plain", metadata);
 
 // Later: rewrite the message
 metadata = ["rewrite_target" -> "task-123"];
-notify(player, "Processing complete!", 0, 0, "text/plain", metadata);
+notify(player, "Processing complete!", false, false, "text/plain", metadata);
 ```
 
-Rewritable messages have:
+Rewritable metadata keys:
 
-- **id**: Unique identifier for the message slot
-- **owner**: Object that owns this slot (security check)
-- **ttl**: Time-to-live in seconds before expiry
-- **fallback** (optional): Content to show if TTL expires without rewrite
+| Key                   | Type   | Description                                               |
+|-----------------------|--------|-----------------------------------------------------------|
+| `rewritable_id`       | string | Unique identifier for the message slot                    |
+| `rewritable_owner`    | object | Object that owns this slot (security check)               |
+| `rewritable_ttl`      | number | Time-to-live in seconds before expiry                     |
+| `rewritable_fallback` | string | Content to show if TTL expires without rewrite            |
+| `rewrite_target`      | string | ID of the message to rewrite (on the replacement message) |
 
 ## Rich Input Prompts
 
-The web client supports structured input prompts that go beyond simple text input. Use `request_input()` to trigger
-these.
+The web client supports structured input prompts that go beyond simple text input. Use `read()` with metadata to trigger
+these. See [read() builtin reference](../the-moo-programming-language/built-in-functions/server.md#read).
 
 ### Input Types
 
@@ -207,10 +215,10 @@ these.
 
 ```moo
 // Simple text input
-request_input(player, ["input_type" -> "text", "prompt" -> "What is your name?"]);
+read(player, ["input_type" -> "text", "prompt" -> "What is your name?"]);
 
 // Number with constraints
-request_input(player, [
+read(player, [
     "input_type" -> "number",
     "prompt" -> "How many items?",
     "min" -> 1,
@@ -219,21 +227,21 @@ request_input(player, [
 ]);
 
 // Multiple choice
-request_input(player, [
+read(player, [
     "input_type" -> "choice",
     "prompt" -> "Choose a direction:",
     "choices" -> {"North", "South", "East", "West"}
 ]);
 
 // Yes/No with alternative (for AI agent approvals)
-request_input(player, [
+read(player, [
     "input_type" -> "yes_no_alternative",
     "prompt" -> "Apply this change?\n```moo\nplayer.score = 100;\n```",
     "alternative_label" -> "Suggest a different approach:"
 ]);
 
 // Image upload
-request_input(player, [
+read(player, [
     "input_type" -> "image",
     "prompt" -> "Upload your profile picture:",
     "accept_content_types" -> {"image/png", "image/jpeg", "image/gif"},
@@ -243,8 +251,8 @@ request_input(player, [
 
 ## present() Targets and Attributes
 
-The `present()` builtin is used to open or update panels and windows. See [Presentations](./presentations.md) for
-comprehensive documentation.
+The [`present()`](../the-moo-programming-language/built-in-functions/server.md#present) builtin is used to open or
+update panels and windows. See [Presentations](./presentations.md) for comprehensive documentation.
 
 Quick reference:
 
