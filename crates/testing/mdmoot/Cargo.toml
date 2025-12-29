@@ -21,6 +21,7 @@ pulldown-cmark = "0.12"
 
 # Config & Serialization
 serde = { workspace = true, features = ["derive"] }
+serde_yaml = "0.9"
 toml = "0.8"
 
 # Error Handling & Logging

@@ -11,13 +11,24 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Markdown parser for mdmoot spec files
-//!
-//! TODO: Implementation in Task 4
+//! Spec file parser
 
-use crate::Spec;
+mod frontmatter;
 
-/// Parse a markdown spec file into AST
-pub fn parse_spec(_content: &str) -> eyre::Result<Spec> {
-    todo!("Parser implementation in Task 4")
+use crate::ast::*;
+use eyre::Result;
+
+pub use frontmatter::parse_frontmatter;
+
+/// Parse a spec file from markdown content
+pub fn parse_spec(content: &str) -> Result<Spec> {
+    let (frontmatter, _body) = parse_frontmatter(content)?;
+
+    // TODO: Parse markdown body
+    let sections = vec![];
+
+    Ok(Spec {
+        frontmatter,
+        sections,
+    })
 }
