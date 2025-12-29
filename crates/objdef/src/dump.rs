@@ -687,7 +687,7 @@ mod tests {
     };
     use moor_compiler::{CompileOptions, compile};
     use moor_db::{Database, DatabaseConfig, TxDB};
-    use moor_textdump::textdump_load;
+    use moor_textdump::{TextdumpImportOptions, textdump_load};
     use moor_var::{
         Obj, SYSTEM_OBJECT, Sequence, Symbol, Var,
         program::{
@@ -721,6 +721,7 @@ mod tests {
                 jhcore,
                 Version::new(0, 1, 0),
                 CompileOptions::default(),
+                TextdumpImportOptions::default(),
             )
             .unwrap();
             assert!(matches!(

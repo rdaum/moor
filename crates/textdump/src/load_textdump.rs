@@ -26,10 +26,100 @@ use moor_common::{
     util::BitEnum,
 };
 use moor_compiler::{CompileOptions, Program, compile};
-use moor_var::{NOTHING, Obj, Symbol, Var, program::ProgramType};
+use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, Var, program::ProgramType, v_str};
 use semver::Version;
 use std::{collections::BTreeMap, fs::File, io, io::BufReader, path::PathBuf};
 use tracing::{info, span, trace, warn};
+
+/// Options for textdump import behavior
+#[derive(Debug, Clone, Default)]
+pub struct TextdumpImportOptions {
+    /// If true, continue importing even when verbs fail to compile.
+    /// Failed verbs will be created with empty programs.
+    /// If false (default), any compile error will abort the import.
+    pub continue_on_compile_errors: bool,
+}
+
+/// Result of compiling a verb's source code
+enum VerbCompileResult {
+    /// Successfully compiled program
+    Ok(Program),
+    /// Compilation failed but we're continuing - use empty program
+    SkippedWithWarning,
+    /// Compilation failed and we should abort
+    Error(TextdumpReaderError),
+}
+
+/// Compile a verb's source code, handling errors according to import options.
+fn compile_verb_source(
+    source: &str,
+    compile_options: CompileOptions,
+    import_options: &TextdumpImportOptions,
+    objid: &Obj,
+    vn: usize,
+    names_str: &str,
+    start_line: usize,
+) -> VerbCompileResult {
+    match compile(source, compile_options) {
+        Ok(program) => VerbCompileResult::Ok(program),
+        Err(e) => {
+            if !import_options.continue_on_compile_errors {
+                return VerbCompileResult::Error(make_compile_error(&e, objid, vn, names_str, start_line));
+            }
+            log_compile_warning(&e, objid, names_str, start_line);
+            VerbCompileResult::SkippedWithWarning
+        }
+    }
+}
+
+fn make_compile_error(
+    e: &CompileError,
+    objid: &Obj,
+    vn: usize,
+    names_str: &str,
+    start_line: usize,
+) -> TextdumpReaderError {
+    match e {
+        CompileError::InvalidTypeLiteralAssignment(t, c) => TextdumpReaderError::VerbCompileError(
+            format!(
+                "Compiling verb {objid}/{vn} ({names_str}) starting at line {}; \
+                (*Note*: assignment to type literal {t} is valid in LambdaMOO/ToastStunt, \
+                but not in mooR. Manual intervention is required. \
+                Use --continue-on-errors to skip failed verbs.)",
+                start_line + c.line_col.0
+            ),
+            e.clone(),
+        ),
+        _ => TextdumpReaderError::VerbCompileError(
+            format!(
+                "Compiling verb {objid}/{vn} ({names_str}) starting at line {}. \
+                Use --continue-on-errors to skip failed verbs.",
+                start_line + e.context().line_col.0,
+            ),
+            e.clone(),
+        ),
+    }
+}
+
+fn log_compile_warning(e: &CompileError, objid: &Obj, names_str: &str, start_line: usize) {
+    match e {
+        CompileError::InvalidTypeLiteralAssignment(t, c) => {
+            warn!(
+                "Verb {objid}:{names_str} (line {}) failed to compile: \
+                assignment to type literal {t} is valid in LambdaMOO/ToastStunt \
+                but not in mooR. Manual intervention required.",
+                start_line + c.line_col.0
+            );
+        }
+        _ => {
+            warn!(
+                "Verb {objid}:{names_str} (line {}) failed to compile: {e}. \
+                Verb will be created with empty program.",
+                start_line + e.context().line_col.0
+            );
+        }
+    }
+}
 
 struct RProp {
     definer: Obj,
@@ -83,6 +173,7 @@ pub fn textdump_load(
     path: PathBuf,
     moor_version: Version,
     features_config: CompileOptions,
+    import_options: TextdumpImportOptions,
 ) -> Result<(), TextdumpReaderError> {
     let textdump_import_span = span!(tracing::Level::INFO, "textdump_import");
     let _enter = textdump_import_span.enter();
@@ -92,7 +183,7 @@ pub fn textdump_load(
 
     let br = BufReader::new(corefile);
 
-    read_textdump(ldr, br, moor_version, features_config)
+    read_textdump(ldr, br, moor_version, features_config, import_options)
 }
 
 /// Returns true if the compile options are compatible with another configuration, for the purposes
@@ -115,6 +206,7 @@ pub fn read_textdump<T: io::Read>(
     reader: BufReader<T>,
     moo_version: Version,
     compile_options: CompileOptions,
+    import_options: TextdumpImportOptions,
 ) -> Result<(), TextdumpReaderError> {
     let mut tdr = TextdumpReader::new(reader)?;
     // Validate the textdumps' version string against the configuration of the server.
@@ -155,6 +247,23 @@ pub fn read_textdump<T: io::Read>(
     }
 
     let td = tdr.read_textdump()?;
+
+    // Report any WAIFs that were found and converted to None
+    if !tdr.waif_locations.is_empty() {
+        warn!(
+            "Found {} WAIF value(s) which were converted to None (WAIFs are unsupported):",
+            tdr.waif_locations.len()
+        );
+        for loc in &tdr.waif_locations {
+            let prop_name = td
+                .objects
+                .get(&loc.object)
+                .and_then(|o| resolve_prop(&td.objects, loc.property_index, o))
+                .map(|r| r.name.to_string())
+                .unwrap_or_else(|| format!("property #{}", loc.property_index));
+            warn!("  - {}:{} (line {})", loc.object, prop_name, loc.line_num);
+        }
+    }
 
     // For textdump imports we wrap unknown functions up in `call_function`...
     let mut compile_options = compile_options.clone();
@@ -228,6 +337,7 @@ pub fn read_textdump<T: io::Read>(
     }
 
     info!("Defining verbs...");
+    let mut compile_errors = 0usize;
     for (objid, o) in &td.objects {
         for (vn, v) in o.verbdefs.iter().enumerate() {
             let mut flags: BitEnum<VerbFlag> = BitEnum::new();
@@ -256,36 +366,31 @@ pub fn read_textdump<T: io::Read>(
             let names: Vec<_> = v.name.split(' ').map(Symbol::mk).collect();
 
             let program = match td.verbs.get(&(*objid, vn)) {
-                Some(verb) if verb.program.is_some() => compile(
-                    verb.program.clone().unwrap().as_str(),
-                    compile_options.clone(),
-                )
-                .map_err(|e| {
-                    let names: Vec<_> = names.iter().map(|s| s.to_string()).collect();
-                    let names = names.join(" ");
-                    match &e {
-                        CompileError::InvalidTypeLiteralAssignment(t, c) => {
-                            TextdumpReaderError::VerbCompileError(
-                                format!(
-                                    "Compiling verb {objid}/{vn} ({names}) starting at line {}; \
-                                    (*Note*: assignment to type literal {t} is valid in LambdaMOO/ToastStunt, \
-                                    but not in mooR. Manual intervention is required)",
-                                    verb.start_line + c.line_col.0
-                                ),
-                                e.clone(),
-                            )
+                Some(verb) if verb.program.is_some() => {
+                    let source = verb.program.as_ref().unwrap();
+                    let names_str = names
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    match compile_verb_source(
+                        source,
+                        compile_options.clone(),
+                        &import_options,
+                        objid,
+                        vn,
+                        &names_str,
+                        verb.start_line,
+                    ) {
+                        VerbCompileResult::Ok(program) => program,
+                        VerbCompileResult::SkippedWithWarning => {
+                            compile_errors += 1;
+                            Program::new()
                         }
-                        _ => TextdumpReaderError::VerbCompileError(
-                            format!(
-                                "Compiling verb {objid}/{vn} ({names}) starting at line {}",
-                                verb.start_line + e.context().line_col.0,
-                            ),
-                            e.clone(),
-                        )
+                        VerbCompileResult::Error(e) => return Err(e),
                     }
-                })?,
-                // If the verb program is missing, then it's an empty program, and we'll put in
-                // an empty binary.
+                }
+                // If the verb program is missing, use an empty program
                 _ => Program::new(),
             };
 
@@ -307,7 +412,106 @@ pub fn read_textdump<T: io::Read>(
             trace!(objid = ?objid, name = ?vn, "Added verb");
         }
     }
+    if compile_errors > 0 {
+        warn!(
+            "{} verb(s) failed to compile and were created with empty programs. \
+            These will need manual intervention.",
+            compile_errors
+        );
+    }
     info!("Verbs defined.");
+
+    // Create import_export_id properties from sysrefs (properties on #0 that point to objects).
+    // This enables proper constant generation when dumping to objdef format.
+    info!("Creating import_export_id from sysrefs...");
+    let import_export_id_sym = Symbol::mk("import_export_id");
+
+    let Some(sysobj) = td.objects.get(&SYSTEM_OBJECT) else {
+        info!("Import complete.");
+        return Ok(());
+    };
+
+    // Find the root object (#1 typically) - it's #0's parent
+    let root_obj = sysobj.parent;
+    if root_obj == NOTHING {
+        warn!("System object #0 has no parent, cannot define import_export_id");
+        info!("Import complete.");
+        return Ok(());
+    }
+
+    // Collect sysrefs: properties on #0 that have object values
+    let mut sysrefs: Vec<(Symbol, Obj)> = Vec::new();
+    for (pnum, _pval) in sysobj.propvals.iter().enumerate() {
+        let Some(resolved) = resolve_prop(&td.objects, pnum, sysobj) else {
+            continue;
+        };
+        // Only consider properties defined on #0 itself (not inherited)
+        if resolved.definer != SYSTEM_OBJECT {
+            continue;
+        }
+        let Some(target_obj) = resolved.value.as_object() else {
+            continue;
+        };
+        // Skip special objects like $nothing, $ambiguous_match, $failed_match
+        if target_obj.is_valid_object() {
+            sysrefs.push((resolved.name, target_obj));
+        }
+    }
+
+    if sysrefs.is_empty() {
+        info!("Import complete.");
+        return Ok(());
+    }
+
+    // Define import_export_id property on root object (will be inherited by all)
+    let flags = BitEnum::new_with(PropFlag::Read) | PropFlag::Chown;
+    loader
+        .define_property(
+            &root_obj,
+            &root_obj,
+            import_export_id_sym,
+            &root_obj,
+            flags,
+            None,
+        )
+        .map_err(|e| {
+            TextdumpReaderError::LoadError(
+                format!("defining import_export_id on {root_obj}"),
+                e.clone(),
+            )
+        })?;
+
+    // Set import_export_id="sysobj" on #0 itself
+    let _ = loader.set_property(
+        &SYSTEM_OBJECT,
+        import_export_id_sym,
+        None,
+        None,
+        Some(v_str("sysobj")),
+    );
+
+    // Set import_export_id on each sysref target object
+    let mut created = 1; // Count #0
+    for (prop_name, target_obj) in sysrefs {
+        // Skip if target object doesn't exist in the textdump
+        if !td.objects.contains_key(&target_obj) {
+            continue;
+        }
+        if loader
+            .set_property(
+                &target_obj,
+                import_export_id_sym,
+                None,
+                None,
+                Some(v_str(&prop_name.as_arc_str())),
+            )
+            .is_ok()
+        {
+            created += 1;
+            trace!(target = ?target_obj, sysref = %prop_name, "Created import_export_id from sysref");
+        }
+    }
+    info!("Created {created} import_export_id properties from sysrefs");
 
     info!("Import complete.");
 

@@ -38,7 +38,7 @@ mod tests {
         tasks::{NoopTasksDb, scheduler::Scheduler},
     };
     use moor_schema::rpc as moor_rpc;
-    use moor_textdump::textdump_load;
+    use moor_textdump::{TextdumpImportOptions, textdump_load};
     use moor_var::{Obj, SYSTEM_OBJECT};
     use rpc_common::{
         AuthToken, ClientToken, mk_command_msg, mk_connection_establish_msg, mk_login_command_msg,
@@ -198,6 +198,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             jhcore,
             Version::new(0, 1, 0),
             config.features.compile_options(),
+            TextdumpImportOptions::default(),
         )
         .expect("Failed to load textdump");
         assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));

@@ -49,7 +49,7 @@ use moor_kernel::{
     tasks::{NoopTasksDb, TasksDb, scheduler::Scheduler},
 };
 use moor_objdef::ObjectDefinitionLoader;
-use moor_textdump::textdump_load;
+use moor_textdump::{TextdumpImportOptions, textdump_load};
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
 use rand::Rng;
 use rpc_common::load_keypair;
@@ -186,6 +186,7 @@ fn perform_import(
                 import_path.clone(),
                 version.clone(),
                 config.features.compile_options(),
+                TextdumpImportOptions::default(),
             )?;
             true
         }

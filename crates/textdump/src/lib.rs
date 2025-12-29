@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub use load_textdump::{read_textdump, textdump_load};
+pub use load_textdump::{TextdumpImportOptions, read_textdump, textdump_load};
 use moor_compiler::CompileOptions;
 use moor_var::{Obj, Symbol, Var};
-pub use read::TextdumpReader;
+pub use read::{TextdumpReader, WaifLocation};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 /// Representation of the structure of objects verbs etc as read from a LambdaMOO textdump'd db

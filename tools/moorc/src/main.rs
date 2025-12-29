@@ -33,7 +33,9 @@ use moor_kernel::{
 };
 use moor_moot::MootOptions;
 use moor_objdef::{ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions};
-use moor_textdump::{EncodingMode, TextdumpWriter, make_textdump, textdump_load};
+use moor_textdump::{
+    EncodingMode, TextdumpImportOptions, TextdumpWriter, make_textdump, textdump_load,
+};
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
 use once_cell::sync::Lazy;
 use std::{
@@ -78,6 +80,14 @@ pub struct Args {
         help = "The output should be a LambdaMOO style 'textdump' file located at this path."
     )]
     out_textdump: Option<PathBuf>,
+
+    #[clap(
+        long,
+        help = "Continue importing even when verbs fail to compile. \
+                Failed verbs will be created with empty programs. \
+                Useful for importing legacy LambdaMOO/ToastStunt databases."
+    )]
+    continue_on_errors: bool,
 
     #[command(flatten)]
     feature_args: Option<FeatureArgs>,
@@ -253,13 +263,20 @@ fn main() -> Result<(), eyre::Report> {
         let start = std::time::Instant::now();
         let version = semver::Version::parse(build::PKG_VERSION).expect("Invalid moor version");
 
-        textdump_load(
+        let import_options = TextdumpImportOptions {
+            continue_on_compile_errors: args.continue_on_errors,
+        };
+
+        if let Err(e) = textdump_load(
             loader_interface.as_mut(),
             textdump.clone(),
             version.clone(),
             features.compile_options(),
-        )
-        .unwrap();
+            import_options,
+        ) {
+            error!("Failed to load textdump: {e}");
+            std::process::exit(1);
+        }
 
         info!("Loaded textdump in {:?}", start.elapsed());
         loader_interface

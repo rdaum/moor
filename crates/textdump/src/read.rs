@@ -44,8 +44,18 @@ use moor_var::{
 };
 
 pub const TYPE_CLEAR: i64 = 5;
-// Textdump-specific type constant for anonymous objects (matching ToastStunt)
+// Textdump-specific type constant for anonymous objects (matching ToastStunt's _TYPE_ANON = 12)
 const TYPE_ANON: i64 = 12;
+// Textdump-specific type constant for WAIFs (ToastStunt's _TYPE_WAIF = 13) - unsupported
+const TYPE_WAIF: i64 = 13;
+
+/// Location where an unsupported WAIF value was encountered
+#[derive(Debug, Clone)]
+pub struct WaifLocation {
+    pub object: Obj,
+    pub property_index: usize,
+    pub line_num: usize,
+}
 
 pub struct TextdumpReader<R: Read> {
     pub line_num: usize,
@@ -54,6 +64,12 @@ pub struct TextdumpReader<R: Read> {
     pub reader: BufReader<R>,
     pub encoding_mode: EncodingMode,
     anonymous_obj_map: HashMap<i64, Obj>,
+    /// Locations where unsupported WAIF values were found and converted to None
+    pub waif_locations: Vec<WaifLocation>,
+    /// Current object being read (for WAIF location tracking)
+    current_object: Option<Obj>,
+    /// Current property index being read (for WAIF location tracking)
+    current_property_index: Option<usize>,
 }
 
 impl<R: Read> TextdumpReader<R> {
@@ -87,6 +103,9 @@ impl<R: Read> TextdumpReader<R> {
             reader,
             line_num: 2,
             anonymous_obj_map: HashMap::new(),
+            waif_locations: Vec::new(),
+            current_object: None,
+            current_property_index: None,
         })
     }
 }
@@ -203,12 +222,21 @@ impl<R: Read> TextdumpReader<R> {
             return self.read_anonymous_obj();
         }
 
+        // Handle WAIFs - ToastStunt feature we don't support
+        if t_num == TYPE_WAIF {
+            return self.read_waif();
+        }
+
         let vtype: VarType = VarType::from_repr(t_num as u8).expect("Invalid var type");
         let v = match vtype {
             VarType::TYPE_INT => v_int(self.read_num()?),
             VarType::TYPE_BOOL => {
-                let s = self.read_string()?;
-                v_bool_int(s == "true")
+                // ToastStunt writes booleans as 0/1 numbers, mooR writes "true"/"false" strings
+                if matches!(&self.version, ToastStunt(_)) {
+                    v_bool_int(self.read_num()? != 0)
+                } else {
+                    v_bool_int(self.read_string()? == "true")
+                }
             }
             VarType::TYPE_SYMBOL => {
                 let s = self.read_string()?;
@@ -219,29 +247,22 @@ impl<R: Read> TextdumpReader<R> {
             VarType::TYPE_STR => v_str(&self.read_string()?),
             VarType::TYPE_BINARY => {
                 let base64_string = self.read_string()?;
-                match general_purpose::STANDARD.decode(base64_string.as_bytes()) {
-                    Ok(bytes) => v_binary(bytes),
-                    Err(_) => {
-                        return Err(TextdumpReaderError::ParseError(
-                            "invalid base64 data for binary type".into(),
-                            self.line_num,
-                        ));
-                    }
-                }
+                let Ok(bytes) = general_purpose::STANDARD.decode(base64_string.as_bytes()) else {
+                    return Err(TextdumpReaderError::ParseError(
+                        "invalid base64 data for binary type".into(),
+                        self.line_num,
+                    ));
+                };
+                v_binary(bytes)
             }
             VarType::TYPE_ERR => {
                 let s = self.read_string()?;
-                // If it's a number, parse as classic LambdaMOO errir
-                match s.parse::<i64>() {
-                    Ok(e_num) => {
-                        let etype: Error =
-                            Error::from_repr(e_num as u8).expect("Invalid error code");
-                        v_error(etype)
-                    }
-                    Err(..) => {
-                        let s = Symbol::mk(&s);
-                        v_err(ErrorCode::ErrCustom(s))
-                    }
+                // If it's a number, parse as classic LambdaMOO error code
+                if let Ok(e_num) = s.parse::<i64>() {
+                    let etype = Error::from_repr(e_num as u8).expect("Invalid error code");
+                    v_error(etype)
+                } else {
+                    v_err(ErrorCode::ErrCustom(Symbol::mk(&s)))
                 }
             }
             VarType::TYPE_LIST => {
@@ -281,27 +302,6 @@ impl<R: Read> TextdumpReader<R> {
                 let contents: Vec<Var> = (0..c_size).map(|_i| self.read_var().unwrap()).collect();
 
                 v_flyweight(delegate, &slots, List::from_iter(contents))
-            }
-            VarType::_TOAST_TYPE_WAIF => {
-                warn!("found ToastStunt WAIF type; treating as None");
-                // We turn WAIFs into nothing, but have to parse them enough to skip past them.
-                let ref_index = self.read_string()?;
-                if &ref_index[0..1] == "r" {
-                    let _terminator = self.read_string()?;
-                    return Ok(v_none());
-                }
-                let _class = self.read_objid()?;
-                let _owner = self.read_objid()?;
-                let _propdefs_length = self.read_num()? as usize;
-                loop {
-                    let cur = self.read_num()?;
-                    if cur == -1 {
-                        break;
-                    }
-                    let _val = self.read_var()?;
-                }
-                let _terminator = self.read_string()?;
-                v_none()
             }
             VarType::TYPE_LAMBDA => self.read_lambda()?,
             _ => {
@@ -420,6 +420,38 @@ impl<R: Read> TextdumpReader<R> {
         let anon_obj = Obj::mk_anonymous_generated();
         self.anonymous_obj_map.insert(temp_id, anon_obj);
         Ok(v_obj(anon_obj))
+    }
+
+    fn read_waif(&mut self) -> Result<Var, TextdumpReaderError> {
+        // Record location if we're in a tracked context (reading object properties)
+        if let (Some(obj), Some(prop_idx)) = (self.current_object, self.current_property_index) {
+            self.waif_locations.push(WaifLocation {
+                object: obj,
+                property_index: prop_idx,
+                line_num: self.line_num,
+            });
+        }
+
+        // WAIFs are ToastStunt-specific and unsupported. Parse them enough to skip past.
+        // Format: 'r' <index> <terminator> for references
+        // Format: 'c' <index> <class> <owner> <propdefs_len> { <propnum> <var> }* -1 <terminator>
+        let ref_index = self.read_string()?;
+        if ref_index.starts_with('r') {
+            let _terminator = self.read_string()?;
+            return Ok(v_none());
+        }
+        let _class = self.read_objid()?;
+        let _owner = self.read_objid()?;
+        let _propdefs_length = self.read_num()? as usize;
+        loop {
+            let cur = self.read_num()?;
+            if cur == -1 {
+                break;
+            }
+            let _val = self.read_var()?;
+        }
+        let _terminator = self.read_string()?;
+        Ok(v_none())
     }
 
     fn read_var(&mut self) -> Result<Var, TextdumpReaderError> {
@@ -608,9 +640,13 @@ impl<R: Read> TextdumpReader<R> {
         }
         let num_pvals = self.read_num()? as usize;
         let mut propvals = Vec::with_capacity(num_pvals);
-        for _ in 0..num_pvals {
+        self.current_object = Some(oid);
+        for pval_idx in 0..num_pvals {
+            self.current_property_index = Some(pval_idx);
             propvals.push(self.read_propval()?);
         }
+        self.current_object = None;
+        self.current_property_index = None;
 
         Ok(Some(Object {
             id: oid,
@@ -720,12 +756,25 @@ impl<R: Read> TextdumpReader<R> {
         let has_task_local = matches!(self.version, ToastStunt(v) if v >= ToastDbvTaskLocal);
 
         if has_task_local {
-            let _local = self.read_string()?;
+            let _local = self.read_var()?;
         }
-        let vm_header = self.read_number_line(3)?;
-        let top = vm_header[0] as usize;
 
-        for _ in 0..top {
+        // VM header format: "top vector func_id [max_stack]"
+        // The max_stack is optional (space-separated if present, otherwise newline after func_id)
+        let vm_header_line = self.read_string()?;
+        let parts: Vec<&str> = vm_header_line.split_whitespace().collect();
+        if parts.len() < 3 {
+            return Err(TextdumpReaderError::ParseError(
+                format!("invalid vm header: {vm_header_line}"),
+                self.line_num,
+            ));
+        }
+        let top = parts[0].parse::<usize>().map_err(|e| {
+            TextdumpReaderError::ParseError(format!("invalid vm top: {e}"), self.line_num)
+        })?;
+
+        // Read top+1 activations (0..=top)
+        for _ in 0..=top {
             self.read_activ()?;
         }
         Ok(())
@@ -822,15 +871,31 @@ impl<R: Read> TextdumpReader<R> {
             )
         })?;
 
-        for _ in 0..num_queued_tasks {
-            let task_desc = self.read_number_line(4)?;
-            let (_first_line_no, _st, _id) = (
-                task_desc[1] as usize,
-                task_desc[2] as usize,
-                task_desc[3] as usize,
+        if num_queued_tasks > 0 {
+            warn!(
+                "Skipping {} queued (forked) tasks - task state cannot be migrated",
+                num_queued_tasks
             );
-            // Read (and throw away) activation.
-            self.read_activ_as_pi()?
+        }
+        for _ in 0..num_queued_tasks {
+            // Task header: dummy first_lineno start_time task_id
+            let task_header = self.read_string()?;
+            let parts: Vec<&str> = task_header.split_whitespace().collect();
+            if parts.len() < 4 {
+                return Err(TextdumpReaderError::ParseError(
+                    format!("invalid queued task header: {task_header}"),
+                    self.line_num,
+                ));
+            }
+
+            // Read activation as player info
+            self.read_activ_as_pi()?;
+
+            // Read runtime environment
+            let _rt_env = self.read_rt_env()?;
+
+            // Read the forked program
+            let _program = self.read_program()?;
         }
 
         let suspended_tasks_line = self.read_string()?;
@@ -841,8 +906,36 @@ impl<R: Read> TextdumpReader<R> {
                 self.line_num,
             )
         })?;
+
+        if num_suspended_tasks > 0 {
+            warn!(
+                "Skipping {} suspended tasks - task state cannot be migrated",
+                num_suspended_tasks
+            );
+        }
         for _ in 0..num_suspended_tasks {
-            let _task_line = self.read_string();
+            // Suspended task header: "start_time task_id[ value]"
+            // If there's a space after task_id, a Var follows on the same logical entry
+            let task_header = self.read_string()?;
+            let parts: Vec<&str> = task_header.split_whitespace().collect();
+            if parts.len() < 2 {
+                return Err(TextdumpReaderError::ParseError(
+                    format!("invalid suspended task header: {task_header}"),
+                    self.line_num,
+                ));
+            }
+            // If there are more than 2 parts, the rest is a var type indicator
+            // But the var itself comes on the next line(s)
+            if parts.len() > 2 {
+                // There's a value - the type number is in parts[2]
+                let type_num = parts[2].parse::<i64>().map_err(|e| {
+                    TextdumpReaderError::ParseError(
+                        format!("invalid suspended task value type: {e}"),
+                        self.line_num,
+                    )
+                })?;
+                let _value = self.read_var_value(type_num)?;
+            }
             self.read_vm()?;
         }
 
@@ -859,8 +952,18 @@ impl<R: Read> TextdumpReader<R> {
                 self.line_num,
             )
         })?;
+
+        if num_interrupted_tasks > 0 {
+            warn!(
+                "Skipping {} interrupted tasks - task state cannot be migrated",
+                num_interrupted_tasks
+            );
+        }
         for _ in 0..num_interrupted_tasks {
-            let _task_line = self.read_string();
+            // Interrupted task header: "task_id description"
+            let _task_line = self.read_string()?;
+            // Each interrupted task has a VM
+            self.read_vm()?;
         }
 
         Ok(())
@@ -880,6 +983,13 @@ impl<R: Read> TextdumpReader<R> {
                 self.line_num,
             )
         })?;
+
+        if num_active_connections > 0 {
+            warn!(
+                "Skipping {} active connections - connection state cannot be migrated",
+                num_active_connections
+            );
+        }
         for _ in 0..num_active_connections {
             if has_listeners {
                 let listener_items = self.read_number_line(2)?;

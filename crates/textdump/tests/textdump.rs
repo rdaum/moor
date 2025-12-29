@@ -35,8 +35,8 @@ mod test {
     use moor_compiler::{CompileOptions, compile};
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_textdump::{
-        EncodingMode, LambdaMOODBVersion, TextdumpReader, TextdumpVersion, TextdumpWriter,
-        make_textdump, read_textdump, textdump_load,
+        EncodingMode, LambdaMOODBVersion, TextdumpImportOptions, TextdumpReader, TextdumpVersion,
+        TextdumpWriter, make_textdump, read_textdump, textdump_load,
     };
     use moor_var::{
         NOTHING, Obj, SYSTEM_OBJECT, Sequence, Symbol, Var,
@@ -66,6 +66,7 @@ mod test {
             PathBuf::from(path),
             Version::new(0, 1, 0),
             compile_options,
+            TextdumpImportOptions::default(),
         )
         .expect("Could not load textdump");
         assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
@@ -134,6 +135,7 @@ mod test {
             cursor,
             Version::new(0, 1, 0),
             CompileOptions::default(),
+            TextdumpImportOptions::default(),
         )
         .unwrap();
         assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
@@ -293,6 +295,7 @@ mod test {
             minimal_db,
             Version::new(0, 1, 0),
             CompileOptions::default(),
+            TextdumpImportOptions::default(),
         )
         .unwrap();
         assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
@@ -393,6 +396,7 @@ mod test {
             buffered_string_reader,
             Version::new(0, 1, 0),
             CompileOptions::default(),
+            TextdumpImportOptions::default(),
         )
         .unwrap();
         assert!(matches!(lc.commit(), Ok(CommitResult::Success { .. })));
@@ -709,6 +713,7 @@ mod test {
             buffered_reader,
             Version::new(0, 1, 0),
             CompileOptions::default(),
+            TextdumpImportOptions::default(),
         )
         .unwrap();
         assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
@@ -1061,6 +1066,7 @@ mod test {
                 cursor,
                 Version::new(0, 1, 0),
                 CompileOptions::default(),
+                TextdumpImportOptions::default(),
             ) {
                 Ok(_) => {
                     println!("Successfully loaded simple textdump");

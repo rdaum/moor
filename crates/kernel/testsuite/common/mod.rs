@@ -31,7 +31,7 @@ use moor_kernel::{
     vm::builtins::BuiltinRegistry,
 };
 use moor_moot::test_db_path;
-use moor_textdump::textdump_load;
+use moor_textdump::{TextdumpImportOptions, textdump_load};
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, program::ProgramType};
 
 #[allow(dead_code)]
@@ -49,6 +49,7 @@ pub fn load_textdump(db: &dyn Database) {
         test_db_path(),
         Version::new(0, 1, 0),
         CompileOptions::default(),
+        TextdumpImportOptions::default(),
     )
     .expect("Could not load textdump");
     assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
