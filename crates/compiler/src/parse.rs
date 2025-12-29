@@ -4147,7 +4147,6 @@ endif
         );
     }
 
-    /// Regression test for auditDB verb parsing issue
     /// This verb from JHCore-DEV-2.db was failing to parse after lambda implementation
     #[test]
     fn test_auditdb_verb_regression() {

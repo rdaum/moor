@@ -27,7 +27,7 @@ use proptest::prelude::*;
 
 use super::generators::{
     arb_expr_layer1, arb_expr_layer2, arb_expr_layer2_complete, arb_expr_layer2b,
-    arb_stmt_layer3, arb_stmt_layer4,
+    arb_stmt_layer3, arb_stmt_layer4, arb_stmt_layer5,
 };
 
 /// Format an expression to MOO source code.
@@ -274,6 +274,17 @@ fn format_expr_to_source(expr: &Expr) -> String {
             format!("{{{}}} = {}", items_str.join(", "), format_expr_to_source(rhs))
         }
         Expr::Pass { args: _ } => "pass".to_string(),
+        Expr::Decl { id, is_const, expr } => {
+            let prefix = if *is_const { "const" } else { "let" };
+            let var_name = match &id.nr {
+                VarName::Named(sym) => sym.to_string(),
+                VarName::Register(n) => format!("_r{}", n),
+            };
+            match expr {
+                Some(init) => format!("{} {} = {}", prefix, var_name, format_expr_to_source(init)),
+                None => format!("{} {}", prefix, var_name),
+            }
+        }
         _ => panic!("Unsupported expression type: {:?}", expr),
     }
 }
@@ -382,7 +393,7 @@ fn format_stmt_to_source(stmt: &Stmt) -> String {
         }
         StmtNode::ForList {
             value_binding,
-            key_binding: _,
+            key_binding,
             expr,
             body,
             ..
@@ -391,7 +402,16 @@ fn format_stmt_to_source(stmt: &Stmt) -> String {
                 VarName::Named(sym) => sym.to_string(),
                 VarName::Register(n) => format!("_r{}", n),
             };
-            let mut result = format!("for {} in ({})\n", var_name, format_expr_to_source(expr));
+            let binding = if let Some(key) = key_binding {
+                let key_name = match &key.nr {
+                    VarName::Named(sym) => sym.to_string(),
+                    VarName::Register(n) => format!("_r{}", n),
+                };
+                format!("{}, {}", var_name, key_name)
+            } else {
+                var_name
+            };
+            let mut result = format!("for {} in ({})\n", binding, format_expr_to_source(expr));
             for stmt in body {
                 result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
             }
@@ -419,19 +439,107 @@ fn format_stmt_to_source(stmt: &Stmt) -> String {
             result
         }
         StmtNode::While {
-            id: _,
+            id,
             condition,
             body,
             ..
         } => {
-            let mut result = format!("while ({})\n", format_expr_to_source(condition));
+            let label = id.as_ref().map(|v| match &v.nr {
+                VarName::Named(sym) => format!("{} ", sym),
+                VarName::Register(n) => format!("_r{} ", n),
+            }).unwrap_or_default();
+            let mut result = format!("while {}({})\n", label, format_expr_to_source(condition));
             for stmt in body {
                 result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
             }
             result.push_str("endwhile");
             result
         }
-        _ => panic!("Unsupported statement type: {:?}", stmt.node),
+        StmtNode::Fork { id, time, body } => {
+            let label = id.as_ref().map(|v| match &v.nr {
+                VarName::Named(sym) => format!("{} ", sym),
+                VarName::Register(n) => format!("_r{} ", n),
+            }).unwrap_or_default();
+            let mut result = format!("fork {}({})\n", label, format_expr_to_source(time));
+            for stmt in body {
+                result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
+            }
+            result.push_str("endfork");
+            result
+        }
+        StmtNode::TryExcept { body, excepts, .. } => {
+            let mut result = "try\n".to_string();
+            for stmt in body {
+                result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
+            }
+            for except in excepts {
+                let var_name = except.id.as_ref().map(|v| match &v.nr {
+                    VarName::Named(sym) => format!("{} ", sym),
+                    VarName::Register(n) => format!("_r{} ", n),
+                }).unwrap_or_default();
+                let codes_str = match &except.codes {
+                    CatchCodes::Any => "ANY".to_string(),
+                    CatchCodes::Codes(codes) => codes
+                        .iter()
+                        .map(|arg| match arg {
+                            Arg::Normal(e) => format_expr_to_source(e),
+                            Arg::Splice(e) => format!("@{}", format_expr_to_source(e)),
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                };
+                result.push_str(&format!("except {}({})\n", var_name, codes_str));
+                for stmt in &except.statements {
+                    result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
+                }
+            }
+            result.push_str("endtry");
+            result
+        }
+        StmtNode::TryFinally { body, handler, .. } => {
+            let mut result = "try\n".to_string();
+            for stmt in body {
+                result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
+            }
+            result.push_str("finally\n");
+            for stmt in handler {
+                result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
+            }
+            result.push_str("endtry");
+            result
+        }
+        StmtNode::Break { exit } => {
+            match exit {
+                Some(label) => {
+                    let label_name = match &label.nr {
+                        VarName::Named(sym) => sym.to_string(),
+                        VarName::Register(n) => format!("_r{}", n),
+                    };
+                    format!("break {};", label_name)
+                }
+                None => "break;".to_string(),
+            }
+        }
+        StmtNode::Continue { exit } => {
+            match exit {
+                Some(label) => {
+                    let label_name = match &label.nr {
+                        VarName::Named(sym) => sym.to_string(),
+                        VarName::Register(n) => format!("_r{}", n),
+                    };
+                    format!("continue {};", label_name)
+                }
+                None => "continue;".to_string(),
+            }
+        }
+        StmtNode::Scope { body, .. } => {
+            let mut result = "begin\n".to_string();
+            for stmt in body {
+                result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
+            }
+            result.push_str("end");
+            result
+        }
     }
 }
 
@@ -650,6 +758,11 @@ proptest! {
     fn roundtrip_stmt_layer4(stmt in arb_stmt_layer4(1)) {
         run_stmt_roundtrip(&stmt)?;
     }
+
+    #[test]
+    fn roundtrip_stmt_layer5(stmt in arb_stmt_layer5(1)) {
+        run_stmt_roundtrip(&stmt)?;
+    }
 }
 
 #[cfg(test)]
@@ -750,5 +863,141 @@ mod manual_tests {
         let source = "{a, b, c} = {1, 2, 3};";
         let result = parse_program(source, CompileOptions::default());
         assert!(result.is_ok(), "scatter should parse: {:?}", result);
+    }
+
+    #[test]
+    fn test_fork_statement() {
+        // Basic fork statement
+        let source = "fork (5)\n  1;\nendfork";
+        let result = parse_program(source, CompileOptions::default());
+        assert!(result.is_ok(), "fork should parse: {:?}", result);
+    }
+
+    #[test]
+    fn test_fork_labeled_statement() {
+        // Labeled fork statement
+        let source = "fork task (5)\n  1;\nendfork";
+        let result = parse_program(source, CompileOptions::default());
+        assert!(result.is_ok(), "labeled fork should parse: {:?}", result);
+    }
+
+    #[test]
+    fn test_try_except_statement() {
+        // Try-except statement
+        let source = "try\n  1;\nexcept (ANY)\n  2;\nendtry";
+        let result = parse_program(source, CompileOptions::default());
+        assert!(result.is_ok(), "try-except should parse: {:?}", result);
+    }
+
+    #[test]
+    fn test_try_finally_statement() {
+        // Try-finally statement
+        let source = "try\n  1;\nfinally\n  2;\nendtry";
+        let result = parse_program(source, CompileOptions::default());
+        assert!(result.is_ok(), "try-finally should parse: {:?}", result);
+    }
+
+    #[test]
+    fn test_while_labeled_statement() {
+        // Labeled while statement
+        let source = "while loop (1)\n  1;\nendwhile";
+        let result = parse_program(source, CompileOptions::default());
+        assert!(result.is_ok(), "labeled while should parse: {:?}", result);
+    }
+
+    #[test]
+    fn test_break_inside_loop() {
+        // Break inside a loop
+        let source = "while (1)\n  break;\nendwhile";
+        let result = parse_program(source, CompileOptions::default());
+        assert!(result.is_ok(), "break inside loop should parse: {:?}", result);
+    }
+
+    #[test]
+    fn test_continue_inside_loop() {
+        // Continue inside a loop
+        let source = "while (1)\n  continue;\nendwhile";
+        let result = parse_program(source, CompileOptions::default());
+        assert!(result.is_ok(), "continue inside loop should parse: {:?}", result);
+    }
+
+    #[test]
+    fn test_for_list_keyed() {
+        // For-list with key binding
+        let source = "for x, i in ({1, 2, 3})\n  x;\nendfor";
+        let result = parse_program(source, CompileOptions::default());
+        assert!(result.is_ok(), "for-list with key should parse: {:?}", result);
+    }
+
+    #[test]
+    fn test_scope_statement() {
+        // Begin/end scope block
+        let source = "begin\n  1;\nend";
+        let result = parse_program(source, CompileOptions::default());
+        assert!(result.is_ok(), "begin/end should parse: {:?}", result);
+    }
+
+    #[test]
+    fn test_scope_with_index_expr() {
+        // Test what works and what doesn't
+
+        // Works: just the index expression
+        let source1 = "(0[0]);";
+        let result1 = parse_program(source1, CompileOptions::default());
+        assert!(result1.is_ok(), "index expr should parse: {:?}", result1);
+
+        // Works: if/endif with parenthesized expression
+        let source_if = "if (1)\n(0);\nendif";
+        let result_if = parse_program(source_if, CompileOptions::default());
+        assert!(result_if.is_ok(), "if with paren should parse: {:?}", result_if);
+
+        // Works: while/endwhile with parenthesized expression
+        let source_while = "while (1)\n(0);\nendwhile";
+        let result_while = parse_program(source_while, CompileOptions::default());
+        assert!(result_while.is_ok(), "while with paren should parse: {:?}", result_while);
+
+        // Test: begin/end with simple expression
+        let source2 = "begin\n  0;\nend";
+        let result2 = parse_program(source2, CompileOptions::default());
+        assert!(result2.is_ok(), "simple begin/end should parse: {:?}", result2);
+
+        // Test: begin/end with parenthesized simple expression
+        let source_paren = "begin\n(0);\nend";
+        println!("Source paren:\n{}", source_paren);
+        let result_paren = parse_program(source_paren, CompileOptions::default());
+        assert!(result_paren.is_ok(), "begin/end with paren should parse: {:?}", result_paren);
+    }
+
+    #[test]
+    fn test_if_elseif_else() {
+        // If-elseif-else statement
+        let source = "if (1)\n  1;\nelseif (2)\n  2;\nelse\n  3;\nendif";
+        let result = parse_program(source, CompileOptions::default());
+        assert!(result.is_ok(), "if-elseif-else should parse: {:?}", result);
+    }
+
+    #[test]
+    fn test_elseif_with_negative_number() {
+        // This is the minimal failing case from proptest
+        let source = "if (0)\n  0;\nelseif (0)\n  -1 || 0;\nendif";
+        println!("=== SOURCE ===");
+        println!("{}", source);
+
+        let parsed = parse_program(source, CompileOptions::default());
+        assert!(parsed.is_ok(), "Should parse: {:?}", parsed);
+        let parsed = parsed.unwrap();
+
+        println!("=== PARSED AST ===");
+        println!("{:#?}", parsed.stmts);
+
+        // Check it's a proper Cond with 2 arms
+        assert_eq!(parsed.stmts.len(), 1, "Should have 1 statement");
+        match &parsed.stmts[0].node {
+            crate::ast::StmtNode::Cond { arms, otherwise } => {
+                assert_eq!(arms.len(), 2, "Should have 2 arms (if + elseif)");
+                assert!(otherwise.is_none(), "Should not have else");
+            }
+            _ => panic!("Expected Cond statement, got: {:?}", parsed.stmts[0].node),
+        }
     }
 }

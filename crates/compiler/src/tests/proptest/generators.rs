@@ -14,8 +14,8 @@
 //! Proptest strategies for generating MOO AST nodes.
 
 use crate::ast::{
-    Arg, BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, Expr, ScatterItem, ScatterKind, Stmt,
-    StmtNode, UnaryOp,
+    Arg, BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem,
+    ScatterKind, Stmt, StmtNode, UnaryOp,
 };
 use moor_var::program::names::{VarName, Variable};
 use moor_var::{ErrorCode, Obj, Symbol, Var, VarType};
@@ -85,6 +85,28 @@ pub fn arb_error() -> impl Strategy<Value = Expr> {
         Just(Expr::Error(ErrorCode::E_FILE, None)),
         Just(Expr::Error(ErrorCode::E_EXEC, None)),
         Just(Expr::Error(ErrorCode::E_INTRPT, None)),
+    ]
+}
+
+/// Generate an arbitrary error code (for use in except clauses).
+pub fn arb_error_code() -> impl Strategy<Value = ErrorCode> {
+    prop_oneof![
+        Just(ErrorCode::E_NONE),
+        Just(ErrorCode::E_TYPE),
+        Just(ErrorCode::E_DIV),
+        Just(ErrorCode::E_PERM),
+        Just(ErrorCode::E_PROPNF),
+        Just(ErrorCode::E_VERBNF),
+        Just(ErrorCode::E_VARNF),
+        Just(ErrorCode::E_INVIND),
+        Just(ErrorCode::E_RECMOVE),
+        Just(ErrorCode::E_MAXREC),
+        Just(ErrorCode::E_RANGE),
+        Just(ErrorCode::E_ARGS),
+        Just(ErrorCode::E_NACC),
+        Just(ErrorCode::E_INVARG),
+        Just(ErrorCode::E_QUOTA),
+        Just(ErrorCode::E_FLOAT),
     ]
 }
 
@@ -669,6 +691,62 @@ pub fn arb_scatter<S: Strategy<Value = Expr> + Clone + 'static>(
 }
 
 // =============================================================================
+// Declaration Generators
+// =============================================================================
+
+/// Generate a let declaration expression: let x or let x = expr
+pub fn arb_decl_let<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+) -> impl Strategy<Value = Expr> {
+    (arb_variable(), proptest::option::of(expr_strategy)).prop_map(|(id, expr)| Expr::Decl {
+        id,
+        is_const: false,
+        expr: expr.map(Box::new),
+    })
+}
+
+/// Generate a const declaration expression: const x = expr
+/// Note: const requires an initializer in MOO
+pub fn arb_decl_const<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+) -> impl Strategy<Value = Expr> {
+    (arb_variable(), expr_strategy).prop_map(|(id, init)| Expr::Decl {
+        id,
+        is_const: true,
+        expr: Some(Box::new(init)),
+    })
+}
+
+/// Generate a declaration statement: let x; or let x = expr; or const x = expr;
+pub fn arb_stmt_decl<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+) -> impl Strategy<Value = Stmt> {
+    prop_oneof![
+        arb_decl_let(expr_strategy.clone()).prop_map(|decl| make_stmt(StmtNode::Expr(decl))),
+        arb_decl_const(expr_strategy).prop_map(|decl| make_stmt(StmtNode::Expr(decl))),
+    ]
+}
+
+/// Generate a scope with declarations: begin let x = ...; body end
+pub fn arb_stmt_scope_with_decls<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_decls: usize,
+    max_body_len: usize,
+) -> impl Strategy<Value = Stmt> {
+    let decl_strategy = proptest::collection::vec(arb_stmt_decl(expr_strategy.clone()), 1..=max_decls);
+    let body_strategy = proptest::collection::vec(arb_stmt_expr(expr_strategy), 1..=max_body_len);
+
+    (decl_strategy, body_strategy).prop_map(|(decls, body)| {
+        let mut all_stmts = decls;
+        all_stmts.extend(body);
+        make_stmt(StmtNode::Scope {
+            num_bindings: all_stmts.len(),
+            body: all_stmts,
+        })
+    })
+}
+
+// =============================================================================
 // Statement Generators
 // =============================================================================
 
@@ -767,6 +845,27 @@ pub fn arb_stmt_for_list<S: Strategy<Value = Expr> + Clone + 'static>(
     })
 }
 
+/// Generate a for-list statement with key binding: for x, i in (expr) body endfor
+pub fn arb_stmt_for_list_keyed<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_body_len: usize,
+) -> impl Strategy<Value = Stmt> {
+    let body_strategy =
+        proptest::collection::vec(arb_stmt_expr(expr_strategy.clone()), 1..=max_body_len);
+
+    (arb_variable(), arb_variable(), expr_strategy, body_strategy).prop_map(
+        |(var, key_var, list_expr, body)| {
+            make_stmt(StmtNode::ForList {
+                value_binding: var,
+                key_binding: Some(key_var),
+                expr: list_expr,
+                body,
+                environment_width: 0,
+            })
+        },
+    )
+}
+
 /// Generate a for-range statement: for x in [from..to] body endfor
 /// Note: $ (Length) is only valid in indexing contexts like list[1..$],
 /// not in for-range statements.
@@ -808,6 +907,213 @@ pub fn arb_stmt_while<S: Strategy<Value = Expr> + Clone + 'static>(
             condition,
             body,
             environment_width: 0,
+        })
+    })
+}
+
+/// Generate a labeled while statement: while name (cond) body endwhile
+pub fn arb_stmt_while_labeled<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_body_len: usize,
+) -> impl Strategy<Value = Stmt> {
+    let body_strategy =
+        proptest::collection::vec(arb_stmt_expr(expr_strategy.clone()), 1..=max_body_len);
+
+    (arb_variable(), expr_strategy, body_strategy).prop_map(|(label, condition, body)| {
+        make_stmt(StmtNode::While {
+            id: Some(label),
+            condition,
+            body,
+            environment_width: 0,
+        })
+    })
+}
+
+/// Generate a fork statement: fork (time) body endfork
+pub fn arb_stmt_fork<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_body_len: usize,
+) -> impl Strategy<Value = Stmt> {
+    let body_strategy =
+        proptest::collection::vec(arb_stmt_expr(expr_strategy.clone()), 1..=max_body_len);
+
+    (expr_strategy, body_strategy).prop_map(|(time, body)| {
+        make_stmt(StmtNode::Fork {
+            id: None,
+            time,
+            body,
+        })
+    })
+}
+
+/// Generate a labeled fork statement: fork name (time) body endfork
+pub fn arb_stmt_fork_labeled<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_body_len: usize,
+) -> impl Strategy<Value = Stmt> {
+    let body_strategy =
+        proptest::collection::vec(arb_stmt_expr(expr_strategy.clone()), 1..=max_body_len);
+
+    (arb_variable(), expr_strategy, body_strategy).prop_map(|(label, time, body)| {
+        make_stmt(StmtNode::Fork {
+            id: Some(label),
+            time,
+            body,
+        })
+    })
+}
+
+/// Generate a try-except statement: try body except handler endtry
+pub fn arb_stmt_try_except<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_body_len: usize,
+) -> impl Strategy<Value = Stmt> {
+    let body_strategy =
+        proptest::collection::vec(arb_stmt_expr(expr_strategy.clone()), 1..=max_body_len);
+
+    // Generate error code arguments as Arg::Normal(Expr::Error(...))
+    let error_args_strategy = proptest::collection::vec(
+        arb_error_code().prop_map(|code| Arg::Normal(Expr::Error(code, None))),
+        1..=3,
+    );
+
+    // Generate 1-2 except arms with different catch codes
+    let except_arm_strategy = (
+        proptest::option::of(arb_variable()),
+        prop_oneof![
+            Just(CatchCodes::Any),
+            error_args_strategy.prop_map(CatchCodes::Codes),
+        ],
+        proptest::collection::vec(arb_stmt_expr(expr_strategy.clone()), 1..=max_body_len),
+    )
+        .prop_map(|(id, codes, statements)| ExceptArm {
+            id,
+            codes,
+            statements,
+        });
+
+    let excepts_strategy = proptest::collection::vec(except_arm_strategy, 1..=2);
+
+    (body_strategy, excepts_strategy).prop_map(|(body, excepts)| {
+        make_stmt(StmtNode::TryExcept {
+            body,
+            excepts,
+            environment_width: 0,
+        })
+    })
+}
+
+/// Generate a try-finally statement: try body finally handler endtry
+pub fn arb_stmt_try_finally<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_body_len: usize,
+) -> impl Strategy<Value = Stmt> {
+    let body_strategy =
+        proptest::collection::vec(arb_stmt_expr(expr_strategy.clone()), 1..=max_body_len);
+    let handler_strategy =
+        proptest::collection::vec(arb_stmt_expr(expr_strategy), 1..=max_body_len);
+
+    (body_strategy, handler_strategy).prop_map(|(body, handler)| {
+        make_stmt(StmtNode::TryFinally {
+            body,
+            handler,
+            environment_width: 0,
+        })
+    })
+}
+
+/// Generate a break statement: break;
+pub fn arb_stmt_break() -> impl Strategy<Value = Stmt> {
+    Just(make_stmt(StmtNode::Break { exit: None }))
+}
+
+/// Generate a continue statement: continue;
+pub fn arb_stmt_continue() -> impl Strategy<Value = Stmt> {
+    Just(make_stmt(StmtNode::Continue { exit: None }))
+}
+
+/// Generate a labeled while loop with a matching labeled break inside.
+/// This ensures semantic correctness - break labels must reference an enclosing loop.
+pub fn arb_stmt_while_with_labeled_break<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+) -> impl Strategy<Value = Stmt> {
+    (arb_variable(), expr_strategy).prop_map(|(label, cond)| {
+        make_stmt(StmtNode::While {
+            id: Some(label),
+            condition: cond,
+            body: vec![make_stmt(StmtNode::Break {
+                exit: Some(label),
+            })],
+            environment_width: 0,
+        })
+    })
+}
+
+/// Generate a labeled while loop with a matching labeled continue inside.
+/// This ensures semantic correctness - continue labels must reference an enclosing loop.
+pub fn arb_stmt_while_with_labeled_continue<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+) -> impl Strategy<Value = Stmt> {
+    (arb_variable(), expr_strategy).prop_map(|(label, cond)| {
+        make_stmt(StmtNode::While {
+            id: Some(label),
+            condition: cond,
+            body: vec![make_stmt(StmtNode::Continue {
+                exit: Some(label),
+            })],
+            environment_width: 0,
+        })
+    })
+}
+
+/// Generate an if-elseif-else statement with multiple arms
+pub fn arb_stmt_if_elseif<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_body_len: usize,
+    max_elseif_arms: usize,
+) -> impl Strategy<Value = Stmt> {
+    // Generate 1-N condition arms (first is "if", rest are "elseif")
+    // Each arm has its own condition and body
+    let arm_strategy = (
+        expr_strategy.clone(),
+        proptest::collection::vec(arb_stmt_expr(expr_strategy.clone()), 1..=max_body_len),
+    )
+        .prop_map(|(condition, statements)| CondArm {
+            condition,
+            statements,
+            environment_width: 0,
+        });
+
+    let arms_strategy = proptest::collection::vec(arm_strategy, 1..=max_elseif_arms);
+
+    // Optional else arm
+    let else_strategy = proptest::option::of(
+        proptest::collection::vec(arb_stmt_expr(expr_strategy), 1..=max_body_len).prop_map(
+            |statements| ElseArm {
+                statements,
+                environment_width: 0,
+            },
+        ),
+    );
+
+    (arms_strategy, else_strategy).prop_map(|(arms, otherwise)| {
+        make_stmt(StmtNode::Cond { arms, otherwise })
+    })
+}
+
+/// Generate a scope/begin statement: begin body end
+/// This is a moor extension for lexical scoping.
+pub fn arb_stmt_scope<S: Strategy<Value = Expr> + Clone + 'static>(
+    expr_strategy: S,
+    max_body_len: usize,
+) -> impl Strategy<Value = Stmt> {
+    let body_strategy =
+        proptest::collection::vec(arb_stmt_expr(expr_strategy), 1..=max_body_len);
+
+    body_strategy.prop_map(|body| {
+        make_stmt(StmtNode::Scope {
+            num_bindings: 0,
+            body,
         })
     })
 }
@@ -854,6 +1160,69 @@ pub fn arb_stmt_layer4(depth: usize) -> BoxedStrategy<Stmt> {
         1 => arb_stmt_for_range(expr_strategy.clone(), 2),
         // While loop
         1 => arb_stmt_while(expr_strategy, 2),
+    ]
+    .boxed()
+}
+
+/// Layer 5: All statement types.
+///
+/// Generates:
+/// - All of Layer 4
+/// - Fork statements (with and without labels)
+/// - Try-except statements
+/// - Try-finally statements
+/// - Break/continue statements (with and without labels)
+/// - Labeled while loops
+/// - For-list with key binding
+/// - If-elseif-else statements
+/// - Scope/begin blocks (with and without declarations)
+/// - Declaration statements (let/const)
+pub fn arb_stmt_layer5(depth: usize) -> BoxedStrategy<Stmt> {
+    let expr_strategy = arb_expr_layer2_complete(depth);
+
+    prop_oneof![
+        // Expression statement
+        3 => arb_stmt_expr(expr_strategy.clone()),
+        // Scatter assignment
+        1 => arb_scatter(expr_strategy.clone()).prop_map(|scatter| make_stmt(StmtNode::Expr(scatter))),
+        // If statement (simple)
+        1 => arb_stmt_if(expr_strategy.clone(), 2),
+        // If-else statement
+        1 => arb_stmt_if_else(expr_strategy.clone(), 2),
+        // If-elseif-else statement
+        1 => arb_stmt_if_elseif(expr_strategy.clone(), 2, 3),
+        // For-list loop
+        1 => arb_stmt_for_list(expr_strategy.clone(), 2),
+        // For-list loop with key binding
+        1 => arb_stmt_for_list_keyed(expr_strategy.clone(), 2),
+        // For-range loop
+        1 => arb_stmt_for_range(expr_strategy.clone(), 2),
+        // While loop
+        1 => arb_stmt_while(expr_strategy.clone(), 2),
+        // Labeled while loop
+        1 => arb_stmt_while_labeled(expr_strategy.clone(), 2),
+        // Fork statement
+        1 => arb_stmt_fork(expr_strategy.clone(), 2),
+        // Labeled fork statement
+        1 => arb_stmt_fork_labeled(expr_strategy.clone(), 2),
+        // Try-except statement
+        1 => arb_stmt_try_except(expr_strategy.clone(), 2),
+        // Try-finally statement
+        1 => arb_stmt_try_finally(expr_strategy.clone(), 2),
+        // Scope/begin block (simple)
+        1 => arb_stmt_scope(expr_strategy.clone(), 2),
+        // Scope/begin block with declarations
+        1 => arb_stmt_scope_with_decls(expr_strategy.clone(), 2, 2),
+        // Declaration statement (let/const)
+        1 => arb_stmt_decl(expr_strategy.clone()),
+        // Break statement
+        1 => arb_stmt_break(),
+        // Continue statement
+        1 => arb_stmt_continue(),
+        // Labeled while loop with labeled break
+        1 => arb_stmt_while_with_labeled_break(expr_strategy.clone()),
+        // Labeled while loop with labeled continue
+        1 => arb_stmt_while_with_labeled_continue(expr_strategy),
     ]
     .boxed()
 }

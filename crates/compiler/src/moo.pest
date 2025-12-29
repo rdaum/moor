@@ -65,6 +65,7 @@ unlabelled_except     = { "(" ~ codes ~ ")" }
 
 begin_statement       = { ^"begin" ~ statements ~ ^"end" }
 
+
 // Function definitions using fn/endfn
 fn_statement = { fn_named | fn_assignment }
 fn_named = { ^"fn" ~ ident ~ "(" ~ lambda_params ~ ")" ~ statements ~ ^"endfn" }
@@ -219,18 +220,23 @@ errcode = @{ ^"e_" ~ ident_continue+  }
 object  = @{ "#" ~ (anonymous_uuid | uuid | integer) }
 uuid    = @{ ASCII_HEX_DIGIT{6} ~ "-" ~ ASCII_HEX_DIGIT{10} }
 anonymous_uuid = @{ "anon_" ~ ASCII_HEX_DIGIT{6} ~ "-" ~ ASCII_HEX_DIGIT{10} }
+// Keywords must be ordered so that longer keywords come before shorter prefixes.
+// PEG parsers try alternatives in order, so "else" before "elseif" would match
+// the "else" prefix of "elseif" incorrectly. Similarly for if/endif, for/endfor, etc.
+// Note: "end" is intentionally NOT a keyword to preserve backward compatibility
+// with existing MOO code that uses "end" as a variable name (e.g., JHCore).
 keyword = @{
-    ^"fork"
-  | ^"for"
-  | ^"endfork"
+    ^"endfork"
   | ^"endfor"
-  | ^"if"
+  | ^"fork"
+  | ^"for"
   | ^"elseif"
+  | ^"endif"
+  | ^"if"
   | ^"else"
   | ^"return"
-  | ^"endif"
-  | ^"while"
   | ^"endwhile"
+  | ^"while"
   | ^"continue"
   | ^"break"
   | ^"try"
@@ -239,8 +245,9 @@ keyword = @{
   | ^"finally"
   | ^"in"
   | ^"let"
-  | ^"fn"
   | ^"endfn"
+  | ^"fn"
+  | ^"begin"
   | err
 }
 
