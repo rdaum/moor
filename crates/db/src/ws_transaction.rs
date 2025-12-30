@@ -1256,6 +1256,38 @@ impl WorldStateTransaction {
     pub fn commit(self) -> Result<CommitResult, WorldStateError> {
         let counters = db_counters();
         let commit_start = Instant::now();
+        let record_commit_result = |result: &CommitResult| {
+            let elapsed_nanos = commit_start.elapsed().as_nanos() as isize;
+            match result {
+                CommitResult::Success { mutations_made, .. } => {
+                    counters.commit_success.invocations().add(1);
+                    counters
+                        .commit_success
+                        .cumulative_duration_nanos()
+                        .add(elapsed_nanos);
+                    if *mutations_made {
+                        counters.commit_success_write.invocations().add(1);
+                        counters
+                            .commit_success_write
+                            .cumulative_duration_nanos()
+                            .add(elapsed_nanos);
+                    } else {
+                        counters.commit_success_readonly.invocations().add(1);
+                        counters
+                            .commit_success_readonly
+                            .cumulative_duration_nanos()
+                            .add(elapsed_nanos);
+                    }
+                }
+                CommitResult::ConflictRetry => {
+                    counters.commit_conflict.invocations().add(1);
+                    counters
+                        .commit_conflict
+                        .cumulative_duration_nanos()
+                        .add(elapsed_nanos);
+                }
+            }
+        };
 
         // Did we have any mutations at all?  If not, just fire and forget the verb cache and
         // return immediate success.
@@ -1270,10 +1302,12 @@ impl WorldStateTransaction {
                     }))
                     .expect("Unable to send commit request for read-only transaction");
             }
-            return Ok(CommitResult::Success {
+            let result = CommitResult::Success {
                 mutations_made: false,
                 timestamp: 0, // Read-only transactions don't have meaningful timestamps
-            });
+            };
+            record_commit_result(&result);
+            return Ok(result);
         }
 
         // Pull out the working sets
@@ -1300,6 +1334,7 @@ impl WorldStateTransaction {
         loop {
             match reply.recv_timeout(Duration::from_millis(10)) {
                 Ok(reply) => {
+                    record_commit_result(&reply);
                     return Ok(reply);
                 }
                 Err(_) => {
