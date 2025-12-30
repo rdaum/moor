@@ -1389,8 +1389,7 @@ impl CodegenState {
 
         // Analyze which variables this lambda captures
         // Pass outer_scope_depth so parameterless lambdas know what depth they're at
-        let captured_symbols =
-            analyze_lambda_captures(params, body, &self.var_names, outer_scope_depth)?;
+        let captured_symbols = analyze_lambda_captures(params, body, outer_scope_depth)?;
         let captured_names: Vec<Name> = captured_symbols
             .iter()
             .filter_map(|sym| self.var_names.name_for_ident(*sym))
@@ -1460,13 +1459,12 @@ use moor_common::model::CompileError::InvalidTypeLiteralAssignment;
 use std::collections::HashSet;
 
 /// A visitor that finds all variable references in lambda bodies for capture analysis
-struct CaptureAnalyzer<'a> {
+struct CaptureAnalyzer {
     captures: HashSet<Symbol>,
     /// Variables from outer scope that are assigned to (an error condition).
     /// Tracks (symbol, line_col) for better error messages.
     assigned_captures: Vec<(Symbol, (usize, usize))>,
     param_names: HashSet<Symbol>,
-    outer_names: &'a Names,
     /// The scope level at which the lambda is defined (parameter scope level).
     /// Only variables at this scope level or lower can be captured.
     outer_scope_level: u8,
@@ -1474,8 +1472,8 @@ struct CaptureAnalyzer<'a> {
     current_line_col: (usize, usize),
 }
 
-impl<'a> CaptureAnalyzer<'a> {
-    fn new(lambda_params: &[ScatterItem], outer_names: &'a Names, outer_scope_depth: u8) -> Self {
+impl CaptureAnalyzer {
+    fn new(lambda_params: &[ScatterItem], outer_scope_depth: u8) -> Self {
         let param_names: HashSet<Symbol> = lambda_params
             .iter()
             .map(|param| param.id.to_symbol())
@@ -1495,26 +1493,24 @@ impl<'a> CaptureAnalyzer<'a> {
             captures: HashSet::new(),
             assigned_captures: Vec::new(),
             param_names,
-            outer_names,
             outer_scope_level,
             current_line_col: (0, 0),
         }
     }
 
-    fn should_capture(&self, var_symbol: &Symbol) -> bool {
+    /// Check if a variable reference should be captured.
+    /// Uses the Variable's actual scope_id from the AST, not a lookup by symbol name,
+    /// because the same symbol can exist at different scope levels (e.g., `prop` used
+    /// both in outer scope and inside the lambda's for-loop are different variables).
+    fn should_capture(&self, var: &Variable) -> bool {
         // Skip if it's a lambda parameter
-        if self.param_names.contains(var_symbol) {
+        if self.param_names.contains(&var.to_symbol()) {
             return false;
         }
 
-        // Check if this variable exists in the outer names
-        let Some(name) = self.outer_names.name_for_ident(*var_symbol) else {
-            return false;
-        };
-
-        // Only capture if the variable is at the outer scope level or lower.
-        // Variables at higher scope levels are local to the lambda body.
-        name.1 <= self.outer_scope_level
+        // Only capture if the variable's scope_id is at or below the outer scope level.
+        // Variables defined inside the lambda body have higher scope_ids.
+        var.scope_id as u8 <= self.outer_scope_level
     }
 
     /// Check if a Variable is from outer scope (for assignment error detection).
@@ -1532,14 +1528,14 @@ impl<'a> CaptureAnalyzer<'a> {
     }
 }
 
-impl<'a> AstVisitor for CaptureAnalyzer<'a> {
+impl AstVisitor for CaptureAnalyzer {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Id(var) => {
                 // This is a variable reference - check if it should be captured
-                let var_symbol = var.to_symbol();
-                if self.should_capture(&var_symbol) {
-                    self.captures.insert(var_symbol);
+                // We pass the full Variable so we can use its scope_id, not just the symbol
+                if self.should_capture(var) {
+                    self.captures.insert(var.to_symbol());
                 }
             }
             Expr::Assign { left, right: _ } => {
@@ -1621,10 +1617,9 @@ impl<'a> AstVisitor for CaptureAnalyzer<'a> {
 fn analyze_lambda_captures(
     lambda_params: &[ScatterItem],
     lambda_body: &Stmt,
-    outer_names: &Names,
     outer_scope_depth: u8,
 ) -> Result<Vec<Symbol>, CompileError> {
-    let mut analyzer = CaptureAnalyzer::new(lambda_params, outer_names, outer_scope_depth);
+    let mut analyzer = CaptureAnalyzer::new(lambda_params, outer_scope_depth);
     analyzer.visit_stmt(lambda_body);
 
     // Check if any captured variables were assigned to (an error)

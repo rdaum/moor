@@ -292,9 +292,7 @@ fn bf_ancestors(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// objects - it simply returns false (or #-1 if return_object is true).
 fn bf_isa(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
-        return Err(BfErr::ErrValue(
-            E_ARGS.msg("isa() takes 2 or 3 arguments"),
-        ));
+        return Err(BfErr::ErrValue(E_ARGS.msg("isa() takes 2 or 3 arguments")));
     }
     let Some(obj) = bf_args.args[0].as_object() else {
         return Err(BfErr::ErrValue(

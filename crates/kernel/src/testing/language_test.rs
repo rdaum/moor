@@ -2413,6 +2413,36 @@ mod tests {
     }
 
     #[test]
+    fn test_lambda_capture_same_name_different_scope() {
+        // Regression test: lambda declared first, then fork block with same variable names.
+        // The lambda's inner variables (val, prop) should NOT be confused with
+        // the outer scope's variables in the fork block.
+        // Bug: CaptureAnalyzer looked up variables by Symbol name in outer_names,
+        // getting the wrong Name tuple when the same name existed at multiple scopes.
+        assert_eq!(
+            run_moo(
+                r#"
+                fn get_val(lst)
+                    for prop in (lst)
+                        val = prop * 2;
+                        if (val > 5)
+                            return val;
+                        endif
+                    endfor
+                    return 0;
+                endfn
+                fork (0)
+                    val = 99;
+                    prop = 88;
+                endfork
+                return get_val({1, 2, 3, 4});
+                "#
+            ),
+            Ok(v_int(6))
+        );
+    }
+
+    #[test]
     fn test_flyweight_counter_pattern() {
         // Test flyweight-based counter using self parameter
         // Flyweights are immutable, so each call returns a new flyweight
