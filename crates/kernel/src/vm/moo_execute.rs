@@ -213,14 +213,19 @@ pub fn moo_frame_execute(
                 // Pop sequence from stack
                 let sequence = f.pop();
 
-                // Validate sequence
-                if (!sequence.is_sequence() && !sequence.is_associative())
-                    || sequence.type_code() == VarType::TYPE_STR
-                {
-                    f.jump(&operand.end_label);
+                // Validate sequence - strings are not iterable in MOO
+                if sequence.type_code() == VarType::TYPE_STR {
                     return ExecutionResult::RaiseError(
-                        E_TYPE.msg("invalid sequence type in for loop"),
+                        E_TYPE.msg("strings are not iterable; convert to list first"),
                     );
+                }
+                if !sequence.is_sequence() && !sequence.is_associative() {
+                    return ExecutionResult::RaiseError(E_TYPE.with_msg(|| {
+                        format!(
+                            "for-loop requires list or map (was {})",
+                            sequence.type_code().to_literal()
+                        )
+                    }));
                 }
 
                 let Ok(list_len) = sequence.len() else {

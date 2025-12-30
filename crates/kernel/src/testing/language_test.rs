@@ -2413,6 +2413,60 @@ mod tests {
     }
 
     #[test]
+    fn test_for_loop_type_error_line_number() {
+        // Test that E_TYPE from for loop with invalid sequence reports correct line
+        let program = r#"x = 1;
+y = 2;
+z = "not a list";
+for item in (z)
+    result = item;
+endfor
+return 99;"#;
+
+        let state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state,
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+
+        match result {
+            Err(exception) => {
+                assert_eq!(exception.error, Error::from(E_TYPE));
+
+                // Verify helpful error message for string iteration
+                assert!(
+                    exception
+                        .error
+                        .message()
+                        .contains("strings are not iterable"),
+                    "Expected helpful message about strings, got: {:?}",
+                    exception.error
+                );
+
+                let last_stack = exception.stack.last().expect("Expected a stack frame");
+                let line_no = last_stack
+                    .get(&v_int(6), IndexMode::OneBased)
+                    .unwrap()
+                    .as_integer()
+                    .expect("Expected line number to be an integer");
+                // Line 4 is "for item in (z)" - the for loop header
+                assert_eq!(
+                    line_no, 4,
+                    "Expected line number to be 4 (for loop), but got {line_no}"
+                );
+            }
+            Ok(_) => {
+                panic!("Expected E_TYPE from for loop with string");
+            }
+        }
+    }
+
+    #[test]
     fn test_lambda_capture_same_name_different_scope() {
         // Regression test: lambda declared first, then fork block with same variable names.
         // The lambda's inner variables (val, prop) should NOT be confused with
