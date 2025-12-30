@@ -46,5 +46,8 @@ tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
+# HTTP client (for URL content fetching)
+reqwest.workspace = true
+
 [dev-dependencies]
 tempfile.workspace = true

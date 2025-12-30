@@ -3530,6 +3530,7 @@ dependencies = [
  "moor-compiler",
  "moor-var",
  "pest",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",

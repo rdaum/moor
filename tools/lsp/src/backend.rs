@@ -23,16 +23,18 @@ use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOptions, CodeActionOrCommand, CodeActionParams,
     CodeActionProviderCapability, CodeActionResponse, Command, CompletionOptions, CompletionParams,
     CompletionResponse, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
-    DidOpenTextDocumentParams, DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams,
-    GotoDefinitionResponse, Hover, HoverParams, HoverProviderCapability, InitializeParams,
-    InitializeResult, InitializedParams, Location, MessageType, OneOf, PrepareRenameResponse,
-    ReferenceParams, RenameParams, ServerCapabilities, SymbolInformation, TextDocumentSyncCapability,
-    TextDocumentSyncKind, TextEdit, Url, WorkspaceEdit, WorkspaceSymbolParams,
+    DidOpenTextDocumentParams, DocumentFormattingParams, DocumentSymbolParams,
+    DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams,
+    HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, Location,
+    MessageType, OneOf, Position, PrepareRenameResponse, Range, ReferenceParams, RenameParams,
+    ServerCapabilities, SymbolInformation, TextDocumentSyncCapability, TextDocumentSyncKind,
+    TextEdit, Url, WorkspaceEdit, WorkspaceSymbolParams,
 };
 use tower_lsp::{Client, LanguageServer};
 
 use crate::client::MoorClient;
 use crate::completion;
+use crate::content::ContentAccessor;
 use crate::definition;
 use crate::diagnostics;
 use crate::hover;
@@ -55,6 +57,8 @@ pub struct MooLanguageServer {
     object_names: Arc<RwLock<ObjectNameRegistry>>,
     /// Workspace-wide symbol index for workspace/symbol requests.
     workspace_index: Arc<RwLock<WorkspaceIndex>>,
+    /// Content accessor for fetching from multiple sources.
+    content_accessor: ContentAccessor,
 }
 
 impl MooLanguageServer {
@@ -63,14 +67,30 @@ impl MooLanguageServer {
         workspace: PathBuf,
         moor_client: Option<Arc<RwLock<MoorClient>>>,
     ) -> Self {
+        let documents = Arc::new(RwLock::new(HashMap::new()));
+        let content_accessor =
+            ContentAccessor::new(Arc::clone(&documents), moor_client.clone());
+
         Self {
             client,
             workspace,
-            documents: Arc::new(RwLock::new(HashMap::new())),
+            documents,
             moor_client,
             object_names: Arc::new(RwLock::new(ObjectNameRegistry::new())),
             workspace_index: Arc::new(RwLock::new(WorkspaceIndex::new())),
+            content_accessor,
         }
+    }
+
+    /// Get content for a URI from any supported source.
+    ///
+    /// Sources checked in order:
+    /// 1. Open documents (in-memory)
+    /// 2. Filesystem (file:// scheme)
+    /// 3. HTTP/HTTPS URLs
+    /// 4. mooR server (moor:// scheme)
+    async fn get_content(&self, uri: &Url) -> Option<String> {
+        self.content_accessor.get_content(uri).await.ok()
     }
 
     /// Load object names from the mooR server if connected.
@@ -183,6 +203,7 @@ impl LanguageServer for MooLanguageServer {
                         ..Default::default()
                     },
                 )),
+                document_formatting_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -854,5 +875,62 @@ impl LanguageServer for MooLanguageServer {
         };
 
         Ok(Some(PrepareRenameResponse::Range(range)))
+    }
+
+    async fn formatting(
+        &self,
+        params: DocumentFormattingParams,
+    ) -> Result<Option<Vec<TextEdit>>> {
+        let uri = params.text_document.uri;
+
+        // Get content from any supported source (open doc, file, URL, mooR server)
+        let Some(content) = self.get_content(&uri).await else {
+            return Ok(None);
+        };
+
+        // Parse and unparse: unparse(parse(src))
+        let parse_result =
+            moor_compiler::parse::parse_program(&content, moor_compiler::CompileOptions::default());
+
+        let parsed = match parse_result {
+            Ok(p) => p,
+            Err(_) => {
+                // Can't format code that doesn't parse
+                return Ok(None);
+            }
+        };
+
+        // Unparse with indentation enabled
+        let formatted_lines = match moor_compiler::unparse(&parsed, false, true) {
+            Ok(lines) => lines,
+            Err(_) => return Ok(None),
+        };
+
+        let formatted = formatted_lines.join("\n");
+
+        // If nothing changed, return no edits
+        if formatted == content {
+            return Ok(Some(vec![]));
+        }
+
+        // Create a single edit that replaces the entire document
+        let line_count = content.lines().count() as u32;
+        let last_line_len = content.lines().last().map(|l| l.len()).unwrap_or(0) as u32;
+
+        let edit = TextEdit {
+            range: Range {
+                start: Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: Position {
+                    line: line_count,
+                    character: last_line_len,
+                },
+            },
+            new_text: formatted,
+        };
+
+        Ok(Some(vec![edit]))
     }
 }
