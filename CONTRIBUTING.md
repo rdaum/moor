@@ -493,6 +493,15 @@ events asynchronously to avoid impacting runtime performance.
 
 ## Pull Request Process
 
+### Branching and Release Policy
+
+- `main` branch: pre-release/next-version development (new features land here first)
+- `1.0` branch: stable release line (bug fixes, stability improvements, documentation)
+- Bug fixes land on `main` first, then are cherry-picked to `1.0` when safe
+- Beta tags are cut from the `1.0` branch
+- If a change is eligible for the release line, target `main` and note if it should be backported to
+  `1.0`
+
 ### Before Submitting
 
 1. **Ensure tests pass**: `cargo test --workspace`
@@ -552,7 +561,7 @@ information.
    ```
    moor-daemon | 2025-12-20T02:25:51.723186Z  INFO main crates/daemon/src/main.rs:434: moor 1.0.0-beta5 (commit: 7c56ea9) daemon starting...
    ```
-   - Include both version number and commit hash
+   - Always include both version number and commit hash
 
 3. **Expected vs Actual Behavior**:
    - What you expected to happen

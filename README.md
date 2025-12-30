@@ -14,9 +14,10 @@ enhancements.
 
 📖 **For comprehensive documentation, see our [mooR Book](https://timbran.org/book/html/).**
 
-> **⚠️ 1.0-Beta Release:** mooR is now in 1.0-beta! This is a significant milestone with stable
-> database formats and APIs. We're in feature freeze mode and focusing on bug fixes, documentation,
-> and performance. See the [Status](#status) section below for details.
+> **⚠️ 1.0-Beta Release:** mooR is in the 1.0-beta series, with stable database formats and APIs. If
+> you are reading `main`, you're looking at pre-release/next-version work; stable releases live on
+> the `1.0` release branch (with beta tags cut from it) and in the Releases tab / published images.
+> See the [Status](#status) section below for details.
 >
 > See the
 > [full announcement blog post for more...](https://timbran.org/announcing-moor-1-0-beta1.html)
@@ -49,15 +50,17 @@ modern technology.
 
 ## Status
 
-mooR is in **1.0-beta** development, focusing on stability, bug fixes, and documentation. The core
+mooR is in the **1.0-beta** series, focusing on stability, bug fixes, and documentation. The core
 runtime and database formats are considered "stable" but churn may still happen. It successfully
 runs databases imported from LambdaMOO with real-world workloads and has passed extensive stress and
 performance testing.
 
-**Beta phase** means:
+**Beta series policy**:
 
-- Feature freeze: No new features will be added before the 1.0 stable release
-- Focus on bug fixes, documentation, and performance optimization
+- `main` branch: pre-release/next-version development (new features land here first)
+- `1.0` branch: stable release line (bug fixes, stability improvements, documentation)
+- Bug fixes land on `main` first, then are cherry-picked to `1.0` when safe
+- Beta tags are cut from the `1.0` branch; releases and images publish from there
 - Database formats and APIs are now stable
 - Ready for testing and feedback from users
 
@@ -235,13 +238,15 @@ mooR offers several opportunities for contribution. For detailed contribution gu
 ## Bug Reports
 
 Found a bug or have a feature request? Please file an issue on our
-[Codeberg issue tracker](https://codeberg.org/timbran/moor/issues).
+[Codeberg issue tracker](https://codeberg.org/timbran/moor/issues). Bug reports from `main` are
+welcome, but if you're looking for stability, use the `1.0` release branch.
 
 When reporting bugs, please include:
 
 - Steps to reproduce the issue
 - Expected vs actual behavior
 - Your system information (OS, Docker version if applicable)
+- Version number and commit tag/hash
 - Relevant log output or error messages
 
 ## Resources
