@@ -28,6 +28,7 @@ use moor_common::{
 };
 use moor_var::Obj;
 
+use crate::tasks::nursery::Nursery;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 
 /// Complete current task execution context containing all necessary state.
@@ -39,6 +40,7 @@ pub struct TaskContext {
     pub task_id: TaskId,
     pub player: Obj,
     pub session: Arc<dyn Session>,
+    pub nursery: Nursery,
 }
 
 thread_local! {
@@ -71,6 +73,7 @@ impl TaskGuard {
                 task_id,
                 player,
                 session,
+                nursery: Nursery::new(),
             });
         });
 
@@ -292,6 +295,45 @@ pub fn has_active_task() -> bool {
     CURRENT_CONTEXT.with(|ctx| ctx.borrow().is_some())
 }
 
+/// Execute a closure with immutable access to the current task's nursery.
+/// Panics if no context is active.
+pub fn with_current_nursery<R>(f: impl FnOnce(&Nursery) -> R) -> R {
+    CURRENT_CONTEXT.with(|ctx| {
+        let ctx_ref = ctx.borrow();
+        let task_ctx = ctx_ref
+            .as_ref()
+            .expect("No active task context on this thread");
+        f(&task_ctx.nursery)
+    })
+}
+
+/// Execute a closure with mutable access to the current task's nursery.
+/// Panics if no context is active.
+pub fn with_current_nursery_mut<R>(f: impl FnOnce(&mut Nursery) -> R) -> R {
+    CURRENT_CONTEXT.with(|ctx| {
+        let mut ctx_ref = ctx.borrow_mut();
+        let task_ctx = ctx_ref
+            .as_mut()
+            .expect("No active task context on this thread");
+        f(&mut task_ctx.nursery)
+    })
+}
+
+/// Execute a closure with mutable access to both nursery and world state.
+/// This is needed for swizzling nursery refs when storing to DB properties.
+/// Panics if no context is active.
+pub fn with_nursery_and_transaction_mut<R>(
+    f: impl FnOnce(&mut Nursery, &mut dyn WorldState) -> R,
+) -> R {
+    CURRENT_CONTEXT.with(|ctx| {
+        let mut ctx_ref = ctx.borrow_mut();
+        let task_ctx = ctx_ref
+            .as_mut()
+            .expect("No active task context on this thread");
+        f(&mut task_ctx.nursery, task_ctx.world_state.as_mut())
+    })
+}
+
 /// Extract the current transaction from thread-local storage.
 /// This is a transitional helper for compatibility with existing parameter-passing code.
 /// Panics if no context is active.
@@ -313,15 +355,16 @@ pub fn with_new_transaction<F, R>(
 where
     F: FnOnce() -> Result<(Box<dyn WorldState>, R), WorldStateError>,
 {
-    // Extract context before commit to preserve it
+    // Extract context before commit to preserve it (including nursery which persists across transactions)
     let preserved_context = CURRENT_CONTEXT.with(|ctx| {
-        let task_ctx = ctx.borrow();
-        let task_ctx = task_ctx.as_ref().expect("No active task context");
+        let mut task_ctx = ctx.borrow_mut();
+        let task_ctx = task_ctx.as_mut().expect("No active task context");
         (
             task_ctx.task_scheduler_client.clone(),
             task_ctx.task_id,
             task_ctx.player,
             task_ctx.session.clone(),
+            std::mem::take(&mut task_ctx.nursery),
         )
     });
 
@@ -346,6 +389,7 @@ where
                     task_id: preserved_context.1,
                     player: preserved_context.2,
                     session: preserved_context.3,
+                    nursery: preserved_context.4,
                 });
             });
 
@@ -367,7 +411,7 @@ where
     F: FnOnce(&mut dyn LoaderInterface) -> Result<R, E>,
 {
     // Extract the current WorldState and context info
-    let (world_state, task_scheduler_client, task_id, player, session) =
+    let (world_state, task_scheduler_client, task_id, player, session, nursery) =
         CURRENT_CONTEXT.with(|ctx| {
             let task_ctx = ctx.borrow_mut().take().expect("No active task context");
             (
@@ -376,6 +420,7 @@ where
                 task_ctx.task_id,
                 task_ctx.player,
                 task_ctx.session,
+                task_ctx.nursery,
             )
         });
 
@@ -401,6 +446,7 @@ where
             task_id,
             player,
             session,
+            nursery,
         });
     });
 
@@ -435,5 +481,17 @@ mod tests {
     #[should_panic(expected = "No active task context to rollback")]
     fn test_panic_on_rollback_no_transaction() {
         rollback_current_transaction().unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "No active task context")]
+    fn test_panic_on_no_nursery_context() {
+        with_current_nursery(|_| ());
+    }
+
+    #[test]
+    #[should_panic(expected = "No active task context")]
+    fn test_panic_on_no_nursery_mut_context() {
+        with_current_nursery_mut(|_| ());
     }
 }

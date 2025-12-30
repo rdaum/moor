@@ -33,7 +33,7 @@ use moor_var::{
 };
 
 use crate::{
-    task_context::{with_current_transaction, with_current_transaction_mut},
+    task_context::{with_current_nursery, with_current_nursery_mut, with_current_transaction, with_current_transaction_mut},
     vm::{
         VerbExecutionRequest,
         builtins::{
@@ -63,16 +63,25 @@ fn create_object_with_initialize(
     init_args: Option<&List>,
     obj_kind: ObjectKind,
 ) -> Result<BfRet, BfErr> {
-    let new_obj = with_current_transaction_mut(|ws| {
-        ws.create_object(
-            &bf_args.task_perms_who(),
-            parent,
-            owner,
-            BitEnum::new(),
-            obj_kind,
-        )
-    })
-    .map_err(world_state_bf_err)?;
+    let new_obj = match obj_kind {
+        ObjectKind::Anonymous => {
+            // Allocate in nursery instead of DB
+            with_current_nursery_mut(|nursery| nursery.allocate(*parent, *owner))
+        }
+        _ => {
+            // Normal DB allocation for regular and uu-objid objects
+            with_current_transaction_mut(|ws| {
+                ws.create_object(
+                    &bf_args.task_perms_who(),
+                    parent,
+                    owner,
+                    BitEnum::new(),
+                    obj_kind,
+                )
+            })
+            .map_err(world_state_bf_err)?
+        }
+    };
 
     // Try to call :initialize on the new object
     let Ok((program, resolved_verb)) = with_current_transaction(|world_state| {
@@ -116,6 +125,15 @@ fn bf_valid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_TYPE.msg("valid() first argument must be an object"),
         ));
     };
+
+    // Nursery objects are valid if they exist in the current task's nursery
+    if obj.is_nursery() {
+        let is_valid = with_current_nursery(|nursery| {
+            obj.nursery_id().is_some_and(|id| nursery.contains(id))
+        });
+        return Ok(Ret(bf_args.v_bool(is_valid)));
+    }
+
     let is_valid = with_current_transaction(|world_state| world_state.valid(&obj))
         .map_err(world_state_bf_err)?;
     Ok(Ret(bf_args.v_bool(is_valid)))
@@ -133,6 +151,22 @@ fn bf_parent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_TYPE.msg("parent() first argument must be an object"),
         ));
     };
+
+    // Nursery objects store their parent directly
+    if obj.is_nursery() {
+        let parent = with_current_nursery(|nursery| {
+            obj.nursery_id()
+                .and_then(|id| nursery.get(id))
+                .map(|nursery_obj| nursery_obj.parent)
+        });
+        return match parent {
+            Some(p) => Ok(Ret(v_obj(p))),
+            None => Err(BfErr::ErrValue(
+                E_INVARG.msg("parent() argument must be a valid object"),
+            )),
+        };
+    }
+
     if !with_current_transaction(|world_state| world_state.valid(&obj))
         .map_err(world_state_bf_err)?
     {
@@ -670,7 +704,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     };
 
-    if obj.is_anonymous() {
+    if obj.is_anonymous() || obj.is_nursery() {
         return Err(BfErr::ErrValue(
             E_INVARG.msg("cannot recycle() anonymous objects"),
         ));
@@ -1315,6 +1349,7 @@ fn bf_renumber(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// Usage: `int is_anonymous(obj object)`
 /// Returns true if object is an anonymous object reference. Anonymous objects are not
 /// stored in the database and exist only as long as they are referenced.
+/// Nursery objects (task-local anonymous objects) also return true.
 fn bf_is_anonymous(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(
@@ -1327,6 +1362,19 @@ fn bf_is_anonymous(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_TYPE.msg("is_anonymous() argument must be an object"),
         ));
     };
+
+    // Nursery objects are anonymous (task-local, not yet promoted)
+    if obj.is_nursery() {
+        let is_valid = with_current_nursery(|nursery| {
+            obj.nursery_id().is_some_and(|id| nursery.contains(id))
+        });
+        if !is_valid {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("is_anonymous() argument must be a valid object"),
+            ));
+        }
+        return Ok(Ret(v_bool(true))); // Nursery objects are anonymous
+    }
 
     if !with_current_transaction(|world_state| world_state.valid(&obj))
         .map_err(world_state_bf_err)?

@@ -13,7 +13,7 @@
 
 use crate::{
     config::FeaturesConfig,
-    task_context::with_current_transaction_mut,
+    task_context::{with_current_nursery, with_current_nursery_mut, with_current_transaction_mut, with_nursery_and_transaction_mut},
     vm::{
         moo_frame::{CatchType, MooStackFrame, ScopeType},
         scatter_assign::scatter_assign,
@@ -24,9 +24,10 @@ use crate::{
 use lazy_static::lazy_static;
 use moor_compiler::{Op, to_literal};
 use moor_var::{
-    E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, Error, IndexMode, Obj, Symbol,
-    TypeClass, Var, VarType, program::names::Name, v_arc_str, v_bool, v_bool_int, v_empty_list,
-    v_empty_map, v_err, v_error, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_sym,
+    E_ARGS, E_DIV, E_INVARG, E_INVIND, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, Error, IndexMode, NOTHING,
+    Obj, Symbol, TypeClass, Var, VarType, program::names::Name, v_arc_str, v_bool, v_bool_int,
+    v_empty_list, v_empty_map, v_err, v_error, v_float, v_flyweight, v_int, v_list, v_map, v_none,
+    v_obj, v_sym,
 };
 use std::time::Duration;
 
@@ -940,16 +941,54 @@ pub fn moo_frame_execute(
                         }),
                     );
                 };
-                let update_result = with_current_transaction_mut(|world_state| {
-                    world_state.update_property(&permissions, &obj, propname, &rhs.clone())
-                });
 
-                match update_result {
-                    Ok(()) => {
+                // Nursery object case - store in nursery slots
+                if obj.is_nursery() {
+                    let success = with_current_nursery_mut(|nursery| {
+                        if let Some(nursery_id) = obj.nursery_id()
+                            && let Some(nursery_obj) = nursery.get_mut(nursery_id)
+                        {
+                            nursery_obj.slots.insert(propname, rhs.clone());
+                            return true;
+                        }
+                        false
+                    });
+
+                    if success {
                         f.poke(0, rhs);
+                    } else {
+                        return ExecutionResult::PushError(
+                            E_INVIND.with_msg(|| format!("Invalid nursery object: {}", obj)),
+                        );
                     }
-                    Err(e) => {
-                        return ExecutionResult::PushError(e.to_error());
+                } else {
+                    // Normal DB update - swizzle any nursery refs first
+                    use crate::tasks::nursery::contains_nursery_refs;
+
+                    let rhs_to_store = if contains_nursery_refs(&rhs) {
+                        use crate::tasks::nursery::swizzle_value;
+
+                        match with_nursery_and_transaction_mut(|nursery, ws| {
+                            swizzle_value(rhs.clone(), nursery, ws, &permissions)
+                        }) {
+                            Ok(swizzled) => swizzled,
+                            Err(e) => return ExecutionResult::PushError(e.to_error()),
+                        }
+                    } else {
+                        rhs.clone()
+                    };
+
+                    let update_result = with_current_transaction_mut(|world_state| {
+                        world_state.update_property(&permissions, &obj, propname, &rhs_to_store)
+                    });
+
+                    match update_result {
+                        Ok(()) => {
+                            f.poke(0, rhs);
+                        }
+                        Err(e) => {
+                            return ExecutionResult::PushError(e.to_error());
+                        }
                     }
                 }
             }
@@ -1443,13 +1482,55 @@ fn get_property(
 ) -> Result<Var, Error> {
     // Fast path: Obj is by far the most common case for property access
     if let Some(obj_ref) = obj.as_object() {
-        let result = with_current_transaction_mut(|world_state| {
+        // Nursery object case - check local slots, then delegate to parent
+        if obj_ref.is_nursery() {
+            // First, try to get from nursery slots or get the parent for delegation
+            let nursery_result = with_current_nursery(|nursery| {
+                if let Some(nursery_id) = obj_ref.nursery_id()
+                    && let Some(nursery_obj) = nursery.get(nursery_id)
+                {
+                    // Check local slots first
+                    if let Some(value) = nursery_obj.slots.get(&propname) {
+                        return Some(Ok(value.clone()));
+                    }
+                    // Need to delegate to parent
+                    if !nursery_obj.parent.is_nothing() {
+                        return None; // Signal: delegate to parent
+                    }
+                }
+                // Nursery object not found - error
+                Some(Err(E_PROPNF.with_msg(|| format!("Property not found: {}", propname))))
+            });
+
+            // If we got a result, return it
+            if let Some(result) = nursery_result {
+                return result;
+            }
+
+            // Need to delegate to parent - get parent outside the nursery borrow
+            let parent = with_current_nursery(|nursery| {
+                obj_ref
+                    .nursery_id()
+                    .and_then(|id| nursery.get(id))
+                    .map(|obj| obj.parent)
+                    .unwrap_or(NOTHING)
+            });
+
+            if !parent.is_nothing() {
+                return with_current_transaction_mut(|world_state| {
+                    world_state.retrieve_property(permissions, &parent, propname)
+                })
+                .map_err(|e| e.to_error());
+            }
+
+            return Err(E_PROPNF.with_msg(|| format!("Property not found: {}", propname)));
+        }
+
+        // Regular object case
+        return with_current_transaction_mut(|world_state| {
             world_state.retrieve_property(permissions, &obj_ref, propname)
-        });
-        return match result {
-            Ok(v) => Ok(v),
-            Err(e) => Err(e.to_error()),
-        };
+        })
+        .map_err(|e| e.to_error());
     }
 
     // Flyweight case

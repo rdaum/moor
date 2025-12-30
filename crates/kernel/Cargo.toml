@@ -61,6 +61,10 @@ harness = false
 name = "verb_dispatch_bench"
 harness = false
 
+[[bench]]
+name = "nursery_benches"
+harness = false
+
 [dependencies]
 # Internal Dependencies
 moor-builtin-docs-macro = { path = "../builtin-docs-macro" }
