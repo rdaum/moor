@@ -278,32 +278,62 @@ fn bf_ancestors(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&ancestors)))
 }
 
-/// Usage: `int isa(obj object, obj ancestor)`
-/// Returns true if object is a descendant of ancestor (i.e., ancestor appears in
-/// object's inheritance chain). Also returns true if object equals ancestor.
+/// Usage: `int|obj isa(obj object, obj|list parent [, int return_object])`
+/// Returns true if object is a descendant of parent (i.e., parent appears in
+/// object's inheritance chain). Also returns true if object equals parent.
+///
+/// The second argument can be a list of objects; if so, returns true if object
+/// is a descendant of any object in the list.
+///
+/// If the optional third argument `return_object` is true, returns the matching
+/// parent object instead of 1, or #-1 instead of 0.
+///
+/// Unlike some other object functions, this does NOT raise E_INVARG for invalid
+/// objects - it simply returns false (or #-1 if return_object is true).
 fn bf_isa(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 2 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("isa() takes 2 arguments")));
+    if bf_args.args.is_empty() || bf_args.args.len() > 3 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("isa() takes 2 or 3 arguments"),
+        ));
     }
     let Some(obj) = bf_args.args[0].as_object() else {
         return Err(BfErr::ErrValue(
             E_TYPE.msg("isa() first argument must be an object"),
         ));
     };
-    let Some(possible_ancestor) = bf_args.args[1].as_object() else {
+
+    // Second argument can be an object or a list of objects
+    let parent_list: Vec<Obj> = if let Some(parent_obj) = bf_args.args[1].as_object() {
+        vec![parent_obj]
+    } else if let Some(parent_list) = bf_args.args[1].as_list() {
+        let mut parents = Vec::with_capacity(parent_list.len());
+        for item in parent_list.iter() {
+            let Some(parent_obj) = item.as_object() else {
+                return Err(BfErr::ErrValue(
+                    E_TYPE.msg("isa() second argument must be an object or list of objects"),
+                ));
+            };
+            parents.push(parent_obj);
+        }
+        parents
+    } else {
         return Err(BfErr::ErrValue(
-            E_TYPE.msg("isa() second argument must be an object"),
+            E_TYPE.msg("isa() second argument must be an object or list of objects"),
         ));
     };
 
+    // Third argument: return_object flag
+    let return_object = bf_args.args.len() > 2 && bf_args.args[2].is_true();
+
+    // If object is not valid, return false (or #-1 if return_object)
     if !with_current_transaction(|world_state| world_state.valid(&obj))
         .map_err(world_state_bf_err)?
-        || !with_current_transaction(|world_state| world_state.valid(&possible_ancestor))
-            .map_err(world_state_bf_err)?
     {
-        return Err(BfErr::ErrValue(
-            E_INVARG.msg("isa() arguments must be valid objects"),
-        ));
+        return Ok(Ret(if return_object {
+            v_obj(NOTHING)
+        } else {
+            bf_args.v_bool(false)
+        }));
     }
 
     let ancestors = with_current_transaction(|world_state| {
@@ -311,9 +341,23 @@ fn bf_isa(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     })
     .map_err(world_state_bf_err)?;
 
-    let isa = ancestors.contains(possible_ancestor);
+    // Check each potential parent
+    for possible_ancestor in parent_list {
+        if ancestors.contains(possible_ancestor) {
+            return Ok(Ret(if return_object {
+                v_obj(possible_ancestor)
+            } else {
+                bf_args.v_bool(true)
+            }));
+        }
+    }
 
-    Ok(Ret(v_bool(isa)))
+    // No match found
+    Ok(Ret(if return_object {
+        v_obj(NOTHING)
+    } else {
+        bf_args.v_bool(false)
+    }))
 }
 
 /// Recursively builds a list of an object's location, its location's location, and so forth until

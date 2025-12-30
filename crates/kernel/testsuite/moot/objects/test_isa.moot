@@ -1,0 +1,76 @@
+// Tests for isa() builtin function
+// Adapted from ToastStunt test_miscellaneous.rb
+
+// Setup: create a simple object hierarchy
+; add_property($system, "a", create($nothing), {player, "wrc"});
+; add_property($system, "b", create($a), {player, "wrc"});
+; add_property($system, "c", create($b), {player, "wrc"});
+
+// Basic isa() tests - returns true/false (or 1/0)
+; return isa($a, $b);
+0
+; return isa($b, $a);
+1
+; return isa($c, $a);
+1
+; return isa($c, $b);
+1
+
+// isa() with $nothing
+; return isa($b, $nothing);
+0
+; return isa($nothing, $a);
+0
+; return isa($nothing, $nothing);
+0
+
+// isa() with invalid objects - should return 0, NOT throw E_INVARG
+; return isa(#100000, #1);
+0
+; return isa(#1, #100000);
+0
+; return isa(#1000000, #1000000);
+0
+; return isa(#-2, #2);
+0
+; return isa(#1, #-1);
+0
+
+// isa() with list of parents as second argument
+; return isa($c, {$a, $b});
+1
+; return isa($c, {$b, $a});
+1
+; return isa($a, {$b, $c});
+0
+; return isa($b, {$nothing, $a});
+1
+
+// isa() with return_object (third argument = true)
+// Should return the matching parent object instead of 1, or #-1 instead of 0
+; return isa($b, $a, 1);
+$a
+; return isa($c, $a, 1);
+$a
+; return isa($a, $b, 1);
+#-1
+
+// return_object with list of parents - returns first matching parent
+; return isa($c, {$a, $b}, 1);
+$a
+; return isa($c, {$b, $a}, 1);
+$b
+; return isa($a, {$b, $c}, 1);
+#-1
+
+// return_object with invalid objects - returns #-1
+; return isa(#100000, #1, 1);
+#-1
+; return isa(#-2, #2, 1);
+#-1
+
+// Object is its own ancestor (isa includes self)
+; return isa($a, $a);
+1
+; return isa($a, $a, 1);
+$a
