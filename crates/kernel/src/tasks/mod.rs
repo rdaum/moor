@@ -29,6 +29,7 @@ pub mod scheduler;
 
 pub(crate) mod checkpoint;
 pub mod convert_task;
+pub mod nursery;
 pub(crate) mod gc_thread;
 pub(crate) mod scheduler_client;
 pub(crate) mod task;

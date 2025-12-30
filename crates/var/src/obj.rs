@@ -69,6 +69,7 @@ pub struct Obj(u64);
 const OBJID_TYPE_CODE: u8 = 0;
 const UUOBJID_TYPE_CODE: u8 = 1;
 const ANONYMOUS_TYPE_CODE: u8 = 2;
+const NURSERY_TYPE_CODE: u8 = 3;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Objid(pub i32);
@@ -78,6 +79,9 @@ pub struct UuObjid(pub u64);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct AnonymousObjid(pub u64);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct NurseryId(pub u32);
 
 // Internal representation varies by type:
 // - Objid: lower 32 bits contain i32 DB object id, upper 30 bits unused
@@ -128,6 +132,16 @@ impl Obj {
         Self((anonymous.0 & 0x3FFF_FFFF_FFFF_FFFF) | ((ANONYMOUS_TYPE_CODE as u64) << 62))
     }
 
+    fn decode_as_nursery(&self) -> u32 {
+        // Extract the 32-bit nursery ID from the lower bits
+        (self.0 & 0xFFFF_FFFF) as u32
+    }
+
+    fn encode_as_nursery(id: u32) -> Self {
+        // Pack the 32-bit nursery ID into the lower bits with type code 3
+        Self((id as u64) | ((NURSERY_TYPE_CODE as u64) << 62))
+    }
+
     fn object_type_code(&self) -> u8 {
         (self.0 >> 62) as u8
     }
@@ -166,6 +180,7 @@ impl Debug for Obj {
                 let anonymous = self.decode_as_anonymous();
                 f.write_fmt(format_args!("Obj(*anonymous*:{})", anonymous.0))
             }
+            NURSERY_TYPE_CODE => write!(f, "Nursery({})", self.decode_as_nursery()),
             _ => f.write_fmt(format_args!("Obj(UnknownType:{})", self.object_type_code())),
         }
     }
@@ -180,6 +195,7 @@ impl Display for Obj {
                 f.write_fmt(format_args!("#{}", uuid.to_uuid_string()))
             }
             ANONYMOUS_TYPE_CODE => f.write_fmt(format_args!("*anonymous*")),
+            NURSERY_TYPE_CODE => write!(f, "#<nursery:{}>", self.decode_as_nursery()),
             _ => f.write_fmt(format_args!("UnknownType:{}", self.object_type_code())),
         }
     }
@@ -200,6 +216,12 @@ impl Display for UuObjid {
 impl Display for AnonymousObjid {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("*anonymous*:{}", self.0))
+    }
+}
+
+impl Display for NurseryId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#<nursery:{}>", self.0)
     }
 }
 
@@ -301,6 +323,25 @@ impl Obj {
     /// Checks if this Obj is an anonymous object
     pub fn is_anonymous(&self) -> bool {
         self.object_type_code() == ANONYMOUS_TYPE_CODE
+    }
+
+    /// Creates a new Obj with a nursery ID (task-local temporary object)
+    pub fn mk_nursery(id: u32) -> Self {
+        Self::encode_as_nursery(id)
+    }
+
+    /// Gets the nursery ID from this Obj if it's a nursery type
+    pub fn nursery_id(&self) -> Option<NurseryId> {
+        if self.object_type_code() == NURSERY_TYPE_CODE {
+            Some(NurseryId(self.decode_as_nursery()))
+        } else {
+            None
+        }
+    }
+
+    /// Checks if this Obj is a nursery object (task-local temporary)
+    pub fn is_nursery(&self) -> bool {
+        self.object_type_code() == NURSERY_TYPE_CODE
     }
 
     /// Checks if this Obj contains a valid object reference (not special values like NOTHING, AMBIGUOUS, etc.)
@@ -708,5 +749,45 @@ mod tests {
         assert_eq!(gen_auto, 42);
         assert!(gen_rng <= 0x3F);
         assert!(gen_epoch > 0); // Should be recent timestamp
+    }
+
+    #[test]
+    fn test_nursery_objects() {
+        let nursery_id = 42u32;
+        let obj = Obj::mk_nursery(nursery_id);
+        assert!(obj.is_nursery());
+        assert!(!obj.is_anonymous());
+        assert!(!obj.is_uuobjid());
+        assert!(!obj.is_sysobj());
+        assert_eq!(obj.nursery_id(), Some(NurseryId(nursery_id)));
+    }
+
+    #[test]
+    fn test_nursery_distinct_from_anonymous() {
+        let nursery = Obj::mk_nursery(1);
+        let anon = Obj::mk_anonymous_generated();
+        assert!(nursery.is_nursery());
+        assert!(!nursery.is_anonymous());
+        assert!(anon.is_anonymous());
+        assert!(!anon.is_nursery());
+        assert_ne!(nursery, anon);
+    }
+
+    #[test]
+    fn test_nursery_max_id() {
+        let obj = Obj::mk_nursery(u32::MAX);
+        assert!(obj.is_nursery());
+        assert_eq!(obj.nursery_id(), Some(NurseryId(u32::MAX)));
+    }
+
+    #[test]
+    fn test_nursery_debug_display() {
+        let nursery = Obj::mk_nursery(42);
+        let debug_str = format!("{:?}", nursery);
+        let display_str = format!("{}", nursery);
+
+        assert!(debug_str.contains("Nursery"));
+        assert!(debug_str.contains("42"));
+        assert_eq!(display_str, "#<nursery:42>");
     }
 }
