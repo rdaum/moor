@@ -341,10 +341,10 @@ impl TreeTransformer {
                 let ident_str = pair.as_str().trim();
 
                 // In legacy mode, check if this identifier is actually a legacy type constant
-                if self.options.legacy_type_constants {
-                    if let Some(type_id) = VarType::parse_legacy(ident_str) {
-                        return Ok(Expr::TypeConstant(type_id));
-                    }
+                if self.options.legacy_type_constants
+                    && let Some(type_id) = VarType::parse_legacy(ident_str)
+                {
+                    return Ok(Expr::TypeConstant(type_id));
                 }
 
                 let name = if self.in_lambda_body() {
@@ -3359,28 +3359,28 @@ endif
 
     #[test]
     fn test_fork_keyword_not_for_ident() {
-        use pest::Parser;
         use crate::parse::moo::{MooParser, Rule};
+        use pest::Parser;
 
         // Verify that 'fork' is parsed correctly as a keyword
         let keyword_result = MooParser::parse(Rule::keyword, "fork");
 
         // Fork should match as keyword with full "fork", not just "for"
-        assert!(
-            keyword_result.is_ok(),
-            "fork should match as keyword"
-        );
+        assert!(keyword_result.is_ok(), "fork should match as keyword");
         let matched = keyword_result.unwrap().next().unwrap().as_str();
-        assert_eq!(matched, "fork", "keyword rule should match full 'fork', not just 'for'");
+        assert_eq!(
+            matched, "fork",
+            "keyword rule should match full 'fork', not just 'for'"
+        );
 
         // Also test endfork
         let keyword_result = MooParser::parse(Rule::keyword, "endfork");
-        assert!(
-            keyword_result.is_ok(),
-            "endfork should match as keyword"
-        );
+        assert!(keyword_result.is_ok(), "endfork should match as keyword");
         let matched = keyword_result.unwrap().next().unwrap().as_str();
-        assert_eq!(matched, "endfork", "keyword rule should match full 'endfork', not just 'endfor'");
+        assert_eq!(
+            matched, "endfork",
+            "keyword rule should match full 'endfork', not just 'endfor'"
+        );
     }
 
     #[test]
@@ -3560,7 +3560,11 @@ endif
         // Test begin/end with a parenthesized expression inside
         let program = "begin\n(0);\nend";
         let result = parse_program(program, CompileOptions::default());
-        assert!(result.is_ok(), "begin/end with paren expr should parse: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "begin/end with paren expr should parse: {:?}",
+            result
+        );
     }
 
     #[test]
@@ -3570,7 +3574,11 @@ endif
         // begin(0) should parse as a function call, not as a begin_statement.
         let program = "begin(0);";
         let result = parse_program(program, CompileOptions::default());
-        assert!(result.is_ok(), "begin(0) should parse as function call: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "begin(0) should parse as function call: {:?}",
+            result
+        );
     }
 
     #[test]
@@ -3581,27 +3589,47 @@ endif
         // Test "end" as a variable name
         let program = "end = 5;";
         let result = parse_program(program, CompileOptions::default());
-        assert!(result.is_ok(), "end should be valid as identifier: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "end should be valid as identifier: {:?}",
+            result
+        );
 
         // Test "begin" as a variable name
         let program = "begin = 10;";
         let result = parse_program(program, CompileOptions::default());
-        assert!(result.is_ok(), "begin should be valid as identifier: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "begin should be valid as identifier: {:?}",
+            result
+        );
 
         // Test "ending" as a variable name (identifier starting with "end")
         let program = "ending = 1;";
         let result = parse_program(program, CompileOptions::default());
-        assert!(result.is_ok(), "ending should be valid as identifier: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "ending should be valid as identifier: {:?}",
+            result
+        );
 
         // Test "beginning" as a variable name (identifier starting with "begin")
         let program = "beginning = 1;";
         let result = parse_program(program, CompileOptions::default());
-        assert!(result.is_ok(), "beginning should be valid as identifier: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "beginning should be valid as identifier: {:?}",
+            result
+        );
 
         // Test that begin/end block still works
         let program = "begin\n  x = 1;\nend";
         let result = parse_program(program, CompileOptions::default());
-        assert!(result.is_ok(), "begin/end block should still work: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "begin/end block should still work: {:?}",
+            result
+        );
 
         // Test begin/end identifiers mixed with begin/end block
         let program = r#"
@@ -3613,7 +3641,11 @@ endif
             begin = ending;
         "#;
         let result = parse_program(program, CompileOptions::default());
-        assert!(result.is_ok(), "mixed begin/end usage should work: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "mixed begin/end usage should work: {:?}",
+            result
+        );
     }
 
     /// Test that lexical block scopes parse and that the inner scope variables can shadow outer scope

@@ -16,18 +16,20 @@
 use std::fs;
 use std::path::PathBuf;
 
-use crate::ast::{Arg, BinaryOp, CallTarget, CatchCodes, Expr, ScatterKind, Stmt, StmtNode, UnaryOp};
+use crate::CompileOptions;
+use crate::ast::{
+    Arg, BinaryOp, CallTarget, CatchCodes, Expr, ScatterKind, Stmt, StmtNode, UnaryOp,
+};
 use crate::parse::parse_program;
 use crate::unparse::unparse;
-use crate::CompileOptions;
-use moor_var::program::names::VarName;
 use moor_var::Variant;
+use moor_var::program::names::VarName;
 use moor_var::{ErrorCode, Var};
 use proptest::prelude::*;
 
 use super::generators::{
-    arb_expr_layer1, arb_expr_layer2, arb_expr_layer2_complete, arb_expr_layer2b,
-    arb_stmt_layer3, arb_stmt_layer4, arb_stmt_layer5,
+    arb_expr_layer1, arb_expr_layer2, arb_expr_layer2_complete, arb_expr_layer2b, arb_stmt_layer3,
+    arb_stmt_layer4, arb_stmt_layer5,
 };
 
 /// Format an expression to MOO source code.
@@ -38,7 +40,11 @@ fn format_expr_to_source(expr: &Expr) -> String {
         Expr::Value(v) => format_var(v),
         Expr::Error(code, None) => format_error_code(code),
         Expr::Error(code, Some(msg)) => {
-            format!("{}({})", format_error_code(code), format_expr_to_source(msg))
+            format!(
+                "{}({})",
+                format_error_code(code),
+                format_expr_to_source(msg)
+            )
         }
         Expr::Id(var) => match &var.nr {
             VarName::Named(sym) => sym.to_string(),
@@ -109,13 +115,21 @@ fn format_expr_to_source(expr: &Expr) -> String {
             let elements: Vec<String> = entries
                 .iter()
                 .map(|(k, v)| {
-                    format!("{} -> {}", format_expr_to_source(k), format_expr_to_source(v))
+                    format!(
+                        "{} -> {}",
+                        format_expr_to_source(k),
+                        format_expr_to_source(v)
+                    )
                 })
                 .collect();
             format!("[{}]", elements.join(", "))
         }
         Expr::Index(base, index) => {
-            format!("({}[{}])", format_expr_to_source(base), format_expr_to_source(index))
+            format!(
+                "({}[{}])",
+                format_expr_to_source(base),
+                format_expr_to_source(index)
+            )
         }
         Expr::Range { base, from, to } => {
             format!(
@@ -196,7 +210,11 @@ fn format_expr_to_source(expr: &Expr) -> String {
                     format!("{}({})", sym, args_str.join(", "))
                 }
                 CallTarget::Expr(expr) => {
-                    format!("call({}, {})", format_expr_to_source(expr), args_str.join(", "))
+                    format!(
+                        "call({}, {})",
+                        format_expr_to_source(expr),
+                        args_str.join(", ")
+                    )
                 }
             }
         }
@@ -271,7 +289,11 @@ fn format_expr_to_source(expr: &Expr) -> String {
                 })
                 .collect();
             // Scatter assignment: {a, b, c} = rhs (not {a, b, c = rhs})
-            format!("{{{}}} = {}", items_str.join(", "), format_expr_to_source(rhs))
+            format!(
+                "{{{}}} = {}",
+                items_str.join(", "),
+                format_expr_to_source(rhs)
+            )
         }
         Expr::Pass { args: _ } => "pass".to_string(),
         Expr::Decl { id, is_const, expr } => {
@@ -444,10 +466,13 @@ fn format_stmt_to_source(stmt: &Stmt) -> String {
             body,
             ..
         } => {
-            let label = id.as_ref().map(|v| match &v.nr {
-                VarName::Named(sym) => format!("{} ", sym),
-                VarName::Register(n) => format!("_r{} ", n),
-            }).unwrap_or_default();
+            let label = id
+                .as_ref()
+                .map(|v| match &v.nr {
+                    VarName::Named(sym) => format!("{} ", sym),
+                    VarName::Register(n) => format!("_r{} ", n),
+                })
+                .unwrap_or_default();
             let mut result = format!("while {}({})\n", label, format_expr_to_source(condition));
             for stmt in body {
                 result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
@@ -456,10 +481,13 @@ fn format_stmt_to_source(stmt: &Stmt) -> String {
             result
         }
         StmtNode::Fork { id, time, body } => {
-            let label = id.as_ref().map(|v| match &v.nr {
-                VarName::Named(sym) => format!("{} ", sym),
-                VarName::Register(n) => format!("_r{} ", n),
-            }).unwrap_or_default();
+            let label = id
+                .as_ref()
+                .map(|v| match &v.nr {
+                    VarName::Named(sym) => format!("{} ", sym),
+                    VarName::Register(n) => format!("_r{} ", n),
+                })
+                .unwrap_or_default();
             let mut result = format!("fork {}({})\n", label, format_expr_to_source(time));
             for stmt in body {
                 result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
@@ -473,10 +501,14 @@ fn format_stmt_to_source(stmt: &Stmt) -> String {
                 result.push_str(&format!("  {}\n", format_stmt_to_source(stmt)));
             }
             for except in excepts {
-                let var_name = except.id.as_ref().map(|v| match &v.nr {
-                    VarName::Named(sym) => format!("{} ", sym),
-                    VarName::Register(n) => format!("_r{} ", n),
-                }).unwrap_or_default();
+                let var_name = except
+                    .id
+                    .as_ref()
+                    .map(|v| match &v.nr {
+                        VarName::Named(sym) => format!("{} ", sym),
+                        VarName::Register(n) => format!("_r{} ", n),
+                    })
+                    .unwrap_or_default();
                 let codes_str = match &except.codes {
                     CatchCodes::Any => "ANY".to_string(),
                     CatchCodes::Codes(codes) => codes
@@ -508,30 +540,26 @@ fn format_stmt_to_source(stmt: &Stmt) -> String {
             result.push_str("endtry");
             result
         }
-        StmtNode::Break { exit } => {
-            match exit {
-                Some(label) => {
-                    let label_name = match &label.nr {
-                        VarName::Named(sym) => sym.to_string(),
-                        VarName::Register(n) => format!("_r{}", n),
-                    };
-                    format!("break {};", label_name)
-                }
-                None => "break;".to_string(),
+        StmtNode::Break { exit } => match exit {
+            Some(label) => {
+                let label_name = match &label.nr {
+                    VarName::Named(sym) => sym.to_string(),
+                    VarName::Register(n) => format!("_r{}", n),
+                };
+                format!("break {};", label_name)
             }
-        }
-        StmtNode::Continue { exit } => {
-            match exit {
-                Some(label) => {
-                    let label_name = match &label.nr {
-                        VarName::Named(sym) => sym.to_string(),
-                        VarName::Register(n) => format!("_r{}", n),
-                    };
-                    format!("continue {};", label_name)
-                }
-                None => "continue;".to_string(),
+            None => "break;".to_string(),
+        },
+        StmtNode::Continue { exit } => match exit {
+            Some(label) => {
+                let label_name = match &label.nr {
+                    VarName::Named(sym) => sym.to_string(),
+                    VarName::Register(n) => format!("_r{}", n),
+                };
+                format!("continue {};", label_name)
             }
-        }
+            None => "continue;".to_string(),
+        },
         StmtNode::Scope { body, .. } => {
             let mut result = "begin\n".to_string();
             for stmt in body {
@@ -854,7 +882,11 @@ mod manual_tests {
         // Basic for-range statement
         let source = "for x in [1..10]\n  x;\nendfor";
         let result = parse_program(source, CompileOptions::default());
-        assert!(result.is_ok(), "for x in [1..10] should parse: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "for x in [1..10] should parse: {:?}",
+            result
+        );
     }
 
     #[test]
@@ -910,7 +942,11 @@ mod manual_tests {
         // Break inside a loop
         let source = "while (1)\n  break;\nendwhile";
         let result = parse_program(source, CompileOptions::default());
-        assert!(result.is_ok(), "break inside loop should parse: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "break inside loop should parse: {:?}",
+            result
+        );
     }
 
     #[test]
@@ -918,7 +954,11 @@ mod manual_tests {
         // Continue inside a loop
         let source = "while (1)\n  continue;\nendwhile";
         let result = parse_program(source, CompileOptions::default());
-        assert!(result.is_ok(), "continue inside loop should parse: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "continue inside loop should parse: {:?}",
+            result
+        );
     }
 
     #[test]
@@ -926,7 +966,11 @@ mod manual_tests {
         // For-list with key binding
         let source = "for x, i in ({1, 2, 3})\n  x;\nendfor";
         let result = parse_program(source, CompileOptions::default());
-        assert!(result.is_ok(), "for-list with key should parse: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "for-list with key should parse: {:?}",
+            result
+        );
     }
 
     #[test]
@@ -949,23 +993,39 @@ mod manual_tests {
         // Works: if/endif with parenthesized expression
         let source_if = "if (1)\n(0);\nendif";
         let result_if = parse_program(source_if, CompileOptions::default());
-        assert!(result_if.is_ok(), "if with paren should parse: {:?}", result_if);
+        assert!(
+            result_if.is_ok(),
+            "if with paren should parse: {:?}",
+            result_if
+        );
 
         // Works: while/endwhile with parenthesized expression
         let source_while = "while (1)\n(0);\nendwhile";
         let result_while = parse_program(source_while, CompileOptions::default());
-        assert!(result_while.is_ok(), "while with paren should parse: {:?}", result_while);
+        assert!(
+            result_while.is_ok(),
+            "while with paren should parse: {:?}",
+            result_while
+        );
 
         // Test: begin/end with simple expression
         let source2 = "begin\n  0;\nend";
         let result2 = parse_program(source2, CompileOptions::default());
-        assert!(result2.is_ok(), "simple begin/end should parse: {:?}", result2);
+        assert!(
+            result2.is_ok(),
+            "simple begin/end should parse: {:?}",
+            result2
+        );
 
         // Test: begin/end with parenthesized simple expression
         let source_paren = "begin\n(0);\nend";
         println!("Source paren:\n{}", source_paren);
         let result_paren = parse_program(source_paren, CompileOptions::default());
-        assert!(result_paren.is_ok(), "begin/end with paren should parse: {:?}", result_paren);
+        assert!(
+            result_paren.is_ok(),
+            "begin/end with paren should parse: {:?}",
+            result_paren
+        );
     }
 
     #[test]

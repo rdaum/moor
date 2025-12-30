@@ -128,9 +128,8 @@ pub fn arb_literal() -> impl Strategy<Value = Expr> {
 
 /// MOO keywords that cannot be standalone identifiers.
 const MOO_KEYWORDS: &[&str] = &[
-    "for", "endfor", "if", "else", "return", "endif", "elseif", "while",
-    "endwhile", "continue", "break", "fork", "endfork", "try", "except",
-    "endtry", "finally", "in", "let", "fn", "endfn",
+    "for", "endfor", "if", "else", "return", "endif", "elseif", "while", "endwhile", "continue",
+    "break", "fork", "endfork", "try", "except", "endtry", "finally", "in", "let", "fn", "endfn",
 ];
 
 /// Check if a string is a valid MOO identifier.
@@ -218,7 +217,11 @@ pub fn arb_binary_op() -> impl Strategy<Value = BinaryOp> {
 
 /// Generate an arbitrary unary operator.
 pub fn arb_unary_op() -> impl Strategy<Value = UnaryOp> {
-    prop_oneof![Just(UnaryOp::Neg), Just(UnaryOp::Not), Just(UnaryOp::BitNot),]
+    prop_oneof![
+        Just(UnaryOp::Neg),
+        Just(UnaryOp::Not),
+        Just(UnaryOp::BitNot),
+    ]
 }
 
 // =============================================================================
@@ -227,7 +230,9 @@ pub fn arb_unary_op() -> impl Strategy<Value = UnaryOp> {
 
 /// Generate an Arg (Normal or Splice) wrapping an expression.
 /// For simplicity, we only generate Normal args (no splices).
-pub fn arb_arg<S: Strategy<Value = Expr> + 'static>(expr_strategy: S) -> impl Strategy<Value = Arg> {
+pub fn arb_arg<S: Strategy<Value = Expr> + 'static>(
+    expr_strategy: S,
+) -> impl Strategy<Value = Arg> {
     expr_strategy.prop_map(Arg::Normal)
 }
 
@@ -255,9 +260,8 @@ pub fn arb_map<S: Strategy<Value = Expr> + Clone + 'static>(
 pub fn arb_index<S: Strategy<Value = Expr> + Clone + 'static>(
     expr_strategy: S,
 ) -> impl Strategy<Value = Expr> {
-    (expr_strategy.clone(), expr_strategy).prop_map(|(base, index)| {
-        Expr::Index(Box::new(base), Box::new(index))
-    })
+    (expr_strategy.clone(), expr_strategy)
+        .prop_map(|(base, index)| Expr::Index(Box::new(base), Box::new(index)))
 }
 
 /// Generate a range index expression: base[from..to]
@@ -281,16 +285,13 @@ pub fn arb_range<S: Strategy<Value = Expr> + Clone + 'static>(
 pub fn arb_cond<S: Strategy<Value = Expr> + Clone + 'static>(
     expr_strategy: S,
 ) -> impl Strategy<Value = Expr> {
-    (
-        expr_strategy.clone(),
-        expr_strategy.clone(),
-        expr_strategy,
-    )
-        .prop_map(|(condition, consequence, alternative)| Expr::Cond {
+    (expr_strategy.clone(), expr_strategy.clone(), expr_strategy).prop_map(
+        |(condition, consequence, alternative)| Expr::Cond {
             condition: Box::new(condition),
             consequence: Box::new(consequence),
             alternative: Box::new(alternative),
-        })
+        },
+    )
 }
 
 /// Generate an And expression: left && right
@@ -316,10 +317,7 @@ pub fn arb_prop<S: Strategy<Value = Expr> + Clone + 'static>(
     _expr_strategy: S,
 ) -> impl Strategy<Value = Expr> {
     // Location should be object-like: object refs or variables
-    let location_strategy = prop_oneof![
-        arb_objref(),
-        arb_variable().prop_map(Expr::Id),
-    ];
+    let location_strategy = prop_oneof![arb_objref(), arb_variable().prop_map(Expr::Id),];
     (location_strategy, arb_identifier_string()).prop_map(|(location, prop_name)| Expr::Prop {
         location: Box::new(location),
         property: Box::new(Expr::Value(Var::mk_str(&prop_name))),
@@ -335,10 +333,7 @@ pub fn arb_verb<S: Strategy<Value = Expr> + Clone + 'static>(
     max_args: usize,
 ) -> impl Strategy<Value = Expr> {
     // Location should be object-like: object refs or variables
-    let location_strategy = prop_oneof![
-        arb_objref(),
-        arb_variable().prop_map(Expr::Id),
-    ];
+    let location_strategy = prop_oneof![arb_objref(), arb_variable().prop_map(Expr::Id),];
 
     // Verb names can be: identifier strings or dynamic expressions (which must return strings)
     // Per LambdaMOO spec: obj:name() or obj:(expr)() where expr returns a string
@@ -427,7 +422,12 @@ pub fn arb_try_catch<S: Strategy<Value = Expr> + Clone + 'static>(
             1..=3
         )
         .prop_map(|codes| {
-            CatchCodes::Codes(codes.into_iter().map(|c| Arg::Normal(Expr::Error(c, None))).collect())
+            CatchCodes::Codes(
+                codes
+                    .into_iter()
+                    .map(|c| Arg::Normal(Expr::Error(c, None)))
+                    .collect(),
+            )
         }),
     ];
 
@@ -510,8 +510,7 @@ pub fn arb_expr_layer1(depth: usize) -> impl Strategy<Value = Expr> {
 pub fn arb_expr_layer2(depth: usize) -> BoxedStrategy<Expr> {
     if depth == 0 {
         // At depth 0: literals and identifiers only
-        prop_oneof![8 => arb_literal(), 2 => arb_variable().prop_map(Expr::Id),]
-            .boxed()
+        prop_oneof![8 => arb_literal(), 2 => arb_variable().prop_map(Expr::Id),].boxed()
     } else {
         // Create boxed strategies that can be cloned
         let elem_strategy = arb_expr_layer2(depth - 1);
@@ -549,8 +548,7 @@ pub fn arb_expr_layer2(depth: usize) -> BoxedStrategy<Expr> {
 pub fn arb_expr_layer2b(depth: usize) -> BoxedStrategy<Expr> {
     if depth == 0 {
         // At depth 0: literals and identifiers only
-        prop_oneof![8 => arb_literal(), 2 => arb_variable().prop_map(Expr::Id),]
-            .boxed()
+        prop_oneof![8 => arb_literal(), 2 => arb_variable().prop_map(Expr::Id),].boxed()
     } else {
         // Create boxed strategies that can be cloned
         let elem_strategy = arb_expr_layer2b(depth - 1);
@@ -733,7 +731,8 @@ pub fn arb_stmt_scope_with_decls<S: Strategy<Value = Expr> + Clone + 'static>(
     max_decls: usize,
     max_body_len: usize,
 ) -> impl Strategy<Value = Stmt> {
-    let decl_strategy = proptest::collection::vec(arb_stmt_decl(expr_strategy.clone()), 1..=max_decls);
+    let decl_strategy =
+        proptest::collection::vec(arb_stmt_decl(expr_strategy.clone()), 1..=max_decls);
     let body_strategy = proptest::collection::vec(arb_stmt_expr(expr_strategy), 1..=max_body_len);
 
     (decl_strategy, body_strategy).prop_map(|(decls, body)| {
@@ -1041,9 +1040,7 @@ pub fn arb_stmt_while_with_labeled_break<S: Strategy<Value = Expr> + Clone + 'st
         make_stmt(StmtNode::While {
             id: Some(label),
             condition: cond,
-            body: vec![make_stmt(StmtNode::Break {
-                exit: Some(label),
-            })],
+            body: vec![make_stmt(StmtNode::Break { exit: Some(label) })],
             environment_width: 0,
         })
     })
@@ -1058,9 +1055,7 @@ pub fn arb_stmt_while_with_labeled_continue<S: Strategy<Value = Expr> + Clone + 
         make_stmt(StmtNode::While {
             id: Some(label),
             condition: cond,
-            body: vec![make_stmt(StmtNode::Continue {
-                exit: Some(label),
-            })],
+            body: vec![make_stmt(StmtNode::Continue { exit: Some(label) })],
             environment_width: 0,
         })
     })
@@ -1096,9 +1091,8 @@ pub fn arb_stmt_if_elseif<S: Strategy<Value = Expr> + Clone + 'static>(
         ),
     );
 
-    (arms_strategy, else_strategy).prop_map(|(arms, otherwise)| {
-        make_stmt(StmtNode::Cond { arms, otherwise })
-    })
+    (arms_strategy, else_strategy)
+        .prop_map(|(arms, otherwise)| make_stmt(StmtNode::Cond { arms, otherwise }))
 }
 
 /// Generate a scope/begin statement: begin body end
@@ -1107,8 +1101,7 @@ pub fn arb_stmt_scope<S: Strategy<Value = Expr> + Clone + 'static>(
     expr_strategy: S,
     max_body_len: usize,
 ) -> impl Strategy<Value = Stmt> {
-    let body_strategy =
-        proptest::collection::vec(arb_stmt_expr(expr_strategy), 1..=max_body_len);
+    let body_strategy = proptest::collection::vec(arb_stmt_expr(expr_strategy), 1..=max_body_len);
 
     body_strategy.prop_map(|body| {
         make_stmt(StmtNode::Scope {
@@ -1259,11 +1252,7 @@ mod tests {
                 first
             );
             for c in ident.chars() {
-                assert!(
-                    c.is_ascii_alphanumeric() || c == '_',
-                    "Invalid char: {}",
-                    c
-                );
+                assert!(c.is_ascii_alphanumeric() || c == '_', "Invalid char: {}", c);
             }
         }
     }
@@ -1343,6 +1332,9 @@ mod tests {
         }
         assert!(found_index, "Layer 2b should generate index expressions");
         assert!(found_range, "Layer 2b should generate range expressions");
-        assert!(found_cond, "Layer 2b should generate conditional expressions");
+        assert!(
+            found_cond,
+            "Layer 2b should generate conditional expressions"
+        );
     }
 }

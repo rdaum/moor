@@ -69,7 +69,9 @@ fn compile_verb_source(
         Ok(program) => VerbCompileResult::Ok(program),
         Err(e) => {
             if !import_options.continue_on_compile_errors {
-                return VerbCompileResult::Error(make_compile_error(&e, objid, vn, names_str, start_line));
+                return VerbCompileResult::Error(make_compile_error(
+                    &e, objid, vn, names_str, start_line,
+                ));
             }
             log_compile_warning(&e, objid, names_str, start_line);
             VerbCompileResult::SkippedWithWarning

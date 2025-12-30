@@ -272,12 +272,10 @@ impl<'a> Unparse<'a> {
                         // `obj.(expr)` is needed for dynamic properties (numbers, negative, etc).
                         // Check if s could be a valid identifier.
                         let needs_parens = s.is_empty()
-                            || s.starts_with(|c: char| c == '-' || c == '"' || c == '#' || c.is_ascii_digit());
-                        if needs_parens {
-                            format!("({})", s)
-                        } else {
-                            s
-                        }
+                            || s.starts_with(|c: char| {
+                                c == '-' || c == '"' || c == '#' || c.is_ascii_digit()
+                            });
+                        if needs_parens { format!("({})", s) } else { s }
                     }
                     _ => format!("({})", brace_if_needed(property, ParenPosition::Right)),
                 };
@@ -300,7 +298,9 @@ impl<'a> Unparse<'a> {
                         let needs_parens = s.is_empty() || s.starts_with(['-', '#']);
                         // $ shorthand only works for identifier-like verbs
                         let is_identifier = !s.is_empty()
-                            && !s.starts_with(|c: char| c == '-' || c == '"' || c == '#' || c.is_ascii_digit());
+                            && !s.starts_with(|c: char| {
+                                c == '-' || c == '"' || c == '#' || c.is_ascii_digit()
+                            });
                         (s, needs_parens, is_identifier)
                     }
                     _ => (brace_if_needed(verb, ParenPosition::Right), true, false),
@@ -1778,7 +1778,7 @@ end"#; "complex scatter declaration with optional and rest")]
     fn test_legacy_type_literals_migration() {
         // Test that legacy type constants (INT, OBJ, STR, etc.) are parsed correctly
         // when legacy_type_constants is enabled, and that they output as TYPE_* forms.
-        use crate::parse::{parse_program, CompileOptions};
+        use crate::parse::{CompileOptions, parse_program};
 
         let legacy_options = CompileOptions {
             legacy_type_constants: true,
@@ -1788,11 +1788,17 @@ end"#; "complex scatter declaration with optional and rest")]
         // Parse with legacy mode - should parse INT as type constant
         let legacy_program = r#"return typeof(x) == INT;"#;
         let tree = parse_program(legacy_program, legacy_options.clone());
-        assert!(tree.is_ok(), "Legacy type constant should parse: {:?}", tree);
+        assert!(
+            tree.is_ok(),
+            "Legacy type constant should parse: {:?}",
+            tree
+        );
 
         // Parse legacy and unparse - should output TYPE_INT
         let tree = tree.unwrap();
-        let unparsed = unparse(&tree, false, true).expect("Failed to unparse").join("\n");
+        let unparsed = unparse(&tree, false, true)
+            .expect("Failed to unparse")
+            .join("\n");
         assert!(
             unparsed.contains("TYPE_INT"),
             "Legacy INT should unparse as TYPE_INT, got: {}",
@@ -1803,7 +1809,9 @@ end"#; "complex scatter declaration with optional and rest")]
         let normal_options = CompileOptions::default();
         let normal_tree = parse_program(legacy_program, normal_options);
         assert!(normal_tree.is_ok(), "INT as variable should parse");
-        let unparsed = unparse(&normal_tree.unwrap(), false, true).expect("Unparse").join("\n");
+        let unparsed = unparse(&normal_tree.unwrap(), false, true)
+            .expect("Unparse")
+            .join("\n");
         // INT should appear as a variable name (lowercase), not TYPE_INT
         assert!(
             !unparsed.contains("TYPE_INT"),

@@ -295,38 +295,35 @@ fn main() -> Result<(), eyre::Report> {
         let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
 
         let options = moor_objdef::ObjDefLoaderOptions::default();
-        let commit = match od.load_objdef_directory(
-            make_compile_options(),
-            objdef_dir.as_ref(),
-            options,
-        ) {
-            Ok(results) => {
-                info!(
-                    "Imported {} objects w/ {} verbs, {} properties and {} property overrides",
-                    results.loaded_objects.len(),
-                    results.num_loaded_verbs,
-                    results.num_loaded_property_definitions,
-                    results.num_loaded_property_overrides
-                );
+        let commit =
+            match od.load_objdef_directory(make_compile_options(), objdef_dir.as_ref(), options) {
+                Ok(results) => {
+                    info!(
+                        "Imported {} objects w/ {} verbs, {} properties and {} property overrides",
+                        results.loaded_objects.len(),
+                        results.num_loaded_verbs,
+                        results.num_loaded_property_definitions,
+                        results.num_loaded_property_overrides
+                    );
 
-                results.commit
-            }
-            Err(e) => {
-                if let Some((file_path, compile_error, verb_source)) = e.compile_error() {
-                    let source_to_use = if !verb_source.is_empty() {
-                        Some(verb_source)
-                    } else {
-                        None
-                    };
-                    emit_objdef_compile_error(file_path, compile_error, source_to_use);
-                    error!("Object load failed");
+                    results.commit
+                }
+                Err(e) => {
+                    if let Some((file_path, compile_error, verb_source)) = e.compile_error() {
+                        let source_to_use = if !verb_source.is_empty() {
+                            Some(verb_source)
+                        } else {
+                            None
+                        };
+                        emit_objdef_compile_error(file_path, compile_error, source_to_use);
+                        error!("Object load failed");
+                        return Ok(());
+                    }
+                    error!("Object load failure @ {}", e.source());
+                    error!("{:#}", e);
                     return Ok(());
                 }
-                error!("Object load failure @ {}", e.source());
-                error!("{:#}", e);
-                return Ok(());
-            }
-        };
+            };
         info!("Loaded objdef directory in {:?}", start.elapsed());
         if commit {
             loader_interface
