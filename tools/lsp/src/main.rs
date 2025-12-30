@@ -51,6 +51,7 @@ mod definition;
 mod diagnostics;
 mod hover;
 mod objects;
+mod references;
 mod symbols;
 mod sync;
 mod workspace;

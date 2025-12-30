@@ -22,6 +22,9 @@ moor-common = { path = "../../crates/common" }
 moor-compiler = { path = "../../crates/compiler" }
 moor-var = { path = "../../crates/var" }
 
+# Parsing (for reference lookup)
+pest.workspace = true
+
 # LSP
 tower-lsp.workspace = true
 

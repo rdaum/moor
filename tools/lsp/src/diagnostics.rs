@@ -95,11 +95,19 @@ fn parse_error_to_diagnostic(error: &ObjDefParseError) -> Option<Diagnostic> {
 }
 
 /// Parse source and return diagnostics for any errors.
+/// Uses a fresh context - prefer `get_diagnostics_with_context` when constants are available.
 pub fn get_diagnostics(source: &str) -> Vec<Diagnostic> {
-    let options = CompileOptions::default();
-    let mut context = ObjFileContext::default();
+    get_diagnostics_with_context(source, &ObjFileContext::default())
+}
 
-    match compile_object_definitions(source, &options, &mut context) {
+/// Parse source using the provided context and return diagnostics for any errors.
+/// The context should contain constants loaded from constants.moo or similar.
+pub fn get_diagnostics_with_context(source: &str, context: &ObjFileContext) -> Vec<Diagnostic> {
+    let options = CompileOptions::default();
+    // Clone the context so we don't mutate the original
+    let mut local_context = context.clone();
+
+    match compile_object_definitions(source, &options, &mut local_context) {
         Ok(_) => Vec::new(),
         Err(error) => parse_error_to_diagnostic(&error).into_iter().collect(),
     }

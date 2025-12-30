@@ -1,5 +1,0 @@
-# ZeroMQ for messaging (with CURVE support)
-pyzmq>=25.1.0
-
-# FlatBuffers for serialization
-flatbuffers>=23.5.26

@@ -25,8 +25,9 @@ use tower_lsp::lsp_types::{
     CompletionResponse, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
     DidOpenTextDocumentParams, DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams,
     GotoDefinitionResponse, Hover, HoverParams, HoverProviderCapability, InitializeParams,
-    InitializeResult, InitializedParams, MessageType, OneOf, ServerCapabilities, SymbolInformation,
-    TextDocumentSyncCapability, TextDocumentSyncKind, Url, WorkspaceSymbolParams,
+    InitializeResult, InitializedParams, Location, MessageType, OneOf, PrepareRenameResponse,
+    ReferenceParams, RenameParams, ServerCapabilities, SymbolInformation, TextDocumentSyncCapability,
+    TextDocumentSyncKind, TextEdit, Url, WorkspaceEdit, WorkspaceSymbolParams,
 };
 use tower_lsp::{Client, LanguageServer};
 
@@ -36,6 +37,7 @@ use crate::definition;
 use crate::diagnostics;
 use crate::hover;
 use crate::objects::ObjectNameRegistry;
+use crate::references;
 use crate::symbols;
 use crate::sync;
 use crate::workspace;
@@ -109,8 +111,9 @@ impl MooLanguageServer {
     async fn publish_diagnostics(&self, uri: Url, content: &str) {
         use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 
-        // Get compilation diagnostics
-        let mut diags = diagnostics::get_diagnostics(content);
+        // Get compilation diagnostics using the shared context with constants
+        let context = self.workspace_index.read().await.context().clone();
+        let mut diags = diagnostics::get_diagnostics_with_context(content, &context);
 
         // If connected to server, also check for sync differences
         if let Some(moor_client) = &self.moor_client {
@@ -167,6 +170,8 @@ impl LanguageServer for MooLanguageServer {
                 }),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
+                references_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
                 code_action_provider: Some(CodeActionProviderCapability::Options(
@@ -201,6 +206,28 @@ impl LanguageServer for MooLanguageServer {
                 format!("Found {} .moo files in workspace", files.len()),
             )
             .await;
+
+        // Look for constants.moo and load it first
+        // This populates the context with symbolic constants used by other files
+        let constants_file = files.iter().find(|f| {
+            f.file_name()
+                .is_some_and(|name| name.eq_ignore_ascii_case("constants.moo"))
+        });
+
+        if let Some(constants_path) = constants_file {
+            if let Ok(content) = tokio::fs::read_to_string(constants_path).await {
+                self.workspace_index
+                    .write()
+                    .await
+                    .load_constants(&content);
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        format!("Loaded constants from {}", constants_path.display()),
+                    )
+                    .await;
+            }
+        }
 
         // Parse each file and publish initial diagnostics
         for file in files {
@@ -417,6 +444,86 @@ impl LanguageServer for MooLanguageServer {
         Ok(location.map(GotoDefinitionResponse::Scalar))
     }
 
+    async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+
+        // Get the document content
+        let content = {
+            let docs = self.documents.read().await;
+            docs.get(&uri).cloned()
+        };
+
+        let content = match content {
+            Some(c) => c,
+            None => {
+                // Fall back to reading from disk
+                let Ok(path) = uri.to_file_path() else {
+                    return Ok(None);
+                };
+                match tokio::fs::read_to_string(&path).await {
+                    Ok(c) => c,
+                    Err(_) => return Ok(None),
+                }
+            }
+        };
+
+        // Find the symbol at the cursor position
+        let Some(symbol) =
+            references::symbol_at_position(&content, position.line, position.character)
+        else {
+            return Ok(None);
+        };
+
+        // Find all references to this symbol across the workspace
+        let mut all_locations = Vec::new();
+
+        // First, search in the current file
+        let refs_in_current = references::find_references_to(&content, &symbol.name);
+        for reference in refs_in_current {
+            // Optionally filter by kind to match the same kind of reference
+            all_locations.push(references::reference_to_location(&reference, &uri));
+        }
+
+        // Then search across all indexed files in the workspace
+        let workspace_index = self.workspace_index.read().await;
+        let documents = self.documents.read().await;
+
+        // Get all files from the workspace index
+        for (file_path, _symbols) in workspace_index.files() {
+            // Skip the current file (already searched)
+            let file_uri = match Url::from_file_path(file_path) {
+                Ok(u) => u,
+                Err(_) => continue,
+            };
+            if file_uri == uri {
+                continue;
+            }
+
+            // Get the file content
+            let file_content = if let Some(c) = documents.get(&file_uri) {
+                c.clone()
+            } else {
+                match tokio::fs::read_to_string(file_path).await {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                }
+            };
+
+            // Find references in this file
+            let refs = references::find_references_to(&file_content, &symbol.name);
+            for reference in refs {
+                all_locations.push(references::reference_to_location(&reference, &file_uri));
+            }
+        }
+
+        if all_locations.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(all_locations))
+        }
+    }
+
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
@@ -583,5 +690,169 @@ impl LanguageServer for MooLanguageServer {
         } else {
             Ok(Some(actions))
         }
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let new_name = params.new_name;
+
+        // Get the document content
+        let content = {
+            let docs = self.documents.read().await;
+            docs.get(&uri).cloned()
+        };
+
+        let content = match content {
+            Some(c) => c,
+            None => {
+                // Fall back to reading from disk
+                let Ok(path) = uri.to_file_path() else {
+                    return Ok(None);
+                };
+                match tokio::fs::read_to_string(&path).await {
+                    Ok(c) => c,
+                    Err(_) => return Ok(None),
+                }
+            }
+        };
+
+        // Find the symbol at the cursor position
+        let Some(symbol) =
+            references::symbol_at_position(&content, position.line, position.character)
+        else {
+            return Ok(None);
+        };
+
+        // Collect all edits grouped by document URI
+        let mut changes: std::collections::HashMap<Url, Vec<TextEdit>> =
+            std::collections::HashMap::new();
+
+        // First, find references in the current file
+        let refs_in_current = references::find_references_to(&content, &symbol.name);
+        for reference in refs_in_current {
+            let range = tower_lsp::lsp_types::Range {
+                start: tower_lsp::lsp_types::Position {
+                    line: reference.line,
+                    character: reference.start_col,
+                },
+                end: tower_lsp::lsp_types::Position {
+                    line: reference.line,
+                    character: reference.end_col,
+                },
+            };
+            changes
+                .entry(uri.clone())
+                .or_default()
+                .push(TextEdit {
+                    range,
+                    new_text: new_name.clone(),
+                });
+        }
+
+        // Then search across all indexed files in the workspace
+        let workspace_index = self.workspace_index.read().await;
+        let documents = self.documents.read().await;
+
+        for (file_path, _symbols) in workspace_index.files() {
+            // Skip the current file (already searched)
+            let file_uri = match Url::from_file_path(file_path) {
+                Ok(u) => u,
+                Err(_) => continue,
+            };
+            if file_uri == uri {
+                continue;
+            }
+
+            // Get the file content
+            let file_content = if let Some(c) = documents.get(&file_uri) {
+                c.clone()
+            } else {
+                match tokio::fs::read_to_string(file_path).await {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                }
+            };
+
+            // Find references in this file
+            let refs = references::find_references_to(&file_content, &symbol.name);
+            for reference in refs {
+                let range = tower_lsp::lsp_types::Range {
+                    start: tower_lsp::lsp_types::Position {
+                        line: reference.line,
+                        character: reference.start_col,
+                    },
+                    end: tower_lsp::lsp_types::Position {
+                        line: reference.line,
+                        character: reference.end_col,
+                    },
+                };
+                changes
+                    .entry(file_uri.clone())
+                    .or_default()
+                    .push(TextEdit {
+                        range,
+                        new_text: new_name.clone(),
+                    });
+            }
+        }
+
+        if changes.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(WorkspaceEdit {
+                changes: Some(changes),
+                document_changes: None,
+                change_annotations: None,
+            }))
+        }
+    }
+
+    async fn prepare_rename(
+        &self,
+        params: tower_lsp::lsp_types::TextDocumentPositionParams,
+    ) -> Result<Option<PrepareRenameResponse>> {
+        let uri = params.text_document.uri;
+        let position = params.position;
+
+        // Get the document content
+        let content = {
+            let docs = self.documents.read().await;
+            docs.get(&uri).cloned()
+        };
+
+        let content = match content {
+            Some(c) => c,
+            None => {
+                let Ok(path) = uri.to_file_path() else {
+                    return Ok(None);
+                };
+                match tokio::fs::read_to_string(&path).await {
+                    Ok(c) => c,
+                    Err(_) => return Ok(None),
+                }
+            }
+        };
+
+        // Find the symbol at the cursor position
+        let Some(symbol) =
+            references::symbol_at_position(&content, position.line, position.character)
+        else {
+            return Ok(None);
+        };
+
+        // Return the range and placeholder text for the rename
+        let range = tower_lsp::lsp_types::Range {
+            start: tower_lsp::lsp_types::Position {
+                line: symbol.line,
+                character: symbol.start_col,
+            },
+            end: tower_lsp::lsp_types::Position {
+                line: symbol.line,
+                character: symbol.end_col,
+            },
+        };
+
+        Ok(Some(PrepareRenameResponse::Range(range)))
     }
 }

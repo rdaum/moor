@@ -53,6 +53,9 @@ pub struct WorkspaceIndex {
     object_files: HashMap<Obj, PathBuf>,
     /// Symbol name to list of locations (for find-references).
     symbol_locations: HashMap<String, Vec<Location>>,
+    /// Shared context containing constants defined across the workspace.
+    /// This context is populated from constants.moo and used when parsing other files.
+    context: ObjFileContext,
 }
 
 #[allow(dead_code)]
@@ -63,23 +66,50 @@ impl WorkspaceIndex {
             symbols_by_file: HashMap::new(),
             object_files: HashMap::new(),
             symbol_locations: HashMap::new(),
+            context: ObjFileContext::default(),
         }
+    }
+
+    /// Load constants from a constants file (typically constants.moo).
+    ///
+    /// This should be called before indexing other files so that symbolic
+    /// references can be resolved correctly.
+    pub fn load_constants(&mut self, content: &str) {
+        let options = CompileOptions::default();
+        // Parse the constants file - this will populate the context with define statements
+        // We don't need the resulting definitions, just the side effect on the context
+        let _ = compile_object_definitions(content, &options, &mut self.context);
+        tracing::debug!(
+            "Loaded {} constants into context",
+            self.context.constants().len()
+        );
     }
 
     /// Index a file and add its symbols to the workspace index.
     ///
     /// Parses the file content and extracts all object, verb, and property definitions.
     /// Updates all internal indexes accordingly.
+    ///
+    /// Note: For files using symbolic references (like `parent: ROOT_CLASS`),
+    /// `load_constants()` should be called first to populate the shared context.
     pub fn index_file(&mut self, path: PathBuf, content: &str) {
         // Remove any existing entries for this file first
         self.remove_file(&path);
 
         let options = CompileOptions::default();
-        let mut context = ObjFileContext::default();
 
-        let Ok(definitions) = compile_object_definitions(content, &options, &mut context) else {
-            // Skip files that don't parse (diagnostics will show errors)
-            return;
+        // Use the shared context which contains constants loaded from constants.moo
+        let definitions = match compile_object_definitions(content, &options, &mut self.context) {
+            Ok(defs) => defs,
+            Err(e) => {
+                // Log parse errors for debugging
+                tracing::debug!(
+                    "Failed to parse {}: {:?}",
+                    path.file_name().unwrap_or_default().to_string_lossy(),
+                    e
+                );
+                return;
+            }
         };
 
         let uri = match Url::from_file_path(&path) {
@@ -237,6 +267,18 @@ impl WorkspaceIndex {
     #[allow(dead_code)]
     pub fn symbol_count(&self) -> usize {
         self.symbols_by_file.values().map(|v| v.len()).sum()
+    }
+
+    /// Get the shared context containing constants.
+    /// This context is populated from constants.moo and should be used
+    /// for parsing files that may reference symbolic constants.
+    pub fn context(&self) -> &ObjFileContext {
+        &self.context
+    }
+
+    /// Iterate over all indexed files and their symbols.
+    pub fn files(&self) -> impl Iterator<Item = (&PathBuf, &Vec<IndexedSymbol>)> {
+        self.symbols_by_file.iter()
     }
 }
 
@@ -455,5 +497,84 @@ endobject
         index.index_file(path, content2);
         assert!(index.search("First Version").is_empty());
         assert!(!index.search("Second Version").is_empty());
+    }
+
+    #[test]
+    fn test_symbolic_object_names() {
+        let mut index = WorkspaceIndex::new();
+        
+        // Load constants first (like lambda-moor does)
+        let constants = r#"
+define ROOT_CLASS = #1;
+define SYSOBJ = #0;
+"#;
+        index.load_constants(constants);
+        
+        // Now parse a file using symbolic names
+        let content = r#"
+object ROOT_CLASS
+    name: "Root Class"
+    owner: #2
+    fertile: true
+    readable: true
+    
+    property aliases (owner: #2, flags: "rc") = {};
+    
+    verb initialize (this none this) owner: #2 flags: "rxd"
+        return 1;
+    endverb
+endobject
+"#;
+        let path = PathBuf::from("/test/root_class.moo");
+        index.index_file(path.clone(), content);
+        
+        println!("File count: {}", index.file_count());
+        println!("Symbol count: {}", index.symbol_count());
+        
+        assert!(index.file_count() >= 1, "Should have indexed at least 1 file");
+        assert!(index.symbol_count() >= 1, "Should have at least 1 symbol");
+        
+        // Search for the object
+        let results = index.search("Root");
+        println!("Search results: {:?}", results);
+        assert!(!results.is_empty(), "Should find Root Class");
+    }
+
+    #[test]
+    fn test_lambda_moor_workspace() {
+        // Test parsing actual lambda-moor files if available
+        // Go from tools/lsp to project root, then to cores/lambda-moor/src
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let lambda_moor_path = project_root.join("cores/lambda-moor/src");
+        if !lambda_moor_path.exists() {
+            println!("Skipping test - lambda-moor not found at {:?}", lambda_moor_path);
+            return;
+        }
+
+        let mut index = WorkspaceIndex::new();
+
+        // Load constants first
+        let constants_path = lambda_moor_path.join("constants.moo");
+        if let Ok(constants) = std::fs::read_to_string(&constants_path) {
+            index.load_constants(&constants);
+            println!("Loaded {} constants", index.context.constants().len());
+        }
+
+        // Parse a few key files
+        let files_to_test = ["root_class.moo", "sysobj.moo", "player.moo"];
+        for file_name in files_to_test {
+            let path = lambda_moor_path.join(file_name);
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                println!("Testing {}: {} chars", file_name, content.len());
+                index.index_file(path.clone(), &content);
+                println!("  After indexing: {} files, {} symbols",
+                    index.file_count(), index.symbol_count());
+            }
+        }
+
+        println!("Final: {} files, {} symbols", index.file_count(), index.symbol_count());
+        assert!(index.file_count() >= 1, "Should have indexed at least one file");
+        assert!(index.symbol_count() >= 1, "Should have at least one symbol");
     }
 }
