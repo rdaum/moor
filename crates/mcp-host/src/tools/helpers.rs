@@ -272,6 +272,7 @@ pub const WIZARD_ONLY_TOOLS: &[&str] = &[
     "moo_load_object",
     "moo_reload_object",
     "moo_apply_patch_objdef",
+    "moo_dispatch_command_verb",
     "moo_read_objdef_file",
     "moo_write_objdef_file",
     "moo_load_objdef_file",

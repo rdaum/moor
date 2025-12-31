@@ -16,6 +16,7 @@
 use crate::mcp_types::{Tool, ToolCallResult};
 use crate::moor_client::{MoorClient, MoorResult};
 use eyre::Result;
+use moor_common::matching::{all_prepositions, get_preposition_forms};
 use moor_var::Sequence;
 use serde_json::{Value, json};
 
@@ -68,6 +69,18 @@ pub fn tool_moo_notify() -> Tool {
                 }
             },
             "required": ["player", "message"]
+        }),
+    }
+}
+
+pub fn tool_moo_list_prepositions() -> Tool {
+    Tool {
+        name: "moo_list_prepositions".to_string(),
+        description: "List all valid prepositions used in command parsing and verb argspecs."
+            .to_string(),
+        input_schema: json!({
+            "type": "object",
+            "properties": {}
         }),
     }
 }
@@ -186,6 +199,27 @@ pub async fn execute_moo_notify(client: &mut MoorClient, args: &Value) -> Result
         ))),
         MoorResult::Error(msg) => Ok(ToolCallResult::error(msg)),
     }
+}
+
+pub async fn execute_moo_list_prepositions(
+    _client: &mut MoorClient,
+    _args: &Value,
+) -> Result<ToolCallResult> {
+    let mut output = String::new();
+    output.push_str("Valid prepositions:\n\n");
+
+    for prep in all_prepositions() {
+        let id = prep as u16;
+        let canonical = prep.to_string();
+        let single = prep.to_string_single();
+        let forms = get_preposition_forms(prep).join(", ");
+        output.push_str(&format!(
+            "  {}: {} (single: {}) forms: {}\n",
+            id, canonical, single, forms
+        ));
+    }
+
+    Ok(ToolCallResult::text(output))
 }
 
 pub async fn execute_moo_connected_players(

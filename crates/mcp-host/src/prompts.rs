@@ -250,6 +250,14 @@ for obj in (list)
 - Use `moo_get_verb` or `moo_dump_object` first if you need the current source to build the patch.
 - Run `moo_test_compile` before programming a verb to catch syntax errors early.
 
+## Command Parsing Tools
+
+- Use `moo_parse_command` to inspect how a command is parsed for a given environment.
+- Use `moo_parse_command_for_player` to parse using a player's match environment.
+- Use `moo_find_command_verb` to test argspec matching without running the verb.
+- Use `moo_dispatch_command_verb` (wizard-only) to simulate command dispatch.
+- Use `moo_list_prepositions` to see valid prepositions.
+
 ## Getting Help
 
 Use the `moo_function_help` tool to get documentation for any builtin function.

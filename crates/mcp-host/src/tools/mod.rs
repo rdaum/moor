@@ -16,7 +16,7 @@
 //! This module defines all the MCP tools available for AI assistants to interact
 //! with the MOO virtual world. Tools are organized into submodules by category:
 //!
-//! - `eval`: Code execution tools (eval, command, invoke_verb, function_help, test_compile)
+//! - `eval`: Code execution tools (eval, command, invoke_verb, function_help, test_compile, command parsing)
 //! - `objects`: Object inspection/manipulation (list, resolve, graph, create, recycle, move, set_parent)
 //! - `verbs`: Verb operations (list, get, program, apply_patch, add, delete, find_definition)
 //! - `properties`: Property operations (list, get, set, add, delete)
@@ -57,6 +57,10 @@ pub fn get_tools() -> Vec<Tool> {
         with_wizard_param(eval::tool_moo_invoke_verb()),
         with_wizard_param(eval::tool_moo_function_help()),
         with_wizard_param(eval::tool_moo_test_compile()),
+        with_wizard_param(eval::tool_moo_parse_command()),
+        with_wizard_param(eval::tool_moo_parse_command_for_player()),
+        with_wizard_param(eval::tool_moo_find_command_verb()),
+        wizard_required(eval::tool_moo_dispatch_command_verb()),
         // Object inspection tools
         with_wizard_param(objects::tool_moo_list_objects()),
         with_wizard_param(objects::tool_moo_resolve()),
@@ -95,6 +99,7 @@ pub fn get_tools() -> Vec<Tool> {
         with_wizard_param(objects::tool_moo_move_object()),
         with_wizard_param(objects::tool_moo_set_parent()),
         wizard_required(objdef::tool_moo_diff_object()),
+        with_wizard_param(util::tool_moo_list_prepositions()),
         with_wizard_param(util::tool_moo_notify()),
         with_wizard_param(verbs::tool_moo_find_verb_definition()),
         // Server/session tools
@@ -122,6 +127,14 @@ pub async fn execute_tool(
         "moo_invoke_verb" => eval::execute_moo_invoke_verb(client, arguments).await,
         "moo_function_help" => eval::execute_moo_function_help(client, arguments).await,
         "moo_test_compile" => eval::execute_moo_test_compile(client, arguments).await,
+        "moo_parse_command" => eval::execute_moo_parse_command(client, arguments).await,
+        "moo_parse_command_for_player" => {
+            eval::execute_moo_parse_command_for_player(client, arguments).await
+        }
+        "moo_find_command_verb" => eval::execute_moo_find_command_verb(client, arguments).await,
+        "moo_dispatch_command_verb" => {
+            eval::execute_moo_dispatch_command_verb(client, arguments).await
+        }
         // Object inspection tools
         "moo_list_objects" => objects::execute_moo_list_objects(client, arguments).await,
         "moo_resolve" => objects::execute_moo_resolve(client, arguments).await,
@@ -160,6 +173,7 @@ pub async fn execute_tool(
         "moo_move_object" => objects::execute_moo_move_object(client, arguments).await,
         "moo_set_parent" => objects::execute_moo_set_parent(client, arguments).await,
         "moo_diff_object" => objdef::execute_moo_diff_object(client, arguments).await,
+        "moo_list_prepositions" => util::execute_moo_list_prepositions(client, arguments).await,
         "moo_notify" => util::execute_moo_notify(client, arguments).await,
         "moo_find_verb_definition" => {
             verbs::execute_moo_find_verb_definition(client, arguments).await
