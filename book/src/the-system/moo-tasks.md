@@ -75,6 +75,25 @@ it is not efficient to gather detailed information about them. The `active_tasks
 active tasks that you own, and the `kill_task()` function can be used to kill an active task. However, killing an active
 task is more of a "best effort" operation, since the task may be in the middle of executing some code.
 
+### Task introspection and safe patterns
+
+mooR does not expose `task_stack()` for active tasks. Tasks run in parallel threads, so a running task's stack is a
+moving target. Capturing it would require pausing tasks or heavy instrumentation, both of which impose significant
+performance costs and scheduling side effects. Queued tasks can be inspected more deeply because they are not running.
+
+If you are used to LambdaMOO/Toast patterns that rely on `task_stack()`, consider these approaches instead:
+
+- Prefer the metadata available from `active_tasks()` and `queued_tasks()` (task id, start info, verb location) to
+  identify what to kill.
+- Treat `kill_task()` as best-effort for active tasks; it takes effect when the task next suspends or exits its main
+  loop. For workflows that need to wait for termination, combine `kill_task()` with `wait_task()` in a loop.
+- Instead of actively recycling objects, consider using anonymous objects. Once all references are gone, they become
+  unreachable and can be reclaimed after any in-flight tasks drop their references.
+- For expected "object missing" failures, handle them in `$handle_uncaught_exception` to avoid cascading tracebacks and
+  to add contextual handling.
+- For tasks that must be cancellable quickly, add voluntary checks in the code paths you control (a property flag or a
+  helper that returns "abort now") and return early when set.
+
 ### Advanced transaction management
 
 Unlike LambdaMOO, mooR supports a transactional model for managing changes to the database, as described above. The automatic transaction management should handle most use cases, but mooR also supports explicit transaction control for advanced scenarios.

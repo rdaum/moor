@@ -30,8 +30,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 `compiler`:
 
-- Rename type constants to `TYPE_*` format
-  Requires code migration.
+- Rename type constants to `TYPE_*` format Requires code migration.
 - Allow `begin`/`end` as identifiers for compatibility
 
 `core`:

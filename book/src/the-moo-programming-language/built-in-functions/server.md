@@ -28,9 +28,9 @@ rich content types for enhanced clients.
 // Basic notification
 notify(player, "Hello, world!");
 
-// Buffer control for performance  
+// Buffer control for performance
 notify(player, "Multiple ", true, true);  // No flush, no newline
-notify(player, "messages ", true, true);  // No flush, no newline  
+notify(player, "messages ", true, true);  // No flush, no newline
 notify(player, "together", false, false);   // Flush and add newline
 
 // Rich content notification (requires rich_notify server option)
@@ -191,19 +191,19 @@ present(player, "profile-setup", "text/plain", "profile-setup", "",
 
 ### `connected_players`
 
-**Description:** Returns a list of all players currently connected to the server.  
+**Description:** Returns a list of all players currently connected to the server.
 **Arguments:** None
 
 ### `is_player`
 
-**Description:** Determines if a given object is a player or player-like entity.  
+**Description:** Determines if a given object is a player or player-like entity.
 **Arguments:**
 
 - : The object to check `object`
 
 ### `boot_player`
 
-**Description:** Forcibly disconnects a player from the server.  
+**Description:** Forcibly disconnects a player from the server.
 **Arguments:**
 
 - : The player to disconnect `player`
@@ -379,35 +379,44 @@ endverb
 
 ### `callers`
 
-**Description:** Returns a list of all callers in the current call stack.  
+**Description:** Returns a list of all callers in the current call stack.
 **Arguments:**
 
 - `level`: Optional parameter to specify how many levels of the call stack to return
+
+### `task_stack`
+
+**Description:** Not supported in moor. Tasks execute in parallel threads, so the stack of a running task is a moving
+target. Capturing it would require pausing tasks (which changes scheduling and can block unrelated work) or adding
+heavy instrumentation to record stack changes, both of which carry significant performance costs. In classic MOO
+servers, tasks are cooperatively scheduled and therefore naturally paused while inspecting state; moor does not have
+that property.
+**Arguments:** None
 
 ## Task and Connection Management
 
 ### `task_id`
 
-**Description:** Returns the unique identifier for the current task.  
+**Description:** Returns the unique identifier for the current task.
 **Arguments:** None
 
 ### `idle_seconds`
 
-**Description:** Returns the number of seconds a player or entity has been idle.  
+**Description:** Returns the number of seconds a player or entity has been idle.
 **Arguments:**
 
 - : Optional player to check (defaults to current player if omitted) `player`
 
 ### `connected_seconds`
 
-**Description:** Returns the total duration a player has been connected in seconds.  
+**Description:** Returns the total duration a player has been connected in seconds.
 **Arguments:**
 
 - : Optional player to check (defaults to current player if omitted) `player`
 
 ### `connection_name`
 
-**Description:** Returns the name of the current connection.  
+**Description:** Returns the name of the current connection.
 **Arguments:**
 
 - : Optional player to check (defaults to current player if omitted) `player`
@@ -440,14 +449,14 @@ have negative IDs (e.g., #-123) and represent the physical connection or line to
 connections()
 => {{#-42, "player.example.com", 15.3, {"text/plain", "text/markdown"}}}
 
-// Get connection info for another player (requires wizard permissions)  
+// Get connection info for another player (requires wizard permissions)
 connections(#123)
-=> {{#-89, "other.example.com", 0.5, {"text/plain", "text/html", "text/djot"}}, 
+=> {{#-89, "other.example.com", 0.5, {"text/plain", "text/html", "text/djot"}},
     {#-90, "mobile.example.com", 120.0, {"text/plain", "text/markdown"}}}
 
 // Multiple connections for same player (web + telnet)
 connections()
-=> {{#-42, "desktop.example.com", 5.0, {"text/plain", "text/html", "text/djot"}}, 
+=> {{#-42, "desktop.example.com", 5.0, {"text/plain", "text/html", "text/djot"}},
     {#-43, "mobile.example.com", 300.5, {"text/plain", "text/markdown"}}}
 ```
 
@@ -465,48 +474,48 @@ connections()
 
 ### `queued_tasks`
 
-**Description:** Returns a list of tasks currently in the queue waiting to be executed.  
+**Description:** Returns a list of tasks currently in the queue waiting to be executed.
 **Arguments:** None
 
 ### `active_tasks`
 
-**Description:** Returns a list of tasks that are currently running.  
+**Description:** Returns a list of tasks that are currently running.
 **Arguments:** None
 
 ### `queue_info`
 
-**Description:** Provides detailed information about the task queue.  
+**Description:** Provides detailed information about the task queue.
 **Arguments:**
 
 - : Optional ID to get information about a specific queued task `task_id`
 
 ### `kill_task`
 
-**Description:** Terminates a specific task by its ID.  
+**Description:** Terminates a specific task by its ID.
 **Arguments:**
 
 - : The ID of the task to terminate `task_id`
 
 ### `ticks_left`
 
-**Description:** Returns the number of execution ticks remaining for the current task.  
+**Description:** Returns the number of execution ticks remaining for the current task.
 **Arguments:** None
 
 ### `seconds_left`
 
-**Description:** Returns the number of seconds remaining before the current task times out.  
+**Description:** Returns the number of seconds remaining before the current task times out.
 **Arguments:** None
 
 ## Time Functions
 
 ### `time`
 
-**Description:** Returns the current server time, likely as a Unix timestamp.  
+**Description:** Returns the current server time, likely as a Unix timestamp.
 **Arguments:** None
 
 ### `ftime`
 
-**Description:** Formats a timestamp into a human-readable string.  
+**Description:** Formats a timestamp into a human-readable string.
 **Arguments:**
 
 - : The timestamp to format `time`
@@ -514,7 +523,7 @@ connections()
 
 ### `ctime`
 
-**Description:** Converts a timestamp to a standard calendar time representation.  
+**Description:** Converts a timestamp to a standard calendar time representation.
 **Arguments:**
 
 - : The timestamp to convert `time`
@@ -523,7 +532,7 @@ connections()
 
 ### `shutdown`
 
-**Description:** Initiates a server shutdown process.  
+**Description:** Initiates a server shutdown process.
 **Arguments:**
 
 - `delay`: Optional delay in seconds before shutdown
@@ -531,26 +540,35 @@ connections()
 
 ### `server_version`
 
-**Description:** Returns the version information for the server.  
+**Description:** Returns the version information for the server.
 **Arguments:** None
 
 ### `suspend`
 
-**Description:** Temporarily suspends the execution of the current task.  
+**Description:** Temporarily suspends the execution of the current task.
 **Arguments:**
 
 - : Optional number of seconds to suspend execution `seconds`
 
+### `suspend_if_needed`
+
+**Description:** Conditionally commits and suspends the current task if it is close to running out of ticks. Returns
+true if the task was suspended and immediately resumed in a new transaction, otherwise false.
+**Arguments:**
+
+- `threshold`: Optional tick threshold (default 4000). If remaining ticks are below this value, the task commits and
+  suspends.
+
 ### `resume`
 
-**Description:** Resumes execution of a previously suspended task.  
+**Description:** Resumes execution of a previously suspended task.
 **Arguments:**
 
 - : The ID of the task to resume `task_id`
 
 ### `server_log`
 
-**Description:** Writes a message to the server log.  
+**Description:** Writes a message to the server log.
 **Arguments:**
 
 - : The message to log `message`
@@ -558,19 +576,19 @@ connections()
 
 ### `memory_usage`
 
-**Description:** Returns information about the server's memory usage.  
+**Description:** Returns information about the server's memory usage.
 **Arguments:**
 
 - `detailed`: Optional boolean flag for requesting detailed information
 
 ### `db_disk_size`
 
-**Description:** Returns the size of the database on disk.  
+**Description:** Returns the size of the database on disk.
 **Arguments:** None
 
 ### `load_server_options`
 
-**Description:** Loads or reloads the server configuration options.  
+**Description:** Loads or reloads the server configuration options.
 **Arguments:**
 
 - `filename`: Optional path to a configuration file
@@ -579,12 +597,12 @@ connections()
 
 ### `commit`
 
-**Description:** Commits pending changes to the database.  
+**Description:** Commits pending changes to the database.
 **Arguments:** None
 
 ### `rollback`
 
-**Description:** Rolls back pending changes to the database.  
+**Description:** Rolls back pending changes to the database.
 **Arguments:** None
 
 ### `read`
@@ -631,7 +649,7 @@ input = read(player, [
 
 ### `dump_database`
 
-**Description:** Creates a dump of the database, typically for backup purposes.  
+**Description:** Creates a dump of the database, typically for backup purposes.
 **Arguments:**
 
 - `filename`: Optional output filename for the dump
@@ -641,7 +659,7 @@ input = read(player, [
 
 ### `listen`
 
-**Description:** Registers to listen for specific events.  
+**Description:** Registers to listen for specific events.
 **Arguments:**
 
 - `event_type`: The type of event to listen for
@@ -649,14 +667,14 @@ input = read(player, [
 
 ### `listeners`
 
-**Description:** Returns a list of all current event listeners.  
+**Description:** Returns a list of all current event listeners.
 **Arguments:**
 
 - `event_type`: Optional parameter to filter listeners by event type
 
 ### `unlisten`
 
-**Description:** Removes a previously registered event listener.  
+**Description:** Removes a previously registered event listener.
 **Arguments:**
 
 - `event_type`: The type of event to stop listening for
@@ -726,7 +744,7 @@ endif
 
 ### `call_function`
 
-**Description:** Calls a specified function with provided arguments.  
+**Description:** Calls a specified function with provided arguments.
 **Arguments:**
 
 - `function`: The function to call
@@ -771,7 +789,7 @@ always matches the running program.
 
 ### `wait_task`
 
-**Description:** Waits for a specified task to complete.  
+**Description:** Waits for a specified task to complete.
 **Arguments:**
 
 - : The ID of the task to wait for `task_id`
@@ -781,7 +799,7 @@ always matches the running program.
 
 ### `bf_counters`
 
-**Description:** Returns performance counters related to built-in functions.  
+**Description:** Returns performance counters related to built-in functions.
 **Arguments:**
 
 - : Optional parameter to control the return format `format`
@@ -789,7 +807,7 @@ always matches the running program.
 
 ### `db_counters`
 
-**Description:** Returns performance counters related to database operations.  
+**Description:** Returns performance counters related to database operations.
 **Arguments:**
 
 - : Optional parameter to control the return format `format`
@@ -797,7 +815,7 @@ always matches the running program.
 
 ### `vm_counters`
 
-**Description:** Returns performance counters related to the virtual machine.  
+**Description:** Returns performance counters related to the virtual machine.
 **Arguments:**
 
 - : Optional parameter to control the return format `format`
@@ -805,7 +823,7 @@ always matches the running program.
 
 ### `sched_counters`
 
-**Description:** Returns performance counters related to the task scheduler.  
+**Description:** Returns performance counters related to the task scheduler.
 **Arguments:**
 
 - : Optional parameter to control the return format `format`
@@ -815,7 +833,7 @@ always matches the running program.
 
 ### `raise`
 
-**Description:** Raises an error or exception.  
+**Description:** Raises an error or exception.
 **Arguments:**
 
 - `error_type`: The type of error to raise
@@ -823,7 +841,7 @@ always matches the running program.
 
 ### `force_input`
 
-**Description:** Forces input to be processed as if it came from a specific source.  
+**Description:** Forces input to be processed as if it came from a specific source.
 **Arguments:**
 
 - `source`: The source entity (typically a player)
