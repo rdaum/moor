@@ -110,13 +110,26 @@ fn execute<F>(
 where
     F: FnOnce(&mut VmHost),
 {
+    execute_with_config(world_state, session, builtins, FeaturesConfig::default(), fun)
+}
+
+fn execute_with_config<F>(
+    world_state: Box<dyn WorldState>,
+    session: Arc<dyn Session>,
+    builtins: BuiltinRegistry,
+    config: FeaturesConfig,
+    fun: F,
+) -> ExecResult
+where
+    F: FnOnce(&mut VmHost),
+{
     let mut vm_host = VmHost::new(0, 20, 90_000, Duration::from_secs(5));
 
     let _tx_guard = setup_task_context(world_state);
 
     fun(&mut vm_host);
 
-    let config = Arc::new(FeaturesConfig::default());
+    let config = Arc::new(config);
 
     // Call repeatedly into exec until we ge either an error or Complete.
     loop {
@@ -168,13 +181,31 @@ pub fn call_verb(
     verb_name: &str,
     args: List,
 ) -> ExecResult {
+    call_verb_with_config(
+        world_state,
+        session,
+        builtins,
+        verb_name,
+        args,
+        FeaturesConfig::default(),
+    )
+}
+
+pub fn call_verb_with_config(
+    world_state: Box<dyn WorldState>,
+    session: Arc<dyn Session>,
+    builtins: BuiltinRegistry,
+    verb_name: &str,
+    args: List,
+    config: FeaturesConfig,
+) -> ExecResult {
     // Set up the verb call before starting transaction context
     let verb_name = Symbol::mk(verb_name);
     let (program, verbdef) = world_state
         .find_method_verb_on(&SYSTEM_OBJECT, &SYSTEM_OBJECT, verb_name)
         .unwrap();
 
-    execute(world_state, session, builtins, |vm_host| {
+    execute_with_config(world_state, session, builtins, config, |vm_host| {
         vm_host.start_call_method_verb(
             0,
             SYSTEM_OBJECT,
