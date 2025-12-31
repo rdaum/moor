@@ -57,6 +57,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 # Utilities & Helpers
+diffy.workspace = true
 uuid.workspace = true
 
 [[bin]]

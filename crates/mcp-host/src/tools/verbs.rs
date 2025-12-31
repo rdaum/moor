@@ -11,10 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Verb tools: list, get, program, add, delete, find_definition, set_verb_info, set_verb_args
+//! Verb tools: list, get, program, apply_patch, add, delete, find_definition, set_verb_info, set_verb_args
 
 use crate::mcp_types::{Tool, ToolCallResult};
 use crate::moor_client::{MoorClient, MoorResult};
+use diffy::{Patch, apply};
 use eyre::Result;
 use moor_var::Sequence;
 use serde_json::{Value, json};
@@ -94,6 +95,33 @@ pub fn tool_moo_program_verb() -> Tool {
                 }
             },
             "required": ["object", "verb", "code"]
+        }),
+    }
+}
+
+pub fn tool_moo_apply_patch_verb() -> Tool {
+    Tool {
+        name: "moo_apply_patch_verb".to_string(),
+        description: "Apply a unified diff patch to a verb's source code. The server fetches the \
+            current verb, applies the patch, and reprograms it. Requires programmer permissions."
+            .to_string(),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "object": {
+                    "type": "string",
+                    "description": "Object reference (e.g., '#0', '$player')"
+                },
+                "verb": {
+                    "type": "string",
+                    "description": "Verb name to patch"
+                },
+                "patch": {
+                    "type": "string",
+                    "description": "Unified diff patch to apply"
+                }
+            },
+            "required": ["object", "verb", "patch"]
         }),
     }
 }
@@ -393,6 +421,50 @@ pub async fn execute_moo_program_verb(
     }
     output.push_str("```\n");
     Ok(ToolCallResult::markdown(output))
+}
+
+pub async fn execute_moo_apply_patch_verb(
+    client: &mut MoorClient,
+    args: &Value,
+) -> Result<ToolCallResult> {
+    let object_str = args
+        .get("object")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'object' parameter"))?;
+
+    let verb_name = args
+        .get("verb")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'verb' parameter"))?;
+
+    let patch_str = args
+        .get("patch")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'patch' parameter"))?;
+
+    let object = parse_object_ref(object_str)
+        .ok_or_else(|| eyre::eyre!("Invalid object reference: {}", object_str))?;
+
+    let verb = client.get_verb(&object, verb_name).await?;
+    let mut source = verb.code.join("\n");
+    if !source.is_empty() {
+        source.push('\n');
+    }
+
+    let patch =
+        Patch::from_str(patch_str).map_err(|err| eyre::eyre!("Invalid patch format: {}", err))?;
+    let patched =
+        apply(&source, &patch).map_err(|err| eyre::eyre!("Patch failed to apply: {}", err))?;
+
+    let code: Vec<String> = patched.lines().map(|line| line.to_string()).collect();
+    let line_count = code.len();
+
+    client.program_verb(&object, verb_name, code).await?;
+
+    Ok(ToolCallResult::text(format!(
+        "Successfully applied patch to {}:{} ({} lines)",
+        object_str, verb_name, line_count
+    )))
 }
 
 pub async fn execute_moo_add_verb(client: &mut MoorClient, args: &Value) -> Result<ToolCallResult> {

@@ -18,9 +18,9 @@
 //!
 //! - `eval`: Code execution tools (eval, command, invoke_verb)
 //! - `objects`: Object inspection/manipulation (list, resolve, graph, create, recycle, move, set_parent)
-//! - `verbs`: Verb operations (list, get, program, add, delete, find_definition)
+//! - `verbs`: Verb operations (list, get, program, apply_patch, add, delete, find_definition)
 //! - `properties`: Property operations (list, get, set, add, delete)
-//! - `objdef`: Object definition tools (dump, load, reload, file ops, diff)
+//! - `objdef`: Object definition tools (dump, load, reload, patch, file ops, diff)
 //! - `util`: Utility tools (notify)
 //! - `dynamic`: MOO-defined tools fetched from #0:external_agent_tools()
 //! - `helpers`: Shared helper functions
@@ -65,6 +65,7 @@ pub fn get_tools() -> Vec<Tool> {
         with_wizard_param(verbs::tool_moo_list_verbs()),
         with_wizard_param(verbs::tool_moo_get_verb()),
         with_wizard_param(verbs::tool_moo_program_verb()),
+        with_wizard_param(verbs::tool_moo_apply_patch_verb()),
         with_wizard_param(verbs::tool_moo_add_verb()),
         with_wizard_param(verbs::tool_moo_delete_verb()),
         with_wizard_param(verbs::tool_moo_set_verb_info()),
@@ -83,6 +84,7 @@ pub fn get_tools() -> Vec<Tool> {
         wizard_required(objdef::tool_moo_dump_object()),
         wizard_required(objdef::tool_moo_load_object()),
         wizard_required(objdef::tool_moo_reload_object()),
+        wizard_required(objdef::tool_moo_apply_patch_objdef()),
         // Filesystem objdef tools - wizard only
         wizard_required(objdef::tool_moo_read_objdef_file()),
         wizard_required(objdef::tool_moo_write_objdef_file()),
@@ -127,6 +129,7 @@ pub async fn execute_tool(
         "moo_list_verbs" => verbs::execute_moo_list_verbs(client, arguments).await,
         "moo_get_verb" => verbs::execute_moo_get_verb(client, arguments).await,
         "moo_program_verb" => verbs::execute_moo_program_verb(client, arguments).await,
+        "moo_apply_patch_verb" => verbs::execute_moo_apply_patch_verb(client, arguments).await,
         "moo_add_verb" => verbs::execute_moo_add_verb(client, arguments).await,
         "moo_delete_verb" => verbs::execute_moo_delete_verb(client, arguments).await,
         "moo_set_verb_info" => verbs::execute_moo_set_verb_info(client, arguments).await,
@@ -145,6 +148,7 @@ pub async fn execute_tool(
         "moo_dump_object" => objdef::execute_moo_dump_object(client, arguments).await,
         "moo_load_object" => objdef::execute_moo_load_object(client, arguments).await,
         "moo_reload_object" => objdef::execute_moo_reload_object(client, arguments).await,
+        "moo_apply_patch_objdef" => objdef::execute_moo_apply_patch_objdef(client, arguments).await,
         // Filesystem objdef tools
         "moo_read_objdef_file" => objdef::execute_moo_read_objdef_file(client, arguments).await,
         "moo_write_objdef_file" => objdef::execute_moo_write_objdef_file(client, arguments).await,

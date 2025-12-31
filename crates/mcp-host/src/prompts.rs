@@ -230,18 +230,24 @@ true false
 
 ## Type Constants
 
-`INT NUM FLOAT STR OBJ LIST MAP ERR BOOL FLYWEIGHT BINARY LAMBDA SYM`
+`TYPE_INT TYPE_NUM TYPE_FLOAT TYPE_STR TYPE_OBJ TYPE_LIST TYPE_MAP TYPE_ERR TYPE_BOOL TYPE_FLYWEIGHT TYPE_BINARY TYPE_LAMBDA TYPE_SYM`
 
 **CRITICAL:** Type constants CANNOT be used as variable names!
 ```moo
 // BAD - compile error:
-INT = 42;
-for OBJ in (list)
+TYPE_INT = 42;
+for TYPE_OBJ in (list)
 
 // GOOD:
 int_value = 42;
 for obj in (list)
 ```
+
+## Editing Verbs and Objdefs
+
+- For large verbs, prefer `moo_apply_patch_verb` with a unified diff to avoid resending full source.
+- For object definitions, use `moo_apply_patch_objdef` to patch in-memory; this avoids filesystem access (handy in containers).
+- Use `moo_get_verb` or `moo_dump_object` first if you need the current source to build the patch.
 
 ## Getting Help
 

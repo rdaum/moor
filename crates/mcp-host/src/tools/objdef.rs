@@ -15,6 +15,7 @@
 
 use crate::mcp_types::{Tool, ToolCallResult};
 use crate::moor_client::{MoorClient, MoorResult};
+use diffy::{apply, Patch};
 use eyre::Result;
 use moor_compiler::{CompileOptions, ObjFileContext, compile_object_definitions};
 use serde_json::{Value, json};
@@ -214,6 +215,43 @@ pub fn tool_moo_reload_objdef_file() -> Tool {
     }
 }
 
+pub fn tool_moo_apply_patch_objdef() -> Tool {
+    Tool {
+        name: "moo_apply_patch_objdef".to_string(),
+        description: "Apply a unified diff patch to an object's objdef. The server dumps the \
+            current objdef, applies the patch, and reloads the object. Requires wizard permissions."
+            .to_string(),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "object": {
+                    "type": "string",
+                    "description": "Object to patch (e.g., '#123', '$thing')"
+                },
+                "patch": {
+                    "type": "string",
+                    "description": "Unified diff patch to apply"
+                },
+                "use_constants": {
+                    "type": "boolean",
+                    "description": "When true, dumps with symbolic constant names. Defaults to true.",
+                    "default": true
+                },
+                "auto_constants": {
+                    "type": "boolean",
+                    "description": "Automatically build constants map from import_export_id properties. Defaults to true.",
+                    "default": true
+                },
+                "target": {
+                    "type": "string",
+                    "description": "Target object to reload (e.g., '#123'). If not specified, uses the object ID from the objdef."
+                }
+            },
+            "required": ["object", "patch"]
+        }),
+    }
+}
+
 pub fn tool_moo_diff_object() -> Tool {
     Tool {
         name: "moo_diff_object".to_string(),
@@ -342,7 +380,7 @@ pub async fn execute_moo_load_object(
     // Build the MOO expression
     // If auto_constants is enabled, build constants map from import_export_id properties
     let expr = if auto_constants {
-        let constants_builder = r#"constants = []; for o in (objects()) id = `o.import_export_id ! E_PROPNF => 0'; if (typeof(id) == STR && id != "") constants[id:uppercase()] = o; endif endfor"#;
+        let constants_builder = r#"constants = []; for o in (objects()) id = `o.import_export_id ! E_PROPNF => 0'; if (typeof(id) == TYPE_STR && id != "") constants[id:uppercase()] = o; endif endfor"#;
         if let Some(spec) = object_spec {
             format!(
                 "{} return load_object({}, constants, {});",
@@ -399,7 +437,7 @@ pub async fn execute_moo_reload_object(
     // Build the MOO expression: reload_object(lines [, constants] [, target])
     // If auto_constants is enabled, build constants map from import_export_id properties
     let expr = if auto_constants {
-        let constants_builder = r#"constants = []; for o in (objects()) id = `o.import_export_id ! E_PROPNF => 0'; if (typeof(id) == STR && id != "") constants[id:uppercase()] = o; endif endfor"#;
+        let constants_builder = r#"constants = []; for o in (objects()) id = `o.import_export_id ! E_PROPNF => 0'; if (typeof(id) == TYPE_STR && id != "") constants[id:uppercase()] = o; endif endfor"#;
         if let Some(target_obj) = target {
             format!(
                 "{} return reload_object({}, constants, {});",
@@ -525,7 +563,7 @@ pub async fn execute_moo_load_objdef_file(
     // Build the MOO expression
     // If auto_constants is enabled, build constants map from import_export_id properties
     let expr = if auto_constants {
-        let constants_builder = r#"constants = []; for o in (objects()) id = `o.import_export_id ! E_PROPNF => 0'; if (typeof(id) == STR && id != "") constants[id:uppercase()] = o; endif endfor"#;
+        let constants_builder = r#"constants = []; for o in (objects()) id = `o.import_export_id ! E_PROPNF => 0'; if (typeof(id) == TYPE_STR && id != "") constants[id:uppercase()] = o; endif endfor"#;
         if let Some(spec) = object_spec {
             format!(
                 "{} return load_object({}, constants, {});",
@@ -594,7 +632,7 @@ pub async fn execute_moo_reload_objdef_file(
     // Build the MOO expression: reload_object(lines [, constants] [, target])
     // If auto_constants is enabled, build constants map from import_export_id properties
     let expr = if auto_constants {
-        let constants_builder = r#"constants = []; for o in (objects()) id = `o.import_export_id ! E_PROPNF => 0'; if (typeof(id) == STR && id != "") constants[id:uppercase()] = o; endif endfor"#;
+        let constants_builder = r#"constants = []; for o in (objects()) id = `o.import_export_id ! E_PROPNF => 0'; if (typeof(id) == TYPE_STR && id != "") constants[id:uppercase()] = o; endif endfor"#;
         if let Some(target_obj) = target {
             format!(
                 "{} return reload_object({}, constants, {});",
@@ -619,6 +657,104 @@ pub async fn execute_moo_reload_objdef_file(
         MoorResult::Success(var) => Ok(ToolCallResult::text(format!(
             "Successfully reloaded object from '{}': {}",
             path,
+            format_var(&var)
+        ))),
+        MoorResult::Error(msg) => Ok(ToolCallResult::error(msg)),
+    }
+}
+
+pub async fn execute_moo_apply_patch_objdef(
+    client: &mut MoorClient,
+    args: &Value,
+) -> Result<ToolCallResult> {
+    let object_str = args
+        .get("object")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'object' parameter"))?;
+
+    let patch_str = args
+        .get("patch")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'patch' parameter"))?;
+
+    let use_constants = args
+        .get("use_constants")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    let auto_constants = args
+        .get("auto_constants")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    let target = args.get("target").and_then(|v| v.as_str());
+
+    let dump_expr = if use_constants {
+        format!("return dump_object({}, ['constants -> 1]);", object_str)
+    } else {
+        format!("return dump_object({});", object_str)
+    };
+
+    let objdef = match client.eval(&dump_expr).await? {
+        MoorResult::Success(var) => {
+            let Some(list) = var.as_list() else {
+                return Ok(ToolCallResult::error("Failed to dump object"));
+            };
+            let lines: Vec<String> = list
+                .iter()
+                .filter_map(|v| v.as_string().map(|s| s.to_string()))
+                .collect();
+            lines.join("\n")
+        }
+        MoorResult::Error(msg) => return Ok(ToolCallResult::error(msg)),
+    };
+
+    let mut source = objdef;
+    if !source.is_empty() {
+        source.push('\n');
+    }
+
+    let patch = Patch::from_str(patch_str)
+        .map_err(|err| eyre::eyre!("Invalid patch format: {}", err))?;
+    let patched = apply(&source, &patch)
+        .map_err(|err| eyre::eyre!("Patch failed to apply: {}", err))?;
+
+    let lines: Vec<&str> = patched.lines().collect();
+    let lines_literal = format!(
+        "{{{}}}",
+        lines
+            .iter()
+            .map(|l| format!("\"{}\"", l.replace('\\', "\\\\").replace('"', "\\\"")))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+
+    let reload_expr = if auto_constants {
+        let constants_builder = r#"constants = []; for o in (objects()) id = `o.import_export_id ! E_PROPNF => 0'; if (typeof(id) == TYPE_STR && id != "") constants[id:uppercase()] = o; endif endfor"#;
+        if let Some(target_obj) = target {
+            format!(
+                "{} return reload_object({}, constants, {});",
+                constants_builder, lines_literal, target_obj
+            )
+        } else {
+            format!(
+                "{} return reload_object({}, constants);",
+                constants_builder, lines_literal
+            )
+        }
+    } else if let Some(target_obj) = target {
+        format!(
+            "return reload_object({}, [], {});",
+            lines_literal, target_obj
+        )
+    } else {
+        format!("return reload_object({});", lines_literal)
+    };
+
+    match client.eval(&reload_expr).await? {
+        MoorResult::Success(var) => Ok(ToolCallResult::text(format!(
+            "Successfully applied patch to {}: {}",
+            object_str,
             format_var(&var)
         ))),
         MoorResult::Error(msg) => Ok(ToolCallResult::error(msg)),
