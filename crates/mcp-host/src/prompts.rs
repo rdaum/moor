@@ -248,6 +248,7 @@ for obj in (list)
 - For large verbs, prefer `moo_apply_patch_verb` with a unified diff to avoid resending full source.
 - For object definitions, use `moo_apply_patch_objdef` to patch in-memory; this avoids filesystem access (handy in containers).
 - Use `moo_get_verb` or `moo_dump_object` first if you need the current source to build the patch.
+- Run `moo_test_compile` before programming a verb to catch syntax errors early.
 
 ## Getting Help
 

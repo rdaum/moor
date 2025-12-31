@@ -15,7 +15,7 @@
 
 use crate::mcp_types::{Tool, ToolCallResult};
 use crate::moor_client::{MoorClient, MoorResult};
-use diffy::{apply, Patch};
+use diffy::{Patch, apply};
 use eyre::Result;
 use moor_compiler::{CompileOptions, ObjFileContext, compile_object_definitions};
 use serde_json::{Value, json};
@@ -714,10 +714,10 @@ pub async fn execute_moo_apply_patch_objdef(
         source.push('\n');
     }
 
-    let patch = Patch::from_str(patch_str)
-        .map_err(|err| eyre::eyre!("Invalid patch format: {}", err))?;
-    let patched = apply(&source, &patch)
-        .map_err(|err| eyre::eyre!("Patch failed to apply: {}", err))?;
+    let patch =
+        Patch::from_str(patch_str).map_err(|err| eyre::eyre!("Invalid patch format: {}", err))?;
+    let patched =
+        apply(&source, &patch).map_err(|err| eyre::eyre!("Patch failed to apply: {}", err))?;
 
     let lines: Vec<&str> = patched.lines().collect();
     let lines_literal = format!(

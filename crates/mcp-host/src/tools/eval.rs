@@ -11,11 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Execution tools: eval, command, invoke_verb
+//! Execution tools: eval, command, invoke_verb, function_help, test_compile
 
 use crate::mcp_types::{Tool, ToolCallResult};
 use crate::moor_client::{MoorClient, MoorResult};
 use eyre::Result;
+use moor_compiler::{CompileOptions, DiagnosticRenderOptions, compile, format_compile_error};
 use moor_var::Var;
 use serde_json::{Value, json};
 
@@ -114,6 +115,30 @@ pub fn tool_moo_function_help() -> Tool {
     }
 }
 
+pub fn tool_moo_test_compile() -> Tool {
+    Tool {
+        name: "moo_test_compile".to_string(),
+        description: "Compile MOO code without executing it. Returns syntax/compile errors for \
+            a program (such as a verb body)."
+            .to_string(),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "description": "MOO source code to compile (e.g., a verb body)"
+                },
+                "legacy_type_constants": {
+                    "type": "boolean",
+                    "description": "Allow legacy type constants (INT, OBJ, STR) in code. Defaults to false.",
+                    "default": false
+                }
+            },
+            "required": ["code"]
+        }),
+    }
+}
+
 // ============================================================================
 // Tool Implementations
 // ============================================================================
@@ -183,5 +208,37 @@ pub async fn execute_moo_function_help(
     match client.eval(&expression).await? {
         MoorResult::Success(var) => Ok(ToolCallResult::text(format_var(&var))),
         MoorResult::Error(msg) => Ok(ToolCallResult::error(msg)),
+    }
+}
+
+pub async fn execute_moo_test_compile(
+    _client: &mut MoorClient,
+    args: &Value,
+) -> Result<ToolCallResult> {
+    let code = args
+        .get("code")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| eyre::eyre!("Missing 'code' parameter"))?;
+
+    let legacy_type_constants = args
+        .get("legacy_type_constants")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let mut options = CompileOptions::default();
+    options.legacy_type_constants = legacy_type_constants;
+
+    match compile(code, options) {
+        Ok(program) => Ok(ToolCallResult::text(format!(
+            "Compilation succeeded ({} lines, {} ops)",
+            code.lines().count(),
+            program.0.main_vector.len()
+        ))),
+        Err(err) => {
+            let rendered =
+                format_compile_error(&err, Some(code), DiagnosticRenderOptions::default())
+                    .join("\n");
+            Ok(ToolCallResult::error(rendered))
+        }
     }
 }
