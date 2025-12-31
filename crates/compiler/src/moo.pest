@@ -306,9 +306,8 @@ comment = _{ c_comment | cpp_comment }
 c_comment = @{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 cpp_comment = @{ "//" ~ (!NEWLINE ~ ANY)* }
 
-WHITESPACE = _{ " " | "\t" | NEWLINE | comment }
+WHITESPACE = _{ " " | "\t" | "\u{00A0}" | NEWLINE | comment }
 
 // And prepositions can't just be IDENT, because that excludes keywords... like "for"
 PREP_CHARACTERS = @{ ASCII_ALPHA+ }
 PROPCHARS = @{ ASCII_ALPHANUMERIC | "_" }
-
