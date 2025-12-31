@@ -9,9 +9,54 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+`mcp-host`:
+
+- MCP diff/patch tools for object and verb definitions
+- Additional MCP command/eval tools, including agent compile-test support
+
+`db`:
+
+- Track commit and conflict counts in `db_counters`
+
+`compiler`:
+
+- Proptest-based AST roundtrip tests with expanded statement generators
+
+`docs`:
+
+- Web-client section added to the book with expanded guidance
+
 ### Changed
 
+`compiler`:
+
+- Rename type constants to `TYPE_*` format
+  Requires code migration.
+- Allow `begin`/`end` as identifiers for compatibility
+
+`core`:
+
+- Disable `$recycler` by default in the LambdaMOO core fork
+
+`tooling`:
+
+- Textdump import now more fully supports ToastStunt format
+- Remove legacy textdump export support
+
 ### Fixed
+
+`compiler`:
+
+- Treat NBSP as whitespace in program input streams
+- Prevent panic on freefloating `$` expressions
+- Order parser keywords by length to avoid prefix matching errors
+- Fix capture analysis for same-named lambda variables
+- Fix transitive capture and chained lambda call handling
+
+`kernel`:
+
+- Correct line number offsets reported for `for`-range errors
+- Align `bf_isa` behavior with the ToastStunt equivalent
 
 ## [1.0.0-beta6] - 2025-12-28
 
