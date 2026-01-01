@@ -355,8 +355,16 @@ The function supports various ordinal formats:
 
 - **Word ordinals**: "first", "second", "third", ..., "twentieth", "thirtieth", etc.
 - **Numeric ordinals**: "1st", "2nd", "3rd", "4th", ..., "21st", "22nd", etc.
-- **Dot notation**: "1.", "2.", "10.", etc.
+- **Dot notation with space**: "1. foo", "2. bar", "10. lamp", etc.
+- **Dot notation without space**: "1.foo", "2.bar", "10.lamp", etc.
 - **Compound ordinals**: "twenty-first", "thirty-second", etc.
+
+Ordinals count across all match tiers combined. For example, with `{"foo", "foobar", "foobaz"}` and token "foo":
+- Position 1: "foo" (exact match)
+- Position 2: "foobar" (prefix match)
+- Position 3: "foobaz" (prefix match)
+
+So `complex_match("2.foo", {"foo", "foobar", "foobaz"})` returns "foobar".
 
 #### Return values
 
@@ -372,9 +380,16 @@ The function supports various ordinal formats:
 complex_match("foo", {"foobar", "food"})             => "foobar"  // exact wins
 complex_match("bar", {"foobar", "barbaz"})           => "foobar"  // first prefix match
 
-// Ordinal selection
+// Ordinal selection (within same tier)
 complex_match("2nd foo", {"foobar", "food", "foot"}) => "food"
 complex_match("third lamp", {"lamp1", "lamp2", "lamp3"}) => "lamp3"
+
+// Ordinal selection (across tiers)
+complex_match("2.foo", {"foo", "foobar", "foobaz"})     => "foobar"  // 2nd overall (1 exact + 1st prefix)
+complex_match("second foo", {"foo", "foobar", "foobaz"}) => "foobar"
+complex_match("2nd foo", {"foo", "foobar", "foobaz"})   => "foobar"
+complex_match("3.foo", {"foo", "foobar", "foobaz"})     => "foobaz"  // 3rd overall
+complex_match("2.foo", {"foo", "bar", "baz"})           => #-3       // only 1 match exists
 
 // Four-tier precedence
 complex_match("test", {"testing", "test", "contest"}) => "test"  // exact beats prefix/substring
@@ -394,3 +409,48 @@ complex_match("xyz", {"abc", "def"})                  => #-3
 ```
 
 This function is particularly useful for implementing sophisticated object matching in MOO commands.
+
+### `complex_matches`
+
+Returns all matches from the best (highest priority) non-empty tier as a list.
+
+```
+list complex_matches(STR token, LIST targets [, NUM fuzzy_threshold])
+```
+
+Unlike `complex_match()` which returns a single match (or uses ordinals to select one), `complex_matches()` returns all matching strings from the highest-priority non-empty tier.
+
+#### Arguments
+
+- `token` (STR): The search string to match against (ordinals are ignored)
+- `targets` (LIST): List of strings to search through
+- `fuzzy_threshold` (NUM, optional): Controls fuzzy matching sensitivity (default: 0.5)
+
+#### Return values
+
+- Returns a list of all matches from the best non-empty tier
+- Returns an empty list `{}` when no matches are found
+- Tier priority: exact > prefix > substring > fuzzy
+
+#### Examples
+
+```
+// Returns all exact matches (best tier)
+complex_matches("foo", {"foo", "bar", "foo"})       => {"foo", "foo"}
+
+// Returns all prefix matches when no exact match
+complex_matches("foo", {"foobar", "food", "bar"})   => {"foobar", "food"}
+
+// Returns all substring matches when no exact/prefix
+complex_matches("oo", {"foobar", "boo", "bar"})     => {"foobar", "boo"}
+
+// Ordinals in token are stripped (returns all matches, not Nth)
+complex_matches("2nd foo", {"foo", "foobar"})       => {"foo"}
+
+// No matches returns empty list
+complex_matches("xyz", {"abc", "def"})              => {}
+
+// Fuzzy matching with typos
+complex_matches("lammp", {"lamp", "table"}, 0.5)    => {"lamp"}
+complex_matches("lammp", {"lamp", "table"}, 0.0)    => {}  // fuzzy disabled
+```
