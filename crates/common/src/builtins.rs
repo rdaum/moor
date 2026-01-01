@@ -610,13 +610,6 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
         mk_builtin(
-            "complex_matches",
-            Q(2),
-            Q(3),
-            vec![Typed(TYPE_STR), Typed(TYPE_LIST), Typed(TYPE_INT)],
-            true,
-        ),
-        mk_builtin(
             "dump_object",
             Q(1),
             Q(2),
@@ -821,6 +814,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin("all", Q(1), Q(1), vec![Typed(TYPE_LIST)], true),
         mk_builtin("none", Q(1), Q(1), vec![Typed(TYPE_LIST)], true),
         mk_builtin("tobool", Q(1), Q(1), vec![Any], true),
+        mk_builtin(
+            "complex_matches",
+            Q(2),
+            Q(3),
+            vec![Typed(TYPE_STR), Typed(TYPE_LIST), Typed(TYPE_INT)],
+            true,
+        ),
     ]
 }
 
