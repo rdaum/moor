@@ -9,6 +9,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [1.0.0-beta7] - 2026-01-01
+
+
+### Added
+
 `mcp-host`:
 
 - MCP diff/patch tools for object and verb definitions
@@ -25,6 +34,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 `docs`:
 
 - Web-client section added to the book with expanded guidance
+- Document new boolean, task, and list builtins
+
+`kernel`:
+
+- New `all`, `none`, `tobool`, and `valid_task` builtins for truthiness checks and task validation
 
 ### Changed
 
@@ -36,6 +50,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 `core`:
 
 - Disable `$recycler` by default in the LambdaMOO core fork
+
+`kernel`:
+
+- `slice()` now mirrors ToastStunt-style indexing with default index 1 and list/string handling
+- `parse_json()` boolean conversions now honor boolean-return configuration
+- `toint()` now converts booleans to 1 or 0, and boolean-returning builtins are consistent when enabled
 
 `tooling`:
 

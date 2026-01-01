@@ -12,7 +12,7 @@
 
 [package]
 name = "lambdamoo-harness"
-version = "1.0.0-beta6"
+version = "1.0.0-beta7"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
