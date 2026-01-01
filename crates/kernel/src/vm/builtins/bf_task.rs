@@ -22,8 +22,8 @@ use moor_common::builtins::offset_for_builtin;
 use moor_common::model::Named;
 use moor_common::tasks::TaskId;
 use moor_var::{
-    E_ARGS, E_INVARG, E_PERM, E_TYPE, Sequence, Symbol, Variant, v_arc_str, v_bool_int, v_int,
-    v_list, v_list_iter, v_obj, v_str, v_string, v_sym,
+    E_ARGS, E_INVARG, E_PERM, E_TYPE, Sequence, Symbol, Variant, v_arc_str, v_int, v_list,
+    v_list_iter, v_obj, v_str, v_string, v_sym,
 };
 use std::time::{Duration, SystemTime};
 use tracing::warn;
@@ -115,7 +115,7 @@ fn bf_commit(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     let return_value = if bf_args.args.is_empty() {
-        v_bool_int(false)
+        bf_args.v_bool(false)
     } else {
         bf_args.args[0].clone()
     };
@@ -261,14 +261,14 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let tasks = tasks.iter().map(|task| {
         let task_id = v_int(task.task_id as i64);
         let start_time = match task.start_time {
-            None => v_bool_int(false),
+            None => bf_args.v_bool(false),
             Some(start_time) => {
                 let time = start_time.duration_since(SystemTime::UNIX_EPOCH).unwrap();
                 v_int(time.as_secs() as i64)
             }
         };
-        let x = v_bool_int(false);
-        let y = v_bool_int(false);
+        let x = v_int(0);
+        let y = v_int(0);
         let programmer = v_obj(task.permissions);
         let verb_loc = v_obj(task.verb_definer);
         let verb_name = v_arc_str(task.verb_name.as_arc_str());
@@ -507,7 +507,7 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let return_value = if bf_args.args.len() == 2 {
         bf_args.args[1].clone()
     } else {
-        v_bool_int(false)
+        bf_args.v_bool(false)
     };
 
     let task_id = resume_task_id as TaskId;
@@ -608,6 +608,40 @@ fn bf_task_id(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(bf_args.exec_state.task_id as i64)))
 }
 
+/// Usage: `bool valid_task(int task_id)`
+/// Returns true if task_id refers to a currently running or suspended task, false otherwise.
+fn bf_valid_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(ErrValue(E_ARGS.msg("valid_task() requires 1 argument")));
+    }
+
+    let Some(task_id) = bf_args.args[0].as_integer() else {
+        return Err(ErrValue(
+            E_TYPE.msg("valid_task() requires an integer as the first argument"),
+        ));
+    };
+
+    let task_id = task_id as TaskId;
+
+    if current_task_scheduler_client()
+        .task_list()
+        .iter()
+        .any(|task| task.task_id == task_id)
+    {
+        return Ok(Ret(bf_args.v_bool(true)));
+    }
+
+    let active_tasks = match current_task_scheduler_client().active_tasks() {
+        Ok(tasks) => tasks,
+        Err(e) => {
+            return Err(ErrValue(e));
+        }
+    };
+
+    let is_active = active_tasks.iter().any(|(id, _, _)| *id == task_id);
+    Ok(Ret(bf_args.v_bool(is_active)))
+}
+
 pub(crate) fn register_bf_task(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("suspend")] = bf_suspend;
     builtins[offset_for_builtin("suspend_if_needed")] = bf_suspend_if_needed;
@@ -624,4 +658,5 @@ pub(crate) fn register_bf_task(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("rollback")] = bf_rollback;
     builtins[offset_for_builtin("callers")] = bf_callers;
     builtins[offset_for_builtin("task_id")] = bf_task_id;
+    builtins[offset_for_builtin("valid_task")] = bf_valid_task;
 }

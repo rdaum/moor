@@ -46,6 +46,12 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 | [`binary_to_str`](strings.md#binary_to_str)     | &check;  |                                                                                                      |
 | [`binary_from_str`](strings.md#binary_from_str) | &check;  |                                                                                                      |
 
+### Booleans
+
+| Name                          | Complete | Notes                                 |
+|-------------------------------|----------|---------------------------------------|
+| [`tobool`](values.md#tobool)  | &check;  | Mirrors `if`/`while` truthiness rules |
+
 ### Numbers
 
 | Name                          | Complete | Notes |
@@ -175,6 +181,7 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 |------------------------------------------|----------|---------------------------------------------------------------------------------------|
 | [`task_id`](server.md#task_id)           | &check;  |                                                                                       |
 | [`queued_tasks`](server.md#queued_tasks) | &check;  |                                                                                       |
+| [`valid_task`](server.md#valid_task)     | &check;  |                                                                                       |
 | [`kill_task`](server.md#kill_task)       | &check;  |                                                                                       |
 | [`resume`](server.md#resume)             | &check;  |                                                                                       |
 | [`queue_info`](server.md#queue_info)     | &check;  |                                                                                       |

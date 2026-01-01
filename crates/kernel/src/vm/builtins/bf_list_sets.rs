@@ -21,8 +21,8 @@ use moor_common::matching::{
 };
 use moor_compiler::offset_for_builtin;
 use moor_var::{
-    Associative, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Error, FAILED_MATCH, IndexMode, List, Sequence,
-    Var, VarType, Variant, v_empty_list, v_int, v_list, v_list_iter, v_map, v_obj, v_str, v_string,
+    Associative, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Error, FAILED_MATCH, IndexMode, List, Sequence, Var,
+    VarType, Variant, v_empty_list, v_int, v_list, v_list_iter, v_map, v_obj, v_str, v_string,
 };
 use onig::{Region, SearchOptions, SyntaxBehavior, SyntaxOperator};
 use std::{ops::BitOr, sync::Mutex};
@@ -96,6 +96,63 @@ fn bf_all_members(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .collect();
 
     Ok(Ret(v_list(&indices)))
+}
+
+fn get_sequence_element(item: &Var, idx: usize) -> Result<Var, BfErr> {
+    match item.variant() {
+        Variant::List(list) => {
+            if idx == 0 || idx > list.len() {
+                return Err(BfErr::Code(E_RANGE));
+            }
+            Ok(list.index(idx - 1).map_err(BfErr::ErrValue)?)
+        }
+        Variant::Str(s) => {
+            let Some(ch) = s.as_str().chars().nth(idx - 1) else {
+                return Err(BfErr::Code(E_RANGE));
+            };
+            Ok(v_string(ch.to_string()))
+        }
+        _ => Err(BfErr::Code(E_TYPE)),
+    }
+}
+
+fn parse_index_list(indices: &List) -> Result<Vec<usize>, BfErr> {
+    if indices.is_empty() {
+        return Err(BfErr::Code(E_RANGE));
+    }
+    let mut result = Vec::with_capacity(indices.len());
+    for idx in indices.iter() {
+        let Some(pos) = idx.as_integer() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        if pos <= 0 {
+            return Err(BfErr::Code(E_RANGE));
+        }
+        result.push(pos as usize);
+    }
+    Ok(result)
+}
+
+/// Usage: `bool all(any value [, ...])`
+/// Returns true if every argument is truthy. Returns true when no arguments are provided.
+fn bf_all(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    for arg in bf_args.args.iter() {
+        if !arg.is_true() {
+            return Ok(Ret(bf_args.v_bool(false)));
+        }
+    }
+    Ok(Ret(bf_args.v_bool(true)))
+}
+
+/// Usage: `bool none(list values)`
+/// Returns true if no argument is truthy. Returns true when no arguments are provided.
+fn bf_none(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    for arg in bf_args.args.iter() {
+        if arg.is_true() {
+            return Ok(Ret(bf_args.v_bool(false)));
+        }
+    }
+    Ok(Ret(bf_args.v_bool(true)))
 }
 
 /// Usage: `list listinsert(list list, any value [, int index])`
@@ -818,161 +875,116 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 /// ```moo
-/// list slice(list|map alist [, list|str index [, any default_value]])
+/// list slice(LIST alist [, INT | LIST | STR index [, ANY default_map_value]])
 /// ```
-/// Returns a list containing elements from `alist` based on the `index` parameter:
+/// Returns values collected from each element of `alist` according to `index`.
 ///
-/// - If `alist` is a list of lists and `index` is an integer, returns a list containing
-///   the element at the specified position from each sublist in `alist`.
-/// - If `alist` is a list of lists and `index` is a list of integers, returns a list containing
-///   lists of elements at the specified positions from each sublist in `alist`.
+/// - `index` defaults to `1` (the first element/character).
+/// - If `index` is an integer, the indexed element is pulled from each sublist/string.
+/// - If `index` is a list of integers, each position is pulled and returned as a list.
+/// - If `index` is a string, every element in `alist` must be a map; the keyed value is returned (or `default_map_value` if provided and the key is missing).
 ///
-/// - If `alist` is a list of maps and `index` is a string, returns a list containing
-///   the values associated with key `index` from each map in `alist`.
-///   If `default_value` is provided, it will be used for any maps that don't contain the key.
+/// Examples:
 /// ```moo
-///   slice({{1,2,3},{4,5,6}}, 2) => {2, 5}
-///   slice({{1,2,3},{4,5,6}}, {1, 3}) => {{1, 3}, {4, 6}}
-///   slice({{"z", 1}, {"y", 2}, {"x",5}}, 2) => {1, 2, 5}.
-///   slice({{"z", 1, 3}, {"y", 2, 4}}, {2, 1}) => {{1, "z"}, {2, "y"}}
-///   slice({["a" -> 1, "b" -> 2], ["a" -> 5, "b" -> 6]}, "a") => {1, 5}
+/// slice({{1,2,3},{4,5,6}}, 2)                     => {2, 5}
+/// slice({{1,2,3},{4,5,6}}, {1, 3})               => {{1, 3}, {4, 6}}
+/// slice({{"z", 1}, {"y", 2}, {"x",5}}, 2)          => {1, 2, 5}
+/// slice({{"z", 1, 3}, {"y", 2, 4}}, {2, 1})       => {{1, "z"}, {2, "y"}}
+/// slice({["a" -> 1, "b" -> 2], ["a" -> 5, "b" -> 6]}, "a") => {1, 5}
+/// slice({["a" -> 1], ["z" -> 2]}, "b", 0)          => {0, 0}
 /// ```
 fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    // Get the collection (list or map)
+    // Get the collection (list)
     let collection = &bf_args.args[0];
 
-    // Index must be provided
+    let default_index = v_int(1);
     let index = if bf_args.args.len() >= 2 {
         &bf_args.args[1]
     } else {
-        return Err(BfErr::Code(E_ARGS));
+        &default_index
     };
 
-    // Optional default value for map lookups
-    let default_value = if bf_args.args.len() == 3 {
-        Some(&bf_args.args[2])
+    let default_value = if bf_args.args.len() >= 3 {
+        Some(bf_args.args.index(2).map_err(BfErr::ErrValue)?)
     } else {
         None
     };
 
-    match collection.variant() {
-        Variant::List(list) => {
-            // Ensure we have a list of lists or maps
-            if list.is_empty() {
-                return Ok(Ret(v_empty_list()));
-            }
+    let Variant::List(list) = collection.variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
 
+    if list.is_empty() {
+        return Ok(Ret(v_empty_list()));
+    }
+
+    match index.variant() {
+        Variant::Int(idx) => {
+            if idx <= 0 {
+                return Err(BfErr::Code(E_RANGE));
+            }
+            let mut result = Vec::with_capacity(list.len());
+            for item in list.iter() {
+                    match item.variant() {
+                        Variant::List(_) | Variant::Str(_) => {
+                            result.push(get_sequence_element(&item, idx as usize)?);
+                        }
+                        _ => return Err(BfErr::Code(E_TYPE)),
+                    }
+            }
+            Ok(Ret(v_list(&result)))
+        }
+        Variant::List(indices) => {
+            let parsed_indices = parse_index_list(indices)?;
             let first_item = list.index(0).map_err(BfErr::ErrValue)?;
-            if !matches!(first_item.variant(), Variant::List(_) | Variant::Map(_)) {
+            let is_string_sequence = matches!(first_item.variant(), Variant::Str(_));
+            let is_list_sequence = matches!(first_item.variant(), Variant::List(_));
+
+            if !is_string_sequence && !is_list_sequence {
                 return Err(BfErr::Code(E_TYPE));
             }
 
-            match index.variant() {
-                // Case 1: List of lists + Integer index
-                // This handles: slice({{1,2,3},{4,5,6}}, 2) => {2, 5}
-                // For each sublist in the input list, extract the element at position 'idx'
-                // and return a list of these elements
-                Variant::Int(idx) => {
-                    let idx = idx as usize;
-                    let mut result = Vec::with_capacity(list.len());
-
+            let mut result = Vec::with_capacity(list.len());
                     for item in list.iter() {
-                        let Some(sublist) = item.as_list() else {
+                        if is_string_sequence && !matches!(item.variant(), Variant::Str(_)) {
                             return Err(BfErr::Code(E_TYPE));
-                        };
-
-                        if idx < 1 || idx > sublist.len() {
-                            return Err(BfErr::Code(E_RANGE));
                         }
-                        // MOO is 1-indexed, so subtract 1
-                        result.push(sublist.index(idx - 1).map_err(BfErr::ErrValue)?);
-                    }
-
-                    Ok(Ret(v_list(&result)))
-                }
-
-                // Case 2: List + List of indices
-                // This handles: slice({{1,2,3},{4,5,6}}, {1, 3}) => {{1, 3}, {4, 6}}
-                Variant::List(indices) => {
-                    let mut result = Vec::with_capacity(list.len());
-
-                    // Check if this is a list of lists
-                    let first_item = list.index(0).map_err(BfErr::ErrValue)?;
-                    if first_item.as_list().is_some() {
-                        // This is a list of lists, extract elements from each sublist based on indices
-                        // For each sublist in the input list, create a new list containing
-                        // the elements at the positions specified in 'indices'
-                        for item in list.iter() {
-                            let Some(sublist) = item.as_list() else {
-                                return Err(BfErr::Code(E_TYPE));
-                            };
-
-                            let mut subresult = Vec::with_capacity(indices.len());
-
-                            for idx_var in indices.iter() {
-                                let Some(idx) = idx_var.as_integer() else {
-                                    return Err(BfErr::Code(E_TYPE));
-                                };
-
-                                let idx = idx as usize;
-                                if idx < 1 || idx > sublist.len() {
-                                    return Err(BfErr::Code(E_RANGE));
-                                }
-                                // MOO is 1-indexed, so subtract 1
-                                subresult.push(sublist.index(idx - 1).map_err(BfErr::ErrValue)?);
-                            }
-
-                            result.push(v_list(&subresult));
-                        }
-                    }
-
-                    Ok(Ret(v_list(&result)))
-                }
-
-                // Case 3: List of maps + String key
-                // This handles: slice({["x" -> 1, "y" -> 2], ["x" -> 3, "z" -> 4]}, "x") => {1, 3}
-                // For each map in the input list, extract the value associated with the key 'key'
-                // and return a list of these values
-                Variant::Str(key) => {
-                    let mut result = Vec::with_capacity(list.len());
-
-                    for item in list.iter() {
-                        let Some(map) = item.as_map() else {
+                        if is_list_sequence && !matches!(item.variant(), Variant::List(_)) {
                             return Err(BfErr::Code(E_TYPE));
-                        };
-
-                        // Create a key Var from the string
-                        let key_var = v_str(key.as_str());
-
-                        // Try to get the value for this key
-                        match map.get(&key_var) {
-                            Ok(value) => result.push(value),
-                            Err(_) => {
-                                // Use default value if provided, otherwise error
-                                // This handles: slice({#[["x", 1]], #[["z", 4]]}, "x", 0) => {1, 0}
-                                if let Some(default) = default_value {
-                                    result.push(default.clone());
-                                } else {
-                                    return Err(BfErr::Code(E_RANGE));
-                                }
-                            }
                         }
+
+                        let mut subresult = Vec::with_capacity(parsed_indices.len());
+                        for &idx in &parsed_indices {
+                            subresult.push(get_sequence_element(&item, idx)?);
+                        }
+
+                        result.push(v_list(&subresult));
                     }
 
-                    Ok(Ret(v_list(&result)))
-                }
-
-                _ => Err(BfErr::Code(E_TYPE)),
-            }
+            Ok(Ret(v_list(&result)))
         }
+        Variant::Str(key) => {
+            let mut result = Vec::with_capacity(list.len());
+            for item in list.iter() {
+                let Some(map) = item.as_map() else {
+                    return Err(BfErr::Code(E_TYPE));
+                };
 
-        // If the collection is a map, we don't support this yet
-        Variant::Map(_) => Err(BfErr::Code(E_TYPE)),
-
+                let key_var = v_str(key.as_str());
+                if let Ok(value) = map.get(&key_var) {
+                    result.push(value);
+                } else if let Some(default) = default_value.clone() {
+                    result.push(default);
+                } else {
+                    return Err(BfErr::Code(E_RANGE));
+                }
+            }
+            Ok(Ret(v_list(&result)))
+        }
         _ => Err(BfErr::Code(E_TYPE)),
     }
 }
@@ -1294,6 +1306,8 @@ fn bf_reverse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 pub(crate) fn register_bf_list_sets(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("is_member")] = bf_is_member;
     builtins[offset_for_builtin("all_members")] = bf_all_members;
+    builtins[offset_for_builtin("all")] = bf_all;
+    builtins[offset_for_builtin("none")] = bf_none;
     builtins[offset_for_builtin("listinsert")] = bf_listinsert;
     builtins[offset_for_builtin("listappend")] = bf_listappend;
     builtins[offset_for_builtin("listdelete")] = bf_listdelete;

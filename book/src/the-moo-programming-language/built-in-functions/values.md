@@ -59,7 +59,7 @@
 - `value`: The value to convert (must be a number, object, string, or error)
 
 **Returns:** The integer representation of the value  
-**Note:** String conversion parses the string as a number; invalid strings convert to 0.
+**Note:** String conversion parses the string as a number; invalid strings convert to 0. Boolean values convert to 1 for `true` and 0 for `false`.
 
 ### `tonum`
 
@@ -84,6 +84,16 @@ Alias for `toint`. **Description:**
 
 **Returns:** The floating-point representation of the value  
 **Note:** String conversion parses the string as a number; invalid strings convert to 0.0.
+
+### `tobool`
+
+**Description**: Converts a value to a boolean based on mooR's truthiness rules (empty strings/lists/maps/binaries and the number 0 evaluate to `false`, everything else to `true`).  
+**Arguments**:
+
+- `value`: The value to evaluate
+
+**Returns:** `true` if the value is truthy, otherwise `false`  
+**Note:** This matches the boolean tests used by `if`, `while`, and other control-flow constructs.
 
 ## Comparison Functions
 

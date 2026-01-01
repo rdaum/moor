@@ -41,7 +41,7 @@ use moor_var::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF, Error, IndexMode, List, Obj, Sequence,
     Symbol, Var, Variant,
     program::{ProgramType, names::GlobalName},
-    v_bool, v_empty_list, v_list, v_list_iter, v_obj, v_str, v_string, v_sym,
+    v_empty_list, v_list, v_list_iter, v_obj, v_str, v_string, v_sym,
 };
 
 /// Usage: `list verb_info(obj object, str|int verb_desc)`
@@ -729,7 +729,7 @@ fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Ok((_, vd)) = with_current_transaction(|world_state| {
         world_state.find_method_verb_on(&bf_args.task_perms_who(), &obj, name)
     }) else {
-        return Ok(Ret(v_bool(false)));
+        return Ok(Ret(bf_args.v_bool(false)));
     };
 
     let oflags = with_current_transaction(|world_state| world_state.flags_of(&obj))
@@ -749,7 +749,7 @@ fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let result = v_list(&[v_obj(vd.location()), names]);
         Ok(Ret(result))
     } else {
-        Ok(Ret(v_bool(true)))
+        Ok(Ret(bf_args.v_bool(true)))
     }
 }
 

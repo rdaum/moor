@@ -810,6 +810,10 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
         mk_builtin("parse_objdef_constants", Q(1), Q(1), vec![Any], true),
+        mk_builtin("valid_task", Q(1), Q(1), vec![Typed(TYPE_INT)], true),
+        mk_builtin("all", Q(1), Q(1), vec![Typed(TYPE_LIST)], true),
+        mk_builtin("none", Q(1), Q(1), vec![Typed(TYPE_LIST)], true),
+        mk_builtin("tobool", Q(1), Q(1), vec![Any], true),
     ]
 }
 

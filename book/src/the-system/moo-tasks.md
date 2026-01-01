@@ -69,6 +69,7 @@ may run in the future. Examples of queued tasks include:
 The `queued_tasks()` function returns a list of all queued tasks that you own, and the `kill_task()` function can be
 used to kill a queued task before it runs. Because queued tasks are not currently running, information on them is more
 detailed, including the verb and line number where the task is suspended at, etc. Queued tasks can be aborted / killed.
+The `valid_task()` function returns true if a task id refers to a currently active or queued task.
 
 Active tasks, on the other hand, are tasks that are currently running. They are executing MOO code and because of this
 it is not efficient to gather detailed information about them. The `active_tasks()` function returns a list of all

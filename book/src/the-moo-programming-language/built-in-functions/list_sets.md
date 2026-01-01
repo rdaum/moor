@@ -36,6 +36,38 @@ Example:
 all_members("a", {"a", "b", "a", "c", "a", "d"}) => {1, 3, 5}
 ```
 
+### `all`
+
+Returns true if every argument is truthy. Returns true when no arguments are supplied.
+
+```
+bool all(any value1 [, any value2, ...])
+```
+
+Examples:
+
+```
+all(1, "ok", {1}) => true
+all(1, 0)         => false
+all()             => true
+```
+
+### `none`
+
+Returns true if no argument is truthy. Returns true when no arguments are supplied.
+
+```
+bool none(any value1 [, any value2, ...])
+```
+
+Examples:
+
+```
+none(0, "", {false}) => true
+none(0, 1)           => false
+none()               => true
+```
+
 ## List Modification Functions
 
 ### `listinsert`

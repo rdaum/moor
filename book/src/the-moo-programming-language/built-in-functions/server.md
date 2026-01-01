@@ -477,6 +477,13 @@ connections()
 **Description:** Returns a list of tasks currently in the queue waiting to be executed.
 **Arguments:** None
 
+### `valid_task`
+
+**Description:** Returns true if `task_id` refers to a currently active or queued task.
+**Arguments:**
+
+- : Task ID to check `task_id`
+
 ### `active_tasks`
 
 **Description:** Returns a list of tasks that are currently running.

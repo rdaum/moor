@@ -20,8 +20,8 @@ use crate::{
 use moor_compiler::{offset_for_builtin, to_literal};
 use moor_var::{
     Associative, E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, Flyweight, List, Map, SYSTEM_OBJECT,
-    Sequence, Symbol, VarType, Variant, v_bool_int, v_flyweight, v_int, v_list, v_map, v_obj,
-    v_str, v_string,
+    Sequence, Symbol, VarType, Variant, v_bool, v_bool_int, v_flyweight, v_int, v_list, v_map,
+    v_obj, v_str, v_string,
 };
 use scraper::{Html, Selector};
 use serde_json::{self, Value as JsonValue};
@@ -758,13 +758,22 @@ fn moo_value_to_json(value: &moor_var::Var) -> Result<JsonValue, BfErr> {
 }
 
 /// Convert a JSON value to a MOO value
-fn json_value_to_moo(json_value: &JsonValue) -> Result<moor_var::Var, BfErr> {
+fn json_value_to_moo(
+    json_value: &JsonValue,
+    use_boolean_returns: bool,
+) -> Result<moor_var::Var, BfErr> {
     match json_value {
         // JSON null becomes the string "null" for ToastStunt compatibility.
         // MOO has no proper null type - v_none() is a sigil that causes problems
         // if it ends up in variables or stack frames.
         JsonValue::Null => Ok(v_str("null")),
-        JsonValue::Bool(b) => Ok(v_bool_int(*b)),
+        JsonValue::Bool(b) => {
+            if use_boolean_returns {
+                Ok(v_bool(*b))
+            } else {
+                Ok(v_bool_int(*b))
+            }
+        }
         JsonValue::Number(n) => {
             if n.is_i64() {
                 Ok(v_int(n.as_i64().unwrap()))
@@ -776,7 +785,7 @@ fn json_value_to_moo(json_value: &JsonValue) -> Result<moor_var::Var, BfErr> {
         JsonValue::Array(arr) => {
             let mut list_items = Vec::new();
             for item in arr {
-                list_items.push(json_value_to_moo(item)?);
+                list_items.push(json_value_to_moo(item, use_boolean_returns)?);
             }
             Ok(v_list(&list_items))
         }
@@ -784,7 +793,7 @@ fn json_value_to_moo(json_value: &JsonValue) -> Result<moor_var::Var, BfErr> {
             let mut map_items = Vec::new();
             for (k, v) in obj {
                 let key = v_str(k);
-                let value = json_value_to_moo(v)?;
+                let value = json_value_to_moo(v, use_boolean_returns)?;
                 map_items.push((key, value));
             }
             Ok(v_map(&map_items))
@@ -805,7 +814,7 @@ fn bf_parse_json(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     match serde_json::from_str::<JsonValue>(json_str) {
         Ok(json_value) => {
-            let moo_value = json_value_to_moo(&json_value)?;
+            let moo_value = json_value_to_moo(&json_value, bf_args.config.use_boolean_returns)?;
             Ok(Ret(moo_value))
         }
         Err(_) => Err(BfErr::Code(E_INVARG)),

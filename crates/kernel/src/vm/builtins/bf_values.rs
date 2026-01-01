@@ -131,6 +131,7 @@ fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     }
     match bf_args.args[0].variant() {
+        Variant::Bool(b) => Ok(Ret(v_int(if b { 1 } else { 0 }))),
         Variant::Int(i) => Ok(Ret(v_int(i))),
         Variant::Float(f) => Ok(Ret(v_int(f as i64))),
         Variant::Obj(o) => {
@@ -162,6 +163,20 @@ fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_INVARG.msg("cannot convert this type to integer"),
         )),
     }
+}
+
+/// Usage: `bool tobool(any value)`
+/// Converts a value to its truthiness equivalent. Empty lists/strings/binaries, zero numbers, and nullish
+/// values convert to false; everything else converts to true.
+fn bf_tobool(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("tobool() requires exactly 1 argument"),
+        ));
+    }
+
+    let truthy = bf_args.args[0].is_true();
+    Ok(Ret(bf_args.v_bool(truthy)))
 }
 
 /// Usage: `obj toobj(int|float|str|obj value)`
@@ -422,4 +437,5 @@ pub(crate) fn register_bf_values(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("error_code")] = bf_error_code;
     builtins[offset_for_builtin("error_message")] = bf_error_message;
     builtins[offset_for_builtin("uuid")] = bf_uuid;
+    builtins[offset_for_builtin("tobool")] = bf_tobool;
 }
