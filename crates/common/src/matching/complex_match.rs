@@ -123,6 +123,17 @@ pub fn parse_ordinal(word: &str) -> Result<i64, OrdinalParseError> {
 
 /// Parse the input token to extract ordinal and subject
 pub fn parse_input_token(token: &str) -> (i64, String) {
+    // Handle "N.subject" pattern (e.g., "2.foo") before whitespace split
+    if let Some(dot_pos) = token.find('.') {
+        let (num_part, rest) = token.split_at(dot_pos);
+        if let Ok(ordinal) = num_part.parse::<i64>() {
+            let subject = &rest[1..]; // skip the dot
+            if !subject.is_empty() {
+                return (ordinal, subject.to_string());
+            }
+        }
+    }
+
     let words: Vec<&str> = token.split_whitespace().collect();
     if words.is_empty() {
         return (0, String::new());
@@ -186,9 +197,6 @@ pub fn complex_match_strings_with_fuzzy_threshold(
 
         // Exact match
         if string_lower == subject_lower {
-            if ordinal > 0 && ordinal == (exact_matches.len() as i64 + 1) {
-                return ComplexMatchResult::Single(string_var.clone());
-            }
             exact_matches.push(string_var.clone());
         }
         // Prefix match
@@ -209,19 +217,17 @@ pub fn complex_match_strings_with_fuzzy_threshold(
         }
     }
 
-    // Handle ordinal selection
+    // Handle ordinal selection - count across all tiers combined
     if ordinal > 0 {
-        if ordinal <= exact_matches.len() as i64 {
-            return ComplexMatchResult::Single(exact_matches[(ordinal - 1) as usize].clone());
+        let mut all_matches = Vec::new();
+        all_matches.extend(exact_matches.iter().cloned());
+        all_matches.extend(start_matches.iter().cloned());
+        all_matches.extend(contain_matches.iter().cloned());
+        if fuzzy_threshold > 0.0 {
+            all_matches.extend(fuzzy_matches.iter().cloned());
         }
-        if ordinal <= start_matches.len() as i64 {
-            return ComplexMatchResult::Single(start_matches[(ordinal - 1) as usize].clone());
-        }
-        if ordinal <= contain_matches.len() as i64 {
-            return ComplexMatchResult::Single(contain_matches[(ordinal - 1) as usize].clone());
-        }
-        if fuzzy_threshold > 0.0 && ordinal <= fuzzy_matches.len() as i64 {
-            return ComplexMatchResult::Single(fuzzy_matches[(ordinal - 1) as usize].clone());
+        if ordinal <= all_matches.len() as i64 {
+            return ComplexMatchResult::Single(all_matches[(ordinal - 1) as usize].clone());
         }
         return ComplexMatchResult::NoMatch;
     }
@@ -256,6 +262,61 @@ pub fn complex_match_strings_with_fuzzy_threshold(
     }
 
     ComplexMatchResult::NoMatch
+}
+
+/// Return all matches from the best (highest priority) non-empty tier
+///
+/// This function ignores ordinals and returns all matching strings from the
+/// first non-empty tier (exact > prefix > substring > fuzzy).
+pub fn complex_match_strings_all(token: &str, strings: &[Var], fuzzy_threshold: f64) -> Vec<Var> {
+    // Strip any leading ordinal from the token
+    let (_, subject) = parse_input_token(token);
+
+    if subject.is_empty() {
+        return Vec::new();
+    }
+
+    let mut exact_matches = Vec::new();
+    let mut start_matches = Vec::new();
+    let mut contain_matches = Vec::new();
+    let mut fuzzy_matches = Vec::new();
+
+    let subject_lower = subject.to_lowercase();
+
+    for string_var in strings.iter() {
+        let Some(string_val) = string_var.as_string() else {
+            continue;
+        };
+
+        let string_lower = string_val.to_lowercase();
+
+        if string_lower == subject_lower {
+            exact_matches.push(string_var.clone());
+        } else if string_lower.starts_with(&subject_lower) {
+            start_matches.push(string_var.clone());
+        } else if string_lower.contains(&subject_lower) {
+            contain_matches.push(string_var.clone());
+        } else if fuzzy_threshold > 0.0 {
+            let distance = damerau_levenshtein(&subject_lower, &string_lower);
+            let max_distance = (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize;
+            if distance <= max_distance {
+                fuzzy_matches.push(string_var.clone());
+            }
+        }
+    }
+
+    // Return all matches from the best non-empty tier
+    if !exact_matches.is_empty() {
+        exact_matches
+    } else if !start_matches.is_empty() {
+        start_matches
+    } else if !contain_matches.is_empty() {
+        contain_matches
+    } else if fuzzy_threshold > 0.0 && !fuzzy_matches.is_empty() {
+        fuzzy_matches
+    } else {
+        Vec::new()
+    }
 }
 
 /// Perform complex matching with separate objects and keys lists
@@ -328,9 +389,6 @@ pub fn complex_match_objects_keys_with_fuzzy_threshold(
 
             // Exact match
             if key_lower == subject_lower {
-                if ordinal > 0 && ordinal == (exact_matches.len() as i64 + 1) {
-                    return ComplexMatchResult::Single(obj_val.clone());
-                }
                 exact_matches.push(obj_val.clone());
                 break; // Don't check other keys for this object
             }
@@ -364,19 +422,17 @@ pub fn complex_match_objects_keys_with_fuzzy_threshold(
         }
     }
 
-    // Handle ordinal selection
+    // Handle ordinal selection - count across all tiers combined
     if ordinal > 0 {
-        if ordinal <= exact_matches.len() as i64 {
-            return ComplexMatchResult::Single(exact_matches[(ordinal - 1) as usize].clone());
+        let mut all_matches = Vec::new();
+        all_matches.extend(exact_matches.iter().cloned());
+        all_matches.extend(start_matches.iter().cloned());
+        all_matches.extend(contain_matches.iter().cloned());
+        if fuzzy_threshold > 0.0 {
+            all_matches.extend(fuzzy_matches.iter().cloned());
         }
-        if ordinal <= start_matches.len() as i64 {
-            return ComplexMatchResult::Single(start_matches[(ordinal - 1) as usize].clone());
-        }
-        if ordinal <= contain_matches.len() as i64 {
-            return ComplexMatchResult::Single(contain_matches[(ordinal - 1) as usize].clone());
-        }
-        if fuzzy_threshold > 0.0 && ordinal <= fuzzy_matches.len() as i64 {
-            return ComplexMatchResult::Single(fuzzy_matches[(ordinal - 1) as usize].clone());
+        if ordinal <= all_matches.len() as i64 {
+            return ComplexMatchResult::Single(all_matches[(ordinal - 1) as usize].clone());
         }
         return ComplexMatchResult::NoMatch;
     }
@@ -628,5 +684,80 @@ mod tests {
 
         let result = complex_match_objects_keys_with_fuzzy_threshold("lammp", &objects, &keys, 0.0);
         assert_eq!(result, ComplexMatchResult::NoMatch);
+    }
+
+    #[test]
+    fn test_ordinal_across_tiers() {
+        // Test that ordinals count across all tiers combined
+        // "foo" = exact match (position 1), "foobar"/"foobaz" = prefix matches (positions 2-3)
+        let strings = vec![v_str("foo"), v_str("foobar"), v_str("foobaz")];
+
+        // "2.foo" should return "foobar" (2nd overall: 1 exact + 1st prefix)
+        let result = complex_match_strings("2.foo", &strings);
+        assert_eq!(result, ComplexMatchResult::Single(v_str("foobar")));
+
+        // "second foo" should return "foobar" (same as "2.foo")
+        let result = complex_match_strings("second foo", &strings);
+        assert_eq!(result, ComplexMatchResult::Single(v_str("foobar")));
+
+        // "2nd foo" should return "foobar" (same as "2.foo")
+        let result = complex_match_strings("2nd foo", &strings);
+        assert_eq!(result, ComplexMatchResult::Single(v_str("foobar")));
+
+        // "3.foo" should return "foobaz" (3rd overall: 1 exact + 2nd prefix)
+        let result = complex_match_strings("3.foo", &strings);
+        assert_eq!(result, ComplexMatchResult::Single(v_str("foobaz")));
+    }
+
+    #[test]
+    fn test_ordinal_out_of_range() {
+        // Test that ordinal beyond available matches returns NoMatch
+        let strings = vec![v_str("foo"), v_str("bar"), v_str("baz")];
+
+        // "2.foo" should return NoMatch since there's only 1 match for "foo"
+        let result = complex_match_strings("2.foo", &strings);
+        assert_eq!(result, ComplexMatchResult::NoMatch);
+
+        // "4.foo" with three matches should return NoMatch
+        let strings = vec![v_str("foo"), v_str("foobar"), v_str("foobaz")];
+        let result = complex_match_strings("4.foo", &strings);
+        assert_eq!(result, ComplexMatchResult::NoMatch);
+    }
+
+    #[test]
+    fn test_dot_notation_parsing() {
+        // Test that "N.subject" format is parsed correctly
+        assert_eq!(parse_input_token("2.foo"), (2, "foo".to_string()));
+        assert_eq!(parse_input_token("10.lamp"), (10, "lamp".to_string()));
+        assert_eq!(parse_input_token("1.bar baz"), (1, "bar baz".to_string()));
+
+        // Test that non-ordinal dots are not misinterpreted
+        assert_eq!(parse_input_token("foo.bar"), (0, "foo.bar".to_string()));
+        assert_eq!(parse_input_token("a.b"), (0, "a.b".to_string()));
+    }
+
+    #[test]
+    fn test_complex_match_strings_all() {
+        let strings = vec![v_str("foo"), v_str("bar"), v_str("foobar")];
+
+        // Should return all matches from the best tier
+        let result = complex_match_strings_all("foo", &strings, 0.5);
+        assert_eq!(result, vec![v_str("foo")]);
+
+        // When there's no exact match, return prefix matches
+        let strings = vec![v_str("foobar"), v_str("food"), v_str("bar")];
+        let result = complex_match_strings_all("foo", &strings, 0.5);
+        assert_eq!(result, vec![v_str("foobar"), v_str("food")]);
+
+        // Test with multiple exact matches
+        let strings = vec![v_str("foo"), v_str("foo"), v_str("bar")];
+        let result = complex_match_strings_all("foo", &strings, 0.5);
+        assert_eq!(result, vec![v_str("foo"), v_str("foo")]);
+
+        // Test that ordinals are stripped from input
+        let strings = vec![v_str("foo"), v_str("foobar"), v_str("foobaz")];
+        let result = complex_match_strings_all("2nd foo", &strings, 0.5);
+        // Should still return all matches, ignoring the ordinal
+        assert_eq!(result, vec![v_str("foo")]);
     }
 }

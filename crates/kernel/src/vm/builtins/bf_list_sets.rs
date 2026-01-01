@@ -17,7 +17,7 @@ use ahash::HashMap;
 use lazy_static::lazy_static;
 use moor_common::matching::{
     ComplexMatchResult, complex_match_objects_keys_with_fuzzy_threshold,
-    complex_match_strings_with_fuzzy_threshold,
+    complex_match_strings_all, complex_match_strings_with_fuzzy_threshold,
 };
 use moor_compiler::offset_for_builtin;
 use moor_var::{
@@ -1130,6 +1130,42 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// Usage: `list complex_matches(str token, list targets [, num fuzzy_threshold])`
+/// Returns all matches from the best (highest priority) tier as a list.
+/// If no matches are found, returns an empty list.
+fn bf_complex_matches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Variant::Str(token) = bf_args.args[0].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+    let token = token.as_str();
+
+    let Variant::List(candidates) = bf_args.args[1].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let fuzzy_threshold = if bf_args.args.len() == 3 {
+        match bf_args.args[2].variant() {
+            Variant::Float(f) => f,
+            Variant::Int(i) => i as f64,
+            _ => {
+                // Backward compatibility: treat as boolean
+                if bf_args.args[2].is_true() { 0.5 } else { 0.0 }
+            }
+        }
+    } else {
+        0.5 // Default to reasonable fuzzy matching
+    };
+
+    let candidate_vars: Vec<Var> = candidates.iter().collect();
+    let matches = complex_match_strings_all(token, &candidate_vars, fuzzy_threshold);
+
+    Ok(Ret(v_list(&matches)))
+}
+
 /// Usage: `list sort(list values [, list keys] [, int natural] [, int reverse])`
 /// Sorts a list of values, optionally using a parallel list of keys for sorting.
 /// All elements must be the same type (int, float, obj, err, or str).
@@ -1321,6 +1357,7 @@ pub(crate) fn register_bf_list_sets(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("pcre_replace")] = bf_pcre_replace;
     builtins[offset_for_builtin("slice")] = bf_slice;
     builtins[offset_for_builtin("complex_match")] = bf_complex_match;
+    builtins[offset_for_builtin("complex_matches")] = bf_complex_matches;
     builtins[offset_for_builtin("sort")] = bf_sort;
     builtins[offset_for_builtin("reverse")] = bf_reverse;
 }

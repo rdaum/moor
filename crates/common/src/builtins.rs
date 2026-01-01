@@ -610,6 +610,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
         mk_builtin(
+            "complex_matches",
+            Q(2),
+            Q(3),
+            vec![Typed(TYPE_STR), Typed(TYPE_LIST), Typed(TYPE_INT)],
+            true,
+        ),
+        mk_builtin(
             "dump_object",
             Q(1),
             Q(2),
