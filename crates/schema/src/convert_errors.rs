@@ -22,7 +22,6 @@ use crate::{
     common::CompileErrorUnionRef,
     convert_common::{symbol_from_ref, symbol_to_flatbuffer_struct},
     convert_var::var_to_flatbuffer,
-    fb_read,
 };
 use moor_common::model::{CompileContext, CompileError, ParseErrorDetails};
 use moor_var::Var;

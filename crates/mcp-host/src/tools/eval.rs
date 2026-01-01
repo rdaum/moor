@@ -344,8 +344,10 @@ pub async fn execute_moo_test_compile(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let mut options = CompileOptions::default();
-    options.legacy_type_constants = legacy_type_constants;
+    let options = CompileOptions {
+        legacy_type_constants,
+        ..Default::default()
+    };
 
     match compile(code, options) {
         Ok(program) => Ok(ToolCallResult::text(format!(
@@ -521,9 +523,7 @@ fn object_ref_literal(value: &Value) -> Result<String> {
         Value::String(s) => {
             if s.starts_with('#') || s.starts_with('$') {
                 Ok(s.to_string())
-            } else if s.parse::<i64>().is_ok() {
-                Ok(format!("#{}", s))
-            } else if s.contains('-') {
+            } else if s.parse::<i64>().is_ok() || s.contains('-') {
                 Ok(format!("#{}", s))
             } else {
                 Err(eyre::eyre!("Invalid object reference: {}", s))

@@ -20,7 +20,7 @@ use moor_common::model::ObjectRef;
 use moor_var::{Obj, Symbol, Var};
 
 use crate::convert_var::var_from_flatbuffer_ref;
-use crate::{common, fb_read, packed_id, var};
+use crate::{common, packed_id, var};
 
 /// Convert from moor_var::Symbol to flatbuffer Symbol
 pub fn symbol_to_flatbuffer_struct(symbol: &Symbol) -> common::Symbol {

@@ -22,7 +22,6 @@ use crate::{
     convert_common::{symbol_from_ref, uuid_from_ref, uuid_to_flatbuffer_struct},
     convert_errors::{error_to_flatbuffer_struct, exception_from_ref},
     convert_var::var_to_flatbuffer,
-    fb_read,
 };
 use moor_common::tasks::{Event, NarrativeEvent, Presentation};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
