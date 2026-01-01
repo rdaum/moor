@@ -65,8 +65,8 @@ fn bf_force_input(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 /// Usage: `any worker_request(symbol worker_type, list args [, map options])`
-/// Sends a request to an external worker (e.g., HTTP). Suspends until complete.
-/// Options may include `timeout_seconds`. Wizard-only.
+/// Sends a request to an external worker (e.g., HTTP) and suspends until complete.
+/// Options may include `timeout_seconds` (float) and may be a map or alist. Wizard-only.
 fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -253,7 +253,7 @@ fn bf_connection(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
 /// Usage: `none switch_player(obj new_player)`
 /// Switches the current session to a different player object. The target must be
-/// a valid player object. Wizard-only.
+/// a valid player object. Wizard-only. Intended for suspend/resume login flows.
 fn bf_switch_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(E_ARGS.msg("switch_player() requires 1 argument")));

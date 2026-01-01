@@ -114,6 +114,7 @@ fn bf_dump_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
 /// Usage: `map parse_objdef_constants(str|list lines)`
 /// Parses constants from objdef content and returns a map of constant -> value.
+/// Raises E_INVARG with a formatted error if parsing or compilation fails.
 fn bf_parse_objdef_constants(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(
@@ -585,6 +586,8 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// Usage: `obj reload_object(list object_lines [, map constants] [, obj target])`
 /// Replaces an existing object with a new definition from objdef format. Properties
 /// and verbs not in the new definition are deleted. Wizard-only.
+/// If target is omitted, uses the object ID encoded in the objdef definition.
+/// constants may be a map or alist of constant substitutions.
 fn bf_reload_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(BfErr::ErrValue(

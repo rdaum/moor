@@ -384,6 +384,8 @@ fn bf_error_message(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// Usage: `str uuid([int high, int low])`
 /// With no arguments, generates a new time-ordered v7 UUID. With two integer arguments,
 /// reconstructs a UUID from its high and low 64-bit components (big-endian).
+/// Raises E_ARGS if the argument count is not 0 or 2, and E_TYPE if either argument
+/// is not an integer.
 fn bf_uuid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     match bf_args.args.len() {
         0 => {

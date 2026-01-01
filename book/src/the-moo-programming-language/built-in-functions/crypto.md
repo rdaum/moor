@@ -67,6 +67,38 @@ Decrypts an age-encrypted message using a passphrase. Encrypted data can be prov
 => "secret data"
 ```
 
+### `paseto_make_local`
+
+```
+str paseto_make_local(map|list claims [, str|bytes signing_key])
+```
+
+Creates a PASETO V4.Local token from the provided claims map or alist. If `signing_key` is omitted, the server
+uses its configured symmetric key (wizard-only). If `signing_key` is provided, any programmer may call it.
+
+The `signing_key` must be a 32-byte binary value or a base64-encoded string.
+
+**Example:**
+
+```
+token = paseto_make_local(["sub" -> "player:#123", "role" -> "wizard"]);
+```
+
+### `paseto_verify_local`
+
+```
+map paseto_verify_local(str token [, str|bytes signing_key])
+```
+
+Verifies and decrypts a PASETO V4.Local token and returns the claims as a map. If `signing_key` is omitted, the server
+uses its configured symmetric key (wizard-only). Raises `E_INVARG` if the token is invalid.
+
+**Example:**
+
+```
+claims = paseto_verify_local(token);
+```
+
 ## Password Hashing Functions
 
 ### `salt`

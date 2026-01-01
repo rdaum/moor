@@ -15,7 +15,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.0.0-beta7] - 2026-01-01
 
-
 ### Added
 
 `mcp-host`:
@@ -55,7 +54,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `slice()` now mirrors ToastStunt-style indexing with default index 1 and list/string handling
 - `parse_json()` boolean conversions now honor boolean-return configuration
-- `toint()` now converts booleans to 1 or 0, and boolean-returning builtins are consistent when enabled
+- `toint()` now converts booleans to 1 or 0, and boolean-returning builtins are consistent when
+  enabled
 
 `tooling`:
 

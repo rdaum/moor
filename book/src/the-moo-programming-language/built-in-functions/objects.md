@@ -448,6 +448,18 @@ is performed and its result is ignored; again, it is not an error if where does 
 
 Passing `position` into move will effectively listinsert() the object into that position in the .contents list.
 
+### `locations`
+
+```
+list locations(obj object [, obj stop [, int is_parent]])
+```
+
+Returns a list of location objects starting from `object`'s location and walking up the location chain until `#-1`.
+If `stop` is provided, the walk stops before adding `stop`. If `is_parent` is true, `stop` is treated as a parent and
+the walk stops after reaching a location whose ancestry includes `stop`.
+
+If `object` is not a valid object, `E_INVARG` is raised.
+
 ## Operations on Properties
 
 ### `properties`

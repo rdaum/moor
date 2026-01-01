@@ -95,6 +95,17 @@ Alias for `toint`. **Description:**
 **Returns:** `true` if the value is truthy, otherwise `false`  
 **Note:** This matches the boolean tests used by `if`, `while`, and other control-flow constructs.
 
+### `uuid`
+
+```
+str uuid([int high, int low])
+```
+
+With no arguments, generates a new time-ordered UUID (v7) and returns it as a string. With two integer arguments,
+reconstructs a UUID from its high and low 64-bit components (big-endian) and returns it as a string.
+
+Raises `E_ARGS` if the argument count is not 0 or 2, and `E_TYPE` if either argument is not an integer.
+
 ## Comparison Functions
 
 ### `equal`

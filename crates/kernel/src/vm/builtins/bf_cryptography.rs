@@ -992,8 +992,9 @@ fn json_to_var(json: &JsonValue) -> Result<Var, BfErr> {
 }
 
 /// Usage: `str paseto_make_local(map|list claims [, str|bytes signing_key])`
-/// Creates a PASETO V4.Local token from claims. Signing_key is 32 bytes or base64.
-/// Without key, uses server's symmetric key (wizard-only). With key, any programmer can call.
+/// Creates a PASETO V4.Local token from claims. signing_key is a 32-byte binary value
+/// or a base64-encoded string. Without key, uses server's symmetric key (wizard-only).
+/// With key, any programmer can call.
 fn bf_paseto_make_local(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -1061,7 +1062,8 @@ fn bf_paseto_make_local(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
 /// Usage: `map paseto_verify_local(str token [, str|bytes signing_key])`
 /// Verifies and decrypts a PASETO V4.Local token, returning claims as a map.
-/// Without key, uses server's symmetric key (wizard-only). Raises E_INVARG if invalid.
+/// signing_key is a 32-byte binary value or a base64-encoded string. Without key,
+/// uses server's symmetric key (wizard-only). Raises E_INVARG if invalid.
 fn bf_paseto_verify_local(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(BfErr::Code(E_ARGS));

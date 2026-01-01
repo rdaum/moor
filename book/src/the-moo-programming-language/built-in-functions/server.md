@@ -472,6 +472,41 @@ connections()
     - Web connections: `["text/plain", "text/html", "text/djot"]`
     - Default connections: `["text/plain"]`
 
+### `switch_player`
+
+**Description:** Switches the current session to a different player object.
+**Arguments:**
+
+- : The target player object `new_player`
+
+**Permission Requirements:**
+
+- Wizard-only
+
+**Notes:**
+
+- The target must be a valid player object
+- Intended for workflows that suspend a task and later attach it to a logged-in player
+
+### `worker_request`
+
+**Description:** Sends a request to an external worker and suspends the task until the response arrives.
+
+**Syntax:** `any worker_request(symbol worker_type, list args [, map options])`
+
+**Arguments:**
+
+- `worker_type`: The worker to target (e.g., `'curl`)
+- `args`: Worker-specific request arguments
+- `options`: (Optional) Map or alist of options. Currently supported:
+    - `timeout_seconds`: Float timeout before the request fails
+
+**Returns:** Worker-specific response value
+
+**Permission Requirements:**
+
+- Wizard-only
+
 ### `queued_tasks`
 
 **Description:** Returns a list of tasks currently in the queue waiting to be executed.
@@ -581,6 +616,53 @@ true if the task was suspended and immediately resumed in a new transaction, oth
 - : The message to log `message`
 - `level`: Optional log level (e.g., "info", "warning", "error")
 
+### `log_cache_stats`
+
+**Description:** Logs verb/property/ancestry cache statistics to the server log.
+**Arguments:** None
+
+**Permission Requirements:**
+
+- Wizard-only
+
+### `verb_cache_stats`
+
+**Description:** Returns verb cache statistics.
+**Arguments:** None
+
+**Returns:** List `{hits, negative_hits, misses, flushes, histogram}`
+
+**Permission Requirements:**
+
+- Wizard-only
+
+### `property_cache_stats`
+
+**Description:** Returns property cache statistics.
+**Arguments:** None
+
+**Returns:** List `{hits, negative_hits, misses, flushes, histogram}`
+
+**Permission Requirements:**
+
+- Wizard-only
+
+### `ancestry_cache_stats`
+
+**Description:** Returns ancestry cache statistics.
+**Arguments:** None
+
+**Returns:** List `{hits, negative_hits, misses, flushes, histogram}`
+
+**Permission Requirements:**
+
+- Wizard-only
+
+**Notes:**
+
+- `histogram` is a simplified list containing `{0, entries}`
+- `flushes` is the closest analog to the LambdaMOO cache generation counter
+
 ### `memory_usage`
 
 **Description:** Returns information about the server's memory usage.
@@ -661,6 +743,20 @@ input = read(player, [
 
 - `filename`: Optional output filename for the dump
 - `options`: Optional flags controlling the dump format
+
+### `gc_collect`
+
+**Description:** Forces garbage collection of anonymous objects.
+**Arguments:** None
+
+**Permission Requirements:**
+
+- Wizard-only
+
+**Notes:**
+
+- Only affects anonymous objects; numbered and UUID objects are not reclaimed
+- Collection is scheduled asynchronously
 
 ## Event Handling
 

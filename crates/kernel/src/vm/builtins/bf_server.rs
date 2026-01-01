@@ -407,6 +407,7 @@ fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
 /// Usage: `none log_cache_stats()`
 /// Logs property, verb, and ancestry cache statistics to the server log. Wizard-only.
+/// The format mirrors LambdaMOO-style cache counters and hit rates.
 fn bf_log_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -675,6 +676,7 @@ fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
 /// Usage: `none gc_collect()`
 /// Forces garbage collection of anonymous objects. Wizard-only.
+/// Collection is scheduled asynchronously and only affects anonymous objects.
 fn bf_gc_collect(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -1059,7 +1061,9 @@ fn make_cache_stats_list(cache_stats: &moor_db::CacheStats) -> Var {
 }
 
 /// Usage: `list verb_cache_stats()`
-/// Returns `{hits, negative_hits, misses, flushes, histogram}` for verb cache. Wizard-only.
+/// Returns `{hits, negative_hits, misses, flushes, histogram}` for the verb cache. Wizard-only.
+/// `histogram` is a simplified `{0, entries}` list and `flushes` is the closest
+/// analog to the LambdaMOO cache generation counter.
 fn bf_verb_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -1081,7 +1085,9 @@ fn bf_verb_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 /// Usage: `list property_cache_stats()`
-/// Returns `{hits, negative_hits, misses, flushes, histogram}` for property cache. Wizard-only.
+/// Returns `{hits, negative_hits, misses, flushes, histogram}` for the property cache. Wizard-only.
+/// `histogram` is a simplified `{0, entries}` list and `flushes` is the closest
+/// analog to the LambdaMOO cache generation counter.
 fn bf_property_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -1103,7 +1109,9 @@ fn bf_property_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
 }
 
 /// Usage: `list ancestry_cache_stats()`
-/// Returns `{hits, negative_hits, misses, flushes, histogram}` for ancestry cache. Wizard-only.
+/// Returns `{hits, negative_hits, misses, flushes, histogram}` for the ancestry cache. Wizard-only.
+/// `histogram` is a simplified `{0, entries}` list and `flushes` is the closest
+/// analog to the LambdaMOO cache generation counter.
 fn bf_ancestry_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(

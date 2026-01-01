@@ -358,10 +358,10 @@ fn bf_isa(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }))
 }
 
-/// Recursively builds a list of an object's location, its location's location, and so forth until
-/// hitting #nothing. If stop is provided, it stops before that object. If is-parent is true, stop
-/// is treated as a parent and stops when any location is a child of that parent.
-/// Usage: `list locations(obj object [, obj stop [, int is-parent]])`
+/// Recursively builds a list of an object's location chain until hitting #nothing.
+/// If stop is provided, it stops before that object. If is-parent is true, stop
+/// is treated as a parent and stops when any location has that parent in its ancestry.
+/// Usage: `list locations(obj object [, obj stop [, int is_parent]])`
 fn bf_locations(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(BfErr::ErrValue(

@@ -446,6 +446,32 @@ new_obj = load_object(definition, [
 ], 0);  // Create new with next ID
 ```
 
+### Reloading Objects
+
+The `reload_object` function replaces an existing object with a new definition from objdef format. Properties and verbs
+not present in the new definition are removed.
+
+```
+obj reload_object(list object_lines [, map constants] [, obj target])
+```
+
+- `object_lines`: A list of strings containing the objdef text for the object.
+- `constants`: (Optional) Map or alist of constant substitutions available during compilation.
+- `target`: (Optional) Object to replace. When omitted, uses the object ID from the objdef definition.
+
+`reload_object` is wizard-only and returns the loaded object ID.
+
+### Parsing Constants
+
+```
+map parse_objdef_constants(str|list lines)
+```
+
+Parses constants from objdef content and returns a map of constant name to value. This is useful when you want to
+extract `constants.moo` definitions or validate constants before calling `load_object`.
+
+Raises `E_INVARG` with a formatted error if parsing or compilation fails.
+
 ## Advanced Loading Options
 
 The `load_object` function accepts an optional second argument - a map of options that control how the loading process
@@ -1051,4 +1077,3 @@ except error (ANY)
     player:tell("Unexpected error: ", error[2]);
 endtry
 ```
-

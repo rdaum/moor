@@ -12,6 +12,8 @@ The following functions are unique to mooR and not found in original LambdaMOO:
 - [`load_object`](../../the-system/object-packaging.md#load_object) - Load an object from objdef format with optional
   conflict detection and resolution options.
 - `dump_object` - Takes an object and returns a list of strings representing the object definition in objdef format.
+- `reload_object` - Replace an existing object with a new objdef definition (wizard-only).
+- `parse_objdef_constants` - Parse constants from objdef text into a map.
 
 **Flyweights & Symbols (New Types):**
 
