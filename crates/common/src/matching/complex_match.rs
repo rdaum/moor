@@ -153,7 +153,7 @@ pub fn parse_input_token(token: &str) -> (i64, String) {
 
 /// Perform complex matching on a list of strings, returning the matching strings
 pub fn complex_match_strings(token: &str, strings: &[Var]) -> ComplexMatchResult<Var> {
-    complex_match_strings_with_fuzzy_threshold(token, strings, 0.5)
+    complex_match_strings_with_fuzzy_threshold(token, strings, 0.0)
 }
 
 /// Perform complex matching on a list of strings with optional fuzzy matching
@@ -325,7 +325,7 @@ pub fn complex_match_objects_keys(
     objects: &[Var],
     keys: &[Var],
 ) -> ComplexMatchResult<Var> {
-    complex_match_objects_keys_with_fuzzy_threshold(token, objects, keys, 0.5)
+    complex_match_objects_keys_with_fuzzy_threshold(token, objects, keys, 0.0)
 }
 
 /// Perform complex matching with separate objects and keys lists with optional fuzzy matching
@@ -565,16 +565,16 @@ mod tests {
     fn test_fuzzy_match_simple_typos() {
         let strings = vec![v_str("lamp"), v_str("table"), v_str("chair")];
 
-        // Single character substitution
-        let result = complex_match_strings("lammp", &strings);
+        // Single character substitution (with fuzzy enabled)
+        let result = complex_match_strings_with_fuzzy_threshold("lammp", &strings, 0.5);
         assert_eq!(result, ComplexMatchResult::Single(v_str("lamp")));
 
         // Single character deletion
-        let result = complex_match_strings("lmp", &strings);
+        let result = complex_match_strings_with_fuzzy_threshold("lmp", &strings, 0.5);
         assert_eq!(result, ComplexMatchResult::Single(v_str("lamp")));
 
         // Single character insertion
-        let result = complex_match_strings("tabel", &strings);
+        let result = complex_match_strings_with_fuzzy_threshold("tabel", &strings, 0.5);
         assert_eq!(result, ComplexMatchResult::Single(v_str("table")));
     }
 
@@ -582,11 +582,11 @@ mod tests {
     fn test_fuzzy_match_transposition() {
         let strings = vec![v_str("chair"), v_str("table")];
 
-        // Adjacent character swap
-        let result = complex_match_strings("chaor", &strings);
+        // Adjacent character swap (with fuzzy enabled)
+        let result = complex_match_strings_with_fuzzy_threshold("chaor", &strings, 0.5);
         assert_eq!(result, ComplexMatchResult::Single(v_str("chair")));
 
-        let result = complex_match_strings("talbe", &strings);
+        let result = complex_match_strings_with_fuzzy_threshold("talbe", &strings, 0.5);
         assert_eq!(result, ComplexMatchResult::Single(v_str("table")));
     }
 
@@ -595,11 +595,11 @@ mod tests {
         let strings = vec![v_str("foobar"), v_str("foo"), v_str("fooo")];
 
         // Exact match should still win over fuzzy matches
-        let result = complex_match_strings("foo", &strings);
+        let result = complex_match_strings_with_fuzzy_threshold("foo", &strings, 0.5);
         assert_eq!(result, ComplexMatchResult::Single(v_str("foo")));
 
         // But fuzzy should work when no exact/prefix/substring match
-        let result = complex_match_strings("foox", &strings);
+        let result = complex_match_strings_with_fuzzy_threshold("foox", &strings, 0.5);
         // Both "foo" and "fooo" are distance 1 from "foox", so we get multiple matches
         assert_eq!(
             result,
@@ -611,8 +611,8 @@ mod tests {
     fn test_fuzzy_match_with_ordinal() {
         let strings = vec![v_str("lamp"), v_str("lump"), v_str("limp")];
 
-        // Should find second fuzzy match
-        let result = complex_match_strings("second lmop", &strings);
+        // Should find second fuzzy match (with fuzzy enabled)
+        let result = complex_match_strings_with_fuzzy_threshold("second lmop", &strings, 0.5);
         // "lmop" should fuzzy match multiple items, so "second" should pick the second one
         assert!(matches!(result, ComplexMatchResult::Single(_)));
     }
@@ -621,11 +621,11 @@ mod tests {
     fn test_fuzzy_match_distance_threshold() {
         let strings = vec![v_str("lamp"), v_str("table")];
 
-        // Too many changes - should not match
-        let result = complex_match_strings("xyz", &strings);
+        // Too many changes - should not match even with fuzzy
+        let result = complex_match_strings_with_fuzzy_threshold("xyz", &strings, 0.5);
         assert_eq!(result, ComplexMatchResult::NoMatch);
 
-        // Just within threshold for short words (distance 1)
+        // Just within threshold for short words (distance 1) - this is a prefix match
         let result = complex_match_strings("lam", &strings);
         assert_eq!(result, ComplexMatchResult::Single(v_str("lamp")));
     }
@@ -638,12 +638,14 @@ mod tests {
             v_list(&[v_str("table"), v_str("desk")]),
         ];
 
-        // Should fuzzy match "lamp" with "lammp"
-        let result = complex_match_objects_keys("lammp", &objects, &keys);
+        // Should fuzzy match "lamp" with "lammp" (with fuzzy enabled)
+        let result =
+            complex_match_objects_keys_with_fuzzy_threshold("lammp", &objects, &keys, 0.5);
         assert_eq!(result, ComplexMatchResult::Single(v_int(1)));
 
         // Should fuzzy match "table" with "tabel"
-        let result = complex_match_objects_keys("tabel", &objects, &keys);
+        let result =
+            complex_match_objects_keys_with_fuzzy_threshold("tabel", &objects, &keys, 0.5);
         assert_eq!(result, ComplexMatchResult::Single(v_int(2)));
     }
 

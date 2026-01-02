@@ -299,10 +299,10 @@ second", "1st", "2nd", "twenty-first") and four-tier matching precedence:
 
 - `token` (STR): The search string to match against
 - `targets` (LIST): List of strings or objects to search through
-- `keys` (LIST, optional): List of key lists for object matching. Pass `false` to disable key-based matching.
+- `keys` (LIST, optional): List of key lists for object matching. Must have the same length as `targets`. Pass `false` to disable key-based matching.
 - `fuzzy_threshold` (NUM, optional): Controls fuzzy matching sensitivity:
-    - `0.0`: Disable fuzzy matching (exact/prefix/substring only)
-    - `0.5`: Reasonable default (1-2 character differences allowed depending on word length)
+    - `0.0`: Disable fuzzy matching (exact/prefix/substring only) - **this is the default**
+    - `0.5`: Reasonable fuzzy matching (1-2 character differences allowed depending on word length)
     - `1.0`: Very permissive fuzzy matching (allows more character differences)
     - Boolean values supported for backward compatibility: `false` = `0.0`, `true` = `0.5`
 
@@ -424,7 +424,7 @@ Unlike `complex_match()` which returns a single match (or uses ordinals to selec
 
 - `token` (STR): The search string to match against (ordinals are ignored)
 - `targets` (LIST): List of strings to search through
-- `fuzzy_threshold` (NUM, optional): Controls fuzzy matching sensitivity (default: 0.5)
+- `fuzzy_threshold` (NUM, optional): Controls fuzzy matching sensitivity (default: 0.0, no fuzzy matching)
 
 #### Return values
 

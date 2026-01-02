@@ -1040,7 +1040,7 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             }
         }
     } else {
-        0.5 // Default to reasonable fuzzy matching
+        0.0 // Default: no fuzzy matching
     };
 
     // Three/four argument form with keys: complex_match(token, objs, keys, [fuzzy])
@@ -1053,6 +1053,11 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
         let obj_vars: Vec<Var> = objs.iter().collect();
         let key_vars: Vec<Var> = keys.iter().collect();
+
+        // Validate that keys and targets have the same length
+        if obj_vars.len() != key_vars.len() {
+            return Err(BfErr::Code(E_INVARG));
+        }
 
         return handle_simple_match_result(complex_match_objects_keys_with_fuzzy_threshold(
             token,
@@ -1157,7 +1162,7 @@ fn bf_complex_matches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             }
         }
     } else {
-        0.5 // Default to reasonable fuzzy matching
+        0.0 // Default: no fuzzy matching
     };
 
     let candidate_vars: Vec<Var> = candidates.iter().collect();
