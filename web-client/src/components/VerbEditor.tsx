@@ -48,6 +48,7 @@ interface VerbEditorProps {
     argspec?: { dobj: string; prep: string; iobj: string };
     onSave?: () => void; // Callback to refresh verb data after metadata save
     onDelete?: () => void; // Callback to delete verb
+    onRun?: () => void; // Callback to run the verb (e.g. for tests)
     normalizeObjectInput?: (raw: string) => string; // Utility to convert object references to MOO expressions
     getDollarName?: (objId: string) => string | null; // Get $ name for an object ID
     // Navigation for multiple editors
@@ -94,6 +95,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     argspec,
     onSave,
     onDelete,
+    onRun,
     normalizeObjectInput,
     getDollarName,
     onPreviousEditor,
@@ -855,6 +857,20 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             className="btn btn-warning btn-sm"
                         >
                             Remove
+                        </button>
+                    )}
+                    {/* Run button - only shown if onRun handler provided */}
+                    {onRun && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onRun();
+                            }}
+                            aria-label="Run verb"
+                            title="Run verb"
+                            className="btn btn-success btn-sm"
+                        >
+                            Run
                         </button>
                     )}
                     <div

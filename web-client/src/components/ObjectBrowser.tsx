@@ -112,6 +112,16 @@ interface ReloadObjectFormValues {
     confirmation: string;
 }
 
+interface TestResult {
+    verb: string;
+    location: string;
+    success: boolean;
+    result?: string;
+    error?: string;
+}
+
+const isTestVerb = (name: string): boolean => name.startsWith("test_");
+
 // Helper to decode object flags to readable string
 function formatObjectFlags(flags: number): string {
     const parts: string[] = [];
@@ -325,6 +335,10 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         "moor-object-browser-show-inherited-verbs",
         true,
     );
+    const [showTests, setShowTests] = usePersistentState(
+        "moor-object-browser-show-tests",
+        true,
+    );
     const [serverFeatures, setServerFeatures] = useState<ServerFeatureSet | null>(null);
     const [dollarNames, setDollarNames] = useState<Map<string, string>>(new Map());
     const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -335,6 +349,9 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [showDeleteVerbDialog, setShowDeleteVerbDialog] = useState(false);
     const [showEditFlagsDialog, setShowEditFlagsDialog] = useState(false);
     const [showReloadDialog, setShowReloadDialog] = useState(false);
+    const [showTestResultsDialog, setShowTestResultsDialog] = useState(false);
+    const [testResults, setTestResults] = useState<TestResult[]>([]);
+    const [isRunningTests, setIsRunningTests] = useState(false);
     const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
     const [isSubmittingRecycle, setIsSubmittingRecycle] = useState(false);
     const [isSubmittingAddProperty, setIsSubmittingAddProperty] = useState(false);
@@ -1335,6 +1352,131 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         setIsSplitDragging(false);
     }, []);
 
+    const handleRunTest = async (verb: VerbData) => {
+        if (!selectedObject) return;
+        const objectExpr = normalizeObjectInput(selectedObject.obj ? `#${selectedObject.obj}` : "");
+        if (!objectExpr) return;
+
+        // Use the first name for calling, or the one starting with test_
+        const verbName = verb.names.find(n => isTestVerb(n)) || verb.names[0];
+        // For now, assume test verbs don't take arguments or we pass none
+        const expr = `return ${objectExpr}:${verbName}();`;
+
+        setActionMessage(`Running test ${verbName}...`);
+        try {
+            const result = await performEvalFlatBuffer(authToken, expr);
+            let success = true;
+            let resultStr = "";
+            let errorStr = undefined;
+
+            if (result && typeof result === "object" && "error" in result) {
+                success = false;
+                const errorResult = result as { error?: { msg?: string } };
+                errorStr = errorResult.error?.msg ?? "Test failed";
+            } else if (result !== undefined) {
+                // Try to format result nicely
+                if (typeof result === "object") {
+                    if ("oid" in result) {
+                        resultStr = `#${result.oid}`;
+                    } else if ("uuid" in result) {
+                        resultStr = `#${uuObjIdToString(BigInt(result.uuid as string))}`;
+                    } else {
+                        resultStr = JSON.stringify(result);
+                    }
+                } else {
+                    resultStr = String(result);
+                }
+            }
+
+            setTestResults([{
+                verb: verbName,
+                location: verb.location,
+                success,
+                result: resultStr,
+                error: errorStr,
+            }]);
+            setShowTestResultsDialog(true);
+            setActionMessage(null);
+        } catch (error) {
+            setTestResults([{
+                verb: verbName,
+                location: verb.location,
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+            }]);
+            setShowTestResultsDialog(true);
+            setActionMessage(null);
+        }
+    };
+
+    const handleRunAllTests = async () => {
+        if (!selectedObject) return;
+        const objectExpr = normalizeObjectInput(selectedObject.obj ? `#${selectedObject.obj}` : "");
+        if (!objectExpr) return;
+
+        // Find all test verbs for this object (excluding inherited ones)
+        const testVerbs = verbs.filter(v => v.names.some(n => isTestVerb(n)) && v.location === selectedObject.obj);
+
+        if (testVerbs.length === 0) {
+            setActionMessage("No test verbs found.");
+            setTimeout(() => setActionMessage(null), 3000);
+            return;
+        }
+
+        setIsRunningTests(true);
+        setActionMessage(`Running ${testVerbs.length} tests...`);
+        const results: TestResult[] = [];
+
+        for (const verb of testVerbs) {
+            const verbName = verb.names.find(n => isTestVerb(n)) || verb.names[0];
+            const expr = `return ${objectExpr}:${verbName}();`;
+
+            try {
+                const result = await performEvalFlatBuffer(authToken, expr);
+                let success = true;
+                let resultStr = "";
+                let errorStr = undefined;
+
+                if (result && typeof result === "object" && "error" in result) {
+                    success = false;
+                    const errorResult = result as { error?: { msg?: string } };
+                    errorStr = errorResult.error?.msg ?? "Test failed";
+                } else {
+                    if (typeof result === "object") {
+                        if ("oid" in result) {
+                            resultStr = `#${result.oid}`;
+                        } else if ("uuid" in result) {
+                            resultStr = `#${uuObjIdToString(BigInt(result.uuid as string))}`;
+                        } else {
+                            resultStr = JSON.stringify(result);
+                        }
+                    } else {
+                        resultStr = String(result);
+                    }
+                }
+                results.push({
+                    verb: verbName,
+                    location: verb.location,
+                    success,
+                    result: resultStr,
+                    error: errorStr,
+                });
+            } catch (error) {
+                results.push({
+                    verb: verbName,
+                    location: verb.location,
+                    success: false,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+        }
+
+        setTestResults(results);
+        setShowTestResultsDialog(true);
+        setIsRunningTests(false);
+        setActionMessage(null);
+    };
+
     const handleSplitDragStart = useCallback((e: React.MouseEvent) => {
         if (e.button !== 0) return;
         setIsSplitDragging(true);
@@ -1409,7 +1551,11 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     // Group verbs by location
     const groupedVerbs = React.useMemo(() => {
         const filterLower = verbFilter.toLowerCase();
-        const filteredVerbs = verbs.filter(verb => verb.names.some(name => name.toLowerCase().includes(filterLower)));
+        let filteredVerbs = verbs.filter(verb => verb.names.some(name => name.toLowerCase().includes(filterLower)));
+
+        if (!showTests) {
+            filteredVerbs = filteredVerbs.filter(verb => !verb.names.some(name => isTestVerb(name)));
+        }
 
         // Track the order locations appear in the original array (API order = ancestor order)
         const locationOrder = new Map<string, number>();
@@ -1442,7 +1588,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             entries = entries.filter(([location]) => location === currentId);
         }
         return entries;
-    }, [verbs, selectedObject, verbFilter, showInheritedVerbs]);
+    }, [verbs, selectedObject, verbFilter, showInheritedVerbs, showTests]);
 
     // Track which verbs are overridden or have duplicate names
     const verbLabels = React.useMemo(() => {
@@ -1728,6 +1874,15 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                             title={showInheritedVerbs ? "Hide inherited verbs" : "Show inherited verbs"}
                         >
                             V
+                        </button>
+                        <button
+                            type="button"
+                            className={`browser-inherited-toggle ${showTests ? "active" : ""}`}
+                            onClick={() => setShowTests(prev => !prev)}
+                            aria-label={showTests ? "Hide test verbs" : "Show test verbs"}
+                            title={showTests ? "Hide test verbs" : "Show test verbs"}
+                        >
+                            T
                         </button>
                     </div>
                     {/* Split/Float toggle button - only on non-touch devices */}
@@ -2081,25 +2236,57 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     Verbs
                                 </span>
                                 {selectedObject && (
-                                    <button
-                                        type="button"
-                                        className="btn btn-sm"
-                                        onClick={() => {
-                                            setAddVerbDialogError(null);
-                                            setActionMessage(null);
-                                            setShowAddVerbDialog(true);
-                                        }}
-                                        disabled={isSubmittingAddVerb}
-                                        aria-label="Add verb"
-                                        title="Add verb"
-                                        style={{
-                                            cursor: isSubmittingAddVerb ? "not-allowed" : "pointer",
-                                            opacity: isSubmittingAddVerb ? 0.6 : 1,
-                                            fontSize: `${secondaryFontSize}px`,
-                                        }}
-                                    >
-                                        + Add
-                                    </button>
+                                    <div className="flex gap-xs">
+                                        <button
+                                            type="button"
+                                            className="btn btn-sm"
+                                            onClick={handleRunAllTests}
+                                            disabled={isRunningTests
+                                                || verbs.every(v =>
+                                                    !v.names.some(n => isTestVerb(n))
+                                                    || v.location !== selectedObject.obj
+                                                )}
+                                            aria-label="Run all tests"
+                                            title="Run all tests"
+                                            style={{
+                                                cursor: isRunningTests || verbs.every(v =>
+                                                        !v.names.some(n => isTestVerb(n))
+                                                        || v.location !== selectedObject.obj
+                                                    )
+                                                    ? "not-allowed"
+                                                    : "pointer",
+                                                opacity: isRunningTests
+                                                        || verbs.every(v =>
+                                                            !v.names.some(n => isTestVerb(n))
+                                                            || v.location !== selectedObject.obj
+                                                        )
+                                                    ? 0.6
+                                                    : 1,
+                                                fontSize: `${secondaryFontSize}px`,
+                                            }}
+                                        >
+                                            🧪 Run Tests
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="btn btn-sm"
+                                            onClick={() => {
+                                                setAddVerbDialogError(null);
+                                                setActionMessage(null);
+                                                setShowAddVerbDialog(true);
+                                            }}
+                                            disabled={isSubmittingAddVerb}
+                                            aria-label="Add verb"
+                                            title="Add verb"
+                                            style={{
+                                                cursor: isSubmittingAddVerb ? "not-allowed" : "pointer",
+                                                opacity: isSubmittingAddVerb ? 0.6 : 1,
+                                                fontSize: `${secondaryFontSize}px`,
+                                            }}
+                                        >
+                                            + Add
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                             <div className="p-sm border-bottom bg-secondary">
@@ -2152,6 +2339,14 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                         onClick={() => handleVerbSelect(verb)}
                                                     >
                                                         <div className="browser-item-name font-bold">
+                                                            {verb.names.some(n => isTestVerb(n)) && (
+                                                                <span
+                                                                    title="Unit Test"
+                                                                    style={{ marginRight: "4px" }}
+                                                                >
+                                                                    🧪
+                                                                </span>
+                                                            )}
                                                             {verb.names.join(" ")}{" "}
                                                             <span
                                                                 className="text-secondary"
@@ -2337,6 +2532,9 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         setDeleteVerbDialogError(null);
                                         setShowDeleteVerbDialog(true);
                                     }}
+                                    onRun={selectedVerb.names.some(n => isTestVerb(n))
+                                        ? () => handleRunTest(selectedVerb)
+                                        : undefined}
                                     normalizeObjectInput={normalizeObjectInput}
                                     getDollarName={getDollarName}
                                 />
@@ -2443,7 +2641,117 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     errorMessage={reloadDialogError}
                 />
             )}
+            {showTestResultsDialog && (
+                <TestResultsDialog
+                    results={testResults}
+                    onClose={() => setShowTestResultsDialog(false)}
+                />
+            )}
         </EditorWindow>
+    );
+};
+
+interface TestResultsDialogProps {
+    results: TestResult[];
+    onClose: () => void;
+}
+
+const TestResultsDialog: React.FC<TestResultsDialogProps> = ({
+    results,
+    onClose,
+}) => {
+    return (
+        <DialogSheet
+            title="Test Results"
+            titleId="test-results-title"
+            onCancel={onClose}
+            maxWidth="800px"
+        >
+            <div className="dialog-sheet-content">
+                <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9em" }}>
+                        <thead
+                            style={{
+                                position: "sticky",
+                                top: 0,
+                                backgroundColor: "var(--color-bg-secondary)",
+                                zIndex: 1,
+                            }}
+                        >
+                            <tr>
+                                <th
+                                    style={{
+                                        textAlign: "left",
+                                        padding: "8px",
+                                        borderBottom: "2px solid var(--color-border-medium)",
+                                    }}
+                                >
+                                    Status
+                                </th>
+                                <th
+                                    style={{
+                                        textAlign: "left",
+                                        padding: "8px",
+                                        borderBottom: "2px solid var(--color-border-medium)",
+                                    }}
+                                >
+                                    Verb
+                                </th>
+                                <th
+                                    style={{
+                                        textAlign: "left",
+                                        padding: "8px",
+                                        borderBottom: "2px solid var(--color-border-medium)",
+                                    }}
+                                >
+                                    Location
+                                </th>
+                                <th
+                                    style={{
+                                        textAlign: "left",
+                                        padding: "8px",
+                                        borderBottom: "2px solid var(--color-border-medium)",
+                                    }}
+                                >
+                                    Result/Error
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {results.map((result, idx) => (
+                                <tr key={idx} style={{ borderBottom: "1px solid var(--color-border-light)" }}>
+                                    <td style={{ padding: "8px" }}>
+                                        {result.success ? "✅" : "❌"}
+                                    </td>
+                                    <td style={{ padding: "8px", fontFamily: "var(--font-mono)" }}>
+                                        {result.verb}
+                                    </td>
+                                    <td style={{ padding: "8px", fontFamily: "var(--font-mono)" }}>
+                                        #{result.location}
+                                    </td>
+                                    <td
+                                        style={{
+                                            padding: "8px",
+                                            fontFamily: "var(--font-mono)",
+                                            whiteSpace: "pre-wrap",
+                                        }}
+                                    >
+                                        {result.success
+                                            ? result.result
+                                            : <span style={{ color: "var(--color-text-error)" }}>{result.error}</span>}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="button-group">
+                    <button type="button" onClick={onClose} className="btn btn-primary">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </DialogSheet>
     );
 };
 
