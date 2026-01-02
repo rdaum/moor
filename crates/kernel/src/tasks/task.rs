@@ -34,6 +34,7 @@ use crate::task_context::{
 
 use flume::Sender;
 use lazy_static::lazy_static;
+use moor_compiler::to_literal;
 use rand::Rng;
 use tracing::{error, warn};
 
@@ -56,8 +57,8 @@ use moor_common::{
     util::{PerfTimerGuard, parse_into_words},
 };
 use moor_var::{
-    List, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant, v_empty_str, v_err, v_int, v_obj, v_str,
-    v_string,
+    Error, ErrorCode, List, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant, v_empty_str, v_err,
+    v_int, v_obj, v_str, v_string,
 };
 
 use crate::{
@@ -990,6 +991,62 @@ impl Task {
             program,
         );
         Ok(())
+    }
+}
+
+impl Drop for Task {
+    fn drop(&mut self) {
+        if !std::thread::panicking() {
+            return;
+        }
+
+        let task_start = self.state.task_start().diagnostic();
+        let vm_state = self.vm_host.vm_exec_state();
+        let Some(activation) = vm_state.try_top() else {
+            error!(
+                task_id = self.task_id,
+                player = %self.player,
+                task_start = %task_start,
+                "Task panicked with empty activation stack"
+            );
+            return;
+        };
+
+        let stack = VMExecState::make_stack_list(&vm_state.stack);
+        let panic_error = Error::new(ErrorCode::E_MAXREC, Some("Task panicked".to_string()), None);
+        let backtrace = VMExecState::make_backtrace(&vm_state.stack, &panic_error);
+        let stack_literals = stack.iter().map(to_literal).collect::<Vec<_>>();
+        let backtrace_lines = backtrace
+            .iter()
+            .map(|entry| {
+                entry
+                    .as_string()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| to_literal(entry))
+            })
+            .collect::<Vec<_>>();
+        let args = activation
+            .args
+            .iter()
+            .map(|arg| to_literal(&arg))
+            .collect::<Vec<_>>();
+        let this_literal = to_literal(&activation.this);
+        let line_number = activation.frame.find_line_no();
+        let definer = activation.verb_definer();
+
+        error!(
+            task_id = self.task_id,
+            player = %self.player,
+            task_start = %task_start,
+            this = %this_literal,
+            verb = %activation.verb_name,
+            definer = %definer,
+            line_number = ?line_number,
+            args = ?args,
+            stack = ?stack_literals,
+            backtrace = ?backtrace_lines,
+            "Task panicked at top activation"
+        );
     }
 }
 
