@@ -16,13 +16,13 @@
 use ahash::HashMap;
 use lazy_static::lazy_static;
 use moor_common::matching::{
-    ComplexMatchResult, complex_match_objects_keys_with_fuzzy_threshold,
-    complex_match_strings_all, complex_match_strings_with_fuzzy_threshold,
+    ComplexMatchResult, complex_match_objects_keys_with_fuzzy_threshold, complex_match_strings_all,
+    complex_match_strings_with_fuzzy_threshold,
 };
 use moor_compiler::offset_for_builtin;
 use moor_var::{
-    Associative, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Error, FAILED_MATCH, IndexMode, List, Sequence, Var,
-    VarType, Variant, v_empty_list, v_int, v_list, v_list_iter, v_map, v_obj, v_str, v_string,
+    Associative, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Error, FAILED_MATCH, IndexMode, List, Sequence,
+    Var, VarType, Variant, v_empty_list, v_int, v_list, v_list_iter, v_map, v_obj, v_str, v_string,
 };
 use onig::{Region, SearchOptions, SyntaxBehavior, SyntaxOperator};
 use std::{ops::BitOr, sync::Mutex};
@@ -929,12 +929,12 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             }
             let mut result = Vec::with_capacity(list.len());
             for item in list.iter() {
-                    match item.variant() {
-                        Variant::List(_) | Variant::Str(_) => {
-                            result.push(get_sequence_element(&item, idx as usize)?);
-                        }
-                        _ => return Err(BfErr::Code(E_TYPE)),
+                match item.variant() {
+                    Variant::List(_) | Variant::Str(_) => {
+                        result.push(get_sequence_element(&item, idx as usize)?);
                     }
+                    _ => return Err(BfErr::Code(E_TYPE)),
+                }
             }
             Ok(Ret(v_list(&result)))
         }
@@ -949,21 +949,21 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             }
 
             let mut result = Vec::with_capacity(list.len());
-                    for item in list.iter() {
-                        if is_string_sequence && !matches!(item.variant(), Variant::Str(_)) {
-                            return Err(BfErr::Code(E_TYPE));
-                        }
-                        if is_list_sequence && !matches!(item.variant(), Variant::List(_)) {
-                            return Err(BfErr::Code(E_TYPE));
-                        }
+            for item in list.iter() {
+                if is_string_sequence && !matches!(item.variant(), Variant::Str(_)) {
+                    return Err(BfErr::Code(E_TYPE));
+                }
+                if is_list_sequence && !matches!(item.variant(), Variant::List(_)) {
+                    return Err(BfErr::Code(E_TYPE));
+                }
 
-                        let mut subresult = Vec::with_capacity(parsed_indices.len());
-                        for &idx in &parsed_indices {
-                            subresult.push(get_sequence_element(&item, idx)?);
-                        }
+                let mut subresult = Vec::with_capacity(parsed_indices.len());
+                for &idx in &parsed_indices {
+                    subresult.push(get_sequence_element(&item, idx)?);
+                }
 
-                        result.push(v_list(&subresult));
-                    }
+                result.push(v_list(&subresult));
+            }
 
             Ok(Ret(v_list(&result)))
         }

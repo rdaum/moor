@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-
 #![recursion_limit = "256"]
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 mod feature_args;
