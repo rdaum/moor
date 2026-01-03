@@ -50,7 +50,7 @@ pub enum MockScenario {
     /// Database connectivity issues - property/verb operations fail
     DatabaseIssues,
     /// Network partition simulation - intermittent failures
-    NetworkPartition,
+    NetworkKeyspace,
     /// System degrading over time - performance gets worse
     GradualDegradation,
     /// System recovering - performance improving over time
@@ -131,7 +131,7 @@ impl MockScenario {
                 ..Default::default()
             },
 
-            MockScenario::NetworkPartition => ScenarioConfig {
+            MockScenario::NetworkKeyspace => ScenarioConfig {
                 success_rate: 0.6,
                 base_delay: Duration::from_millis(100),
                 max_delay: Duration::from_millis(8000),

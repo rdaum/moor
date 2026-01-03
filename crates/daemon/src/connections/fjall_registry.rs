@@ -26,7 +26,7 @@ use crate::connections::{
     registry::{CONNECTION_TIMEOUT_DURATION, ConnectionRegistry, NewConnectionParams},
 };
 use eyre::{Error, bail};
-use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
+use fjall::{Database, Keyspace, KeyspaceCreateOptions};
 use moor_common::tasks::SessionError;
 use moor_var::{Obj, Symbol, Var};
 use rpc_common::RpcMessageError;
@@ -52,13 +52,13 @@ pub struct FjallConnectionRegistry {
 
 struct FjallInner {
     _tmpdir: Option<tempfile::TempDir>,
-    keyspace: Keyspace,
-    client_connection_table: PartitionHandle, // client_id (u128) -> connection_obj (Obj bytes)
-    client_player_table: PartitionHandle, // client_id (u128) -> player_obj (Obj bytes), only after login
-    connection_records_table: PartitionHandle, // connection_obj (Obj bytes) -> ConnectionsRecords
-    player_clients_table: PartitionHandle, // player_obj (Obj bytes) -> ConnectionsRecords, only after login
+    keyspace: Database,
+    client_connection_table: Keyspace, // client_id (u128) -> connection_obj (Obj bytes)
+    client_player_table: Keyspace, // client_id (u128) -> player_obj (Obj bytes), only after login
+    connection_records_table: Keyspace, // connection_obj (Obj bytes) -> ConnectionsRecords
+    player_clients_table: Keyspace, // player_obj (Obj bytes) -> ConnectionsRecords, only after login
     connection_id_sequence: i32,
-    connection_id_sequence_table: PartitionHandle,
+    connection_id_sequence_table: Keyspace,
 }
 
 impl FjallConnectionRegistry {
@@ -73,28 +73,28 @@ impl FjallConnectionRegistry {
         };
 
         info!("Opening connections database at {:?}", path);
-        let keyspace = Config::new(&path).open()?;
+        let keyspace = Database::builder(&path).open()?;
 
         info!("Compacting connections database journals...");
         keyspace.persist(fjall::PersistMode::SyncAll)?;
 
         let sequences_partition =
-            keyspace.open_partition("connection_sequences", PartitionCreateOptions::default())?;
+            keyspace.keyspace("connection_sequences", KeyspaceCreateOptions::default)?;
 
         let client_connection_table =
-            keyspace.open_partition("client_connection", PartitionCreateOptions::default())?;
+            keyspace.keyspace("client_connection", KeyspaceCreateOptions::default)?;
 
         let client_player_table =
-            keyspace.open_partition("client_player", PartitionCreateOptions::default())?;
+            keyspace.keyspace("client_player", KeyspaceCreateOptions::default)?;
 
         let connection_records_table =
-            keyspace.open_partition("connection_records", PartitionCreateOptions::default())?;
+            keyspace.keyspace("connection_records", KeyspaceCreateOptions::default)?;
 
         let player_clients_table =
-            keyspace.open_partition("player_clients", PartitionCreateOptions::default())?;
+            keyspace.keyspace("player_clients", KeyspaceCreateOptions::default)?;
 
-        let connection_id_sequence = match sequences_partition.get("connection_id_sequence") {
-            Ok(Some(bytes)) => i32::from_le_bytes(bytes[0..size_of::<i32>()].try_into()?),
+        let connection_id_sequence = match sequences_partition.get("connection_id_sequence")? {
+            Some(bytes) => i32::from_le_bytes(bytes[0..size_of::<i32>()].try_into()?),
             _ => FIRST_CONNECTION_ID,
         };
 
@@ -112,8 +112,12 @@ impl FjallConnectionRegistry {
         // Load existing timestamps from disk into memory cache
         let mut timestamps_cache = HashMap::new();
         for entry in inner.connection_records_table.iter() {
-            if let Ok((_, value)) = entry
-                && let Ok(connections_record) = connections_records_from_bytes(&value)
+            let Ok(value) = entry.value() else {
+                continue;
+            };
+            let Ok(connections_record) = connections_records_from_bytes(&value) else {
+                continue;
+            };
             {
                 for cr in connections_record.connections {
                     timestamps_cache.insert(
@@ -128,8 +132,12 @@ impl FjallConnectionRegistry {
         }
 
         for entry in inner.player_clients_table.iter() {
-            if let Ok((_, value)) = entry
-                && let Ok(connections_record) = connections_records_from_bytes(&value)
+            let Ok(value) = entry.value() else {
+                continue;
+            };
+            let Ok(connections_record) = connections_records_from_bytes(&value) else {
+                continue;
+            };
             {
                 for cr in connections_record.connections {
                     // Use the most recent timestamp if already in cache
@@ -223,7 +231,7 @@ impl FjallConnectionRegistry {
                 if let Ok(encoded) = connections_records_to_bytes(&connections_record) {
                     let _ = inner
                         .connection_records_table
-                        .insert(&*conn_obj_bytes, &encoded);
+                        .insert(&*conn_obj_bytes, encoded);
                 }
             }
 
@@ -245,7 +253,7 @@ impl FjallConnectionRegistry {
                 if let Ok(encoded) = connections_records_to_bytes(&player_connections) {
                     let _ = inner
                         .player_clients_table
-                        .insert(player_obj.as_bytes(), &encoded);
+                        .insert(player_obj.as_bytes(), encoded);
                 }
             }
 
@@ -280,7 +288,7 @@ impl FjallConnectionRegistry {
         let mut invalid_mapping_keys: Vec<Vec<u8>> = Vec::new();
 
         for entry in inner.client_connection_table.iter() {
-            let Ok((key, value)) = entry else {
+            let Ok((key, value)) = entry.into_inner() else {
                 continue;
             };
             let Ok(bytes) = key.as_ref().try_into() else {
@@ -296,7 +304,7 @@ impl FjallConnectionRegistry {
         }
 
         for entry in inner.client_player_table.iter() {
-            let Ok((key, value)) = entry else {
+            let Ok((key, value)) = entry.into_inner() else {
                 continue;
             };
             let Ok(bytes) = key.as_ref().try_into() else {
@@ -327,7 +335,7 @@ impl FjallConnectionRegistry {
         let mut connection_removals: Vec<Vec<u8>> = Vec::new();
 
         for entry in inner.connection_records_table.iter() {
-            let Ok((key, value)) = entry else {
+            let Ok((key, value)) = entry.into_inner() else {
                 continue;
             };
 
@@ -396,7 +404,7 @@ impl FjallConnectionRegistry {
 
         for (key, record) in connection_updates {
             if let Ok(encoded) = connections_records_to_bytes(&record) {
-                let _ = inner.connection_records_table.insert(&key, &encoded);
+                let _ = inner.connection_records_table.insert(&key, encoded);
             }
         }
 
@@ -411,7 +419,7 @@ impl FjallConnectionRegistry {
 
         let mut mapping_removals: Vec<Vec<u8>> = Vec::new();
         for entry in inner.client_connection_table.iter() {
-            let Ok((key, _)) = entry else {
+            let Ok(key) = entry.key() else {
                 continue;
             };
             let Ok(bytes) = key.as_ref().try_into() else {
@@ -434,7 +442,7 @@ impl FjallConnectionRegistry {
         let mut player_removals: Vec<Vec<u8>> = Vec::new();
 
         for entry in inner.player_clients_table.iter() {
-            let Ok((key, value)) = entry else {
+            let Ok((key, value)) = entry.into_inner() else {
                 continue;
             };
 
@@ -493,7 +501,7 @@ impl FjallConnectionRegistry {
 
         for (key, record) in player_updates {
             if let Ok(encoded) = connections_records_to_bytes(&record) {
-                let _ = inner.player_clients_table.insert(&key, &encoded);
+                let _ = inner.player_clients_table.insert(&key, encoded);
             }
         }
 
@@ -553,9 +561,7 @@ impl FjallConnectionRegistry {
         if player_connections.connections.is_empty() {
             let _ = inner.player_clients_table.remove(player_oid_bytes);
         } else if let Ok(encoded) = connections_records_to_bytes(&player_connections) {
-            let _ = inner
-                .player_clients_table
-                .insert(player_oid_bytes, &encoded);
+            let _ = inner.player_clients_table.insert(player_oid_bytes, encoded);
         }
 
         let _ = inner
@@ -583,7 +589,7 @@ impl FjallConnectionRegistry {
         } else if let Ok(encoded) = connections_records_to_bytes(&connections_record) {
             let _ = inner
                 .connection_records_table
-                .insert(conn_oid_bytes, &encoded);
+                .insert(conn_oid_bytes, encoded);
         }
     }
 }
@@ -644,7 +650,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         let encoded = connections_records_to_bytes(&player_conns)?;
         inner
             .player_clients_table
-            .insert(player_oid_bytes, &encoded)?;
+            .insert(player_oid_bytes, encoded)?;
 
         Ok(())
     }
@@ -704,7 +710,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
                     let encoded = connections_records_to_bytes(&old_conns)?;
                     inner
                         .player_clients_table
-                        .insert(old_player_bytes, &encoded)?;
+                        .insert(old_player_bytes, encoded)?;
                 }
             }
         }
@@ -721,7 +727,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         let encoded = connections_records_to_bytes(&new_conns)?;
         inner
             .player_clients_table
-            .insert(new_player_bytes, &encoded)?;
+            .insert(new_player_bytes, encoded)?;
 
         Ok(())
     }
@@ -820,7 +826,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
 
         let Ok(()) = inner
             .connection_records_table
-            .insert(conn_oid_bytes, &encoded)
+            .insert(conn_oid_bytes, encoded)
         else {
             return Err(RpcMessageError::InternalError(
                 "Failed to write connection records".to_string(),
@@ -868,10 +874,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
                 ));
             };
 
-            let Ok(()) = inner
-                .player_clients_table
-                .insert(player_oid_bytes, &encoded)
-            else {
+            let Ok(()) = inner.player_clients_table.insert(player_oid_bytes, encoded) else {
                 return Err(RpcMessageError::InternalError(
                     "Failed to write player connections".to_string(),
                 ));
@@ -985,8 +988,8 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         // Clone the keyspace (it's Arc-based, so cheap) and release the lock
         // before calling persist to avoid blocking connection operations during disk I/O.
         //
-        // Note: fjall::Keyspace::persist() is safe to call concurrently with normal
-        // partition operations (insert/get/remove). Keyspace is Arc<KeyspaceInner>
+        // Note: fjall::Database::persist() is safe to call concurrently with normal
+        // partition operations (insert/get/remove). Database is Arc<DatabaseInner>
         // and uses internal synchronization for WAL flushing.
         let keyspace = {
             let Ok(inner) = self.inner.lock() else {
@@ -1109,7 +1112,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
 
         // Get all connection objects
         for entry in inner.connection_records_table.iter() {
-            let Ok((key, _)) = entry else {
+            let Ok(key) = entry.key() else {
                 continue;
             };
             if let Ok(oid) = Obj::from_bytes(key.as_ref()) {
@@ -1119,9 +1122,10 @@ impl ConnectionRegistry for FjallConnectionRegistry {
 
         // Get all player objects
         for entry in inner.player_clients_table.iter() {
-            if let Ok((key, _)) = entry
-                && let Ok(oid) = Obj::from_bytes(key.as_ref())
-            {
+            let Ok(key) = entry.key() else {
+                continue;
+            };
+            if let Ok(oid) = Obj::from_bytes(key.as_ref()) {
                 connections.push(oid);
             }
         }
@@ -1206,7 +1210,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
                 let encoded = connections_records_to_bytes(&connections_record)?;
                 inner
                     .connection_records_table
-                    .insert(conn_oid_bytes, &encoded)?;
+                    .insert(conn_oid_bytes, encoded)?;
             }
         }
 
@@ -1237,7 +1241,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
                     let encoded = connections_records_to_bytes(&connections_record)?;
                     inner
                         .player_clients_table
-                        .insert(player_oid_bytes, &encoded)?;
+                        .insert(player_oid_bytes, encoded)?;
                 }
             }
         }
@@ -1315,7 +1319,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
                 .map_err(|e| RpcMessageError::InternalError(e.to_string()))?;
             inner
                 .connection_records_table
-                .insert(conn_oid_bytes, &encoded)
+                .insert(conn_oid_bytes, encoded)
                 .map_err(|e| RpcMessageError::InternalError(e.to_string()))?;
         }
 
@@ -1344,7 +1348,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
             if let Ok(encoded) = connections_records_to_bytes(&player_records) {
                 let _ = inner
                     .player_clients_table
-                    .insert(player_obj.as_bytes(), &encoded);
+                    .insert(player_obj.as_bytes(), encoded);
             }
         }
 

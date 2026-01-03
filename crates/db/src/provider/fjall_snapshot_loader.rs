@@ -12,7 +12,7 @@
 //
 
 use byteview::ByteView;
-use fjall::UserValue;
+use fjall::{Readable, Slice};
 use uuid::Uuid;
 
 use crate::{
@@ -31,29 +31,30 @@ use moor_var::{NOTHING, Obj, Var, program::ProgramType};
 
 /// A snapshot-based implementation of LoaderInterface for read-only database access
 pub struct FjallSnapshotLoader {
-    pub object_location_snapshot: fjall::Snapshot,
-    pub object_flags_snapshot: fjall::Snapshot,
-    pub object_parent_snapshot: fjall::Snapshot,
-    pub object_owner_snapshot: fjall::Snapshot,
-    pub object_name_snapshot: fjall::Snapshot,
-    pub object_verbdefs_snapshot: fjall::Snapshot,
-    pub object_verbs_snapshot: fjall::Snapshot,
-    pub object_propdefs_snapshot: fjall::Snapshot,
-    pub object_propvalues_snapshot: fjall::Snapshot,
-    pub object_propflags_snapshot: fjall::Snapshot,
-    pub anonymous_object_metadata_snapshot: fjall::Snapshot,
-    #[allow(dead_code)]
-    pub sequences_snapshot: fjall::Snapshot,
+    pub snapshot: fjall::Snapshot,
+    pub object_location_keyspace: fjall::Keyspace,
+    pub object_flags_keyspace: fjall::Keyspace,
+    pub object_parent_keyspace: fjall::Keyspace,
+    pub object_owner_keyspace: fjall::Keyspace,
+    pub object_name_keyspace: fjall::Keyspace,
+    pub object_verbdefs_keyspace: fjall::Keyspace,
+    pub object_verbs_keyspace: fjall::Keyspace,
+    pub object_propdefs_keyspace: fjall::Keyspace,
+    pub object_propvalues_keyspace: fjall::Keyspace,
+    pub object_propflags_keyspace: fjall::Keyspace,
+    pub anonymous_object_metadata_keyspace: fjall::Keyspace,
 }
 
 impl SnapshotInterface for FjallSnapshotLoader {
     fn get_objects(&self) -> Result<ObjSet, WorldStateError> {
-        // Scan all objects by iterating through the object_flags relation
+        // Scan all objects by iterating through the object_flags keyspace
         let mut objects = Vec::new();
 
-        for entry in self.object_flags_snapshot.iter() {
-            let (key, _value) = entry.map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-            let obj = FjallCodec.decode(key.into()).map_err(|_| {
+        for entry in self.snapshot.iter(&self.object_flags_keyspace) {
+            let (key, _value) = entry
+                .into_inner()
+                .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+            let obj = FjallCodec.decode(ByteView::from(key)).map_err(|_| {
                 WorldStateError::DatabaseError("Failed to decode object ID".to_string())
             })?;
             objects.push(obj);
@@ -66,9 +67,11 @@ impl SnapshotInterface for FjallSnapshotLoader {
         // Scan object flags to find objects with the Player flag
         let mut players = Vec::new();
 
-        for entry in self.object_flags_snapshot.iter() {
-            let (key, value) = entry.map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-            let obj = FjallCodec.decode(key.into()).map_err(|_| {
+        for entry in self.snapshot.iter(&self.object_flags_keyspace) {
+            let (key, value) = entry
+                .into_inner()
+                .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+            let obj = FjallCodec.decode(ByteView::from(key)).map_err(|_| {
                 WorldStateError::DatabaseError("Failed to decode object ID".to_string())
             })?;
 
@@ -99,7 +102,7 @@ impl SnapshotInterface for FjallSnapshotLoader {
     }
 
     fn get_verb_program(&self, objid: &Obj, uuid: Uuid) -> Result<ProgramType, WorldStateError> {
-        self.get_verb_program(objid, uuid)
+        self.get_verb_program_internal(objid, uuid)
     }
 
     fn get_object_properties(&self, objid: &Obj) -> Result<PropDefs, WorldStateError> {
@@ -167,7 +170,7 @@ impl SnapshotInterface for FjallSnapshotLoader {
         objid: &Obj,
     ) -> Result<Option<Box<dyn std::any::Any + Send>>, WorldStateError> {
         let metadata = self.get_from_snapshot::<Obj, AnonymousObjectMetadata>(
-            &self.anonymous_object_metadata_snapshot,
+            &self.anonymous_object_metadata_keyspace,
             objid,
         )?;
         Ok(metadata.map(|m| Box::new(m) as Box<dyn std::any::Any + Send>))
@@ -177,13 +180,16 @@ impl SnapshotInterface for FjallSnapshotLoader {
         let mut references = Vec::new();
 
         // Scan all property values for anonymous object references
-        for entry in self.object_propvalues_snapshot.iter() {
-            let (key, value) = entry.map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+        for entry in self.snapshot.iter(&self.object_propvalues_keyspace) {
+            let (key, value) = entry
+                .into_inner()
+                .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
 
             // Decode the key to get the object and property UUID
-            let key_holder: ObjAndUUIDHolder = FjallCodec.decode(key.into()).map_err(|_| {
-                WorldStateError::DatabaseError("Failed to decode property key".to_string())
-            })?;
+            let key_holder: ObjAndUUIDHolder =
+                FjallCodec.decode(ByteView::from(key)).map_err(|_| {
+                    WorldStateError::DatabaseError("Failed to decode property key".to_string())
+                })?;
 
             // Decode the value to get the property value
             let (_ts, prop_value) = self
@@ -204,11 +210,11 @@ impl SnapshotInterface for FjallSnapshotLoader {
 
 impl FjallSnapshotLoader {
     /// Helper method to decode a value from a snapshot using FjallCodec
-    fn decode<Codomain>(&self, user_value: UserValue) -> Result<(Timestamp, Codomain), Error>
+    fn decode<Codomain>(&self, user_value: Slice) -> Result<(Timestamp, Codomain), Error>
     where
         FjallCodec: EncodeFor<Codomain, Stored = ByteView>,
     {
-        let result: ByteView = user_value.into();
+        let result = ByteView::from(user_value);
         let ts = Timestamp(u64::from_le_bytes(result[0..8].try_into().unwrap()));
         let codomain_bytes = result.slice(8..);
         let codomain = FjallCodec.decode(codomain_bytes)?;
@@ -218,7 +224,7 @@ impl FjallSnapshotLoader {
     /// Helper method to get a value from a snapshot using FjallCodec
     fn get_from_snapshot<Domain, Codomain>(
         &self,
-        snapshot: &fjall::Snapshot,
+        keyspace: &fjall::Keyspace,
         domain: &Domain,
     ) -> Result<Option<Codomain>, WorldStateError>
     where
@@ -228,10 +234,11 @@ impl FjallSnapshotLoader {
             .encode(domain)
             .map_err(|_| WorldStateError::DatabaseError("Failed to encode domain".to_string()))?;
 
-        let Some(result) = snapshot
-            .get(key)
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?
-        else {
+        let result_opt = self
+            .snapshot
+            .get(keyspace, key)
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+        let Some(result) = result_opt else {
             return Ok(None);
         };
 
@@ -241,22 +248,22 @@ impl FjallSnapshotLoader {
         Ok(Some(codomain))
     }
 
-    // Individual getter methods for each relation
+    // Individual getter methods for each keyspace
     fn get_object_owner(&self, objid: &Obj) -> Result<Obj, WorldStateError> {
         Ok(self
-            .get_from_snapshot::<Obj, Obj>(&self.object_owner_snapshot, objid)?
+            .get_from_snapshot::<Obj, Obj>(&self.object_owner_keyspace, objid)?
             .unwrap_or(NOTHING))
     }
 
     fn get_object_parent(&self, objid: &Obj) -> Result<Obj, WorldStateError> {
         Ok(self
-            .get_from_snapshot::<Obj, Obj>(&self.object_parent_snapshot, objid)?
+            .get_from_snapshot::<Obj, Obj>(&self.object_parent_keyspace, objid)?
             .unwrap_or(NOTHING))
     }
 
     fn get_object_location(&self, objid: &Obj) -> Result<Obj, WorldStateError> {
         Ok(self
-            .get_from_snapshot::<Obj, Obj>(&self.object_location_snapshot, objid)?
+            .get_from_snapshot::<Obj, Obj>(&self.object_location_keyspace, objid)?
             .unwrap_or(NOTHING))
     }
 
@@ -266,7 +273,7 @@ impl FjallSnapshotLoader {
     ) -> Result<BitEnum<moor_common::model::ObjFlag>, WorldStateError> {
         Ok(self
             .get_from_snapshot::<Obj, BitEnum<moor_common::model::ObjFlag>>(
-                &self.object_flags_snapshot,
+                &self.object_flags_keyspace,
                 objid,
             )?
             .unwrap_or_default())
@@ -274,26 +281,30 @@ impl FjallSnapshotLoader {
 
     fn get_object_name(&self, objid: &Obj) -> Result<String, WorldStateError> {
         let name_holder = self
-            .get_from_snapshot::<Obj, StringHolder>(&self.object_name_snapshot, objid)?
+            .get_from_snapshot::<Obj, StringHolder>(&self.object_name_keyspace, objid)?
             .ok_or(WorldStateError::ObjectNotFound(ObjectRef::Id(*objid)))?;
         Ok(name_holder.0)
     }
 
     fn get_verbs(&self, objid: &Obj) -> Result<VerbDefs, WorldStateError> {
         Ok(self
-            .get_from_snapshot::<Obj, VerbDefs>(&self.object_verbdefs_snapshot, objid)?
+            .get_from_snapshot::<Obj, VerbDefs>(&self.object_verbdefs_keyspace, objid)?
             .unwrap_or(VerbDefs::empty()))
     }
 
-    fn get_verb_program(&self, objid: &Obj, uuid: Uuid) -> Result<ProgramType, WorldStateError> {
+    fn get_verb_program_internal(
+        &self,
+        objid: &Obj,
+        uuid: Uuid,
+    ) -> Result<ProgramType, WorldStateError> {
         let key = ObjAndUUIDHolder::new(objid, uuid);
-        self.get_from_snapshot::<ObjAndUUIDHolder, ProgramType>(&self.object_verbs_snapshot, &key)?
+        self.get_from_snapshot::<ObjAndUUIDHolder, ProgramType>(&self.object_verbs_keyspace, &key)?
             .ok_or_else(|| WorldStateError::VerbNotFound(*objid, uuid.to_string()))
     }
 
     fn get_properties(&self, objid: &Obj) -> Result<PropDefs, WorldStateError> {
         Ok(self
-            .get_from_snapshot::<Obj, PropDefs>(&self.object_propdefs_snapshot, objid)?
+            .get_from_snapshot::<Obj, PropDefs>(&self.object_propdefs_keyspace, objid)?
             .unwrap_or_else(PropDefs::empty))
     }
 
@@ -306,11 +317,11 @@ impl FjallSnapshotLoader {
 
         // Get property value
         let value = self
-            .get_from_snapshot::<ObjAndUUIDHolder, Var>(&self.object_propvalues_snapshot, &key)?;
+            .get_from_snapshot::<ObjAndUUIDHolder, Var>(&self.object_propvalues_keyspace, &key)?;
 
         // Get property permissions - if not found, this property doesn't exist on this object
         let Some(perms) = self.get_from_snapshot::<ObjAndUUIDHolder, PropPerms>(
-            &self.object_propflags_snapshot,
+            &self.object_propflags_keyspace,
             &key,
         )?
         else {
@@ -331,7 +342,7 @@ impl FjallSnapshotLoader {
 
         // Walk up the parent chain
         while let Some(parent) =
-            self.get_from_snapshot::<Obj, Obj>(&self.object_parent_snapshot, &current)?
+            self.get_from_snapshot::<Obj, Obj>(&self.object_parent_keyspace, &current)?
         {
             if parent == current {
                 // Avoid infinite loops in case of self-parenting

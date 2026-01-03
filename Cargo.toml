@@ -118,7 +118,7 @@ serde_json = "1.0"
 xml-rs = "1.0"
 
 # Database & Persistence
-fjall = { version = "2.11", default-features = false, features = ["lz4"] }
+fjall = "3.0"
 fs2 = "0.4"
 
 # Networking & Communication
@@ -201,7 +201,7 @@ tracing-subscriber = "0.3"
 # Utilities & Helpers
 binary-layout = "4.0"
 bytes = "1.10"
-byteview = "0.6"
+byteview = "0.10"
 diffy = "0.4"
 enum-primitive-derive = "0.3"
 hostname = "0.4"

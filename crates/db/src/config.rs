@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use fjall::PartitionCreateOptions;
+use fjall::KeyspaceCreateOptions;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -36,20 +36,16 @@ pub struct DatabaseConfig {
 /// Per-table configuration.
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct TableConfig {
-    /// Various fjall partition creation options.
+    /// Various fjall keyspace creation options.
     /// Refer to the fjall documentation for more information.
-    pub max_memtable_size: Option<u32>,
-    pub block_size: Option<u32>,
+    pub max_memtable_size: Option<u64>,
 }
 
 impl TableConfig {
-    pub fn partition_options(&self) -> PartitionCreateOptions {
-        let mut opts = PartitionCreateOptions::default();
+    pub fn keyspace_options(&self) -> KeyspaceCreateOptions {
+        let mut opts = KeyspaceCreateOptions::default();
         if let Some(max_memtable_size) = self.max_memtable_size {
             opts = opts.max_memtable_size(max_memtable_size);
-        }
-        if let Some(block_size) = self.block_size {
-            opts = opts.block_size(block_size);
         }
         opts
     }

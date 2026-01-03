@@ -51,9 +51,10 @@
 //!
 //! *Note* that the DB version is separate from the main mooR project version, which has its own
 //! sem-versioning.
+//!
 
 use crate::provider::Migrator;
-use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
+use fjall::{Database, Keyspace, KeyspaceCreateOptions};
 use semver::Version;
 use std::{fs, path::Path};
 use tracing::{error, info, warn};
@@ -88,24 +89,33 @@ pub fn fjall_check_and_migrate(db_path: &Path) -> Result<(), String> {
     }
 
     // Open database read-only to check version
-    let keyspace = Config::new(db_path)
+    let database = fjall::Database::builder(db_path)
         .open()
         .map_err(|e| format!("Failed to open database to check version: {e}"))?;
 
-    let sequences_partition = keyspace
-        .open_partition("sequences", PartitionCreateOptions::default())
-        .map_err(|e| format!("Failed to open sequences partition: {e}"))?;
+    let sequences_keyspace = database
+        .keyspace("sequences", KeyspaceCreateOptions::default)
+        .map_err(|e| format!("Failed to open sequences keyspace: {e}"))?;
 
     // Check version (read the full version string from database)
-    let current_version_str = sequences_partition
+    let current_version_str = sequences_keyspace
         .get(VERSION_KEY)
         .ok()
         .flatten()
         .and_then(|bytes| String::from_utf8(bytes.to_vec()).ok());
 
+    // If no version marker, treat as a fresh database and mark current
+    if current_version_str.is_none() {
+        info!("Database at {db_path:?} has no version marker; marking as {CURRENT_DB_VERSION}");
+        sequences_keyspace
+            .insert(VERSION_KEY, CURRENT_DB_VERSION.as_bytes())
+            .map_err(|e| format!("Failed to write version marker: {e}"))?;
+        return Ok(());
+    }
+
     // Drop handles before any file operations
-    drop(sequences_partition);
-    drop(keyspace);
+    drop(sequences_keyspace);
+    drop(database);
 
     // If database already has the current release version, no migration needed
     if let Some(ref version_str) = current_version_str {
@@ -119,8 +129,7 @@ pub fn fjall_check_and_migrate(db_path: &Path) -> Result<(), String> {
     }
 
     // For 1.0-beta, only support migration from 3.0.0 to release-1.0.0
-    // If no version marker, assume it's 3.0.0 (pre-beta format)
-    let current_version_str = current_version_str.unwrap_or_else(|| "3.0.0".to_string());
+    let current_version_str = current_version_str.unwrap();
 
     // Validate that we're migrating from a supported version
     if current_version_str != "3.0.0" {
@@ -172,15 +181,15 @@ fn fjall_migrate_via_copy(
     info!("Opening copied database for migration");
 
     // Open the copy and perform migration
-    let keyspace = Config::new(&migrating_path)
+    let database = Database::builder(&migrating_path)
         .open()
         .map_err(|e| format!("Failed to open copied database: {e}"))?;
 
-    let sequences_partition = keyspace
-        .open_partition("sequences", PartitionCreateOptions::default())
-        .map_err(|e| format!("Failed to open sequences partition in copy: {e}"))?;
+    let sequences_keyspace = database
+        .keyspace("sequences", KeyspaceCreateOptions::default)
+        .map_err(|e| format!("Failed to open sequences keyspace in copy: {e}"))?;
 
-    let migrator = FjallMigrator::new(keyspace, sequences_partition);
+    let migrator = FjallMigrator::new(database, sequences_keyspace);
 
     info!("Running migration on copied database");
 
@@ -268,22 +277,22 @@ fn parse_version_string(version_str: &str) -> Result<(Option<&str>, Version), St
 /// Fjall-specific migration handler
 pub struct FjallMigrator {
     #[allow(dead_code)]
-    keyspace: Keyspace,
-    sequences_partition: PartitionHandle,
+    keyspace: Database,
+    sequences_keyspace: Keyspace,
 }
 
 impl FjallMigrator {
-    pub fn new(keyspace: Keyspace, sequences_partition: PartitionHandle) -> Self {
+    pub fn new(keyspace: Database, sequences_keyspace: Keyspace) -> Self {
         Self {
             keyspace,
-            sequences_partition,
+            sequences_keyspace,
         }
     }
 
     /// Get the current database version as a full string (e.g., "3.0.0" or "release-1.0.0")
     fn get_db_version_string(&self) -> Result<String, String> {
         let version_bytes = self
-            .sequences_partition
+            .sequences_keyspace
             .get(VERSION_KEY)
             .map_err(|e| format!("Failed to read version: {e}"))?
             .ok_or_else(|| "No version marker found".to_string())?;
@@ -306,9 +315,16 @@ impl FjallMigrator {
 
 impl Migrator for FjallMigrator {
     fn migrate_if_needed(&self) -> Result<(), String> {
-        let current_version_str = self
-            .get_db_version_string()
-            .unwrap_or_else(|_| "3.0.0".to_string());
+        let current_version_str = match self.get_db_version_string() {
+            Ok(version) => version,
+            Err(_) => {
+                info!(
+                    "Database has no version marker; marking as {CURRENT_DB_VERSION} without migration"
+                );
+                self.mark_current_version()?;
+                return Ok(());
+            }
+        };
 
         // Parse current version for comparison
         let (current_prefix, current_version) = parse_version_string(&current_version_str)
@@ -358,7 +374,7 @@ impl Migrator for FjallMigrator {
     }
 
     fn mark_current_version(&self) -> Result<(), String> {
-        self.sequences_partition
+        self.sequences_keyspace
             .insert(VERSION_KEY, CURRENT_DB_VERSION.as_bytes())
             .map_err(|e| format!("Failed to write version marker: {e}"))?;
 
@@ -371,20 +387,20 @@ impl Migrator for FjallMigrator {
 mod tests {
     use super::*;
     use crate::provider::Migrator;
-    use byteview::ByteView;
-    use fjall::{Config, PartitionCreateOptions};
+    use fjall::KeyspaceCreateOptions;
     use semver::Version;
     use tempfile::TempDir;
 
     #[test]
     fn test_fjall_migration_detection() {
         let tmpdir = TempDir::new().unwrap();
-        let keyspace = Config::new(tmpdir.path()).open().unwrap();
-        let sequences_partition = keyspace
-            .open_partition("sequences", PartitionCreateOptions::default())
+
+        let database = Database::builder(tmpdir.path()).open().unwrap();
+        let sequences_keyspace = database
+            .keyspace("sequences", KeyspaceCreateOptions::default)
             .unwrap();
 
-        let migrator = FjallMigrator::new(keyspace.clone(), sequences_partition.clone());
+        let migrator = FjallMigrator::new(database.clone(), sequences_keyspace.clone());
 
         // Fresh database should have no version marker
         assert!(migrator.get_db_version_string().is_err());
@@ -404,28 +420,23 @@ mod tests {
     #[test]
     fn test_fjall_migrate_if_needed_fresh_db() {
         let tmpdir = TempDir::new().unwrap();
-        let keyspace = Config::new(tmpdir.path()).open().unwrap();
-        let sequences_partition = keyspace
-            .open_partition("sequences", PartitionCreateOptions::default())
+        let database = Database::builder(tmpdir.path()).open().unwrap();
+        let sequences_partition = database
+            .keyspace("sequences", KeyspaceCreateOptions::default)
             .unwrap();
 
-        // Create a test partition with old format data
-        let test_partition = keyspace
-            .open_partition("test", PartitionCreateOptions::default())
+        // Create a test keyspace with sample data
+        let test_partition = database
+            .keyspace("test", KeyspaceCreateOptions::default)
             .unwrap();
 
-        // Write old format data (u128 timestamp)
+        // Write sample data (u128 timestamp)
         let mut old_format = Vec::new();
         old_format.extend_from_slice(&1000u128.to_le_bytes());
         old_format.extend_from_slice(b"test_value");
-        test_partition
-            .insert(
-                ByteView::from(b"test_key".as_slice()),
-                ByteView::from(old_format),
-            )
-            .unwrap();
+        test_partition.insert(b"test_key", old_format).unwrap();
 
-        let migrator = FjallMigrator::new(keyspace, sequences_partition);
+        let migrator = FjallMigrator::new(database, sequences_partition);
 
         // Run migration
         migrator.migrate_if_needed().unwrap();
@@ -463,12 +474,12 @@ mod tests {
     #[test]
     fn test_fjall_version_marker_persistence() {
         let tmpdir = TempDir::new().unwrap();
-        let keyspace = Config::new(tmpdir.path()).open().unwrap();
-        let sequences_partition = keyspace
-            .open_partition("sequences", PartitionCreateOptions::default())
+        let database = Database::builder(tmpdir.path()).open().unwrap();
+        let sequences_partition = database
+            .keyspace("sequences", KeyspaceCreateOptions::default)
             .unwrap();
 
-        let migrator = FjallMigrator::new(keyspace, sequences_partition.clone());
+        let migrator = FjallMigrator::new(database, sequences_partition.clone());
 
         // Write a version marker
         sequences_partition

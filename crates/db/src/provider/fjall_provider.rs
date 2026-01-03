@@ -46,7 +46,7 @@ use crate::{
     tx_management::{EncodeFor, Error, Timestamp},
 };
 use byteview::ByteView;
-use fjall::UserValue;
+use fjall::Slice;
 use flume::Sender;
 use gdt_cpus::ThreadPriority;
 use moor_common::util::PerfTimerGuard;
@@ -93,21 +93,21 @@ where
     Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
 {
     /// Insert with pre-encoded key and value bytes
-    Insert(Vec<u8>, UserValue, Domain), // key_bytes, value_bytes, domain (for pending ops tracking)
+    Insert(Vec<u8>, Vec<u8>, Domain), // key_bytes, value_bytes, domain (for pending ops tracking)
     /// Delete with pre-encoded key bytes
     Delete(Vec<u8>, Domain), // key_bytes, domain (for pending ops tracking)
     /// Barrier marker for snapshot consistency - reply when all writes up to this timestamp are complete
     Barrier(Timestamp, oneshot::Sender<()>),
 }
 
-/// A backing persistence provider that fills the DB cache from a Fjall partition.
+/// A backing persistence provider that fills the DB cache from a Fjall keyspace.
 #[derive(Clone)]
 pub(crate) struct FjallProvider<Domain, Codomain>
 where
     Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
     Codomain: Clone + PartialEq + Send + Sync,
 {
-    fjall_partition: fjall::PartitionHandle,
+    fjall_keyspace: fjall::Keyspace,
     ops: Sender<WriteOp<Domain>>,
     kill_switch: Arc<AtomicBool>,
     /// Shared state tracking operations in-flight to background thread
@@ -122,12 +122,12 @@ where
 
 fn decode_codomain_with_ts<P, Codomain>(
     provider: &P,
-    user_value: UserValue,
+    user_value: Slice,
 ) -> Result<(Timestamp, Codomain), Error>
 where
     P: EncodeFor<Codomain, Stored = ByteView>,
 {
-    let result: ByteView = user_value.into();
+    let result = ByteView::from(user_value);
     let ts = Timestamp(u64::from_le_bytes(result[0..8].try_into().unwrap()));
     let codomain_bytes = result.slice(8..);
     let codomain = provider.decode(codomain_bytes)?;
@@ -138,7 +138,7 @@ fn encode_codomain_with_ts<P, Codomain>(
     provider: &P,
     ts: Timestamp,
     codomain: &Codomain,
-) -> Result<UserValue, Error>
+) -> Result<Vec<u8>, Error>
 where
     P: EncodeFor<Codomain, Stored = ByteView>,
 {
@@ -146,7 +146,7 @@ where
     let mut result = Vec::with_capacity(8 + codomain_stored.len());
     result.extend_from_slice(&ts.0.to_le_bytes());
     result.extend_from_slice(&codomain_stored);
-    Ok(UserValue::from(ByteView::from(result)))
+    Ok(result)
 }
 
 impl<Domain, Codomain> FjallProvider<Domain, Codomain>
@@ -154,7 +154,7 @@ where
     Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
-    pub fn new(relation_name: &str, fjall_partition: fjall::PartitionHandle) -> Self
+    pub fn new(relation_name: &str, fjall_keyspace: fjall::Keyspace) -> Self
     where
         Self: EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
     {
@@ -164,7 +164,7 @@ where
         let tombstones = Arc::new(RwLock::new(HashSet::new()));
         let completed_barrier = Arc::new(AtomicU64::new(0));
 
-        let fj = fjall_partition.clone();
+        let fj = fjall_keyspace.clone();
         let ks = kill_switch.clone();
         let pending_ops_bg = pending_ops.clone();
         let completed_barrier_bg = completed_barrier.clone();
@@ -180,10 +180,10 @@ where
                         while let Ok(op) = ops_rx.try_recv() {
                             match op {
                                 WriteOp::Insert(key_bytes, value, _domain) => {
-                                    let _ = fj.insert(ByteView::from(key_bytes), value);
+                                    let _ = fj.insert(key_bytes, value);
                                 }
                                 WriteOp::Delete(key_bytes, _domain) => {
-                                    let _ = fj.remove(ByteView::from(key_bytes));
+                                    let _ = fj.remove(key_bytes);
                                 }
                                 WriteOp::Barrier(timestamp, reply) => {
                                     completed_barrier_bg
@@ -206,7 +206,7 @@ where
                         WriteOp::Insert(key_bytes, value, domain) => {
                             // Bytes are already encoded by the per-type EncodeFor impl!
                             // Perform the actual write
-                            let write_result = fj.insert(ByteView::from(key_bytes), value);
+                            let write_result = fj.insert(key_bytes, value);
 
                             // Remove from pending operations after completion (success or failure)
                             if let Ok(mut pending) = pending_ops_bg.write() {
@@ -220,7 +220,7 @@ where
                         WriteOp::Delete(key_bytes, domain) => {
                             // Bytes are already encoded by the per-type EncodeFor impl!
                             // Perform the actual delete
-                            let delete_result = fj.remove(ByteView::from(key_bytes));
+                            let delete_result = fj.remove(key_bytes);
 
                             // Remove from pending operations after completion (success or failure)
                             if let Ok(mut pending) = pending_ops_bg.write() {
@@ -243,7 +243,7 @@ where
             })
             .expect("failed to spawn fjall-write");
         Self {
-            fjall_partition,
+            fjall_keyspace,
             ops: ops_tx,
             kill_switch,
             pending_ops,
@@ -253,8 +253,8 @@ where
         }
     }
 
-    pub fn partition(&self) -> &fjall::PartitionHandle {
-        &self.fjall_partition
+    pub fn partition(&self) -> &fjall::Keyspace {
+        &self.fjall_keyspace
     }
 
     /// Send a barrier message to track transaction timestamp without waiting.
@@ -356,7 +356,7 @@ where
         let _t = PerfTimerGuard::new(&db_counters().provider_tuple_load);
         let key_stored = <Self as EncodeFor<Domain>>::encode(self, domain)?;
         let Some(result) = self
-            .fjall_partition
+            .fjall_keyspace
             .get(key_stored)
             .map_err(|e| Error::RetrievalFailure(e.to_string()))?
         else {
@@ -458,9 +458,11 @@ where
         })?;
 
         // Scan backing store first
-        for entry in self.fjall_partition.iter() {
-            let (key, value) = entry.map_err(|e| Error::RetrievalFailure(e.to_string()))?;
-            let domain = <Self as EncodeFor<Domain>>::decode(self, key.clone().into())?;
+        for entry in self.fjall_keyspace.iter() {
+            let (key, value) = entry
+                .into_inner()
+                .map_err(|e| Error::RetrievalFailure(e.to_string()))?;
+            let domain = <Self as EncodeFor<Domain>>::decode(self, ByteView::from(key))?;
 
             // Skip if this domain is pending deletion
             if pending.pending_deletes.contains(&domain) {
@@ -773,7 +775,7 @@ pub struct SequenceWriter {
 
 impl SequenceWriter {
     /// Create a new sequence writer with a background thread.
-    pub fn new(partition: fjall::PartitionHandle) -> Self {
+    pub fn new(keyspace: fjall::Keyspace) -> Self {
         let kill_switch = Arc::new(AtomicBool::new(false));
         let (ops_tx, ops_rx) = flume::unbounded::<[i64; 16]>();
 
@@ -786,14 +788,14 @@ impl SequenceWriter {
                     if ks.load(std::sync::atomic::Ordering::Relaxed) {
                         // Drain remaining writes before exiting
                         while let Ok(seq_values) = ops_rx.try_recv() {
-                            Self::write_sequences(&partition, &seq_values);
+                            Self::write_sequences(&keyspace, &seq_values);
                         }
                         break;
                     }
 
                     match ops_rx.recv_timeout(Duration::from_millis(100)) {
                         Ok(seq_values) => {
-                            Self::write_sequences(&partition, &seq_values);
+                            Self::write_sequences(&keyspace, &seq_values);
                         }
                         Err(flume::RecvTimeoutError::Timeout) => continue,
                         Err(flume::RecvTimeoutError::Disconnected) => break,
@@ -809,9 +811,9 @@ impl SequenceWriter {
         }
     }
 
-    fn write_sequences(partition: &fjall::PartitionHandle, seq_values: &[i64; 16]) {
+    fn write_sequences(keyspace: &fjall::Keyspace, seq_values: &[i64; 16]) {
         for (i, val) in seq_values.iter().enumerate() {
-            if let Err(e) = partition.insert(i.to_le_bytes(), val.to_le_bytes()) {
+            if let Err(e) = keyspace.insert(i.to_le_bytes(), val.to_le_bytes()) {
                 error!("Failed to persist sequence {}: {}", i, e);
             }
         }

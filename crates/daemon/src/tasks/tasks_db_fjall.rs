@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
+use fjall::{Database, Keyspace, KeyspaceCreateOptions};
 use moor_common::tasks::TaskId;
 use moor_kernel::{
     SuspendedTask,
@@ -31,18 +31,18 @@ use std::{
 use tracing::{debug, error, warn};
 
 pub struct FjallTasksDB {
-    keyspace: Keyspace,
-    tasks_partition: PartitionHandle,
+    keyspace: Database,
+    tasks_partition: Keyspace,
     /// Guard to prevent overlapping compaction runs
     compaction_in_progress: Arc<AtomicBool>,
 }
 
 impl FjallTasksDB {
     pub fn open(path: &Path) -> (Self, bool) {
-        let keyspace = Config::new(path).open().unwrap();
-        let fresh = keyspace.partition_count() == 0;
+        let keyspace = Database::builder(path).open().unwrap();
+        let fresh = keyspace.keyspace_count() == 0;
         let tasks_partition = keyspace
-            .open_partition("tasks", PartitionCreateOptions::default())
+            .keyspace("tasks", KeyspaceCreateOptions::default)
             .unwrap();
         (
             Self {
@@ -60,12 +60,15 @@ impl TasksDb for FjallTasksDB {
         let pi = self.tasks_partition.iter();
         let mut tasks = vec![];
         for entry in pi {
-            let entry = entry.map_err(|_| TasksDbError::CouldNotLoadTasks)?;
-            let task_id = TaskId::from_le_bytes(entry.0.as_ref().try_into().map_err(|e| {
+            let (key, value) = entry
+                .into_inner()
+                .map_err(|_| TasksDbError::CouldNotLoadTasks)?;
+
+            let task_id = TaskId::from_le_bytes(key.as_ref().try_into().map_err(|e| {
                 error!("Failed to deserialize TaskId from record: {:?}", e);
                 TasksDbError::CouldNotLoadTasks
             })?);
-            let tasks_bytes = entry.1.as_ref();
+            let tasks_bytes = value.as_ref();
 
             // Deserialize FlatBuffer directly from ref to avoid copying
             let fb_task =
@@ -122,8 +125,10 @@ impl TasksDb for FjallTasksDB {
 
     fn delete_all_tasks(&self) -> Result<(), TasksDbError> {
         for entry in self.tasks_partition.iter() {
-            let entry = entry.map_err(|_| TasksDbError::CouldNotDeleteTask)?;
-            self.tasks_partition.remove(entry.0.as_ref()).map_err(|e| {
+            let (key, _) = entry
+                .into_inner()
+                .map_err(|_| TasksDbError::CouldNotDeleteTask)?;
+            self.tasks_partition.remove(key).map_err(|e| {
                 error!("Failed to delete record: {:?}", e);
                 TasksDbError::CouldNotDeleteTask
             })?;

@@ -185,26 +185,26 @@ macro_rules! define_relations {
             impl Relations {
                 /// Initialize all relations from the given keyspace and configuration.
                 ///
-                /// This method creates partitions, providers, and relations for each
+                /// This method creates keyspaces, providers, and relations for each
                 /// defined relation, and seeds them by scanning for existing data.
                 ///
                 /// # Parameters
-                /// - `keyspace`: The fjall keyspace to create partitions in
-                /// - `config`: Database configuration containing partition options
+                /// - `keyspace`: The fjall database to create keyspaces in
+                /// - `config`: Database configuration containing keyspace options
                 ///
                 /// # Panics
-                /// Panics if any partition creation or relation seeding fails.
-                fn init(keyspace: &fjall::Keyspace, config: &DatabaseConfig) -> Self {
+                /// Panics if any keyspace creation or relation seeding fails.
+                fn init(keyspace: &fjall::Database, config: &DatabaseConfig) -> Self {
                     $(
-                        // Create partition using field name as partition name
+                        // Create keyspace using field name as keyspace name
                         let [<$field _partition>] = keyspace
-                            .open_partition(
+                            .keyspace(
                                 stringify!($field),
-                                config
+                                || config
                                     .$field
                                     .clone()
                                     .unwrap_or_default()
-                                    .partition_options(),
+                                    .keyspace_options(),
                             )
                             .unwrap();
 

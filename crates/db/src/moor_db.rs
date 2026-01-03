@@ -31,7 +31,7 @@ use crate::{
     relation_defs::define_relations,
 };
 use arc_swap::ArcSwap;
-use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
+use fjall::{Database, KeyspaceCreateOptions, PersistMode};
 use flume::Sender;
 use gdt_cpus::{ThreadPriority, set_thread_priority};
 use minstant::Instant;
@@ -103,10 +103,9 @@ pub struct MoorDB {
     monotonic: CachePadded<AtomicU64>,
     /// Seqlock version counter: even = stable, odd = commit in progress
     commit_version: CachePadded<AtomicU64>,
-    keyspace: fjall::Keyspace,
+    keyspace: Database,
     relations: Relations,
     sequences: [Arc<CachePadded<AtomicI64>>; 16],
-    sequences_partition: PartitionHandle,
     /// Background writer for sequence persistence
     sequence_writer: crate::provider::fjall_provider::SequenceWriter,
     kill_switch: Arc<AtomicBool>,
@@ -142,94 +141,33 @@ impl MoorDB {
             // Continue anyway - the snapshot might be slightly inconsistent but we don't want to fail completely
         }
 
-        // Get a consistent instant from the keyspace
-        let instant = self.keyspace.instant();
+        // Get a database-wide snapshot
+        let snapshot = self.keyspace.snapshot();
 
-        // Create snapshots of each relation partition
-        let object_location_snapshot = self
-            .relations
-            .object_location
-            .source()
-            .partition()
-            .snapshot_at(instant);
-        let object_flags_snapshot = self
-            .relations
-            .object_flags
-            .source()
-            .partition()
-            .snapshot_at(instant);
-        let object_parent_snapshot = self
-            .relations
-            .object_parent
-            .source()
-            .partition()
-            .snapshot_at(instant);
-        let object_owner_snapshot = self
-            .relations
-            .object_owner
-            .source()
-            .partition()
-            .snapshot_at(instant);
-        let object_name_snapshot = self
-            .relations
-            .object_name
-            .source()
-            .partition()
-            .snapshot_at(instant);
-        let object_verbdefs_snapshot = self
-            .relations
-            .object_verbdefs
-            .source()
-            .partition()
-            .snapshot_at(instant);
-        let object_verbs_snapshot = self
-            .relations
-            .object_verbs
-            .source()
-            .partition()
-            .snapshot_at(instant);
-        let object_propdefs_snapshot = self
-            .relations
-            .object_propdefs
-            .source()
-            .partition()
-            .snapshot_at(instant);
-        let object_propvalues_snapshot = self
-            .relations
-            .object_propvalues
-            .source()
-            .partition()
-            .snapshot_at(instant);
-        let object_propflags_snapshot = self
-            .relations
-            .object_propflags
-            .source()
-            .partition()
-            .snapshot_at(instant);
-        let anonymous_object_metadata_snapshot = self
-            .relations
-            .anonymous_object_metadata
-            .source()
-            .partition()
-            .snapshot_at(instant);
-
-        // Create snapshot of sequences partition
-        let sequences_snapshot = self.sequences_partition.snapshot_at(instant);
-
-        // Return a custom SnapshotInterface implementation that uses these snapshots
+        // Return a custom SnapshotInterface implementation that uses this snapshot
         Ok(Box::new(FjallSnapshotLoader {
-            object_location_snapshot,
-            object_flags_snapshot,
-            object_parent_snapshot,
-            object_owner_snapshot,
-            object_name_snapshot,
-            object_verbdefs_snapshot,
-            object_verbs_snapshot,
-            object_propdefs_snapshot,
-            object_propvalues_snapshot,
-            object_propflags_snapshot,
-            anonymous_object_metadata_snapshot,
-            sequences_snapshot,
+            snapshot,
+            object_location_keyspace: self.relations.object_location.source().partition().clone(),
+            object_flags_keyspace: self.relations.object_flags.source().partition().clone(),
+            object_parent_keyspace: self.relations.object_parent.source().partition().clone(),
+            object_owner_keyspace: self.relations.object_owner.source().partition().clone(),
+            object_name_keyspace: self.relations.object_name.source().partition().clone(),
+            object_verbdefs_keyspace: self.relations.object_verbdefs.source().partition().clone(),
+            object_verbs_keyspace: self.relations.object_verbs.source().partition().clone(),
+            object_propdefs_keyspace: self.relations.object_propdefs.source().partition().clone(),
+            object_propvalues_keyspace: self
+                .relations
+                .object_propvalues
+                .source()
+                .partition()
+                .clone(),
+            object_propflags_keyspace: self.relations.object_propflags.source().partition().clone(),
+            anonymous_object_metadata_keyspace: self
+                .relations
+                .anonymous_object_metadata
+                .source()
+                .partition()
+                .clone(),
         }))
     }
 
@@ -347,16 +285,16 @@ impl MoorDB {
         fjall_migration::fjall_check_and_migrate(path)
             .unwrap_or_else(|e| panic!("Failed to migrate database: {e}"));
 
-        let keyspace = Config::new(path).open().unwrap();
+        let keyspace = Database::builder(path).open().unwrap();
 
         let sequences_partition = keyspace
-            .open_partition("sequences", PartitionCreateOptions::default())
+            .keyspace("sequences", KeyspaceCreateOptions::default)
             .unwrap();
 
         let sequences = [(); 16].map(|_| Arc::new(CachePadded::new(AtomicI64::new(-1))));
 
         let mut fresh = false;
-        if !keyspace.partition_exists("object_location") {
+        if !keyspace.keyspace_exists("object_location") {
             fresh = true;
         }
 
@@ -400,7 +338,6 @@ impl MoorDB {
             commit_version: CachePadded::new(AtomicU64::new(0)),
             relations,
             sequences,
-            sequences_partition,
             sequence_writer,
             commit_channel,
             usage_send,
@@ -418,7 +355,7 @@ impl MoorDB {
     }
 
     pub fn usage_bytes(&self) -> usize {
-        self.keyspace.disk_space() as usize
+        self.keyspace.disk_space().unwrap_or_default() as usize
     }
 
     /// Mark all relations as fully loaded from their backing providers.

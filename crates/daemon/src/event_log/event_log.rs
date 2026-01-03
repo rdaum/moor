@@ -20,7 +20,8 @@ use std::{
 use uuid::Uuid;
 
 use crate::event_log::{PresentationAction, presentation_from_flatbuffer};
-use fjall::{CompressionType, Config, Keyspace, PartitionCreateOptions, PartitionHandle};
+use fjall::config::CompressionPolicy;
+use fjall::{CompressionType, Database, Keyspace, KeyspaceCreateOptions};
 use flume::{Receiver, Sender};
 use moor_common::tasks::{EventLogPurgeResult, EventLogStats, Presentation};
 use moor_schema::convert::presentation_to_flatbuffer_struct;
@@ -149,11 +150,11 @@ pub struct EventLog {
 /// Internal structure for the fjall persistence backend
 struct EventPersistence {
     _tmpdir: Option<tempfile::TempDir>,
-    _keyspace: Keyspace,
-    narrative_events_partition: PartitionHandle,
-    player_index_partition: PartitionHandle,
-    presentations_partition: PartitionHandle,
-    pubkeys_partition: PartitionHandle,
+    _keyspace: Database,
+    narrative_events_partition: Keyspace,
+    player_index_partition: Keyspace,
+    presentations_partition: Keyspace,
+    pubkeys_partition: Keyspace,
 }
 
 impl EventPersistence {
@@ -168,17 +169,18 @@ impl EventPersistence {
         };
 
         info!("Opening event log database at {:?}", path);
-        let keyspace = Config::new(&path).open()?;
+        let keyspace = Database::builder(&path).open()?;
 
-        let partition_creation_options =
-            PartitionCreateOptions::default().compression(CompressionType::Lz4);
+        let partition_creation_options = KeyspaceCreateOptions::default()
+            .data_block_compression_policy(CompressionPolicy::all(CompressionType::Lz4));
         let narrative_events_partition =
-            keyspace.open_partition("narrative_events", partition_creation_options.clone())?;
+            keyspace.keyspace("narrative_events", || partition_creation_options.clone())?;
         let player_index_partition =
-            keyspace.open_partition("player_index", partition_creation_options.clone())?;
+            keyspace.keyspace("player_index", || partition_creation_options.clone())?;
         let presentations_partition =
-            keyspace.open_partition("presentations", partition_creation_options.clone())?;
-        let pubkeys_partition = keyspace.open_partition("pubkeys", partition_creation_options)?;
+            keyspace.keyspace("presentations", || partition_creation_options.clone())?;
+        let pubkeys_partition =
+            keyspace.keyspace("pubkeys", || partition_creation_options.clone())?;
 
         Ok(Self {
             _tmpdir: tmpdir,
@@ -299,7 +301,7 @@ impl EventPersistence {
         // Fjall range query from start_bound to end
         if start_bound.is_empty() {
             for entry in self.narrative_events_partition.iter() {
-                let (_, value) = entry?;
+                let (_, value) = entry.into_inner()?;
                 // Deserialize using planus from FlatBuffer bytes
                 let event_ref =
                     <moor_schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
@@ -312,7 +314,7 @@ impl EventPersistence {
                 .narrative_events_partition
                 .range(start_bound.as_slice()..)
             {
-                let (_key, value) = entry?;
+                let (_key, value) = entry.into_inner()?;
                 // Deserialize using planus from FlatBuffer bytes
                 let event_ref =
                     <moor_schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
@@ -341,7 +343,7 @@ impl EventPersistence {
             .narrative_events_partition
             .range(..end_bound.as_slice())
         {
-            let (_, value) = entry?;
+            let (_, value) = entry.into_inner()?;
             // Deserialize using planus from FlatBuffer bytes
             let event_ref =
                 <moor_schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
@@ -370,7 +372,7 @@ impl EventPersistence {
         let player_fb = obj_to_flatbuffer_struct(&player);
 
         for entry in self.narrative_events_partition.iter() {
-            let (_key, value) = entry?;
+            let (_key, value) = entry.into_inner()?;
 
             // Deserialize using planus from FlatBuffer bytes
             let event_ref =
@@ -538,11 +540,11 @@ impl EventPersistence {
         let mut index_keys = Vec::new();
         let mut event_ids = Vec::new();
 
-        for result in self
+        for entry in self
             .player_index_partition
             .range(player_prefix_with_colon.as_bytes()..)
         {
-            let (key, value) = result?;
+            let (key, value) = entry.into_inner()?;
 
             // Check if key still matches our prefix (range scan stops when prefix doesn't match)
             let key_str = std::str::from_utf8(&key)?;
@@ -589,11 +591,11 @@ impl EventPersistence {
         let player_key_prefix = Self::obj_to_key(player);
         let player_prefix_with_colon = format!("{player_key_prefix}:");
 
-        for result in self
+        for entry in self
             .player_index_partition
             .range(player_prefix_with_colon.as_bytes()..)
         {
-            let (key, value) = result?;
+            let (key, value) = entry.into_inner()?;
 
             let key_str = std::str::from_utf8(&key)?;
             if !key_str.starts_with(&player_prefix_with_colon) {
@@ -651,11 +653,11 @@ impl EventPersistence {
         let mut index_keys = Vec::new();
         let mut event_ids = Vec::new();
 
-        for result in self
+        for entry in self
             .player_index_partition
             .range(player_prefix_with_colon.as_bytes()..)
         {
-            let (key, value) = result?;
+            let (key, value) = entry.into_inner()?;
 
             let key_str = std::str::from_utf8(&key)?;
             if !key_str.starts_with(&player_prefix_with_colon) {
