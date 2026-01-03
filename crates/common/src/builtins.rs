@@ -50,6 +50,7 @@ pub struct Builtin {
     pub max_args: ArgCount,
     pub types: Vec<ArgType>,
     pub implemented: bool,
+    pub exposed: bool,
 }
 
 // Helper function to create a Builtin with automatic bf_override_name generation
@@ -67,37 +68,364 @@ fn mk_builtin(
         max_args,
         types,
         implemented,
+        exposed: true,
     }
 }
 
-// IMPORTANT: all new functions should be added at the *end* of this table in order to keep stable
-//  ids in existing program assemblies in the database and not require recompilation.
-// If you absolutely have to violate this rule for some reason, it will require an incrementing
-// of the DB version and migration process in `crates/db/src/provider/fjall_migration.rs`
+fn mk_reserved_builtin() -> Builtin {
+    Builtin {
+        name: Symbol::mk("<reserved>"),
+        bf_override_name: Symbol::mk("<reserved>"),
+        min_args: Q(0),
+        max_args: Q(0),
+        types: Vec::new(),
+        implemented: false,
+        exposed: false,
+    }
+}
+
+// Each group gets a fixed-size ID block to allow safe growth without renumbering.
+// Builtin IDs are embedded in compiled programs and persisted in the database, so reordering
+// breaks existing binaries and forces a full recompile/import.
+const BUILTIN_GROUP_SIZE: usize = 256;
+
+fn pad_group(builtins: &mut Vec<Builtin>, start_len: usize, label: &str) {
+    let used = builtins.len() - start_len;
+    assert!(
+        used <= BUILTIN_GROUP_SIZE,
+        "{label} builtin group exceeded {BUILTIN_GROUP_SIZE} entries"
+    );
+    for _ in used..BUILTIN_GROUP_SIZE {
+        builtins.push(mk_reserved_builtin());
+    }
+}
+
+// Builtins are grouped by vm/builtins module with fixed-size padding to keep IDs stable within a group.
+// Reserved entries are hidden from lookups and listings but still occupy their IDs.
+// To add a builtin safely: append it within the right group and keep the group size <= 256.
 fn mk_builtin_table() -> Vec<Builtin> {
-    vec![
-        mk_builtin("disassemble", Q(2), Q(2), vec![Typed(TYPE_OBJ), Any], true),
+    let mut builtins = Vec::new();
+
+    // Server/system builtins (crates/kernel/src/vm/builtins/bf_server.rs).
+    let start = builtins.len();
+    builtins.extend([
+        mk_builtin("is_player", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("caller_perms", Q(0), Q(0), vec![], true),
+        mk_builtin("set_task_perms", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("time", Q(0), Q(0), vec![], true),
+        mk_builtin("ftime", Q(0), Q(1), vec![Typed(TYPE_INT)], true),
+        mk_builtin("ctime", Q(0), Q(1), vec![Typed(TYPE_INT)], true),
+        mk_builtin("raise", Q(1), Q(3), vec![Any, Typed(TYPE_STR), Any], true),
+        mk_builtin("server_version", Q(0), Q(1), vec![Any], true),
+        mk_builtin("shutdown", Q(0), Q(1), vec![Typed(TYPE_STR)], true),
+        mk_builtin("boot_player", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("call_function", Q(1), U, vec![Typed(TYPE_STR)], true),
+        mk_builtin("server_log", Q(1), Q(2), vec![Typed(TYPE_STR), Any], true),
+        mk_builtin("function_info", Q(0), Q(1), vec![Typed(TYPE_STR)], true),
+        mk_builtin("function_help", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
+        mk_builtin("eval", Q(1), Q(3), vec![Typed(TYPE_STR), Any, Any], true),
+        mk_builtin("dump_database", Q(0), Q(0), vec![], true),
+        mk_builtin("gc_collect", Q(0), Q(0), vec![], true),
+        mk_builtin("memory_usage", Q(0), Q(0), vec![], true),
+        mk_builtin("db_disk_size", Q(0), Q(0), vec![], false),
+        mk_builtin("load_server_options", Q(0), Q(0), vec![], false),
+        mk_builtin("bf_counters", Q(0), Q(0), vec![], true),
+        mk_builtin("db_counters", Q(0), Q(0), vec![], true),
+        mk_builtin("vm_counters", Q(0), Q(0), vec![], true),
+        mk_builtin("sched_counters", Q(0), Q(0), vec![], true),
         mk_builtin("log_cache_stats", Q(0), Q(0), vec![], true),
         mk_builtin("verb_cache_stats", Q(0), Q(0), vec![], true),
         mk_builtin("property_cache_stats", Q(0), Q(0), vec![], true),
         mk_builtin("ancestry_cache_stats", Q(0), Q(0), vec![], true),
-        mk_builtin("call_function", Q(1), U, vec![Typed(TYPE_STR)], true),
-        mk_builtin("raise", Q(1), Q(3), vec![Any, Typed(TYPE_STR), Any], true),
+        mk_builtin("flush_caches", Q(0), Q(0), vec![], true),
+        mk_builtin("rotate_enrollment_token", Q(0), Q(0), vec![], true),
+        mk_builtin(
+            "player_event_log_stats",
+            Q(1),
+            Q(3),
+            vec![Typed(TYPE_OBJ), Any, Any],
+            true,
+        ),
+        mk_builtin(
+            "purge_player_event_log",
+            Q(1),
+            Q(3),
+            vec![Typed(TYPE_OBJ), Any, Any],
+            true,
+        ),
+        mk_builtin("reset_max_object", Q(0), Q(0), vec![], false),
+    ]);
+    pad_group(&mut builtins, start, "server/system");
+
+    // Connection/network builtins (crates/kernel/src/vm/builtins/bf_connection.rs).
+    let start = builtins.len();
+    builtins.extend([
+        mk_builtin(
+            "notify",
+            Q(2),
+            Q(6),
+            vec![
+                Typed(TYPE_OBJ),
+                Typed(TYPE_STR),
+                Typed(TYPE_BOOL),
+                Typed(TYPE_BOOL),
+                Typed(TYPE_SYMBOL),
+                Typed(TYPE_MAP),
+            ],
+            true,
+        ),
+        mk_builtin("connected_players", Q(0), Q(1), vec![Any], true),
+        mk_builtin(
+            "force_input",
+            Q(2),
+            Q(3),
+            vec![Typed(TYPE_OBJ), Typed(TYPE_STR), Any],
+            true,
+        ),
+        mk_builtin(
+            "present",
+            Q(2),
+            Q(6),
+            vec![
+                Typed(TYPE_OBJ),
+                Typed(TYPE_STR),
+                Typed(TYPE_STR),
+                Typed(TYPE_STR),
+                Typed(TYPE_STR),
+                Any,
+            ],
+            true,
+        ),
+        mk_builtin(
+            "worker_request",
+            Q(2),
+            U,
+            vec![Typed(TYPE_SYMBOL), Any],
+            true,
+        ),
+        mk_builtin("connections", Q(0), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("connection", Q(0), Q(0), vec![], true),
+        mk_builtin("switch_player", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("workers", Q(0), Q(0), vec![], true),
+        mk_builtin("output_delimiters", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin(
+            "connection_options",
+            Q(1),
+            Q(1),
+            vec![Typed(TYPE_OBJ)],
+            true,
+        ),
+        mk_builtin(
+            "connection_option",
+            Q(2),
+            Q(2),
+            vec![Typed(TYPE_OBJ), Typed(TYPE_STR)],
+            true,
+        ),
+        mk_builtin(
+            "set_connection_option",
+            Q(3),
+            Q(3),
+            vec![Typed(TYPE_OBJ), Typed(TYPE_STR), Any],
+            true,
+        ),
+        mk_builtin("idle_seconds", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("connected_seconds", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("connection_name", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("listeners", Q(0), Q(0), vec![], true),
+        mk_builtin("listen", Q(2), Q(3), vec![Typed(TYPE_OBJ), Any, Any], true),
+        mk_builtin("unlisten", Q(1), Q(1), vec![Any], true),
+        mk_builtin(
+            "event_log",
+            Q(2),
+            Q(4),
+            vec![
+                Typed(TYPE_OBJ),
+                Typed(TYPE_STR),
+                Typed(TYPE_SYMBOL),
+                Typed(TYPE_MAP),
+            ],
+            true,
+        ),
+        mk_builtin("open_network_connection", Q(0), U, vec![], false),
+        mk_builtin(
+            "buffered_output_length",
+            Q(0),
+            Q(1),
+            vec![Typed(TYPE_OBJ)],
+            false,
+        ),
+        mk_builtin("flush_input", Q(1), Q(2), vec![Typed(TYPE_OBJ), Any], false),
+    ]);
+    pad_group(&mut builtins, start, "connection/network");
+
+    // Task/scheduler builtins (crates/kernel/src/vm/builtins/bf_task.rs).
+    let start = builtins.len();
+    builtins.extend([
         mk_builtin("suspend", Q(0), Q(1), vec![Typed(TYPE_INT)], true),
-        mk_builtin("read", Q(0), Q(2), vec![Typed(TYPE_OBJ), Any], true),
-        mk_builtin("seconds_left", Q(0), Q(0), vec![], true),
+        mk_builtin("suspend_if_needed", Q(0), Q(1), vec![AnyNum], true),
+        mk_builtin("queued_tasks", Q(0), Q(0), vec![], true),
+        mk_builtin("active_tasks", Q(0), Q(0), vec![], true),
+        mk_builtin("queue_info", Q(0), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("kill_task", Q(1), Q(1), vec![Typed(TYPE_INT)], true),
+        mk_builtin("resume", Q(1), Q(2), vec![Typed(TYPE_INT), Any], true),
         mk_builtin("ticks_left", Q(0), Q(0), vec![], true),
-        mk_builtin("pass", Q(0), U, vec![], true),
-        mk_builtin("set_task_perms", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin("caller_perms", Q(0), Q(0), vec![], true),
+        mk_builtin("seconds_left", Q(0), Q(0), vec![], true),
+        mk_builtin("read", Q(0), Q(2), vec![Typed(TYPE_OBJ), Any], true),
+        mk_builtin("wait_task", Q(1), Q(1), vec![Typed(TYPE_INT)], true),
+        mk_builtin("commit", Q(0), Q(0), vec![], true),
+        mk_builtin("rollback", Q(0), Q(1), vec![Typed(TYPE_BOOL)], true),
         mk_builtin("callers", Q(0), Q(1), vec![Any], true),
+        mk_builtin("task_id", Q(0), Q(0), vec![], true),
+        mk_builtin("valid_task", Q(1), Q(1), vec![Typed(TYPE_INT)], true),
+        mk_builtin("pass", Q(0), U, vec![], true),
         mk_builtin("task_stack", Q(1), Q(2), vec![Typed(TYPE_INT), Any], false),
-        mk_builtin("function_info", Q(0), Q(1), vec![Typed(TYPE_STR)], true),
-        mk_builtin("load_server_options", Q(0), Q(0), vec![], false),
+    ]);
+    pad_group(&mut builtins, start, "task/scheduler");
+
+    // Numeric/math builtins (crates/kernel/src/vm/builtins/bf_num.rs).
+    let start = builtins.len();
+    builtins.extend([
+        mk_builtin("abs", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("min", Q(1), U, vec![AnyNum], true),
+        mk_builtin("max", Q(1), U, vec![AnyNum], true),
+        mk_builtin(
+            "random",
+            Q(0),
+            Q(2),
+            vec![Typed(TYPE_INT), Typed(TYPE_INT)],
+            true,
+        ),
+        mk_builtin(
+            "floatstr",
+            Q(2),
+            Q(3),
+            vec![Typed(TYPE_FLOAT), Typed(TYPE_INT), Any],
+            true,
+        ),
+        mk_builtin("sqrt", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
+        mk_builtin("sin", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
+        mk_builtin("cos", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
+        mk_builtin("tan", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
+        mk_builtin("asin", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
+        mk_builtin("acos", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
+        mk_builtin(
+            "atan",
+            Q(1),
+            Q(2),
+            vec![Typed(TYPE_FLOAT), Typed(TYPE_FLOAT)],
+            true,
+        ),
+        mk_builtin("sinh", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
+        mk_builtin("cosh", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
+        mk_builtin("tanh", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
+        mk_builtin("exp", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
+        mk_builtin("log", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
+        mk_builtin("log10", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
+        mk_builtin("ceil", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
+        mk_builtin("floor", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
+        mk_builtin("trunc", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
+        mk_builtin("round", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("cbrt", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("fract", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("signum", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("recip", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("exp2", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("expm1", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("log2", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("ln1p", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("asinh", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("acosh", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("atanh", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("to_degrees", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("to_radians", Q(1), Q(1), vec![AnyNum], true),
+        mk_builtin("hypot", Q(2), Q(2), vec![AnyNum, AnyNum], true),
+        mk_builtin("copysign", Q(2), Q(2), vec![AnyNum, AnyNum], true),
+    ]);
+    pad_group(&mut builtins, start, "numeric/math");
+
+    // Value conversion/introspection builtins (crates/kernel/src/vm/builtins/bf_values.rs).
+    let start = builtins.len();
+    builtins.extend([
+        mk_builtin("typeof", Q(1), Q(1), vec![Any], true),
+        mk_builtin("tostr", Q(0), U, vec![], true),
+        mk_builtin("tosym", Q(1), Q(1), vec![Any], true),
+        mk_builtin("toliteral", Q(1), Q(1), vec![Any], true),
+        mk_builtin("toint", Q(1), Q(1), vec![Any], true),
+        mk_builtin("tonum", Q(1), Q(1), vec![Any], true),
+        mk_builtin("toobj", Q(1), Q(1), vec![Any], true),
+        mk_builtin("tofloat", Q(1), Q(1), vec![Any], true),
+        mk_builtin("equal", Q(2), Q(2), vec![Any, Any], true),
         mk_builtin("value_bytes", Q(1), Q(1), vec![Any], true),
+        mk_builtin("object_bytes", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
         mk_builtin("value_hash", Q(1), Q(1), vec![Any], true),
+        mk_builtin("length", Q(1), Q(1), vec![Any], true),
+        mk_builtin("error_code", Q(1), Q(1), vec![Typed(TYPE_ERR)], true),
+        mk_builtin("error_message", Q(1), Q(1), vec![Typed(TYPE_ERR)], true),
+        mk_builtin(
+            "uuid",
+            Q(0),
+            Q(2),
+            vec![Typed(TYPE_INT), Typed(TYPE_INT)],
+            true,
+        ),
+        mk_builtin("tobool", Q(1), Q(1), vec![Any], true),
+    ]);
+    pad_group(&mut builtins, start, "value conversion/introspection");
+
+    // String/binary/encoding builtins (crates/kernel/src/vm/builtins/bf_strings.rs).
+    let start = builtins.len();
+    builtins.extend([
+        mk_builtin(
+            "strsub",
+            Q(3),
+            Q(4),
+            vec![Typed(TYPE_STR), Typed(TYPE_STR), Typed(TYPE_STR), Any],
+            true,
+        ),
+        mk_builtin(
+            "index",
+            Q(2),
+            Q(4),
+            vec![Typed(TYPE_STR), Typed(TYPE_STR), Any, Typed(TYPE_INT)],
+            true,
+        ),
+        mk_builtin(
+            "rindex",
+            Q(2),
+            Q(4),
+            vec![Typed(TYPE_STR), Typed(TYPE_STR), Any, Typed(TYPE_INT)],
+            true,
+        ),
+        mk_builtin(
+            "strcmp",
+            Q(2),
+            Q(2),
+            vec![Typed(TYPE_STR), Typed(TYPE_STR)],
+            true,
+        ),
         mk_builtin("string_hash", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
         mk_builtin("binary_hash", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
+        mk_builtin("encode_base64", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
+        mk_builtin("decode_base64", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
+        mk_builtin("binary_to_str", Q(1), Q(2), vec![Any, Any], true),
+        mk_builtin("binary_from_str", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
+        mk_builtin(
+            "explode",
+            Q(1),
+            Q(3),
+            vec![Typed(TYPE_STR), Typed(TYPE_STR), Any],
+            true,
+        ),
+        mk_builtin(
+            "strtr",
+            Q(3),
+            Q(4),
+            vec![Typed(TYPE_STR), Typed(TYPE_STR), Typed(TYPE_STR), Any],
+            true,
+        ),
+        mk_builtin("urlencode", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
+        mk_builtin("urldecode", Q(1), Q(2), vec![Typed(TYPE_STR), Any], true),
         mk_builtin(
             "decode_binary",
             Q(1),
@@ -106,18 +434,25 @@ fn mk_builtin_table() -> Vec<Builtin> {
             false,
         ),
         mk_builtin("encode_binary", Q(0), U, vec![], false),
-        mk_builtin("length", Q(1), Q(1), vec![Any], true),
-        mk_builtin("setadd", Q(2), Q(2), vec![Typed(TYPE_LIST), Any], true),
-        mk_builtin("setremove", Q(2), Q(2), vec![Typed(TYPE_LIST), Any], true),
+    ]);
+    pad_group(&mut builtins, start, "string/binary/encoding");
+
+    // List/set/regex builtins (crates/kernel/src/vm/builtins/bf_list_sets.rs).
+    let start = builtins.len();
+    builtins.extend([
+        mk_builtin("is_member", Q(2), Q(2), vec![Any, Typed(TYPE_LIST)], true),
+        mk_builtin("all_members", Q(2), Q(2), vec![Any, Typed(TYPE_LIST)], true),
+        mk_builtin("all", Q(1), Q(1), vec![Typed(TYPE_LIST)], true),
+        mk_builtin("none", Q(1), Q(1), vec![Typed(TYPE_LIST)], true),
         mk_builtin(
-            "listappend",
+            "listinsert",
             Q(2),
             Q(3),
             vec![Typed(TYPE_LIST), Any, Typed(TYPE_INT)],
             true,
         ),
         mk_builtin(
-            "listinsert",
+            "listappend",
             Q(2),
             Q(3),
             vec![Typed(TYPE_LIST), Any, Typed(TYPE_INT)],
@@ -137,17 +472,8 @@ fn mk_builtin_table() -> Vec<Builtin> {
             vec![Typed(TYPE_LIST), Any, Typed(TYPE_INT)],
             true,
         ),
-        mk_builtin(
-            "locations",
-            Q(1),
-            Q(3),
-            vec![Typed(TYPE_OBJ), Typed(TYPE_OBJ), Typed(TYPE_INT)],
-            true,
-        ),
-        mk_builtin("equal", Q(2), Q(2), vec![Any, Any], true),
-        mk_builtin("is_member", Q(2), Q(2), vec![Any, Typed(TYPE_LIST)], true),
-        mk_builtin("tostr", Q(0), U, vec![], true),
-        mk_builtin("toliteral", Q(1), Q(1), vec![Any], true),
+        mk_builtin("setadd", Q(2), Q(2), vec![Typed(TYPE_LIST), Any], true),
+        mk_builtin("setremove", Q(2), Q(2), vec![Typed(TYPE_LIST), Any], true),
         mk_builtin(
             "match",
             Q(2),
@@ -183,89 +509,55 @@ fn mk_builtin_table() -> Vec<Builtin> {
             vec![Typed(TYPE_STR), Typed(TYPE_STR), Any],
             true,
         ),
+        mk_builtin("slice", Q(1), Q(3), vec![Any, Any, Any], true),
         mk_builtin(
-            "crypt",
-            Q(1),
-            Q(2),
-            vec![Typed(TYPE_STR), Typed(TYPE_STR)],
-            true,
-        ),
-        mk_builtin(
-            "index",
+            "complex_match",
             Q(2),
             Q(4),
-            vec![Typed(TYPE_STR), Typed(TYPE_STR), Any, Typed(TYPE_INT)],
+            vec![
+                Typed(TYPE_STR),
+                Typed(TYPE_LIST),
+                Typed(TYPE_LIST),
+                Typed(TYPE_INT),
+            ],
             true,
         ),
         mk_builtin(
-            "rindex",
-            Q(2),
-            Q(4),
-            vec![Typed(TYPE_STR), Typed(TYPE_STR), Any, Typed(TYPE_INT)],
-            true,
-        ),
-        mk_builtin(
-            "strcmp",
-            Q(2),
-            Q(2),
-            vec![Typed(TYPE_STR), Typed(TYPE_STR)],
-            true,
-        ),
-        mk_builtin(
-            "strsub",
-            Q(3),
-            Q(4),
-            vec![Typed(TYPE_STR), Typed(TYPE_STR), Typed(TYPE_STR), Any],
-            true,
-        ),
-        mk_builtin("server_log", Q(1), Q(2), vec![Typed(TYPE_STR), Any], true),
-        mk_builtin("toint", Q(1), Q(1), vec![Any], true),
-        mk_builtin("tonum", Q(1), Q(1), vec![Any], true),
-        mk_builtin("tofloat", Q(1), Q(1), vec![Any], true),
-        mk_builtin("min", Q(1), U, vec![AnyNum], true),
-        mk_builtin("max", Q(1), U, vec![AnyNum], true),
-        mk_builtin("abs", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin(
-            "random",
-            Q(0),
-            Q(2),
-            vec![Typed(TYPE_INT), Typed(TYPE_INT)],
-            true,
-        ),
-        mk_builtin("time", Q(0), Q(0), vec![], true),
-        mk_builtin("ftime", Q(0), Q(1), vec![Typed(TYPE_INT)], true),
-        mk_builtin("ctime", Q(0), Q(1), vec![Typed(TYPE_INT)], true),
-        mk_builtin(
-            "floatstr",
+            "complex_matches",
             Q(2),
             Q(3),
-            vec![Typed(TYPE_FLOAT), Typed(TYPE_INT), Any],
+            vec![Typed(TYPE_STR), Typed(TYPE_LIST), Typed(TYPE_INT)],
             true,
         ),
-        mk_builtin("sqrt", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
-        mk_builtin("sin", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
-        mk_builtin("cos", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
-        mk_builtin("tan", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
-        mk_builtin("asin", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
-        mk_builtin("acos", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
         mk_builtin(
-            "atan",
+            "sort",
             Q(1),
-            Q(2),
-            vec![Typed(TYPE_FLOAT), Typed(TYPE_FLOAT)],
+            Q(4),
+            vec![
+                Typed(TYPE_LIST),
+                Typed(TYPE_LIST),
+                Typed(TYPE_INT),
+                Typed(TYPE_INT),
+            ],
             true,
         ),
-        mk_builtin("sinh", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
-        mk_builtin("cosh", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
-        mk_builtin("tanh", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
-        mk_builtin("exp", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
-        mk_builtin("log", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
-        mk_builtin("log10", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
-        mk_builtin("ceil", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
-        mk_builtin("floor", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
-        mk_builtin("trunc", Q(1), Q(1), vec![Typed(TYPE_FLOAT)], true),
-        mk_builtin("toobj", Q(1), Q(1), vec![Any], true),
-        mk_builtin("typeof", Q(1), Q(1), vec![Any], true),
+        mk_builtin("reverse", Q(1), Q(1), vec![Any], true),
+    ]);
+    pad_group(&mut builtins, start, "list/set/regex");
+
+    // Map builtins (crates/kernel/src/vm/builtins/bf_maps.rs).
+    let start = builtins.len();
+    builtins.extend([
+        mk_builtin("mapdelete", Q(2), Q(2), vec![Typed(TYPE_MAP), Any], true),
+        mk_builtin("mapkeys", Q(1), Q(1), vec![Typed(TYPE_MAP)], true),
+        mk_builtin("mapvalues", Q(1), U, vec![Typed(TYPE_MAP)], true),
+        mk_builtin("maphaskey", Q(2), Q(2), vec![Typed(TYPE_MAP), Any], true),
+    ]);
+    pad_group(&mut builtins, start, "map");
+
+    // Object/command builtins (crates/kernel/src/vm/builtins/bf_objects.rs).
+    let start = builtins.len();
+    builtins.extend([
         mk_builtin(
             "create",
             Q(1),
@@ -273,28 +565,32 @@ fn mk_builtin_table() -> Vec<Builtin> {
             vec![Typed(TYPE_OBJ), Typed(TYPE_OBJ)],
             true,
         ),
-        mk_builtin("recycle", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin("object_bytes", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin(
+            "create_at",
+            Q(2),
+            Q(4),
+            vec![
+                Typed(TYPE_OBJ),
+                Typed(TYPE_OBJ),
+                Typed(TYPE_OBJ),
+                Typed(TYPE_LIST),
+            ],
+            true,
+        ),
         mk_builtin("valid", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("verbs", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("properties", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
         mk_builtin("parent", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
         mk_builtin("children", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("ancestors", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
         mk_builtin(
-            "chparent",
+            "isa",
             Q(2),
             Q(2),
             vec![Typed(TYPE_OBJ), Typed(TYPE_OBJ)],
             true,
         ),
-        mk_builtin("max_object", Q(0), Q(0), vec![], true),
-        mk_builtin("players", Q(0), Q(0), vec![], true),
-        mk_builtin("is_player", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin(
-            "set_player_flag",
-            Q(2),
-            Q(2),
-            vec![Typed(TYPE_OBJ), Any],
-            true,
-        ),
+        mk_builtin("descendants", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
         mk_builtin(
             "move",
             Q(2),
@@ -302,50 +598,32 @@ fn mk_builtin_table() -> Vec<Builtin> {
             vec![Typed(TYPE_OBJ), Typed(TYPE_OBJ)],
             true,
         ),
-        mk_builtin("properties", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
         mk_builtin(
-            "property_info",
+            "chparent",
             Q(2),
             Q(2),
-            vec![Typed(TYPE_OBJ), Typed(TYPE_STR)],
+            vec![Typed(TYPE_OBJ), Typed(TYPE_OBJ)],
             true,
         ),
         mk_builtin(
-            "set_property_info",
+            "set_player_flag",
+            Q(2),
+            Q(2),
+            vec![Typed(TYPE_OBJ), Any],
+            true,
+        ),
+        mk_builtin("recycle", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("max_object", Q(0), Q(0), vec![], true),
+        mk_builtin("players", Q(0), Q(0), vec![], true),
+        mk_builtin("objects", Q(0), Q(0), vec![], true),
+        mk_builtin(
+            "locations",
+            Q(1),
             Q(3),
-            Q(3),
-            vec![Typed(TYPE_OBJ), Typed(TYPE_STR), Typed(TYPE_LIST)],
+            vec![Typed(TYPE_OBJ), Typed(TYPE_OBJ), Typed(TYPE_INT)],
             true,
         ),
-        mk_builtin(
-            "add_property",
-            Q(4),
-            Q(4),
-            vec![Typed(TYPE_OBJ), Typed(TYPE_STR), Any, Typed(TYPE_LIST)],
-            true,
-        ),
-        mk_builtin(
-            "delete_property",
-            Q(2),
-            Q(2),
-            vec![Typed(TYPE_OBJ), Typed(TYPE_STR)],
-            true,
-        ),
-        mk_builtin(
-            "clear_property",
-            Q(2),
-            Q(2),
-            vec![Typed(TYPE_OBJ), Typed(TYPE_STR)],
-            true,
-        ),
-        mk_builtin(
-            "is_clear_property",
-            Q(2),
-            Q(2),
-            vec![Typed(TYPE_OBJ), Typed(TYPE_STR)],
-            true,
-        ),
-        mk_builtin("server_version", Q(0), Q(1), vec![Any], true),
+        mk_builtin("owned_objects", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
         mk_builtin(
             "renumber",
             Q(1),
@@ -353,77 +631,63 @@ fn mk_builtin_table() -> Vec<Builtin> {
             vec![Typed(TYPE_OBJ), Typed(TYPE_OBJ)],
             true,
         ),
-        mk_builtin("reset_max_object", Q(0), Q(0), vec![], false),
-        mk_builtin("memory_usage", Q(0), Q(0), vec![], true),
-        mk_builtin("shutdown", Q(0), Q(1), vec![Typed(TYPE_STR)], true),
-        mk_builtin("dump_database", Q(0), Q(0), vec![], true),
-        mk_builtin("db_disk_size", Q(0), Q(0), vec![], false),
-        mk_builtin("open_network_connection", Q(0), U, vec![], false),
-        mk_builtin("connected_players", Q(0), Q(1), vec![Any], true),
-        mk_builtin("connected_seconds", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin("idle_seconds", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin("connection_name", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("is_anonymous", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("is_uuobjid", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
         mk_builtin(
-            "notify",
-            Q(2),
-            Q(6),
-            vec![
-                Typed(TYPE_OBJ),
-                Typed(TYPE_STR),
-                Typed(TYPE_BOOL),
-                Typed(TYPE_BOOL),
-                Typed(TYPE_SYMBOL),
-                Typed(TYPE_MAP),
-            ],
-            true,
-        ),
-        mk_builtin("boot_player", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin(
-            "set_connection_option",
-            Q(3),
-            Q(3),
-            vec![Typed(TYPE_OBJ), Typed(TYPE_STR), Any],
-            true,
-        ),
-        mk_builtin(
-            "connection_option",
-            Q(2),
-            Q(2),
-            vec![Typed(TYPE_OBJ), Typed(TYPE_STR)],
-            true,
-        ),
-        mk_builtin(
-            "connection_options",
-            Q(1),
-            Q(1),
-            vec![Typed(TYPE_OBJ)],
-            true,
-        ),
-        mk_builtin("listen", Q(2), Q(3), vec![Typed(TYPE_OBJ), Any, Any], true),
-        mk_builtin("unlisten", Q(1), Q(1), vec![Any], true),
-        mk_builtin("listeners", Q(0), Q(0), vec![], true),
-        mk_builtin(
-            "buffered_output_length",
-            Q(0),
-            Q(1),
-            vec![Typed(TYPE_OBJ)],
-            false,
-        ),
-        mk_builtin("task_id", Q(0), Q(0), vec![], true),
-        mk_builtin("queued_tasks", Q(0), Q(0), vec![], true),
-        mk_builtin("kill_task", Q(1), Q(1), vec![Typed(TYPE_INT)], true),
-        mk_builtin("output_delimiters", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin("queue_info", Q(0), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin("resume", Q(1), Q(2), vec![Typed(TYPE_INT), Any], true),
-        mk_builtin(
-            "force_input",
+            "parse_command",
             Q(2),
             Q(3),
-            vec![Typed(TYPE_OBJ), Typed(TYPE_STR), Any],
+            vec![Typed(TYPE_STR), Typed(TYPE_LIST), Typed(TYPE_BOOL)],
             true,
         ),
-        mk_builtin("flush_input", Q(1), Q(2), vec![Typed(TYPE_OBJ), Any], false),
-        mk_builtin("verbs", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin(
+            "find_command_verb",
+            Q(2),
+            Q(2),
+            vec![Typed(TYPE_MAP), Typed(TYPE_LIST)],
+            true,
+        ),
+        mk_builtin(
+            "dispatch_command_verb",
+            Q(3),
+            Q(3),
+            vec![Typed(TYPE_OBJ), Typed(TYPE_STR), Typed(TYPE_MAP)],
+            true,
+        ),
+    ]);
+    pad_group(&mut builtins, start, "object/command");
+
+    // Object load/dump builtins (crates/kernel/src/vm/builtins/bf_obj_load.rs).
+    let start = builtins.len();
+    builtins.extend([
+        mk_builtin(
+            "dump_object",
+            Q(1),
+            Q(2),
+            vec![Typed(TYPE_OBJ), Typed(TYPE_MAP)],
+            true,
+        ),
+        mk_builtin(
+            "load_object",
+            Q(1),
+            Q(3),
+            vec![Typed(TYPE_LIST), Typed(TYPE_OBJ), Typed(TYPE_MAP)],
+            true,
+        ),
+        mk_builtin(
+            "reload_object",
+            Q(1),
+            Q(3),
+            vec![Typed(TYPE_LIST), Typed(TYPE_MAP), Typed(TYPE_OBJ)],
+            true,
+        ),
+        mk_builtin("parse_objdef_constants", Q(1), Q(1), vec![Any], true),
+    ]);
+    pad_group(&mut builtins, start, "object load/dump");
+
+    // Verb builtins (crates/kernel/src/vm/builtins/bf_verbs.rs).
+    let start = builtins.len();
+    builtins.extend([
         mk_builtin("verb_info", Q(2), Q(2), vec![Typed(TYPE_OBJ), Any], true),
         mk_builtin(
             "set_verb_info",
@@ -441,14 +705,6 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
         mk_builtin(
-            "add_verb",
-            Q(3),
-            Q(3),
-            vec![Typed(TYPE_OBJ), Typed(TYPE_LIST), Typed(TYPE_LIST)],
-            true,
-        ),
-        mk_builtin("delete_verb", Q(2), Q(2), vec![Typed(TYPE_OBJ), Any], true),
-        mk_builtin(
             "verb_code",
             Q(2),
             Q(4),
@@ -462,55 +718,78 @@ fn mk_builtin_table() -> Vec<Builtin> {
             vec![Typed(TYPE_OBJ), Any, Typed(TYPE_LIST), Any, Any],
             true,
         ),
-        mk_builtin("eval", Q(1), Q(3), vec![Typed(TYPE_STR), Any, Any], true),
-        mk_builtin("mapkeys", Q(1), Q(1), vec![Typed(TYPE_MAP)], true),
-        mk_builtin("mapvalues", Q(1), U, vec![Typed(TYPE_MAP)], true),
-        mk_builtin("mapdelete", Q(2), Q(2), vec![Typed(TYPE_MAP), Any], true),
-        mk_builtin("maphaskey", Q(2), Q(2), vec![Typed(TYPE_MAP), Any], true),
         mk_builtin(
-            "xml_parse",
-            Q(2),
+            "format_compile_error",
+            Q(1),
             Q(3),
-            vec![Typed(TYPE_STR), Typed(TYPE_INT), Typed(TYPE_MAP)],
-            true,
-        ),
-        mk_builtin("to_xml", Q(1), Q(2), vec![Any, Typed(TYPE_MAP)], true),
-        mk_builtin(
-            "present",
-            Q(2),
-            Q(6),
-            vec![
-                Typed(TYPE_OBJ),
-                Typed(TYPE_STR),
-                Typed(TYPE_STR),
-                Typed(TYPE_STR),
-                Typed(TYPE_STR),
-                Any,
-            ],
+            vec![Typed(TYPE_MAP), Any, Any],
             true,
         ),
         mk_builtin(
-            "argon2",
+            "add_verb",
+            Q(3),
+            Q(3),
+            vec![Typed(TYPE_OBJ), Typed(TYPE_LIST), Typed(TYPE_LIST)],
+            true,
+        ),
+        mk_builtin("delete_verb", Q(2), Q(2), vec![Typed(TYPE_OBJ), Any], true),
+        mk_builtin("disassemble", Q(2), Q(2), vec![Typed(TYPE_OBJ), Any], true),
+        mk_builtin("respond_to", Q(2), Q(2), vec![Typed(TYPE_OBJ), Any], true),
+        mk_builtin("prepositions", Q(0), Q(0), vec![], true),
+    ]);
+    pad_group(&mut builtins, start, "verbs");
+
+    // Property builtins (crates/kernel/src/vm/builtins/bf_properties.rs).
+    let start = builtins.len();
+    builtins.extend([
+        mk_builtin(
+            "property_info",
             Q(2),
-            Q(5),
-            vec![
-                Typed(TYPE_STR),
-                Typed(TYPE_STR),
-                Typed(TYPE_INT),
-                Typed(TYPE_INT),
-                Typed(TYPE_INT),
-            ],
+            Q(2),
+            vec![Typed(TYPE_OBJ), Typed(TYPE_STR)],
             true,
         ),
         mk_builtin(
-            "argon2_verify",
-            Q(2),
-            Q(2),
-            vec![Typed(TYPE_STR), Typed(TYPE_STR)],
+            "set_property_info",
+            Q(3),
+            Q(3),
+            vec![Typed(TYPE_OBJ), Typed(TYPE_STR), Typed(TYPE_LIST)],
             true,
         ),
-        mk_builtin("tosym", Q(1), Q(1), vec![Any], true),
-        mk_builtin("salt", Q(0), Q(0), vec![], true),
+        mk_builtin(
+            "is_clear_property",
+            Q(2),
+            Q(2),
+            vec![Typed(TYPE_OBJ), Typed(TYPE_STR)],
+            true,
+        ),
+        mk_builtin(
+            "clear_property",
+            Q(2),
+            Q(2),
+            vec![Typed(TYPE_OBJ), Typed(TYPE_STR)],
+            true,
+        ),
+        mk_builtin(
+            "add_property",
+            Q(4),
+            Q(4),
+            vec![Typed(TYPE_OBJ), Typed(TYPE_STR), Any, Typed(TYPE_LIST)],
+            true,
+        ),
+        mk_builtin(
+            "delete_property",
+            Q(2),
+            Q(2),
+            vec![Typed(TYPE_OBJ), Typed(TYPE_STR)],
+            true,
+        ),
+    ]);
+    pad_group(&mut builtins, start, "properties");
+
+    // Flyweight builtins (crates/kernel/src/vm/builtins/bf_flyweights.rs).
+    let start = builtins.len();
+    builtins.extend([
         mk_builtin(
             "toflyweight",
             Q(1),
@@ -534,6 +813,36 @@ fn mk_builtin_table() -> Vec<Builtin> {
             vec![Typed(TYPE_FLYWEIGHT), Typed(TYPE_SYMBOL)],
             true,
         ),
+    ]);
+    pad_group(&mut builtins, start, "flyweights");
+
+    // Document/format builtins (crates/kernel/src/vm/builtins/bf_documents.rs).
+    let start = builtins.len();
+    builtins.extend([
+        mk_builtin(
+            "xml_parse",
+            Q(2),
+            Q(3),
+            vec![Typed(TYPE_STR), Typed(TYPE_INT), Typed(TYPE_MAP)],
+            true,
+        ),
+        mk_builtin("to_xml", Q(1), Q(2), vec![Any, Typed(TYPE_MAP)], true),
+        mk_builtin("generate_json", Q(1), Q(1), vec![Any], true),
+        mk_builtin("parse_json", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
+        mk_builtin(
+            "html_query",
+            Q(2),
+            Q(3),
+            vec![Typed(TYPE_STR), Any, Typed(TYPE_MAP)],
+            true,
+        ),
+    ]);
+    pad_group(&mut builtins, start, "documents/formats");
+
+    // Cryptography builtins (crates/kernel/src/vm/builtins/bf_cryptography.rs).
+    let start = builtins.len();
+    builtins.extend([
+        mk_builtin("age_generate_keypair", Q(0), Q(0), vec![], true),
         mk_builtin(
             "age_encrypt",
             Q(2),
@@ -546,205 +855,6 @@ fn mk_builtin_table() -> Vec<Builtin> {
             Q(2),
             Q(2),
             vec![Typed(TYPE_STR), Typed(TYPE_STR)],
-            true,
-        ),
-        mk_builtin("age_generate_keypair", Q(0), Q(0), vec![], true),
-        mk_builtin("encode_base64", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
-        mk_builtin("decode_base64", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
-        mk_builtin("slice", Q(1), Q(3), vec![Any, Any, Any], true),
-        mk_builtin("generate_json", Q(1), Q(1), vec![Any], true),
-        mk_builtin("parse_json", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
-        mk_builtin("ancestors", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin("descendants", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin(
-            "isa",
-            Q(2),
-            Q(2),
-            vec![Typed(TYPE_OBJ), Typed(TYPE_OBJ)],
-            true,
-        ),
-        mk_builtin("bf_counters", Q(0), Q(0), vec![], true),
-        mk_builtin("db_counters", Q(0), Q(0), vec![], true),
-        mk_builtin("vm_counters", Q(0), Q(0), vec![], true),
-        mk_builtin("sched_counters", Q(0), Q(0), vec![], true),
-        mk_builtin("wait_task", Q(1), Q(1), vec![Typed(TYPE_INT)], true),
-        mk_builtin("commit", Q(0), Q(0), vec![], true),
-        mk_builtin("rollback", Q(0), Q(1), vec![Typed(TYPE_BOOL)], true),
-        mk_builtin("respond_to", Q(2), Q(2), vec![Typed(TYPE_OBJ), Any], true),
-        mk_builtin("active_tasks", Q(0), Q(0), vec![], true),
-        mk_builtin(
-            "worker_request",
-            Q(2),
-            U,
-            vec![Typed(TYPE_SYMBOL), Any],
-            true,
-        ),
-        mk_builtin("connections", Q(0), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin("connection", Q(0), Q(0), vec![], true),
-        mk_builtin("error_message", Q(1), Q(1), vec![Typed(TYPE_ERR)], true),
-        mk_builtin("error_code", Q(1), Q(1), vec![Typed(TYPE_ERR)], true),
-        mk_builtin(
-            "string_hmac",
-            Q(2),
-            Q(4),
-            vec![
-                Typed(TYPE_STR),
-                Typed(TYPE_STR),
-                Typed(TYPE_STR),
-                Typed(TYPE_BOOL),
-            ],
-            true,
-        ),
-        mk_builtin("owned_objects", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin("switch_player", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin(
-            "complex_match",
-            Q(2),
-            Q(4),
-            vec![
-                Typed(TYPE_STR),
-                Typed(TYPE_LIST),
-                Typed(TYPE_LIST),
-                Typed(TYPE_INT),
-            ],
-            true,
-        ),
-        mk_builtin(
-            "dump_object",
-            Q(1),
-            Q(2),
-            vec![Typed(TYPE_OBJ), Typed(TYPE_MAP)],
-            true,
-        ),
-        mk_builtin(
-            "load_object",
-            Q(1),
-            Q(3),
-            vec![Typed(TYPE_LIST), Typed(TYPE_OBJ), Typed(TYPE_MAP)],
-            true,
-        ),
-        mk_builtin(
-            "reload_object",
-            Q(1),
-            Q(3),
-            vec![Typed(TYPE_LIST), Typed(TYPE_MAP), Typed(TYPE_OBJ)],
-            true,
-        ),
-        mk_builtin(
-            "create_at",
-            Q(2),
-            Q(4),
-            vec![
-                Typed(TYPE_OBJ),
-                Typed(TYPE_OBJ),
-                Typed(TYPE_OBJ),
-                Typed(TYPE_LIST),
-            ],
-            true,
-        ),
-        mk_builtin("workers", Q(0), Q(0), vec![], true),
-        mk_builtin("gc_collect", Q(0), Q(0), vec![], true),
-        mk_builtin("is_anonymous", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin("is_uuobjid", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin("objects", Q(0), Q(0), vec![], true),
-        mk_builtin("flush_caches", Q(0), Q(0), vec![], true),
-        mk_builtin("binary_to_str", Q(1), Q(2), vec![Any, Any], true),
-        mk_builtin("binary_from_str", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
-        mk_builtin("rotate_enrollment_token", Q(0), Q(0), vec![], true),
-        mk_builtin(
-            "player_event_log_stats",
-            Q(1),
-            Q(3),
-            vec![Typed(TYPE_OBJ), Any, Any],
-            true,
-        ),
-        mk_builtin(
-            "purge_player_event_log",
-            Q(1),
-            Q(3),
-            vec![Typed(TYPE_OBJ), Any, Any],
-            true,
-        ),
-        mk_builtin("function_help", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
-        mk_builtin(
-            "parse_command",
-            Q(2),
-            Q(3),
-            vec![Typed(TYPE_STR), Typed(TYPE_LIST), Typed(TYPE_BOOL)],
-            true,
-        ),
-        mk_builtin(
-            "find_command_verb",
-            Q(2),
-            Q(2),
-            vec![Typed(TYPE_MAP), Typed(TYPE_LIST)],
-            true,
-        ),
-        mk_builtin(
-            "format_compile_error",
-            Q(1),
-            Q(3),
-            vec![Typed(TYPE_MAP), Any, Any],
-            true,
-        ),
-        mk_builtin(
-            "explode",
-            Q(1),
-            Q(3),
-            vec![Typed(TYPE_STR), Typed(TYPE_STR), Any],
-            true,
-        ),
-        mk_builtin(
-            "binary_hmac",
-            Q(2),
-            Q(4),
-            vec![
-                Typed(TYPE_BINARY),
-                Typed(TYPE_STR),
-                Typed(TYPE_SYMBOL),
-                Typed(TYPE_BOOL),
-            ],
-            true,
-        ),
-        mk_builtin(
-            "dispatch_command_verb",
-            Q(3),
-            Q(3),
-            vec![Typed(TYPE_OBJ), Typed(TYPE_STR), Typed(TYPE_MAP)],
-            true,
-        ),
-        mk_builtin(
-            "sort",
-            Q(1),
-            Q(4),
-            vec![
-                Typed(TYPE_LIST),
-                Typed(TYPE_LIST),
-                Typed(TYPE_INT),
-                Typed(TYPE_INT),
-            ],
-            true,
-        ),
-        mk_builtin("reverse", Q(1), Q(1), vec![Any], true),
-        mk_builtin(
-            "uuid",
-            Q(0),
-            Q(2),
-            vec![Typed(TYPE_INT), Typed(TYPE_INT)],
-            true,
-        ),
-        mk_builtin(
-            "paseto_make_local",
-            Q(1),
-            Q(2),
-            vec![Any, Typed(TYPE_LIST)],
-            true,
-        ),
-        mk_builtin(
-            "paseto_verify_local",
-            Q(1),
-            Q(2),
-            vec![Typed(TYPE_STR), Typed(TYPE_LIST)],
             true,
         ),
         mk_builtin(
@@ -761,67 +871,76 @@ fn mk_builtin_table() -> Vec<Builtin> {
             vec![Typed(TYPE_STR), Typed(TYPE_STR)],
             true,
         ),
-        mk_builtin("suspend_if_needed", Q(0), Q(1), vec![AnyNum], true),
-        mk_builtin("prepositions", Q(0), Q(0), vec![], true),
         mk_builtin(
-            "html_query",
+            "argon2",
             Q(2),
-            Q(3),
-            vec![Typed(TYPE_STR), Any, Typed(TYPE_MAP)],
-            true,
-        ),
-        mk_builtin(
-            "strtr",
-            Q(3),
-            Q(4),
-            vec![Typed(TYPE_STR), Typed(TYPE_STR), Typed(TYPE_STR), Any],
-            true,
-        ),
-        mk_builtin("all_members", Q(2), Q(2), vec![Any, Typed(TYPE_LIST)], true),
-        // Additional numeric/math functions
-        mk_builtin("round", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin("cbrt", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin("fract", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin("signum", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin("recip", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin("exp2", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin("expm1", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin("log2", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin("ln1p", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin("asinh", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin("acosh", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin("atanh", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin("to_degrees", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin("to_radians", Q(1), Q(1), vec![AnyNum], true),
-        mk_builtin("hypot", Q(2), Q(2), vec![AnyNum, AnyNum], true),
-        mk_builtin("copysign", Q(2), Q(2), vec![AnyNum, AnyNum], true),
-        mk_builtin("urlencode", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
-        mk_builtin("urldecode", Q(1), Q(2), vec![Typed(TYPE_STR), Any], true),
-        mk_builtin(
-            "event_log",
-            Q(2),
-            Q(4),
+            Q(5),
             vec![
-                Typed(TYPE_OBJ),
                 Typed(TYPE_STR),
-                Typed(TYPE_SYMBOL),
-                Typed(TYPE_MAP),
+                Typed(TYPE_STR),
+                Typed(TYPE_INT),
+                Typed(TYPE_INT),
+                Typed(TYPE_INT),
             ],
             true,
         ),
-        mk_builtin("parse_objdef_constants", Q(1), Q(1), vec![Any], true),
-        mk_builtin("valid_task", Q(1), Q(1), vec![Typed(TYPE_INT)], true),
-        mk_builtin("all", Q(1), Q(1), vec![Typed(TYPE_LIST)], true),
-        mk_builtin("none", Q(1), Q(1), vec![Typed(TYPE_LIST)], true),
-        mk_builtin("tobool", Q(1), Q(1), vec![Any], true),
         mk_builtin(
-            "complex_matches",
+            "argon2_verify",
             Q(2),
-            Q(3),
-            vec![Typed(TYPE_STR), Typed(TYPE_LIST), Typed(TYPE_INT)],
+            Q(2),
+            vec![Typed(TYPE_STR), Typed(TYPE_STR)],
             true,
         ),
-    ]
+        mk_builtin(
+            "crypt",
+            Q(1),
+            Q(2),
+            vec![Typed(TYPE_STR), Typed(TYPE_STR)],
+            true,
+        ),
+        mk_builtin("salt", Q(0), Q(0), vec![], true),
+        mk_builtin(
+            "string_hmac",
+            Q(2),
+            Q(4),
+            vec![
+                Typed(TYPE_STR),
+                Typed(TYPE_STR),
+                Typed(TYPE_STR),
+                Typed(TYPE_BOOL),
+            ],
+            true,
+        ),
+        mk_builtin(
+            "binary_hmac",
+            Q(2),
+            Q(4),
+            vec![
+                Typed(TYPE_BINARY),
+                Typed(TYPE_STR),
+                Typed(TYPE_SYMBOL),
+                Typed(TYPE_BOOL),
+            ],
+            true,
+        ),
+        mk_builtin(
+            "paseto_make_local",
+            Q(1),
+            Q(2),
+            vec![Any, Typed(TYPE_LIST)],
+            true,
+        ),
+        mk_builtin(
+            "paseto_verify_local",
+            Q(1),
+            Q(2),
+            vec![Typed(TYPE_STR), Typed(TYPE_LIST)],
+            true,
+        ),
+    ]);
+    pad_group(&mut builtins, start, "cryptography");
+
+    builtins
 }
 
 // BuiltinId is now defined in moor_var::program::opcode and re-exported
@@ -855,7 +974,7 @@ impl Builtins {
     }
 
     pub fn number_of(&self) -> usize {
-        self.offsets.len()
+        BUILTIN_DESCRIPTORS.len()
     }
 
     pub fn description_for(&self, offset: BuiltinId) -> Option<&Builtin> {
@@ -863,13 +982,16 @@ impl Builtins {
     }
 
     pub fn descriptions(&self) -> impl Iterator<Item = &Builtin> {
-        BUILTIN_DESCRIPTORS.iter()
+        BUILTIN_DESCRIPTORS.iter().filter(|builtin| builtin.exposed)
     }
 }
 
 fn make_builtin_offsets() -> HashMap<Symbol, BuiltinId> {
     let mut b = HashMap::new();
     for (offset, builtin) in BUILTIN_DESCRIPTORS.iter().enumerate() {
+        if !builtin.exposed {
+            continue;
+        }
         b.insert(builtin.name, BuiltinId(offset as u16));
     }
 
@@ -878,6 +1000,9 @@ fn make_builtin_offsets() -> HashMap<Symbol, BuiltinId> {
 pub fn make_offsets_builtins() -> HashMap<BuiltinId, Symbol> {
     let mut b = HashMap::new();
     for (offset, builtin) in BUILTIN_DESCRIPTORS.iter().enumerate() {
+        if !builtin.exposed {
+            continue;
+        }
         b.insert(BuiltinId(offset as u16), builtin.name);
     }
 

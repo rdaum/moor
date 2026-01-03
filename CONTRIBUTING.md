@@ -25,7 +25,7 @@ mooR welcomes contributions in many forms -- here's some examples:
 ### Core Development (Rust)
 
 - Server architecture improvements
-- New builtin functions
+- New builtin functions (follow `crates/kernel/src/vm/builtins/ADDING-BUILTINS.md`)
 - Performance optimizations
 - Protocol extensions
 - Bug fixes

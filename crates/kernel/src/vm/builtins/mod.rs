@@ -71,6 +71,7 @@ mod bf_task;
 #[cfg(test)]
 #[path = "test_function_help.rs"]
 mod test_function_help;
+// See ADDING-BUILTINS.md in this directory for safe builtin additions.
 
 lazy_static! {
     static ref BF_COUNTERS: BfCounters = BfCounters::new();
@@ -80,7 +81,10 @@ thread_local! {
     static BF_COUNTERS_TLS: &'static BfCounters = &BF_COUNTERS;
 }
 
-pub struct BfCounters(Vec<PerfCounter>);
+pub struct BfCounters {
+    counters: Vec<PerfCounter>,
+    exposed_ids: Vec<BuiltinId>,
+}
 
 impl Default for BfCounters {
     fn default() -> Self {
@@ -91,18 +95,30 @@ impl Default for BfCounters {
 impl BfCounters {
     pub fn new() -> Self {
         let mut counters = Vec::with_capacity(BUILTINS.number_of());
-        for b in BUILTINS.names.values() {
-            counters.push(PerfCounter::new(*b));
+        let mut exposed_ids = Vec::new();
+        for index in 0..BUILTINS.number_of() {
+            let id = BuiltinId(index as u16);
+            let desc = BUILTINS.description_for(id).expect("Builtin not found");
+            counters.push(PerfCounter::new(desc.name));
+            if desc.exposed {
+                exposed_ids.push(id);
+            }
         }
-        Self(counters)
+        Self {
+            counters,
+            exposed_ids,
+        }
     }
 
     pub fn counter_for(&self, id: BuiltinId) -> &PerfCounter {
-        &self.0[id.0 as usize]
+        &self.counters[id.0 as usize]
     }
 
     pub fn all_counters(&self) -> Vec<&PerfCounter> {
-        self.0.iter().collect()
+        self.exposed_ids
+            .iter()
+            .map(|id| &self.counters[id.0 as usize])
+            .collect()
     }
 }
 
