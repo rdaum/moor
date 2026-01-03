@@ -14,29 +14,83 @@
 
 # Check that the builtin table in builtins.rs hasn't been modified in ways
 # that would invalidate compiled programs (removals, reorders, renames).
-# Adding new builtins at the end is allowed.
+# Adding new builtins in reserved slots is allowed.
 #
 # Usage: ./check-builtin-stability.sh [base_ref]
 #   base_ref: git ref to compare against (default: origin/main)
 
 set -e
 
-BASE_REF="${1:-origin/main}"
+BASE_REF="${1:-}"
+if [ -z "$BASE_REF" ]; then
+  if [ -n "${GITHUB_BASE_REF:-}" ]; then
+    BASE_REF="origin/${GITHUB_BASE_REF}"
+  elif [ -n "${FORGEJO_BASE_REF:-}" ]; then
+    BASE_REF="origin/${FORGEJO_BASE_REF}"
+  elif [ -n "${GITEA_BASE_REF:-}" ]; then
+    BASE_REF="origin/${GITEA_BASE_REF}"
+  else
+    BASE_REF="origin/main"
+  fi
+fi
 BUILTINS_FILE="crates/common/src/builtins.rs"
+GROUP_SIZE=256
 
 extract_builtins() {
-  # Handle both single-line: mk_builtin("name", ...)
-  # and multi-line: mk_builtin(\n    "name", ...)
-  grep -ozP 'mk_builtin\(\s*"\K[^"]+' "$1" | tr '\0' '\n' || true
+  python3 - "$1" <<'PY'
+import re
+import sys
+
+path = sys.argv[1]
+group_size = int(sys.argv[2])
+
+names = []
+count = 0
+pending = False
+
+with open(path, "r", encoding="utf-8") as handle:
+    for line in handle:
+        if pending:
+            match = re.search(r'"([^"]+)"', line)
+            if match:
+                names.append(match.group(1))
+                count += 1
+                pending = False
+            continue
+
+        match = re.search(r'mk_builtin\(\s*"([^"]+)"', line)
+        if match:
+            names.append(match.group(1))
+            count += 1
+            continue
+
+        if "mk_builtin(" in line:
+            pending = True
+            continue
+
+        if "pad_group(" in line:
+            missing = group_size - count
+            if missing < 0:
+                missing = 0
+            names.extend(["<reserved>"] * missing)
+            count = 0
+
+if count:
+    missing = group_size - count
+    if missing > 0:
+        names.extend(["<reserved>"] * missing)
+
+print("\n".join(names))
+PY
 }
 
-extract_builtins "$BUILTINS_FILE" > /tmp/pr_builtins.txt
+extract_builtins "$BUILTINS_FILE" "$GROUP_SIZE" > /tmp/pr_builtins.txt
 
 git show "${BASE_REF}:${BUILTINS_FILE}" > /tmp/base_builtins.rs 2>/dev/null || {
   echo "Could not fetch base branch file, skipping check"
   exit 0
 }
-extract_builtins /tmp/base_builtins.rs > /tmp/base_builtins.txt
+extract_builtins /tmp/base_builtins.rs "$GROUP_SIZE" > /tmp/base_builtins.txt
 
 BASE_COUNT=$(wc -l < /tmp/base_builtins.txt)
 PR_COUNT=$(wc -l < /tmp/pr_builtins.txt)
@@ -46,11 +100,19 @@ echo "PR branch has $PR_COUNT builtins"
 
 ERRORS=""
 line_num=0
+ADDED=""
 while IFS= read -r base_builtin; do
   line_num=$((line_num + 1))
   pr_builtin=$(sed -n "${line_num}p" /tmp/pr_builtins.txt)
+  if [ "$base_builtin" = "<reserved>" ]; then
+    if [ -n "$pr_builtin" ] && [ "$pr_builtin" != "<reserved>" ]; then
+      ADDED="${ADDED}Builtin #${line_num} added as '${pr_builtin}'\n"
+    fi
+    continue
+  fi
+
   if [ "$base_builtin" != "$pr_builtin" ]; then
-    if [ -z "$pr_builtin" ]; then
+    if [ -z "$pr_builtin" ] || [ "$pr_builtin" = "<reserved>" ]; then
       ERRORS="${ERRORS}ERROR: Builtin #${line_num} '${base_builtin}' was REMOVED\n"
     else
       ERRORS="${ERRORS}ERROR: Builtin #${line_num} changed from '${base_builtin}' to '${pr_builtin}'\n"
@@ -58,10 +120,10 @@ while IFS= read -r base_builtin; do
   fi
 done < /tmp/base_builtins.txt
 
-if [ "$PR_COUNT" -gt "$BASE_COUNT" ]; then
+if [ -n "$ADDED" ]; then
   echo ""
-  echo "New builtins added at the end:"
-  tail -n $((PR_COUNT - BASE_COUNT)) /tmp/pr_builtins.txt
+  echo "New builtins added in reserved slots:"
+  printf "$ADDED"
 fi
 
 if [ -n "$ERRORS" ]; then

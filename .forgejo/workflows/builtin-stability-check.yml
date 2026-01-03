@@ -11,4 +11,4 @@ jobs:
           fetch-depth: 0
 
       - name: Check builtin table stability
-        run: ./scripts/check-builtin-stability.sh "origin/${{ github.base_ref }}"
+        run: ./scripts/check-builtin-stability.sh
