@@ -25,7 +25,7 @@ jobs:
             runs-on: linux-arm64
             dockerfile: Dockerfile.arm64-cross
     runs-on: ${{ matrix.runs-on }}
-    container: moor-ci:1.90.0
+    container: moor-ci:1.92.0
     outputs:
       x86_64-packages: ${{ steps.list-packages.outputs.x86_64 }}
       aarch64-packages: ${{ steps.list-packages.outputs.aarch64 }}
@@ -131,7 +131,7 @@ jobs:
   create_release:
     needs: build_and_publish
     runs-on: linux-x86
-    container: moor-ci:1.90.0
+    container: moor-ci:1.92.0
     steps:
       - uses: https://code.forgejo.org/actions/checkout@v4
         with:

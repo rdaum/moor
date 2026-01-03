@@ -12,7 +12,7 @@ COPY ./.git ./.git
 RUN npm run build
 
 # Backend build stage
-FROM rust:1.90-bookworm AS backend-build
+FROM rust:1.92-bookworm AS backend-build
 
 WORKDIR /moor-build
 RUN apt update

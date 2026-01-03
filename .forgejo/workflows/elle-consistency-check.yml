@@ -8,7 +8,7 @@ env:
 jobs:
   consistency_check:
     runs-on: ubuntu-latest
-    container: moor-ci:1.90.0
+    container: moor-ci:1.92.0
     steps:
       - uses: actions/checkout@v4
         with:

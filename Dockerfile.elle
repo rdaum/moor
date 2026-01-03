@@ -1,7 +1,7 @@
 # Dockerfile for Elle consistency testing
 # Builds Elle model checkers, installs elle-cli, runs workload, and checks consistency
 
-FROM rust:1.90.0 AS builder
+FROM rust:1.92.0 AS builder
 
 # Build all Elle model checker binaries from the workspace
 WORKDIR /build

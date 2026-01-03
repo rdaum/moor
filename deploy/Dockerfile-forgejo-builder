@@ -1,17 +1,17 @@
 # Dockerfile for mooR Forgejo CI/Build Image
 # This image is used by Forgejo Actions runners and should be installed on the Forgejo builder machine.
 #
-# To build: docker build -f Dockerfile-forgejo-builder -t moor-ci:1.90.0 .
+# To build: docker build -f Dockerfile-forgejo-builder -t moor-ci:1.92.0 .
 #
 # Pre-installed dependencies:
-# - Rust 1.90.0 (from base image)
+# - Rust 1.92.0 (from base image)
 # - Node.js and npm (for GitHub Actions)
 # - OpenJDK 21 (for Elle consistency checks)
 # - Leiningen (for Elle consistency checks)
 # - licensure (for license header checking)
 # - graphviz (for Elle graph generation)
 
-FROM rust:1.90.0
+FROM rust:1.92.0
 
 # Install Node.js, npm, Java, Docker, and other dependencies for mooR CI/build
 RUN apt-get update && \
