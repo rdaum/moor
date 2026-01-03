@@ -50,4 +50,5 @@ once_cell.workspace = true
 semver.workspace = true
 
 # Testing & Development
+glob.workspace = true
 tempfile.workspace = true

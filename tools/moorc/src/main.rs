@@ -92,10 +92,11 @@ pub struct Args {
     run_tests: Option<bool>,
 
     #[clap(
-        long,
-        help = "Run the set of integration `moot` tests defined in the defined directory"
+        long = "test-files",
+        visible_alias = "test-directory",
+        help = "Run integration `moot` tests from directory (recursive) or glob pattern (e.g., 'tests/**/*.moot')"
     )]
-    test_directory: Option<PathBuf>,
+    test_files: Option<String>,
 
     #[clap(
         long,
@@ -157,8 +158,84 @@ fn emit_objdef_compile_error(
     emit_compile_error(compile_error, source.as_deref(), &source_name, use_color);
 }
 
+/// Check if a path has the .moot extension.
+fn is_moot_file(path: &std::path::Path) -> bool {
+    path.extension().map(|ext| ext == "moot").unwrap_or(false)
+}
+
+/// Recursively collect all .moot test files from a directory, skipping hidden directories.
+fn collect_moot_files_recursive(path: &std::path::Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+
+    if !path.is_dir() {
+        return Ok(files);
+    }
+
+    for entry in std::fs::read_dir(path)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+
+        if entry_path.is_dir() {
+            // Skip hidden directories (starting with '.')
+            if let Some(name) = entry_path.file_name()
+                && name.to_string_lossy().starts_with('.')
+            {
+                continue;
+            }
+            // Recursively collect from subdirectories
+            files.extend(collect_moot_files_recursive(&entry_path)?);
+        } else if entry_path.is_file() && is_moot_file(&entry_path) {
+            files.push(entry_path);
+        }
+    }
+
+    Ok(files)
+}
+
+/// Collect test files from either a directory path or glob pattern.
+/// Returns files sorted depth-first, then alphabetically.
+fn collect_moot_files(input: &str) -> Result<Vec<PathBuf>, eyre::Report> {
+    let mut files = Vec::new();
+
+    // Check if input contains glob characters
+    if input.contains('*') || input.contains('?') || input.contains('[') {
+        // Treat as glob pattern
+        for entry in glob::glob(input)? {
+            let path = entry?;
+            if path.is_file() && is_moot_file(&path) {
+                files.push(path);
+            }
+        }
+    } else {
+        // Treat as directory path
+        let path = PathBuf::from(input);
+        if !path.exists() {
+            return Err(eyre::eyre!("Path does not exist: {}", input));
+        }
+        if path.is_file() {
+            // Single file specified
+            if is_moot_file(&path) {
+                files.push(path);
+            } else {
+                return Err(eyre::eyre!("File is not a .moot file: {}", input));
+            }
+        } else {
+            files = collect_moot_files_recursive(&path)?;
+        }
+    }
+
+    // Sort: depth-first (fewer components first), then alphabetically
+    files.sort_by(|a, b| {
+        let a_depth = a.components().count();
+        let b_depth = b.components().count();
+        a_depth.cmp(&b_depth).then_with(|| a.cmp(b))
+    });
+
+    Ok(files)
+}
+
 fn run_tests(
-    test_directory: &PathBuf,
+    test_input: &str,
     player: Obj,
     programmer: Obj,
     wizard: Obj,
@@ -170,29 +247,20 @@ fn run_tests(
         .programmer_object(programmer)
         .init_logging(false);
 
-    // Iterate all the .moot tests and run them in the context of the current database.
-    warn!("Running integration tests in {}", test_directory.display());
-    let Ok(dir) = std::fs::read_dir(test_directory) else {
-        error!(
-            "Failed to read test directory: {}",
-            test_directory.display()
-        );
+    let test_files = collect_moot_files(test_input)?;
+
+    if test_files.is_empty() {
+        warn!("No .moot test files found matching: {}", test_input);
         return Ok(());
-    };
-    for entry in dir {
-        let Ok(entry) = entry else {
-            continue;
-        };
+    }
 
-        let path = entry.path();
-        let Some(extension) = path.extension() else {
-            continue;
-        };
+    warn!(
+        "Running {} integration tests from {}",
+        test_files.len(),
+        test_input
+    );
 
-        if extension != "moot" {
-            continue;
-        }
-
+    for path in test_files {
         run_test(&moot_options, scheduler_client.clone(), &path);
     }
 
@@ -337,8 +405,8 @@ fn main() -> Result<(), eyre::Report> {
     }
 
     info!(
-        "Database loaded. out_objdef_dir?: {:?} test_directory?: {:?} run_tests?: {:?}",
-        args.out_objdef_dir, args.test_directory, args.run_tests
+        "Database loaded. out_objdef_dir?: {:?} test_files?: {:?} run_tests?: {:?}",
+        args.out_objdef_dir, args.test_files, args.run_tests
     );
 
     // Dump phase.
@@ -356,7 +424,7 @@ fn main() -> Result<(), eyre::Report> {
         info!(?dirdump_path, "Objdefdump written.");
     }
 
-    if args.run_tests != Some(true) && args.test_directory.is_none() {
+    if args.run_tests != Some(true) && args.test_files.is_none() {
         info!("No tests to run. Exiting.");
         info!("Dropping database to trigger shutdown...");
         // Explicitly drop database to ensure clean shutdown with barrier waiting
@@ -373,7 +441,7 @@ fn main() -> Result<(), eyre::Report> {
 
     // If running integration tests, we need to create a scratch property on #0 that is used for tests to stick transient
     // values in
-    if args.test_directory.is_some() {
+    if args.test_files.is_some() {
         let mut tx = db.new_world_state().unwrap();
         tx.define_property(
             &wizard,
@@ -486,14 +554,14 @@ fn main() -> Result<(), eyre::Report> {
     }
 
     // Perform integration test run.
-    if let Some(test_directory) = args.test_directory {
+    if let Some(ref test_files) = args.test_files {
         let player = Obj::mk_id(args.test_player.expect("Must specify player object"));
         let programmer = Obj::mk_id(
             args.test_programmer
                 .expect("Must specify programmer object"),
         );
         run_tests(
-            &test_directory,
+            test_files,
             player,
             programmer,
             wizard,
