@@ -15,7 +15,7 @@
 //!
 //! This wraps a FlatBuffer byte array with accessor methods, similar to how
 //! VerbDef and PropDef work. The actual wire format is defined in
-//! crates/common/schema/moor_program.fbs
+//! crates/schema/schema/moor_program.fbs
 //!
 //! Flow:
 //!   Disk → StoredProgram (ByteView) → decode → Program (runtime) → Execute

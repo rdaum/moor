@@ -36,15 +36,19 @@ define_enum_mapping! {
 }
 use crate::convert::var_from_db_flatbuffer_ref;
 use byteview::ByteView;
+use moor_common::builtins::builtin_signature_for_ids;
 use moor_var::program::{
     labels::{JumpLabel, Label, Offset},
     names::{Name, VarName},
-    opcode::{ForSequenceOperand, ScatterArgs, ScatterLabel},
+    opcode::{BuiltinId, ForSequenceOperand, Op, ScatterArgs, ScatterLabel},
     program::{PrgInner, Program},
     stored_program::StoredProgram,
 };
 use planus::{ReadAsRoot, WriteAsOffset};
+use std::collections::HashSet;
 use std::sync::Arc;
+
+const STORED_PROGRAM_VERSION: u16 = 2;
 
 // Helper to encode a Name into FlatBuffer StoredName
 fn encode_name(name: &Name) -> fb::StoredName {
@@ -57,6 +61,8 @@ fn encode_name(name: &Name) -> fb::StoredName {
 
 // Internal helper: encode to StoredMooRProgram (for recursive lambda encoding)
 fn encode_moor_program(program: &Program) -> Result<fb::StoredMooRProgram, EncodeError> {
+    let builtin_signature = builtin_signature_for_ids(used_builtin_ids(program));
+
     // 1. Encode main_vector using OpStream
     let mut main_stream = OpStream::new();
     for op in program.main_vector() {
@@ -166,9 +172,6 @@ fn encode_moor_program(program: &Program) -> Result<fb::StoredMooRProgram, Encod
         global_width: program.var_names().global_width as u64,
         decls: decl_pairs,
     });
-
-    // 6. Build symbol table (for now, empty - could be used for deduplication in future)
-    let symbol_table: Vec<crate::common::Symbol> = vec![];
 
     // 7. Encode scatter tables
     let scatter_tables: Vec<fb::StoredScatterArgs> = program
@@ -320,20 +323,19 @@ fn encode_moor_program(program: &Program) -> Result<fb::StoredMooRProgram, Encod
 
     // Build the FlatBuffer struct
     Ok(fb::StoredMooRProgram {
-        version: 1,
+        version: STORED_PROGRAM_VERSION,
+        builtin_signature,
         main_vector,
         fork_vectors,
         literals,
         jump_labels,
         var_names,
-        symbol_table,
         scatter_tables,
         for_sequence_operands,
         for_range_operands,
         range_comprehensions,
         list_comprehensions,
-        error_operands: vec![], // Deprecated field, always empty
-        error_operands_full: Some(error_operands_full),
+        error_operands_full,
         lambda_programs,
         line_number_spans,
         fork_line_number_spans,
@@ -477,6 +479,14 @@ fn decode_names_from_fb(
 }
 
 pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Program, DecodeError> {
+    let version = fb_decode!(fb_prog_ref, version);
+    if version != STORED_PROGRAM_VERSION {
+        return Err(DecodeError::DecodeFailed(format!(
+            "Stored program version {version} does not match expected {STORED_PROGRAM_VERSION}"
+        )));
+    }
+    let expected_builtin_signature = fb_decode!(fb_prog_ref, builtin_signature);
+
     // Decode main_vector
     let main_words = fb_decode!(fb_prog_ref, main_vector)
         .to_vec()
@@ -589,10 +599,8 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
     let range_comprehensions = decode_range_comprehensions(&fb_prog_ref)?;
     let list_comprehensions = decode_list_comprehensions(&fb_prog_ref)?;
 
-    // Decode error operands - require new format with full error information
-    let fb_error_operands_full = fb_decode!(fb_prog_ref, error_operands_full)
-        .expect("error_operands_full field is missing - database migration to v3.0.0 required");
-
+    // Decode error operands - require full format with error symbols
+    let fb_error_operands_full = fb_decode!(fb_prog_ref, error_operands_full);
     let error_operands = fb_error_operands_full
         .iter()
         .map(|operand_result| {
@@ -701,7 +709,7 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
         .collect();
     let fork_line_number_spans = fork_line_number_spans?;
 
-    Ok(Program(Arc::new(PrgInner {
+    let program = Program(Arc::new(PrgInner {
         literals,
         jump_labels,
         var_names,
@@ -716,7 +724,35 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
         fork_vectors,
         line_number_spans,
         fork_line_number_spans,
-    })))
+    }));
+
+    let actual_builtin_signature = builtin_signature_for_ids(used_builtin_ids(&program));
+    if actual_builtin_signature != expected_builtin_signature {
+        return Err(DecodeError::DecodeFailed(
+            "Stored program builtin signature mismatch; \
+             program data is corrupt or builtin table changed"
+                .to_string(),
+        ));
+    }
+
+    Ok(program)
+}
+
+fn used_builtin_ids(program: &Program) -> Vec<BuiltinId> {
+    let mut ids = HashSet::new();
+    collect_builtin_ids(&program.0.main_vector, &mut ids);
+    for (_, ops) in &program.0.fork_vectors {
+        collect_builtin_ids(ops, &mut ids);
+    }
+    ids.into_iter().collect()
+}
+
+fn collect_builtin_ids(ops: &[Op], ids: &mut HashSet<BuiltinId>) {
+    for op in ops {
+        if let Op::FuncCall { id } = op {
+            ids.insert(*id);
+        }
+    }
 }
 
 fn decode_one_scatter_label(

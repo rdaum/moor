@@ -1016,3 +1016,106 @@ pub fn offset_for_builtin(bf_name: &str) -> usize {
         .unwrap_or_else(|| panic!("Unknown builtin: {bf_name}"));
     builtin.0 as usize
 }
+
+pub fn builtin_signature_for_ids<I>(ids: I) -> u64
+where
+    I: IntoIterator<Item = BuiltinId>,
+{
+    const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
+
+    fn hash_bytes(hash: &mut u64, bytes: &[u8]) {
+        for byte in bytes {
+            *hash ^= *byte as u64;
+            *hash = hash.wrapping_mul(FNV_PRIME);
+        }
+    }
+
+    fn hash_u8(hash: &mut u64, value: u8) {
+        hash_bytes(hash, &[value]);
+    }
+
+    fn hash_u16(hash: &mut u64, value: u16) {
+        hash_bytes(hash, &value.to_le_bytes());
+    }
+
+    fn hash_u64(hash: &mut u64, value: u64) {
+        hash_bytes(hash, &value.to_le_bytes());
+    }
+
+    fn hash_str(hash: &mut u64, value: &str) {
+        hash_u64(hash, value.len() as u64);
+        hash_bytes(hash, value.as_bytes());
+    }
+
+    let mut ids: Vec<BuiltinId> = ids.into_iter().collect();
+    ids.sort_by_key(|id| id.0);
+
+    let mut hash = FNV_OFFSET_BASIS;
+    for id in ids {
+        let builtin = BUILTIN_DESCRIPTORS.get(id.0 as usize).unwrap_or_else(|| {
+            panic!(
+                "Unknown builtin id {} while hashing program signature; \
+                     program data is corrupt or builtin table changed",
+                id.0
+            )
+        });
+
+        hash_u16(&mut hash, id.0);
+        let name = builtin.name.as_arc_str();
+        hash_str(&mut hash, name.as_str());
+        let override_name = builtin.bf_override_name.as_arc_str();
+        hash_str(&mut hash, override_name.as_str());
+
+        match builtin.min_args {
+            ArgCount::Q(value) => {
+                hash_u8(&mut hash, 0);
+                hash_u64(&mut hash, value as u64);
+            }
+            ArgCount::U => hash_u8(&mut hash, 1),
+        }
+        match builtin.max_args {
+            ArgCount::Q(value) => {
+                hash_u8(&mut hash, 0);
+                hash_u64(&mut hash, value as u64);
+            }
+            ArgCount::U => hash_u8(&mut hash, 1),
+        }
+
+        hash_u64(&mut hash, builtin.types.len() as u64);
+        for arg_type in &builtin.types {
+            match arg_type {
+                ArgType::Any => hash_u8(&mut hash, 0),
+                ArgType::AnyNum => hash_u8(&mut hash, 1),
+                ArgType::Typed(var_type) => {
+                    hash_u8(&mut hash, 2);
+                    hash_u8(&mut hash, *var_type as u8);
+                }
+            }
+        }
+
+        hash_u8(&mut hash, builtin.implemented as u8);
+        hash_u8(&mut hash, builtin.exposed as u8);
+    }
+
+    hash
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BuiltinId, builtin_signature_for_ids};
+
+    #[test]
+    fn builtin_signature_is_order_independent() {
+        let sig_a = builtin_signature_for_ids([BuiltinId(0), BuiltinId(1)]);
+        let sig_b = builtin_signature_for_ids([BuiltinId(1), BuiltinId(0)]);
+        assert_eq!(sig_a, sig_b);
+    }
+
+    #[test]
+    fn builtin_signature_changes_with_ids() {
+        let sig_a = builtin_signature_for_ids([BuiltinId(0)]);
+        let sig_b = builtin_signature_for_ids([BuiltinId(0), BuiltinId(1)]);
+        assert_ne!(sig_a, sig_b);
+    }
+}

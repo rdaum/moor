@@ -184,6 +184,9 @@ table StoredMooRProgram {
     // Schema version for migrations
     version: uint16;
 
+    // Builtin table signature for early detection of incompatible programs
+    builtin_signature: uint64;
+
     // Opcode stream as packed u16 words
     main_vector: [uint16] (required);
 
@@ -198,9 +201,6 @@ table StoredMooRProgram {
 
     // Variable names
     var_names: StoredNames (required);
-
-    // Symbol table for interned symbols
-    symbol_table: [MoorCommon.Symbol] (required);
 
     // Scatter tables
     scatter_tables: [StoredScatterArgs] (required);
@@ -217,11 +217,8 @@ table StoredMooRProgram {
     // List comprehensions
     list_comprehensions: [StoredListComprehend] (required);
 
-    // Error operands (as u8 codes) - DEPRECATED: Use error_operands_full instead
-    error_operands: [uint8] (required);
-
     // Error operands with complete information including symbols for custom errors
-    error_operands_full: [StoredErrorOperand];
+    error_operands_full: [StoredErrorOperand] (required);
 
     // Lambda programs (recursive)
     lambda_programs: [StoredMooRProgram] (required);
