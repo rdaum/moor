@@ -639,13 +639,11 @@ mod tests {
         ];
 
         // Should fuzzy match "lamp" with "lammp" (with fuzzy enabled)
-        let result =
-            complex_match_objects_keys_with_fuzzy_threshold("lammp", &objects, &keys, 0.5);
+        let result = complex_match_objects_keys_with_fuzzy_threshold("lammp", &objects, &keys, 0.5);
         assert_eq!(result, ComplexMatchResult::Single(v_int(1)));
 
         // Should fuzzy match "table" with "tabel"
-        let result =
-            complex_match_objects_keys_with_fuzzy_threshold("tabel", &objects, &keys, 0.5);
+        let result = complex_match_objects_keys_with_fuzzy_threshold("tabel", &objects, &keys, 0.5);
         assert_eq!(result, ComplexMatchResult::Single(v_int(2)));
     }
 

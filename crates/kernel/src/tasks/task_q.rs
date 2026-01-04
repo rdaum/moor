@@ -622,21 +622,41 @@ impl SuspensionQ {
                     }
                 }
                 TaskState::Prepared(_) => {
-                    // For prepared tasks, vm_host stack MUST be non-empty
-                    let Some(((verb_name, verb_definer), (line_number, this))) = sr
+                    // Prefer the top non-builtin frame so builtins like suspend() don't mask
+                    // the calling verb in queued_tasks().
+                    let activation = sr
                         .task
                         .vm_host
-                        .verb_name()
-                        .zip(sr.task.vm_host.verb_definer())
-                        .zip(sr.task.vm_host.line_number().zip(sr.task.vm_host.this()))
-                    else {
-                        error!(
-                            task_id = sr.task.task_id,
-                            "Prepared task has empty activation stack - skipping"
-                        );
-                        continue;
-                    };
-                    (verb_name, verb_definer, line_number, this)
+                        .vm_exec_state()
+                        .stack
+                        .iter()
+                        .rev()
+                        .find(|a| !a.is_builtin_frame());
+                    if let Some(activation) = activation {
+                        let line_number = activation.frame.find_line_no().unwrap_or(0);
+                        (
+                            activation.verb_name,
+                            activation.verb_definer(),
+                            line_number,
+                            activation.this.clone(),
+                        )
+                    } else {
+                        // For prepared tasks, vm_host stack MUST be non-empty
+                        let Some(((verb_name, verb_definer), (line_number, this))) = sr
+                            .task
+                            .vm_host
+                            .verb_name()
+                            .zip(sr.task.vm_host.verb_definer())
+                            .zip(sr.task.vm_host.line_number().zip(sr.task.vm_host.this()))
+                        else {
+                            error!(
+                                task_id = sr.task.task_id,
+                                "Prepared task has empty activation stack - skipping"
+                            );
+                            continue;
+                        };
+                        (verb_name, verb_definer, line_number, this)
+                    }
                 }
             };
 

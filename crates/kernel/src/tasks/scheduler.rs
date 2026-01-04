@@ -2517,37 +2517,32 @@ impl TaskQ {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.kill_task);
 
-        // Check if task exists in suspended tasks first, which we can combine with the perms
-        // check.
-        let is_suspended =
-            if self
-                .suspended
-                .perms_check(victim_task_id, sender_permissions.who, false)
+        let is_suspended = if self.suspended.tasks.contains_key(&victim_task_id) {
+            let is_wizard = sender_permissions
+                .check_is_wizard()
+                .expect("Could not check wizard status for kill request");
+            if !is_wizard
+                && !self
+                    .suspended
+                    .perms_check(victim_task_id, sender_permissions.who, false)
             {
-                true
-            } else if self.active.contains_key(&victim_task_id) {
-                // For active tasks, check if sender has permission to kill them
-                let tc = self.active.get(&victim_task_id).unwrap();
-                if !sender_permissions
-                    .check_is_wizard()
-                    .expect("Could not check wizard status for kill request")
-                    && sender_permissions.who != tc.player
-                {
-                    return v_err(E_PERM);
-                }
-                false
-            } else {
-                return v_err(E_INVARG);
-            };
-
-        // If not wizard and suspended task permission check failed, return permission error
-        if is_suspended
-            && !sender_permissions
+                return v_err(E_PERM);
+            }
+            true
+        } else if self.active.contains_key(&victim_task_id) {
+            // For active tasks, check if sender has permission to kill them
+            let tc = self.active.get(&victim_task_id).unwrap();
+            if !sender_permissions
                 .check_is_wizard()
                 .expect("Could not check wizard status for kill request")
-        {
-            return v_err(E_PERM);
-        }
+                && sender_permissions.who != tc.player
+            {
+                return v_err(E_PERM);
+            }
+            false
+        } else {
+            return v_err(E_INVARG);
+        };
 
         // If suspended we can just remove completely and move on.
         if is_suspended {
