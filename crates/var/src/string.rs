@@ -643,6 +643,16 @@ impl Sequence for Str {
         let base_str = self.as_str();
         let from = max(from, 0) as usize;
 
+        if from > base_str.len() {
+            return Err(E_RANGE.with_msg(|| {
+                format!(
+                    "Range start {} out of bounds for string of length {}",
+                    from,
+                    base_str.len()
+                )
+            }));
+        }
+
         let mut result_str = if from > 0 {
             base_str[..from].to_string()
         } else {
@@ -652,7 +662,9 @@ impl Sequence for Str {
 
         match to.to_usize() {
             Some(to) => {
-                result_str.push_str(&base_str[to + 1..]);
+                if to + 1 < base_str.len() {
+                    result_str.push_str(&base_str[to + 1..]);
+                }
             }
             None => {
                 result_str.push_str(base_str);
@@ -900,6 +912,16 @@ mod tests {
         let expected = v_str("me:words");
         let result = base.range_set(&v_int(1), &v_int(0), &value, IndexMode::OneBased);
         assert_eq!(result, Ok(expected));
+    }
+
+    #[test]
+    fn test_string_range_set_out_of_bounds_panic() {
+        let base = v_str("abc");
+        let value = v_str("d");
+        // 1-based index 5 -> 0-based 4. len is 3. 4 > 3. Returns E_RANGE.
+        let result = base.range_set(&v_int(5), &v_int(5), &value, IndexMode::OneBased);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), E_RANGE);
     }
 
     #[test]
