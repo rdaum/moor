@@ -21,11 +21,15 @@ use moor_common::matching::{
 };
 use moor_compiler::offset_for_builtin;
 use moor_var::{
-    Associative, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Error, FAILED_MATCH, IndexMode, List, Sequence,
-    Var, VarType, Variant, v_empty_list, v_int, v_list, v_list_iter, v_map, v_obj, v_str, v_string,
+    Associative, E_ARGS, E_INVARG, E_MAXREC, E_RANGE, E_TYPE, Error, FAILED_MATCH, IndexMode, List,
+    Sequence, Var, VarType, Variant, v_empty_list, v_int, v_list, v_list_iter, v_map, v_obj, v_str,
+    v_string,
 };
-use onig::{Region, SearchOptions, SyntaxBehavior, SyntaxOperator};
-use std::{ops::BitOr, sync::Mutex};
+use onig::{MatchParam, Region, SearchOptions, SyntaxBehavior, SyntaxOperator};
+use std::{
+    ops::BitOr,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     task_context::with_current_transaction,
@@ -329,7 +333,7 @@ fn char_range_to_byte_range(s: &str, start: isize, end: isize) -> Option<(usize,
 }
 
 lazy_static! {
-    static ref MOO_REGEX_CACHE: Mutex<HashMap<(String, bool), Result<onig::Regex, onig::Error>>> =
+    static ref MOO_REGEX_CACHE: Mutex<HashMap<(String, bool), Result<Arc<onig::Regex>, onig::Error>>> =
         Default::default();
 }
 
@@ -362,16 +366,19 @@ fn perform_regex_match(
     );
     syntax.set_behavior(SyntaxBehavior::SYNTAX_BEHAVIOR_ALLOW_DOUBLE_RANGE_OP_IN_CC);
 
-    let mut cache_lock = MOO_REGEX_CACHE.lock().unwrap();
-    let regex = cache_lock
-        .entry((translated_pattern.clone(), case_matters))
-        .or_insert_with(|| {
-            onig::Regex::with_options(translated_pattern.as_str(), options, &syntax)
-        });
-    let regex = match regex {
-        Ok(regex) => regex,
-        Err(_) => {
-            return Err(E_INVARG.msg("Invalid regex pattern"));
+    let regex = {
+        let mut cache_lock = MOO_REGEX_CACHE.lock().unwrap();
+        let regex = cache_lock
+            .entry((translated_pattern.clone(), case_matters))
+            .or_insert_with(|| {
+                onig::Regex::with_options(translated_pattern.as_str(), options, &syntax)
+                    .map(Arc::new)
+            });
+        match regex {
+            Ok(regex) => Arc::clone(regex),
+            Err(_) => {
+                return Err(E_INVARG.msg("Invalid regex pattern"));
+            }
         }
     };
     let (search_start, search_end) = if reverse {
@@ -380,14 +387,20 @@ fn perform_regex_match(
         (0, subject.len())
     };
     let mut region = Region::new();
-
-    let Some(_) = regex.search_with_options(
+    let search_result = match regex.search_with_param(
         subject,
         search_start,
         search_end,
         SearchOptions::SEARCH_OPTION_NONE,
         Some(&mut region),
-    ) else {
+        MatchParam::default(),
+    ) {
+        Ok(result) => result,
+        Err(err) => {
+            return Err(E_MAXREC.msg(format!("Regex search error: {}", err.description())));
+        }
+    };
+    let Some(_) = search_result else {
         return Ok(None);
     };
     // Overall span
@@ -469,7 +482,7 @@ fn bf_rmatch(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 lazy_static! {
-    static ref PCRE_PATTERN_CACHE: Mutex<HashMap<(String, bool), Result<onig::Regex, onig::Error>>> =
+    static ref PCRE_PATTERN_CACHE: Mutex<HashMap<(String, bool), Result<Arc<onig::Regex>, onig::Error>>> =
         Default::default();
 }
 
@@ -489,21 +502,23 @@ fn perform_pcre_match(
 ) -> Result<List, Error> {
     let case_insensitive = !case_matters;
     let cache_key = (re.to_string(), case_insensitive);
-    let mut cache_lock = PCRE_PATTERN_CACHE.lock().unwrap();
-    let regex = cache_lock.entry(cache_key).or_insert_with(|| {
-        let options = if !case_insensitive {
-            onig::RegexOptions::REGEX_OPTION_NONE
-        } else {
-            onig::RegexOptions::REGEX_OPTION_IGNORECASE
-        };
+    let regex = {
+        let mut cache_lock = PCRE_PATTERN_CACHE.lock().unwrap();
+        let regex = cache_lock.entry(cache_key).or_insert_with(|| {
+            let options = if !case_insensitive {
+                onig::RegexOptions::REGEX_OPTION_NONE
+            } else {
+                onig::RegexOptions::REGEX_OPTION_IGNORECASE
+            };
 
-        let syntax = onig::Syntax::perl();
-        onig::Regex::with_options(re, options, syntax)
-    });
-    let regex = match regex {
-        Ok(regex) => regex,
-        Err(_) => {
-            return Err(E_INVARG.msg("Invalid regex pattern"));
+            let syntax = onig::Syntax::perl();
+            onig::Regex::with_options(re, options, syntax).map(Arc::new)
+        });
+        match regex {
+            Ok(regex) => Arc::clone(regex),
+            Err(_) => {
+                return Err(E_INVARG.msg("Invalid regex pattern"));
+            }
         }
     };
 
@@ -511,15 +526,20 @@ fn perform_pcre_match(
     let mut matches = Vec::new();
     let mut start = 0;
     let end = target.len();
-    while regex
-        .search_with_options(
-            target,
-            start,
-            end,
-            SearchOptions::SEARCH_OPTION_NONE,
-            Some(&mut region),
-        )
-        .is_some()
+    while match regex.search_with_param(
+        target,
+        start,
+        end,
+        SearchOptions::SEARCH_OPTION_NONE,
+        Some(&mut region),
+        MatchParam::default(),
+    ) {
+        Ok(result) => result,
+        Err(err) => {
+            return Err(E_MAXREC.msg(format!("Regex search error: {}", err.description())));
+        }
+    }
+    .is_some()
     {
         if map_support {
             let mut map = vec![];
@@ -604,21 +624,23 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
     };
 
     let cache_key = (pattern.to_string(), case_insensitive);
-    let mut cache_lock = PCRE_PATTERN_CACHE.lock().unwrap();
-    let regex = cache_lock.entry(cache_key).or_insert_with(|| {
-        let options = if !case_insensitive {
-            onig::RegexOptions::REGEX_OPTION_NONE
-        } else {
-            onig::RegexOptions::REGEX_OPTION_IGNORECASE
-        };
+    let regex = {
+        let mut cache_lock = PCRE_PATTERN_CACHE.lock().unwrap();
+        let regex = cache_lock.entry(cache_key).or_insert_with(|| {
+            let options = if !case_insensitive {
+                onig::RegexOptions::REGEX_OPTION_NONE
+            } else {
+                onig::RegexOptions::REGEX_OPTION_IGNORECASE
+            };
 
-        let syntax = onig::Syntax::perl();
-        onig::Regex::with_options(pattern, options, syntax)
-    });
-    let regex = match regex {
-        Ok(regex) => regex,
-        Err(_) => {
-            return Err(E_INVARG.msg("Invalid regex pattern"));
+            let syntax = onig::Syntax::perl();
+            onig::Regex::with_options(pattern, options, syntax).map(Arc::new)
+        });
+        match regex {
+            Ok(regex) => Arc::clone(regex),
+            Err(_) => {
+                return Err(E_INVARG.msg("Invalid regex pattern"));
+            }
         }
     };
     // If `global` we will replace all matches. Otherwise, just stop after the first
@@ -627,13 +649,19 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
     let end = target.len();
     let mut matches = vec![];
     'outer: loop {
-        let match_num = regex.search_with_options(
+        let match_num = match regex.search_with_param(
             target,
             start,
             end,
             SearchOptions::SEARCH_OPTION_NONE,
             Some(&mut region),
-        );
+            MatchParam::default(),
+        ) {
+            Ok(result) => result,
+            Err(err) => {
+                return Err(E_MAXREC.msg(format!("Regex search error: {}", err.description())));
+            }
+        };
 
         if match_num.is_none() {
             break;
@@ -1373,7 +1401,7 @@ mod tests {
         perform_pcre_match, perform_pcre_replace, perform_regex_match, substitute,
     };
     use moor_compiler::to_literal;
-    use moor_var::{Var, v_int, v_list, v_map, v_str};
+    use moor_var::{E_MAXREC, Var, v_int, v_list, v_map, v_str};
 
     #[test]
     fn test_match_substitute() {
@@ -1551,6 +1579,15 @@ mod tests {
             to_literal(&expected),
             to_literal(&v)
         );
+    }
+
+    #[test]
+    fn test_pcre_match_retry_limit() {
+        let regex = "(a|b|ab)*bc";
+        let target = "ababababababababababababababababababababababababababababacbc";
+        let err = perform_pcre_match(false, false, regex, target, false).unwrap_err();
+        assert_eq!(err.err_type, E_MAXREC);
+        assert!(err.message().contains("retry-limit-in-match"));
     }
 
     #[test]
