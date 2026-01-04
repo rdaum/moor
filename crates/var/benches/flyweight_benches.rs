@@ -11,8 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_bench_utils::{black_box, BenchContext};
-use moor_var::{v_int, Flyweight, List, Obj, Symbol};
+use moor_bench_utils::{BenchContext, black_box};
+use moor_var::{Flyweight, List, Obj, Symbol, v_int};
 
 // Context for flyweight benchmarks
 struct FlyweightContext {
@@ -99,12 +99,12 @@ fn flyweight_remove_slot(ctx: &mut FlyweightContext, chunk_size: usize, _chunk_n
 }
 
 pub fn main() {
-    use moor_bench_utils::{generate_session_summary, run_benchmark_group, BenchmarkDef};
+    use moor_bench_utils::{BenchmarkDef, generate_session_summary, run_benchmark_group};
     use std::env;
 
     #[cfg(target_os = "linux")]
     {
-        use moor_bench_utils::perf_event::{events::Hardware, Builder};
+        use moor_bench_utils::perf_event::{Builder, events::Hardware};
         if Builder::new(Hardware::INSTRUCTIONS).build().is_err() {
             eprintln!(
                 "⚠️  Perf events are not available on this system (insufficient permissions or kernel support)."

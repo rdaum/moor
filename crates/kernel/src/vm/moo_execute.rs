@@ -1302,7 +1302,7 @@ fn get_property(
             v_obj(*flyweight.delegate())
         } else if propname == *SLOTS_SYM {
             let slots: Vec<_> = flyweight
-                .slots()
+                .slots_storage()
                 .iter()
                 .map(|(k, v)| {
                     (

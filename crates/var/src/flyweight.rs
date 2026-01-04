@@ -34,33 +34,17 @@
 use crate::{List, Obj, Sequence, Symbol, Var};
 use std::{
     fmt::{Debug, Formatter},
-    hash::Hash,
+    sync::Arc,
 };
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Flyweight(Box<Inner>);
 
-#[derive(Clone, PartialOrd, Ord, Eq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Inner {
     delegate: Obj,
-    slots: imbl::OrdMap<Symbol, Var>,
+    slots: Arc<Vec<(Symbol, Var)>>,
     contents: List,
-}
-
-impl PartialEq for Inner {
-    fn eq(&self, other: &Self) -> bool {
-        self.delegate == other.delegate
-            && self.slots == other.slots
-            && self.contents == other.contents
-    }
-}
-
-impl Hash for Flyweight {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.delegate.hash(state);
-        self.0.slots.hash(state);
-        self.0.contents.hash(state);
-    }
 }
 
 impl Debug for Flyweight {
@@ -74,11 +58,33 @@ impl Debug for Flyweight {
 }
 
 impl Flyweight {
-    pub fn mk_flyweight(delegate: Obj, slots: &[(Symbol, Var)], contents: List) -> Self {
-        Self::from_parts(delegate, slots.iter().cloned().collect(), contents)
+    fn canonicalize_slots(mut slots: Vec<(Symbol, Var)>) -> Vec<(Symbol, Var)> {
+        slots.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
+        let mut deduped = Vec::with_capacity(slots.len());
+        for (key, value) in slots {
+            match deduped.last_mut() {
+                Some((last_key, last_value)) if *last_key == key => {
+                    *last_value = value;
+                }
+                _ => deduped.push((key, value)),
+            }
+        }
+        deduped
     }
 
-    pub fn from_parts(delegate: Obj, slots: imbl::OrdMap<Symbol, Var>, contents: List) -> Self {
+    pub fn mk_flyweight(delegate: Obj, slots: &[(Symbol, Var)], contents: List) -> Self {
+        let mut final_slots = Vec::with_capacity(slots.len());
+        final_slots.extend(slots.iter().map(|(k, v)| (*k, v.clone())));
+        let final_slots = Self::canonicalize_slots(final_slots);
+        Self::from_parts_unchecked(delegate, Arc::new(final_slots), contents)
+    }
+
+    pub fn from_parts(delegate: Obj, slots: Arc<Vec<(Symbol, Var)>>, contents: List) -> Self {
+        let slots = Self::canonicalize_slots((*slots).clone());
+        Self::from_parts_unchecked(delegate, Arc::new(slots), contents)
+    }
+
+    fn from_parts_unchecked(delegate: Obj, slots: Arc<Vec<(Symbol, Var)>>, contents: List) -> Self {
         Self(Box::new(Inner {
             delegate,
             slots,
@@ -90,14 +96,18 @@ impl Flyweight {
 impl Flyweight {
     /// Return the slot with the given key, if it exists.
     pub fn get_slot(&self, key: &Symbol) -> Option<&Var> {
-        self.0.slots.get(key)
+        let slots = self.0.slots.as_slice();
+        match slots.binary_search_by(|(k, _)| k.cmp(key)) {
+            Ok(pos) => Some(&slots[pos].1),
+            Err(_) => None,
+        }
     }
 
     pub fn slots(&self) -> Vec<(Symbol, Var)> {
-        self.0.slots.iter().map(|(k, v)| (*k, v.clone())).collect()
+        self.0.slots.to_vec()
     }
 
-    pub fn slots_map(&self) -> &imbl::OrdMap<Symbol, Var> {
+    pub fn slots_storage(&self) -> &Vec<(Symbol, Var)> {
         &self.0.slots
     }
 
@@ -113,31 +123,39 @@ impl Flyweight {
         self.0.contents.is_empty()
     }
 
-    pub fn with_slots_map(&self, slots: imbl::OrdMap<Symbol, Var>) -> Self {
+    pub fn with_slots_vec(&self, slots: Arc<Vec<(Symbol, Var)>>) -> Self {
         Self::from_parts(self.0.delegate, slots, self.0.contents.clone())
     }
 
     pub fn with_contents(&self, contents: List) -> Self {
-        Self::from_parts(self.0.delegate, self.0.slots.clone(), contents)
+        Self::from_parts_unchecked(self.0.delegate, self.0.slots.clone(), contents)
     }
 
     /// Add or update a slot, returning a new Flyweight with the change.
     pub fn add_slot(&self, key: Symbol, value: Var) -> Self {
-        let mut new_slots = self.0.slots.clone();
-        new_slots.insert(key, value);
-        Self::from_parts(self.0.delegate, new_slots, self.0.contents.clone())
+        let mut new_slots = (*self.0.slots).clone();
+        match new_slots.binary_search_by(|(k, _)| k.cmp(&key)) {
+            Ok(pos) => new_slots[pos] = (key, value),
+            Err(pos) => new_slots.insert(pos, (key, value)),
+        }
+        Self::from_parts_unchecked(
+            self.0.delegate,
+            Arc::new(new_slots),
+            self.0.contents.clone(),
+        )
     }
 
     /// Remove a slot, returning a new Flyweight without that slot.
     pub fn remove_slot(&self, key: Symbol) -> Self {
-        let mut new_slots = self.0.slots.clone();
-        new_slots.remove(&key);
-        Self::from_parts(self.0.delegate, new_slots, self.0.contents.clone())
-    }
-
-    /// Get slots as a map (for the slots() builtin).
-    pub fn slots_as_map(&self) -> imbl::OrdMap<Symbol, Var> {
-        self.0.slots.clone()
+        let mut new_slots = (*self.0.slots).clone();
+        if let Ok(pos) = new_slots.binary_search_by(|(k, _)| k.cmp(&key)) {
+            new_slots.remove(pos);
+        }
+        Self::from_parts_unchecked(
+            self.0.delegate,
+            Arc::new(new_slots),
+            self.0.contents.clone(),
+        )
     }
 }
 
@@ -164,7 +182,7 @@ mod tests {
         assert_eq!(fw2.get_slot(&sym_dobj), Some(&v_int(12)));
         assert_eq!(fw2.get_slot(&sym_iobj), Some(&v_int(13)));
         assert_eq!(fw2.get_slot(&sym_dobj_name), Some(&v_int(100)));
-        assert_eq!(fw2.slots().len(), 3);
+        assert_eq!(fw2.slots_storage().len(), 3);
     }
 
     #[test]
@@ -181,6 +199,6 @@ mod tests {
 
         assert_eq!(fw2.get_slot(&sym_a), Some(&v_int(999)));
         assert_eq!(fw2.get_slot(&sym_b), Some(&v_int(2)));
-        assert_eq!(fw2.slots().len(), 2);
+        assert_eq!(fw2.slots_storage().len(), 2);
     }
 }

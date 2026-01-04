@@ -384,7 +384,7 @@ impl FjallSnapshotLoader {
                 }
 
                 // Check slots (Symbol -> Var pairs)
-                for (_symbol, slot_value) in flyweight.slots().iter() {
+                for (_symbol, slot_value) in flyweight.slots_storage().iter() {
                     Self::extract_anonymous_refs_recursive(slot_value, refs);
                 }
 

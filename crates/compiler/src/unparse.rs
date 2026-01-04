@@ -1070,8 +1070,9 @@ pub fn to_literal(v: &Var) -> String {
             let mut result = String::new();
             result.push('<');
             result.push_str(fl.delegate().to_literal().as_str());
-            if !fl.slots().is_empty() {
-                for (k, v) in fl.slots().iter() {
+            let slots = fl.slots_storage();
+            if !slots.is_empty() {
+                for (k, v) in slots.iter() {
                     result.push_str(", .");
                     result.push_str(&k.as_arc_str());
                     result.push_str(" = ");
@@ -1353,8 +1354,9 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
             // < delegate, .slot = value, ..., { ... } >
             result.push('<');
             result.push_str(&f(fl.delegate()));
-            if !fl.slots().is_empty() {
-                for (k, v) in fl.slots().iter() {
+            let slots = fl.slots_storage();
+            if !slots.is_empty() {
+                for (k, v) in slots.iter() {
                     result.push_str(", .");
                     result.push_str(&k.as_arc_str());
                     result.push_str(" = ");

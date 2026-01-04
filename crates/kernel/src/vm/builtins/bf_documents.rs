@@ -520,8 +520,9 @@ where
     // Use the provided closure to resolve the tag name
     let tag_name = flyweight_tag_resolver(fl)?;
 
-    let mut attributes = Vec::with_capacity(fl.slots().len());
-    for (key, value) in fl.slots() {
+    let slots = fl.slots_storage();
+    let mut attributes = Vec::with_capacity(slots.len());
+    for (key, value) in slots.iter() {
         let key = key.to_string();
         let value = match value.variant() {
             Variant::Str(s) => s.as_str().to_string(),

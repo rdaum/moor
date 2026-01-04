@@ -1113,8 +1113,8 @@ impl Var {
                 if f1.delegate() != f2.delegate() {
                     return false;
                 }
-                let slots1 = f1.slots();
-                let slots2 = f2.slots();
+                let slots1 = f1.slots_storage();
+                let slots2 = f2.slots_storage();
                 if slots1.len() != slots2.len() {
                     return false;
                 }
@@ -1431,7 +1431,7 @@ impl ByteSized for Var {
             Variant::Flyweight(f) => {
                 size_of::<Obj>()
                     + f.contents().iter().map(|e| e.size_bytes()).sum::<usize>()
-                    + f.slots()
+                    + f.slots_storage()
                         .iter()
                         .map(|(_, v)| size_of::<Symbol>() + v.size_bytes())
                         .sum::<usize>()

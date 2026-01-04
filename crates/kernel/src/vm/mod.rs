@@ -128,7 +128,7 @@ fn extract_anonymous_refs_from_var(var: &Var, refs: &mut std::collections::HashS
             }
 
             // Check slots (Symbol -> Var pairs)
-            for (_symbol, slot_value) in flyweight.slots().iter() {
+            for (_symbol, slot_value) in flyweight.slots_storage().iter() {
                 extract_anonymous_refs_from_var(slot_value, refs);
             }
 

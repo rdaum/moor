@@ -98,7 +98,7 @@ fn bf_flyslots(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     let slots = f
-        .slots_as_map()
+        .slots_storage()
         .iter()
         .map(|(k, v)| (v_sym(*k), v.clone()))
         .collect::<Vec<_>>();

@@ -315,7 +315,7 @@ pub fn var_to_flatbuffer_internal(
 
         Variant::Flyweight(f) => {
             let slots: Result<Vec<_>, _> = f
-                .slots()
+                .slots_storage()
                 .iter()
                 .map(|(name, value)| {
                     Ok(var::FlyweightSlot {
