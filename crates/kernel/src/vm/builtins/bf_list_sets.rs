@@ -541,14 +541,31 @@ fn perform_pcre_match(
     }
     .is_some()
     {
+        let mut max_index = None;
+        for i in 0..region.len() {
+            if region.pos(i).is_some() {
+                max_index = Some(i);
+            }
+        }
+        let Some(max_index) = max_index else {
+            break;
+        };
+
         if map_support {
             let mut map = vec![];
-            for i in 0..region.len() {
-                let (start, end) = region.pos(i).unwrap();
-                let start_char = (byte_offset_to_char_index(target, start) + 1) as i64;
-                let end_char = byte_offset_to_char_index(target, end) as i64;
+            for i in 0..=max_index {
+                let (match_value, start_char, end_char) = if let Some((start, end)) = region.pos(i)
+                {
+                    (
+                        v_str(&target[start..end]),
+                        (byte_offset_to_char_index(target, start) + 1) as i64,
+                        byte_offset_to_char_index(target, end) as i64,
+                    )
+                } else {
+                    (v_str(""), 0, -1)
+                };
                 let match_map = vec![
-                    (v_str("match"), v_str(&target[start..end])),
+                    (v_str("match"), match_value),
                     (
                         v_str("position"),
                         v_list(&[v_int(start_char), v_int(end_char)]),
@@ -558,15 +575,21 @@ fn perform_pcre_match(
             }
             let map = v_map(&map);
             matches.push(map);
-            start = region.pos(0).unwrap().1;
         } else {
             let mut assoc_list = vec![];
-            for i in 0..region.len() {
-                let (start, end) = region.pos(i).unwrap();
-                let start_char = (byte_offset_to_char_index(target, start) + 1) as i64;
-                let end_char = byte_offset_to_char_index(target, end) as i64;
+            for i in 0..=max_index {
+                let (match_value, start_char, end_char) = if let Some((start, end)) = region.pos(i)
+                {
+                    (
+                        v_str(&target[start..end]),
+                        (byte_offset_to_char_index(target, start) + 1) as i64,
+                        byte_offset_to_char_index(target, end) as i64,
+                    )
+                } else {
+                    (v_str(""), 0, -1)
+                };
                 let match_list = vec![
-                    v_list(&[v_str("match"), v_str(&target[start..end])]),
+                    v_list(&[v_str("match"), match_value]),
                     v_list(&[
                         v_str("position"),
                         v_list(&[v_int(start_char), v_int(end_char)]),
@@ -575,7 +598,11 @@ fn perform_pcre_match(
                 assoc_list.push(v_list(&[v_string(i.to_string()), v_list(&match_list)]));
             }
             matches.push(v_list(&assoc_list));
-            start = region.pos(0).unwrap().1;
+        }
+        if let Some((_, end)) = region.pos(0) {
+            start = end;
+        } else {
+            break;
         }
         if !repeat {
             break;
@@ -748,23 +775,8 @@ fn bf_pcre_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    let case_matters = if bf_args.args.len() >= 3 {
-        let Some(case_matters) = bf_args.args[2].as_integer() else {
-            return Err(BfErr::Code(E_TYPE));
-        };
-        case_matters == 1
-    } else {
-        false
-    };
-
-    let repeat = if bf_args.args.len() == 4 {
-        let Some(repeat) = bf_args.args[3].as_integer() else {
-            return Err(BfErr::Code(E_TYPE));
-        };
-        repeat == 1
-    } else {
-        true
-    };
+    let case_matters = bf_args.args.len() >= 3 && bf_args.args[2].is_true();
+    let repeat = bf_args.args.len() != 4 || bf_args.args[3].is_true();
 
     let result = match perform_pcre_match(
         true,
@@ -1572,6 +1584,28 @@ mod tests {
                 ]),
             ),
         ])]);
+        assert_eq!(
+            v,
+            expected,
+            "Expected: \n{}\nGot: \n{}",
+            to_literal(&expected),
+            to_literal(&v)
+        );
+    }
+
+    #[test]
+    fn test_pcre_match_optional_group_unmatched() {
+        let regex = "(a)?b";
+        let target = "b";
+        let result = perform_pcre_match(true, false, regex, target, false).unwrap();
+        let v = Var::from_list(result);
+        let expected = v_list(&[v_map(&[(
+            v_str("0"),
+            v_map(&[
+                (v_str("match"), v_str("b")),
+                (v_str("position"), v_list(&[v_int(1), v_int(1)])),
+            ]),
+        )])]);
         assert_eq!(
             v,
             expected,
