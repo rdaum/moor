@@ -262,7 +262,7 @@ fn main() -> Result<(), eyre::Error> {
     println!();
 
     // Create temporary directory for database if using default path
-    let temp_dir = if args.db_path == "test_db" {
+    let temp_dir = if args.db_path == std::path::Path::new("test_db") {
         Some(tempfile::tempdir()?)
     } else {
         None
