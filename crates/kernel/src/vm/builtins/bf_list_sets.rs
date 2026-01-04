@@ -541,6 +541,11 @@ fn perform_pcre_match(
     }
     .is_some()
     {
+        let capture = |index| {
+            let (start, end) = region.pos(index)?;
+            let matched = target.get(start..end)?;
+            Some((matched, start, end))
+        };
         let mut max_index = None;
         for i in 0..region.len() {
             if region.pos(i).is_some() {
@@ -554,10 +559,11 @@ fn perform_pcre_match(
         if map_support {
             let mut map = vec![];
             for i in 0..=max_index {
-                let (match_value, start_char, end_char) = if let Some((start, end)) = region.pos(i)
+                let (match_value, start_char, end_char) = if let Some((matched, start, end)) =
+                    capture(i)
                 {
                     (
-                        v_str(&target[start..end]),
+                        v_str(matched),
                         (byte_offset_to_char_index(target, start) + 1) as i64,
                         byte_offset_to_char_index(target, end) as i64,
                     )
@@ -578,10 +584,11 @@ fn perform_pcre_match(
         } else {
             let mut assoc_list = vec![];
             for i in 0..=max_index {
-                let (match_value, start_char, end_char) = if let Some((start, end)) = region.pos(i)
+                let (match_value, start_char, end_char) = if let Some((matched, start, end)) =
+                    capture(i)
                 {
                     (
-                        v_str(&target[start..end]),
+                        v_str(matched),
                         (byte_offset_to_char_index(target, start) + 1) as i64,
                         byte_offset_to_char_index(target, end) as i64,
                     )
@@ -599,11 +606,10 @@ fn perform_pcre_match(
             }
             matches.push(v_list(&assoc_list));
         }
-        if let Some((_, end)) = region.pos(0) {
-            start = end;
-        } else {
+        let Some((_, _, end)) = capture(0) else {
             break;
-        }
+        };
+        start = end;
         if !repeat {
             break;
         }
@@ -1606,6 +1612,26 @@ mod tests {
                 (v_str("position"), v_list(&[v_int(1), v_int(1)])),
             ]),
         )])]);
+        assert_eq!(
+            v,
+            expected,
+            "Expected: \n{}\nGot: \n{}",
+            to_literal(&expected),
+            to_literal(&v)
+        );
+    }
+
+    #[test]
+    fn test_pcre_match_unicode_indices() {
+        let regex = "(é)";
+        let target = "héllo";
+        let result = perform_pcre_match(true, false, regex, target, false).unwrap();
+        let v = Var::from_list(result);
+        let match_map = v_map(&[
+            (v_str("match"), v_str("é")),
+            (v_str("position"), v_list(&[v_int(2), v_int(2)])),
+        ]);
+        let expected = v_list(&[v_map(&[(v_str("0"), match_map.clone()), (v_str("1"), match_map)])]);
         assert_eq!(
             v,
             expected,
