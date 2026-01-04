@@ -47,8 +47,8 @@ using [anonymous objects](objects-in-the-moo-database.md#anonymous-objects) inst
 
 ### The Delegate
 
-Every flyweight has a **delegate** object. When you call a verb on a flyweight, the server looks up that verb on the
-delegate object.
+Every flyweight has a **delegate** object. When you call a verb on a flyweight, the server looks up that verb starting
+from the delegate object and following its normal inheritance chain (delegate → parent → grandparent, etc.).
 
 Inside the verb:
 
@@ -56,7 +56,8 @@ Inside the verb:
 - `caller` is the object that called the verb.
 
 This works exactly like regular object inheritance. Just as `this` refers to the child object even when running code
-defined on a parent, here `this` refers to the flyweight even when running code defined on the delegate.
+defined on a parent, here `this` refers to the flyweight even when running code defined on the delegate or any of its
+ancestors.
 
 You can access the delegate of a flyweight using the `.delegate` slot:
 
@@ -74,8 +75,16 @@ let item = < $thing, .weight = 5 >;
 player:tell(item.weight); // prints 5
 ```
 
-If a slot does not exist on the flyweight, the server does **not** look for a property on the delegate object. It raises
-`E_PROPNF` (Property Not Found).
+If a slot does not exist on the flyweight, the server looks for a property on the delegate object (including its ancestor
+objects, following the normal inheritance chain). This allows flyweights to "inherit" properties from their delegate's
+hierarchy.
+
+```moo
+// Example: $fish inherits from $animal which has property .blood_colour = "red"
+let fish_flyweight = < $fish, .flavour = 'yum >;
+player:tell(fish_flyweight.blood_colour); // prints "red" - inherited from $animal
+player:tell(fish_flyweight.flavour);      // prints 'yum - from flyweight slot
+```
 
 > **Important**: Unlike database objects, you **cannot** assign to a slot using dot notation.
 >
