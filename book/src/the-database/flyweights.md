@@ -1,7 +1,7 @@
 # Flyweights
 
 Flyweights are a special value type in mooR designed to represent "lightweight objects". They allow you to bundle data (
-properties) and behaviour (verbs) together in a value that doesn't carry the weight of a full database object.
+slots) and behaviour (verbs) together in a value that doesn't carry the weight of a full database object.
 
 They are particularly useful for:
 
@@ -14,15 +14,16 @@ They are particularly useful for:
 Unlike database objects, flyweights:
 
 - Are **values**, not references. They are passed efficiently by the system, not by object number.
-- Are **immutable**. You cannot change a flyweight in place; you create a new one with modified properties.
+- Are **immutable**. You cannot change a flyweight in place; you create a new one with modified slots.
 - Do not have their own unique object number in the database. Instead, they live inside properties, variables, or
   lists/maps, just like strings or numbers.
+- Never have their own verbs; all verb calls are handled by the delegate object.
 - Are automatically garbage collected when no longer used.
 
 However, like objects:
 
 - They can receive **verb calls**. Calls are delegated to a "parent" object (the **delegate**).
-- They have **properties** (called **slots**).
+- They have **slots** (which work like object properties).
 - They can contain other values (in a **contents** list).
 
 ## Terminology: Why "Slots" and "Delegate"?
@@ -33,9 +34,10 @@ Flyweights use special terminology to emphasize that they are **not** full datab
   slots" reminds you they are **immutable value storage**, not mutable object properties that can be directly assigned.
 
 - **Delegate** instead of "parent": The delegate object provides verb implementations, but the flyweight itself is a
-  separate value. When you call `flyweight:verb()`, the server finds that verb on the delegate object and runs it with
-  `this` set to the **flyweight value** (not the delegate). Using "delegate" emphasizes that verbs are **implemented by
-  ** another object, not that the flyweight inherits from it in the object hierarchy.
+  separate value. **Flyweights never have verbs of their own**—when you call `flyweight:verb()`, the server finds that
+  verb on the delegate object and runs it with `this` set to the **flyweight value** (not the delegate). Using "delegate"
+  emphasizes that verbs are **implemented by** another object, not that the flyweight inherits from it in the object
+  hierarchy.
 
 This terminology helps distinguish flyweights from real objects. If you need something more object-like that is still
 garbage collected but **mutable**, consider
@@ -56,7 +58,7 @@ Inside the verb:
 This works exactly like regular object inheritance. Just as `this` refers to the child object even when running code
 defined on a parent, here `this` refers to the flyweight even when running code defined on the delegate.
 
-You can access the delegate of a flyweight using the `.delegate` property:
+You can access the delegate of a flyweight using the `.delegate` slot:
 
 ```moo
 let token = < $auth_token >;
