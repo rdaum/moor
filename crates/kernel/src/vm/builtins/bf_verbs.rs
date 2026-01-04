@@ -14,7 +14,7 @@
 //! Builtin functions for verb manipulation and introspection.
 
 use strum::EnumCount;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 use crate::{
     task_context::{with_current_transaction, with_current_transaction_mut},
@@ -735,7 +735,7 @@ fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let oflags = with_current_transaction(|world_state| world_state.flags_of(&obj))
         .map_err(world_state_bf_err)?;
 
-    if with_current_transaction(|world_state| world_state.controls(&bf_args.caller_perms(), &obj))
+    if with_current_transaction(|world_state| world_state.controls(&bf_args.task_perms_who(), &obj))
         .map_err(world_state_bf_err)?
         || oflags.contains(ObjFlag::Read)
     {
@@ -749,6 +749,11 @@ fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let result = v_list(&[v_obj(vd.location()), names]);
         Ok(Ret(result))
     } else {
+        info!(
+            "rejected caller_perms: {:?} is_readable: {}",
+            bf_args.caller_perms(),
+            oflags.contains(ObjFlag::Read)
+        );
         Ok(Ret(bf_args.v_bool(true)))
     }
 }
