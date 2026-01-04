@@ -559,135 +559,21 @@ mooR provides built-in functions for working with binary data:
 
 ## Flyweights - lightweight objects
 
-_Flyweights_ are a special type that mooR adds to help you create lots of small, temporary objects without using too
-much memory or slowing down your MUD. Think of them as "mini-objects" that can hold data and respond to verbs, but are
-much lighter than real database objects.
+_Flyweights_ are a special type that mooR adds to help you create lots of small, temporary object-like values without
+using too much memory or slowing down your system. Think of them as "mini-objects" that can hold data and respond to
+verbs, but are much lighter than "real" database objects.
 
-### Why use flyweights instead of regular objects?
-
-**Regular objects are "heavy":**
-
-- Each object takes up database space permanently
-- Creating many objects can slow down your MOO
-- Objects need to be cleaned up manually or they stick around forever
-
-**Flyweights are "light":**
-
-- You can create thousands of them quickly without performance problems
-- They automatically disappear when no longer needed
-- They can't be changed once created (immutable)
-- They exist only as _values_ in other things (properties, variables, arguments)
-
-### What can flyweights do?
-
-Flyweights combine the best parts of objects, lists, and maps:
-
-- **Like objects**: They can have verbs called on them
-- **Like maps**: They can store named properties ("slots")
-- **Like lists**: They can contain other values
-
-### Flyweight syntax:
-
-The basic pattern is: `< delegate_object, .slot = value, ..., {contents} >`
-
-- **Delegate object** (required): The object that handles verb calls
-- **Slots** (optional): Named properties using dot-equals syntax
-- **Contents** (optional): A list of other values
-
-### Simple examples:
+They are defined using the angle-bracket syntax:
 
 ```moo
-// Just a delegate - simplest flyweight:
-< #123 >
-
-// With some data slots:
-< $generic_item, .name = "magic sword", .power = 15 >
-
-// With contents (like inventory):
-< $container, .name = "treasure chest", {"gold coins", "ruby", "scroll"} >
-
-// Complex example - a room in a maze:
-< $maze_room,
-  .description = "A twisty passage", .exits = {"north", "south"},
-  {player1, player2} >
+let my_flyweight = < $delegate_object, .prop = "value", { "contents" } >;
 ```
 
-### When should you use flyweights?
+Flyweights are immutable _values_ that delegate verb calls to a "parent" object. They are perfect for inventory items,
+UI elements, and structured data like XML/HTML nodes.
 
-**Great for flyweights:**
-
-- Inventory items that aren't permanent
-- Temporary game pieces (chess pieces, cards, etc.)
-- Menu items and UI elements
-- Parts of a large structure (maze rooms, building floors)
-- Anything you need lots of that's similar but not identical
-
-**Better to use regular objects for:**
-
-- Players and important NPCs
-- Rooms that should persist between server restarts
-- Valuable items that players own long-term
-- Anything that needs to be saved in the database
-
-### How verb calls work:
-
-When you call a verb on a flyweight, it looks for the verb on the delegate object:
-
-```moo
-// Create a flyweight sword:
-sword = < $weapon, .damage = 10, .name = "iron sword" >;
-
-// Call a verb - this will look for "wield" on $weapon:
-sword:wield(player);
-```
-
-### Accessing flyweight data:
-
-You can read the slots (properties) of a flyweight:
-
-```moo
-sword = < $weapon, .damage = 10, .name = "iron sword" >;
-damage_value = sword.damage;    // Gets 10
-weapon_name = sword.name;       // Gets "iron sword"
-```
-
-### Working with XML and web interfaces:
-
-Flyweights are especially useful for building web pages because they can be easily converted to and from XML. However,
-mooR also supports working with XML using regular lists and maps, which can be more convenient for simple cases:
-
-```moo
-// A flyweight representing HTML structure:
-div_element = < $html_div, 
-               [class -> "player-info"], 
-               {"Player: Alice", "Score: 1500"} >;
-
-// Convert to XML string:
-html_string = to_xml(div_element);
-
-// Alternative: Use list format (works without flyweights enabled)
-list_element = {"div", {"class", "player-info"}, "Player: Alice", "Score: 1500"};
-html_string = to_xml(list_element);
-
-// Parse XML into different formats:
-xml_as_flyweights = xml_parse(html_string, 15);  // Returns flyweights
-xml_as_lists = xml_parse(html_string, 4);        // Returns nested lists
-xml_as_maps = xml_parse(html_string, 10);        // Returns structured maps
-```
-
-**List format** uses the pattern: `{"tag_name", {"attr", "value"}, ...content...}`
-
-**Map format** uses: `["tag" -> "tag_name", "attributes" -> ["attr" -> "value"], "content" -> {...}]`
-
-Both list and map formats work regardless of whether flyweights are enabled, making them useful for systems that prefer
-simpler data structures.
-
-### Important notes:
-
-- Flyweights cannot be changed once created - they're immutable
-- They only exist while your program is running
-- They're perfect for temporary data structures
-- The `player` variable can never be a flyweight (but `this` and `caller` can be)
+For a complete guide to using flyweights, including all built-in functions and advanced usage patterns, please see
+the [Flyweights](./flyweights.md) chapter.
 
 ## Function Type
 

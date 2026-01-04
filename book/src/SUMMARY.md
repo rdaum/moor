@@ -5,6 +5,7 @@
 - [A Brief History of MUDs and MOOs](./history-of-moos.md)
 - [The World And Database](./the-database.md)
     - [MOO Value Types](./the-database/moo-value-types.md)
+    - [Flyweights](./the-database/flyweights.md)
     - [Objects in the MOO Database](./the-database/objects-in-the-moo-database.md)
     - [Object Properties](./the-database/object-properties.md)
     - [Object Verbs](./the-database/object-verbs.md)

@@ -155,44 +155,12 @@ this.colour || return false;
 data structures without the overhead of a full object. Flyweights are immutable and can be used to represent
 complex data structures like trees or graphs without the overhead of creating a full object for each node.
 
-Flyweights have three components only one of this is mandatory:
-
-- A delegate (like a parent)
-- A set of slots (like properties)
-- Contents (a list)
-
-Which is expressed in the following literal syntax:
-
 ```moo
-< delegate, .slot = value, ..., { contents } >
+let request = < $http_request, .method = "GET" >;
+request:send(); // Calls $http_request:send with 'this' as the flyweight
 ```
 
-Examples:
-
-```moo
-< $key, .password = "secret", { 1, 2, 3 } >
-< $exit, .name = "door", .locked = 1, .description = "..." >
-< $password, .crypted = "fsadfdsa", .salt = "sdfasfd" >
-```
-
-When accessing a property (or slot) on a flyweight using property accessing syntax, the system will first check the
-flyweight itself, and then check the delegate object. If the property is not found on either, it will return `E_PROPNF`:
-
-```moo
-let x = < $key, .password = "secret" >;
-return x.password;
-
-=> "secret"
-```
-
-Verbs cannot be defined on a flyweight, but calling a verb on one will attempt to call it on the delegate:
-
-```moo
-let x = < $key, .password = "secret" >;
-x:unlock("magic_key");
-```
-
-Will call `$key:unlock` with `this` being the flyweight object, and the first argument being the string "magic_key".
+See the [Flyweights](../the-database/flyweights.md) chapter for full documentation.
 
 ### "Rich" output via `notify`
 
