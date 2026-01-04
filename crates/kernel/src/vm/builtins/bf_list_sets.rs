@@ -332,10 +332,12 @@ fn char_range_to_byte_range(s: &str, start: isize, end: isize) -> Option<(usize,
     }
 }
 
+type RegexCacheKey = (String, bool);
+type RegexCacheValue = Result<Arc<onig::Regex>, onig::Error>;
+type RegexCache = Mutex<HashMap<RegexCacheKey, RegexCacheValue>>;
+
 lazy_static! {
-    #[allow(clippy::type_complexity)]
-    static ref MOO_REGEX_CACHE: Mutex<HashMap<(String, bool), Result<Arc<onig::Regex>, onig::Error>>> =
-        Default::default();
+    static ref MOO_REGEX_CACHE: RegexCache = Default::default();
 }
 
 /// Perform regex match using LambdaMOO's "legacy" regular expression support, which is based on
@@ -483,9 +485,7 @@ fn bf_rmatch(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 lazy_static! {
-    #[allow(clippy::type_complexity)]
-    static ref PCRE_PATTERN_CACHE: Mutex<HashMap<(String, bool), Result<Arc<onig::Regex>, onig::Error>>> =
-        Default::default();
+    static ref PCRE_PATTERN_CACHE: RegexCache = Default::default();
 }
 
 /// Perform a PCRE match using oniguruma.
