@@ -12,7 +12,7 @@ MOO offers two primary methods of interacting with regular expressions.
 ### `pcre_match`
 
 ```
-list pcre_match(str subject, str pattern [, int case_matters] [, int repeat_until_no_matches])
+list pcre_match(str subject, str pattern [, bool case_matters] [, bool repeat_until_no_matches])
 ```
 
 The function `pcre_match()` searches `subject` for `pattern` using the Perl Compatible Regular Expressions library.
@@ -22,8 +22,9 @@ a named capture group or the number of the capture group being matched. The full
 The value of each key will be another map containing the keys 'match' and 'position'. Match corresponds to the text that
 was matched and position will return the indices of the substring within `subject`.
 
-If `repeat_until_no_matches` is 1, the expression will continue to be evaluated until no further matches can be found or
-it exhausts the iteration limit. This defaults to 1.
+If `case_matters` is true, the match is case-sensitive; otherwise it is case-insensitive. This defaults to false.
+If `repeat_until_no_matches` is true, the expression will continue to be evaluated until no further matches can be found
+or it exhausts the iteration limit. This defaults to true.
 
 Additionally, wizards can control how many iterations of the loop are possible by adding a property
 to $server_options. $server_options.pcre_match_max_iterations is the maximum number of loops allowed before giving up
@@ -249,5 +250,3 @@ subs = match("*** Welcome to LambdaMOO!!!", "%(%w*%) to %(%w*%)");
 substitute("I thank you for your %1 here in %2.", subs)
         =>   "I thank you for your Welcome here in LambdaMOO."
 ```
-
-
