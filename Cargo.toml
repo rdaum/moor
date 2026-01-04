@@ -220,8 +220,8 @@ zerocopy = { version = "0.8", features = ["derive"] }
 
 # Testing & Development
 criterion = { version = "0.8", features = ["async_tokio"] }
-glob = "0.3"
 escargot = "0.5"
+glob = "0.3"
 pretty_assertions = "1.4"
 serial_test = "3.2"
 similar = "*"
