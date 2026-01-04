@@ -1502,6 +1502,7 @@ mod tests {
         let (_kill_switch, mut task, db, tx, task_scheduler_client, control_receiver) =
             setup_test_env_eval("fork (1) return 1 + 1; endfork return 123;");
         tx.commit().unwrap();
+        let scheduler_db = db.clone();
 
         // Pull a copy of the program out for comparison later.
         let task_start = task.state.task_start().clone();
@@ -1526,6 +1527,15 @@ mod tests {
                 );
             }
         });
+
+        // Scheduler should have received a RequestNewTransaction message for the fork pre-commit.
+        let (task_id, msg) = control_receiver.recv().unwrap();
+        assert_eq!(task_id, 1);
+        let TaskControlMsg::RequestNewTransaction(reply_channel) = msg else {
+            panic!("Expected RequestNewTransaction, got different message type");
+        };
+        let new_tx = scheduler_db.new_world_state().unwrap();
+        reply_channel.send(Ok(new_tx)).unwrap();
 
         // Scheduler should have received a TaskRequestFork message.
         let (task_id, msg) = control_receiver.recv().unwrap();

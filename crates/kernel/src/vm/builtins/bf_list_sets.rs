@@ -559,17 +559,16 @@ fn perform_pcre_match(
         if map_support {
             let mut map = vec![];
             for i in 0..=max_index {
-                let (match_value, start_char, end_char) = if let Some((matched, start, end)) =
-                    capture(i)
-                {
-                    (
-                        v_str(matched),
-                        (byte_offset_to_char_index(target, start) + 1) as i64,
-                        byte_offset_to_char_index(target, end) as i64,
-                    )
-                } else {
-                    (v_str(""), 0, -1)
-                };
+                let (match_value, start_char, end_char) =
+                    if let Some((matched, start, end)) = capture(i) {
+                        (
+                            v_str(matched),
+                            (byte_offset_to_char_index(target, start) + 1) as i64,
+                            byte_offset_to_char_index(target, end) as i64,
+                        )
+                    } else {
+                        (v_str(""), 0, -1)
+                    };
                 let match_map = vec![
                     (v_str("match"), match_value),
                     (
@@ -584,17 +583,16 @@ fn perform_pcre_match(
         } else {
             let mut assoc_list = vec![];
             for i in 0..=max_index {
-                let (match_value, start_char, end_char) = if let Some((matched, start, end)) =
-                    capture(i)
-                {
-                    (
-                        v_str(matched),
-                        (byte_offset_to_char_index(target, start) + 1) as i64,
-                        byte_offset_to_char_index(target, end) as i64,
-                    )
-                } else {
-                    (v_str(""), 0, -1)
-                };
+                let (match_value, start_char, end_char) =
+                    if let Some((matched, start, end)) = capture(i) {
+                        (
+                            v_str(matched),
+                            (byte_offset_to_char_index(target, start) + 1) as i64,
+                            byte_offset_to_char_index(target, end) as i64,
+                        )
+                    } else {
+                        (v_str(""), 0, -1)
+                    };
                 let match_list = vec![
                     v_list(&[v_str("match"), match_value]),
                     v_list(&[
@@ -1631,7 +1629,10 @@ mod tests {
             (v_str("match"), v_str("é")),
             (v_str("position"), v_list(&[v_int(2), v_int(2)])),
         ]);
-        let expected = v_list(&[v_map(&[(v_str("0"), match_map.clone()), (v_str("1"), match_map)])]);
+        let expected = v_list(&[v_map(&[
+            (v_str("0"), match_map.clone()),
+            (v_str("1"), match_map),
+        ])]);
         assert_eq!(
             v,
             expected,
