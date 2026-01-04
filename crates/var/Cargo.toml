@@ -25,6 +25,10 @@ shuttle.workspace = true
 name = "var_benches"
 harness = false
 
+[[bench]]
+name = "flyweight_benches"
+harness = false
+
 [dependencies]
 # Serialization & Data Formats
 serde.workspace = true
