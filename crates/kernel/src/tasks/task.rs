@@ -273,17 +273,44 @@ impl Task {
         // Having done that, what should we now do?
         match vm_exec_result {
             VMHostResponse::DispatchFork(fork_request) => {
-                // To fork a new task, we need to get the scheduler to do some work for us. So we'll
-                // send a message back asking it to fork the task and return the new task id on a
-                // reply channel.
-                // We will then take the new task id and send it back to the caller.
+                // Commit current transaction, dispatch fork, then resume in a new transaction.
                 let task_id_var = fork_request.task_id;
-                let task_id = task_scheduler_client.request_fork(fork_request);
-                if let Some(task_id_var) = task_id_var {
-                    self.vm_host
-                        .set_variable(&task_id_var, v_int(task_id as i64));
+                let fork_request = fork_request;
+
+                match with_new_transaction(|| {
+                    let new_world_state =
+                        task_scheduler_client.begin_new_transaction().map_err(|e| {
+                            WorldStateError::DatabaseError(format!("Scheduler error: {e:?}"))
+                        })?;
+                    let task_id = task_scheduler_client.request_fork(fork_request);
+                    Ok((new_world_state, task_id))
+                }) {
+                    Ok((CommitResult::Success { .. }, Some(task_id))) => {
+                        if let Some(task_id_var) = task_id_var {
+                            self.vm_host
+                                .set_variable(&task_id_var, v_int(task_id as i64));
+                        }
+                        Some(self)
+                    }
+                    Ok((CommitResult::ConflictRetry, _)) => {
+                        warn!("Conflict during commit before fork dispatch");
+                        session.rollback().unwrap();
+                        task_scheduler_client.conflict_retry(self);
+                        None
+                    }
+                    Ok((CommitResult::Success { .. }, None)) => {
+                        error!("Fork dispatch did not return a new task id");
+                        session.rollback().unwrap();
+                        task_scheduler_client.conflict_retry(self);
+                        None
+                    }
+                    Err(e) => {
+                        error!("Failed to commit before fork dispatch: {:?}", e);
+                        session.rollback().unwrap();
+                        task_scheduler_client.conflict_retry(self);
+                        None
+                    }
                 }
-                Some(self)
             }
             VMHostResponse::Suspend(delay) => {
                 // Check for immediate wake conditions to avoid scheduler round-trip
