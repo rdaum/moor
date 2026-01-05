@@ -101,6 +101,11 @@ impl Decompile {
     fn push_expr(&mut self, expr: Expr) {
         self.expr_stack.push_front(expr);
     }
+    fn remove_expr_at(&mut self, depth: usize) -> Result<Expr, DecompileError> {
+        self.expr_stack
+            .remove(depth)
+            .ok_or_else(|| MalformedProgram("expected expression on stack".to_string()))
+    }
 
     fn find_jump(&self, label: &Label) -> Result<JumpLabel, DecompileError> {
         self.program
@@ -455,6 +460,19 @@ impl Decompile {
                 self.statements
                     .push(Stmt::new(StmtNode::Expr(expr), line_num));
             }
+            Op::Dup => {
+                let expr =
+                    self.expr_stack.front().cloned().ok_or_else(|| {
+                        MalformedProgram("expected expression on stack".to_string())
+                    })?;
+                self.push_expr(expr);
+            }
+            Op::Swap => {
+                let a = self.pop_expr()?;
+                let b = self.pop_expr()?;
+                self.push_expr(a);
+                self.push_expr(b);
+            }
             Op::Return => {
                 let expr = self.pop_expr()?;
                 self.push_expr(Expr::Return(Some(Box::new(expr))));
@@ -617,6 +635,43 @@ impl Decompile {
                     }
                 }
             }
+            Op::IndexSetAt(offset) => {
+                let offset = offset.0 as usize;
+                let base = self.remove_expr_at(offset + 2)?;
+                let index = self.remove_expr_at(offset + 1)?;
+                let rval = self.remove_expr_at(offset)?;
+                if offset > 0 {
+                    let _ = self.remove_expr_at(0)?;
+                }
+                self.push_expr(Expr::Assign {
+                    left: Box::new(Expr::Index(Box::new(base), Box::new(index))),
+                    right: Box::new(rval),
+                });
+
+                let opcode_vector_len = self.opcode_vector().len();
+                while self.position < opcode_vector_len {
+                    let op = self.next()?;
+                    if let Op::Swap = op {
+                        if self.position < opcode_vector_len {
+                            match &self.opcode_vector()[self.position] {
+                                Op::Pop => {
+                                    self.position += 1;
+                                }
+                                Op::Put(_) => {
+                                    self.position += 1;
+                                    if self.position < opcode_vector_len
+                                        && matches!(self.opcode_vector()[self.position], Op::Pop)
+                                    {
+                                        self.position += 1;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
             Op::RangeSet => {
                 let rval = self.pop_expr()?;
                 let (to, from, base) = (self.pop_expr()?, self.pop_expr()?, self.pop_expr()?);
@@ -634,6 +689,48 @@ impl Decompile {
                 while self.position < opcode_vector_len {
                     let op = self.next()?;
                     if let Op::PushTemp = op {
+                        break;
+                    }
+                }
+            }
+            Op::RangeSetAt(offset) => {
+                let offset = offset.0 as usize;
+                let base = self.remove_expr_at(offset + 3)?;
+                let from = self.remove_expr_at(offset + 2)?;
+                let to = self.remove_expr_at(offset + 1)?;
+                let rval = self.remove_expr_at(offset)?;
+                if offset > 0 {
+                    let _ = self.remove_expr_at(0)?;
+                }
+                self.push_expr(Expr::Assign {
+                    left: Box::new(Expr::Range {
+                        base: Box::new(base),
+                        from: Box::new(from),
+                        to: Box::new(to),
+                    }),
+                    right: Box::new(rval),
+                });
+
+                let opcode_vector_len = self.opcode_vector().len();
+                while self.position < opcode_vector_len {
+                    let op = self.next()?;
+                    if let Op::Swap = op {
+                        if self.position < opcode_vector_len {
+                            match &self.opcode_vector()[self.position] {
+                                Op::Pop => {
+                                    self.position += 1;
+                                }
+                                Op::Put(_) => {
+                                    self.position += 1;
+                                    if self.position < opcode_vector_len
+                                        && matches!(self.opcode_vector()[self.position], Op::Pop)
+                                    {
+                                        self.position += 1;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
                         break;
                     }
                 }
@@ -1016,6 +1113,47 @@ impl Decompile {
                     right: Box::new(rvalue),
                 };
                 self.push_expr(assign);
+            }
+            Op::PutPropAt(offset) => {
+                let offset = offset.0 as usize;
+                let location = self.remove_expr_at(offset + 2)?;
+                let property = self.remove_expr_at(offset + 1)?;
+                let rvalue = self.remove_expr_at(offset)?;
+                if offset > 0 {
+                    let _ = self.remove_expr_at(0)?;
+                }
+                let assign = Expr::Assign {
+                    left: Box::new(Expr::Prop {
+                        location: Box::new(location),
+                        property: Box::new(property),
+                    }),
+                    right: Box::new(rvalue),
+                };
+                self.push_expr(assign);
+
+                let opcode_vector_len = self.opcode_vector().len();
+                while self.position < opcode_vector_len {
+                    let op = self.next()?;
+                    if let Op::Swap = op {
+                        if self.position < opcode_vector_len {
+                            match &self.opcode_vector()[self.position] {
+                                Op::Pop => {
+                                    self.position += 1;
+                                }
+                                Op::Put(_) => {
+                                    self.position += 1;
+                                    if self.position < opcode_vector_len
+                                        && matches!(self.opcode_vector()[self.position], Op::Pop)
+                                    {
+                                        self.position += 1;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        break;
+                    }
+                }
             }
             Op::Jump { .. } | Op::PushTemp => {
                 // unreachable!("should have been handled other decompilation branches")

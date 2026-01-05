@@ -669,6 +669,37 @@ mod tests {
     }
 
     #[test]
+    fn test_flyweight_slot_assignment() {
+        assert_eq!(
+            run_moo(
+                r#"
+                let fw = <#1, .slot = "123", {1, 2, 3}>;
+                fw.slot = "456";
+                return fw.slot;
+                "#
+            )
+            .unwrap(),
+            v_str("456")
+        );
+    }
+
+    #[test]
+    fn test_flyweight_slot_assignment_in_list() {
+        assert_eq!(
+            run_moo(
+                r#"
+                let fw = <#1, .slot = "123", {1, 2, 3}>;
+                let l = {fw};
+                l[1].slot = "456";
+                return l[1].slot;
+                "#
+            )
+            .unwrap(),
+            v_str("456")
+        );
+    }
+
+    #[test]
     fn test_flyweight_builtins() {
         assert_eq!(
             run_moo(

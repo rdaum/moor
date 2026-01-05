@@ -190,6 +190,13 @@ impl CodegenState {
         self.ops.push(op);
     }
 
+    fn is_assignable_expr(expr: &Expr) -> bool {
+        matches!(
+            expr,
+            Expr::Id(..) | Expr::Index(..) | Expr::Range { .. } | Expr::Prop { .. }
+        )
+    }
+
     fn find_loop(&self, loop_label: &Name) -> Result<&Loop, CompileError> {
         for l in self.loops.iter() {
             if l.loop_name.is_none() {
@@ -255,12 +262,16 @@ impl CodegenState {
     fn generate_assign(&mut self, left: &Expr, right: &Expr) -> Result<(), CompileError> {
         self.push_lvalue(left, false)?;
         self.generate_expr(right)?;
-        match left {
-            Expr::Range { .. } => self.emit(Op::PutTemp),
-            Expr::Index(..) => self.emit(Op::PutTemp),
-            _ => {}
+        let uses_set = matches!(
+            left,
+            Expr::Range { .. } | Expr::Index(..) | Expr::Prop { .. }
+        );
+        if uses_set {
+            self.emit(Op::Dup);
+            self.push_stack(1);
         }
-        let mut is_indexed = false;
+        let mut used_set = false;
+        let mut handled_stack = false;
         let mut e = left;
         loop {
             // Figure out the form of assignment, handle correctly, then walk through
@@ -271,29 +282,42 @@ impl CodegenState {
                     from: _,
                     to: _,
                 } => {
-                    self.emit(Op::RangeSet);
+                    self.emit(Op::RangeSetAt(Offset(1)));
                     self.pop_stack(3);
                     e = base;
-                    is_indexed = true;
+                    used_set = true;
                     continue;
                 }
                 Expr::Index(lhs, _rhs) => {
-                    self.emit(Op::IndexSet);
+                    self.emit(Op::IndexSetAt(Offset(1)));
                     self.pop_stack(2);
                     e = lhs;
-                    is_indexed = true;
+                    used_set = true;
                     continue;
                 }
                 Expr::Id(name) => {
-                    self.emit(Op::Put(self.find_name(name)));
+                    if used_set {
+                        self.emit(Op::Swap);
+                        self.emit(Op::Put(self.find_name(name)));
+                        self.emit(Op::Pop);
+                        self.pop_stack(1);
+                        handled_stack = true;
+                    } else {
+                        self.emit(Op::Put(self.find_name(name)));
+                    }
                     break;
                 }
                 Expr::Prop {
-                    location: _,
+                    location,
                     property: _,
                 } => {
-                    self.emit(Op::PutProp);
+                    self.emit(Op::PutPropAt(Offset(1)));
                     self.pop_stack(2);
+                    used_set = true;
+                    if Self::is_assignable_expr(location.as_ref()) {
+                        e = location;
+                        continue;
+                    }
                     break;
                 }
                 _ => {
@@ -301,9 +325,10 @@ impl CodegenState {
                 }
             }
         }
-        if is_indexed {
+        if used_set && !handled_stack {
+            self.emit(Op::Swap);
             self.emit(Op::Pop);
-            self.emit(Op::PushTemp);
+            self.pop_stack(1);
         }
 
         Ok(())
@@ -385,7 +410,11 @@ impl CodegenState {
                 }
             }
             Expr::Prop { property, location } => {
-                self.generate_expr(location.as_ref())?;
+                if Self::is_assignable_expr(location.as_ref()) {
+                    self.push_lvalue(location.as_ref(), true)?;
+                } else {
+                    self.generate_expr(location.as_ref())?;
+                }
                 self.generate_symbol_expr(property.as_ref())?;
                 if indexed_above {
                     self.emit(Op::PushGetProp);

@@ -463,11 +463,11 @@ mod tests {
                 Push(a),
                 ImmInt(2),
                 Imm(0.into()),
-                PutTemp,
-                IndexSet,
+                Dup,
+                IndexSetAt(Offset(1)),
+                Swap,
                 Put(a),
                 Pop,
-                PushTemp,
                 Pop,
                 Done
             ]
@@ -487,11 +487,11 @@ mod tests {
                 ImmInt(2),
                 ImmInt(4),
                 Imm(0.into()),
-                PutTemp,
-                RangeSet,
+                Dup,
+                RangeSetAt(Offset(1)),
+                Swap,
                 Put(a),
                 Pop,
-                PushTemp,
                 Pop,
                 Done
             ]
@@ -1159,16 +1159,17 @@ mod tests {
         let binary = compile(program, CompileOptions::default()).unwrap();
 
         /*
-                  0: 073                   PUSH this
-                  1: 100 000               PUSH_LITERAL "stack"
-                  3: 008                 * PUSH_GET_PROP
-                  4: 128                   NUM 5
-                  5: 128                   NUM 5
-                  6: 105                   PUT_TEMP
-                  7: 007                 * INDEXSET
-                  8: 011                 * PUT_PROP
-                  9: 111                   POP
-                 10: 106                   PUSH_TEMP
+            PUSH this
+            PUSH_LITERAL "stack"
+            PUSH_GET_PROP
+            NUM 5
+            NUM 5
+            DUP
+            INDEXSET_AT
+            PUT_PROP_AT
+            SWAP
+            PUT this
+            POP
         */
         assert_eq!(
             binary.main_vector().to_vec(),
@@ -1178,11 +1179,12 @@ mod tests {
                 PushGetProp,
                 ImmInt(5),
                 ImmInt(5),
-                PutTemp,
-                IndexSet,
-                PutProp,
+                Dup,
+                IndexSetAt(Offset(1)),
+                PutPropAt(Offset(1)),
+                Swap,
+                Put(binary.find_var("this")),
                 Pop,
-                PushTemp,
                 Pop,
                 Done
             ]

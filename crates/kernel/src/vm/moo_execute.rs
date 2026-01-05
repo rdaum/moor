@@ -126,6 +126,18 @@ macro_rules! binary_var_op {
     };
 }
 
+fn stack_index(len: usize, depth: usize, pc: usize) -> usize {
+    len.checked_sub(depth + 1)
+        .unwrap_or_else(|| panic!("stack underflow @ PC: {pc}"))
+}
+
+fn remove_stack_indices(stack: &mut Vec<Var>, indices: &mut [usize]) {
+    indices.sort_unstable_by(|a, b| b.cmp(a));
+    for idx in indices.iter().copied() {
+        stack.remove(idx);
+    }
+}
+
 /// Main VM opcode execution for MOO stack frames. The actual meat of the MOO virtual machine.
 pub fn moo_frame_execute(
     tick_slice: usize,
@@ -424,6 +436,17 @@ pub fn moo_frame_execute(
             Op::Pop => {
                 f.pop();
             }
+            Op::Dup => {
+                let v = f.peek_top().clone();
+                f.push(v);
+            }
+            Op::Swap => {
+                let len = f.valstack.len();
+                if len < 2 {
+                    panic!("stack underflow @ PC: {}", f.pc);
+                }
+                f.valstack.swap(len - 1, len - 2);
+            }
             Op::ImmNone => {
                 f.push(v_none());
             }
@@ -520,6 +543,34 @@ pub fn moo_frame_execute(
                     }
                     Err(e) => {
                         f.pop();
+                        return ExecutionResult::PushError(e);
+                    }
+                }
+            }
+            Op::IndexSetAt(offset) => {
+                let offset = offset.0 as usize;
+                let len = f.valstack.len();
+                let rhs_idx = stack_index(len, offset, f.pc);
+                let index_idx = stack_index(len, offset + 1, f.pc);
+                let base_idx = stack_index(len, offset + 2, f.pc);
+
+                let rhs = f.valstack[rhs_idx].clone();
+                let index = f.valstack[index_idx].clone();
+                let base = f.valstack[base_idx].clone();
+
+                let result = base.set(&index, &rhs, IndexMode::OneBased);
+                match result {
+                    Ok(v) => {
+                        f.valstack[base_idx] = v;
+                        let mut to_remove = [rhs_idx, index_idx];
+                        remove_stack_indices(&mut f.valstack, &mut to_remove);
+                    }
+                    Err(e) => {
+                        let mut to_remove = vec![rhs_idx, index_idx, base_idx];
+                        if offset > 0 {
+                            to_remove.push(len - 1);
+                        }
+                        remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
                         return ExecutionResult::PushError(e);
                     }
                 }
@@ -790,6 +841,36 @@ pub fn moo_frame_execute(
                 }
                 f.poke(0, result.unwrap());
             }
+            Op::RangeSetAt(offset) => {
+                let offset = offset.0 as usize;
+                let len = f.valstack.len();
+                let rhs_idx = stack_index(len, offset, f.pc);
+                let to_idx = stack_index(len, offset + 1, f.pc);
+                let from_idx = stack_index(len, offset + 2, f.pc);
+                let base_idx = stack_index(len, offset + 3, f.pc);
+
+                let rhs = f.valstack[rhs_idx].clone();
+                let to = f.valstack[to_idx].clone();
+                let from = f.valstack[from_idx].clone();
+                let base = f.valstack[base_idx].clone();
+
+                let result = base.range_set(&from, &to, &rhs, IndexMode::OneBased);
+                match result {
+                    Ok(v) => {
+                        f.valstack[base_idx] = v;
+                        let mut to_remove = [rhs_idx, to_idx, from_idx];
+                        remove_stack_indices(&mut f.valstack, &mut to_remove);
+                    }
+                    Err(e) => {
+                        let mut to_remove = vec![rhs_idx, to_idx, from_idx, base_idx];
+                        if offset > 0 {
+                            to_remove.push(len - 1);
+                        }
+                        remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
+                        return ExecutionResult::PushError(e);
+                    }
+                }
+            }
             Op::Length(offset) => {
                 let v = f.peek_abs(offset.0 as usize);
                 match v.len() {
@@ -864,6 +945,71 @@ pub fn moo_frame_execute(
                     }
                     Err(e) => {
                         return ExecutionResult::PushError(e.to_error());
+                    }
+                }
+            }
+            Op::PutPropAt(offset) => {
+                let offset = offset.0 as usize;
+                let len = f.valstack.len();
+                let rhs_idx = stack_index(len, offset, f.pc);
+                let prop_idx = stack_index(len, offset + 1, f.pc);
+                let base_idx = stack_index(len, offset + 2, f.pc);
+
+                let rhs = f.valstack[rhs_idx].clone();
+                let propname = f.valstack[prop_idx].clone();
+                let base = f.valstack[base_idx].clone();
+
+                let Ok(propname) = propname.as_symbol() else {
+                    let mut to_remove = vec![rhs_idx, prop_idx, base_idx];
+                    if offset > 0 {
+                        to_remove.push(len - 1);
+                    }
+                    remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
+                    return ExecutionResult::PushError(
+                        E_TYPE.with_msg(|| {
+                            format!("Invalid property name: {}", to_literal(&propname))
+                        }),
+                    );
+                };
+
+                let update_result = if let Some(obj) = base.as_object() {
+                    with_current_transaction_mut(|world_state| {
+                        world_state.update_property(&permissions, &obj, propname, &rhs)
+                    })
+                    .map(|()| base.clone())
+                    .map_err(|e| e.to_error())
+                } else if let Some(flyweight) = base.as_flyweight() {
+                    if propname == *DELEGATE_SYM || propname == *SLOTS_SYM {
+                        let mut to_remove = vec![rhs_idx, prop_idx, base_idx];
+                        if offset > 0 {
+                            to_remove.push(len - 1);
+                        }
+                        remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
+                        return ExecutionResult::PushError(
+                            E_TYPE.with_msg(|| format!("Invalid property name: {propname}")),
+                        );
+                    }
+                    let updated = flyweight.add_slot(propname, rhs.clone());
+                    Ok(Var::from_flyweight(updated))
+                } else {
+                    Err(E_TYPE.with_msg(|| {
+                        format!("Invalid value for property access: {}", to_literal(&base))
+                    }))
+                };
+
+                match update_result {
+                    Ok(updated_base) => {
+                        f.valstack[base_idx] = updated_base;
+                        let mut to_remove = vec![rhs_idx, prop_idx];
+                        remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
+                    }
+                    Err(e) => {
+                        let mut to_remove = vec![rhs_idx, prop_idx, base_idx];
+                        if offset > 0 {
+                            to_remove.push(len - 1);
+                        }
+                        remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
+                        return ExecutionResult::PushError(e);
                     }
                 }
             }

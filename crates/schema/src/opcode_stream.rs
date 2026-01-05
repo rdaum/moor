@@ -125,8 +125,13 @@ const OP_CAPTURE: u16 = 89;
 const OP_MAKE_LAMBDA: u16 = 90;
 const OP_CALL_LAMBDA: u16 = 91;
 const OP_BIT_LSHR: u16 = 92;
+const OP_DUP: u16 = 93;
+const OP_SWAP: u16 = 94;
+const OP_INDEX_SET_AT: u16 = 95;
+const OP_RANGE_SET_AT: u16 = 96;
+const OP_PUT_PROP_AT: u16 = 97;
 
-// Reserve 93-999 for future opcodes
+// Reserve 98-999 for future opcodes
 // Reserve 1000-65535 for extensions
 
 // ============================================================================
@@ -288,6 +293,8 @@ impl OpStream {
             }
 
             Op::Pop => self.words.push(OP_POP),
+            Op::Dup => self.words.push(OP_DUP),
+            Op::Swap => self.words.push(OP_SWAP),
             Op::Ref => self.words.push(OP_REF),
             Op::PushRef => self.words.push(OP_PUSH_REF),
             Op::PushTemp => self.words.push(OP_PUSH_TEMP),
@@ -376,8 +383,16 @@ impl OpStream {
             Op::ListAppend => self.words.push(OP_LIST_APPEND),
 
             Op::IndexSet => self.words.push(OP_INDEX_SET),
+            Op::IndexSetAt(offset) => {
+                self.words.push(OP_INDEX_SET_AT);
+                self.words.push(offset.0);
+            }
             Op::RangeRef => self.words.push(OP_RANGE_REF),
             Op::RangeSet => self.words.push(OP_RANGE_SET),
+            Op::RangeSetAt(offset) => {
+                self.words.push(OP_RANGE_SET_AT);
+                self.words.push(offset.0);
+            }
 
             Op::Length(offset) => {
                 self.words.push(OP_LENGTH);
@@ -395,6 +410,10 @@ impl OpStream {
             Op::GetProp => self.words.push(OP_GET_PROP),
             Op::PushGetProp => self.words.push(OP_PUSH_GET_PROP),
             Op::PutProp => self.words.push(OP_PUT_PROP),
+            Op::PutPropAt(offset) => {
+                self.words.push(OP_PUT_PROP_AT);
+                self.words.push(offset.0);
+            }
 
             Op::Jump { label } => {
                 self.words.push(OP_JUMP);
@@ -630,6 +649,8 @@ impl OpStream {
             OP_PUSH => Ok(Op::Push(self.decode_name(pc)?)),
             OP_PUT => Ok(Op::Put(self.decode_name(pc)?)),
             OP_POP => Ok(Op::Pop),
+            OP_DUP => Ok(Op::Dup),
+            OP_SWAP => Ok(Op::Swap),
             OP_REF => Ok(Op::Ref),
             OP_PUSH_REF => Ok(Op::PushRef),
             OP_PUSH_TEMP => Ok(Op::PushTemp),
@@ -723,8 +744,10 @@ impl OpStream {
             OP_LIST_APPEND => Ok(Op::ListAppend),
 
             OP_INDEX_SET => Ok(Op::IndexSet),
+            OP_INDEX_SET_AT => Ok(Op::IndexSetAt(Offset(self.read_u16(pc)?))),
             OP_RANGE_REF => Ok(Op::RangeRef),
             OP_RANGE_SET => Ok(Op::RangeSet),
+            OP_RANGE_SET_AT => Ok(Op::RangeSetAt(Offset(self.read_u16(pc)?))),
 
             OP_LENGTH => Ok(Op::Length(Offset(self.read_u16(pc)?))),
 
@@ -736,6 +759,7 @@ impl OpStream {
             OP_GET_PROP => Ok(Op::GetProp),
             OP_PUSH_GET_PROP => Ok(Op::PushGetProp),
             OP_PUT_PROP => Ok(Op::PutProp),
+            OP_PUT_PROP_AT => Ok(Op::PutPropAt(Offset(self.read_u16(pc)?))),
 
             OP_JUMP => Ok(Op::Jump {
                 label: Label(self.read_u16(pc)?),
@@ -1213,10 +1237,16 @@ mod tests {
             Op::Push(Name(1, 0, 0)),
             Op::Put(Name(2, 1, 5)),
             Op::Pop,
+            Op::Dup,
+            Op::Swap,
             // Immediates
             Op::ImmInt(42),
             Op::ImmFloat(2.5),
             Op::ImmNone,
+            // Indexed ops
+            Op::IndexSetAt(Offset(1)),
+            Op::RangeSetAt(Offset(1)),
+            Op::PutPropAt(Offset(1)),
             // Control flow
             Op::Jump { label: Label(100) },
             Op::Return,

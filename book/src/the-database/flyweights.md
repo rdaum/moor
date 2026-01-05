@@ -86,14 +86,15 @@ player:tell(fish_flyweight.blood_colour); // prints "red" - inherited from $anim
 player:tell(fish_flyweight.flavour);      // prints 'yum - from flyweight slot
 ```
 
-> **Important**: Unlike database objects, you **cannot** assign to a slot using dot notation.
+> **Important**: Flyweights are immutable. Slot assignment uses copy-on-write:
 >
 > ```moo
 > let item = < $thing, .weight = 5 >;
-> item.weight = 10; // ERROR! Flyweights are immutable.
+> item.weight = 10; // creates a new flyweight and stores it back into `item`
 > ```
 >
-> To "change" a slot, you must create a new flyweight using `flyslotset()` (see below).
+> If the flyweight lives inside a variable, list/map entry, or property, the updated flyweight is
+> stored back into that container. You can also use `flyslotset()` (see below) explicitly.
 
 ### Contents
 
