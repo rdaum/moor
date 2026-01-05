@@ -21,14 +21,21 @@ use moor_common::{
     matching::Preposition,
     model::{
         ArgSpec, ObjAttrs, ObjFlag, ObjectKind, PrepSpec, PropFlag, VerbArgsSpec, VerbFlag,
-        loader::LoaderInterface,
+        loader::{LoaderInterface, ProgressEvent, ProgressPhase},
     },
     util::BitEnum,
 };
 use moor_compiler::{CompileOptions, Program, compile};
 use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, Var, program::ProgramType, v_str};
 use semver::Version;
-use std::{collections::BTreeMap, fs::File, io, io::BufReader, path::PathBuf};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fs::File,
+    io,
+    io::BufReader,
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 use tracing::{info, span, trace, warn};
 
 /// Options for textdump import behavior
@@ -156,6 +163,140 @@ fn resolve_prop(omap: &BTreeMap<Obj, Object>, offset: usize, o: &Object) -> Opti
     resolve_prop(omap, offset, parent)
 }
 
+struct ProgressTracker {
+    phase_totals: HashMap<ProgressPhase, u64>,
+    phase_done: HashMap<ProgressPhase, u64>,
+    phase_start: HashMap<ProgressPhase, Instant>,
+    phase_ema: HashMap<ProgressPhase, f64>,
+    overall_start: Instant,
+    overall_done: u64,
+    overall_total: u64,
+    last_phase_percent: HashMap<ProgressPhase, u8>,
+    last_overall_percent: u8,
+}
+
+impl ProgressTracker {
+    fn new(totals: &[(ProgressPhase, u64)]) -> Self {
+        let mut phase_totals = HashMap::new();
+        let mut overall_total = 0u64;
+        for (phase, total) in totals {
+            phase_totals.insert(*phase, *total);
+            overall_total = overall_total.saturating_add(*total);
+        }
+        Self {
+            phase_totals,
+            phase_done: HashMap::new(),
+            phase_start: HashMap::new(),
+            phase_ema: HashMap::new(),
+            overall_start: Instant::now(),
+            overall_done: 0,
+            overall_total,
+            last_phase_percent: HashMap::new(),
+            last_overall_percent: 0,
+        }
+    }
+
+    fn finish_if_empty(&mut self, loader: &mut dyn LoaderInterface, phase: ProgressPhase) {
+        if self.phase_totals.get(&phase).copied().unwrap_or(0) == 0 {
+            self.report(loader, phase);
+        }
+    }
+
+    fn advance(
+        &mut self,
+        loader: &mut dyn LoaderInterface,
+        phase: ProgressPhase,
+        delta: u64,
+    ) {
+        if !self.phase_start.contains_key(&phase) {
+            self.phase_start.insert(phase, Instant::now());
+        }
+        *self.phase_done.entry(phase).or_insert(0) += delta;
+        self.overall_done = self.overall_done.saturating_add(delta);
+        self.report(loader, phase);
+    }
+
+    fn report(&mut self, loader: &mut dyn LoaderInterface, phase: ProgressPhase) {
+        let phase_total = self.phase_totals.get(&phase).copied().unwrap_or(0);
+        let phase_done = self.phase_done.get(&phase).copied().unwrap_or(0);
+        let phase_percent = if phase_total == 0 {
+            100
+        } else {
+            ((phase_done * 100) / phase_total) as u8
+        };
+        let overall_percent = if self.overall_total == 0 {
+            100
+        } else {
+            ((self.overall_done * 100) / self.overall_total) as u8
+        };
+
+        let last_phase = self.last_phase_percent.get(&phase).copied().unwrap_or(0);
+        if phase_percent == last_phase && overall_percent == self.last_overall_percent {
+            return;
+        }
+        self.last_phase_percent.insert(phase, phase_percent);
+        self.last_overall_percent = overall_percent;
+
+        let phase_elapsed = self
+            .phase_start
+            .get(&phase)
+            .map(|start| start.elapsed())
+            .unwrap_or(Duration::ZERO);
+        let overall_elapsed = self.overall_start.elapsed();
+
+        let phase_eta = self.update_phase_ema(phase, phase_done, phase_elapsed, phase_total);
+        let overall_eta = self.compute_overall_eta(overall_elapsed);
+
+        loader.report_progress(ProgressEvent {
+            phase,
+            phase_done,
+            phase_total,
+            overall_done: self.overall_done,
+            overall_total: self.overall_total,
+            phase_elapsed,
+            overall_elapsed,
+            phase_eta,
+            overall_eta,
+        });
+    }
+
+    fn update_phase_ema(
+        &mut self,
+        phase: ProgressPhase,
+        phase_done: u64,
+        phase_elapsed: Duration,
+        phase_total: u64,
+    ) -> Option<Duration> {
+        if phase_done == 0 || phase_total == 0 {
+            return None;
+        }
+        let observed = phase_elapsed.as_secs_f64() / phase_done as f64;
+        let ema = self.phase_ema.entry(phase).or_insert(observed);
+        let alpha = 0.2;
+        *ema = alpha * observed + (1.0 - alpha) * *ema;
+        let remaining = phase_total.saturating_sub(phase_done) as f64;
+        Some(Duration::from_secs_f64(remaining * *ema))
+    }
+
+    fn compute_overall_eta(&self, overall_elapsed: Duration) -> Option<Duration> {
+        if self.overall_done == 0 || self.overall_total == 0 {
+            return None;
+        }
+        let fallback = overall_elapsed.as_secs_f64() / self.overall_done as f64;
+        let mut remaining_secs = 0.0;
+        for (phase, total) in &self.phase_totals {
+            let done = self.phase_done.get(phase).copied().unwrap_or(0);
+            let remaining = total.saturating_sub(done) as f64;
+            if remaining == 0.0 {
+                continue;
+            }
+            let rate = self.phase_ema.get(phase).copied().unwrap_or(fallback);
+            remaining_secs += remaining * rate;
+        }
+        Some(Duration::from_secs_f64(remaining_secs))
+    }
+}
+
 fn cv_prep_flag(vprep: i16) -> PrepSpec {
     match vprep {
         PREP_ANY => PrepSpec::Any,
@@ -255,6 +396,57 @@ pub fn read_textdump<T: io::Read>(
 
     let td = tdr.read_textdump()?;
 
+    let total_objects = td.objects.len() as u64;
+    let total_props = td
+        .objects
+        .values()
+        .map(|o| o.propvals.len() as u64)
+        .sum::<u64>();
+    let total_verbs = td
+        .objects
+        .values()
+        .map(|o| o.verbdefs.len() as u64)
+        .sum::<u64>();
+
+    // Collect sysrefs early so we can report progress totals.
+    let mut sysrefs: Vec<(Symbol, Obj)> = Vec::new();
+    let mut root_obj = NOTHING;
+    if let Some(sysobj) = td.objects.get(&SYSTEM_OBJECT) {
+        root_obj = sysobj.parent;
+        for (pnum, _pval) in sysobj.propvals.iter().enumerate() {
+            let Some(resolved) = resolve_prop(&td.objects, pnum, sysobj) else {
+                continue;
+            };
+            // Only consider properties defined on #0 itself (not inherited)
+            if resolved.definer != SYSTEM_OBJECT {
+                continue;
+            }
+            let Some(target_obj) = resolved.value.as_object() else {
+                continue;
+            };
+            // Skip special objects like $nothing, $ambiguous_match, $failed_match
+            if target_obj.is_valid_object() && td.objects.contains_key(&target_obj) {
+                sysrefs.push((resolved.name, target_obj));
+            }
+        }
+    }
+
+    let sysrefs_total = if sysrefs.is_empty() || root_obj == NOTHING {
+        0
+    } else {
+        sysrefs.len() as u64 + 2
+    };
+    let mut progress = ProgressTracker::new(&[
+        (ProgressPhase::ReadTextdump, 1),
+        (ProgressPhase::CreateObjects, total_objects),
+        (ProgressPhase::SetAttributes, total_objects),
+        (ProgressPhase::DefineProperties, total_props),
+        (ProgressPhase::SetProperties, total_props),
+        (ProgressPhase::DefineVerbs, total_verbs),
+        (ProgressPhase::CreateSysrefs, sysrefs_total),
+    ]);
+    progress.advance(loader, ProgressPhase::ReadTextdump, 1);
+
     // Report any WAIFs that were found and converted to None
     if !tdr.waif_locations.is_empty() {
         warn!(
@@ -277,6 +469,7 @@ pub fn read_textdump<T: io::Read>(
     compile_options.call_unsupported_builtins = true;
 
     info!("Instantiating objects");
+    progress.finish_if_empty(loader, ProgressPhase::CreateObjects);
     for (objid, o) in &td.objects {
         let flags: BitEnum<ObjFlag> = BitEnum::from_u8(o.flags);
 
@@ -289,9 +482,11 @@ pub fn read_textdump<T: io::Read>(
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, flags, &o.name),
             )
             .unwrap();
+        progress.advance(loader, ProgressPhase::CreateObjects, 1);
     }
 
     info!("Setting object attributes (parent/location/owner)");
+    progress.finish_if_empty(loader, ProgressPhase::SetAttributes);
     for (objid, o) in &td.objects {
         trace!(owner = ?o.owner, parent = ?o.parent, location = ?o.location, "Setting attributes");
         loader.set_object_owner(objid, &o.owner).map_err(|e| {
@@ -303,6 +498,7 @@ pub fn read_textdump<T: io::Read>(
                 TextdumpReaderError::LoadError(format!("setting parent of {objid}"), e.clone())
             })?;
         loader.set_object_location(objid, &o.location).unwrap();
+        progress.advance(loader, ProgressPhase::SetAttributes, 1);
     }
 
     info!("Defining properties...");
@@ -310,6 +506,7 @@ pub fn read_textdump<T: io::Read>(
     // Define props. This means going through and just adding at the very root, which will create
     // initially-clear state in all the descendants. A second pass will then go through and update
     // flags and common for the children.
+    progress.finish_if_empty(loader, ProgressPhase::DefineProperties);
     for (objid, o) in &td.objects {
         for (pnum, _p) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
@@ -327,10 +524,12 @@ pub fn read_textdump<T: io::Read>(
                     )
                     .unwrap();
             }
+            progress.advance(loader, ProgressPhase::DefineProperties, 1);
         }
     }
 
     info!("Setting property common & info");
+    progress.finish_if_empty(loader, ProgressPhase::SetProperties);
     for (objid, o) in &td.objects {
         for (pnum, p) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
@@ -340,11 +539,13 @@ pub fn read_textdump<T: io::Read>(
             loader
                 .set_property(objid, resolved.name, Some(p.owner), Some(flags), value)
                 .unwrap();
+            progress.advance(loader, ProgressPhase::SetProperties, 1);
         }
     }
 
     info!("Defining verbs...");
     let mut compile_errors = 0usize;
+    progress.finish_if_empty(loader, ProgressPhase::DefineVerbs);
     for (objid, o) in &td.objects {
         for (vn, v) in o.verbdefs.iter().enumerate() {
             let mut flags: BitEnum<VerbFlag> = BitEnum::new();
@@ -417,6 +618,7 @@ pub fn read_textdump<T: io::Read>(
                     )
                 })?;
             trace!(objid = ?objid, name = ?vn, "Added verb");
+            progress.advance(loader, ProgressPhase::DefineVerbs, 1);
         }
     }
     if compile_errors > 0 {
@@ -433,39 +635,14 @@ pub fn read_textdump<T: io::Read>(
     info!("Creating import_export_id from sysrefs...");
     let import_export_id_sym = Symbol::mk("import_export_id");
 
-    let Some(sysobj) = td.objects.get(&SYSTEM_OBJECT) else {
+    progress.finish_if_empty(loader, ProgressPhase::CreateSysrefs);
+    if sysrefs.is_empty() {
         info!("Import complete.");
         return Ok(());
-    };
+    }
 
-    // Find the root object (#1 typically) - it's #0's parent
-    let root_obj = sysobj.parent;
     if root_obj == NOTHING {
         warn!("System object #0 has no parent, cannot define import_export_id");
-        info!("Import complete.");
-        return Ok(());
-    }
-
-    // Collect sysrefs: properties on #0 that have object values
-    let mut sysrefs: Vec<(Symbol, Obj)> = Vec::new();
-    for (pnum, _pval) in sysobj.propvals.iter().enumerate() {
-        let Some(resolved) = resolve_prop(&td.objects, pnum, sysobj) else {
-            continue;
-        };
-        // Only consider properties defined on #0 itself (not inherited)
-        if resolved.definer != SYSTEM_OBJECT {
-            continue;
-        }
-        let Some(target_obj) = resolved.value.as_object() else {
-            continue;
-        };
-        // Skip special objects like $nothing, $ambiguous_match, $failed_match
-        if target_obj.is_valid_object() {
-            sysrefs.push((resolved.name, target_obj));
-        }
-    }
-
-    if sysrefs.is_empty() {
         info!("Import complete.");
         return Ok(());
     }
@@ -487,6 +664,7 @@ pub fn read_textdump<T: io::Read>(
                 e.clone(),
             )
         })?;
+    progress.advance(loader, ProgressPhase::CreateSysrefs, 1);
 
     // Set import_export_id="sysobj" on #0 itself
     let _ = loader.set_property(
@@ -496,14 +674,11 @@ pub fn read_textdump<T: io::Read>(
         None,
         Some(v_str("sysobj")),
     );
+    progress.advance(loader, ProgressPhase::CreateSysrefs, 1);
 
     // Set import_export_id on each sysref target object
     let mut created = 1; // Count #0
     for (prop_name, target_obj) in sysrefs {
-        // Skip if target object doesn't exist in the textdump
-        if !td.objects.contains_key(&target_obj) {
-            continue;
-        }
         if loader
             .set_property(
                 &target_obj,
@@ -517,6 +692,7 @@ pub fn read_textdump<T: io::Read>(
             created += 1;
             trace!(target = ?target_obj, sysref = %prop_name, "Created import_export_id from sysref");
         }
+        progress.advance(loader, ProgressPhase::CreateSysrefs, 1);
     }
     info!("Created {created} import_export_id properties from sysrefs");
 

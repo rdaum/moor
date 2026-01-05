@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::time::Duration;
 use uuid::Uuid;
 
 use crate::{
@@ -62,6 +63,30 @@ pub trait SnapshotInterface: Send {
         objid: &Obj,
     ) -> Result<Option<Box<dyn std::any::Any + Send>>, WorldStateError>;
     fn scan_anonymous_object_references(&self) -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError>;
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum ProgressPhase {
+    ReadTextdump,
+    CreateObjects,
+    SetAttributes,
+    DefineProperties,
+    SetProperties,
+    DefineVerbs,
+    CreateSysrefs,
+}
+
+#[derive(Clone, Debug)]
+pub struct ProgressEvent {
+    pub phase: ProgressPhase,
+    pub phase_done: u64,
+    pub phase_total: u64,
+    pub overall_done: u64,
+    pub overall_total: u64,
+    pub phase_elapsed: Duration,
+    pub overall_elapsed: Duration,
+    pub phase_eta: Option<Duration>,
+    pub overall_eta: Option<Duration>,
 }
 
 /// Interface exposed to be used by the textdump/objdef loader for loading data into the database.
@@ -175,6 +200,9 @@ pub trait LoaderInterface: Send {
 
     /// Get the program for an existing verb
     fn get_verb_program(&self, obj: &Obj, uuid: Uuid) -> Result<ProgramType, WorldStateError>;
+
+    /// Report progress for long-running load operations.
+    fn report_progress(&mut self, _event: ProgressEvent) {}
 
     /// Update the flags of an existing object
     fn update_object_flags(

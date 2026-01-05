@@ -1,0 +1,15 @@
+warning: field `object_ids` is never read
+  --> crates/db/benches/../tests/support/builder.rs:42:9
+   |
+40 | pub struct GeneratedDb {
+   |            ----------- field in this struct
+41 |     pub db: Arc<TxDB>,
+42 |     pub object_ids: Vec<Obj>,
+   |         ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `moor-db` (bench "textdump_load_scaling") generated 1 warning
+    Finished `bench` profile [optimized + debuginfo] target(s) in 0.52s
+     Running benches/textdump_load_scaling.rs (target/release/deps/textdump_load_scaling-f35564aea6188766)
+Gnuplot not found, using plotters backend

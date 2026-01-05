@@ -83,6 +83,7 @@ excludes:
   - \.git/.*
   - \.idea/.*
   - \.cargo/.*
+  - \.worktrees/.*
   - target/*
   - README.*
   - LICENSE.*
