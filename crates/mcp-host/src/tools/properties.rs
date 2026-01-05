@@ -14,7 +14,7 @@
 //! Property tools: list, get, set, add, delete
 
 use crate::mcp_types::{Tool, ToolCallResult};
-use crate::moor_client::{MoorClient, MoorResult};
+use moor_client::{MoorClient, MoorResult};
 use eyre::Result;
 use serde_json::{Value, json};
 

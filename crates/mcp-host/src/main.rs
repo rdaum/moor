@@ -46,7 +46,6 @@
 mod connection;
 mod mcp_server;
 mod mcp_types;
-mod moor_client;
 mod prompts;
 mod resources;
 mod tools;
@@ -63,7 +62,7 @@ use mcp_server::McpServer;
 use moor_client::MoorClientConfig;
 use rpc_common::client_args::RpcClientArgs;
 use serde_derive::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::info;
 
 /// mooR MCP Host - AI assistant interface for MOO virtual worlds
 #[derive(Parser, Debug, Serialize, Deserialize)]
@@ -120,16 +119,13 @@ async fn main() -> Result<()> {
     info!("Events address: {}", args.client_args.events_address);
 
     // Setup CURVE authentication if needed
-    let curve_keys = match setup_curve_auth(&args.client_args).await {
-        Ok(keys) => keys,
-        Err(e) => {
-            warn!(
-                "Failed to setup CURVE auth (will try without encryption): {}",
-                e
-            );
-            None
-        }
-    };
+    let curve_keys = moor_client::setup_curve_auth(
+        &args.client_args.rpc_address,
+        &args.client_args.enrollment_address,
+        args.client_args.enrollment_token_file.as_deref(),
+        "mcp-host",
+        &args.client_args.data_dir,
+    );
 
     // Create the client config
     let client_config = MoorClientConfig {
@@ -198,25 +194,3 @@ fn setup_logging(debug: bool) -> Result<()> {
     Ok(())
 }
 
-/// Setup CURVE authentication
-async fn setup_curve_auth(args: &RpcClientArgs) -> Result<Option<(String, String, String)>> {
-    // Check if we need CURVE auth (TCP endpoints typically do)
-    if !args.rpc_address.starts_with("tcp://") {
-        return Ok(None);
-    }
-
-    // Try to use the enrollment client to get keys
-    match rpc_async_client::enrollment_client::setup_curve_auth(
-        &args.rpc_address,
-        &args.enrollment_address,
-        args.enrollment_token_file.as_deref(),
-        "mcp-host",
-        &args.data_dir,
-    ) {
-        Ok(keys) => Ok(keys),
-        Err(e) => {
-            warn!("CURVE auth setup failed: {}", e);
-            Ok(None)
-        }
-    }
-}

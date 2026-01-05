@@ -14,7 +14,7 @@
 //! Utility tools: notify, reconnect, server info, players, tasks
 
 use crate::mcp_types::{Tool, ToolCallResult};
-use crate::moor_client::{MoorClient, MoorResult};
+use moor_client::{MoorClient, MoorResult};
 use eyre::Result;
 use moor_common::matching::{all_prepositions, get_preposition_forms};
 use moor_var::Sequence;

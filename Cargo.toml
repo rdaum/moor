@@ -10,6 +10,7 @@ members = [
     "crates/kernel",
     "crates/mcp-host",
     "crates/objdef",
+    "crates/rpc/moor-client",
     "crates/rpc/rpc-async-client",
     "crates/rpc/rpc-common",
     "crates/schema",

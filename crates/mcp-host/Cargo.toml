@@ -23,6 +23,7 @@ assets = [
 
 [dependencies]
 # Internal Dependencies
+moor-client = { path = "../rpc/moor-client" }
 moor-common = { path = "../common" }
 moor-compiler = { path = "../compiler" }
 moor-schema = { path = "../schema" }
