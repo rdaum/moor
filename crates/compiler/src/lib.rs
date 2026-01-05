@@ -19,7 +19,7 @@ mod ast;
 mod codegen;
 mod decompile;
 mod diagnostics;
-mod parse;
+pub mod parse;
 mod unparse;
 
 mod codegen_tests;
