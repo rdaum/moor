@@ -23,6 +23,7 @@ members = [
     "crates/textdump",
     "crates/var",
     "crates/web-host",
+    "tools/lsp",
     "tools/moor-emh",
     "tools/moorc",
 ]
@@ -130,6 +131,7 @@ rustls-pemfile = "2.2"
 socket2 = { version = "0.6", features = ["all"] }
 tmq = "0.5"
 tokio-rustls = "0.26"
+tower-lsp = "0.20"
 zmq = "0.10"
 
 # Async Runtime & Concurrency

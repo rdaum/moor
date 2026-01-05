@@ -1,0 +1,57 @@
+[package]
+name = "moor-lsp"
+version = "1.0.0-beta5"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Language Server Protocol implementation for MOO language"
+
+[[bin]]
+name = "moor-lsp"
+path = "src/main.rs"
+
+[dependencies]
+# Core mooR dependencies
+moor-client = { path = "../../crates/rpc/moor-client" }
+moor-common = { path = "../../crates/common" }
+moor-compiler = { path = "../../crates/compiler" }
+moor-var = { path = "../../crates/var" }
+
+# RPC dependencies (for CURVE auth enrollment)
+rpc-async-client = { path = "../../crates/rpc/rpc-async-client" }
+rpc-common = { path = "../../crates/rpc/rpc-common" }
+
+# Parsing (for reference lookup)
+pest.workspace = true
+
+# LSP
+tower-lsp.workspace = true
+
+# CLI & Configuration
+clap = { workspace = true, features = ["env"] }
+clap_derive.workspace = true
+dotenvy = "0.15"
+serde = { workspace = true }
+serde_json.workspace = true
+
+# Error handling
+color-eyre.workspace = true
+eyre.workspace = true
+
+# Async Runtime
+tokio = { workspace = true, features = ["full"] }
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# HTTP client (for URL content fetching)
+reqwest.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

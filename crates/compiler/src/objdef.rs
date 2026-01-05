@@ -38,6 +38,7 @@ use pest::{
 };
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub struct ObjFileContext(HashMap<Symbol, Var>);
 impl Default for ObjFileContext {
     fn default() -> Self {
