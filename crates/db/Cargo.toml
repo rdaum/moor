@@ -28,6 +28,8 @@ criterion.workspace = true
 edn-format.workspace = true
 eyre.workspace = true
 moor-bench-utils = { path = "../testing/bench-utils" }
+moor-compiler = { path = "../compiler" }
+moor-textdump = { path = "../textdump" }
 shuttle.workspace = true
 tempfile.workspace = true
 
