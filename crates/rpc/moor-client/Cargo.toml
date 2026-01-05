@@ -1,0 +1,38 @@
+[package]
+name = "moor-client"
+version = "1.0.0-beta5"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Client interfaces for mooR world state access, including in-memory mode and RPC mode"
+
+[dependencies]
+# Internal Dependencies
+moor-common = { path = "../../common" }
+moor-db = { path = "../../db" }
+moor-schema = { path = "../../schema" }
+moor-var = { path = "../../var" }
+rpc-async-client = { path = "../rpc-async-client" }
+rpc-common = { path = "../rpc-common" }
+
+# Networking & Communication
+tmq.workspace = true
+
+# Async Runtime
+tokio.workspace = true
+
+# Error Handling & Logging
+eyre.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+# Utilities
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

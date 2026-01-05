@@ -17,7 +17,7 @@
 //! from #0:external_agent_tools() at connection time.
 
 use crate::mcp_types::{Tool, ToolCallResult};
-use crate::moor_client::{MoorClient, MoorResult};
+use moor_client::{MoorClient, MoorResult};
 use eyre::{Result, eyre};
 use moor_var::{Associative, Var, Variant};
 use serde_json::{Value, json};

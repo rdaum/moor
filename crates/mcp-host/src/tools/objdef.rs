@@ -14,7 +14,7 @@
 //! Object definition (objdef) tools: dump, load, reload, file operations, diff
 
 use crate::mcp_types::{Tool, ToolCallResult};
-use crate::moor_client::{MoorClient, MoorResult};
+use moor_client::{MoorClient, MoorResult};
 use diffy::{Patch, apply};
 use eyre::Result;
 use moor_compiler::{CompileOptions, ObjFileContext, compile_object_definitions};

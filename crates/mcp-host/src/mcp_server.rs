@@ -18,7 +18,7 @@
 
 use crate::connection::ConnectionManager;
 use crate::mcp_types::*;
-use crate::moor_client::MoorClient;
+use moor_client::MoorClient;
 use crate::tools::dynamic::{
     DynamicResource, DynamicTool, execute_dynamic_tool, fetch_dynamic_resources,
     fetch_dynamic_tools,

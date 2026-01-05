@@ -14,7 +14,7 @@
 //! Shared helper functions for MCP tools
 
 use crate::mcp_types::{Tool, ToolCallResult};
-use crate::moor_client::TaskResult;
+use moor_client::TaskResult;
 use moor_common::model::ObjectRef;
 use moor_var::Var;
 use serde_json::{Value, json};

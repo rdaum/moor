@@ -14,7 +14,7 @@
 //! Execution tools: eval, command, invoke_verb, function_help, test_compile, command parsing
 
 use crate::mcp_types::{Tool, ToolCallResult};
-use crate::moor_client::{MoorClient, MoorResult};
+use moor_client::{MoorClient, MoorResult};
 use eyre::Result;
 use moor_compiler::{CompileOptions, DiagnosticRenderOptions, compile, format_compile_error};
 use moor_var::Var;

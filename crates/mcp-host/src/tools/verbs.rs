@@ -14,7 +14,7 @@
 //! Verb tools: list, get, program, apply_patch, add, delete, find_definition, set_verb_info, set_verb_args
 
 use crate::mcp_types::{Tool, ToolCallResult};
-use crate::moor_client::{MoorClient, MoorResult};
+use moor_client::{MoorClient, MoorResult};
 use diffy::{Patch, apply};
 use eyre::Result;
 use moor_var::Sequence;

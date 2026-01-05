@@ -3271,6 +3271,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "moor-client"
+version = "1.0.0-beta5"
+dependencies = [
+ "eyre",
+ "moor-common",
+ "moor-db",
+ "moor-schema",
+ "moor-var",
+ "rpc-async-client",
+ "rpc-common",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tmq",
+ "tokio",
+ "tracing",
+ "uuid 1.19.0",
+]
+
+[[package]]
 name = "moor-common"
 version = "1.0.0-beta7"
 dependencies = [
@@ -3527,6 +3546,7 @@ dependencies = [
  "eyre",
  "figment",
  "futures-util",
+ "moor-client",
  "moor-common",
  "moor-compiler",
  "moor-schema",

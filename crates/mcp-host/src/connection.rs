@@ -16,7 +16,7 @@
 //! Manages lazy creation of programmer and wizard connections, allowing
 //! operations to use appropriate privilege levels.
 
-use crate::moor_client::{MoorClient, MoorClientConfig};
+use moor_client::{MoorClient, MoorClientConfig};
 use eyre::{Result, eyre};
 use tracing::{debug, error, info, warn};
 

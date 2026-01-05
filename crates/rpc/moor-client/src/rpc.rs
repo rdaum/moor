@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Ryan Daum <ryan.daum@gmail.com> This program is free
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
 // software: you can redistribute it and/or modify it under the terms of the GNU
 // General Public License as published by the Free Software Foundation, version
 // 3.
@@ -11,10 +11,35 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! mooR RPC client wrapper for MCP host
+//! RPC-based mooR daemon client.
 //!
 //! This module provides a high-level interface to communicate with the mooR daemon,
 //! handling authentication, connection management, and RPC call translation.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use moor_client::rpc::{MoorClient, MoorClientConfig};
+//! use moor_common::model::ObjectRef;
+//! use moor_var::Obj;
+//!
+//! # async fn example() -> eyre::Result<()> {
+//! let config = MoorClientConfig {
+//!     rpc_address: "tcp://127.0.0.1:7899".to_string(),
+//!     events_address: "tcp://127.0.0.1:7898".to_string(),
+//!     curve_keys: None,
+//! };
+//!
+//! let mut client = MoorClient::new(config)?;
+//! client.connect().await?;
+//! client.login("wizard", "wizard").await?;
+//!
+//! // Now use the client for introspection
+//! let system_obj = ObjectRef::Id(Obj::mk_id(0));
+//! let verbs = client.list_verbs(&system_obj, false).await?;
+//! # Ok(())
+//! # }
+//! ```
 
 use eyre::{Result, eyre};
 use moor_common::model::ObjectRef;
@@ -58,7 +83,7 @@ pub struct MoorClientConfig {
     pub curve_keys: Option<(String, String, String)>,
 }
 
-/// mooR client for MCP host
+/// mooR client
 ///
 /// Manages the connection to the mooR daemon and provides high-level
 /// methods for interacting with the MOO world.
@@ -249,9 +274,9 @@ impl MoorClient {
         }];
 
         let establish_msg = mk_connection_establish_msg(
-            "mcp-host".to_string(), // peer_addr
-            0,                      // local_port
-            0,                      // remote_port
+            "moor-client".to_string(), // peer_addr
+            0,                          // local_port
+            0,                          // remote_port
             Some(content_types),
             Some(vec![]),
         );
