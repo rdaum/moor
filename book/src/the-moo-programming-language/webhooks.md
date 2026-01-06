@@ -5,13 +5,14 @@ enables the MOO to function as a web application server, serving HTML pages, JSO
 
 ## Enabling Webhooks
 
-Webhooks are enabled via a command-line flag when starting the `web-host`:
+Webhooks are enabled by default when starting the `web-host`. You can be explicit (or disable them) with the CLI flag:
 
 Here's an example, although this is something only an administrator would have to be concerned with and you should ask
 your admin about:
 
 ```bash
-./target/release/moor-web-host --enable-webhooks
+./target/release/moor-web-host --enable-webhooks=true
+./target/release/moor-web-host --enable-webhooks=false
 ```
 
 When enabled, all HTTP requests to paths starting with `/webhooks/` will be routed to the MOO's `#0:invoke_http_handler`
@@ -24,7 +25,7 @@ happens:
 
 1. The request is parsed and converted to MOO data structures
 2. A system handler task is created to call `#0:invoke_http_handler`
-3. The handler runs with the system object (#0) permissions unless an auth token is provided
+3. The handler runs with the system object (#0) permissions
 4. The handler's return value is converted back to an HTTP response
 
 ## Handler Arguments
@@ -38,8 +39,8 @@ The `#0:invoke_http_handler` verb receives the following arguments:
 - **`method`**: HTTP method as string ("GET", "POST", "PUT", etc.)
 - **`path`**: Request path as string (e.g., "/webhooks/test/friendly")
 - **`query_params`**: Query parameters as a list of `{key, value}` pairs
-- **`headers`**: HTTP headers as a list of `{key, value}` pairs
-- **`body`**: Request body as string (for text) or binary (for binary data)
+- **`headers`**: HTTP headers as a list of `{key, value}` pairs (both strings)
+- **`body`**: Request body as string (if UTF-8) or binary; empty string when no body is present
 - **`client_ip`**: Client IP address and port as string (e.g., "127.0.0.1:35194")
 
 ### Example Request Data
@@ -61,18 +62,11 @@ The handler would receive:
 
 ## Authentication and Permissions
 
-By default, webhook handlers run with system object (#0) permissions. However, you can provide authentication via a
-PASETO token in the `Authorization` header:
+Webhook handlers always run with system object (#0) permissions. The web host does not authenticate webhook requests
+for you.
 
-```bash
-curl -H "Authorization: Bearer <paseto_token>" "http://localhost:8080/webhooks/private"
-```
-
-When an auth token is provided:
-
-- The handler runs with the permissions of the authenticated player
-- The `player` variable in the handler will be the player's object ID
-- Without a token, `player` is the system object (#0)
+If you need authentication, validate it inside your handler (for example, by checking a shared secret header or
+verifying a token) and enforce your own access rules.
 
 ## Response Formats
 
@@ -114,7 +108,7 @@ Return a list to control the full HTTP response:
 
 ```moo
 #0:invoke_http_handler   this none this
- 1:  return {200, "You sent me: " + toliteral(args), "text/plain", {{"monkey", "paw"}}};
+ 1:  return {200, "You sent me: " + toliteral(args), "text/plain", {{'monkey, "paw"}}};
 ```
 
 The list format is:
@@ -122,7 +116,7 @@ The list format is:
 - **Index 0**: HTTP status code (integer)
 - **Index 1**: Response body (string or binary)
 - **Index 2**: Content-Type header (string, optional)
-- **Index 3**: Additional headers (list of `{key, value}` pairs, optional)
+- **Index 3**: Additional headers (list of `{symbol, string}` pairs, optional)
 
 This would return:
 
@@ -146,8 +140,8 @@ Webhooks enable many powerful use cases:
  1:  {method, path, query, headers, body, client_ip} = args;
  2:  if (path == "/webhooks/help")
  3:      return {200, "<h1>Help Page</h1><p>Welcome to the MOO!</p>", "text/html"};
- 4:  elseif (path == "/webhooks/api/users")
- 5:      return {200, tojson(users()), "application/json"};
+ 4:  elseif (path == "/webhooks/api/players")
+ 5:      return {200, generate_json(["players" -> players()]), "application/json"};
  6:  else
  7:      return {404, "Not found", "text/plain"};
  8:  endif
@@ -162,7 +156,7 @@ For more sophisticated HTML generation using MOO's document processing capabilit
  1:  {method, path, query, headers, body, client_ip} = args;
  2:  if (method == "POST" && path == "/webhooks/notify")
  3:      "Parse JSON body and trigger notification"
- 4:      notify_all("Webhook notification: " + body);
+ 4:      $wiz:tell("Webhook notification: " + body);
  5:      return {200, "Notification sent", "text/plain"};
  6:  endif
  7:  return {405, "Method not allowed", "text/plain"};
@@ -177,14 +171,14 @@ For more sophisticated HTML generation using MOO's document processing capabilit
  3:      "Parse form data from body"
  4:      {name, email, message} = parse_form_data(body);
  5:      "Store in database"
- 6:      contact_form = create_object(#contact_form);
+ 6:      contact_form = create($contact_form);
  7:      contact_form.name = name;
  8:      contact_form.email = email;
  9:      contact_form.message = message;
 10:      return {200, "Thank you for your message!", "text/html"};
 11:  endif
 12:  "Show contact form for GET requests"
-13:  return {200, contact_form_html(), "text/html"};
+13:  return {200, this:contact_form_html(), "text/html"};
 ```
 
 ## Error Handling
@@ -230,4 +224,3 @@ This pattern allows the HTTP request to complete quickly while the expensive wor
 3. **Sanitize output** when returning HTML
 4. **Limit resource usage** in handlers
 5. **Log suspicious activity** for monitoring
-
