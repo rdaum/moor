@@ -492,7 +492,13 @@ export const InputArea: React.FC<InputAreaProps> = ({
     const activePill = verbPill || (showSayPill ? "say" : null);
 
     // Get context-sensitive placeholder
+    // Screen reader users get minimal placeholders since aria-label provides context
     const getPlaceholder = (): string => {
+        // For screen reader users (proxied by prefers-reduced-motion), use minimal placeholders
+        // to avoid redundant announcements since aria-label already describes the input
+        if (prefersReducedMotion.current) {
+            return "";
+        }
         if (activePill === "say") {
             return "What would you like to say?";
         }
@@ -566,12 +572,14 @@ export const InputArea: React.FC<InputAreaProps> = ({
                 </div>
             </div>
 
+            {
+                /* Help text - kept static to avoid re-announcements while typing.
+                Completion details are announced via the live region when user interacts (Tab, etc). */
+            }
             <div id="input-help" className="sr-only">
                 {activePill
                     ? `${activePill} command active. Press Backspace to remove. Use Shift+Enter for new lines.`
-                    : currentCompletion
-                    ? `Completion available: ${currentCompletion.verb}. Tab to cycle options, Right Arrow to accept, Escape to dismiss. Shift+Tab to navigate away.`
-                    : "Use Shift+Enter for new lines. Arrow keys navigate command history when at start or end of input."}
+                    : "Press Tab for completions, Right Arrow to accept. Use Shift+Enter for new lines. Arrow keys navigate history."}
             </div>
 
             {/* Live region for screen reader announcements */}

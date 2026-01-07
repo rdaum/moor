@@ -12,10 +12,8 @@
 //
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { uuObjIdToString } from "../lib/var";
 import { ContentRenderer } from "./ContentRenderer";
 import { LinkPreview, LinkPreviewCard } from "./LinkPreviewCard";
-import { getSpeechBubblesEnabled } from "./SpeechBubbleToggle";
 
 const COLLAPSED_LOOKS_KEY = "moor-collapsed-looks";
 
@@ -60,33 +58,6 @@ interface OutputWindowProps {
     onMessageLinkClicked?: (messageId: string) => void;
 }
 
-// Compare actor from event metadata with playerOid
-const isActorPlayer = (actor: any, playerOid: string | null | undefined): boolean => {
-    if (!actor || !playerOid) return false;
-
-    // Normalize playerOid - strip # prefix and oid:/uuid: prefix
-    let normalizedPlayerOid = playerOid;
-    if (normalizedPlayerOid.startsWith("#")) {
-        normalizedPlayerOid = normalizedPlayerOid.substring(1);
-    }
-    if (normalizedPlayerOid.startsWith("oid:")) {
-        normalizedPlayerOid = normalizedPlayerOid.substring(4);
-    } else if (normalizedPlayerOid.startsWith("uuid:")) {
-        normalizedPlayerOid = normalizedPlayerOid.substring(5);
-    }
-
-    // actor has { oid: number } or { uuid: string (packed bigint) }
-    if (actor.oid !== undefined) {
-        return normalizedPlayerOid === String(actor.oid);
-    }
-    if (actor.uuid !== undefined) {
-        // Convert packed bigint string to formatted UUID for comparison
-        const formattedUuid = uuObjIdToString(BigInt(actor.uuid));
-        return normalizedPlayerOid === formattedUuid;
-    }
-    return false;
-};
-
 export const OutputWindow: React.FC<OutputWindowProps> = ({
     messages,
     onLoadMoreHistory,
@@ -104,7 +75,6 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
     const shouldAutoScroll = useRef(true);
     const previousScrollHeight = useRef<number>(0);
     const [isViewingHistory, setIsViewingHistory] = useState(false);
-    const [speechBubblesEnabled, setSpeechBubblesEnabled] = useState(getSpeechBubblesEnabled);
 
     // Track collapsed look descriptions by groupId
     const [collapsedLooks, setCollapsedLooks] = useState<Set<string>>(() => {
@@ -134,25 +104,6 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
             }
             return next;
         });
-    }, []);
-
-    // Listen for speech bubble setting changes
-    useEffect(() => {
-        const handleChange = (e: Event) => {
-            const customEvent = e as CustomEvent<boolean>;
-            setSpeechBubblesEnabled(customEvent.detail);
-        };
-        const handleStorage = (e: StorageEvent) => {
-            if (e.key === "speechBubblesEnabled") {
-                setSpeechBubblesEnabled(getSpeechBubblesEnabled());
-            }
-        };
-        window.addEventListener("speechBubblesChanged", handleChange);
-        window.addEventListener("storage", handleStorage);
-        return () => {
-            window.removeEventListener("speechBubblesChanged", handleChange);
-            window.removeEventListener("storage", handleStorage);
-        };
     }, []);
 
     // Create a wrapped link click handler that also marks the message as stale
@@ -314,62 +265,6 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         return baseClass;
     };
 
-    // Render a speech bubble for say events
-    const renderSpeechBubble = (
-        actorName: string,
-        content: string,
-        messageId: string,
-        isHistorical?: boolean,
-        fromMe?: boolean,
-        contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback",
-        isStale?: boolean,
-    ) => {
-        const displayName = fromMe ? "You" : actorName;
-        const bubbleClass = fromMe ? "speech_bubble speech_bubble_me" : "speech_bubble";
-        const ariaLabel = fromMe ? `You say: ${content}` : `${actorName} says: ${content}`;
-        const linkClickHandler = createLinkClickHandler(messageId);
-        return (
-            <div
-                key={messageId}
-                className={`speech_bubble_container${fromMe ? " speech_bubble_container_me" : ""}${
-                    isHistorical ? " historical_narrative" : " live_narrative"
-                }`}
-                role="article"
-                aria-label={ariaLabel}
-            >
-                <span className="speech_bubble_actor" aria-hidden="true">{displayName}</span>
-                <div className={bubbleClass} aria-hidden="true">
-                    <ContentRenderer
-                        content={content}
-                        contentType={contentType}
-                        onLinkClick={linkClickHandler}
-                        onLinkHoldStart={onLinkHoldStart}
-                        onLinkHoldEnd={onLinkHoldEnd}
-                        isStale={isStale}
-                    />
-                </div>
-            </div>
-        );
-    };
-
-    // Check if current theme is a CRT theme (no speech bubbles in retro modes)
-    const isCrtTheme = () => {
-        return document.body.classList.contains("crt-theme")
-            || document.body.classList.contains("crt-amber-theme");
-    };
-
-    // Check if a message should be rendered as a speech bubble
-    const isSpeechBubble = (
-        presentationHint?: string,
-        eventMetadata?: EventMetadata,
-    ): eventMetadata is EventMetadata & { content: string; actorName: string } => {
-        return speechBubblesEnabled
-            && !isCrtTheme()
-            && presentationHint === "speech_bubble"
-            && typeof eventMetadata?.content === "string"
-            && typeof eventMetadata?.actorName === "string";
-    };
-
     // Check if a message is a "look" event with a title to display
     const isLookEvent = (
         presentationHint?: string,
@@ -489,22 +384,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                         // Single message
                         const message = group[0];
 
-                        // Check if this should render as a speech bubble
-                        if (isSpeechBubble(message.presentationHint, message.eventMetadata)) {
-                            const fromMe = isActorPlayer(message.eventMetadata.actor, playerOid);
-                            const isMessageStale = staleMessageIds?.has(message.id) || message.isHistorical;
-                            result.push(
-                                renderSpeechBubble(
-                                    message.eventMetadata.actorName,
-                                    message.eventMetadata.content,
-                                    message.id,
-                                    message.isHistorical,
-                                    fromMe,
-                                    message.contentType,
-                                    isMessageStale,
-                                ),
-                            );
-                        } else if (message.presentationHint) {
+                        if (message.presentationHint) {
                             // If it has a presentationHint, wrap it like we do for groups
                             const baseClassName = getMessageClassName(message.type, message.isHistorical);
                             const showLookTitle = isLookEvent(message.presentationHint, message.eventMetadata);
@@ -535,7 +415,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                 aria-expanded={false}
                                                 aria-label="Expand description"
                                             >
-                                                <span className="look_chevron collapsed">▼</span>
+                                                <span className="look_chevron collapsed" aria-hidden="true">▼</span>
                                             </button>
                                             <span className="look_collapsed_name">
                                                 {message.eventMetadata!.dobjName}
@@ -551,7 +431,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                 aria-expanded={true}
                                                 aria-label="Collapse description"
                                             >
-                                                <span className="look_chevron">▼</span>
+                                                <span className="look_chevron" aria-hidden="true">▼</span>
                                             </button>
                                             <div className={baseClassName}>
                                                 {renderContentWithTts(
@@ -617,123 +497,73 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                             );
 
                         if (isHintGroup) {
-                            // Check if this is a speech bubble group
-                            if (isSpeechBubble(firstMessage.presentationHint, firstMessage.eventMetadata)) {
-                                // Get actor name from first message (all in group are same speaker)
-                                const actorName = firstMessage.eventMetadata.actorName;
-                                const fromMe = isActorPlayer(firstMessage.eventMetadata.actor, playerOid);
-                                // Group is stale if any message in it is stale or historical
-                                const isGroupStale = group.some(msg =>
-                                    staleMessageIds?.has(msg.id) || msg.isHistorical
-                                );
+                            // Hint group - render each on its own line
+                            const baseClassName = getMessageClassName(
+                                firstMessage.type,
+                                firstMessage.isHistorical,
+                            );
+                            const showLookTitle = isLookEvent(
+                                firstMessage.presentationHint,
+                                firstMessage.eventMetadata,
+                            );
+                            const groupId = firstMessage.groupId;
+                            // Group is stale if any message in it is stale or historical
+                            const isGroupStale = group.some(msg => staleMessageIds?.has(msg.id) || msg.isHistorical);
 
-                                // Combine all messages into one bubble with newlines
-                                const combinedContent = group.map(msg =>
-                                    msg.eventMetadata?.content
-                                    || (typeof msg.content === "string" ? msg.content : "")
-                                ).join("\n");
+                            // Use firstMessage.id for collapse key (unique per event group)
+                            const collapseKey = firstMessage.id;
+                            const isCollapsible = showLookTitle && groupId;
+                            const isThisCollapsed = isCollapsible && collapsedLooks.has(collapseKey);
 
-                                result.push(
-                                    renderSpeechBubble(
-                                        actorName,
-                                        combinedContent,
-                                        `speech_group_${firstMessage.id}`,
-                                        firstMessage.isHistorical,
-                                        fromMe,
-                                        firstMessage.contentType,
-                                        isGroupStale,
-                                    ),
-                                );
-                            } else {
-                                // Regular hint group - render each on its own line
-                                const baseClassName = getMessageClassName(
-                                    firstMessage.type,
-                                    firstMessage.isHistorical,
-                                );
-                                const showLookTitle = isLookEvent(
-                                    firstMessage.presentationHint,
-                                    firstMessage.eventMetadata,
-                                );
-                                const groupId = firstMessage.groupId;
-                                // Group is stale if any message in it is stale or historical
-                                const isGroupStale = group.some(msg =>
-                                    staleMessageIds?.has(msg.id) || msg.isHistorical
-                                );
+                            const wrapperClassName = (() => {
+                                const classes: string[] = [];
+                                if (firstMessage.presentationHint === "inset") classes.push("presentation_inset");
+                                if (firstMessage.presentationHint === "processing") {
+                                    classes.push("presentation_processing");
+                                }
+                                if (firstMessage.presentationHint === "expired") {
+                                    classes.push("presentation_expired");
+                                }
+                                return classes.join(" ");
+                            })();
 
-                                // Use firstMessage.id for collapse key (unique per event group)
-                                const collapseKey = firstMessage.id;
-                                const isCollapsible = showLookTitle && groupId;
-                                const isThisCollapsed = isCollapsible && collapsedLooks.has(collapseKey);
-
-                                const wrapperClassName = (() => {
-                                    const classes: string[] = [];
-                                    if (firstMessage.presentationHint === "inset") classes.push("presentation_inset");
-                                    if (firstMessage.presentationHint === "processing") {
-                                        classes.push("presentation_processing");
-                                    }
-                                    if (firstMessage.presentationHint === "expired") {
-                                        classes.push(
-                                            "presentation_expired",
-                                        );
-                                    }
-                                    return classes.join(" ");
-                                })();
-
-                                result.push(
-                                    <div
-                                        key={`hint_${firstMessage.id}`}
-                                        className={wrapperClassName}
-                                        role="group"
-                                        aria-label={showLookTitle
-                                            ? firstMessage.eventMetadata!.dobjName
-                                            : "Grouped content"}
-                                    >
-                                        {isCollapsible && isThisCollapsed && (
-                                            <div className="look_collapsed_summary">
-                                                <button
-                                                    type="button"
-                                                    className="look_toggle_button"
-                                                    onClick={() => toggleLookCollapse(collapseKey)}
-                                                    aria-expanded={false}
-                                                    aria-label="Expand description"
-                                                >
-                                                    <span className="look_chevron collapsed">▼</span>
-                                                </button>
-                                                <span className="look_collapsed_name">
-                                                    {firstMessage.eventMetadata!.dobjName}
-                                                </span>
-                                            </div>
-                                        )}
-                                        {!isThisCollapsed && isCollapsible && (
-                                            <div className="look_toggle_row">
-                                                <button
-                                                    type="button"
-                                                    className="look_toggle_button"
-                                                    onClick={() => toggleLookCollapse(collapseKey)}
-                                                    aria-expanded={true}
-                                                    aria-label="Collapse description"
-                                                >
-                                                    <span className="look_chevron">▼</span>
-                                                </button>
-                                                <div>
-                                                    {group.map(msg => (
-                                                        <div key={msg.id} className={baseClassName}>
-                                                            {renderContentWithTts(
-                                                                msg.content,
-                                                                msg.contentType,
-                                                                msg.ttsText,
-                                                                msg.thumbnail,
-                                                                msg.linkPreview,
-                                                                msg.id,
-                                                                isGroupStale,
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                        {!isThisCollapsed && !isCollapsible && (
-                                            <>
+                            result.push(
+                                <div
+                                    key={`hint_${firstMessage.id}`}
+                                    className={wrapperClassName}
+                                    role="group"
+                                    aria-label={showLookTitle
+                                        ? firstMessage.eventMetadata!.dobjName
+                                        : "Grouped content"}
+                                >
+                                    {isCollapsible && isThisCollapsed && (
+                                        <div className="look_collapsed_summary">
+                                            <button
+                                                type="button"
+                                                className="look_toggle_button"
+                                                onClick={() => toggleLookCollapse(collapseKey)}
+                                                aria-expanded={false}
+                                                aria-label="Expand description"
+                                            >
+                                                <span className="look_chevron collapsed" aria-hidden="true">▼</span>
+                                            </button>
+                                            <span className="look_collapsed_name">
+                                                {firstMessage.eventMetadata!.dobjName}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {!isThisCollapsed && isCollapsible && (
+                                        <div className="look_toggle_row">
+                                            <button
+                                                type="button"
+                                                className="look_toggle_button"
+                                                onClick={() => toggleLookCollapse(collapseKey)}
+                                                aria-expanded={true}
+                                                aria-label="Collapse description"
+                                            >
+                                                <span className="look_chevron" aria-hidden="true">▼</span>
+                                            </button>
+                                            <div>
                                                 {group.map(msg => (
                                                     <div key={msg.id} className={baseClassName}>
                                                         {renderContentWithTts(
@@ -747,11 +577,28 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                         )}
                                                     </div>
                                                 ))}
-                                            </>
-                                        )}
-                                    </div>,
-                                );
-                            }
+                                            </div>
+                                        </div>
+                                    )}
+                                    {!isThisCollapsed && !isCollapsible && (
+                                        <>
+                                            {group.map(msg => (
+                                                <div key={msg.id} className={baseClassName}>
+                                                    {renderContentWithTts(
+                                                        msg.content,
+                                                        msg.contentType,
+                                                        msg.ttsText,
+                                                        msg.thumbnail,
+                                                        msg.linkPreview,
+                                                        msg.id,
+                                                        isGroupStale,
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </>
+                                    )}
+                                </div>,
+                            );
                         } else {
                             // noNewline group - combine content on same line
                             const combinedHtml = group.map(msg => {
