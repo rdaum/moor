@@ -273,6 +273,15 @@ Functions not part of the original LambdaMOO, but added in moor
 | `flyslotremove` | Returns a copy of the flyweight with the given slot removed, if present  | Available only if the flyweights feature is turned on |
 | `tosym`         | Turns the given value into a Symbol                                      | Available only if the symbols feature is turned on    |
 
+### Encoding
+
+| Name                                       | Description                                    | Notes            |
+|--------------------------------------------|------------------------------------------------|------------------|
+| [`encode_base64`](crypto.md#encode_base64) | Encodes string or binary data to Base64        | From ToastStunt  |
+| [`decode_base64`](crypto.md#decode_base64) | Decodes Base64-encoded string to binary data   | From ToastStunt  |
+| [`encode_base32`](crypto.md#encode_base32) | Encodes string or binary data to Base32        |                  |
+| [`decode_base32`](crypto.md#decode_base32) | Decodes Base32-encoded string to binary data   |                  |
+
 ### Cryptography
 
 | Name                                                                            | Description                                                                    | Notes |
@@ -282,6 +291,9 @@ Functions not part of the original LambdaMOO, but added in moor
 | [`age_decrypt`](crypto.md#age_decrypt)                                         | Decrypts an age-encrypted message using one or more private keys               |       |
 | [`age_passphrase_encrypt`](crypto.md#age_passphrase_encrypt)                   | Encrypts a message using age encryption with a passphrase                      |       |
 | [`age_passphrase_decrypt`](crypto.md#age_passphrase_decrypt)                   | Decrypts an age-encrypted message using a passphrase                           |       |
+| [`hotp`](crypto.md#hotp)                                                       | Generates HMAC-based One-Time Password (RFC 4226)                              |       |
+| [`totp`](crypto.md#totp)                                                       | Generates Time-based One-Time Password (RFC 6238)                              |       |
+| [`random_bytes`](crypto.md#random_bytes)                                       | Generates cryptographically secure random bytes                                |       |
 
 ### Expanded error handling
 

@@ -117,6 +117,35 @@ salt()  ⇒    "M5pZr3m8N7q9K4v6B"
 
 > Note: This function takes no arguments and generates a cryptographically secure salt string. It is not compatible with Toast's two-argument salt function which allows specifying format and input.
 
+### `random_bytes`
+
+```
+binary random_bytes(int count)
+```
+
+Generates cryptographically secure random bytes.
+
+**Parameters:**
+- `count`: Number of bytes to generate (1-65536)
+
+**Returns:** Random bytes as binary data
+
+**Raises:** `E_INVARG` if count is out of range
+
+**Examples:**
+
+```
+// Generate a 20-byte secret for TOTP (can be used directly)
+secret = random_bytes(20);
+code = totp(secret);
+
+// Encode to Base32 if sharing with authenticator apps
+encoded = encode_base32(secret);
+
+// Generate a 32-byte key for encryption
+key = random_bytes(32);
+```
+
 ### `crypt`
 
 ```
@@ -241,7 +270,7 @@ Returns the HMAC (Hash-based Message Authentication Code) of the given string us
 **Parameters:**
 - `text`: The string to compute the HMAC for
 - `key`: The secret key to use for the HMAC
-- `algorithm`: Hash algorithm to use. Can be `#sha1` or `#sha256`. Defaults to `#sha256`.
+- `algorithm`: Hash algorithm to use. Can be `'sha1` or `'sha256`. Defaults to `'sha256`.
 - `binary_output`: If true, returns the raw binary HMAC. If false, returns hex-encoded string. Defaults to false.
 
 **Returns:** Hex-encoded string or binary data depending on `binary_output`
@@ -252,10 +281,10 @@ Returns the HMAC (Hash-based Message Authentication Code) of the given string us
 string_hmac("hello", "secret")
 => "88aab3ede8d3adf94d26ab90d3bafd4a2083070c3bcce9c014ee04a443847c0b"
 
-string_hmac("hello", "secret", #sha1)
+string_hmac("hello", "secret", 'sha1)
 => "2e0e5e2c72b56b2a8c4d9f9f6c2e8e5d3b7f1a4b"
 
-string_hmac("hello", "secret", #sha256, 1)
+string_hmac("hello", "secret", 'sha256, 1)
 => b"\x88\xaa\xb3\xed\xe8\xd3\xad\xf9..."
 ```
 
@@ -270,7 +299,7 @@ Returns the HMAC (Hash-based Message Authentication Code) of the given binary da
 **Parameters:**
 - `data`: The binary data to compute the HMAC for (mooR's native Binary type)
 - `key`: The secret key to use for the HMAC
-- `algorithm`: Hash algorithm to use. Can be `#sha1` or `#sha256`. Defaults to `#sha256`.
+- `algorithm`: Hash algorithm to use. Can be `'sha1` or `'sha256`. Defaults to `'sha256`.
 - `binary_output`: If true, returns the raw binary HMAC. If false, returns hex-encoded string. Defaults to false.
 
 **Returns:** Hex-encoded string or binary data depending on `binary_output`
@@ -283,10 +312,10 @@ Returns the HMAC (Hash-based Message Authentication Code) of the given binary da
 binary_hmac(b"\x00\x01\x02", "secret")
 => "f87a5a8f..."
 
-binary_hmac(b"\x00\x01\x02", "secret", #sha1)
+binary_hmac(b"\x00\x01\x02", "secret", 'sha1)
 => "2e0e5e2c..."
 
-binary_hmac(b"\x00\x01\x02", "secret", #sha256, 1)
+binary_hmac(b"\x00\x01\x02", "secret", 'sha256, 1)
 => b"\xf8\x7a\x5a\x8f..."
 ```
 
@@ -345,3 +374,148 @@ decode_base64("aGVsbG8gd29ybGQ=")
 decode_base64("aGVsbG8gd29ybGQ", 1)
 => b"hello world"
 ```
+
+### `encode_base32`
+
+```
+str encode_base32(str|binary data)
+```
+
+Encodes the given string or binary data using Base32 encoding ([RFC 4648](https://datatracker.ietf.org/doc/html/rfc4648)).
+
+**Parameters:**
+- `data`: String or binary data to encode
+
+**Returns:** Base32-encoded string with padding
+
+**Examples:**
+
+```
+encode_base32("Hello")
+=> "JBSWY3DP"
+
+encode_base32("foobar")
+=> "MZXW6YTBOI======"
+```
+
+### `decode_base32`
+
+```
+binary decode_base32(str encoded_text)
+```
+
+Decodes a Base32-encoded string to binary data.
+
+**Parameters:**
+- `encoded_text`: Base32-encoded string to decode (with or without padding)
+
+**Returns:** Decoded binary data
+
+**Raises:** `E_INVARG` if the input is not valid Base32
+
+**Examples:**
+
+```
+decode_base32("JBSWY3DP")
+=> b"Hello"
+
+binary_to_str(decode_base32("MZXW6YTBOI======"))
+=> "foobar"
+```
+
+## One-Time Password Functions
+
+These functions implement industry-standard one-time password algorithms used for two-factor authentication (2FA).
+
+### `hotp`
+
+```
+str hotp(str|binary secret, int counter [, int digits])
+```
+
+Generates an HMAC-based One-Time Password per [RFC 4226](https://datatracker.ietf.org/doc/html/rfc4226).
+
+HOTP generates a one-time password from a shared secret and a counter value. Each time a password is used, the counter should be incremented. This is the foundation for hardware tokens and some authenticator apps.
+
+**Parameters:**
+- `secret`: The shared secret key, either as a Base32-encoded string (common format for TOTP apps) or raw binary data
+- `counter`: The counter value (must be non-negative). This should be incremented after each successful authentication.
+- `digits`: Number of digits in the output (1-10, default 6)
+
+**Returns:** The OTP as a zero-padded string
+
+**Raises:**
+- `E_TYPE` if arguments are wrong type
+- `E_INVARG` if secret is invalid Base32, counter is negative, or digits is out of range
+
+**Examples:**
+
+```
+// Using Base32-encoded secret (standard format)
+hotp("JBSWY3DPEHPK3PXP", 0)
+=> "282760"
+
+hotp("JBSWY3DPEHPK3PXP", 1)
+=> "996344"
+
+// With 8 digits
+hotp("JBSWY3DPEHPK3PXP", 0, 8)
+=> "84282760"
+
+// Using raw binary secret
+hotp(decode_base32("JBSWY3DPEHPK3PXP"), 0)
+=> "282760"
+```
+
+### `totp`
+
+```
+str totp(str|binary secret [, int time] [, int time_step] [, symbol algorithm] [, int digits])
+```
+
+Generates a Time-based One-Time Password per [RFC 6238](https://datatracker.ietf.org/doc/html/rfc6238).
+
+TOTP extends HOTP by using the current time as the counter, divided into time steps (typically 30 seconds). This is the algorithm used by Google Authenticator, Authy, and most authenticator apps.
+
+**Parameters:**
+- `secret`: The shared secret key, either as a Base32-encoded string or raw binary data
+- `time`: Unix timestamp to use (default: current time). Use `time()` to get the current system time.
+- `time_step`: Time step in seconds (default 30). Most authenticator apps use 30 seconds.
+- `algorithm`: Hash algorithm symbol - `'sha1`, `'sha256`, or `'sha512` (default `'sha256`). Note: Most authenticator apps use SHA1 for compatibility.
+- `digits`: Number of digits in the output (1-10, default 6)
+
+**Returns:** The OTP as a zero-padded string
+
+**Raises:**
+- `E_TYPE` if arguments are wrong type
+- `E_INVARG` if secret is invalid Base32, time is negative, time_step is not positive, algorithm is invalid, or digits is out of range
+
+**Examples:**
+
+```
+// Generate current TOTP with default settings (SHA256)
+totp("JBSWY3DPEHPK3PXP")
+=> "123456"
+
+// Generate TOTP for current time explicitly
+totp("JBSWY3DPEHPK3PXP", time())
+=> "123456"
+
+// Use SHA1 for compatibility with most authenticator apps
+totp("JBSWY3DPEHPK3PXP", time(), 30, 'sha1)
+=> "654321"
+
+// Generate TOTP for a specific timestamp (useful for testing)
+totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 59, 30, 'sha1, 8)
+=> "94287082"
+
+// With 60-second time step
+totp("JBSWY3DPEHPK3PXP", time(), 60)
+=> "789012"
+```
+
+**Compatibility Note:** While this implementation defaults to SHA256 for better security, most authenticator apps (Google Authenticator, Authy, etc.) use SHA1. When generating secrets for use with these apps, specify `'sha1` as the algorithm.
+
+**See Also:**
+- [RFC 4226 - HOTP](https://datatracker.ietf.org/doc/html/rfc4226) - The underlying HMAC-based algorithm
+- [RFC 6238 - TOTP](https://datatracker.ietf.org/doc/html/rfc6238) - Time-based extension specification

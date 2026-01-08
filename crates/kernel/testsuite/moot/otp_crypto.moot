@@ -1,0 +1,327 @@
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+
+// Tests for Base32, HOTP, and TOTP builtins
+// HOTP test vectors from RFC 4226 Appendix D
+// TOTP test vectors from RFC 6238 Appendix B
+// Note: Use strings for algorithm names since backtick symbols cause issues in moot
+
+@programmer
+
+// ============================================================================
+// Base32 Encoding/Decoding Tests
+// ============================================================================
+
+// Test encode_base32 with simple string
+; return encode_base32("Hello");
+"JBSWY3DP"
+
+// Test encode_base32 with empty string
+; return encode_base32("");
+""
+
+// Test encode_base32 with "f" -> "MY======"
+; return encode_base32("f");
+"MY======"
+
+// Test encode_base32 with "fo" -> "MZXQ===="
+; return encode_base32("fo");
+"MZXQ===="
+
+// Test encode_base32 with "foo" -> "MZXW6==="
+; return encode_base32("foo");
+"MZXW6==="
+
+// Test encode_base32 with "foob" -> "MZXW6YQ="
+; return encode_base32("foob");
+"MZXW6YQ="
+
+// Test encode_base32 with "fooba" -> "MZXW6YTB"
+; return encode_base32("fooba");
+"MZXW6YTB"
+
+// Test encode_base32 with "foobar" -> "MZXW6YTBOI======"
+; return encode_base32("foobar");
+"MZXW6YTBOI======"
+
+// Test decode_base32 with simple string
+; return binary_to_str(decode_base32("JBSWY3DP"));
+"Hello"
+
+// Test decode_base32 with empty string
+; return decode_base32("");
+b""
+
+// Test decode_base32 with padding
+; return binary_to_str(decode_base32("MZXW6YTBOI======"));
+"foobar"
+
+// Test decode_base32 returns binary type (TYPE 17)
+; return typeof(decode_base32("JBSWY3DP")) == 17;
+1
+
+// Test encode_base32 with binary input
+; return encode_base32(decode_base32("JBSWY3DP"));
+"JBSWY3DP"
+
+// Test full round-trip: string -> base32 -> binary -> string
+; return binary_to_str(decode_base32(encode_base32("hello")));
+"hello"
+
+// Test encode_base32 with too few arguments
+; encode_base32();
+E_ARGS
+
+// Test encode_base32 with too many arguments
+; encode_base32("test", "extra");
+E_ARGS
+
+// Test encode_base32 with invalid type
+; encode_base32(123);
+E_TYPE
+
+// Test decode_base32 with too few arguments
+; decode_base32();
+E_ARGS
+
+// Test decode_base32 with too many arguments
+; decode_base32("TEST", "extra");
+E_ARGS
+
+// Test decode_base32 with invalid type
+; decode_base32(123);
+E_TYPE
+
+// Test decode_base32 with invalid base32 string
+; decode_base32("!!!invalid!!!");
+E_INVARG
+
+// ============================================================================
+// HOTP Tests - RFC 4226 Appendix D Test Vectors
+// ============================================================================
+// Secret: "12345678901234567890" (ASCII)
+// Base32: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+
+// RFC 4226 test vector: counter=0 -> 755224
+; return hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 0);
+"755224"
+
+// RFC 4226 test vector: counter=1 -> 287082
+; return hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 1);
+"287082"
+
+// RFC 4226 test vector: counter=2 -> 359152
+; return hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 2);
+"359152"
+
+// RFC 4226 test vector: counter=3 -> 969429
+; return hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 3);
+"969429"
+
+// RFC 4226 test vector: counter=4 -> 338314
+; return hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 4);
+"338314"
+
+// RFC 4226 test vector: counter=5 -> 254676
+; return hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 5);
+"254676"
+
+// RFC 4226 test vector: counter=6 -> 287922
+; return hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 6);
+"287922"
+
+// RFC 4226 test vector: counter=7 -> 162583
+; return hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 7);
+"162583"
+
+// RFC 4226 test vector: counter=8 -> 399871
+; return hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 8);
+"399871"
+
+// RFC 4226 test vector: counter=9 -> 520489
+; return hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 9);
+"520489"
+
+// Test hotp with binary secret (same secret as bytes)
+; return hotp(binary_from_str("12345678901234567890"), 0);
+"755224"
+
+// Test hotp with 8 digits
+; return hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 0, 8);
+"84755224"
+
+// Test hotp with too few arguments
+; hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ");
+E_ARGS
+
+// Test hotp with too many arguments
+; hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 0, 6, "extra");
+E_ARGS
+
+// Test hotp with invalid secret type
+; hotp(123, 0);
+E_TYPE
+
+// Test hotp with invalid counter type
+; hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", "not a number");
+E_TYPE
+
+// Test hotp with negative counter
+; hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", -1);
+E_INVARG
+
+// Test hotp with invalid digits (too small)
+; hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 0, 0);
+E_INVARG
+
+// Test hotp with invalid digits (too large)
+; hotp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 0, 11);
+E_INVARG
+
+// Test hotp with invalid Base32 secret
+; hotp("!!!notbase32!!!", 0);
+E_INVARG
+
+// ============================================================================
+// TOTP Tests - RFC 6238 Appendix B Test Vectors
+// ============================================================================
+// Using SHA1 with secret "12345678901234567890" (ASCII)
+// Base32: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+// Time step: 30 seconds
+
+// RFC 6238 test: time=59 (T=1) -> 94287082 (8 digits)
+; return totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 59, 30, "sha1", 8);
+"94287082"
+
+// RFC 6238 test: time=1111111109 (T=37037036) -> 07081804 (8 digits)
+; return totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 1111111109, 30, "sha1", 8);
+"07081804"
+
+// RFC 6238 test: time=1111111111 (T=37037037) -> 14050471 (8 digits)
+; return totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 1111111111, 30, "sha1", 8);
+"14050471"
+
+// RFC 6238 test: time=1234567890 (T=41152263) -> 89005924 (8 digits)
+; return totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 1234567890, 30, "sha1", 8);
+"89005924"
+
+// RFC 6238 test: time=2000000000 (T=66666666) -> 69279037 (8 digits)
+; return totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 2000000000, 30, "sha1", 8);
+"69279037"
+
+// Test totp with sha1 algorithm and default 6 digits
+; return totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 59, 30, "sha1");
+"287082"
+
+// Test totp with binary secret
+; return totp(binary_from_str("12345678901234567890"), 59, 30, "sha1", 8);
+"94287082"
+
+// Test totp with SHA256 algorithm
+// RFC 6238 SHA256 secret is 32 bytes: "12345678901234567890123456789012"
+// Base32: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZA===="
+; return totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZA", 59, 30, "sha256", 8);
+"46119246"
+
+// Test totp with SHA512 algorithm
+// RFC 6238 SHA512 secret is 64 bytes: "1234567890123456789012345678901234567890123456789012345678901234"
+// Base32: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA="
+; return totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA", 59, 30, "sha512", 8);
+"90693936"
+
+// Test totp with too few arguments
+; totp();
+E_ARGS
+
+// Test totp with too many arguments
+; totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 59, 30, "sha1", 6, "extra");
+E_ARGS
+
+// Test totp with invalid secret type
+; totp(123);
+E_TYPE
+
+// Test totp with invalid time type
+; totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", "not a number");
+E_TYPE
+
+// Test totp with negative time
+; totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", -1);
+E_INVARG
+
+// Test totp with invalid time_step (zero)
+; totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 59, 0);
+E_INVARG
+
+// Test totp with invalid time_step (negative)
+; totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 59, -1);
+E_INVARG
+
+// Test totp with invalid algorithm
+; totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 59, 30, "md5");
+E_INVARG
+
+// Test totp with invalid digits (too small)
+; totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 59, 30, "sha1", 0);
+E_INVARG
+
+// Test totp with invalid digits (too large)
+; totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 59, 30, "sha1", 11);
+E_INVARG
+
+// Test totp with invalid Base32 secret
+; totp("!!!notbase32!!!");
+E_INVARG
+
+// ============================================================================
+// Random Bytes Tests
+// ============================================================================
+
+// Test random_bytes returns binary type (TYPE 17)
+; return typeof(random_bytes(16)) == 17;
+1
+
+// Test random_bytes returns correct length
+; return length(random_bytes(20)) == 20;
+1
+
+// Test random_bytes with 1 byte
+; return length(random_bytes(1)) == 1;
+1
+
+// Test random_bytes with too few arguments
+; random_bytes();
+E_ARGS
+
+// Test random_bytes with too many arguments
+; random_bytes(10, 20);
+E_ARGS
+
+// Test random_bytes with invalid type
+; random_bytes("not a number");
+E_TYPE
+
+// Test random_bytes with zero count
+; random_bytes(0);
+E_INVARG
+
+// Test random_bytes with negative count
+; random_bytes(-1);
+E_INVARG
+
+// Test random_bytes with count too large
+; random_bytes(65537);
+E_INVARG
+
+// Test random_bytes at max allowed (65536)
+; return length(random_bytes(65536)) == 65536;
+1

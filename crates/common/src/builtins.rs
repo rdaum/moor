@@ -937,6 +937,32 @@ fn mk_builtin_table() -> Vec<Builtin> {
             vec![Typed(TYPE_STR), Typed(TYPE_LIST)],
             true,
         ),
+        // Base32 encoding/decoding
+        mk_builtin("encode_base32", Q(1), Q(1), vec![Any], true),
+        mk_builtin("decode_base32", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
+        // HOTP/TOTP one-time password generation (RFC 4226, RFC 6238)
+        mk_builtin(
+            "hotp",
+            Q(2),
+            Q(3),
+            vec![Any, Typed(TYPE_INT), Typed(TYPE_INT)],
+            true,
+        ),
+        mk_builtin(
+            "totp",
+            Q(1),
+            Q(5),
+            vec![
+                Any,
+                Typed(TYPE_INT),
+                Typed(TYPE_INT),
+                Typed(TYPE_SYMBOL),
+                Typed(TYPE_INT),
+            ],
+            true,
+        ),
+        // Random bytes generation
+        mk_builtin("random_bytes", Q(1), Q(1), vec![Typed(TYPE_INT)], true),
     ]);
     pad_group(&mut builtins, start, "cryptography");
 

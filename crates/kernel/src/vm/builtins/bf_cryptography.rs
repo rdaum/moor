@@ -22,7 +22,9 @@ use age::{
 };
 use argon2::password_hash::{SaltString, rand_core::OsRng};
 use argon2::{Algorithm, Argon2, Params, PasswordHasher, PasswordVerifier, Version};
+use base32::Alphabet;
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use chrono::Utc;
 use hmac::{Hmac, Mac};
 use lazy_static::lazy_static;
 use rand::Rng;
@@ -30,7 +32,7 @@ use rand::distr::Alphanumeric;
 use rusty_paseto::core::{Key, Local, Paseto, PasetoNonce, PasetoSymmetricKey, Payload, V4};
 use serde_json::Value as JsonValue;
 use sha1::Sha1;
-use sha2::Sha256;
+use sha2::{Sha256, Sha512};
 use ssh_key::public::PublicKey;
 use std::io::Read;
 use tracing::{error, warn};
@@ -47,6 +49,7 @@ use moor_var::{
 lazy_static! {
     static ref SHA1_SYM: Symbol = Symbol::mk("sha1");
     static ref SHA256_SYM: Symbol = Symbol::mk("sha256");
+    static ref SHA512_SYM: Symbol = Symbol::mk("sha512");
 }
 
 /// Usage: `list age_generate_keypair([bool as_bytes])`
@@ -1124,6 +1127,251 @@ fn bf_paseto_verify_local(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr>
     Ok(Ret(v_map(&pairs)))
 }
 
+/// Usage: `str encode_base32(str|bytes data)`
+/// Encodes string or binary data to Base32 (RFC 4648).
+fn bf_encode_base32(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let bytes = match bf_args.args[0].variant() {
+        Variant::Str(s) => s.as_str().as_bytes().to_vec(),
+        Variant::Binary(b) => b.as_bytes().to_vec(),
+        _ => return Err(BfErr::Code(E_TYPE)),
+    };
+
+    let encoded = base32::encode(Alphabet::Rfc4648 { padding: true }, &bytes);
+    Ok(Ret(v_string(encoded)))
+}
+
+/// Usage: `bytes decode_base32(str encoded_text)`
+/// Decodes Base32-encoded string to binary data.
+fn bf_decode_base32(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Some(encoded_text) = bf_args.args[0].as_string() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let decoded_bytes = base32::decode(Alphabet::Rfc4648 { padding: true }, encoded_text)
+        .ok_or(BfErr::Code(E_INVARG))?;
+
+    Ok(Ret(v_binary(decoded_bytes)))
+}
+
+/// HOTP dynamic truncation per RFC 4226 Section 5.3
+fn hotp_truncate(hmac_result: &[u8], digits: u32) -> u32 {
+    let offset = (hmac_result[hmac_result.len() - 1] & 0x0f) as usize;
+    let binary = ((hmac_result[offset] & 0x7f) as u32) << 24
+        | (hmac_result[offset + 1] as u32) << 16
+        | (hmac_result[offset + 2] as u32) << 8
+        | (hmac_result[offset + 3] as u32);
+    binary % 10u32.pow(digits)
+}
+
+/// Parse a secret key from a Var - accepts raw bytes or Base32-encoded string.
+fn parse_otp_secret(var: &Var) -> Result<Vec<u8>, BfErr> {
+    match var.variant() {
+        Variant::Binary(b) => Ok(b.as_bytes().to_vec()),
+        Variant::Str(s) => base32::decode(Alphabet::Rfc4648 { padding: false }, s.as_str())
+            .or_else(|| base32::decode(Alphabet::Rfc4648 { padding: true }, s.as_str()))
+            .ok_or_else(|| BfErr::ErrValue(E_INVARG.msg("Secret must be valid Base32 or binary"))),
+        _ => Err(BfErr::Code(E_TYPE)),
+    }
+}
+
+/// Compute HMAC for TOTP with the specified algorithm.
+fn compute_totp_hmac(algo: Symbol, secret: &[u8], counter_bytes: &[u8]) -> Result<Vec<u8>, BfErr> {
+    if algo == *SHA1_SYM {
+        let mut mac = Hmac::<Sha1>::new_from_slice(secret)
+            .map_err(|_| BfErr::ErrValue(E_INVARG.msg("Invalid secret key length")))?;
+        mac.update(counter_bytes);
+        return Ok(mac.finalize().into_bytes().to_vec());
+    }
+    if algo == *SHA256_SYM {
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret)
+            .map_err(|_| BfErr::ErrValue(E_INVARG.msg("Invalid secret key length")))?;
+        mac.update(counter_bytes);
+        return Ok(mac.finalize().into_bytes().to_vec());
+    }
+    if algo == *SHA512_SYM {
+        let mut mac = Hmac::<Sha512>::new_from_slice(secret)
+            .map_err(|_| BfErr::ErrValue(E_INVARG.msg("Invalid secret key length")))?;
+        mac.update(counter_bytes);
+        return Ok(mac.finalize().into_bytes().to_vec());
+    }
+    Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
+        format!("Invalid algorithm: {algo} (use `sha1`, `sha256`, or `sha512`)")
+    })))
+}
+
+/// Usage: `str hotp(str|bytes secret, int counter [, int digits])`
+///
+/// Generates an HMAC-based One-Time Password per RFC 4226.
+///
+/// - secret: The shared secret key (Base32-encoded string or raw bytes)
+/// - counter: The 8-byte counter value (must be non-negative)
+/// - digits: Number of digits in output (default 6, max 10)
+///
+/// Returns the OTP as a zero-padded string.
+fn bf_hotp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let secret = parse_otp_secret(&bf_args.args[0])?;
+
+    let Some(counter) = bf_args.args[1].as_integer() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+    if counter < 0 {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("Counter must be non-negative"),
+        ));
+    }
+
+    let digits = if bf_args.args.len() > 2 {
+        let Some(d) = bf_args.args[2].as_integer() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        if !(1..=10).contains(&d) {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("Digits must be between 1 and 10"),
+            ));
+        }
+        d as u32
+    } else {
+        6
+    };
+
+    // Convert counter to big-endian bytes
+    let counter_bytes = (counter as u64).to_be_bytes();
+
+    // Compute HMAC-SHA1
+    let mut mac = Hmac::<Sha1>::new_from_slice(&secret)
+        .map_err(|_| BfErr::ErrValue(E_INVARG.msg("Invalid secret key length")))?;
+    mac.update(&counter_bytes);
+    let result = mac.finalize().into_bytes();
+
+    // Dynamic truncation
+    let otp = hotp_truncate(&result, digits);
+
+    // Format with leading zeros
+    Ok(Ret(v_string(format!(
+        "{:0width$}",
+        otp,
+        width = digits as usize
+    ))))
+}
+
+/// Usage: `str totp(str|bytes secret [, int time] [, int time_step] [, symbol algorithm] [, int digits])`
+///
+/// Generates a Time-based One-Time Password per RFC 6238.
+///
+/// - secret: The shared secret key (Base32-encoded string or raw bytes)
+/// - time: Unix timestamp to use (default: current time)
+/// - time_step: Time step in seconds (default 30)
+/// - algorithm: Hash algorithm (`sha1`, `sha256`, or `sha512`, default `sha256`)
+/// - digits: Number of digits in output (default 6, max 10)
+///
+/// Returns the OTP as a zero-padded string.
+fn bf_totp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.is_empty() || bf_args.args.len() > 5 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let secret = parse_otp_secret(&bf_args.args[0])?;
+
+    let time = if bf_args.args.len() > 1 {
+        let Some(t) = bf_args.args[1].as_integer() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        if t < 0 {
+            return Err(BfErr::ErrValue(E_INVARG.msg("Time must be non-negative")));
+        }
+        t as u64
+    } else {
+        Utc::now().timestamp() as u64
+    };
+
+    let time_step = if bf_args.args.len() > 2 {
+        let Some(ts) = bf_args.args[2].as_integer() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        if ts < 1 {
+            return Err(BfErr::ErrValue(E_INVARG.msg("Time step must be positive")));
+        }
+        ts as u64
+    } else {
+        30
+    };
+
+    let algo = if bf_args.args.len() > 3 {
+        let Ok(kind) = bf_args.args[3].as_symbol() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        kind
+    } else {
+        *SHA256_SYM
+    };
+
+    let digits = if bf_args.args.len() > 4 {
+        let Some(d) = bf_args.args[4].as_integer() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        if !(1..=10).contains(&d) {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("Digits must be between 1 and 10"),
+            ));
+        }
+        d as u32
+    } else {
+        6
+    };
+
+    let counter = time / time_step;
+    let counter_bytes = counter.to_be_bytes();
+    let hmac_result = compute_totp_hmac(algo, &secret, &counter_bytes)?;
+    let otp = hotp_truncate(&hmac_result, digits);
+
+    Ok(Ret(v_string(format!(
+        "{:0width$}",
+        otp,
+        width = digits as usize
+    ))))
+}
+
+/// Usage: `bytes random_bytes(int count)`
+///
+/// Generates cryptographically secure random bytes.
+///
+/// - count: Number of bytes to generate (1-65536)
+///
+/// Returns the random bytes as binary data.
+fn bf_random_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Some(count) = bf_args.args[0].as_integer() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    if count < 1 || count > 65536 {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("Count must be between 1 and 65536"),
+        ));
+    }
+
+    let mut rng = rand::rng();
+    let mut bytes = vec![0u8; count as usize];
+    rng.fill(&mut bytes[..]);
+
+    Ok(Ret(v_binary(bytes)))
+}
+
 pub(crate) fn register_bf_cryptography(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("age_generate_keypair")] = bf_age_generate_keypair;
     builtins[offset_for_builtin("age_encrypt")] = bf_age_encrypt;
@@ -1138,4 +1386,9 @@ pub(crate) fn register_bf_cryptography(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("binary_hmac")] = bf_binary_hmac;
     builtins[offset_for_builtin("paseto_make_local")] = bf_paseto_make_local;
     builtins[offset_for_builtin("paseto_verify_local")] = bf_paseto_verify_local;
+    builtins[offset_for_builtin("encode_base32")] = bf_encode_base32;
+    builtins[offset_for_builtin("decode_base32")] = bf_decode_base32;
+    builtins[offset_for_builtin("hotp")] = bf_hotp;
+    builtins[offset_for_builtin("totp")] = bf_totp;
+    builtins[offset_for_builtin("random_bytes")] = bf_random_bytes;
 }
