@@ -618,6 +618,51 @@ fn perform_pcre_match(
     Ok(List::mk_list(&matches))
 }
 
+/// Substitutes capture group references ($0, $1, $2, etc.) in a replacement string with
+/// the corresponding captured text from the regex match.
+/// - $0 refers to the entire match
+/// - $1, $2, ... $9 refer to capture groups 1-9
+/// - $$ produces a literal $ character
+fn apply_capture_groups(replacement: &str, target: &str, captures: &[(usize, usize)]) -> String {
+    let mut result = String::new();
+    let mut chars = replacement.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c != '$' {
+            result.push(c);
+            continue;
+        }
+
+        // We've seen a $, check what follows
+        match chars.peek() {
+            Some('$') => {
+                // $$ -> literal $
+                result.push('$');
+                chars.next();
+            }
+            Some(d) if d.is_ascii_digit() => {
+                // $N -> capture group N
+                let digit = chars.next().unwrap();
+                let group_num = digit.to_digit(10).unwrap() as usize;
+
+                if group_num < captures.len() {
+                    let (start, end) = captures[group_num];
+                    if start <= end && end <= target.len() {
+                        result.push_str(&target[start..end]);
+                    }
+                }
+                // If group doesn't exist, we just skip it (no output)
+            }
+            _ => {
+                // $ followed by non-digit, non-$ -> literal $
+                result.push('$');
+            }
+        }
+    }
+
+    result
+}
+
 fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error> {
     let separator = {
         let mut chars = replace_str.chars();
@@ -644,7 +689,8 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
 
     // Split using the separator
     let components: Vec<_> = replace_str.splitn(4, separator).collect();
-    if components.len() < 2 {
+    // Need at least 3 components: "s", pattern, and replacement
+    if components.len() < 3 {
         return Err(E_INVARG.msg("Invalid regex pattern"));
     };
 
@@ -680,8 +726,9 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
     let mut start = 0;
     let mut region = Region::new();
     let end = target.len();
-    let mut matches = vec![];
-    'outer: loop {
+    // Each match stores all capture groups: group 0 is the full match, groups 1+ are capture groups
+    let mut matches: Vec<Vec<(usize, usize)>> = vec![];
+    loop {
         let match_num = match regex.search_with_param(
             target,
             start,
@@ -702,15 +749,38 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
         if region.is_empty() {
             break;
         }
-        for (match_start, end) in region.iter() {
-            // Append the match to our matches.
-            // If not `global`, break afterwords.
-            // If global, move "start" past it, and continue
-            matches.push((match_start, end));
-            if !global {
-                break 'outer;
+
+        // Collect all capture groups for this match
+        let mut captures = vec![];
+        for i in 0..region.len() {
+            if let Some((cap_start, cap_end)) = region.pos(i) {
+                captures.push((cap_start, cap_end));
+            } else {
+                // Non-participating group - push a sentinel value
+                captures.push((0, 0));
             }
-            start = end;
+        }
+
+        // Get the full match bounds (group 0)
+        let Some((match_start, match_end)) = region.pos(0) else {
+            break;
+        };
+
+        matches.push(captures);
+
+        if !global {
+            break;
+        }
+
+        // Move past this match for the next iteration
+        // Handle zero-length matches by advancing at least one byte
+        start = if match_end > match_start {
+            match_end
+        } else {
+            match_end + 1
+        };
+        if start > end {
+            break;
         }
     }
 
@@ -719,15 +789,19 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
     let mut offset = 0;
 
     // Iterate through all matches and compose the result string
-    for (start, end) in matches {
-        // Append the portion of the target string before the match
-        result.push_str(&target[offset..start]);
+    for captures in &matches {
+        // Get the full match bounds (group 0)
+        let (match_start, match_end) = captures[0];
 
-        // Append the replacement string
-        result.push_str(replacement);
+        // Append the portion of the target string before the match
+        result.push_str(&target[offset..match_start]);
+
+        // Apply capture group substitution to the replacement string
+        let substituted = apply_capture_groups(replacement, target, captures);
+        result.push_str(&substituted);
 
         // Update the offset to the end of the current match
-        offset = end;
+        offset = match_end;
     }
 
     // Append the remainder of the target string after the last match
@@ -1674,6 +1748,116 @@ mod tests {
         assert_eq!(
             perform_pcre_replace("Cats and Dogs and cats", r#"s/cats/moose/ig"#).unwrap(),
             "moose and Dogs and moose"
+        );
+    }
+
+    #[test]
+    fn test_pcre_replace_capture_groups() {
+        // Basic capture group substitution from issue #606
+        assert_eq!(
+            perform_pcre_replace("Foobar", "s/(bar)/t$1t/i").unwrap(),
+            "Footbart"
+        );
+
+        // $0 refers to the full match
+        assert_eq!(
+            perform_pcre_replace("hello world", r#"s/\w+/[$0]/g"#).unwrap(),
+            "[hello] [world]"
+        );
+
+        // Multiple capture groups
+        assert_eq!(
+            perform_pcre_replace("John Smith", r#"s/(\w+) (\w+)/$2, $1/"#).unwrap(),
+            "Smith, John"
+        );
+
+        // Capture groups with global flag
+        assert_eq!(
+            perform_pcre_replace("cat bat rat", r#"s/(\w)at/$1ot/g"#).unwrap(),
+            "cot bot rot"
+        );
+
+        // Case insensitive with capture groups
+        assert_eq!(
+            perform_pcre_replace("CAT cat Cat", r#"s/(c)(at)/$1-$2/ig"#).unwrap(),
+            "C-AT c-at C-at"
+        );
+
+        // $$ for literal dollar sign
+        assert_eq!(
+            perform_pcre_replace("price 100", r#"s/(\d+)/$$$$1/"#).unwrap(),
+            "price $$1"
+        );
+
+        // Non-existing capture group is ignored
+        assert_eq!(
+            perform_pcre_replace("hello", r#"s/(hello)/$1 $2/"#).unwrap(),
+            "hello "
+        );
+
+        // Complex example from the issue (singularization rule pattern)
+        assert_eq!(
+            perform_pcre_replace(
+                "agenda",
+                r#"s/(agend|addend|millenni|dat|extrem|bacteri|desiderat|strat|candelabr|errat|ov|symposi|curricul|quor)a$/$1um/i"#
+            )
+            .unwrap(),
+            "agendum"
+        );
+    }
+
+    #[test]
+    fn test_pcre_replace_bad_tokenization() {
+        // Issue #605: Bad tokenization should return E_INVARG, not panic
+        // Missing replacement part
+        assert!(perform_pcre_replace("hello", "s/hello").is_err());
+
+        // Only separator
+        assert!(perform_pcre_replace("hello", "s/").is_err());
+
+        // Empty string after s
+        assert!(perform_pcre_replace("hello", "s").is_err());
+
+        // Just 's'
+        assert!(perform_pcre_replace("hello", "s").is_err());
+
+        // Wrong first character
+        assert!(perform_pcre_replace("hello", "r/foo/bar/").is_err());
+
+        // Wrong separator character
+        assert!(perform_pcre_replace("hello", "s#foo#bar#").is_err());
+    }
+
+    #[test]
+    fn test_pcre_replace_unicode() {
+        // Basic UTF-8 replacement
+        assert_eq!(
+            perform_pcre_replace("héllo wörld", "s/wörld/world/").unwrap(),
+            "héllo world"
+        );
+
+        // Capture group with multi-byte characters
+        assert_eq!(
+            perform_pcre_replace("日本語テスト", "s/(日本語)/[$1]/").unwrap(),
+            "[日本語]テスト"
+        );
+
+        // Multiple capture groups with mixed ASCII and Unicode
+        assert_eq!(
+            perform_pcre_replace("café au lait", r#"s/(café) (au) (lait)/$3 $2 $1/"#).unwrap(),
+            "lait au café"
+        );
+
+        // Global replacement with Unicode
+        assert_eq!(
+            perform_pcre_replace("🐱 and 🐱 and 🐱", r#"s/(🐱)/[$1]/g"#).unwrap(),
+            "[🐱] and [🐱] and [🐱]"
+        );
+
+        // Unicode in replacement string
+        assert_eq!(
+            perform_pcre_replace("hello", "s/hello/привет/").unwrap(),
+            "привет"
         );
     }
 }
