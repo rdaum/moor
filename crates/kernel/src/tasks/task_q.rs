@@ -342,25 +342,14 @@ impl SuspensionQ {
             match &task.wake_condition {
                 WakeCondition::Time(wake_time) => {
                     let now = Instant::now();
-                    if *wake_time > now {
+                    let inserted = *wake_time > now && {
                         let delay = wake_time.duration_since(now);
                         let timer_entry = TimerEntry { task_id, delay };
-                        if let Err(e) = self.timer_wheel.insert_with_delay(timer_entry, delay) {
-                            error!(
-                                ?e,
-                                ?task_id,
-                                "Failed to insert timer entry into timer wheel"
-                            );
-                        }
-                    } else {
-                        // Past deadline - add to immediate queue
-                        if let Err(e) = self.immediate_wake_sender.send(task_id) {
-                            error!(
-                                ?e,
-                                ?task_id,
-                                "Failed to send past deadline task to immediate wake channel"
-                            );
-                        }
+                        self.timer_wheel.insert_with_delay(timer_entry, delay).is_ok()
+                    };
+                    if !inserted {
+                        // Past deadline or timer expired - wake immediately
+                        let _ = self.immediate_wake_sender.send(task_id);
                     }
                 }
                 WakeCondition::Immediate(_) => {
@@ -415,28 +404,16 @@ impl SuspensionQ {
         // Add to appropriate storage based on wake condition
         let should_persist = match &wake_condition {
             WakeCondition::Time(wake_time) => {
-                if *wake_time > now {
+                let inserted = *wake_time > now && {
                     let delay = wake_time.duration_since(now);
                     let timer_entry = TimerEntry { task_id, delay };
-                    if let Err(e) = self.timer_wheel.insert_with_delay(timer_entry, delay) {
-                        error!(
-                            ?e,
-                            ?task_id,
-                            "Failed to insert timer entry into timer wheel"
-                        );
-                    }
-                    true
-                } else {
-                    // Past deadline - add to immediate queue
-                    if let Err(e) = self.immediate_wake_sender.send(task_id) {
-                        error!(
-                            ?e,
-                            ?task_id,
-                            "Failed to send past deadline task to immediate wake channel during add"
-                        );
-                    }
-                    false
+                    self.timer_wheel.insert_with_delay(timer_entry, delay).is_ok()
+                };
+                if !inserted {
+                    // Past deadline or timer expired - wake immediately
+                    let _ = self.immediate_wake_sender.send(task_id);
                 }
+                inserted // Persist only if successfully inserted into timer wheel
             }
             WakeCondition::Immediate(_) => {
                 if let Err(e) = self.immediate_wake_sender.send(task_id) {

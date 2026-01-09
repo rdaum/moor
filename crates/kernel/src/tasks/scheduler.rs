@@ -1725,12 +1725,14 @@ impl Scheduler {
         };
 
         // Extract the return value from the wake condition
+        // Note: Time-based tasks may arrive here if their timer expired before insertion
         let return_value = match sr.wake_condition {
             WakeCondition::Immediate(val) => val.unwrap_or_else(|| v_int(0)),
+            WakeCondition::Time(_) => v_int(0), // Expired timer - return 0 as suspend() normally does
             _ => {
                 error!(
                     ?task_id,
-                    "Immediate wake task has non-immediate wake condition"
+                    "Immediate wake task has unexpected wake condition"
                 );
                 v_int(0)
             }
