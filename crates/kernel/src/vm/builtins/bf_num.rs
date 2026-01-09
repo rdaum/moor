@@ -341,12 +341,28 @@ math_fn!(
     "trunc",
     |x: f64| x.trunc()
 );
-math_fn!(
-    "Usage: `float round(num x)`\nReturns x rounded to the nearest integer, as a float. Halfway cases round away from zero.",
-    bf_round,
-    "round",
-    |x: f64| x.round()
-);
+/// Usage: `float round(num x [, int places])`
+/// Rounds x to the nearest integer, or to `places` decimal places if specified.
+/// Halfway cases round away from zero.
+fn bf_round(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.is_empty() || bf_args.args.len() > 2 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("round() takes 1 or 2 arguments"),
+        ));
+    }
+
+    let x = numeric_arg(&bf_args.args[0])?;
+
+    if bf_args.args.len() == 2 {
+        let Variant::Int(places) = bf_args.args[1].variant() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        let factor = 10_f64.powi(places as i32);
+        Ok(Ret(v_float((x * factor).round() / factor)))
+    } else {
+        Ok(Ret(v_float(x.round())))
+    }
+}
 
 // Additional math functions
 math_fn!(

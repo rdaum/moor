@@ -93,3 +93,45 @@ E_INVARG
 3.0
 ; return 15.0 % 4.0;
 3.0
+
+// test_round_to_integer
+; return round(3.5);
+4.0
+; return round(3.4);
+3.0
+; return round(-3.5);
+-4.0
+; return round(-3.4);
+-3.0
+
+// test_round_with_places
+; return round(3.14159, 2);
+3.14
+; return round(3.14159, 4);
+3.1416
+; return round(2.5555, 3);
+2.556
+; return round(-2.5555, 2);
+-2.56
+
+// test_round_accepts_int_input
+; return round(5);
+5.0
+; return round(5, 2);
+5.0
+
+// test_round_with_zero_places
+; return round(3.7, 0);
+4.0
+
+// test_round_with_negative_places
+; return round(12345.6, -2);
+12300.0
+
+// test_round_errors
+; round();
+E_ARGS
+; round(1.0, 2, 3);
+E_ARGS
+; round(1.0, "bad");
+E_TYPE
