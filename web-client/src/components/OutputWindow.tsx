@@ -536,10 +536,6 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                 <div
                                     key={`hint_${firstMessage.id}`}
                                     className={wrapperClassName}
-                                    role="group"
-                                    aria-label={showLookTitle
-                                        ? firstMessage.eventMetadata!.dobjName
-                                        : "Grouped content"}
                                 >
                                     {isCollapsible && isThisCollapsed && (
                                         <div className="look_collapsed_summary">
