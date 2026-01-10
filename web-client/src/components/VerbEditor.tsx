@@ -18,7 +18,7 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 import { usePersistentState } from "../hooks/usePersistentState";
 import { useTouchDevice } from "../hooks/useTouchDevice";
 import { registerMooLanguage } from "../lib/monaco-moo";
-import { registerMooCompletionProvider } from "../lib/monaco-moo-completions";
+import { mooCompletionManager } from "../lib/monaco-moo-completions";
 import { getVerbCodeFlatBuffer, performEvalFlatBuffer } from "../lib/rpc-fb.js";
 import { DialogSheet } from "./DialogSheet";
 import { EditorWindow, useTitleBarDrag } from "./EditorWindow";
@@ -113,7 +113,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const [compileSuccess, setCompileSuccess] = useState(false);
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const errorDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
-    const completionProviderRef = useRef<monaco.IDisposable | null>(null);
+    const modelUriRef = useRef<string | null>(null);
     const contentRef = useRef(content);
 
     // Keep contentRef in sync with content state
@@ -208,12 +208,19 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         }
     }, [initialContent]);
 
+    // Update completion context when props change
+    useEffect(() => {
+        if (modelUriRef.current) {
+            mooCompletionManager.updateContext(modelUriRef.current, { authToken, objectCurie, uploadAction });
+        }
+    }, [authToken, objectCurie, uploadAction]);
+
     // Cleanup on unmount
     useEffect(() => {
         return () => {
-            if (completionProviderRef.current) {
-                completionProviderRef.current.dispose();
-                completionProviderRef.current = null;
+            if (modelUriRef.current) {
+                mooCompletionManager.unregister(modelUriRef.current);
+                modelUriRef.current = null;
             }
             if (editorRef.current) {
                 editorRef.current.dispose();
@@ -412,18 +419,17 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
         monacoInstance.editor.setTheme(monacoTheme);
 
-        // Dispose old completion provider if it exists
-        if (completionProviderRef.current) {
-            completionProviderRef.current.dispose();
+        // Register this editor's context with the completion manager
+        const model = editor.getModel();
+        if (model) {
+            const modelUri = model.uri.toString();
+            // Unregister old URI if we had one (e.g., editor remount)
+            if (modelUriRef.current && modelUriRef.current !== modelUri) {
+                mooCompletionManager.unregister(modelUriRef.current);
+            }
+            modelUriRef.current = modelUri;
+            mooCompletionManager.register(modelUri, { authToken, objectCurie, uploadAction }, monacoInstance);
         }
-
-        // Register MOO completion provider
-        completionProviderRef.current = registerMooCompletionProvider(
-            monacoInstance,
-            authToken,
-            objectCurie,
-            uploadAction,
-        );
 
         // Focus the editor
         editor.focus();

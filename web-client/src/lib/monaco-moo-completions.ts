@@ -25,6 +25,95 @@ const completionCache = new Map<
 >();
 const CACHE_TTL = 30000; // 30 seconds
 
+// Editor context for completion lookups
+interface EditorContext {
+    authToken: string;
+    objectCurie?: string;
+    uploadAction?: string;
+}
+
+// Singleton manager for MOO completion provider
+class MooCompletionManager {
+    private static instance: MooCompletionManager | null = null;
+    private providerDisposable: monaco.IDisposable | null = null;
+    private editorContexts = new Map<string, EditorContext>();
+    private monacoInstance: Monaco | null = null;
+
+    private constructor() {}
+
+    static getInstance(): MooCompletionManager {
+        if (!MooCompletionManager.instance) {
+            MooCompletionManager.instance = new MooCompletionManager();
+        }
+        return MooCompletionManager.instance;
+    }
+
+    /**
+     * Register an editor's context for completions.
+     * @param modelUri The Monaco model URI (unique identifier for the editor)
+     * @param context The editor's context (auth token, object curie, etc.)
+     * @param monaco The Monaco instance (needed for first registration)
+     */
+    register(modelUri: string, context: EditorContext, monaco: Monaco): void {
+        this.editorContexts.set(modelUri, context);
+
+        // Register the global provider only once
+        if (!this.providerDisposable && !this.monacoInstance) {
+            this.monacoInstance = monaco;
+            this.providerDisposable = this.createProvider(monaco);
+        }
+    }
+
+    /**
+     * Update an editor's context (e.g., when props change).
+     */
+    updateContext(modelUri: string, context: EditorContext): void {
+        if (this.editorContexts.has(modelUri)) {
+            this.editorContexts.set(modelUri, context);
+        }
+    }
+
+    /**
+     * Unregister an editor when it unmounts.
+     */
+    unregister(modelUri: string): void {
+        this.editorContexts.delete(modelUri);
+
+        // If no more editors, dispose the provider
+        if (this.editorContexts.size === 0 && this.providerDisposable) {
+            this.providerDisposable.dispose();
+            this.providerDisposable = null;
+            this.monacoInstance = null;
+        }
+    }
+
+    /**
+     * Get context for a specific model URI.
+     */
+    getContext(modelUri: string): EditorContext | undefined {
+        return this.editorContexts.get(modelUri);
+    }
+
+    private createProvider(monaco: Monaco): monaco.IDisposable {
+        return monaco.languages.registerCompletionItemProvider("moo", {
+            provideCompletionItems: async (model, position) => {
+                const modelUri = model.uri.toString();
+                const context = this.editorContexts.get(modelUri);
+
+                if (!context) {
+                    // No context for this editor, return empty suggestions
+                    return { suggestions: [] };
+                }
+
+                return provideCompletionsForContext(monaco, model, position, context);
+            },
+        });
+    }
+}
+
+// Export the singleton instance
+export const mooCompletionManager = MooCompletionManager.getInstance();
+
 const getCachedVerbs = async (cacheKey: string, fetchFn: () => Promise<any>) => {
     const cached = completionCache.get(cacheKey);
     if (cached && cached.verbs && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -261,357 +350,350 @@ const addBuiltinCompletions = async (
 };
 
 /**
- * Register MOO completion provider for Monaco editor
- * @param monaco Monaco instance
- * @param authToken Authentication token for API calls
- * @param objectCurie Optional object CURIE for "this" context (e.g., "oid:123")
- * @param uploadAction Optional upload action string for extracting actual object ID
- * @returns Disposable to unregister the completion provider
+ * Provide completions for a specific editor context.
+ * This is the core completion logic, extracted to work with the singleton manager.
  */
-export function registerMooCompletionProvider(
-    monaco: Monaco,
-    authToken: string,
-    objectCurie?: string,
-    uploadAction?: string,
-): monaco.IDisposable {
-    return monaco.languages.registerCompletionItemProvider("moo", {
-        provideCompletionItems: async (model, position) => {
-            const suggestions: monaco.languages.CompletionItem[] = [];
-            const lineContent = model.getLineContent(position.lineNumber);
-            const beforeCursor = lineContent.substring(0, position.column - 1);
+async function provideCompletionsForContext(
+    monacoInstance: Monaco,
+    model: monaco.editor.ITextModel,
+    position: monaco.Position,
+    context: EditorContext,
+): Promise<monaco.languages.CompletionList> {
+    const { authToken, objectCurie, uploadAction } = context;
+    const suggestions: monaco.languages.CompletionItem[] = [];
+    const lineContent = model.getLineContent(position.lineNumber);
+    const beforeCursor = lineContent.substring(0, position.column - 1);
 
-            // Extract actual object ID from uploadAction for "this" completion
-            let actualObjectId: number | null = null;
-            if (uploadAction) {
-                const programMatch = uploadAction.match(/@program\s+#(\d+):/);
-                if (programMatch) {
-                    actualObjectId = parseInt(programMatch[1]);
-                }
-            }
+    // Extract actual object ID from uploadAction for "this" completion
+    let actualObjectId: number | null = null;
+    if (uploadAction) {
+        const programMatch = uploadAction.match(/@program\s+#(\d+):/);
+        if (programMatch) {
+            actualObjectId = parseInt(programMatch[1]);
+        }
+    }
 
-            // Check for smart completion patterns
-            const thisVerbMatch = beforeCursor.match(/\bthis:(\w*)$/);
-            const thisPropMatch = beforeCursor.match(/\bthis\.(\w*)$/);
-            const objVerbMatch = beforeCursor.match(/#(-?\d+):(\w*)$/);
-            const objPropMatch = beforeCursor.match(/#(-?\d+)\.(\w*)$/);
-            const sysVerbMatch = beforeCursor.match(/\$(\w+):(\w*)$/);
-            const sysPropMatch = beforeCursor.match(/\$(\w+)\.(\w*)$/);
+    // Check for smart completion patterns
+    const thisVerbMatch = beforeCursor.match(/\bthis:(\w*)$/);
+    const thisPropMatch = beforeCursor.match(/\bthis\.(\w*)$/);
+    const objVerbMatch = beforeCursor.match(/#(-?\d+):(\w*)$/);
+    const objPropMatch = beforeCursor.match(/#(-?\d+)\.(\w*)$/);
+    const sysVerbMatch = beforeCursor.match(/\$(\w+):(\w*)$/);
+    const sysPropMatch = beforeCursor.match(/\$(\w+)\.(\w*)$/);
 
-            // Smart completion for this: verbs
-            if (thisVerbMatch && objectCurie) {
-                const { MoorRemoteObject, curieORef } = await import("./rpc");
-                const { oidRef } = await import("./var");
-                const currentObject = actualObjectId
-                    ? new MoorRemoteObject(oidRef(actualObjectId), authToken)
-                    : new MoorRemoteObject(curieORef(objectCurie), authToken);
-                const cacheKey = actualObjectId ? `#${actualObjectId}:verbs` : `this:verbs`;
+    // Smart completion for this: verbs
+    if (thisVerbMatch && objectCurie) {
+        const { MoorRemoteObject, curieORef } = await import("./rpc");
+        const { oidRef } = await import("./var");
+        const currentObject = actualObjectId
+            ? new MoorRemoteObject(oidRef(actualObjectId), authToken)
+            : new MoorRemoteObject(curieORef(objectCurie), authToken);
+        const cacheKey = actualObjectId ? `#${actualObjectId}:verbs` : `this:verbs`;
 
-                await addVerbCompletions(
-                    monaco,
-                    currentObject,
-                    cacheKey,
-                    "this object",
-                    thisVerbMatch[1],
-                    position.column - thisVerbMatch[1].length,
-                    position,
-                    suggestions,
-                );
-            } // Smart completion for this. properties
-            else if (thisPropMatch && objectCurie) {
-                const { MoorRemoteObject, curieORef } = await import("./rpc");
-                const { oidRef } = await import("./var");
-                const currentObject = actualObjectId
-                    ? new MoorRemoteObject(oidRef(actualObjectId), authToken)
-                    : new MoorRemoteObject(curieORef(objectCurie), authToken);
-                const cacheKey = actualObjectId ? `#${actualObjectId}:properties` : `this:properties`;
+        await addVerbCompletions(
+            monacoInstance,
+            currentObject,
+            cacheKey,
+            "this object",
+            thisVerbMatch[1],
+            position.column - thisVerbMatch[1].length,
+            position,
+            suggestions,
+        );
+    } else if (thisPropMatch && objectCurie) {
+        // Smart completion for this. properties
+        const { MoorRemoteObject, curieORef } = await import("./rpc");
+        const { oidRef } = await import("./var");
+        const currentObject = actualObjectId
+            ? new MoorRemoteObject(oidRef(actualObjectId), authToken)
+            : new MoorRemoteObject(curieORef(objectCurie), authToken);
+        const cacheKey = actualObjectId ? `#${actualObjectId}:properties` : `this:properties`;
 
-                await addPropertyCompletions(
-                    monaco,
-                    currentObject,
-                    cacheKey,
-                    "this object",
-                    thisPropMatch[1],
-                    position.column - thisPropMatch[1].length,
-                    position,
-                    suggestions,
-                );
-            } // Smart completion for #123: object verb calls
-            else if (objVerbMatch) {
-                const { MoorRemoteObject } = await import("./rpc");
-                const { oidRef } = await import("./var");
-                const objectId = parseInt(objVerbMatch[1]);
-                const targetObject = new MoorRemoteObject(oidRef(objectId), authToken);
+        await addPropertyCompletions(
+            monacoInstance,
+            currentObject,
+            cacheKey,
+            "this object",
+            thisPropMatch[1],
+            position.column - thisPropMatch[1].length,
+            position,
+            suggestions,
+        );
+    } else if (objVerbMatch) {
+        // Smart completion for #123: object verb calls
+        const { MoorRemoteObject } = await import("./rpc");
+        const { oidRef } = await import("./var");
+        const objectId = parseInt(objVerbMatch[1]);
+        const targetObject = new MoorRemoteObject(oidRef(objectId), authToken);
 
-                await addVerbCompletions(
-                    monaco,
-                    targetObject,
-                    `#${objectId}:verbs`,
-                    `object #${objectId}`,
-                    objVerbMatch[2],
-                    position.column - objVerbMatch[2].length,
-                    position,
-                    suggestions,
-                );
-            } // Smart completion for #123. object property access
-            else if (objPropMatch) {
-                const { MoorRemoteObject } = await import("./rpc");
-                const { oidRef } = await import("./var");
-                const objectId = parseInt(objPropMatch[1]);
-                const targetObject = new MoorRemoteObject(oidRef(objectId), authToken);
+        await addVerbCompletions(
+            monacoInstance,
+            targetObject,
+            `#${objectId}:verbs`,
+            `object #${objectId}`,
+            objVerbMatch[2],
+            position.column - objVerbMatch[2].length,
+            position,
+            suggestions,
+        );
+    } else if (objPropMatch) {
+        // Smart completion for #123. object property access
+        const { MoorRemoteObject } = await import("./rpc");
+        const { oidRef } = await import("./var");
+        const objectId = parseInt(objPropMatch[1]);
+        const targetObject = new MoorRemoteObject(oidRef(objectId), authToken);
 
-                await addPropertyCompletions(
-                    monaco,
-                    targetObject,
-                    `#${objectId}:properties`,
-                    `object #${objectId}`,
-                    objPropMatch[2],
-                    position.column - objPropMatch[2].length,
-                    position,
-                    suggestions,
-                );
-            } // Smart completion for $thing. property access
-            else if (sysPropMatch) {
-                const { MoorRemoteObject } = await import("./rpc");
-                const { sysobjRef } = await import("./var");
-                const targetObject = new MoorRemoteObject(sysobjRef([sysPropMatch[1]]), authToken);
+        await addPropertyCompletions(
+            monacoInstance,
+            targetObject,
+            `#${objectId}:properties`,
+            `object #${objectId}`,
+            objPropMatch[2],
+            position.column - objPropMatch[2].length,
+            position,
+            suggestions,
+        );
+    } else if (sysPropMatch) {
+        // Smart completion for $thing. property access
+        const { MoorRemoteObject } = await import("./rpc");
+        const { sysobjRef } = await import("./var");
+        const targetObject = new MoorRemoteObject(sysobjRef([sysPropMatch[1]]), authToken);
 
-                await addPropertyCompletions(
-                    monaco,
-                    targetObject,
-                    `$${sysPropMatch[1]}:properties`,
-                    `$${sysPropMatch[1]}`,
-                    sysPropMatch[2],
-                    position.column - sysPropMatch[2].length,
-                    position,
-                    suggestions,
-                );
-            } // Smart completion for $thing: verb calls
-            else if (sysVerbMatch) {
-                const { MoorRemoteObject } = await import("./rpc");
-                const { sysobjRef } = await import("./var");
-                const targetObject = new MoorRemoteObject(sysobjRef([sysVerbMatch[1]]), authToken);
+        await addPropertyCompletions(
+            monacoInstance,
+            targetObject,
+            `$${sysPropMatch[1]}:properties`,
+            `$${sysPropMatch[1]}`,
+            sysPropMatch[2],
+            position.column - sysPropMatch[2].length,
+            position,
+            suggestions,
+        );
+    } else if (sysVerbMatch) {
+        // Smart completion for $thing: verb calls
+        const { MoorRemoteObject } = await import("./rpc");
+        const { sysobjRef } = await import("./var");
+        const targetObject = new MoorRemoteObject(sysobjRef([sysVerbMatch[1]]), authToken);
 
-                await addVerbCompletions(
-                    monaco,
-                    targetObject,
-                    `$${sysVerbMatch[1]}:verbs`,
-                    `$${sysVerbMatch[1]}`,
-                    sysVerbMatch[2],
-                    position.column - sysVerbMatch[2].length,
-                    position,
-                    suggestions,
-                );
-            } else {
-                const letSnippetMatch = beforeCursor.match(/\blet(?:\s+([a-zA-Z_][a-zA-Z0-9_]*))?\s*$/);
-                if (letSnippetMatch) {
-                    const replaceLength = letSnippetMatch[0].length;
-                    const startColumn = Math.max(1, position.column - replaceLength);
-                    const variableName = letSnippetMatch[1] || "name";
-                    const letRange = {
-                        startLineNumber: position.lineNumber,
-                        endLineNumber: position.lineNumber,
-                        startColumn,
-                        endColumn: position.column,
-                    };
+        await addVerbCompletions(
+            monacoInstance,
+            targetObject,
+            `$${sysVerbMatch[1]}:verbs`,
+            `$${sysVerbMatch[1]}`,
+            sysVerbMatch[2],
+            position.column - sysVerbMatch[2].length,
+            position,
+            suggestions,
+        );
+    } else {
+        const letSnippetMatch = beforeCursor.match(/\blet(?:\s+([a-zA-Z_][a-zA-Z0-9_]*))?\s*$/);
+        if (letSnippetMatch) {
+            const replaceLength = letSnippetMatch[0].length;
+            const startColumn = Math.max(1, position.column - replaceLength);
+            const variableName = letSnippetMatch[1] || "name";
+            const letRange = {
+                startLineNumber: position.lineNumber,
+                endLineNumber: position.lineNumber,
+                startColumn,
+                endColumn: position.column,
+            };
 
-                    const letSnippets = [
-                        {
-                            label: "let assignment",
-                            insertText: `let \${1:${variableName}} = \${2:value};`,
-                            documentation: "Bind a local variable to the result of an expression.",
-                            detail: "Bind a single variable",
-                            sortText: "00",
-                        },
-                        {
-                            label: "let scatter assignment",
-                            insertText:
-                                `let {\${1:${variableName}}, \${2:?optional = default}, \${3:@rest}} = \${4:expr};`,
-                            documentation: "Unpack a list (or map) into variables, with optional and rest bindings.",
-                            detail: "Unpack a collection",
-                            sortText: "10",
-                        },
-                    ];
+            const letSnippets = [
+                {
+                    label: "let assignment",
+                    insertText: `let \${1:${variableName}} = \${2:value};`,
+                    documentation: "Bind a local variable to the result of an expression.",
+                    detail: "Bind a single variable",
+                    sortText: "00",
+                },
+                {
+                    label: "let scatter assignment",
+                    insertText: `let {\${1:${variableName}}, \${2:?optional = default}, \${3:@rest}} = \${4:expr};`,
+                    documentation: "Unpack a list (or map) into variables, with optional and rest bindings.",
+                    detail: "Unpack a collection",
+                    sortText: "10",
+                },
+            ];
 
-                    for (const snippet of letSnippets) {
-                        suggestions.push({
-                            label: snippet.label,
-                            kind: monaco.languages.CompletionItemKind.Snippet,
-                            insertText: snippet.insertText,
-                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                            documentation: snippet.documentation,
-                            detail: snippet.detail,
-                            range: letRange,
-                            sortText: snippet.sortText,
-                            filterText: "let",
-                        });
-                    }
-
-                    return { suggestions };
-                }
-
-                const constSnippetMatch = beforeCursor.match(/\bconst(?:\s+([a-zA-Z_][a-zA-Z0-9_]*))?\s*$/);
-                if (constSnippetMatch) {
-                    const replaceLength = constSnippetMatch[0].length;
-                    const startColumn = Math.max(1, position.column - replaceLength);
-                    const constantName = constSnippetMatch[1] || "NAME";
-                    const constRange = {
-                        startLineNumber: position.lineNumber,
-                        endLineNumber: position.lineNumber,
-                        startColumn,
-                        endColumn: position.column,
-                    };
-
-                    const constSnippets = [
-                        {
-                            label: "const assignment",
-                            insertText: `const \${1:${constantName}} = \${2:value};`,
-                            documentation: "Define a constant value within the current scope.",
-                            detail: "Define a constant",
-                            sortText: "00",
-                        },
-                        {
-                            label: "const scatter assignment",
-                            insertText:
-                                `const {\${1:${constantName}}, \${2:?optional = default}, \${3:@rest}} = \${4:expr};`,
-                            documentation: "Unpack values into constant bindings; the rest binding remains a list.",
-                            detail: "Unpack to constants",
-                            sortText: "10",
-                        },
-                    ];
-
-                    for (const snippet of constSnippets) {
-                        suggestions.push({
-                            label: snippet.label,
-                            kind: monaco.languages.CompletionItemKind.Snippet,
-                            insertText: snippet.insertText,
-                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                            documentation: snippet.documentation,
-                            detail: snippet.detail,
-                            range: constRange,
-                            sortText: snippet.sortText,
-                            filterText: "const",
-                        });
-                    }
-
-                    return { suggestions };
-                }
-
-                // Check for builtin function completions
-                // Trigger when typing a word that's not after : or .
-                const word = model.getWordUntilPosition(position);
-                const beforeWord = lineContent.substring(0, word.startColumn - 1);
-                const isAfterObjectOp = beforeWord.match(/[:.]$/);
-
-                if (!isAfterObjectOp && word.word.length > 0) {
-                    await addBuiltinCompletions(
-                        monaco,
-                        authToken,
-                        word.word,
-                        word.startColumn,
-                        position,
-                        suggestions,
-                    );
-                }
-            } // If no smart completions matched, show block templates
-            if (suggestions.length === 0) {
-                const word = model.getWordUntilPosition(position);
-                const defaultRange = {
-                    startLineNumber: position.lineNumber,
-                    endLineNumber: position.lineNumber,
-                    startColumn: word.startColumn,
-                    endColumn: word.endColumn,
-                };
-
-                const blockSnippets: Array<{
-                    label: string;
-                    insertText: string;
-                    documentation: string;
-                    sortText: string;
-                    detailText?: string;
-                    filterText?: string;
-                }> = [
-                    {
-                        label: "begin/end block",
-                        insertText: "begin\n\t${1}\nend",
-                        documentation: "Wrap statements in a begin...end block to group work or scope locals.",
-                        sortText: "00",
-                        detailText: "Group statements",
-                        filterText: "begin",
-                    },
-                    {
-                        label: "if/endif conditional",
-                        insertText: "if (${1:condition})\n\t${2}\nendif",
-                        documentation: "Conditional block; fill in optional elseif/else by hand as needed.",
-                        sortText: "10",
-                        detailText: "Branch on a condition",
-                        filterText: "if",
-                    },
-                    {
-                        label: "while loop",
-                        insertText: "while (${1:condition})\n\t${2}\nendwhile",
-                        documentation: "Loop while the condition stays true.",
-                        sortText: "20",
-                        detailText: "Repeat while true",
-                        filterText: "while",
-                    },
-                    {
-                        label: "for ... in (collection)",
-                        insertText: "for ${1:item} in (${2:collection})\n\t${3}\nendfor",
-                        documentation: "Iterate values (and optional index/key) from a collection.",
-                        sortText: "30",
-                        detailText: "Loop over a collection",
-                        filterText: "for",
-                    },
-                    {
-                        label: "for ... in [start..end]",
-                        insertText: "for ${1:i} in [${2:start}..${3:end}]\n\t${4}\nendfor",
-                        documentation: "Iterate across a numeric range inclusive of both ends.",
-                        sortText: "40",
-                        detailText: "Loop over a range",
-                        filterText: "for",
-                    },
-                    {
-                        label: "try/except block",
-                        insertText: "try\n\t${1}\nexcept (${2:E_ANY})\n\t${3}\nendtry",
-                        documentation: "Wrap statements and handle errors in one or more except clauses.",
-                        sortText: "50",
-                        detailText: "Catch errors",
-                        filterText: "try",
-                    },
-                    {
-                        label: "try expression",
-                        insertText: "` ${1:dodgy()} ! ${2:any} => ${3:fallback()}'",
-                        documentation: "Inline error handling: value ! error_pattern => fallback_value",
-                        sortText: "60",
-                        detailText: "Inline error handler",
-                        filterText: "try",
-                    },
-                    {
-                        label: "fork/endfork",
-                        insertText: "fork (${1:seconds})\n\t${2}\nendfork",
-                        documentation: "Schedule code to run asynchronously after a delay.",
-                        sortText: "70",
-                        detailText: "Async execution",
-                        filterText: "fork",
-                    },
-                ];
-
-                for (const snippet of blockSnippets) {
-                    suggestions.push({
-                        label: snippet.label,
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: snippet.insertText,
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        documentation: snippet.documentation,
-                        detail: snippet.detailText,
-                        range: defaultRange,
-                        sortText: snippet.sortText,
-                        filterText: snippet.filterText,
-                    });
-                }
+            for (const snippet of letSnippets) {
+                suggestions.push({
+                    label: snippet.label,
+                    kind: monacoInstance.languages.CompletionItemKind.Snippet,
+                    insertText: snippet.insertText,
+                    insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    documentation: snippet.documentation,
+                    detail: snippet.detail,
+                    range: letRange,
+                    sortText: snippet.sortText,
+                    filterText: "let",
+                });
             }
 
             return { suggestions };
-        },
-    });
+        }
+
+        const constSnippetMatch = beforeCursor.match(/\bconst(?:\s+([a-zA-Z_][a-zA-Z0-9_]*))?\s*$/);
+        if (constSnippetMatch) {
+            const replaceLength = constSnippetMatch[0].length;
+            const startColumn = Math.max(1, position.column - replaceLength);
+            const constantName = constSnippetMatch[1] || "NAME";
+            const constRange = {
+                startLineNumber: position.lineNumber,
+                endLineNumber: position.lineNumber,
+                startColumn,
+                endColumn: position.column,
+            };
+
+            const constSnippets = [
+                {
+                    label: "const assignment",
+                    insertText: `const \${1:${constantName}} = \${2:value};`,
+                    documentation: "Define a constant value within the current scope.",
+                    detail: "Define a constant",
+                    sortText: "00",
+                },
+                {
+                    label: "const scatter assignment",
+                    insertText: `const {\${1:${constantName}}, \${2:?optional = default}, \${3:@rest}} = \${4:expr};`,
+                    documentation: "Unpack values into constant bindings; the rest binding remains a list.",
+                    detail: "Unpack to constants",
+                    sortText: "10",
+                },
+            ];
+
+            for (const snippet of constSnippets) {
+                suggestions.push({
+                    label: snippet.label,
+                    kind: monacoInstance.languages.CompletionItemKind.Snippet,
+                    insertText: snippet.insertText,
+                    insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    documentation: snippet.documentation,
+                    detail: snippet.detail,
+                    range: constRange,
+                    sortText: snippet.sortText,
+                    filterText: "const",
+                });
+            }
+
+            return { suggestions };
+        }
+
+        // Check for builtin function completions
+        // Trigger when typing a word that's not after : or .
+        const word = model.getWordUntilPosition(position);
+        const beforeWord = lineContent.substring(0, word.startColumn - 1);
+        const isAfterObjectOp = beforeWord.match(/[:.]$/);
+
+        if (!isAfterObjectOp && word.word.length > 0) {
+            await addBuiltinCompletions(
+                monacoInstance,
+                authToken,
+                word.word,
+                word.startColumn,
+                position,
+                suggestions,
+            );
+        }
+    }
+
+    // If no smart completions matched, show block templates
+    if (suggestions.length === 0) {
+        const word = model.getWordUntilPosition(position);
+        const defaultRange = {
+            startLineNumber: position.lineNumber,
+            endLineNumber: position.lineNumber,
+            startColumn: word.startColumn,
+            endColumn: word.endColumn,
+        };
+
+        const blockSnippets: Array<{
+            label: string;
+            insertText: string;
+            documentation: string;
+            sortText: string;
+            detailText?: string;
+            filterText?: string;
+        }> = [
+            {
+                label: "begin/end block",
+                insertText: "begin\n\t${1}\nend",
+                documentation: "Wrap statements in a begin...end block to group work or scope locals.",
+                sortText: "00",
+                detailText: "Group statements",
+                filterText: "begin",
+            },
+            {
+                label: "if/endif conditional",
+                insertText: "if (${1:condition})\n\t${2}\nendif",
+                documentation: "Conditional block; fill in optional elseif/else by hand as needed.",
+                sortText: "10",
+                detailText: "Branch on a condition",
+                filterText: "if",
+            },
+            {
+                label: "while loop",
+                insertText: "while (${1:condition})\n\t${2}\nendwhile",
+                documentation: "Loop while the condition stays true.",
+                sortText: "20",
+                detailText: "Repeat while true",
+                filterText: "while",
+            },
+            {
+                label: "for ... in (collection)",
+                insertText: "for ${1:item} in (${2:collection})\n\t${3}\nendfor",
+                documentation: "Iterate values (and optional index/key) from a collection.",
+                sortText: "30",
+                detailText: "Loop over a collection",
+                filterText: "for",
+            },
+            {
+                label: "for ... in [start..end]",
+                insertText: "for ${1:i} in [${2:start}..${3:end}]\n\t${4}\nendfor",
+                documentation: "Iterate across a numeric range inclusive of both ends.",
+                sortText: "40",
+                detailText: "Loop over a range",
+                filterText: "for",
+            },
+            {
+                label: "try/except block",
+                insertText: "try\n\t${1}\nexcept (${2:E_ANY})\n\t${3}\nendtry",
+                documentation: "Wrap statements and handle errors in one or more except clauses.",
+                sortText: "50",
+                detailText: "Catch errors",
+                filterText: "try",
+            },
+            {
+                label: "try expression",
+                insertText: "` ${1:dodgy()} ! ${2:any} => ${3:fallback()}'",
+                documentation: "Inline error handling: value ! error_pattern => fallback_value",
+                sortText: "60",
+                detailText: "Inline error handler",
+                filterText: "try",
+            },
+            {
+                label: "fork/endfork",
+                insertText: "fork (${1:seconds})\n\t${2}\nendfork",
+                documentation: "Schedule code to run asynchronously after a delay.",
+                sortText: "70",
+                detailText: "Async execution",
+                filterText: "fork",
+            },
+        ];
+
+        for (const snippet of blockSnippets) {
+            suggestions.push({
+                label: snippet.label,
+                kind: monacoInstance.languages.CompletionItemKind.Snippet,
+                insertText: snippet.insertText,
+                insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: snippet.documentation,
+                detail: snippet.detailText,
+                range: defaultRange,
+                sortText: snippet.sortText,
+                filterText: snippet.filterText,
+            });
+        }
+    }
+
+    return { suggestions };
 }

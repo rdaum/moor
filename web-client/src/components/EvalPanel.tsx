@@ -20,7 +20,7 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 import { usePersistentState } from "../hooks/usePersistentState";
 import { useTouchDevice } from "../hooks/useTouchDevice";
 import { registerMooLanguage } from "../lib/monaco-moo";
-import { registerMooCompletionProvider } from "../lib/monaco-moo-completions";
+import { mooCompletionManager } from "../lib/monaco-moo-completions";
 import { performEvalMoorVar } from "../lib/rpc-fb.js";
 import { useTheme } from "./ThemeProvider";
 import { monacoThemeFor } from "./themeSupport";
@@ -64,7 +64,7 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
     const [isSplitDragging, setIsSplitDragging] = useState(false);
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const errorDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
-    const completionProviderRef = useRef<monaco.IDisposable | null>(null);
+    const modelUriRef = useRef<string | null>(null);
     const { theme } = useTheme();
     const monacoTheme = React.useMemo(() => monacoThemeFor(theme), [theme]);
 
@@ -95,6 +95,26 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
     useEffect(() => {
         monaco.editor.setTheme(monacoTheme);
     }, [monacoTheme]);
+
+    // Update completion context when authToken changes
+    useEffect(() => {
+        if (modelUriRef.current) {
+            mooCompletionManager.updateContext(modelUriRef.current, { authToken });
+        }
+    }, [authToken]);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (modelUriRef.current) {
+                mooCompletionManager.unregister(modelUriRef.current);
+                modelUriRef.current = null;
+            }
+            if (editorRef.current) {
+                editorRef.current.dispose();
+            }
+        };
+    }, []);
 
     // Update error decorations when error changes
     useEffect(() => {
@@ -185,16 +205,16 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
         // Set up MOO language
         registerMooLanguage(monacoInstance);
 
-        // Dispose old completion provider if it exists
-        if (completionProviderRef.current) {
-            completionProviderRef.current.dispose();
+        // Register this editor's context with the completion manager
+        const model = editor.getModel();
+        if (model) {
+            const modelUri = model.uri.toString();
+            if (modelUriRef.current && modelUriRef.current !== modelUri) {
+                mooCompletionManager.unregister(modelUriRef.current);
+            }
+            modelUriRef.current = modelUri;
+            mooCompletionManager.register(modelUri, { authToken }, monacoInstance);
         }
-
-        // Register MOO completion provider (without object context for eval panel)
-        completionProviderRef.current = registerMooCompletionProvider(
-            monacoInstance,
-            authToken,
-        );
 
         monacoInstance.editor.setTheme(monacoTheme);
 
