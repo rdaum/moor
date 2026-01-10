@@ -40,6 +40,14 @@ use uuid::Uuid;
 const TASK_TIMEOUT: Duration = Duration::from_secs(10);
 const WEBSOCKET_PING_INTERVAL: Duration = Duration::from_secs(30);
 
+// Application-level heartbeat to detect zombie WebSocket connections.
+// Unlike WebSocket ping/pong (handled by browser at protocol level), this requires
+// JavaScript to process and respond, proving the client is actually alive.
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
+const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
+const HEARTBEAT_REQUEST: u8 = 0x02;
+const HEARTBEAT_RESPONSE: u8 = 0x01;
+
 fn log_rpc_failure(failure: moor_rpc::FailureRef<'_>) {
     let error_ref = failure.error().expect("Missing error");
     let error_code = error_ref.error_code().expect("Missing error code");
@@ -77,6 +85,7 @@ pub enum ReadEvent {
     },
     PendingEvent,
     Ping(Vec<u8>),
+    HeartbeatResponse,
 }
 
 impl WebSocketConnection {
@@ -104,7 +113,21 @@ impl WebSocketConnection {
 
         let mut expecting_input = VecDeque::new();
         let mut ping_interval = tokio::time::interval(WEBSOCKET_PING_INTERVAL);
+        let mut heartbeat_interval = tokio::time::interval(HEARTBEAT_INTERVAL);
+        let mut pending_heartbeat: Option<Instant> = None;
         loop {
+            // Check for heartbeat timeout - if we sent a heartbeat and haven't received
+            // a response within HEARTBEAT_TIMEOUT, the connection is likely zombie.
+            if let Some(sent_time) = pending_heartbeat {
+                if sent_time.elapsed() > HEARTBEAT_TIMEOUT {
+                    warn!(
+                        "Heartbeat timeout after {:?} - client JS not responding, closing connection",
+                        sent_time.elapsed()
+                    );
+                    break;
+                }
+            }
+
             // We should not send the next line until we've received a narrative event for the
             // previous.
             //
@@ -138,6 +161,11 @@ impl WebSocketConnection {
                             // Used to prevent proxy idle timeouts (e.g., Cloudflare)
                             trace!("Received keepalive from client");
                             continue;
+                        }
+                        Message::Binary(ref data) if data.len() == 1 && data[0] == HEARTBEAT_RESPONSE => {
+                            // Application-level heartbeat response
+                            trace!("Received heartbeat response from client");
+                            return ReadEvent::HeartbeatResponse;
                         }
                         Message::Text(_) | Message::Binary(_) => {
                             if !expecting_input.is_empty() {
@@ -204,7 +232,21 @@ impl WebSocketConnection {
                                 break;
                             }
                         }
+                        ReadEvent::HeartbeatResponse => {
+                            trace!("Heartbeat response received, client JS is alive");
+                            pending_heartbeat = None;
+                        }
                     }
+                }
+                _ = heartbeat_interval.tick() => {
+                    // Send application-level heartbeat request
+                    // Client must respond with HEARTBEAT_RESPONSE to prove JS is processing
+                    trace!("Sending heartbeat request");
+                    if let Err(e) = ws_sender.send(Message::Binary(vec![HEARTBEAT_REQUEST].into())).await {
+                        error!("Failed to send heartbeat request: {}", e);
+                        break;
+                    }
+                    pending_heartbeat = Some(Instant::now());
                 }
                 _ = ping_interval.tick() => {
                     trace!("Sending WebSocket ping");

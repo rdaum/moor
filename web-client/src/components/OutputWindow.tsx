@@ -17,16 +17,21 @@ import { LinkPreview, LinkPreviewCard } from "./LinkPreviewCard";
 
 const COLLAPSED_LOOKS_KEY = "moor-collapsed-looks";
 
+interface ObjRef {
+    oid?: number;
+    uuid?: string;
+}
+
 interface EventMetadata {
     verb?: string;
-    actor?: any;
+    actor?: ObjRef | null;
     actorName?: string;
     content?: string;
-    thisObj?: any;
+    thisObj?: ObjRef | null;
     thisName?: string;
-    dobj?: any;
+    dobj?: ObjRef | null;
     dobjName?: string;
-    iobj?: any;
+    iobj?: ObjRef | null;
     timestamp?: number;
 }
 
@@ -67,7 +72,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
     onLinkHoldEnd,
     fontSize,
     shouldShowDisconnectDivider = false,
-    playerOid,
+    playerOid: _playerOid,
     staleMessageIds,
     onMessageLinkClicked,
 }) => {

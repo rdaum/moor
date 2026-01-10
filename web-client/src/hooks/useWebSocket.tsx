@@ -73,6 +73,12 @@ export const useWebSocket = (
     // Single zero byte marker - definitely not a valid FlatBuffer (needs >= 4 bytes)
     const KEEPALIVE_MARKER = new Uint8Array([0x00]);
 
+    // Application-level heartbeat markers
+    // Server sends 0x02 to request heartbeat, client responds with 0x01
+    // This proves JavaScript is actually processing messages (unlike WS ping/pong)
+    const HEARTBEAT_REQUEST = 0x02;
+    const HEARTBEAT_RESPONSE = new Uint8Array([0x01]);
+
     useEffect(() => {
         connectionStatusRef.current = wsState.connectionStatus;
     }, [wsState.connectionStatus]);
@@ -90,8 +96,19 @@ export const useWebSocket = (
                         ? await event.data.arrayBuffer()
                         : event.data;
 
+                    const data = new Uint8Array(arrayBuffer);
+
+                    // Check for heartbeat request (single byte 0x02)
+                    // Server sends this to verify JS is processing; we must respond with 0x01
+                    if (data.byteLength === 1 && data[0] === HEARTBEAT_REQUEST) {
+                        if (socketRef.current?.readyState === WebSocket.OPEN) {
+                            socketRef.current.send(HEARTBEAT_RESPONSE);
+                        }
+                        return;
+                    }
+
                     handleClientEventFlatBuffer(
-                        new Uint8Array(arrayBuffer),
+                        data,
                         onSystemMessage,
                         onNarrativeMessage,
                         onPresentMessage,
