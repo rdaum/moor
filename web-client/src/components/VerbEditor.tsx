@@ -1094,14 +1094,19 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
                     {/* Names - editable */}
                     <div className="verb-metadata-item">
-                        <span className="verb-metadata-label">
+                        <label
+                            htmlFor="verb-names-input"
+                            className="verb-metadata-label"
+                        >
                             Names:
-                        </span>
+                        </label>
                         <input
+                            id="verb-names-input"
                             type="text"
                             value={editVerbNames}
                             onChange={(e) => setEditVerbNames(e.target.value)}
                             className="verb-metadata-input"
+                            aria-describedby="verb-names-hint"
                             onKeyDown={(e) => {
                                 if (e.key === "Enter") {
                                     handleSaveMetadata();
@@ -1110,6 +1115,9 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                                 }
                             }}
                         />
+                        <span id="verb-names-hint" className="sr-only">
+                            Space-separated list of verb names and aliases
+                        </span>
                     </div>
 
                     {/* Owner - editable */}
@@ -1381,6 +1389,9 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             verticalScrollbarSize: isMobile ? 8 : 10, // Thinner scrollbar on mobile
                             horizontalScrollbarSize: isMobile ? 8 : 10,
                         },
+                        // Accessibility options for screen readers
+                        accessibilitySupport: "on",
+                        ariaLabel: `Code editor for verb ${verbName} on ${objectCurie}`,
                     }}
                 />
             </div>

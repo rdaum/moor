@@ -1857,9 +1857,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                             type="button"
                             className={`browser-inherited-toggle ${showInheritedProperties ? "active" : ""}`}
                             onClick={() => setShowInheritedProperties(prev => !prev)}
-                            aria-label={showInheritedProperties
-                                ? "Hide inherited properties"
-                                : "Show inherited properties"}
+                            aria-label="Show inherited properties"
+                            aria-pressed={showInheritedProperties}
                             title={showInheritedProperties
                                 ? "Hide inherited properties"
                                 : "Show inherited properties"}
@@ -1870,7 +1869,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                             type="button"
                             className={`browser-inherited-toggle ${showInheritedVerbs ? "active" : ""}`}
                             onClick={() => setShowInheritedVerbs(prev => !prev)}
-                            aria-label={showInheritedVerbs ? "Hide inherited verbs" : "Show inherited verbs"}
+                            aria-label="Show inherited verbs"
+                            aria-pressed={showInheritedVerbs}
                             title={showInheritedVerbs ? "Hide inherited verbs" : "Show inherited verbs"}
                         >
                             V
@@ -1879,7 +1879,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                             type="button"
                             className={`browser-inherited-toggle ${showTests ? "active" : ""}`}
                             onClick={() => setShowTests(prev => !prev)}
-                            aria-label={showTests ? "Hide test verbs" : "Show test verbs"}
+                            aria-label="Show test verbs"
+                            aria-pressed={showTests}
                             title={showTests ? "Hide test verbs" : "Show test verbs"}
                         >
                             T
@@ -1980,7 +1981,11 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         }}
                     >
                         {/* Objects pane */}
-                        <div className={`browser-pane ${!useTabLayout || activeTab === "objects" ? "active" : ""}`}>
+                        <div
+                            className={`browser-pane ${!useTabLayout || activeTab === "objects" ? "active" : ""}`}
+                            role="region"
+                            aria-label="Objects"
+                        >
                             <div className="browser-pane-header">
                                 <span
                                     className="browser-pane-title"
@@ -2034,6 +2039,15 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                             selectedObject?.obj === obj.obj ? "selected" : ""
                                                         }`}
                                                         onClick={() => handleObjectSelect(obj)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === "Enter" || e.key === " ") {
+                                                                e.preventDefault();
+                                                                handleObjectSelect(obj);
+                                                            }
+                                                        }}
+                                                        tabIndex={0}
+                                                        role="button"
+                                                        aria-pressed={selectedObject?.obj === obj.obj}
                                                     >
                                                         <div className="browser-item-name font-bold">
                                                             {dollarName ? `$${dollarName} / ` : ""}#{obj.obj}{" "}
@@ -2083,6 +2097,15 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                                         : ""
                                                                 }`}
                                                                 onClick={() => handleObjectSelect(obj)}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === "Enter" || e.key === " ") {
+                                                                        e.preventDefault();
+                                                                        handleObjectSelect(obj);
+                                                                    }
+                                                                }}
+                                                                tabIndex={0}
+                                                                role="button"
+                                                                aria-pressed={selectedObject?.obj === obj.obj}
                                                             >
                                                                 <div className="browser-item-name font-bold">
                                                                     {dollarName ? `$${dollarName} / ` : ""}#{obj
@@ -2117,6 +2140,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         {/* Properties pane */}
                         <div
                             className={`browser-pane ${!useTabLayout || activeTab === "properties" ? "active" : ""}`}
+                            role="region"
+                            aria-label="Properties"
                         >
                             <div className="browser-pane-header">
                                 <span
@@ -2194,6 +2219,16 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                                 : ""
                                                         }`}
                                                         onClick={() => handlePropertySelect(prop)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === "Enter" || e.key === " ") {
+                                                                e.preventDefault();
+                                                                handlePropertySelect(prop);
+                                                            }
+                                                        }}
+                                                        tabIndex={0}
+                                                        role="button"
+                                                        aria-pressed={selectedProperty?.name === prop.name
+                                                            && selectedProperty?.definer === prop.definer}
                                                     >
                                                         <div className="browser-item-name font-bold">
                                                             {prop.name}{" "}
@@ -2227,7 +2262,11 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         </div>
 
                         {/* Verbs pane */}
-                        <div className={`browser-pane ${!useTabLayout || activeTab === "verbs" ? "active" : ""}`}>
+                        <div
+                            className={`browser-pane ${!useTabLayout || activeTab === "verbs" ? "active" : ""}`}
+                            role="region"
+                            aria-label="Verbs"
+                        >
                             <div className="browser-pane-header">
                                 <span
                                     className="browser-pane-title"
@@ -2337,6 +2376,16 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                                 : ""
                                                         }`}
                                                         onClick={() => handleVerbSelect(verb)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === "Enter" || e.key === " ") {
+                                                                e.preventDefault();
+                                                                handleVerbSelect(verb);
+                                                            }
+                                                        }}
+                                                        tabIndex={0}
+                                                        role="button"
+                                                        aria-pressed={selectedVerb?.location === verb.location
+                                                            && selectedVerb?.indexInLocation === verb.indexInLocation}
                                                     >
                                                         <div className="browser-item-name font-bold">
                                                             {verb.names.some(n => isTestVerb(n)) && (
