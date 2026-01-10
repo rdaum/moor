@@ -19,7 +19,7 @@ import { usePersistentState } from "../hooks/usePersistentState";
 import { useTouchDevice } from "../hooks/useTouchDevice";
 import { registerMooLanguage } from "../lib/monaco-moo";
 import { registerMooCompletionProvider } from "../lib/monaco-moo-completions";
-import { performEvalFlatBuffer } from "../lib/rpc-fb.js";
+import { getVerbCodeFlatBuffer, performEvalFlatBuffer } from "../lib/rpc-fb.js";
 import { DialogSheet } from "./DialogSheet";
 import { EditorWindow, useTitleBarDrag } from "./EditorWindow";
 import { useTheme } from "./ThemeProvider";
@@ -114,6 +114,12 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const errorDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
     const completionProviderRef = useRef<monaco.IDisposable | null>(null);
+    const contentRef = useRef(content);
+
+    // Keep contentRef in sync with content state
+    useEffect(() => {
+        contentRef.current = content;
+    }, [content]);
     const MIN_FONT_SIZE = 10;
     const MAX_FONT_SIZE = 24;
     const clampFontSize = (size: number) => Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size));
@@ -717,6 +723,47 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         }
                         if (errorDecorationsRef.current) {
                             errorDecorationsRef.current.clear();
+                        }
+                    }
+
+                    // Reload verb code from server to get any server-side formatting
+                    // Only reload if content hasn't changed during compilation
+                    const contentAtCompile = content;
+                    if (contentRef.current === contentAtCompile) {
+                        try {
+                            const verbValue = await getVerbCodeFlatBuffer(authToken, objectCurie, verbName);
+                            const codeLength = verbValue.codeLength();
+                            const lines: string[] = [];
+                            for (let i = 0; i < codeLength; i++) {
+                                const line = verbValue.code(i);
+                                if (line) lines.push(line);
+                            }
+                            const newCode = lines.join("\n");
+
+                            // Save cursor position before updating content
+                            const editor = editorRef.current;
+                            const savedPosition = editor?.getPosition();
+
+                            // Update content with reloaded code
+                            setContent(newCode);
+
+                            // Restore cursor position after content update (clamped to valid range)
+                            if (editor && savedPosition) {
+                                setTimeout(() => {
+                                    const currentModel = editor.getModel();
+                                    if (currentModel) {
+                                        const maxLine = currentModel.getLineCount();
+                                        const line = Math.min(savedPosition.lineNumber, maxLine);
+                                        const maxColumn = currentModel.getLineMaxColumn(line);
+                                        const column = Math.min(savedPosition.column, maxColumn);
+                                        editor.setPosition({ lineNumber: line, column });
+                                        editor.revealPositionInCenterIfOutsideViewport({ lineNumber: line, column });
+                                    }
+                                }, 0);
+                            }
+                        } catch (reloadError) {
+                            console.error("Failed to reload verb code after compile:", reloadError);
+                            // Don't fail the compile success - just log the error
                         }
                     }
                 }
