@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import React, { useCallback, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { renderDjot, renderHtmlContent, renderPlainText } from "../lib/djot-renderer";
 
 interface ContentRendererProps {
@@ -42,6 +42,18 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
             isHolding: boolean;
         } | null
     >(null);
+
+    // Ref to container for updating tabindex on stale change
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    // Update tabindex on links when stale state or content changes
+    useEffect(() => {
+        if (!containerRef.current) return;
+        const links = containerRef.current.querySelectorAll("[data-url]");
+        links.forEach((link) => {
+            (link as HTMLElement).tabIndex = isStale ? -1 : 0;
+        });
+    }, [isStale, content]);
 
     // Handle content that might be an array or string
     const getContentString = useCallback((joinWith: string = "\n") => {
@@ -258,5 +270,5 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
         staleClass,
     ]);
 
-    return renderedContent;
+    return <div ref={containerRef}>{renderedContent}</div>;
 };
