@@ -66,6 +66,21 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
         }
     }, [onLinkClick, isStale]);
 
+    // Keyboard handler for Enter/Space on focused links
+    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (isStale) return;
+        if (e.key !== "Enter" && e.key !== " ") return;
+
+        const target = e.target as HTMLElement;
+        const url = target.getAttribute("data-url");
+        if (url && onLinkClick) {
+            e.preventDefault();
+            // Use element position for popovers since there's no mouse position
+            const rect = target.getBoundingClientRect();
+            onLinkClick(url, { x: rect.left + rect.width / 2, y: rect.bottom });
+        }
+    }, [onLinkClick, isStale]);
+
     // Touch start: begin tracking for hold detection on inspect links
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
         // Ignore touches when content is stale
@@ -153,6 +168,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                     <div
                         dangerouslySetInnerHTML={{ __html: processedHtml }}
                         onClick={handleLinkClick}
+                        onKeyDown={handleKeyDown}
                         onTouchStart={handleTouchStart}
                         onTouchEnd={handleTouchEnd}
                         onTouchCancel={handleTouchCancel}
@@ -178,6 +194,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                             className={`text_djot content-html${staleClass}`}
                             dangerouslySetInnerHTML={{ __html: processedDjotHtml }}
                             onClick={handleLinkClick}
+                            onKeyDown={handleKeyDown}
                             onTouchStart={handleTouchStart}
                             onTouchEnd={handleTouchEnd}
                             onTouchCancel={handleTouchCancel}
@@ -232,6 +249,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
         contentType,
         getContentString,
         handleLinkClick,
+        handleKeyDown,
         handleTouchStart,
         handleTouchEnd,
         handleTouchCancel,

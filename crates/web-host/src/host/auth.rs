@@ -217,7 +217,9 @@ pub async fn auth_auth(
                 return Ok((auth_token, client_id, confirmed_token, rpc_client));
             }
             Err(WsHostError::AuthenticationFailed) => {
-                warn!(
+                // Expected when connection was removed on soft detach (page reload)
+                // Fall through to attach_authenticated with NoConnect
+                debug!(
                     client_id = ?client_id,
                     "Reattach failed, falling back to attach flow"
                 );
@@ -253,61 +255,36 @@ pub fn stateless_rpc_client(
     Ok((auth_token, client_id, rpc_client))
 }
 
-/// Validate an auth token without establishing a full session
-/// Also optionally validates stored client credentials if provided
+/// Validate an auth token without establishing a full session.
+/// This just checks that the auth token is present and syntactically valid.
+/// The actual cryptographic validation happens when the websocket connects.
+/// We don't require an existing connection - connections are cleaned up on soft detach,
+/// but the auth token remains valid for reconnection.
 pub async fn validate_auth_handler(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    State(host): State<WebHost>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
+    State(_host): State<WebHost>,
     header_map: HeaderMap,
 ) -> impl IntoResponse {
+    // Just check that auth token is present and non-empty
     let auth_token = match extract_auth_token_header(&header_map) {
         Ok(token) => token,
         Err(status) => return status.into_response(),
     };
 
-    debug!("Validating auth token");
-
-    // Client credentials are required - validate the stored session
-    let (client_id, client_token) = match extract_client_credentials(&header_map) {
-        Some(creds) => creds,
-        None => {
-            debug!("No client credentials provided - cannot validate");
-            return Response::builder()
-                .status(StatusCode::UNAUTHORIZED)
-                .body(Body::empty())
-                .unwrap();
-        }
-    };
-
-    debug!("Validating stored session with client credentials");
-
-    // Try to reattach with stored credentials to verify the session still exists
-    match host
-        .reattach_authenticated(auth_token, client_id, client_token, addr)
-        .await
-    {
-        Ok(_) => {
-            debug!("Stored session validated successfully");
-            Response::builder()
-                .status(StatusCode::OK)
-                .body(Body::empty())
-                .unwrap()
-        }
-        Err(WsHostError::AuthenticationFailed) => {
-            debug!("Stored session invalid - connection no longer exists in daemon");
-            Response::builder()
-                .status(StatusCode::UNAUTHORIZED)
-                .body(Body::empty())
-                .unwrap()
-        }
-        Err(e) => {
-            error!("Error validating stored session: {}", e);
-            Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(Body::empty())
-                .unwrap()
-        }
+    // Basic syntactic check - PASETO tokens start with "v4.public."
+    if !auth_token.0.starts_with("v4.public.") {
+        debug!("Auth token has invalid format");
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .body(Body::empty())
+            .unwrap();
     }
+
+    debug!("Auth token validated (syntactic check passed)");
+    Response::builder()
+        .status(StatusCode::OK)
+        .body(Body::empty())
+        .unwrap()
 }
 
 /// Explicit logout endpoint that notifies daemon that player is disconnecting

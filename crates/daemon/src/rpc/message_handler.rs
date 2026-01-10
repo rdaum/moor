@@ -1025,22 +1025,24 @@ impl RpcMessageHandler {
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         let connection = self.extract_client_token(&detach, client_id, |d| d.client_token())?;
 
-        let disconnected = detach.disconnected().rpc_err()?;
+        // disconnected=true means explicit logout, disconnected=false means soft detach (page reload)
+        // In both cases we remove the connection record - the transport is gone.
+        // user_disconnected is only triggered on explicit logout when no connections remain.
+        let is_logout = detach.disconnected().rpc_err()?;
 
-        if disconnected {
-            // Get player before removing connection
-            if let Some(player) = self.connections.player_object_for_client(client_id) {
-                // Remove this connection
-                let Ok(_) = self.connections.remove_client_connection(client_id) else {
-                    return Err(RpcMessageError::InternalError(
-                        "Unable to remove client connection".to_string(),
-                    ));
-                };
+        // Get player before removing connection
+        let player = self.connections.player_object_for_client(client_id);
 
-                // Only trigger user_disconnected if this was the last connection for the player
+        // Always remove the connection record
+        if let Err(e) = self.connections.remove_client_connection(client_id) {
+            debug!(error = ?e, client_id = ?client_id, "Unable to remove client connection on detach");
+        }
+
+        // Only trigger user_disconnected on explicit logout AND if no connections remain
+        if is_logout {
+            if let Some(player) = player {
                 match self.connections.client_ids_for(player) {
                     Ok(remaining_clients) if remaining_clients.is_empty() => {
-                        // Last connection for this player - trigger user_disconnected
                         if let Err(e) = self.submit_disconnected_task(
                             &SYSTEM_OBJECT,
                             scheduler_client,
@@ -1055,26 +1057,14 @@ impl RpcMessageHandler {
                         debug!(
                             player = ?player,
                             remaining_connections = remaining_clients.len(),
-                            "Player still has active connections after detach"
+                            "Player still has active connections after logout"
                         );
                     }
                     Err(e) => {
                         error!(error = ?e, "Error checking remaining connections for player");
                     }
                 }
-            } else {
-                // No player associated - just remove the connection
-                let Ok(_) = self.connections.remove_client_connection(client_id) else {
-                    return Err(RpcMessageError::InternalError(
-                        "Unable to remove client connection".to_string(),
-                    ));
-                };
             }
-        } else if let Err(e) = self
-            .connections
-            .record_client_activity(client_id, connection)
-        {
-            warn!(error = ?e, "Unable to refresh client activity on soft detach");
         }
 
         Ok(mk_disconnected_reply())

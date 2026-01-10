@@ -352,7 +352,9 @@ impl FjallConnectionRegistry {
             };
 
             let mut changed = false;
-            let mut kept = Vec::with_capacity(connections_record.connections.len());
+            let mut kept: Vec<ConnectionRecord> =
+                Vec::with_capacity(connections_record.connections.len());
+            let mut seen_client_ids: HashSet<u128> = HashSet::new();
 
             for record in connections_record.connections {
                 let client_id = record.client_id;
@@ -380,7 +382,12 @@ impl FjallConnectionRegistry {
                     stale_records_removed += 1;
                     removed_client_ids.insert(client_id);
                     changed = true;
+                } else if seen_client_ids.contains(&client_id) {
+                    // Duplicate client_id - mark as stale
+                    stale_records_removed += 1;
+                    changed = true;
                 } else {
+                    seen_client_ids.insert(client_id);
                     kept_client_ids.insert(client_id);
                     kept.push(record);
                 }
@@ -459,7 +466,9 @@ impl FjallConnectionRegistry {
             };
 
             let mut changed = false;
-            let mut kept = Vec::with_capacity(connections_record.connections.len());
+            let mut kept: Vec<ConnectionRecord> =
+                Vec::with_capacity(connections_record.connections.len());
+            let mut seen_client_ids: HashSet<u128> = HashSet::new();
 
             for record in connections_record.connections {
                 let client_id = record.client_id;
@@ -478,7 +487,12 @@ impl FjallConnectionRegistry {
                 if stale {
                     stale_records_removed += 1;
                     changed = true;
+                } else if seen_client_ids.contains(&client_id) {
+                    // Duplicate client_id - mark as stale
+                    stale_records_removed += 1;
+                    changed = true;
                 } else {
+                    seen_client_ids.insert(client_id);
                     kept.push(record);
                 }
             }
@@ -816,7 +830,22 @@ impl ConnectionRegistry for FjallConnectionRegistry {
             },
         };
 
-        connections_record.connections.push(cr.clone());
+        // Deduplicate by client_id to prevent accumulation from reconnects
+        if !connections_record
+            .connections
+            .iter()
+            .any(|c| c.client_id == cr.client_id)
+        {
+            connections_record.connections.push(cr.clone());
+        } else {
+            // Update existing record with new connection info
+            for existing in &mut connections_record.connections {
+                if existing.client_id == cr.client_id {
+                    *existing = cr.clone();
+                    break;
+                }
+            }
+        }
 
         let Ok(encoded) = connections_records_to_bytes(&connections_record) else {
             return Err(RpcMessageError::InternalError(
@@ -866,7 +895,68 @@ impl ConnectionRegistry for FjallConnectionRegistry {
                 },
             };
 
-            player_conns.connections.push(cr);
+            // Clean up orphaned connections for this player before adding new one.
+            // A connection is orphaned if:
+            // 1. Its client_id is no longer in client_connection_table, OR
+            // 2. Its last_activity is stale (soft-detached but never reattached)
+            //
+            // We use a short threshold (30 seconds) to catch soft-detached connections
+            // that weren't successfully reattached before a new connection came in.
+            const ORPHAN_THRESHOLD: std::time::Duration = std::time::Duration::from_secs(30);
+            let original_len = player_conns.connections.len();
+            let timestamps_snapshot = self.timestamps.lock().unwrap().clone();
+            player_conns.connections.retain(|existing_cr| {
+                let existing_client_id = existing_cr.client_id;
+
+                // Check if this client_id still has a valid mapping
+                let has_mapping = matches!(
+                    inner
+                        .client_connection_table
+                        .get(existing_client_id.to_le_bytes()),
+                    Ok(Some(_))
+                );
+                if !has_mapping {
+                    return false; // No mapping, definitely orphaned
+                }
+
+                // Check if connection is stale (soft-detached and not reattached)
+                let last_activity = timestamps_snapshot
+                    .get(&Uuid::from_u128(existing_client_id))
+                    .map(|ts| ts.last_activity)
+                    .unwrap_or(existing_cr.last_activity);
+
+                if let Ok(idle) = now.duration_since(last_activity) {
+                    if idle >= ORPHAN_THRESHOLD {
+                        return false; // Stale connection, likely orphaned
+                    }
+                }
+
+                true // Keep this connection
+            });
+            if player_conns.connections.len() < original_len {
+                tracing::debug!(
+                    removed = original_len - player_conns.connections.len(),
+                    player = ?player_obj,
+                    "Cleaned up orphaned player connections during new_connection"
+                );
+            }
+
+            // Deduplicate by client_id to prevent accumulation from reconnects
+            if !player_conns
+                .connections
+                .iter()
+                .any(|c| c.client_id == cr.client_id)
+            {
+                player_conns.connections.push(cr);
+            } else {
+                // Update existing record with new connection info
+                for existing in &mut player_conns.connections {
+                    if existing.client_id == cr.client_id {
+                        *existing = cr;
+                        break;
+                    }
+                }
+            }
 
             let Ok(encoded) = connections_records_to_bytes(&player_conns) else {
                 return Err(RpcMessageError::InternalError(

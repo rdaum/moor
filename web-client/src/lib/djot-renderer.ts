@@ -298,9 +298,11 @@ function convertLinksAndTables(container: HTMLElement): void {
         }
 
         // Create span to replace the link with URL-based styling
+        // tabindex="0" makes it keyboard-focusable without role="link"
         const span = document.createElement("span");
         span.className = getLinkClass(href);
         span.setAttribute("data-url", href);
+        span.setAttribute("tabindex", "0");
         span.title = href;
         span.textContent = linkText;
 
@@ -415,7 +417,9 @@ export function renderDjot(content: string, options: DjotRenderOptions = {}): st
             // Determine CSS class based on URL scheme
             const linkClass = getLinkClass(href);
 
-            return `<span class="${linkClass}" ${linkHandler.dataAttribute}="${href}" title="${href}">${linkText}</span>`;
+            // tabindex="0" makes it keyboard-focusable/discoverable without role="link"
+            // which would cause screen readers to announce "link" during normal reading
+            return `<span class="${linkClass}" ${linkHandler.dataAttribute}="${href}" title="${href}" tabindex="0">${linkText}</span>`;
         };
     }
 

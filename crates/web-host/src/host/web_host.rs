@@ -174,6 +174,11 @@ fn extract_ws_attach_info(headers: &HeaderMap) -> Result<WsAttachInfo, StatusCod
         _ => None,
     };
 
+    debug!(
+        "extract_ws_attach_info: is_initial_attach={}, client_hint={:?}",
+        is_initial_attach,
+        client_hint.as_ref().map(|(id, _)| id)
+    );
     Ok(WsAttachInfo {
         auth_token,
         client_hint,
@@ -999,7 +1004,12 @@ async fn attach(
     client_hint: Option<(Uuid, ClientToken)>,
     is_initial_attach: bool,
 ) -> Response {
-    debug!("Connection from {}", addr);
+    debug!(
+        "Connection from {}, is_initial_attach={}, has_client_hint={}",
+        addr,
+        is_initial_attach,
+        client_hint.is_some()
+    );
 
     let auth_token = AuthToken(auth_token);
 
@@ -1025,14 +1035,36 @@ async fn attach(
         None
     };
 
-    let (player, client_id, client_token, rpc_client) = if let Some(details) = reattach_details {
-        details
+    // Determine effective connect type:
+    // - If reattach succeeded, it's implicitly a reconnect (no user_connected needed)
+    // - If we had stored credentials, this is a reconnection attempt (regardless of is_initial_attach)
+    //   The is_initial_attach flag from client controls history display, not whether user_connected fires
+    // - Only use the original connect_type for true initial connections (no stored credentials)
+    let (effective_connect_type, connection_details) = if let Some(details) = reattach_details {
+        debug!("Reattach succeeded, using Reconnected");
+        (moor_rpc::ConnectType::Reconnected, details)
     } else {
+        // If we have client_hint (stored credentials), this is always a reconnection
+        // The client is coming back with previously issued tokens, so use Reconnected
+        // to avoid re-triggering :user_connected
+        let ct = if client_hint.is_some() {
+            debug!(
+                "Have stored credentials, using Reconnected (is_initial_attach={} ignored)",
+                is_initial_attach
+            );
+            moor_rpc::ConnectType::Reconnected
+        } else {
+            debug!(
+                "Fresh connection (no stored credentials), using {:?}",
+                connect_type
+            );
+            connect_type
+        };
         match host
-            .attach_authenticated(auth_token.clone(), Some(connect_type), addr)
+            .attach_authenticated(auth_token.clone(), Some(ct), addr)
             .await
         {
-            Ok(connection_details) => connection_details,
+            Ok(details) => (ct, details),
             Err(WsHostError::AuthenticationFailed) => {
                 return Response::builder()
                     .status(StatusCode::UNAUTHORIZED)
@@ -1048,6 +1080,7 @@ async fn attach(
             }
         }
     };
+    let (player, client_id, client_token, rpc_client) = connection_details;
 
     let Ok(mut connection) = host
         .start_ws_connection(
@@ -1067,7 +1100,9 @@ async fn attach(
             .unwrap();
     };
 
-    ws.on_upgrade(move |socket| async move { connection.handle(connect_type, socket).await })
+    ws.on_upgrade(
+        move |socket| async move { connection.handle(effective_connect_type, socket).await },
+    )
 }
 
 /// Websocket upgrade handler for authenticated users who are connecting to an existing user

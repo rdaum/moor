@@ -1816,6 +1816,21 @@
   color: var(--color-link-hover);
 }
 
+/* Focus styles for keyboard navigation (visible focus ring) */
+.moo-link:focus,
+.moo-link-cmd:focus,
+.moo-link-inspect:focus,
+.moo-link-help:focus,
+.moo-link-external:focus {
+  outline: 2px solid var(--color-link);
+  outline-offset: 2px;
+}
+
+.moo-link-cmd:focus {
+  outline-color: #fff;
+  box-shadow: 0 0 0 3px var(--color-button-primary);
+}
+
 /* ====== STALE CONTENT STYLES ====== */
 /* Links in stale content are no longer actionable */
 
