@@ -162,7 +162,9 @@ impl WebSocketConnection {
                             trace!("Received keepalive from client");
                             continue;
                         }
-                        Message::Binary(ref data) if data.len() == 1 && data[0] == HEARTBEAT_RESPONSE => {
+                        Message::Binary(ref data)
+                            if data.len() == 1 && data[0] == HEARTBEAT_RESPONSE =>
+                        {
                             // Application-level heartbeat response
                             trace!("Received heartbeat response from client");
                             return ReadEvent::HeartbeatResponse;

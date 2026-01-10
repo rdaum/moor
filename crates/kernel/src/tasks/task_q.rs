@@ -345,7 +345,9 @@ impl SuspensionQ {
                     let inserted = *wake_time > now && {
                         let delay = wake_time.duration_since(now);
                         let timer_entry = TimerEntry { task_id, delay };
-                        self.timer_wheel.insert_with_delay(timer_entry, delay).is_ok()
+                        self.timer_wheel
+                            .insert_with_delay(timer_entry, delay)
+                            .is_ok()
                     };
                     if !inserted {
                         // Past deadline or timer expired - wake immediately
@@ -407,7 +409,9 @@ impl SuspensionQ {
                 let inserted = *wake_time > now && {
                     let delay = wake_time.duration_since(now);
                     let timer_entry = TimerEntry { task_id, delay };
-                    self.timer_wheel.insert_with_delay(timer_entry, delay).is_ok()
+                    self.timer_wheel
+                        .insert_with_delay(timer_entry, delay)
+                        .is_ok()
                 };
                 if !inserted {
                     // Past deadline or timer expired - wake immediately

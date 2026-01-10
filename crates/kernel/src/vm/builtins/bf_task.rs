@@ -255,29 +255,37 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Ask the scheduler (through its mailbox) to describe all the tasks.
     let tasks = current_task_scheduler_client().task_list();
 
+    // Wizards see all tasks, others see only tasks where they are the programmer.
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    let is_wizard = task_perms.check_is_wizard().map_err(world_state_bf_err)?;
+    let perms_who = task_perms.who;
+
     // return in form:
     //     {<task-id>, <start-time>, <x>, <y>,
     //      <programmer>, <verb-loc>, <verb-name>, <line>, <this>}
-    let tasks = tasks.iter().map(|task| {
-        let task_id = v_int(task.task_id as i64);
-        let start_time = match task.start_time {
-            None => bf_args.v_bool(false),
-            Some(start_time) => {
-                let time = start_time.duration_since(SystemTime::UNIX_EPOCH).unwrap();
-                v_int(time.as_secs() as i64)
-            }
-        };
-        let x = v_int(0);
-        let y = v_int(0);
-        let programmer = v_obj(task.permissions);
-        let verb_loc = v_obj(task.verb_definer);
-        let verb_name = v_arc_str(task.verb_name.as_arc_str());
-        let line = v_int(task.line_number as i64);
-        let this = task.this.clone();
-        v_list(&[
-            task_id, start_time, x, y, programmer, verb_loc, verb_name, line, this,
-        ])
-    });
+    let tasks = tasks
+        .iter()
+        .filter(|task| is_wizard || task.permissions == perms_who)
+        .map(|task| {
+            let task_id = v_int(task.task_id as i64);
+            let start_time = match task.start_time {
+                None => bf_args.v_bool(false),
+                Some(start_time) => {
+                    let time = start_time.duration_since(SystemTime::UNIX_EPOCH).unwrap();
+                    v_int(time.as_secs() as i64)
+                }
+            };
+            let x = v_int(0);
+            let y = v_int(0);
+            let programmer = v_obj(task.permissions);
+            let verb_loc = v_obj(task.verb_definer);
+            let verb_name = v_arc_str(task.verb_name.as_arc_str());
+            let line = v_int(task.line_number as i64);
+            let this = task.this.clone();
+            v_list(&[
+                task_id, start_time, x, y, programmer, verb_loc, verb_name, line, this,
+            ])
+        });
 
     Ok(Ret(v_list_iter(tasks)))
 }
@@ -293,18 +301,15 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     };
 
-    let player = bf_args.exec_state.caller();
-    let is_wizard = bf_args
-        .task_perms()
-        .map_err(world_state_bf_err)?
-        .check_is_wizard()
-        .map_err(world_state_bf_err)?;
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    let is_wizard = task_perms.check_is_wizard().map_err(world_state_bf_err)?;
+    let perms_who = task_perms.who;
 
     let results = tasks.iter().filter(|(_, player_id, _)| {
         if is_wizard {
             true
         } else {
-            v_obj(*player_id) == player
+            *player_id == perms_who
         }
     });
 
