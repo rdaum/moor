@@ -1095,6 +1095,7 @@ function AppContent({
         disconnectWS,
         narrativeRef,
         playerOid,
+        setUserSkippedEncryption,
         wsState,
     ]);
 
@@ -1266,7 +1267,11 @@ function AppContent({
             return;
         }
 
-        if (authState.player && !encryptionState.isChecking && !userSkippedEncryption) {
+        // Wait until we've checked the backend at least once before making decisions
+        // Otherwise we briefly show setup prompt before knowing actual backend state
+        if (
+            authState.player && !encryptionState.isChecking && encryptionState.hasCheckedOnce && !userSkippedEncryption
+        ) {
             const hasLocalKey = !!encryptionState.ageIdentity;
             const backendHasPubkey = encryptionState.hasEncryption;
 
@@ -1324,9 +1329,11 @@ function AppContent({
         encryptionState.hasEncryption,
         encryptionState.ageIdentity,
         encryptionState.isChecking,
+        encryptionState.hasCheckedOnce,
         showEncryptionSetup,
         showPasswordPrompt,
         forgetKey,
+        setUserSkippedEncryption,
         userSkippedEncryption,
         eventLogEnabled,
         setupEncryption,
@@ -1411,6 +1418,7 @@ function AppContent({
         fetchInitialHistory,
         historyLoaded,
         loginMode,
+        narrativeRef,
         setHistoryBoundaryNow,
         showMessage,
         wsState.isConnected,
