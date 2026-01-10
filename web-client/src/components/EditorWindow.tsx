@@ -16,6 +16,10 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
+// Global z-index manager to track the highest z-index across all editor windows
+let globalZIndex = 1000;
+const getNextZIndex = () => ++globalZIndex;
+
 interface EditorWindowContextValue {
     splitMode: boolean;
     isDragging: boolean;
@@ -69,6 +73,12 @@ export const EditorWindow: React.FC<EditorWindowProps> = ({
     const [isResizing, setIsResizing] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
+    const [zIndex, setZIndex] = useState(() => getNextZIndex());
+
+    // Bring window to front when clicked or focused
+    const bringToFront = useCallback(() => {
+        setZIndex(getNextZIndex());
+    }, []);
 
     // Function to start dragging (called by title bar via context)
     const startDrag = useCallback((clientX: number, clientY: number) => {
@@ -209,7 +219,7 @@ export const EditorWindow: React.FC<EditorWindowProps> = ({
         border: "1px solid var(--color-border-medium)",
         borderRadius: "var(--radius-lg)",
         boxShadow: "0 8px 32px var(--color-shadow)",
-        zIndex: 1000,
+        zIndex,
         display: "flex",
         flexDirection: "column",
         cursor: isDragging ? "grabbing" : "default",
@@ -232,6 +242,7 @@ export const EditorWindow: React.FC<EditorWindowProps> = ({
                 aria-label={ariaLabel}
                 tabIndex={-1}
                 style={splitMode ? splitStyle : modalStyle}
+                onMouseDown={splitMode ? undefined : bringToFront}
             >
                 {children}
 

@@ -734,9 +734,14 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         // Open in the main verb editor system
         onOpenVerbInEditor(title, objectCurie, selectedVerb.names[0], verbCode);
 
-        // Clear the embedded editor
+        // Clear the embedded editor and go back to object view
+        // Also clear restoration state to prevent the useEffect from re-selecting the verb
         setSelectedVerb(null);
         setEditorVisible(false);
+        setActiveTab("objects");
+        setLastEditorType(null);
+        setLastVerbIndex(null);
+        setLastVerbLocation(null);
     };
 
     const handleNameSave = async () => {
