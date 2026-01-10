@@ -118,14 +118,14 @@ impl WebSocketConnection {
         loop {
             // Check for heartbeat timeout - if we sent a heartbeat and haven't received
             // a response within HEARTBEAT_TIMEOUT, the connection is likely zombie.
-            if let Some(sent_time) = pending_heartbeat {
-                if sent_time.elapsed() > HEARTBEAT_TIMEOUT {
-                    warn!(
-                        "Heartbeat timeout after {:?} - client JS not responding, closing connection",
-                        sent_time.elapsed()
-                    );
-                    break;
-                }
+            if let Some(sent_time) = pending_heartbeat
+                && sent_time.elapsed() > HEARTBEAT_TIMEOUT
+            {
+                warn!(
+                    "Heartbeat timeout after {:?} - client JS not responding, closing connection",
+                    sent_time.elapsed()
+                );
+                break;
             }
 
             // We should not send the next line until we've received a narrative event for the

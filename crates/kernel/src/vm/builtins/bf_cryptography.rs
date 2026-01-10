@@ -1359,7 +1359,7 @@ fn bf_random_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     };
 
-    if count < 1 || count > 65536 {
+    if !(1..=65536).contains(&count) {
         return Err(BfErr::ErrValue(
             E_INVARG.msg("Count must be between 1 and 65536"),
         ));
