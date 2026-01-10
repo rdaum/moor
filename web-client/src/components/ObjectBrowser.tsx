@@ -550,17 +550,28 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             const objectsLength = reply.objectsLength();
             const result: ObjectData[] = [];
 
+            // ObjUnion enum: 0=NONE, 1=ObjId, 2=UuObjId, 3=AnonymousObjId
+            const ANONYMOUS_OBJ_TYPE = 3;
+
             for (let i = 0; i < objectsLength; i++) {
                 const objInfo = reply.objects(i);
                 if (!objInfo) continue;
 
                 const obj = objInfo.obj();
+
+                // Skip anonymous objects - they can't be referenced in eval calls
+                if (obj && obj.objType() === ANONYMOUS_OBJ_TYPE) {
+                    continue;
+                }
+
                 const name = objInfo.name();
                 const parent = objInfo.parent();
                 const owner = objInfo.owner();
                 const location = objInfo.location();
 
-                const objStr = objToString(obj) || "?";
+                const objStr = objToString(obj);
+                if (!objStr) continue; // Skip objects we can't get an ID for
+
                 result.push({
                     obj: objStr,
                     name: name?.value() || "",
@@ -1667,7 +1678,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         return options;
     })();
 
-    // Helper to check if object ID is UUID-based
+    // Helper to check if object ID is UUID-based (contains "-" like "FFFFFF-FFFFFFFFFF")
     const isUuidObject = (objId: string): boolean => {
         return objId.includes("-");
     };
