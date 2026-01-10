@@ -50,9 +50,6 @@ __pycache__/
 *.so
 .Python
 
-# Cowbell repository (cloned locally, not a submodule)
-cores/cowbell/
-
 # LambdaMOO sources (fetched by setup script for comparative testing)
 lambdamoo/
 certs/
