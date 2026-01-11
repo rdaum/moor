@@ -877,6 +877,8 @@ export interface EventMetadata {
     dobjName?: string;
     iobj?: any;
     timestamp?: number;
+    /** Whether emoji conversion should be enabled for this event (server-side hint) */
+    enableEmojis?: boolean;
 }
 
 export interface LinkPreview {
@@ -1076,6 +1078,8 @@ export function handleClientEventFlatBuffer(
                                     rewritableFallback = value;
                                 } else if (keyValue === "rewrite_target" && typeof value === "string") {
                                     rewriteTarget = value;
+                                } else if (keyValue === "enable_emojis" && typeof value === "boolean") {
+                                    eventMeta.enableEmojis = value;
                                 }
                             }
                         }

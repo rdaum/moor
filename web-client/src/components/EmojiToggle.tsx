@@ -79,43 +79,48 @@ export const getEmojiEnabled = (): boolean => {
 /**
  * Convert text emoticons to unicode emoji.
  * Handles common emoticons like :) :-) ;) ;-) :( :-( :D :-D :P :-P etc.
+ *
+ * Uses negative lookbehinds to avoid false positives:
+ * - (?<![a-zA-Z]) prevents matching after letters (avoids http://)
+ * - (?<![0-9]) prevents matching after digits (avoids "8)" in lists)
  */
 export const convertEmoticons = (text: string): string => {
     // Map of emoticons to unicode emoji
     // Order matters - longer patterns first to avoid partial matches
+    // Patterns use negative lookbehinds to avoid false positives
     const emoticons: [RegExp, string][] = [
-        // Happy faces
-        [/:-\)/g, "😊"],
-        [/:\)/g, "🙂"],
+        // Happy faces - require not preceded by a letter
+        [/(?<![a-zA-Z]):-\)/g, "😊"],
+        [/(?<![a-zA-Z]):\)/g, "🙂"],
         // Winking faces
-        [/;-\)/g, "😉"],
-        [/;\)/g, "😉"],
+        [/(?<![a-zA-Z]);-\)/g, "😉"],
+        [/(?<![a-zA-Z]);\)/g, "😉"],
         // Sad faces
-        [/:-\(/g, "😞"],
-        [/:\(/g, "🙁"],
+        [/(?<![a-zA-Z]):-\(/g, "😞"],
+        [/(?<![a-zA-Z]):\(/g, "🙁"],
         // Laughing/grinning
-        [/:-D/g, "😃"],
-        [/:D/g, "😃"],
+        [/(?<![a-zA-Z]):-D/g, "😃"],
+        [/(?<![a-zA-Z]):D/g, "😃"],
         // Tongue out
-        [/:-P/gi, "😛"],
-        [/:P/gi, "😛"],
+        [/(?<![a-zA-Z]):-P/gi, "😛"],
+        [/(?<![a-zA-Z]):P/gi, "😛"],
         // Surprised
-        [/:-O/gi, "😮"],
-        [/:O/gi, "😮"],
+        [/(?<![a-zA-Z]):-O/gi, "😮"],
+        [/(?<![a-zA-Z]):O/gi, "😮"],
         // Heart
         [/<3/g, "❤️"],
         // Crying
-        [/:'-\(/g, "😢"],
-        [/:'\(/g, "😢"],
-        // Cool
-        [/8-\)/g, "😎"],
-        [/8\)/g, "😎"],
-        // Confused
-        [/:-\//g, "😕"],
-        [/:\//g, "😕"],
+        [/(?<![a-zA-Z]):'-\(/g, "😢"],
+        [/(?<![a-zA-Z]):'\(/g, "😢"],
+        // Cool - require not preceded by letter or digit (avoids "8)" in numbered lists)
+        [/(?<![a-zA-Z0-9])8-\)/g, "😎"],
+        [/(?<![a-zA-Z0-9])8\)/g, "😎"],
+        // Confused - require not preceded by letter AND not followed by / (avoids http://)
+        [/(?<![a-zA-Z]):-\/(?!\/)/g, "😕"],
+        [/(?<![a-zA-Z]):\/(?!\/)/g, "😕"],
         // Kiss
-        [/:-\*/g, "😘"],
-        [/:\*/g, "😘"],
+        [/(?<![a-zA-Z]):-\*/g, "😘"],
+        [/(?<![a-zA-Z]):\*/g, "😘"],
     ];
 
     let result = text;

@@ -13,6 +13,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ContentRenderer } from "./ContentRenderer";
+import { getEmojiEnabled } from "./EmojiToggle";
 import { LinkPreview, LinkPreviewCard } from "./LinkPreviewCard";
 
 const COLLAPSED_LOOKS_KEY = "moor-collapsed-looks";
@@ -33,6 +34,7 @@ interface EventMetadata {
     dobjName?: string;
     iobj?: ObjRef | null;
     timestamp?: number;
+    enableEmojis?: boolean;
 }
 
 interface OutputWindowProps {
@@ -130,9 +132,13 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         linkPreview?: LinkPreview,
         messageId?: string,
         isStale?: boolean,
+        enableEmojis?: boolean,
     ) => {
         // Use a wrapped handler that marks the message stale, or fall back to direct handler
         const linkClickHandler = messageId ? createLinkClickHandler(messageId) : onLinkClick;
+
+        // Enable emoji only if server says to AND client setting is on
+        const enableEmoji = enableEmojis === true && getEmojiEnabled();
 
         if (ttsText) {
             return (
@@ -147,6 +153,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                             onLinkHoldStart={onLinkHoldStart}
                             onLinkHoldEnd={onLinkHoldEnd}
                             isStale={isStale}
+                            enableEmoji={enableEmoji}
                         />
                     </span>
                     {linkPreview && <LinkPreviewCard preview={linkPreview} />}
@@ -163,6 +170,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                     onLinkHoldStart={onLinkHoldStart}
                     onLinkHoldEnd={onLinkHoldEnd}
                     isStale={isStale}
+                    enableEmoji={enableEmoji}
                 />
                 {linkPreview && <LinkPreviewCard preview={linkPreview} />}
             </>
@@ -447,6 +455,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                     message.linkPreview,
                                                     message.id,
                                                     isMessageStale,
+                                                    message.eventMetadata?.enableEmojis,
                                                 )}
                                             </div>
                                         </div>
@@ -461,6 +470,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                 message.linkPreview,
                                                 message.id,
                                                 isMessageStale,
+                                                message.eventMetadata?.enableEmojis,
                                             )}
                                         </div>
                                     )}
@@ -485,6 +495,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                         message.linkPreview,
                                         message.id,
                                         isMessageStale,
+                                        message.eventMetadata?.enableEmojis,
                                     )}
                                 </div>,
                             );
@@ -575,6 +586,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                             msg.linkPreview,
                                                             msg.id,
                                                             isGroupStale,
+                                                            msg.eventMetadata?.enableEmojis,
                                                         )}
                                                     </div>
                                                 ))}
@@ -593,6 +605,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                         msg.linkPreview,
                                                         msg.id,
                                                         isGroupStale,
+                                                        msg.eventMetadata?.enableEmojis,
                                                     )}
                                                 </div>
                                             ))}
@@ -646,6 +659,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                         lastLinkPreview,
                                         firstMessage.id,
                                         isGroupStale,
+                                        firstMessage.eventMetadata?.enableEmojis,
                                     )}
                                 </div>,
                             );

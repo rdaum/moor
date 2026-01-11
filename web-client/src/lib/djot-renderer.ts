@@ -15,7 +15,7 @@ import { parse, renderHTML } from "@djot/djot";
 import { AnsiUp } from "ansi_up";
 import DOMPurify from "dompurify";
 import Prism from "prismjs";
-import { convertEmoticons, getEmojiEnabled } from "../components/EmojiToggle";
+import { convertEmoticons } from "../components/EmojiToggle";
 import "./prism-moo";
 
 /**
@@ -38,6 +38,10 @@ export interface DjotRenderOptions {
      * Additional allowed HTML tags for sanitization
      */
     additionalAllowedTags?: string[];
+    /**
+     * Whether to convert emoticons to emoji (defaults to false)
+     */
+    enableEmoji?: boolean;
 }
 
 /**
@@ -225,18 +229,20 @@ function escapeIdentifierUnderscores(content: string): string {
 
 /**
  * Processes ANSI escape codes and emoji conversion in text nodes recursively
+ * @param node - The DOM node to process
+ * @param ansi_up - The AnsiUp instance for ANSI code conversion
+ * @param enableEmoji - Whether to convert emoticons to emoji (defaults to false)
  */
-function processTextNodesForAnsi(node: Node, ansi_up: AnsiUp): void {
+function processTextNodesForAnsi(node: Node, ansi_up: AnsiUp, enableEmoji: boolean = false): void {
     if (node.nodeType === Node.TEXT_NODE) {
         let text = node.textContent || "";
 
-        // Apply emoji conversion if enabled
-        const emojiEnabled = getEmojiEnabled();
-        if (emojiEnabled) {
+        // Apply emoji conversion if enabled for this content
+        if (enableEmoji) {
             text = convertEmoticons(text);
         }
 
-        if (text.includes("\x1b[") || (emojiEnabled && text !== node.textContent)) {
+        if (text.includes("\x1b[") || (enableEmoji && text !== node.textContent)) {
             const ansiHtml = ansi_up.ansi_to_html(text);
             const span = document.createElement("span");
             span.innerHTML = ansiHtml;
@@ -245,7 +251,7 @@ function processTextNodesForAnsi(node: Node, ansi_up: AnsiUp): void {
     } else if (node.nodeType === Node.ELEMENT_NODE) {
         const element = node as Element;
         if (element.tagName !== "PRE" && element.tagName !== "CODE") {
-            Array.from(node.childNodes).forEach(child => processTextNodesForAnsi(child, ansi_up));
+            Array.from(node.childNodes).forEach(child => processTextNodesForAnsi(child, ansi_up, enableEmoji));
         }
     }
 }
@@ -329,14 +335,16 @@ function convertLinksAndTables(container: HTMLElement): void {
 /**
  * Processes HTML content - handles ANSI escape codes in text and syntax highlighting in code blocks
  * This is the final rendering step for all content types
+ * @param html - The HTML string to process
+ * @param enableEmoji - Whether to convert emoticons to emoji (defaults to false)
  */
-export function processHtmlContent(html: string): string {
+export function processHtmlContent(html: string, enableEmoji: boolean = false): string {
     const tempDiv = document.createElement("div");
     tempDiv.innerHTML = html;
     const ansi_up = new AnsiUp();
 
     processCodeBlocks(tempDiv, ansi_up);
-    processTextNodesForAnsi(tempDiv, ansi_up);
+    processTextNodesForAnsi(tempDiv, ansi_up, enableEmoji);
 
     return tempDiv.innerHTML;
 }
@@ -344,8 +352,10 @@ export function processHtmlContent(html: string): string {
 /**
  * Renders HTML content with link/table conversion, ANSI codes, and syntax highlighting
  * This is used for text/html content type
+ * @param html - The HTML string to render
+ * @param enableEmoji - Whether to convert emoticons to emoji (defaults to false)
  */
-export function renderHtmlContent(html: string): string {
+export function renderHtmlContent(html: string, enableEmoji: boolean = false): string {
     // First sanitize (moo:// is allowed for internal MOO links)
     const sanitizedHtml = DOMPurify.sanitize(html, {
         ALLOWED_TAGS: CONTENT_ALLOWED_TAGS,
@@ -361,17 +371,19 @@ export function renderHtmlContent(html: string): string {
     // Process ANSI and syntax highlighting
     const ansi_up = new AnsiUp();
     processCodeBlocks(tempDiv, ansi_up);
-    processTextNodesForAnsi(tempDiv, ansi_up);
+    processTextNodesForAnsi(tempDiv, ansi_up, enableEmoji);
 
     return tempDiv.innerHTML;
 }
 
 /**
  * Renders plain text to HTML, converting ANSI escape codes
+ * @param text - The plain text to render
+ * @param enableEmoji - Whether to convert emoticons to emoji (defaults to false)
  */
-export function renderPlainText(text: string): string {
-    // Apply emoji conversion if enabled
-    const processedText = getEmojiEnabled() ? convertEmoticons(text) : text;
+export function renderPlainText(text: string, enableEmoji: boolean = false): string {
+    // Apply emoji conversion if enabled for this content
+    const processedText = enableEmoji ? convertEmoticons(text) : text;
 
     const ansi_up = new AnsiUp();
     const htmlFromAnsi = ansi_up.ansi_to_html(processedText);
@@ -393,6 +405,7 @@ export function renderDjot(content: string, options: DjotRenderOptions = {}): st
         linkHandler,
         addTableClass = false,
         additionalAllowedTags = [],
+        enableEmoji = false,
     } = options;
 
     // Escape underscores in identifier-like contexts
@@ -465,5 +478,5 @@ export function renderDjot(content: string, options: DjotRenderOptions = {}): st
     });
 
     // Process for ANSI codes and syntax highlighting
-    return processHtmlContent(sanitizedHtml);
+    return processHtmlContent(sanitizedHtml, enableEmoji);
 }

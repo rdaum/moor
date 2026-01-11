@@ -21,6 +21,8 @@ interface ContentRendererProps {
     onLinkHoldStart?: (url: string, position: { x: number; y: number }) => void;
     onLinkHoldEnd?: () => void;
     isStale?: boolean;
+    /** Whether to enable emoji conversion for this content. Defaults to false. */
+    enableEmoji?: boolean;
 }
 
 const HOLD_THRESHOLD_MS = 300;
@@ -32,6 +34,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
     onLinkHoldStart,
     onLinkHoldEnd,
     isStale = false,
+    enableEmoji = false,
 }) => {
     // Touch state tracking for tap vs hold detection
     const touchStateRef = useRef<
@@ -174,7 +177,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
         switch (contentType) {
             case "text/html": {
                 const htmlContent = getContentString("\n");
-                const processedHtml = renderHtmlContent(htmlContent);
+                const processedHtml = renderHtmlContent(htmlContent, enableEmoji);
 
                 return (
                     <div
@@ -199,6 +202,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                             dataAttribute: "data-url",
                         },
                         addTableClass: true,
+                        enableEmoji,
                     });
 
                     return (
@@ -247,7 +251,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
             case "text/plain":
             default: {
                 const plainContent = getContentString("\n");
-                const renderedHtml = renderPlainText(plainContent);
+                const renderedHtml = renderPlainText(plainContent, enableEmoji);
 
                 return (
                     <div
@@ -268,6 +272,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
         handleContextMenu,
         content,
         staleClass,
+        enableEmoji,
     ]);
 
     return <div ref={containerRef}>{renderedContent}</div>;
