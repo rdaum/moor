@@ -11,14 +11,17 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use moor_common::model::ObjFlag;
+use moor_common::tasks::TaskId;
+use moor_common::util::BitEnum;
 use moor_var::{NOTHING, Obj, Symbol, Var, v_obj};
 use std::time::{Duration, SystemTime};
 
 use crate::{
     PhantomUnsync,
+    task_context::with_current_transaction,
     vm::activation::{Activation, Frame},
 };
-use moor_common::tasks::TaskId;
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
@@ -170,6 +173,14 @@ impl VMExecState {
         stack_top.map(|a| a.permissions).unwrap_or(NOTHING)
     }
 
+    /// Return the cached flags for the task permissions object.
+    pub(crate) fn task_perms_flags(&self) -> BitEnum<ObjFlag> {
+        let stack_top = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
+        stack_top
+            .map(|a| a.permissions_flags)
+            .unwrap_or_else(BitEnum::new)
+    }
+
     pub(crate) fn this(&self) -> Var {
         let stack_top = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
         stack_top.map(|a| a.this.clone()).unwrap_or(v_obj(NOTHING))
@@ -178,10 +189,14 @@ impl VMExecState {
     /// Update the permissions of the current task, as called by the `set_task_perms`
     /// built-in.
     pub(crate) fn set_task_perms(&mut self, perms: Obj) {
+        // Look up the flags for the new perms object
+        let perms_flags = with_current_transaction(|ws| ws.flags_of(&perms)).unwrap_or_default();
+
         // Copy the stack perms up to the last non-builtin. That is, make sure builtin-frames
         // get the permissions update, and the first non-builtin, too.
         for activation in self.stack.iter_mut().rev() {
             activation.permissions = perms;
+            activation.permissions_flags = perms_flags;
             if !activation.is_builtin_frame() {
                 break;
             }

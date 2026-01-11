@@ -21,6 +21,7 @@ use tracing::{debug, error, warn};
 use moor_common::{
     model::{ObjFlag, VerbDef},
     tasks::{AbortLimitReason, TaskId},
+    util::BitEnum,
 };
 use moor_compiler::{BuiltinId, CompileOptions, Offset, Program, compile};
 use moor_var::{E_MAXREC, Error, List, Obj, Symbol, Var, v_none};
@@ -176,7 +177,7 @@ impl VmHost {
         caller: Var,
         argstr: Var,
         command: ParsedCommand,
-        permissions: Obj,
+        permissions_flags: BitEnum<ObjFlag>,
         program: ProgramType,
     ) {
         self.vm_exec_state.start_time = Some(SystemTime::now());
@@ -184,7 +185,7 @@ impl VmHost {
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
         self.vm_exec_state.exec_command_request(
-            permissions,
+            permissions_flags,
             resolved_verb,
             verb_name,
             this,
@@ -203,7 +204,6 @@ impl VmHost {
     pub fn start_call_method_verb(
         &mut self,
         task_id: TaskId,
-        perms: Obj,
         resolved_verb: VerbDef,
         verb_name: Symbol,
         this: Var,
@@ -211,6 +211,7 @@ impl VmHost {
         args: List,
         caller: Var,
         argstr: Var,
+        permissions_flags: BitEnum<ObjFlag>,
         program: ProgramType,
     ) {
         self.vm_exec_state.start_time = Some(SystemTime::now());
@@ -218,7 +219,7 @@ impl VmHost {
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
         self.vm_exec_state.exec_call_request(
-            perms,
+            permissions_flags,
             resolved_verb,
             verb_name,
             this,
@@ -346,8 +347,11 @@ impl VmHost {
                     continue;
                 }
                 ExecutionResult::DispatchVerb(exec_request) => {
+                    let perms_flags =
+                        with_current_transaction(|ws| ws.flags_of(&exec_request.permissions))
+                            .unwrap_or_default();
                     self.vm_exec_state.exec_call_request(
-                        exec_request.permissions,
+                        perms_flags,
                         exec_request.resolved_verb,
                         exec_request.verb_name,
                         exec_request.this,
@@ -360,8 +364,11 @@ impl VmHost {
                     return ContinueOk;
                 }
                 ExecutionResult::DispatchCommandVerb(exec_request) => {
+                    let perms_flags =
+                        with_current_transaction(|ws| ws.flags_of(&exec_request.permissions))
+                            .unwrap_or_default();
                     self.vm_exec_state.exec_command_request(
-                        exec_request.permissions,
+                        perms_flags,
                         exec_request.resolved_verb,
                         exec_request.verb_name,
                         exec_request.this,

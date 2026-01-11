@@ -15,7 +15,8 @@
 
 use std::{sync::Arc, time::Duration};
 
-use moor_common::model::WorldState;
+use moor_common::model::{ObjFlag, WorldState};
+use moor_common::util::BitEnum;
 use moor_compiler::Program;
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, v_empty_str, v_obj};
 
@@ -174,10 +175,11 @@ pub fn call_verb(
         .find_method_verb_on(&SYSTEM_OBJECT, &SYSTEM_OBJECT, verb_name)
         .unwrap();
 
+    // Use wizard + programmer flags for testing
+    let permissions_flags = BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer;
     execute(world_state, session, builtins, |vm_host| {
         vm_host.start_call_method_verb(
             0,
-            SYSTEM_OBJECT,
             verbdef,
             verb_name,
             v_obj(SYSTEM_OBJECT),
@@ -185,6 +187,7 @@ pub fn call_verb(
             args,
             v_obj(SYSTEM_OBJECT),
             v_empty_str(),
+            permissions_flags,
             program,
         );
     })
@@ -240,7 +243,7 @@ impl ActivationBenchResult {
 /// This exposes `Activation::for_call` for micro-benchmarking frame creation costs.
 #[allow(clippy::too_many_arguments)]
 pub fn create_activation_for_bench(
-    permissions: Obj,
+    _permissions: Obj,
     verbdef: moor_common::model::VerbDef,
     verb_name: Symbol,
     this: Var,
@@ -250,9 +253,11 @@ pub fn create_activation_for_bench(
     argstr: Var,
     program: moor_var::program::ProgramType,
 ) -> ActivationBenchResult {
+    // Use wizard + programmer flags for benchmarking
+    let permissions_flags = BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer;
     let activation = crate::vm::activation::Activation::for_call(
-        permissions,
         verbdef,
+        permissions_flags,
         verb_name,
         this,
         player,
@@ -269,7 +274,7 @@ pub fn create_activation_for_bench(
 /// This exercises the `with_globals_from_source` path which copies parsing globals.
 #[allow(clippy::too_many_arguments)]
 pub fn create_nested_activation_for_bench(
-    permissions: Obj,
+    _permissions: Obj,
     verbdef: moor_common::model::VerbDef,
     verb_name: Symbol,
     this: Var,
@@ -280,9 +285,11 @@ pub fn create_nested_activation_for_bench(
     parent: &ActivationBenchResult,
     program: moor_var::program::ProgramType,
 ) -> ActivationBenchResult {
+    // Use wizard + programmer flags for benchmarking
+    let permissions_flags = BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer;
     let activation = crate::vm::activation::Activation::for_call(
-        permissions,
         verbdef,
+        permissions_flags,
         verb_name,
         this,
         player,

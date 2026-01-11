@@ -569,9 +569,11 @@ impl Task {
                         self.handling_uncaught_error = true;
 
                         // Set up the handler as a method call on SYSTEM_OBJECT
+                        let permissions_flags =
+                            with_current_transaction(|ws| ws.flags_of(&self.perms))
+                                .unwrap_or_default();
                         self.vm_host.start_call_method_verb(
                             self.task_id,
-                            self.perms,
                             verbdef,
                             *HANDLE_UNCAUGHT_ERROR_SYM,
                             v_obj(SYSTEM_OBJECT),
@@ -579,6 +581,7 @@ impl Task {
                             args,
                             v_obj(self.player),
                             v_empty_str(),
+                            permissions_flags,
                             program,
                         );
 
@@ -802,9 +805,11 @@ impl Task {
                         panic!("Could not resolve verb: {e:?}");
                     }
                     Ok((program, verbdef)) => {
+                        let permissions_flags =
+                            with_current_transaction(|ws| ws.flags_of(&self.perms))
+                                .unwrap_or_default();
                         self.vm_host.start_call_method_verb(
                             self.task_id,
-                            self.perms,
                             verbdef,
                             verb_name,
                             this,
@@ -812,6 +817,7 @@ impl Task {
                             args_val,
                             caller,
                             argstr_val,
+                            permissions_flags,
                             program,
                         );
                     }
@@ -860,9 +866,11 @@ impl Task {
                         return false;
                     }
                     Ok((program, verbdef)) => {
+                        let permissions_flags =
+                            with_current_transaction(|ws| ws.flags_of(&self.perms))
+                                .unwrap_or_default();
                         self.vm_host.start_call_method_verb(
                             self.task_id,
-                            self.perms,
                             verbdef,
                             *HANDLE_UNCAUGHT_ERROR_SYM,
                             v_obj(SYSTEM_OBJECT),
@@ -870,6 +878,7 @@ impl Task {
                             args.clone(),
                             v_obj(*player),
                             v_empty_str(),
+                            permissions_flags,
                             program,
                         );
                     }
@@ -914,9 +923,9 @@ impl Task {
             Ok((program, verbdef)) => {
                 let arguments = parse_into_words(command);
                 let args = List::from_iter(arguments.iter().map(|s| v_str(s)));
+                let permissions_flags = world_state.flags_of(&self.perms).unwrap_or_default();
                 self.vm_host.start_call_method_verb(
                     self.task_id,
-                    self.perms,
                     verbdef,
                     *DO_COMMAND_SYM,
                     v_obj(*handler_object),
@@ -924,6 +933,7 @@ impl Task {
                     args,
                     v_obj(*handler_object),
                     v_str(command),
+                    permissions_flags,
                     program,
                 );
                 self.state = TaskState::Prepared(TaskStart::StartDoCommand {
@@ -1004,6 +1014,7 @@ impl Task {
             }
         };
         let verb_owner = verbdef.owner();
+        let permissions_flags = world_state.flags_of(&verb_owner).unwrap_or_default();
         self.vm_host.start_call_command_verb(
             self.task_id,
             verbdef,
@@ -1014,7 +1025,7 @@ impl Task {
             v_obj(*player),
             v_string(parsed_command.argstr.clone()),
             parsed_command,
-            verb_owner,
+            permissions_flags,
             program,
         );
         Ok(())

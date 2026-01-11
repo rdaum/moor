@@ -33,6 +33,7 @@ use moor_common::{
     matching::ParsedCommand,
     model::{ObjFlag, VerbDef, WorldStateError},
     tasks::Session,
+    util::BitEnum,
 };
 use moor_compiler::{BUILTINS, BuiltinId, Program, to_literal};
 use moor_var::{
@@ -211,9 +212,7 @@ impl VMExecState {
                 .and_then(|v| v.as_object())
                 .filter(|fp| fp != &activation_player)
                 .map_or(activation_player, |fp| {
-                    let is_wiz =
-                        with_current_transaction_mut(|ws| ws.flags_of(&self.top().permissions))
-                            .is_ok_and(|f| f.contains(ObjFlag::Wizard));
+                    let is_wiz = self.task_perms_flags().contains(ObjFlag::Wizard);
                     if is_wiz { fp } else { activation_player }
                 })
         } else {
@@ -258,9 +257,11 @@ impl VMExecState {
         };
 
         // Permissions for the activation are the verb's owner.
-        let permissions = resolved_verb.owner();
+        let permissions_flags =
+            with_current_transaction_mut(|ws| ws.flags_of(&resolved_verb.owner()))
+                .unwrap_or_default();
         self.exec_call_request(
-            permissions,
+            permissions_flags,
             resolved_verb,
             verb_name,
             this,
@@ -335,7 +336,7 @@ impl VMExecState {
     #[allow(clippy::too_many_arguments)]
     pub fn exec_command_request(
         &mut self,
-        permissions: Obj,
+        permissions_flags: BitEnum<ObjFlag>,
         resolved_verb: VerbDef,
         verb_name: Symbol,
         this: Var,
@@ -348,8 +349,8 @@ impl VMExecState {
     ) {
         // Initial command activation - no parent to inherit from
         let mut a = Activation::for_call(
-            permissions,
             resolved_verb,
+            permissions_flags,
             verb_name,
             this,
             player,
@@ -412,7 +413,7 @@ impl VMExecState {
     #[allow(clippy::too_many_arguments)]
     pub fn exec_call_request(
         &mut self,
-        permissions: Obj,
+        permissions_flags: BitEnum<ObjFlag>,
         resolved_verb: VerbDef,
         verb_name: Symbol,
         this: Var,
@@ -426,8 +427,8 @@ impl VMExecState {
         let current_activation = self.stack.last();
 
         let a = Activation::for_call(
-            permissions,
             resolved_verb,
+            permissions_flags,
             verb_name,
             this,
             player,
@@ -467,7 +468,15 @@ impl VMExecState {
         program: Program,
         initial_env: Option<&[(Symbol, Var)]>,
     ) {
-        let a = Activation::for_eval(*permissions, player, program, initial_env);
+        let permissions_flags =
+            with_current_transaction_mut(|ws| ws.flags_of(permissions)).unwrap_or_default();
+        let a = Activation::for_eval(
+            *permissions,
+            permissions_flags,
+            player,
+            program,
+            initial_env,
+        );
         self.stack.push(a);
 
         // Emit VerbBegin trace event if this is a MOO eval

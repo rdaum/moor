@@ -14,6 +14,7 @@
 //! Conversion between kernel task types and FlatBuffer representations
 
 use crate::{
+    task_context::with_current_transaction,
     tasks::{
         TaskStart as KernelTaskStart,
         task::Task as KernelTask,
@@ -1212,6 +1213,9 @@ pub(crate) fn activation_from_ref(
     let permissions = convert_schema::obj_from_ref(permissions_ref)
         .map_err(|e| TaskConversionError::DecodingError(format!("permissions: {e}")))?;
 
+    let permissions_flags =
+        with_current_transaction(|ws| ws.flags_of(&permissions)).unwrap_or_default();
+
     Ok(KernelActivation {
         frame,
         this,
@@ -1220,6 +1224,7 @@ pub(crate) fn activation_from_ref(
         verb_name,
         verbdef,
         permissions,
+        permissions_flags,
     })
 }
 

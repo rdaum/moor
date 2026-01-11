@@ -18,7 +18,7 @@ use strum::EnumCount;
 use uuid::Uuid;
 
 use moor_common::{
-    model::{VerbArgsSpec, VerbDef, VerbFlag},
+    model::{ObjFlag, VerbArgsSpec, VerbDef, VerbFlag},
     util::BitEnum,
 };
 use moor_compiler::{BuiltinId, Program, ScatterLabel};
@@ -108,6 +108,9 @@ pub(crate) struct Activation {
     /// Set initially to verb owner ('programmer'). It is what set_task_perms() can override,
     /// and caller_perms() returns the value of this in the *parent* stack frame (or #-1 if none)
     pub(crate) permissions: Obj,
+    /// Cached flags for the permissions object, to avoid repeated DB lookups.
+    /// Updated when set_task_perms is called.
+    pub(crate) permissions_flags: BitEnum<ObjFlag>,
 }
 
 // Boxing MooStackFrame would add pointer indirection on every opcode dispatch,
@@ -205,8 +208,8 @@ impl Activation {
     #[allow(irrefutable_let_patterns)] // We know this is a Moo frame
     #[allow(clippy::too_many_arguments)]
     pub fn for_call(
-        _permissions: Obj,
         resolved_verb: VerbDef,
+        permissions_flags: BitEnum<ObjFlag>,
         verb_name: Symbol,
         this: Var,
         player: Obj,
@@ -261,6 +264,7 @@ impl Activation {
             verb_name,
             args,
             permissions: verb_owner,
+            permissions_flags,
         }
     }
 
@@ -456,11 +460,13 @@ impl Activation {
             verb_name: Symbol::mk(&lambda_name),
             args: args.iter().cloned().collect(),
             permissions: current_activation.permissions,
+            permissions_flags: current_activation.permissions_flags,
         })
     }
 
     pub fn for_eval(
         permissions: Obj,
+        permissions_flags: BitEnum<ObjFlag>,
         player: &Obj,
         program: Program,
         initial_env: Option<&[(Symbol, Var)]>,
@@ -504,6 +510,7 @@ impl Activation {
             verb_name: *EVAL_SYMBOL,
             args: List::mk_list(&[]),
             permissions,
+            permissions_flags,
         }
     }
 
@@ -539,6 +546,8 @@ impl Activation {
             verb_name: bf_name,
             args,
             permissions: NOTHING,
+            // NOTHING has no flags
+            permissions_flags: BitEnum::new(),
         }
     }
 
