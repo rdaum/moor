@@ -925,10 +925,10 @@ impl ConnectionRegistry for FjallConnectionRegistry {
                     .map(|ts| ts.last_activity)
                     .unwrap_or(existing_cr.last_activity);
 
-                if let Ok(idle) = now.duration_since(last_activity) {
-                    if idle >= ORPHAN_THRESHOLD {
-                        return false; // Stale connection, likely orphaned
-                    }
+                if let Ok(idle) = now.duration_since(last_activity)
+                    && idle >= ORPHAN_THRESHOLD
+                {
+                    return false; // Stale connection, likely orphaned
                 }
 
                 true // Keep this connection

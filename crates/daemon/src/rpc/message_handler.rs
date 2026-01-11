@@ -1039,30 +1039,28 @@ impl RpcMessageHandler {
         }
 
         // Only trigger user_disconnected on explicit logout AND if no connections remain
-        if is_logout {
-            if let Some(player) = player {
-                match self.connections.client_ids_for(player) {
-                    Ok(remaining_clients) if remaining_clients.is_empty() => {
-                        if let Err(e) = self.submit_disconnected_task(
-                            &SYSTEM_OBJECT,
-                            scheduler_client,
-                            client_id,
-                            &player,
-                            &connection,
-                        ) {
-                            error!(error = ?e, "Error submitting user_disconnected task");
-                        }
+        if is_logout && let Some(player) = player {
+            match self.connections.client_ids_for(player) {
+                Ok(remaining_clients) if remaining_clients.is_empty() => {
+                    if let Err(e) = self.submit_disconnected_task(
+                        &SYSTEM_OBJECT,
+                        scheduler_client,
+                        client_id,
+                        &player,
+                        &connection,
+                    ) {
+                        error!(error = ?e, "Error submitting user_disconnected task");
                     }
-                    Ok(remaining_clients) => {
-                        debug!(
-                            player = ?player,
-                            remaining_connections = remaining_clients.len(),
-                            "Player still has active connections after logout"
-                        );
-                    }
-                    Err(e) => {
-                        error!(error = ?e, "Error checking remaining connections for player");
-                    }
+                }
+                Ok(remaining_clients) => {
+                    debug!(
+                        player = ?player,
+                        remaining_connections = remaining_clients.len(),
+                        "Player still has active connections after logout"
+                    );
+                }
+                Err(e) => {
+                    error!(error = ?e, "Error checking remaining connections for player");
                 }
             }
         }
