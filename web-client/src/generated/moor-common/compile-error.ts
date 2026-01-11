@@ -6,7 +6,7 @@ import {
     CompileErrorUnion,
     unionListToCompileErrorUnion,
     unionToCompileErrorUnion,
-} from "../moor-common/compile-error-union.js";
+} from "../moor-common/compile-error-union";
 
 export class CompileError {
     bb: flatbuffers.ByteBuffer | null = null;

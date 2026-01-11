@@ -905,7 +905,8 @@ union ClientEventUnion {
     TaskSuccessEvent,
     TaskSuspendedEvent,
     PlayerSwitchedEvent,
-    SetConnectionOptionEvent
+    SetConnectionOptionEvent,
+    CredentialsUpdatedEvent
 }
 
 table NarrativeEventMessage {
@@ -954,6 +955,13 @@ table SetConnectionOptionEvent {
     connection_obj: MoorCommon.Obj (required);
     option_name: MoorCommon.Symbol (required);
     value: MoorVar.Var (required);
+}
+
+// Sent when WebSocket reattach fails and a new connection is created.
+// Client should update stored credentials with these new values.
+table CredentialsUpdatedEvent {
+    client_id: MoorCommon.Uuid (required);
+    client_token: ClientToken (required);
 }
 
 table ClientEvent {

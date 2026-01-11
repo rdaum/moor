@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Exception } from "../moor-common/exception.js";
+import { Exception } from "../moor-common/exception";
 
 export class TracebackEvent {
     bb: flatbuffers.ByteBuffer | null = null;

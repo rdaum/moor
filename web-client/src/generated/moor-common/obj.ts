@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { ObjUnion, unionListToObjUnion, unionToObjUnion } from "../moor-common/obj-union.js";
+import { ObjUnion, unionListToObjUnion, unionToObjUnion } from "../moor-common/obj-union";
 
 export class Obj {
     bb: flatbuffers.ByteBuffer | null = null;

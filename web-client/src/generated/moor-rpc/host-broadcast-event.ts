@@ -6,7 +6,7 @@ import {
     HostBroadcastEventUnion,
     unionListToHostBroadcastEventUnion,
     unionToHostBroadcastEventUnion,
-} from "../moor-rpc/host-broadcast-event-union.js";
+} from "../moor-rpc/host-broadcast-event-union";
 
 export class HostBroadcastEvent {
     bb: flatbuffers.ByteBuffer | null = null;

@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { ObjectRefUnion, unionListToObjectRefUnion, unionToObjectRefUnion } from "../moor-common/object-ref-union.js";
+import { ObjectRefUnion, unionListToObjectRefUnion, unionToObjectRefUnion } from "../moor-common/object-ref-union";
 
 export class ObjectRef {
     bb: flatbuffers.ByteBuffer | null = null;

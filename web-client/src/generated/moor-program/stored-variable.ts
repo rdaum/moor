@@ -6,7 +6,7 @@ import {
     StoredVarNameUnion,
     unionListToStoredVarNameUnion,
     unionToStoredVarNameUnion,
-} from "../moor-program/stored-var-name-union.js";
+} from "../moor-program/stored-var-name-union";
 
 export class StoredVariable {
     bb: flatbuffers.ByteBuffer | null = null;

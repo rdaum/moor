@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Activation } from "../moor-task/activation.js";
+import { Activation } from "../moor-task/activation";
 
 export class VMExecState {
     bb: flatbuffers.ByteBuffer | null = null;

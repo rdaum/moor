@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Task } from "../moor-task/task.js";
-import { WakeCondition } from "../moor-task/wake-condition.js";
+import { Task } from "../moor-task/task";
+import { WakeCondition } from "../moor-task/wake-condition";
 
 export class SuspendedTask {
     bb: flatbuffers.ByteBuffer | null = null;

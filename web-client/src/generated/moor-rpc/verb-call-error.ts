@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { SchedulerError } from "../moor-rpc/scheduler-error.js";
+import { SchedulerError } from "../moor-rpc/scheduler-error";
 
 export class VerbCallError {
     bb: flatbuffers.ByteBuffer | null = null;

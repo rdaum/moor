@@ -2,14 +2,14 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { StoredProgram } from "../moor-program/stored-program.js";
-import { CapturedVar } from "../moor-task/captured-var.js";
-import { CatchHandler } from "../moor-task/catch-handler.js";
-import { EnvironmentScope } from "../moor-task/environment-scope.js";
-import { FinallyReason } from "../moor-task/finally-reason.js";
-import { PcType } from "../moor-task/pc-type.js";
-import { Scope } from "../moor-task/scope.js";
-import { Var } from "../moor-var/var.js";
+import { StoredProgram } from "../moor-program/stored-program";
+import { CapturedVar } from "../moor-task/captured-var";
+import { CatchHandler } from "../moor-task/catch-handler";
+import { EnvironmentScope } from "../moor-task/environment-scope";
+import { FinallyReason } from "../moor-task/finally-reason";
+import { PcType } from "../moor-task/pc-type";
+import { Scope } from "../moor-task/scope";
+import { Var } from "../moor-var/var";
 
 export class MooStackFrame {
     bb: flatbuffers.ByteBuffer | null = null;

@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { HostClientToDaemonMessage } from "../moor-rpc/host-client-to-daemon-message.js";
+import { HostClientToDaemonMessage } from "../moor-rpc/host-client-to-daemon-message";
 
 export class HostClientToDaemonMsg {
     bb: flatbuffers.ByteBuffer | null = null;

@@ -6,7 +6,7 @@ import {
     unionListToVerbProgramResponseUnion,
     unionToVerbProgramResponseUnion,
     VerbProgramResponseUnion,
-} from "../moor-rpc/verb-program-response-union.js";
+} from "../moor-rpc/verb-program-response-union";
 
 export class VerbProgramResponse {
     bb: flatbuffers.ByteBuffer | null = null;

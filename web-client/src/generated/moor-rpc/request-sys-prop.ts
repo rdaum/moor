@@ -2,9 +2,9 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { ObjectRef } from "../moor-common/object-ref.js";
-import { Symbol } from "../moor-common/symbol.js";
-import { AuthToken } from "../moor-rpc/auth-token.js";
+import { ObjectRef } from "../moor-common/object-ref";
+import { Symbol } from "../moor-common/symbol";
+import { AuthToken } from "../moor-rpc/auth-token";
 
 export class RequestSysProp {
     bb: flatbuffers.ByteBuffer | null = null;

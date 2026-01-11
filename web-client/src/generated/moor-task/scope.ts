@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { ScopeType } from "../moor-task/scope-type.js";
+import { ScopeType } from "../moor-task/scope-type";
 
 export class Scope {
     bb: flatbuffers.ByteBuffer | null = null;

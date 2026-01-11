@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { RpcMessageErrorCode } from "../moor-rpc/rpc-message-error-code.js";
-import { SchedulerError } from "../moor-rpc/scheduler-error.js";
+import { RpcMessageErrorCode } from "../moor-rpc/rpc-message-error-code";
+import { SchedulerError } from "../moor-rpc/scheduler-error";
 
 export class RpcMessageError {
     bb: flatbuffers.ByteBuffer | null = null;

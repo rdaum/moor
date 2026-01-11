@@ -6,7 +6,7 @@ import {
     unionListToWorldStateErrorUnion,
     unionToWorldStateErrorUnion,
     WorldStateErrorUnion,
-} from "../moor-common/world-state-error-union.js";
+} from "../moor-common/world-state-error-union";
 
 export class WorldStateError {
     bb: flatbuffers.ByteBuffer | null = null;

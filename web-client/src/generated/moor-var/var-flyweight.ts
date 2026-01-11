@@ -2,9 +2,9 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Obj } from "../moor-common/obj.js";
-import { FlyweightSlot } from "../moor-var/flyweight-slot.js";
-import { VarList } from "../moor-var/var-list.js";
+import { Obj } from "../moor-common/obj";
+import { FlyweightSlot } from "../moor-var/flyweight-slot";
+import { VarList } from "../moor-var/var-list";
 
 export class VarFlyweight {
     bb: flatbuffers.ByteBuffer | null = null;

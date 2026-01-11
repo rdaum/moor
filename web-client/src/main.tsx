@@ -1157,12 +1157,12 @@ function AppContent({
             if (flagsParam) {
                 localStorage.setItem("oauth2_player_flags", flagsParam);
             }
-            // Store client credentials for transparent reconnection
+            // Store connection credentials for this tab (sessionStorage = per-tab)
             if (clientTokenParam) {
-                localStorage.setItem("client_token", clientTokenParam);
+                sessionStorage.setItem("client_token", clientTokenParam);
             }
             if (clientIdParam) {
-                localStorage.setItem("client_id", clientIdParam);
+                sessionStorage.setItem("client_id", clientIdParam);
             }
 
             showMessage("Logged in successfully via OAuth2!", 2);
@@ -1233,12 +1233,12 @@ function AppContent({
                 if (result.player_flags !== undefined) {
                     localStorage.setItem("oauth2_player_flags", result.player_flags.toString());
                 }
-                // Store client credentials for transparent reconnection
+                // Store connection credentials for this tab (sessionStorage = per-tab)
                 if (result.client_token) {
-                    localStorage.setItem("client_token", result.client_token);
+                    sessionStorage.setItem("client_token", result.client_token);
                 }
                 if (result.client_id) {
-                    localStorage.setItem("client_id", result.client_id);
+                    sessionStorage.setItem("client_id", result.client_id);
                 }
 
                 // If encryption password was provided, store it temporarily for auto-setup after reload

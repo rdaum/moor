@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Fork } from "../moor-task/fork.js";
+import { Fork } from "../moor-task/fork";
 
 export class StartFork {
     bb: flatbuffers.ByteBuffer | null = null;

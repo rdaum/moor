@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { CompileError } from "../moor-common/compile-error.js";
+import { CompileError } from "../moor-common/compile-error";
 
 export class VerbCompilationError {
     bb: flatbuffers.ByteBuffer | null = null;

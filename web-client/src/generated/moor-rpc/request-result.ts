@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Uuid } from "../moor-common/uuid.js";
-import { Var } from "../moor-var/var.js";
+import { Uuid } from "../moor-common/uuid";
+import { Var } from "../moor-var/var";
 
 export class RequestResult {
     bb: flatbuffers.ByteBuffer | null = null;

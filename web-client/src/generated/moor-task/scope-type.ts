@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { ScopeTypeUnion, unionListToScopeTypeUnion, unionToScopeTypeUnion } from "../moor-task/scope-type-union.js";
+import { ScopeTypeUnion, unionListToScopeTypeUnion, unionToScopeTypeUnion } from "../moor-task/scope-type-union";
 
 export class ScopeType {
     bb: flatbuffers.ByteBuffer | null = null;

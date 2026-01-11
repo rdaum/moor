@@ -6,7 +6,7 @@ import {
     unionListToVerbProgramErrorUnion,
     unionToVerbProgramErrorUnion,
     VerbProgramErrorUnion,
-} from "../moor-rpc/verb-program-error-union.js";
+} from "../moor-rpc/verb-program-error-union";
 
 export class VerbProgramError {
     bb: flatbuffers.ByteBuffer | null = null;

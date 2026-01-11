@@ -2,11 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import {
-    ClientEventUnion,
-    unionListToClientEventUnion,
-    unionToClientEventUnion,
-} from "../moor-rpc/client-event-union.js";
+import { ClientEventUnion, unionListToClientEventUnion, unionToClientEventUnion } from "../moor-rpc/client-event-union";
 
 export class ClientEvent {
     bb: flatbuffers.ByteBuffer | null = null;

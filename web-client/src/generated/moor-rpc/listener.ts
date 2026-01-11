@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Obj } from "../moor-common/obj.js";
+import { Obj } from "../moor-common/obj";
 
 export class Listener {
     bb: flatbuffers.ByteBuffer | null = null;

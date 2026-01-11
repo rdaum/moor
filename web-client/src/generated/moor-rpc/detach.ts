@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { ClientToken } from "../moor-rpc/client-token.js";
+import { ClientToken } from "../moor-rpc/client-token";
 
 export class Detach {
     bb: flatbuffers.ByteBuffer | null = null;

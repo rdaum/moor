@@ -2,9 +2,9 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Event } from "../moor-common/event.js";
-import { Uuid } from "../moor-common/uuid.js";
-import { Var } from "../moor-var/var.js";
+import { Event } from "../moor-common/event";
+import { Uuid } from "../moor-common/uuid";
+import { Var } from "../moor-var/var";
 
 export class NarrativeEvent {
     bb: flatbuffers.ByteBuffer | null = null;

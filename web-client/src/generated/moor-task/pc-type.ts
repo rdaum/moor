@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { PcTypeUnion, unionListToPcTypeUnion, unionToPcTypeUnion } from "../moor-task/pc-type-union.js";
+import { PcTypeUnion, unionListToPcTypeUnion, unionToPcTypeUnion } from "../moor-task/pc-type-union";
 
 export class PcType {
     bb: flatbuffers.ByteBuffer | null = null;

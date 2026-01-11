@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { RpcMessageError } from "../moor-rpc/rpc-message-error.js";
+import { RpcMessageError } from "../moor-rpc/rpc-message-error";
 
 export class Failure {
     bb: flatbuffers.ByteBuffer | null = null;

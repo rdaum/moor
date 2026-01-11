@@ -6,7 +6,7 @@ import {
     DaemonToClientReplyUnion,
     unionListToDaemonToClientReplyUnion,
     unionToDaemonToClientReplyUnion,
-} from "../moor-rpc/daemon-to-client-reply-union.js";
+} from "../moor-rpc/daemon-to-client-reply-union";
 
 export class DaemonToClientReply {
     bb: flatbuffers.ByteBuffer | null = null;

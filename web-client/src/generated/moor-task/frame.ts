@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { FrameUnion, unionListToFrameUnion, unionToFrameUnion } from "../moor-task/frame-union.js";
+import { FrameUnion, unionListToFrameUnion, unionToFrameUnion } from "../moor-task/frame-union";
 
 export class Frame {
     bb: flatbuffers.ByteBuffer | null = null;

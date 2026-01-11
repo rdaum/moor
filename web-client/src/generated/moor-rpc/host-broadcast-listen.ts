@@ -2,9 +2,9 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Obj } from "../moor-common/obj.js";
-import { HostType } from "../moor-rpc/host-type.js";
-import { VarMapPair } from "../moor-var/var-map-pair.js";
+import { Obj } from "../moor-common/obj";
+import { HostType } from "../moor-rpc/host-type";
+import { VarMapPair } from "../moor-var/var-map-pair";
 
 export class HostBroadcastListen {
     bb: flatbuffers.ByteBuffer | null = null;

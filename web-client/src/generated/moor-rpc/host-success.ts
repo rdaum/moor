@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { DaemonToHostReply } from "../moor-rpc/daemon-to-host-reply.js";
+import { DaemonToHostReply } from "../moor-rpc/daemon-to-host-reply";
 
 export class HostSuccess {
     bb: flatbuffers.ByteBuffer | null = null;

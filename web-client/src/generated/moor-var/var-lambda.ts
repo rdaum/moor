@@ -2,10 +2,10 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { StoredName } from "../moor-program/stored-name.js";
-import { StoredProgram } from "../moor-program/stored-program.js";
-import { StoredScatterArgs } from "../moor-program/stored-scatter-args.js";
-import { VarList } from "../moor-var/var-list.js";
+import { StoredName } from "../moor-program/stored-name";
+import { StoredProgram } from "../moor-program/stored-program";
+import { StoredScatterArgs } from "../moor-program/stored-scatter-args";
+import { VarList } from "../moor-var/var-list";
 
 export class VarLambda {
     bb: flatbuffers.ByteBuffer | null = null;

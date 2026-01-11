@@ -2,9 +2,9 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { ErrorCode } from "../moor-common/error-code.js";
-import { Symbol } from "../moor-common/symbol.js";
-import { Var } from "../moor-var/var.js";
+import { ErrorCode } from "../moor-common/error-code";
+import { Symbol } from "../moor-common/symbol";
+import { Var } from "../moor-var/var";
 
 export class Error {
     bb: flatbuffers.ByteBuffer | null = null;

@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { BfFrame } from "../moor-task/bf-frame.js";
+import { BfFrame } from "../moor-task/bf-frame";
 
 export class BfFrameWrapper {
     bb: flatbuffers.ByteBuffer | null = null;

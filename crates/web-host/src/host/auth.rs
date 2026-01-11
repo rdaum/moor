@@ -187,10 +187,8 @@ async fn auth_handler(
         }
     };
 
-    // Don't detach - keep the connection open so the WebSocket can reattach to it.
-    // The connection will be cleaned up when the user logs out or the session times out.
-
-    // Return the entire ReplyResult FlatBuffer which includes player_flags
+    // Keep the connection alive - WebSocket will reattach to it, preserving the connection ID
+    // from :do_login_command. This is the user's "real" connection.
     Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/x-flatbuffer")
@@ -201,6 +199,9 @@ async fn auth_handler(
         .unwrap()
 }
 
+/// Authenticate an HTTP request and create an ephemeral connection.
+/// Unlike WebSocket, HTTP calls don't need to reattach - they create fresh
+/// ephemeral connections that are cleaned up after the request completes.
 pub async fn auth_auth(
     host: WebHost,
     addr: SocketAddr,
@@ -208,29 +209,8 @@ pub async fn auth_auth(
 ) -> Result<(AuthToken, Uuid, ClientToken, RpcClient), StatusCode> {
     let auth_token = extract_auth_token_header(&header_map)?;
 
-    if let Some((client_id, client_token)) = extract_client_credentials(&header_map) {
-        match host
-            .reattach_authenticated(auth_token.clone(), client_id, client_token.clone(), addr)
-            .await
-        {
-            Ok((_player, _, confirmed_token, rpc_client)) => {
-                return Ok((auth_token, client_id, confirmed_token, rpc_client));
-            }
-            Err(WsHostError::AuthenticationFailed) => {
-                // Expected when connection was removed on soft detach (page reload)
-                // Fall through to attach_authenticated with NoConnect
-                debug!(
-                    client_id = ?client_id,
-                    "Reattach failed, falling back to attach flow"
-                );
-            }
-            Err(WsHostError::RpcError(e)) => {
-                error!("Reattach RPC failure: {}", e);
-                return Err(StatusCode::INTERNAL_SERVER_ERROR);
-            }
-        }
-    }
-
+    // HTTP calls always create fresh ephemeral connections.
+    // Only WebSocket needs reattach to preserve connection ID from login.
     host.attach_authenticated(
         auth_token.clone(),
         Some(moor_rpc::ConnectType::NoConnect),

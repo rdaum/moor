@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Error } from "../moor-common/error.js";
-import { Var } from "../moor-var/var.js";
+import { Error } from "../moor-common/error";
+import { Var } from "../moor-var/var";
 
 export class Exception {
     bb: flatbuffers.ByteBuffer | null = null;

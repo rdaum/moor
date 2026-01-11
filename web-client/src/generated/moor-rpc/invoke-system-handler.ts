@@ -2,9 +2,9 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Uuid } from "../moor-common/uuid.js";
-import { AuthToken } from "../moor-rpc/auth-token.js";
-import { Var } from "../moor-var/var.js";
+import { Uuid } from "../moor-common/uuid";
+import { AuthToken } from "../moor-rpc/auth-token";
+import { Var } from "../moor-var/var";
 
 export class InvokeSystemHandler {
     bb: flatbuffers.ByteBuffer | null = null;

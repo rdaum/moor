@@ -6,7 +6,7 @@ import {
     StoredScatterLabelUnion,
     unionListToStoredScatterLabelUnion,
     unionToStoredScatterLabelUnion,
-} from "../moor-program/stored-scatter-label-union.js";
+} from "../moor-program/stored-scatter-label-union";
 
 export class StoredScatterLabel {
     bb: flatbuffers.ByteBuffer | null = null;

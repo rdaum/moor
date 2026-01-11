@@ -6,7 +6,7 @@ import {
     ClientsBroadcastEventUnion,
     unionListToClientsBroadcastEventUnion,
     unionToClientsBroadcastEventUnion,
-} from "../moor-rpc/clients-broadcast-event-union.js";
+} from "../moor-rpc/clients-broadcast-event-union";
 
 export class ClientsBroadcastEvent {
     bb: flatbuffers.ByteBuffer | null = null;

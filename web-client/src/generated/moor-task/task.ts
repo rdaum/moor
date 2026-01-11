@@ -2,11 +2,11 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Exception } from "../moor-common/exception.js";
-import { Obj } from "../moor-common/obj.js";
-import { TaskState } from "../moor-task/task-state.js";
-import { VmHost } from "../moor-task/vm-host.js";
-import { VMExecState } from "../moor-task/vmexec-state.js";
+import { Exception } from "../moor-common/exception";
+import { Obj } from "../moor-common/obj";
+import { TaskState } from "../moor-task/task-state";
+import { VmHost } from "../moor-task/vm-host";
+import { VMExecState } from "../moor-task/vmexec-state";
 
 export class Task {
     bb: flatbuffers.ByteBuffer | null = null;

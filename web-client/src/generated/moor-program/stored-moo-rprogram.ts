@@ -2,19 +2,18 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Symbol } from "../moor-common/symbol.js";
-import { ForkLineSpans } from "../moor-program/fork-line-spans.js";
-import { ForkVector } from "../moor-program/fork-vector.js";
-import { LineSpan } from "../moor-program/line-span.js";
-import { StoredErrorOperand } from "../moor-program/stored-error-operand.js";
-import { StoredForRangeOperand } from "../moor-program/stored-for-range-operand.js";
-import { StoredForSequenceOperand } from "../moor-program/stored-for-sequence-operand.js";
-import { StoredJumpLabel } from "../moor-program/stored-jump-label.js";
-import { StoredListComprehend } from "../moor-program/stored-list-comprehend.js";
-import { StoredNames } from "../moor-program/stored-names.js";
-import { StoredRangeComprehend } from "../moor-program/stored-range-comprehend.js";
-import { StoredScatterArgs } from "../moor-program/stored-scatter-args.js";
-import { Var } from "../moor-var/var.js";
+import { ForkLineSpans } from "../moor-program/fork-line-spans";
+import { ForkVector } from "../moor-program/fork-vector";
+import { LineSpan } from "../moor-program/line-span";
+import { StoredErrorOperand } from "../moor-program/stored-error-operand";
+import { StoredForRangeOperand } from "../moor-program/stored-for-range-operand";
+import { StoredForSequenceOperand } from "../moor-program/stored-for-sequence-operand";
+import { StoredJumpLabel } from "../moor-program/stored-jump-label";
+import { StoredListComprehend } from "../moor-program/stored-list-comprehend";
+import { StoredNames } from "../moor-program/stored-names";
+import { StoredRangeComprehend } from "../moor-program/stored-range-comprehend";
+import { StoredScatterArgs } from "../moor-program/stored-scatter-args";
+import { Var } from "../moor-var/var";
 
 export class StoredMooRProgram {
     bb: flatbuffers.ByteBuffer | null = null;
@@ -42,18 +41,23 @@ export class StoredMooRProgram {
         return offset ? this.bb!.readUint16(this.bb_pos + offset) : 0;
     }
 
-    mainVector(index: number): number | null {
+    builtinSignature(): bigint {
         const offset = this.bb!.__offset(this.bb_pos, 6);
+        return offset ? this.bb!.readUint64(this.bb_pos + offset) : BigInt("0");
+    }
+
+    mainVector(index: number): number | null {
+        const offset = this.bb!.__offset(this.bb_pos, 8);
         return offset ? this.bb!.readUint16(this.bb!.__vector(this.bb_pos + offset) + index * 2) : 0;
     }
 
     mainVectorLength(): number {
-        const offset = this.bb!.__offset(this.bb_pos, 6);
+        const offset = this.bb!.__offset(this.bb_pos, 8);
         return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
     }
 
     mainVectorArray(): Uint16Array | null {
-        const offset = this.bb!.__offset(this.bb_pos, 6);
+        const offset = this.bb!.__offset(this.bb_pos, 8);
         return offset
             ? new Uint16Array(
                 this.bb!.bytes().buffer,
@@ -64,7 +68,7 @@ export class StoredMooRProgram {
     }
 
     forkVectors(index: number, obj?: ForkVector): ForkVector | null {
-        const offset = this.bb!.__offset(this.bb_pos, 8);
+        const offset = this.bb!.__offset(this.bb_pos, 10);
         return offset
             ? (obj || new ForkVector()).__init(
                 this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4),
@@ -74,12 +78,12 @@ export class StoredMooRProgram {
     }
 
     forkVectorsLength(): number {
-        const offset = this.bb!.__offset(this.bb_pos, 8);
+        const offset = this.bb!.__offset(this.bb_pos, 10);
         return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
     }
 
     literals(index: number, obj?: Var): Var | null {
-        const offset = this.bb!.__offset(this.bb_pos, 10);
+        const offset = this.bb!.__offset(this.bb_pos, 12);
         return offset
             ? (obj || new Var()).__init(
                 this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4),
@@ -89,12 +93,12 @@ export class StoredMooRProgram {
     }
 
     literalsLength(): number {
-        const offset = this.bb!.__offset(this.bb_pos, 10);
+        const offset = this.bb!.__offset(this.bb_pos, 12);
         return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
     }
 
     jumpLabels(index: number, obj?: StoredJumpLabel): StoredJumpLabel | null {
-        const offset = this.bb!.__offset(this.bb_pos, 12);
+        const offset = this.bb!.__offset(this.bb_pos, 14);
         return offset
             ? (obj || new StoredJumpLabel()).__init(
                 this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4),
@@ -104,28 +108,13 @@ export class StoredMooRProgram {
     }
 
     jumpLabelsLength(): number {
-        const offset = this.bb!.__offset(this.bb_pos, 12);
+        const offset = this.bb!.__offset(this.bb_pos, 14);
         return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
     }
 
     varNames(obj?: StoredNames): StoredNames | null {
-        const offset = this.bb!.__offset(this.bb_pos, 14);
+        const offset = this.bb!.__offset(this.bb_pos, 16);
         return offset ? (obj || new StoredNames()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
-    }
-
-    symbolTable(index: number, obj?: Symbol): Symbol | null {
-        const offset = this.bb!.__offset(this.bb_pos, 16);
-        return offset
-            ? (obj || new Symbol()).__init(
-                this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4),
-                this.bb!,
-            )
-            : null;
-    }
-
-    symbolTableLength(): number {
-        const offset = this.bb!.__offset(this.bb_pos, 16);
-        return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
     }
 
     scatterTables(index: number, obj?: StoredScatterArgs): StoredScatterArgs | null {
@@ -203,29 +192,8 @@ export class StoredMooRProgram {
         return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
     }
 
-    errorOperands(index: number): number | null {
-        const offset = this.bb!.__offset(this.bb_pos, 28);
-        return offset ? this.bb!.readUint8(this.bb!.__vector(this.bb_pos + offset) + index) : 0;
-    }
-
-    errorOperandsLength(): number {
-        const offset = this.bb!.__offset(this.bb_pos, 28);
-        return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
-    }
-
-    errorOperandsArray(): Uint8Array | null {
-        const offset = this.bb!.__offset(this.bb_pos, 28);
-        return offset
-            ? new Uint8Array(
-                this.bb!.bytes().buffer,
-                this.bb!.bytes().byteOffset + this.bb!.__vector(this.bb_pos + offset),
-                this.bb!.__vector_len(this.bb_pos + offset),
-            )
-            : null;
-    }
-
     errorOperandsFull(index: number, obj?: StoredErrorOperand): StoredErrorOperand | null {
-        const offset = this.bb!.__offset(this.bb_pos, 30);
+        const offset = this.bb!.__offset(this.bb_pos, 28);
         return offset
             ? (obj || new StoredErrorOperand()).__init(
                 this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4),
@@ -235,12 +203,12 @@ export class StoredMooRProgram {
     }
 
     errorOperandsFullLength(): number {
-        const offset = this.bb!.__offset(this.bb_pos, 30);
+        const offset = this.bb!.__offset(this.bb_pos, 28);
         return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
     }
 
     lambdaPrograms(index: number, obj?: StoredMooRProgram): StoredMooRProgram | null {
-        const offset = this.bb!.__offset(this.bb_pos, 32);
+        const offset = this.bb!.__offset(this.bb_pos, 30);
         return offset
             ? (obj || new StoredMooRProgram()).__init(
                 this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4),
@@ -250,12 +218,12 @@ export class StoredMooRProgram {
     }
 
     lambdaProgramsLength(): number {
-        const offset = this.bb!.__offset(this.bb_pos, 32);
+        const offset = this.bb!.__offset(this.bb_pos, 30);
         return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
     }
 
     lineNumberSpans(index: number, obj?: LineSpan): LineSpan | null {
-        const offset = this.bb!.__offset(this.bb_pos, 34);
+        const offset = this.bb!.__offset(this.bb_pos, 32);
         return offset
             ? (obj || new LineSpan()).__init(
                 this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4),
@@ -265,12 +233,12 @@ export class StoredMooRProgram {
     }
 
     lineNumberSpansLength(): number {
-        const offset = this.bb!.__offset(this.bb_pos, 34);
+        const offset = this.bb!.__offset(this.bb_pos, 32);
         return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
     }
 
     forkLineNumberSpans(index: number, obj?: ForkLineSpans): ForkLineSpans | null {
-        const offset = this.bb!.__offset(this.bb_pos, 36);
+        const offset = this.bb!.__offset(this.bb_pos, 34);
         return offset
             ? (obj || new ForkLineSpans()).__init(
                 this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4),
@@ -280,20 +248,24 @@ export class StoredMooRProgram {
     }
 
     forkLineNumberSpansLength(): number {
-        const offset = this.bb!.__offset(this.bb_pos, 36);
+        const offset = this.bb!.__offset(this.bb_pos, 34);
         return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
     }
 
     static startStoredMooRProgram(builder: flatbuffers.Builder) {
-        builder.startObject(17);
+        builder.startObject(16);
     }
 
     static addVersion(builder: flatbuffers.Builder, version: number) {
         builder.addFieldInt16(0, version, 0);
     }
 
+    static addBuiltinSignature(builder: flatbuffers.Builder, builtinSignature: bigint) {
+        builder.addFieldInt64(1, builtinSignature, BigInt("0"));
+    }
+
     static addMainVector(builder: flatbuffers.Builder, mainVectorOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(1, mainVectorOffset, 0);
+        builder.addFieldOffset(2, mainVectorOffset, 0);
     }
 
     static createMainVectorVector(builder: flatbuffers.Builder, data: number[] | Uint16Array): flatbuffers.Offset;
@@ -317,7 +289,7 @@ export class StoredMooRProgram {
     }
 
     static addForkVectors(builder: flatbuffers.Builder, forkVectorsOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(2, forkVectorsOffset, 0);
+        builder.addFieldOffset(3, forkVectorsOffset, 0);
     }
 
     static createForkVectorsVector(builder: flatbuffers.Builder, data: flatbuffers.Offset[]): flatbuffers.Offset {
@@ -333,7 +305,7 @@ export class StoredMooRProgram {
     }
 
     static addLiterals(builder: flatbuffers.Builder, literalsOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(3, literalsOffset, 0);
+        builder.addFieldOffset(4, literalsOffset, 0);
     }
 
     static createLiteralsVector(builder: flatbuffers.Builder, data: flatbuffers.Offset[]): flatbuffers.Offset {
@@ -349,7 +321,7 @@ export class StoredMooRProgram {
     }
 
     static addJumpLabels(builder: flatbuffers.Builder, jumpLabelsOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(4, jumpLabelsOffset, 0);
+        builder.addFieldOffset(5, jumpLabelsOffset, 0);
     }
 
     static createJumpLabelsVector(builder: flatbuffers.Builder, data: flatbuffers.Offset[]): flatbuffers.Offset {
@@ -365,23 +337,7 @@ export class StoredMooRProgram {
     }
 
     static addVarNames(builder: flatbuffers.Builder, varNamesOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(5, varNamesOffset, 0);
-    }
-
-    static addSymbolTable(builder: flatbuffers.Builder, symbolTableOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(6, symbolTableOffset, 0);
-    }
-
-    static createSymbolTableVector(builder: flatbuffers.Builder, data: flatbuffers.Offset[]): flatbuffers.Offset {
-        builder.startVector(4, data.length, 4);
-        for (let i = data.length - 1; i >= 0; i--) {
-            builder.addOffset(data[i]!);
-        }
-        return builder.endVector();
-    }
-
-    static startSymbolTableVector(builder: flatbuffers.Builder, numElems: number) {
-        builder.startVector(4, numElems, 4);
+        builder.addFieldOffset(6, varNamesOffset, 0);
     }
 
     static addScatterTables(builder: flatbuffers.Builder, scatterTablesOffset: flatbuffers.Offset) {
@@ -473,24 +429,8 @@ export class StoredMooRProgram {
         builder.startVector(4, numElems, 4);
     }
 
-    static addErrorOperands(builder: flatbuffers.Builder, errorOperandsOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(12, errorOperandsOffset, 0);
-    }
-
-    static createErrorOperandsVector(builder: flatbuffers.Builder, data: number[] | Uint8Array): flatbuffers.Offset {
-        builder.startVector(1, data.length, 1);
-        for (let i = data.length - 1; i >= 0; i--) {
-            builder.addInt8(data[i]!);
-        }
-        return builder.endVector();
-    }
-
-    static startErrorOperandsVector(builder: flatbuffers.Builder, numElems: number) {
-        builder.startVector(1, numElems, 1);
-    }
-
     static addErrorOperandsFull(builder: flatbuffers.Builder, errorOperandsFullOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(13, errorOperandsFullOffset, 0);
+        builder.addFieldOffset(12, errorOperandsFullOffset, 0);
     }
 
     static createErrorOperandsFullVector(builder: flatbuffers.Builder, data: flatbuffers.Offset[]): flatbuffers.Offset {
@@ -506,7 +446,7 @@ export class StoredMooRProgram {
     }
 
     static addLambdaPrograms(builder: flatbuffers.Builder, lambdaProgramsOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(14, lambdaProgramsOffset, 0);
+        builder.addFieldOffset(13, lambdaProgramsOffset, 0);
     }
 
     static createLambdaProgramsVector(builder: flatbuffers.Builder, data: flatbuffers.Offset[]): flatbuffers.Offset {
@@ -522,7 +462,7 @@ export class StoredMooRProgram {
     }
 
     static addLineNumberSpans(builder: flatbuffers.Builder, lineNumberSpansOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(15, lineNumberSpansOffset, 0);
+        builder.addFieldOffset(14, lineNumberSpansOffset, 0);
     }
 
     static createLineNumberSpansVector(builder: flatbuffers.Builder, data: flatbuffers.Offset[]): flatbuffers.Offset {
@@ -538,7 +478,7 @@ export class StoredMooRProgram {
     }
 
     static addForkLineNumberSpans(builder: flatbuffers.Builder, forkLineNumberSpansOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(16, forkLineNumberSpansOffset, 0);
+        builder.addFieldOffset(15, forkLineNumberSpansOffset, 0);
     }
 
     static createForkLineNumberSpansVector(
@@ -558,21 +498,20 @@ export class StoredMooRProgram {
 
     static endStoredMooRProgram(builder: flatbuffers.Builder): flatbuffers.Offset {
         const offset = builder.endObject();
-        builder.requiredField(offset, 6); // main_vector
-        builder.requiredField(offset, 8); // fork_vectors
-        builder.requiredField(offset, 10); // literals
-        builder.requiredField(offset, 12); // jump_labels
-        builder.requiredField(offset, 14); // var_names
-        builder.requiredField(offset, 16); // symbol_table
+        builder.requiredField(offset, 8); // main_vector
+        builder.requiredField(offset, 10); // fork_vectors
+        builder.requiredField(offset, 12); // literals
+        builder.requiredField(offset, 14); // jump_labels
+        builder.requiredField(offset, 16); // var_names
         builder.requiredField(offset, 18); // scatter_tables
         builder.requiredField(offset, 20); // for_sequence_operands
         builder.requiredField(offset, 22); // for_range_operands
         builder.requiredField(offset, 24); // range_comprehensions
         builder.requiredField(offset, 26); // list_comprehensions
-        builder.requiredField(offset, 28); // error_operands
-        builder.requiredField(offset, 32); // lambda_programs
-        builder.requiredField(offset, 34); // line_number_spans
-        builder.requiredField(offset, 36); // fork_line_number_spans
+        builder.requiredField(offset, 28); // error_operands_full
+        builder.requiredField(offset, 30); // lambda_programs
+        builder.requiredField(offset, 32); // line_number_spans
+        builder.requiredField(offset, 34); // fork_line_number_spans
         return offset;
     }
 }

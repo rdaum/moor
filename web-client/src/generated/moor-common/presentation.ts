@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { PresentationAttribute } from "../moor-common/presentation-attribute.js";
+import { PresentationAttribute } from "../moor-common/presentation-attribute";
 
 export class Presentation {
     bb: flatbuffers.ByteBuffer | null = null;

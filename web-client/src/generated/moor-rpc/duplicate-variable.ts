@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Symbol } from "../moor-common/symbol.js";
-import { CompileContext } from "../moor-rpc/compile-context.js";
+import { Symbol } from "../moor-common/symbol";
+import { CompileContext } from "../moor-rpc/compile-context";
 
 export class DuplicateVariable {
     bb: flatbuffers.ByteBuffer | null = null;

@@ -2,10 +2,10 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Obj } from "../moor-common/obj.js";
-import { Symbol } from "../moor-common/symbol.js";
-import { AuthToken } from "../moor-rpc/auth-token.js";
-import { ConnectType } from "../moor-rpc/connect-type.js";
+import { Obj } from "../moor-common/obj";
+import { Symbol } from "../moor-common/symbol";
+import { AuthToken } from "../moor-rpc/auth-token";
+import { ConnectType } from "../moor-rpc/connect-type";
 
 export class Attach {
     bb: flatbuffers.ByteBuffer | null = null;

@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { AuthToken } from "../moor-rpc/auth-token.js";
-import { HistoryRecall } from "../moor-rpc/history-recall.js";
+import { AuthToken } from "../moor-rpc/auth-token";
+import { HistoryRecall } from "../moor-rpc/history-recall";
 
 export class RequestHistory {
     bb: flatbuffers.ByteBuffer | null = null;

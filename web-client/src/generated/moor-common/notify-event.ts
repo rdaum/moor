@@ -2,9 +2,9 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { EventMetadata } from "../moor-common/event-metadata.js";
-import { Symbol } from "../moor-common/symbol.js";
-import { Var } from "../moor-var/var.js";
+import { EventMetadata } from "../moor-common/event-metadata";
+import { Symbol } from "../moor-common/symbol";
+import { Var } from "../moor-var/var";
 
 export class NotifyEvent {
     bb: flatbuffers.ByteBuffer | null = null;

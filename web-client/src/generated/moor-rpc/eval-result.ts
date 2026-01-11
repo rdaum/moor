@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Var } from "../moor-var/var.js";
+import { Var } from "../moor-var/var";
 
 export class EvalResult {
     bb: flatbuffers.ByteBuffer | null = null;

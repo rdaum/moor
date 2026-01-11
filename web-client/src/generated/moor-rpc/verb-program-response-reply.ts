@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { VerbProgramResponse } from "../moor-rpc/verb-program-response.js";
+import { VerbProgramResponse } from "../moor-rpc/verb-program-response";
 
 export class VerbProgramResponseReply {
     bb: flatbuffers.ByteBuffer | null = null;

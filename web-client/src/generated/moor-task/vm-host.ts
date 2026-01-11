@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { VMExecState } from "../moor-task/vmexec-state.js";
+import { VMExecState } from "../moor-task/vmexec-state";
 
 export class VmHost {
     bb: flatbuffers.ByteBuffer | null = null;

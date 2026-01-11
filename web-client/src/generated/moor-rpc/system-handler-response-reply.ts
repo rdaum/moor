@@ -6,7 +6,7 @@ import {
     SystemHandlerResponseUnion,
     unionListToSystemHandlerResponseUnion,
     unionToSystemHandlerResponseUnion,
-} from "../moor-rpc/system-handler-response-union.js";
+} from "../moor-rpc/system-handler-response-union";
 
 export class SystemHandlerResponseReply {
     bb: flatbuffers.ByteBuffer | null = null;

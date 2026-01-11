@@ -2,10 +2,10 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Obj } from "../moor-common/obj.js";
-import { Symbol } from "../moor-common/symbol.js";
-import { Uuid } from "../moor-common/uuid.js";
-import { VerbArgsSpec } from "../moor-common/verb-args-spec.js";
+import { Obj } from "../moor-common/obj";
+import { Symbol } from "../moor-common/symbol";
+import { Uuid } from "../moor-common/uuid";
+import { VerbArgsSpec } from "../moor-common/verb-args-spec";
 
 export class VerbDef {
     bb: flatbuffers.ByteBuffer | null = null;

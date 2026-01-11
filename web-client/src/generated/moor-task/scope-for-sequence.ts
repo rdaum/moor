@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { StoredName } from "../moor-program/stored-name.js";
-import { Var } from "../moor-var/var.js";
+import { StoredName } from "../moor-program/stored-name";
+import { Var } from "../moor-var/var";
 
 export class ScopeForSequence {
     bb: flatbuffers.ByteBuffer | null = null;

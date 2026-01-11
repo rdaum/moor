@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { VerbDef } from "../moor-common/verb-def.js";
+import { VerbDef } from "../moor-common/verb-def";
 
 export class VerbDefs {
     bb: flatbuffers.ByteBuffer | null = null;

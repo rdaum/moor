@@ -2,9 +2,9 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Obj } from "../moor-common/obj.js";
-import { StoredName } from "../moor-program/stored-name.js";
-import { Activation } from "../moor-task/activation.js";
+import { Obj } from "../moor-common/obj";
+import { StoredName } from "../moor-program/stored-name";
+import { Activation } from "../moor-task/activation";
 
 export class Fork {
     bb: flatbuffers.ByteBuffer | null = null;

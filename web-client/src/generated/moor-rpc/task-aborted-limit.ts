@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { AbortLimit } from "../moor-rpc/abort-limit.js";
+import { AbortLimit } from "../moor-rpc/abort-limit";
 
 export class TaskAbortedLimit {
     bb: flatbuffers.ByteBuffer | null = null;

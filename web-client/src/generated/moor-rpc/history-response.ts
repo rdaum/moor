@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Uuid } from "../moor-common/uuid.js";
-import { HistoricalNarrativeEvent } from "../moor-rpc/historical-narrative-event.js";
+import { Uuid } from "../moor-common/uuid";
+import { HistoricalNarrativeEvent } from "../moor-rpc/historical-narrative-event";
 
 export class HistoryResponse {
     bb: flatbuffers.ByteBuffer | null = null;

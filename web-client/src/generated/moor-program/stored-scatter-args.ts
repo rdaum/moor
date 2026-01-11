@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { StoredScatterLabel } from "../moor-program/stored-scatter-label.js";
+import { StoredScatterLabel } from "../moor-program/stored-scatter-label";
 
 export class StoredScatterArgs {
     bb: flatbuffers.ByteBuffer | null = null;

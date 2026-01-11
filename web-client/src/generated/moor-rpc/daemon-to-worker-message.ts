@@ -6,7 +6,7 @@ import {
     DaemonToWorkerMessageUnion,
     unionListToDaemonToWorkerMessageUnion,
     unionToDaemonToWorkerMessageUnion,
-} from "../moor-rpc/daemon-to-worker-message-union.js";
+} from "../moor-rpc/daemon-to-worker-message-union";
 
 export class DaemonToWorkerMessage {
     bb: flatbuffers.ByteBuffer | null = null;

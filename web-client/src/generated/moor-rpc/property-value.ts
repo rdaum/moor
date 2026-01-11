@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { PropInfo } from "../moor-common/prop-info.js";
-import { Var } from "../moor-var/var.js";
+import { PropInfo } from "../moor-common/prop-info";
+import { Var } from "../moor-var/var";
 
 export class PropertyValue {
     bb: flatbuffers.ByteBuffer | null = null;

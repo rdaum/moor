@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { PropInfo } from "../moor-common/prop-info.js";
+import { PropInfo } from "../moor-common/prop-info";
 
 export class PropertiesReply {
     bb: flatbuffers.ByteBuffer | null = null;

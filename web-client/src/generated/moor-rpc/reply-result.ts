@@ -2,11 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import {
-    ReplyResultUnion,
-    unionListToReplyResultUnion,
-    unionToReplyResultUnion,
-} from "../moor-rpc/reply-result-union.js";
+import { ReplyResultUnion, unionListToReplyResultUnion, unionToReplyResultUnion } from "../moor-rpc/reply-result-union";
 
 export class ReplyResult {
     bb: flatbuffers.ByteBuffer | null = null;

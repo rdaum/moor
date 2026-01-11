@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { WorldStateError } from "../moor-common/world-state-error.js";
+import { WorldStateError } from "../moor-common/world-state-error";
 
 export class VerbRetrievalFailed {
     bb: flatbuffers.ByteBuffer | null = null;

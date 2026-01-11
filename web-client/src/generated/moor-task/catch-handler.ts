@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { CatchType } from "../moor-task/catch-type.js";
+import { CatchType } from "../moor-task/catch-type";
 
 export class CatchHandler {
     bb: flatbuffers.ByteBuffer | null = null;

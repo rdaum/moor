@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { AuthToken } from "../moor-rpc/auth-token.js";
-import { ClientToken } from "../moor-rpc/client-token.js";
+import { AuthToken } from "../moor-rpc/auth-token";
+import { ClientToken } from "../moor-rpc/client-token";
 
 export class Eval {
     bb: flatbuffers.ByteBuffer | null = null;

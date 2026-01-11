@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { ObjectInfo } from "../moor-rpc/object-info.js";
+import { ObjectInfo } from "../moor-rpc/object-info";
 
 export class ListObjectsReply {
     bb: flatbuffers.ByteBuffer | null = null;

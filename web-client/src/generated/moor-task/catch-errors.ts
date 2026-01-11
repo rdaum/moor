@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Error } from "../moor-common/error.js";
+import { Error } from "../moor-common/error";
 
 export class CatchErrors {
     bb: flatbuffers.ByteBuffer | null = null;

@@ -2,9 +2,9 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Obj } from "../moor-common/obj.js";
-import { AuthToken } from "../moor-rpc/auth-token.js";
-import { ClientToken } from "../moor-rpc/client-token.js";
+import { Obj } from "../moor-common/obj";
+import { AuthToken } from "../moor-rpc/auth-token";
+import { ClientToken } from "../moor-rpc/client-token";
 
 export class OutOfBand {
     bb: flatbuffers.ByteBuffer | null = null;

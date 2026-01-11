@@ -2,10 +2,10 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Uuid } from "../moor-common/uuid.js";
-import { AuthToken } from "../moor-rpc/auth-token.js";
-import { ClientToken } from "../moor-rpc/client-token.js";
-import { Var } from "../moor-var/var.js";
+import { Uuid } from "../moor-common/uuid";
+import { AuthToken } from "../moor-rpc/auth-token";
+import { ClientToken } from "../moor-rpc/client-token";
+import { Var } from "../moor-var/var";
 
 export class RequestedInput {
     bb: flatbuffers.ByteBuffer | null = null;

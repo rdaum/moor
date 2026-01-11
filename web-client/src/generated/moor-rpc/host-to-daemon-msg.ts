@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Uuid } from "../moor-common/uuid.js";
-import { HostToDaemonMessage } from "../moor-rpc/host-to-daemon-message.js";
+import { Uuid } from "../moor-common/uuid";
+import { HostToDaemonMessage } from "../moor-rpc/host-to-daemon-message";
 
 export class HostToDaemonMsg {
     bb: flatbuffers.ByteBuffer | null = null;

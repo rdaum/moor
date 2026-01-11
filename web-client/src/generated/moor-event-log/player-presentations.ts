@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Obj } from "../moor-common/obj.js";
-import { StoredPresentation } from "../moor-event-log/stored-presentation.js";
+import { Obj } from "../moor-common/obj";
+import { StoredPresentation } from "../moor-event-log/stored-presentation";
 
 export class PlayerPresentations {
     bb: flatbuffers.ByteBuffer | null = null;

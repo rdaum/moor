@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { CompileContext } from "../moor-rpc/compile-context.js";
+import { CompileContext } from "../moor-rpc/compile-context";
 
 export class UnknownTypeConstant {
     bb: flatbuffers.ByteBuffer | null = null;

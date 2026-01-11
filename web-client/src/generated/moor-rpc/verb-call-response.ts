@@ -6,7 +6,7 @@ import {
     unionListToVerbCallResponseUnion,
     unionToVerbCallResponseUnion,
     VerbCallResponseUnion,
-} from "../moor-rpc/verb-call-response-union.js";
+} from "../moor-rpc/verb-call-response-union";
 
 export class VerbCallResponse {
     bb: flatbuffers.ByteBuffer | null = null;

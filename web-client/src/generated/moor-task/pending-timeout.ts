@@ -2,9 +2,9 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Symbol } from "../moor-common/symbol.js";
-import { AbortLimitReason } from "../moor-task/abort-limit-reason.js";
-import { Var } from "../moor-var/var.js";
+import { Symbol } from "../moor-common/symbol";
+import { AbortLimitReason } from "../moor-task/abort-limit-reason";
+import { Var } from "../moor-var/var";
 
 export class PendingTimeout {
     bb: flatbuffers.ByteBuffer | null = null;

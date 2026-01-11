@@ -1313,7 +1313,8 @@ fn bf_complex_matches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             return Err(BfErr::Code(E_INVARG));
         }
 
-        let matches = complex_match_objects_keys_all(token, &target_vars, &key_vars, fuzzy_threshold);
+        let matches =
+            complex_match_objects_keys_all(token, &target_vars, &key_vars, fuzzy_threshold);
         return Ok(Ret(v_list(&matches)));
     }
 

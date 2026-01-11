@@ -6,7 +6,7 @@ import {
     AbortLimitReasonUnion,
     unionListToAbortLimitReasonUnion,
     unionToAbortLimitReasonUnion,
-} from "../moor-task/abort-limit-reason-union.js";
+} from "../moor-task/abort-limit-reason-union";
 
 export class AbortLimitReason {
     bb: flatbuffers.ByteBuffer | null = null;

@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Uuid } from "../moor-common/uuid.js";
-import { WorkerError } from "../moor-rpc/worker-error.js";
+import { Uuid } from "../moor-common/uuid";
+import { WorkerError } from "../moor-rpc/worker-error";
 
 export class RequestError {
     bb: flatbuffers.ByteBuffer | null = null;

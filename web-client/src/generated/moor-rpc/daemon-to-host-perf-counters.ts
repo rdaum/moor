@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { CounterCategory } from "../moor-rpc/counter-category.js";
+import { CounterCategory } from "../moor-rpc/counter-category";
 
 export class DaemonToHostPerfCounters {
     bb: flatbuffers.ByteBuffer | null = null;

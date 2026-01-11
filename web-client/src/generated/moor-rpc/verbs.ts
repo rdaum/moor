@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { ObjectRef } from "../moor-common/object-ref.js";
-import { AuthToken } from "../moor-rpc/auth-token.js";
+import { ObjectRef } from "../moor-common/object-ref";
+import { AuthToken } from "../moor-rpc/auth-token";
 
 export class Verbs {
     bb: flatbuffers.ByteBuffer | null = null;

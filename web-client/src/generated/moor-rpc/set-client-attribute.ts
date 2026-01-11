@@ -2,10 +2,10 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Symbol } from "../moor-common/symbol.js";
-import { AuthToken } from "../moor-rpc/auth-token.js";
-import { ClientToken } from "../moor-rpc/client-token.js";
-import { Var } from "../moor-var/var.js";
+import { Symbol } from "../moor-common/symbol";
+import { AuthToken } from "../moor-rpc/auth-token";
+import { ClientToken } from "../moor-rpc/client-token";
+import { Var } from "../moor-var/var";
 
 export class SetClientAttribute {
     bb: flatbuffers.ByteBuffer | null = null;

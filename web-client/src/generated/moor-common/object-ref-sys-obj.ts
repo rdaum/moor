@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Symbol } from "../moor-common/symbol.js";
+import { Symbol } from "../moor-common/symbol";
 
 export class ObjectRefSysObj {
     bb: flatbuffers.ByteBuffer | null = null;

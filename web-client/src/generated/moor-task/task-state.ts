@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { TaskStateUnion, unionListToTaskStateUnion, unionToTaskStateUnion } from "../moor-task/task-state-union.js";
+import { TaskStateUnion, unionListToTaskStateUnion, unionToTaskStateUnion } from "../moor-task/task-state-union";
 
 export class TaskState {
     bb: flatbuffers.ByteBuffer | null = null;

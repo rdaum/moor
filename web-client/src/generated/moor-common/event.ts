@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { EventUnion, unionListToEventUnion, unionToEventUnion } from "../moor-common/event-union.js";
+import { EventUnion, unionListToEventUnion, unionToEventUnion } from "../moor-common/event-union";
 
 export class Event {
     bb: flatbuffers.ByteBuffer | null = null;

@@ -11,10 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::{
-    collections::HashMap,
-    time::{Duration, SystemTime},
-};
+use std::{collections::HashMap, time::SystemTime};
 
 use uuid::Uuid;
 
@@ -24,11 +21,6 @@ use moor_common::tasks::SessionError;
 use moor_var::{Obj, Symbol, Var};
 use rpc_common::RpcMessageError;
 use std::path::Path;
-
-/// Maximum time we'll keep an idle connection around without hearing from it.
-/// The window is intentionally large (24h) so transports like the web host can
-/// rely on soft reattachment rather than constantly provoking new connections.
-pub const CONNECTION_TIMEOUT_DURATION: Duration = Duration::from_secs(60 * 60 * 24);
 
 /// Parameters for creating a new connection
 #[derive(Debug)]
@@ -276,5 +268,172 @@ mod tests {
         // Client IDs should work for both connection and player objects
         assert_eq!(db.client_ids_for(connection_obj).unwrap(), vec![client_id]);
         assert_eq!(db.client_ids_for(player_obj).unwrap(), vec![client_id]);
+    }
+
+    #[test]
+    fn test_soft_detach_preserves_connection() {
+        // Soft detach should call record_client_activity, keeping the connection alive
+        let db = ConnectionRegistryFactory::in_memory_only().unwrap();
+
+        let client_id = Uuid::new_v4();
+        let connection_obj = db
+            .new_connection(NewConnectionParams {
+                client_id,
+                hostname: "test.host".to_string(),
+                local_port: 7777,
+                remote_port: 12345,
+                player: None,
+                acceptable_content_types: None,
+                connection_attributes: None,
+            })
+            .unwrap();
+
+        // Simulate soft detach by calling record_client_activity
+        db.record_client_activity(client_id, connection_obj)
+            .unwrap();
+
+        // Connection should still exist
+        assert_eq!(
+            db.connection_object_for_client(client_id),
+            Some(connection_obj)
+        );
+        assert!(db.last_activity_for(connection_obj).is_ok());
+    }
+
+    #[test]
+    fn test_hard_detach_removes_connection() {
+        // Hard detach should call remove_client_connection, destroying the connection
+        let db = ConnectionRegistryFactory::in_memory_only().unwrap();
+
+        let client_id = Uuid::new_v4();
+        let connection_obj = db
+            .new_connection(NewConnectionParams {
+                client_id,
+                hostname: "test.host".to_string(),
+                local_port: 7777,
+                remote_port: 12345,
+                player: None,
+                acceptable_content_types: None,
+                connection_attributes: None,
+            })
+            .unwrap();
+
+        // Verify connection exists
+        assert_eq!(
+            db.connection_object_for_client(client_id),
+            Some(connection_obj)
+        );
+
+        // Hard detach - remove the connection
+        db.remove_client_connection(client_id).unwrap();
+
+        // Connection should be gone
+        assert_eq!(db.connection_object_for_client(client_id), None);
+        assert_eq!(db.connections(), vec![]);
+    }
+
+    #[test]
+    fn test_ping_timeout_removes_connection() {
+        let db = ConnectionRegistryFactory::in_memory_only().unwrap();
+
+        let client_id = Uuid::new_v4();
+        let connection_obj = db
+            .new_connection(NewConnectionParams {
+                client_id,
+                hostname: "test.host".to_string(),
+                local_port: 7777,
+                remote_port: 12345,
+                player: None,
+                acceptable_content_types: None,
+                connection_attributes: None,
+            })
+            .unwrap();
+
+        // Connection exists initially
+        assert_eq!(
+            db.connection_object_for_client(client_id),
+            Some(connection_obj)
+        );
+
+        // Notify alive to set last_ping
+        db.notify_is_alive(client_id, connection_obj).unwrap();
+
+        // ping_check with fresh timestamp should NOT remove
+        db.ping_check();
+        assert_eq!(
+            db.connection_object_for_client(client_id),
+            Some(connection_obj)
+        );
+
+        // Note: We can't easily test the timeout without waiting 30+ seconds
+        // or modifying the PING_TIMEOUT constant. This test verifies that
+        // active connections are NOT removed.
+    }
+
+    #[test]
+    fn test_multiple_connections_same_player() {
+        use moor_var::Obj;
+
+        let db = ConnectionRegistryFactory::in_memory_only().unwrap();
+        let player_obj = Obj::mk_id(100);
+
+        // Create first connection
+        let client_id_1 = Uuid::new_v4();
+        let connection_obj_1 = db
+            .new_connection(NewConnectionParams {
+                client_id: client_id_1,
+                hostname: "host1.test".to_string(),
+                local_port: 7777,
+                remote_port: 12345,
+                player: Some(player_obj),
+                acceptable_content_types: None,
+                connection_attributes: None,
+            })
+            .unwrap();
+
+        // Create second connection for same player
+        let client_id_2 = Uuid::new_v4();
+        let connection_obj_2 = db
+            .new_connection(NewConnectionParams {
+                client_id: client_id_2,
+                hostname: "host2.test".to_string(),
+                local_port: 7778,
+                remote_port: 12346,
+                player: Some(player_obj),
+                acceptable_content_types: None,
+                connection_attributes: None,
+            })
+            .unwrap();
+
+        // Both connections should exist
+        assert_eq!(
+            db.connection_object_for_client(client_id_1),
+            Some(connection_obj_1)
+        );
+        assert_eq!(
+            db.connection_object_for_client(client_id_2),
+            Some(connection_obj_2)
+        );
+
+        // Player should have both client IDs
+        let client_ids = db.client_ids_for(player_obj).unwrap();
+        assert_eq!(client_ids.len(), 2);
+        assert!(client_ids.contains(&client_id_1));
+        assert!(client_ids.contains(&client_id_2));
+
+        // Remove first connection
+        db.remove_client_connection(client_id_1).unwrap();
+
+        // Player should still have second connection
+        let client_ids = db.client_ids_for(player_obj).unwrap();
+        assert_eq!(client_ids, vec![client_id_2]);
+        assert_eq!(db.player_object_for_client(client_id_2), Some(player_obj));
+
+        // Remove second connection
+        db.remove_client_connection(client_id_2).unwrap();
+
+        // Player should have no connections
+        let client_ids = db.client_ids_for(player_obj).unwrap();
+        assert!(client_ids.is_empty());
     }
 }

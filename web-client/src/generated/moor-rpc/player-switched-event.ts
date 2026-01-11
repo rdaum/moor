@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Obj } from "../moor-common/obj.js";
-import { AuthToken } from "../moor-rpc/auth-token.js";
+import { Obj } from "../moor-common/obj";
+import { AuthToken } from "../moor-rpc/auth-token";
 
 export class PlayerSwitchedEvent {
     bb: flatbuffers.ByteBuffer | null = null;

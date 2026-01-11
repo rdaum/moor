@@ -2,9 +2,9 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Obj } from "../moor-common/obj.js";
-import { Symbol } from "../moor-common/symbol.js";
-import { Uuid } from "../moor-common/uuid.js";
+import { Obj } from "../moor-common/obj";
+import { Symbol } from "../moor-common/symbol";
+import { Uuid } from "../moor-common/uuid";
 
 export class PropDef {
     bb: flatbuffers.ByteBuffer | null = null;

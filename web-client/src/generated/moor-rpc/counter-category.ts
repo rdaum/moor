@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Symbol } from "../moor-common/symbol.js";
-import { Counter } from "../moor-rpc/counter.js";
+import { Symbol } from "../moor-common/symbol";
+import { Counter } from "../moor-rpc/counter";
 
 export class CounterCategory {
     bb: flatbuffers.ByteBuffer | null = null;

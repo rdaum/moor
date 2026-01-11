@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { HostType } from "../moor-rpc/host-type.js";
+import { HostType } from "../moor-rpc/host-type";
 
 export class HostBroadcastUnlisten {
     bb: flatbuffers.ByteBuffer | null = null;

@@ -15,8 +15,9 @@ export const buildAuthHeaders = (authToken: string): Record<string, string> => {
     const headers: Record<string, string> = {
         "X-Moor-Auth-Token": authToken,
     };
-    const clientToken = localStorage.getItem("client_token");
-    const clientId = localStorage.getItem("client_id");
+    // Connection credentials are per-tab (sessionStorage), not shared across tabs
+    const clientToken = sessionStorage.getItem("client_token");
+    const clientId = sessionStorage.getItem("client_id");
 
     if (clientToken) {
         headers["X-Moor-Client-Token"] = clientToken;

@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Uuid } from "../moor-common/uuid.js";
+import { Uuid } from "../moor-common/uuid";
 
 export class DetachWorker {
     bb: flatbuffers.ByteBuffer | null = null;

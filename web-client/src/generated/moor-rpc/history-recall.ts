@@ -6,7 +6,7 @@ import {
     HistoryRecallUnion,
     unionListToHistoryRecallUnion,
     unionToHistoryRecallUnion,
-} from "../moor-rpc/history-recall-union.js";
+} from "../moor-rpc/history-recall-union";
 
 export class HistoryRecall {
     bb: flatbuffers.ByteBuffer | null = null;

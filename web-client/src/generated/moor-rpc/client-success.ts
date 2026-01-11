@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { DaemonToClientReply } from "../moor-rpc/daemon-to-client-reply.js";
+import { DaemonToClientReply } from "../moor-rpc/daemon-to-client-reply";
 
 export class ClientSuccess {
     bb: flatbuffers.ByteBuffer | null = null;

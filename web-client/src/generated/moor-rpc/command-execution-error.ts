@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { CommandError } from "../moor-rpc/command-error.js";
+import { CommandError } from "../moor-rpc/command-error";
 
 export class CommandExecutionError {
     bb: flatbuffers.ByteBuffer | null = null;

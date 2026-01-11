@@ -2,10 +2,10 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Symbol } from "../moor-common/symbol.js";
-import { AuthToken } from "../moor-rpc/auth-token.js";
-import { ClientToken } from "../moor-rpc/client-token.js";
-import { ConnectionAttribute } from "../moor-rpc/connection-attribute.js";
+import { Symbol } from "../moor-common/symbol";
+import { AuthToken } from "../moor-rpc/auth-token";
+import { ClientToken } from "../moor-rpc/client-token";
+import { ConnectionAttribute } from "../moor-rpc/connection-attribute";
 
 export class Reattach {
     bb: flatbuffers.ByteBuffer | null = null;

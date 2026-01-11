@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Uuid } from "../moor-common/uuid.js";
-import { MetadataPair } from "../moor-rpc/metadata-pair.js";
+import { Uuid } from "../moor-common/uuid";
+import { MetadataPair } from "../moor-rpc/metadata-pair";
 
 export class RequestInputEvent {
     bb: flatbuffers.ByteBuffer | null = null;

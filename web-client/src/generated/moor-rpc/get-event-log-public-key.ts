@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { AuthToken } from "../moor-rpc/auth-token.js";
+import { AuthToken } from "../moor-rpc/auth-token";
 
 export class GetEventLogPublicKey {
     bb: flatbuffers.ByteBuffer | null = null;

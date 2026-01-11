@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { VarMapPair } from "../moor-var/var-map-pair.js";
+import { VarMapPair } from "../moor-var/var-map-pair";
 
 export class VarMap {
     bb: flatbuffers.ByteBuffer | null = null;

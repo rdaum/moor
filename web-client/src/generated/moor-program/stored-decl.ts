@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { StoredDeclType } from "../moor-program/stored-decl-type.js";
-import { StoredVariable } from "../moor-program/stored-variable.js";
+import { StoredDeclType } from "../moor-program/stored-decl-type";
+import { StoredVariable } from "../moor-program/stored-variable";
 
 export class StoredDecl {
     bb: flatbuffers.ByteBuffer | null = null;

@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { StoredNameDeclPair } from "../moor-program/stored-name-decl-pair.js";
+import { StoredNameDeclPair } from "../moor-program/stored-name-decl-pair";
 
 export class StoredNames {
     bb: flatbuffers.ByteBuffer | null = null;

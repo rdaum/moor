@@ -2,11 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import {
-    MessageTypeUnion,
-    unionListToMessageTypeUnion,
-    unionToMessageTypeUnion,
-} from "../moor-rpc/message-type-union.js";
+import { MessageTypeUnion, unionListToMessageTypeUnion, unionToMessageTypeUnion } from "../moor-rpc/message-type-union";
 
 export class MessageType {
     bb: flatbuffers.ByteBuffer | null = null;

@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { NarrativeEvent } from "../moor-common/narrative-event.js";
-import { Var } from "../moor-var/var.js";
+import { NarrativeEvent } from "../moor-common/narrative-event";
+import { Var } from "../moor-var/var";
 
 export class VerbCallSuccess {
     bb: flatbuffers.ByteBuffer | null = null;

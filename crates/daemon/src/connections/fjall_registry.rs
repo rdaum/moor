@@ -23,14 +23,14 @@ use std::{
 use crate::connections::{
     ConnectionRecord, ConnectionsRecords, FIRST_CONNECTION_ID,
     conversions::{connections_records_from_bytes, connections_records_to_bytes},
-    registry::{CONNECTION_TIMEOUT_DURATION, ConnectionRegistry, NewConnectionParams},
+    registry::{ConnectionRegistry, NewConnectionParams},
 };
 use eyre::{Error, bail};
 use fjall::{Database, Keyspace, KeyspaceCreateOptions};
 use moor_common::tasks::SessionError;
 use moor_var::{Obj, Symbol, Var};
 use rpc_common::RpcMessageError;
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 use zerocopy::IntoBytes;
 
@@ -78,7 +78,7 @@ impl FjallConnectionRegistry {
         info!("Compacting connections database journals...");
         keyspace.persist(fjall::PersistMode::SyncAll)?;
 
-        let sequences_partition =
+        let sequences_keyspace =
             keyspace.keyspace("connection_sequences", KeyspaceCreateOptions::default)?;
 
         let client_connection_table =
@@ -93,7 +93,7 @@ impl FjallConnectionRegistry {
         let player_clients_table =
             keyspace.keyspace("player_clients", KeyspaceCreateOptions::default)?;
 
-        let connection_id_sequence = match sequences_partition.get("connection_id_sequence")? {
+        let connection_id_sequence = match sequences_keyspace.get("connection_id_sequence")? {
             Some(bytes) => i32::from_le_bytes(bytes[0..size_of::<i32>()].try_into()?),
             _ => FIRST_CONNECTION_ID,
         };
@@ -106,7 +106,7 @@ impl FjallConnectionRegistry {
             connection_records_table,
             player_clients_table,
             connection_id_sequence,
-            connection_id_sequence_table: sequences_partition,
+            connection_id_sequence_table: sequences_keyspace,
         };
 
         // Load existing timestamps from disk into memory cache
@@ -172,15 +172,12 @@ impl FjallConnectionRegistry {
     }
 
     /// Flush all dirty timestamps to the database.
-    /// Called periodically from compact() to batch writes.
-    ///
-    /// To avoid deadlocks with code paths that take inner → timestamps (e.g., new_connection,
-    /// ping_check), we snapshot data from each lock independently rather than holding both.
+    /// Called periodically from flush() to batch writes.
     fn flush_dirty_timestamps(&self) {
         // Step 1: Take the dirty set (brief lock, then release)
         let dirty: HashSet<Uuid> = {
             let Ok(mut dirty_guard) = self.dirty_clients.lock() else {
-                tracing::warn!("Poisoned dirty clients lock during timestamp flush");
+                warn!("Poisoned dirty clients lock during timestamp flush");
                 return;
             };
             std::mem::take(&mut *dirty_guard)
@@ -193,7 +190,7 @@ impl FjallConnectionRegistry {
         // Step 2: Snapshot timestamp data for dirty clients (brief lock, then release)
         let timestamps_snapshot: HashMap<Uuid, ClientTimestamps> = {
             let Ok(timestamps) = self.timestamps.lock() else {
-                tracing::warn!("Poisoned timestamps lock during timestamp flush");
+                warn!("Poisoned timestamps lock during timestamp flush");
                 return;
             };
             dirty
@@ -208,7 +205,7 @@ impl FjallConnectionRegistry {
 
         // Step 3: Now take inner lock and do DB writes (no other locks held)
         let Ok(inner) = self.inner.lock() else {
-            tracing::warn!("Poisoned connections inner lock during timestamp flush");
+            warn!("Poisoned connections inner lock during timestamp flush");
             return;
         };
 
@@ -267,19 +264,11 @@ impl FjallConnectionRegistry {
 
     /// Prune stale or invalid records from the connections database.
     /// Called on startup and periodically from compact().
+    /// Stale records are those with no host mapping (soft-detached and not reattached)
+    /// or duplicate client_ids.
     fn prune_stale_records(&self) {
-        let now = SystemTime::now();
-
-        let timestamps_snapshot = {
-            let Ok(timestamps) = self.timestamps.lock() else {
-                tracing::warn!("Poisoned timestamps lock during connections prune");
-                return;
-            };
-            timestamps.clone()
-        };
-
         let Ok(inner) = self.inner.lock() else {
-            tracing::warn!("Poisoned connections inner lock during connections prune");
+            warn!("Poisoned connections inner lock during connections prune");
             return;
         };
 
@@ -358,24 +347,18 @@ impl FjallConnectionRegistry {
 
             for record in connections_record.connections {
                 let client_id = record.client_id;
+
+                // A connection record is stale if:
+                // 1. No mapping in client_to_connection (host has removed it), OR
+                // 2. Mapping points to different connection object, OR
+                // 3. Duplicate client_id in this record set
+
                 let mapping = client_to_connection.get(&client_id);
                 let mut stale = mapping.is_none();
                 if let Some(mapping_bytes) = mapping
                     && mapping_bytes.as_slice() != key.as_ref()
                 {
                     stale = true;
-                }
-
-                if !stale {
-                    let last_activity = timestamps_snapshot
-                        .get(&Uuid::from_u128(client_id))
-                        .map(|ts| ts.last_activity)
-                        .unwrap_or(record.last_activity);
-                    if let Ok(idle) = now.duration_since(last_activity)
-                        && idle >= CONNECTION_TIMEOUT_DURATION
-                    {
-                        stale = true;
-                    }
                 }
 
                 if stale {
@@ -606,6 +589,22 @@ impl FjallConnectionRegistry {
                 .insert(conn_oid_bytes, encoded);
         }
     }
+
+    /// Get connection records for an object, checking both connection_records and player_clients tables.
+    fn get_connections_record(inner: &FjallInner, obj: Obj) -> Option<ConnectionsRecords> {
+        let oid_bytes = obj.as_bytes();
+
+        if let Ok(Some(bytes)) = inner.connection_records_table.get(oid_bytes)
+            && let Ok(record) = connections_records_from_bytes(&bytes)
+        {
+            return Some(record);
+        }
+
+        let Ok(Some(bytes)) = inner.player_clients_table.get(oid_bytes) else {
+            return None;
+        };
+        connections_records_from_bytes(&bytes).ok()
+    }
 }
 
 impl ConnectionRegistry for FjallConnectionRegistry {
@@ -793,6 +792,12 @@ impl ConnectionRegistry for FjallConnectionRegistry {
             .insert(client_id.as_u128().to_le_bytes(), connection_id.as_bytes())
             .map_err(|e| RpcMessageError::InternalError(e.to_string()))?;
 
+        info!(
+            client_id = ?client_id,
+            connection_id = ?connection_id,
+            "new_connection: created connection"
+        );
+
         // Build connection record
         let cr = ConnectionRecord {
             client_id: client_id.as_u128(),
@@ -895,51 +900,10 @@ impl ConnectionRegistry for FjallConnectionRegistry {
                 },
             };
 
-            // Clean up orphaned connections for this player before adding new one.
-            // A connection is orphaned if:
-            // 1. Its client_id is no longer in client_connection_table, OR
-            // 2. Its last_activity is stale (soft-detached but never reattached)
-            //
-            // We use a short threshold (30 seconds) to catch soft-detached connections
-            // that weren't successfully reattached before a new connection came in.
-            const ORPHAN_THRESHOLD: std::time::Duration = std::time::Duration::from_secs(30);
-            let original_len = player_conns.connections.len();
-            let timestamps_snapshot = self.timestamps.lock().unwrap().clone();
-            player_conns.connections.retain(|existing_cr| {
-                let existing_client_id = existing_cr.client_id;
-
-                // Check if this client_id still has a valid mapping
-                let has_mapping = matches!(
-                    inner
-                        .client_connection_table
-                        .get(existing_client_id.to_le_bytes()),
-                    Ok(Some(_))
-                );
-                if !has_mapping {
-                    return false; // No mapping, definitely orphaned
-                }
-
-                // Check if connection is stale (soft-detached and not reattached)
-                let last_activity = timestamps_snapshot
-                    .get(&Uuid::from_u128(existing_client_id))
-                    .map(|ts| ts.last_activity)
-                    .unwrap_or(existing_cr.last_activity);
-
-                if let Ok(idle) = now.duration_since(last_activity)
-                    && idle >= ORPHAN_THRESHOLD
-                {
-                    return false; // Stale connection, likely orphaned
-                }
-
-                true // Keep this connection
-            });
-            if player_conns.connections.len() < original_len {
-                tracing::debug!(
-                    removed = original_len - player_conns.connections.len(),
-                    player = ?player_obj,
-                    "Cleaned up orphaned player connections during new_connection"
-                );
-            }
+            // Note: We don't clean up soft-detached connections here (those without host mapping).
+            // They stay in player_clients_table for potential reattachment/history recovery.
+            // Connection liveness is managed entirely by the hosts via RPC keepalive pings.
+            // Garbage collection of truly abandoned connections happens through normal host disconnect flow.
 
             // Deduplicate by client_id to prevent accumulation from reconnects
             if !player_conns
@@ -978,11 +942,15 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         let now = SystemTime::now();
 
         // Update in-memory timestamp cache (hot path - no DB I/O)
+        // Update both timestamps - activity proves client is alive, so also refresh ping
         {
             let mut timestamps = self.timestamps.lock().unwrap();
             timestamps
                 .entry(client_id)
-                .and_modify(|ts| ts.last_activity = now)
+                .and_modify(|ts| {
+                    ts.last_activity = now;
+                    ts.last_ping = now;
+                })
                 .or_insert(ClientTimestamps {
                     last_activity: now,
                     last_ping: now,
@@ -1021,22 +989,26 @@ impl ConnectionRegistry for FjallConnectionRegistry {
     }
 
     fn ping_check(&self) {
+        // Timeout for ping response - if a client hasn't responded to pings in this time,
+        // it's considered dead. This is ~3 ping cycles.
+        const PING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
         let Ok(inner) = self.inner.lock() else {
-            tracing::warn!("Poisoned connections inner lock during ping check");
+            warn!("Poisoned connections inner lock during ping check");
             return;
         };
 
-        // Check timestamps in-memory cache for stale connections
+        // Check timestamps in-memory cache for connections that haven't responded to pings
         let timestamps = self.timestamps.lock().unwrap();
         let mut to_remove = vec![];
         let now = SystemTime::now();
 
         for (&client_uuid, ts) in timestamps.iter() {
-            // Keep connections around unless they've been idle for a very long time.
-            let Ok(idle_duration) = now.duration_since(ts.last_activity) else {
+            // Check last_ping, not last_activity - we care about ping response, not user activity
+            let Ok(since_last_ping) = now.duration_since(ts.last_ping) else {
                 continue;
             };
-            if idle_duration < CONNECTION_TIMEOUT_DURATION {
+            if since_last_ping < PING_TIMEOUT {
                 continue;
             }
 
@@ -1046,6 +1018,27 @@ impl ConnectionRegistry for FjallConnectionRegistry {
                 .get(client_uuid.as_u128().to_le_bytes())
                 && let Ok(connection_id) = Obj::from_bytes(bytes.as_ref())
             {
+                // Try to get hostname and port for better logging
+                let (hostname, local_port) =
+                    if let Some(records) = Self::get_connections_record(&inner, connection_id) {
+                        records
+                            .connections
+                            .iter()
+                            .find(|r| r.client_id == client_uuid.as_u128())
+                            .map(|r| (r.hostname.clone(), r.local_port))
+                            .unwrap_or_else(|| ("unknown".to_string(), 0))
+                    } else {
+                        ("unknown".to_string(), 0)
+                    };
+
+                warn!(
+                    client_id = ?client_uuid,
+                    connection = ?connection_id,
+                    hostname = %hostname,
+                    local_port = local_port,
+                    since_last_ping_secs = since_last_ping.as_secs(),
+                    "Removing connection due to ping timeout"
+                );
                 to_remove.push((connection_id, client_uuid.as_u128()));
             }
         }
@@ -1083,14 +1076,14 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         // and uses internal synchronization for WAL flushing.
         let keyspace = {
             let Ok(inner) = self.inner.lock() else {
-                tracing::warn!("Poisoned connections inner lock during compact");
+                warn!("Poisoned connections inner lock during compact");
                 return;
             };
             inner.keyspace.clone()
         };
 
         if let Err(e) = keyspace.persist(fjall::PersistMode::SyncAll) {
-            tracing::warn!(error = ?e, "Failed to compact connections database");
+            warn!(error = ?e, "Failed to compact connections database");
         }
     }
 
@@ -1112,50 +1105,25 @@ impl ConnectionRegistry for FjallConnectionRegistry {
             .ok_or(SessionError::NoConnectionForPlayer(connection))
     }
 
-    fn connection_name_for(&self, player: Obj) -> Result<String, SessionError> {
+    fn connection_name_for(&self, obj: Obj) -> Result<String, SessionError> {
         let inner = self.inner.lock().unwrap();
-
-        let player_oid_bytes = player.as_bytes();
-
-        let connections_record =
-            if let Ok(Some(bytes)) = inner.player_clients_table.get(player_oid_bytes) {
-                connections_records_from_bytes(&bytes)
-                    .map_err(|_| SessionError::NoConnectionForPlayer(player))?
-            } else if let Ok(Some(bytes)) = inner.connection_records_table.get(player_oid_bytes) {
-                connections_records_from_bytes(&bytes)
-                    .map_err(|_| SessionError::NoConnectionForPlayer(player))?
-            } else {
-                return Err(SessionError::NoConnectionForPlayer(player));
-            };
-
-        let cr = connections_record
+        let record = Self::get_connections_record(&inner, obj)
+            .ok_or(SessionError::NoConnectionForPlayer(obj))?;
+        let cr = record
             .connections
             .first()
-            .ok_or(SessionError::NoConnectionForPlayer(player))?;
-
+            .ok_or(SessionError::NoConnectionForPlayer(obj))?;
         Ok(format!(
             "port {} from {}, port {}",
             cr.local_port, cr.hostname, cr.remote_port
         ))
     }
 
-    fn connected_seconds_for(&self, player: Obj) -> Result<f64, SessionError> {
+    fn connected_seconds_for(&self, obj: Obj) -> Result<f64, SessionError> {
         let inner = self.inner.lock().unwrap();
-
-        let player_oid_bytes = player.as_bytes();
-
-        let connections_record =
-            if let Ok(Some(bytes)) = inner.player_clients_table.get(player_oid_bytes) {
-                connections_records_from_bytes(&bytes)
-                    .map_err(|_| SessionError::NoConnectionForPlayer(player))?
-            } else if let Ok(Some(bytes)) = inner.connection_records_table.get(player_oid_bytes) {
-                connections_records_from_bytes(&bytes)
-                    .map_err(|_| SessionError::NoConnectionForPlayer(player))?
-            } else {
-                return Err(SessionError::NoConnectionForPlayer(player));
-            };
-
-        let seconds: f64 = connections_record
+        let record = Self::get_connections_record(&inner, obj)
+            .ok_or(SessionError::NoConnectionForPlayer(obj))?;
+        Ok(record
             .connections
             .iter()
             .map(|cr| {
@@ -1164,28 +1132,15 @@ impl ConnectionRegistry for FjallConnectionRegistry {
                     .unwrap_or_default()
                     .as_secs_f64()
             })
-            .sum();
-
-        Ok(seconds)
+            .sum())
     }
 
-    fn client_ids_for(&self, player: Obj) -> Result<Vec<Uuid>, SessionError> {
+    fn client_ids_for(&self, obj: Obj) -> Result<Vec<Uuid>, SessionError> {
         let inner = self.inner.lock().unwrap();
-
-        let player_oid_bytes = player.as_bytes();
-
-        let connections_record =
-            if let Ok(Some(bytes)) = inner.player_clients_table.get(player_oid_bytes) {
-                connections_records_from_bytes(&bytes)
-                    .map_err(|_| SessionError::NoConnectionForPlayer(player))?
-            } else if let Ok(Some(bytes)) = inner.connection_records_table.get(player_oid_bytes) {
-                connections_records_from_bytes(&bytes)
-                    .map_err(|_| SessionError::NoConnectionForPlayer(player))?
-            } else {
-                return Ok(vec![]);
-            };
-
-        Ok(connections_record
+        let Some(record) = Self::get_connections_record(&inner, obj) else {
+            return Ok(vec![]);
+        };
+        Ok(record
             .connections
             .iter()
             .map(|cr| Uuid::from_u128(cr.client_id))
@@ -1194,7 +1149,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
 
     fn connections(&self) -> Vec<Obj> {
         let Ok(inner) = self.inner.lock() else {
-            tracing::warn!("Poisoned connections inner lock during connections list");
+            warn!("Poisoned connections inner lock during connections list");
             return vec![];
         };
 
@@ -1244,6 +1199,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
     }
 
     fn remove_client_connection(&self, client_id: Uuid) -> Result<(), Error> {
+        info!(client_id = ?client_id, "remove_client_connection: removing");
         let inner = self.inner.lock().unwrap();
 
         // Get timestamps from cache before removal
@@ -1339,22 +1295,11 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         Ok(())
     }
 
-    fn acceptable_content_types_for(&self, connection: Obj) -> Result<Vec<Symbol>, SessionError> {
+    fn acceptable_content_types_for(&self, obj: Obj) -> Result<Vec<Symbol>, SessionError> {
         let inner = self.inner.lock().unwrap();
-
-        let conn_oid_bytes = connection.as_bytes();
-        let connection_records =
-            if let Ok(Some(bytes)) = inner.connection_records_table.get(conn_oid_bytes) {
-                connections_records_from_bytes(&bytes)
-                    .map_err(|_| SessionError::NoConnectionForPlayer(connection))?
-            } else if let Ok(Some(bytes)) = inner.player_clients_table.get(conn_oid_bytes) {
-                connections_records_from_bytes(&bytes)
-                    .map_err(|_| SessionError::NoConnectionForPlayer(connection))?
-            } else {
-                return Err(SessionError::NoConnectionForPlayer(connection));
-            };
-
-        Ok(connection_records
+        let record = Self::get_connections_record(&inner, obj)
+            .ok_or(SessionError::NoConnectionForPlayer(obj))?;
+        Ok(record
             .connections
             .first()
             .map(|cr| cr.acceptable_content_types.clone())

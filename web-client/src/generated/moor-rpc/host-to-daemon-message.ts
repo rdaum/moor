@@ -6,7 +6,7 @@ import {
     HostToDaemonMessageUnion,
     unionListToHostToDaemonMessageUnion,
     unionToHostToDaemonMessageUnion,
-} from "../moor-rpc/host-to-daemon-message-union.js";
+} from "../moor-rpc/host-to-daemon-message-union";
 
 export class HostToDaemonMessage {
     bb: flatbuffers.ByteBuffer | null = null;

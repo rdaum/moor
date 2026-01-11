@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { HistoryResponse } from "../moor-rpc/history-response.js";
+import { HistoryResponse } from "../moor-rpc/history-response";
 
 export class HistoryResponseReply {
     bb: flatbuffers.ByteBuffer | null = null;

@@ -6,7 +6,7 @@ import {
     unionListToWakeConditionUnion,
     unionToWakeConditionUnion,
     WakeConditionUnion,
-} from "../moor-task/wake-condition-union.js";
+} from "../moor-task/wake-condition-union";
 
 export class WakeCondition {
     bb: flatbuffers.ByteBuffer | null = null;

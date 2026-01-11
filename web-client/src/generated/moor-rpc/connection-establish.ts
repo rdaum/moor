@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Symbol } from "../moor-common/symbol.js";
-import { ConnectionAttribute } from "../moor-rpc/connection-attribute.js";
+import { Symbol } from "../moor-common/symbol";
+import { ConnectionAttribute } from "../moor-rpc/connection-attribute";
 
 export class ConnectionEstablish {
     bb: flatbuffers.ByteBuffer | null = null;

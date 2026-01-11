@@ -6,7 +6,7 @@ import {
     StoredProgramLanguage,
     unionListToStoredProgramLanguage,
     unionToStoredProgramLanguage,
-} from "../moor-program/stored-program-language.js";
+} from "../moor-program/stored-program-language";
 
 export class StoredProgram {
     bb: flatbuffers.ByteBuffer | null = null;

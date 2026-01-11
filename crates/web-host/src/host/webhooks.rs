@@ -258,8 +258,8 @@ pub async fn web_hook_handler(
 
     debug!("Response: {response:?}");
 
-    // Clean up connection
-    let detach_msg = mk_detach_msg(&client_token, false);
+    // Hard detach for ephemeral HTTP connections - immediate cleanup
+    let detach_msg = mk_detach_msg(&client_token, true);
     let _ = rpc_client.make_client_rpc_call(client_id, detach_msg).await;
 
     response

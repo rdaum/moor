@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { AbortLimitReason } from "../moor-rpc/abort-limit-reason.js";
+import { AbortLimitReason } from "../moor-rpc/abort-limit-reason";
 
 export class AbortLimit {
     bb: flatbuffers.ByteBuffer | null = null;

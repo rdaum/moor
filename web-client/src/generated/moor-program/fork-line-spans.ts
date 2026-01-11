@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { LineSpan } from "../moor-program/line-span.js";
+import { LineSpan } from "../moor-program/line-span";
 
 export class ForkLineSpans {
     bb: flatbuffers.ByteBuffer | null = null;

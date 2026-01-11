@@ -6,7 +6,7 @@ import {
     CommandErrorUnion,
     unionListToCommandErrorUnion,
     unionToCommandErrorUnion,
-} from "../moor-rpc/command-error-union.js";
+} from "../moor-rpc/command-error-union";
 
 export class CommandError {
     bb: flatbuffers.ByteBuffer | null = null;

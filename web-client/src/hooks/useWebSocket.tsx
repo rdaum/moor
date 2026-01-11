@@ -165,9 +165,10 @@ export const useWebSocket = (
             const baseUrl = window.location.host;
             const isSecure = window.location.protocol === "https:";
 
-            // Get client tokens from localStorage for reconnection
-            const clientToken = localStorage.getItem("client_token");
-            const clientId = localStorage.getItem("client_id");
+            // Get connection credentials from sessionStorage (per-tab)
+            const clientToken = sessionStorage.getItem("client_token");
+            const clientId = sessionStorage.getItem("client_id");
+            // Session active flag is cross-tab (localStorage) for coordination
             const sessionActive = localStorage.getItem("client_session_active") === "true";
 
             const wsUrl = `${isSecure ? "wss://" : "ws://"}${baseUrl}/ws/attach/${mode}`;

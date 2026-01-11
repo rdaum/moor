@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { NarrativeEvent } from "../moor-common/narrative-event.js";
-import { Obj } from "../moor-common/obj.js";
+import { NarrativeEvent } from "../moor-common/narrative-event";
+import { Obj } from "../moor-common/obj";
 
 export class NarrativeEventMessage {
     bb: flatbuffers.ByteBuffer | null = null;

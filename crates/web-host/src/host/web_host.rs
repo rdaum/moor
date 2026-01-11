@@ -1013,16 +1013,25 @@ async fn attach(
 
     let auth_token = AuthToken(auth_token);
 
-    // Only attempt reattachment if this is not an initial attach AND we have client credentials
-    // Initial attaches (fresh logins) should always create new connections to trigger :user_connected
-    let reattach_details = if !is_initial_attach && client_hint.is_some() {
-        let (hint_id, hint_token) = client_hint.clone().unwrap();
+    // Always try reattach if we have credentials - this preserves the connection ID
+    // from :do_login_command. The is_initial_attach flag only affects client-side behavior.
+    let reattach_details = if let Some((hint_id, hint_token)) = client_hint.clone() {
+        debug!(
+            client_id = ?hint_id,
+            "WebSocket attach: attempting reattach with existing credentials"
+        );
         match host
             .reattach_authenticated(auth_token.clone(), hint_id, hint_token.clone(), addr)
             .await
         {
-            Ok(details) => Some(details),
-            Err(WsHostError::AuthenticationFailed) => None,
+            Ok(details) => {
+                debug!(client_id = ?hint_id, "WebSocket reattach succeeded");
+                Some(details)
+            }
+            Err(WsHostError::AuthenticationFailed) => {
+                warn!(client_id = ?hint_id, "WebSocket reattach failed - will create new connection");
+                None
+            }
             Err(e) => {
                 error!("Reattach attempt failed: {}", e);
                 return Response::builder()
@@ -1032,6 +1041,7 @@ async fn attach(
             }
         }
     } else {
+        debug!("WebSocket attach: no credentials, will create new connection");
         None
     };
 
@@ -1231,8 +1241,9 @@ pub async fn eval_handler(
         .body(Body::from(reply_bytes))
         .unwrap();
 
+    // Hard detach for ephemeral HTTP connections - immediate cleanup
     let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
+        message: mk_detach_msg(&client_token, true).message,
     };
     let _ = rpc_client
         .make_client_rpc_call(client_id, detach_msg)

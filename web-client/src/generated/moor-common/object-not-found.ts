@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { ObjectRef } from "../moor-common/object-ref.js";
+import { ObjectRef } from "../moor-common/object-ref";
 
 export class ObjectNotFound {
     bb: flatbuffers.ByteBuffer | null = null;

@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { CatchTypeUnion, unionListToCatchTypeUnion, unionToCatchTypeUnion } from "../moor-task/catch-type-union.js";
+import { CatchTypeUnion, unionListToCatchTypeUnion, unionToCatchTypeUnion } from "../moor-task/catch-type-union";
 
 export class CatchType {
     bb: flatbuffers.ByteBuffer | null = null;

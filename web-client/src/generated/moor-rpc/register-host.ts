@@ -2,9 +2,9 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Uuid } from "../moor-common/uuid.js";
-import { HostType } from "../moor-rpc/host-type.js";
-import { Listener } from "../moor-rpc/listener.js";
+import { Uuid } from "../moor-common/uuid";
+import { HostType } from "../moor-rpc/host-type";
+import { Listener } from "../moor-rpc/listener";
 
 export class RegisterHost {
     bb: flatbuffers.ByteBuffer | null = null;

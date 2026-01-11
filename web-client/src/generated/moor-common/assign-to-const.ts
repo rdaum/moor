@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { CompileContext } from "../moor-common/compile-context.js";
-import { Symbol } from "../moor-common/symbol.js";
+import { CompileContext } from "../moor-common/compile-context";
+import { Symbol } from "../moor-common/symbol";
 
 export class AssignToConst {
     bb: flatbuffers.ByteBuffer | null = null;

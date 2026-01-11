@@ -2,9 +2,9 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Symbol } from "../moor-common/symbol.js";
-import { AuthToken } from "../moor-rpc/auth-token.js";
-import { Var } from "../moor-var/var.js";
+import { Symbol } from "../moor-common/symbol";
+import { AuthToken } from "../moor-rpc/auth-token";
+import { Var } from "../moor-var/var";
 
 export class CallSystemVerb {
     bb: flatbuffers.ByteBuffer | null = null;

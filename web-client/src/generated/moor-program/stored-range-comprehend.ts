@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { StoredName } from "../moor-program/stored-name.js";
+import { StoredName } from "../moor-program/stored-name";
 
 export class StoredRangeComprehend {
     bb: flatbuffers.ByteBuffer | null = null;

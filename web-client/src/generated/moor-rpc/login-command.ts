@@ -2,9 +2,9 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Obj } from "../moor-common/obj.js";
-import { ClientToken } from "../moor-rpc/client-token.js";
-import { VarMap } from "../moor-var/var-map.js";
+import { Obj } from "../moor-common/obj";
+import { ClientToken } from "../moor-rpc/client-token";
+import { VarMap } from "../moor-var/var-map";
 
 export class LoginCommand {
     bb: flatbuffers.ByteBuffer | null = null;

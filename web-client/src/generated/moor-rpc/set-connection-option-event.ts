@@ -2,9 +2,9 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Obj } from "../moor-common/obj.js";
-import { Symbol } from "../moor-common/symbol.js";
-import { Var } from "../moor-var/var.js";
+import { Obj } from "../moor-common/obj";
+import { Symbol } from "../moor-common/symbol";
+import { Var } from "../moor-var/var";
 
 export class SetConnectionOptionEvent {
     bb: flatbuffers.ByteBuffer | null = null;

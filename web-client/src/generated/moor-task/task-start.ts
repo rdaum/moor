@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { TaskStartUnion, unionListToTaskStartUnion, unionToTaskStartUnion } from "../moor-task/task-start-union.js";
+import { TaskStartUnion, unionListToTaskStartUnion, unionToTaskStartUnion } from "../moor-task/task-start-union";
 
 export class TaskStart {
     bb: flatbuffers.ByteBuffer | null = null;

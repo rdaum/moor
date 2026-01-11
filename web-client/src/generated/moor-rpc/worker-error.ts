@@ -2,11 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import {
-    unionListToWorkerErrorUnion,
-    unionToWorkerErrorUnion,
-    WorkerErrorUnion,
-} from "../moor-rpc/worker-error-union.js";
+import { unionListToWorkerErrorUnion, unionToWorkerErrorUnion, WorkerErrorUnion } from "../moor-rpc/worker-error-union";
 
 export class WorkerError {
     bb: flatbuffers.ByteBuffer | null = null;

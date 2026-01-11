@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { VerbProgramError } from "../moor-rpc/verb-program-error.js";
+import { VerbProgramError } from "../moor-rpc/verb-program-error";
 
 export class VerbProgramFailure {
     bb: flatbuffers.ByteBuffer | null = null;

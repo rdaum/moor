@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Obj } from "../moor-common/obj.js";
-import { StoredProgram } from "../moor-program/stored-program.js";
+import { Obj } from "../moor-common/obj";
+import { StoredProgram } from "../moor-program/stored-program";
 
 export class StartEval {
     bb: flatbuffers.ByteBuffer | null = null;

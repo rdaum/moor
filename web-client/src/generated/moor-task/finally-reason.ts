@@ -6,7 +6,7 @@ import {
     FinallyReasonUnion,
     unionListToFinallyReasonUnion,
     unionToFinallyReasonUnion,
-} from "../moor-task/finally-reason-union.js";
+} from "../moor-task/finally-reason-union";
 
 export class FinallyReason {
     bb: flatbuffers.ByteBuffer | null = null;

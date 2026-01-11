@@ -360,9 +360,9 @@ pub async fn invoke_verb_handler(
         }
     };
 
-    // Send detach
+    // Hard detach for ephemeral HTTP connections - immediate cleanup
     let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
+        message: mk_detach_msg(&client_token, true).message,
     };
     let _ = rpc_client.make_client_rpc_call(client_id, detach_msg).await;
 
@@ -474,8 +474,9 @@ pub async fn verb_program_handler(
         .body(Body::from(reply_bytes))
         .unwrap();
 
+    // Hard detach for ephemeral HTTP connections - immediate cleanup
     let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
+        message: mk_detach_msg(&client_token, true).message,
     };
     let _ = rpc_client
         .make_client_rpc_call(client_id, detach_msg)

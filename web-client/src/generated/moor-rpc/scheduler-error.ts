@@ -6,7 +6,7 @@ import {
     SchedulerErrorUnion,
     unionListToSchedulerErrorUnion,
     unionToSchedulerErrorUnion,
-} from "../moor-rpc/scheduler-error-union.js";
+} from "../moor-rpc/scheduler-error-union";
 
 export class SchedulerError {
     bb: flatbuffers.ByteBuffer | null = null;

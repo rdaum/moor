@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Symbol } from "../moor-common/symbol.js";
-import { Uuid } from "../moor-common/uuid.js";
+import { Symbol } from "../moor-common/symbol";
+import { Uuid } from "../moor-common/uuid";
 
 export class AttachWorker {
     bb: flatbuffers.ByteBuffer | null = null;

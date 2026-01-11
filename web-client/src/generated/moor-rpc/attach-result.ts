@@ -2,8 +2,8 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Obj } from "../moor-common/obj.js";
-import { ClientToken } from "../moor-rpc/client-token.js";
+import { Obj } from "../moor-common/obj";
+import { ClientToken } from "../moor-rpc/client-token";
 
 export class AttachResult {
     bb: flatbuffers.ByteBuffer | null = null;

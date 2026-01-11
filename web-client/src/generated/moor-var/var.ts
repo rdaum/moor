@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { unionListToVarUnion, unionToVarUnion, VarUnion } from "../moor-var/var-union.js";
+import { unionListToVarUnion, unionToVarUnion, VarUnion } from "../moor-var/var-union";
 
 export class Var {
     bb: flatbuffers.ByteBuffer | null = null;

@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { ArgSpec } from "../moor-common/arg-spec.js";
+import { ArgSpec } from "../moor-common/arg-spec";
 
 export class VerbArgsSpec {
     bb: flatbuffers.ByteBuffer | null = null;

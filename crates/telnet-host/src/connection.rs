@@ -925,6 +925,9 @@ impl TelnetConnection {
                                 self.handle_connection_option(option_name, Some(value)).await?;
                             }
                         }
+                        moor_rpc::ClientEventUnionRef::CredentialsUpdatedEvent(_) => {
+                            // Not relevant for telnet - only used by web clients
+                        }
                     }
                 }
                 // Auto loop
@@ -1702,6 +1705,10 @@ impl TelnetConnection {
                     self.handle_connection_option(option_name, Some(value))
                         .await?;
                 }
+                Ok(None)
+            }
+            moor_rpc::ClientEventUnionRef::CredentialsUpdatedEvent(_) => {
+                // Not relevant for telnet - only used by web clients
                 Ok(None)
             }
         }

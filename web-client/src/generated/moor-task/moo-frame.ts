@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { MooStackFrame } from "../moor-task/moo-stack-frame.js";
+import { MooStackFrame } from "../moor-task/moo-stack-frame";
 
 export class MooFrame {
     bb: flatbuffers.ByteBuffer | null = null;

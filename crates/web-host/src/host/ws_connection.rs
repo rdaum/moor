@@ -14,8 +14,8 @@
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, StreamExt};
 use moor_schema::{
-    convert::uuid_from_ref, convert::var_from_flatbuffer_ref, rpc as moor_rpc,
-    var as moor_var_schema,
+    common as moor_common, convert::uuid_from_ref, convert::var_from_flatbuffer_ref,
+    rpc as moor_rpc, var as moor_var_schema,
 };
 use moor_var::{Obj, Var, v_str};
 use planus::ReadAsRoot;
@@ -89,9 +89,40 @@ pub enum ReadEvent {
 }
 
 impl WebSocketConnection {
+    /// Build a CredentialsUpdatedEvent as serialized FlatBuffer bytes
+    fn build_credentials_event(&self) -> Vec<u8> {
+        let event = moor_rpc::ClientEvent {
+            event: moor_rpc::ClientEventUnion::CredentialsUpdatedEvent(Box::new(
+                moor_rpc::CredentialsUpdatedEvent {
+                    client_id: Box::new(moor_common::Uuid {
+                        data: self.client_id.as_bytes().to_vec(),
+                    }),
+                    client_token: Box::new(moor_rpc::ClientToken {
+                        token: self.client_token.0.clone(),
+                    }),
+                },
+            )),
+        };
+        let mut builder = planus::Builder::new();
+        builder.finish(event, None).to_vec()
+    }
+
     pub async fn handle(&mut self, connect_type: moor_rpc::ConnectType, stream: WebSocket) {
         info!("New connection from {}, {}", self.peer_addr, self.player);
         let (mut ws_sender, mut ws_receiver) = stream.split();
+
+        // Send credentials at the start of every connection.
+        // This ensures the client always has the correct credentials, even after
+        // reattach fails and a new connection is created.
+        let credentials_bytes = self.build_credentials_event();
+        if let Err(e) = ws_sender
+            .send(Message::Binary(credentials_bytes.into()))
+            .await
+        {
+            error!("Failed to send credentials update: {}", e);
+            return;
+        }
+        debug!(client_id = ?self.client_id, "Sent credentials update to client");
 
         // Connection message is now sent via SystemMessageEvent from the daemon
         match connect_type {
@@ -117,12 +148,12 @@ impl WebSocketConnection {
         let mut pending_heartbeat: Option<Instant> = None;
         loop {
             // Check for heartbeat timeout - if we sent a heartbeat and haven't received
-            // a response within HEARTBEAT_TIMEOUT, the connection is likely zombie.
+            // a response within HEARTBEAT_TIMEOUT, the websocket connection is likely zombie.
             if let Some(sent_time) = pending_heartbeat
                 && sent_time.elapsed() > HEARTBEAT_TIMEOUT
             {
                 warn!(
-                    "Heartbeat timeout after {:?} - client JS not responding, closing connection",
+                    "Heartbeat timeout after {:?} - websocket not responding, closing connection",
                     sent_time.elapsed()
                 );
                 break;

@@ -2,11 +2,11 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { Obj } from "../moor-common/obj.js";
-import { Symbol } from "../moor-common/symbol.js";
-import { VerbDef } from "../moor-common/verb-def.js";
-import { Frame } from "../moor-task/frame.js";
-import { Var } from "../moor-var/var.js";
+import { Obj } from "../moor-common/obj";
+import { Symbol } from "../moor-common/symbol";
+import { VerbDef } from "../moor-common/verb-def";
+import { Frame } from "../moor-task/frame";
+import { Var } from "../moor-var/var";
 
 export class Activation {
     bb: flatbuffers.ByteBuffer | null = null;

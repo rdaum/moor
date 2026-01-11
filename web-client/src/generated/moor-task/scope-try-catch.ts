@@ -2,7 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
-import { CatchHandler } from "../moor-task/catch-handler.js";
+import { CatchHandler } from "../moor-task/catch-handler";
 
 export class ScopeTryCatch {
     bb: flatbuffers.ByteBuffer | null = null;
