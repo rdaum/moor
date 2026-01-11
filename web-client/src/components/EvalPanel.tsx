@@ -65,6 +65,8 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const errorDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
     const modelUriRef = useRef<string | null>(null);
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const previouslyFocusedRef = useRef<HTMLElement | null>(null);
     const { theme } = useTheme();
     const monacoTheme = React.useMemo(() => monacoThemeFor(theme), [theme]);
 
@@ -115,6 +117,63 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
             }
         };
     }, []);
+
+    // Focus trap for modal mode
+    useEffect(() => {
+        if (!visible || splitMode) return;
+
+        // Save the currently focused element
+        previouslyFocusedRef.current = document.activeElement as HTMLElement;
+
+        // Move focus to the modal container
+        if (containerRef.current) {
+            containerRef.current.focus();
+        }
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== "Tab" || !containerRef.current) return;
+
+            // Get all focusable elements within the container
+            const focusableElements = containerRef.current.querySelectorAll<HTMLElement>(
+                "button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])",
+            );
+
+            if (focusableElements.length === 0) return;
+
+            const firstElement = focusableElements[0];
+            const lastElement = focusableElements[focusableElements.length - 1];
+            const activeElement = document.activeElement as HTMLElement;
+
+            if (e.shiftKey) {
+                // Shift+Tab: move to previous element
+                if (activeElement === firstElement) {
+                    e.preventDefault();
+                    lastElement.focus();
+                }
+            } else {
+                // Tab: move to next element
+                if (activeElement === lastElement) {
+                    e.preventDefault();
+                    firstElement.focus();
+                }
+            }
+        };
+
+        document.addEventListener("keydown", handleKeyDown);
+
+        return () => {
+            document.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [visible, splitMode]);
+
+    // Restore focus when modal closes
+    useEffect(() => {
+        return () => {
+            if (!visible && previouslyFocusedRef.current && previouslyFocusedRef.current.focus) {
+                previouslyFocusedRef.current.focus();
+            }
+        };
+    }, [visible]);
 
     // Update error decorations when error changes
     useEffect(() => {
@@ -302,6 +361,17 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
         setIsSplitDragging(false);
     }, []);
 
+    const handleSplitKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+        const step = 5; // Percentage to change per key press
+        if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setEditorHeight(prev => Math.min(80, prev + step));
+        } else if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setEditorHeight(prev => Math.max(20, prev - step));
+        }
+    }, []);
+
     // Add global mouse event listeners
     useEffect(() => {
         if (isDragging || isResizing || isSplitDragging) {
@@ -366,11 +436,12 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
 
     return (
         <div
+            ref={containerRef}
             className="editor_container"
             role={splitMode ? "region" : "dialog"}
             aria-modal={splitMode ? undefined : "true"}
             aria-labelledby="eval-panel-title"
-            tabIndex={-1}
+            tabIndex={splitMode ? undefined : -1}
             style={splitMode ? splitStyle : modalStyle}
         >
             {/* Title bar */}
@@ -443,7 +514,14 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
             {/* Editor area with horizontal split */}
             <div className="editor-body" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
                 {/* Editor pane */}
-                <div style={{ height: `${editorHeight}%`, overflow: "hidden", flex: "0 0 auto" }}>
+                <div
+                    style={{ height: `${editorHeight}%`, overflow: "hidden", flex: "0 0 auto" }}
+                    role="group"
+                    aria-labelledby="editor-label"
+                >
+                    <label id="editor-label" style={{ display: "none" }}>
+                        MOO code editor
+                    </label>
                     <Editor
                         height="100%"
                         defaultLanguage="moo"
@@ -472,6 +550,13 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
                 <div
                     className={`browser-resize-handle ${isSplitDragging ? "dragging" : ""}`}
                     onMouseDown={handleSplitDragStart}
+                    onKeyDown={handleSplitKeyDown}
+                    role="separator"
+                    aria-label="Adjust editor and results pane heights"
+                    aria-valuenow={Math.round(editorHeight)}
+                    aria-valuemin={20}
+                    aria-valuemax={80}
+                    tabIndex={0}
                     style={{
                         zIndex: 10,
                     }}
@@ -479,6 +564,9 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
 
                 {/* Results pane */}
                 <div
+                    aria-live="polite"
+                    aria-label="Evaluation results"
+                    role="region"
                     style={{
                         height: `${100 - editorHeight}%`,
                         overflow: "auto",
@@ -492,8 +580,14 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
                             <div style={{ padding: "12px 16px" }}>
                                 {error
                                     ? (
-                                        <div className="editor-error-text">
-                                            <strong>Error:</strong> {error.message}
+                                        <div className="editor-error-text" role="alert">
+                                            <strong>Error</strong>
+                                            {error.line && error.col && (
+                                                <div aria-label={`Error at line ${error.line}, column ${error.col}`}>
+                                                    at line {error.line}, column {error.col}
+                                                </div>
+                                            )}
+                                            <p style={{ margin: "8px 0 0 0" }}>{error.message}</p>
                                         </div>
                                     )
                                     : (
@@ -534,6 +628,7 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
                     <button
                         onClick={handleEvaluate}
                         disabled={isEvaluating}
+                        aria-busy={isEvaluating}
                         className="btn btn-primary btn-sm"
                     >
                         {isEvaluating ? "Evaluating..." : "Evaluate"}
