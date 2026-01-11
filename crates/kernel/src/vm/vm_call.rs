@@ -204,23 +204,20 @@ impl VMExecState {
         let caller = self.caller();
 
         // Only wizards can propagate a modified player value to called verbs.
-        // Check if player was modified in the frame before doing any DB lookup.
         let activation_player = self.top().player;
-        let Frame::Moo(frame) = &self.top().frame else {
-            return self.push_error(E_TYPE.msg("Cannot call verb from non-MOO frame"));
-        };
-        let frame_player = frame
-            .get_gvar(GlobalName::player)
-            .and_then(|v| v.as_object());
-        let player = match frame_player {
-            Some(fp) if fp != activation_player => {
-                // Player was modified - only propagate if caller is wizard
-                let caller_perms = self.top().permissions;
-                let is_wiz = with_current_transaction_mut(|ws| ws.flags_of(&caller_perms))
-                    .is_ok_and(|f| f.contains(ObjFlag::Wizard));
-                if is_wiz { fp } else { activation_player }
-            }
-            _ => activation_player,
+        let player = if let Frame::Moo(frame) = &self.top().frame {
+            frame
+                .get_gvar(GlobalName::player)
+                .and_then(|v| v.as_object())
+                .filter(|fp| fp != &activation_player)
+                .map_or(activation_player, |fp| {
+                    let is_wiz =
+                        with_current_transaction_mut(|ws| ws.flags_of(&self.top().permissions))
+                            .is_ok_and(|f| f.contains(ObjFlag::Wizard));
+                    if is_wiz { fp } else { activation_player }
+                })
+        } else {
+            activation_player
         };
 
         let self_valid = with_current_transaction_mut(|world_state| world_state.valid(&location))
