@@ -384,24 +384,29 @@ pub fn complex_match_objects_keys_with_fuzzy_threshold(
             _ => continue,
         };
 
+        // Find the best match type across ALL keys for this object
+        // Priority: exact (0) > prefix (1) > substring (2) > none (3)
+        let mut best_match: u8 = 3; // none
+
         for key_str in &key_strings {
             let key_lower = key_str.to_lowercase();
 
-            // Exact match
             if key_lower == subject_lower {
-                exact_matches.push(obj_val.clone());
-                break; // Don't check other keys for this object
-            }
-            // Prefix match
-            else if key_lower.starts_with(&subject_lower) {
-                start_matches.push(obj_val.clone());
+                best_match = 0; // exact - can't do better, stop checking
                 break;
+            } else if key_lower.starts_with(&subject_lower) {
+                best_match = best_match.min(1); // prefix
+            } else if key_lower.contains(&subject_lower) {
+                best_match = best_match.min(2); // substring
             }
-            // Substring match
-            else if key_lower.contains(&subject_lower) {
-                contain_matches.push(obj_val.clone());
-                break;
-            }
+        }
+
+        // Add object to the appropriate category based on best match found
+        match best_match {
+            0 => exact_matches.push(obj_val.clone()),
+            1 => start_matches.push(obj_val.clone()),
+            2 => contain_matches.push(obj_val.clone()),
+            _ => {}
         }
 
         // If no exact/prefix/substring match found, try fuzzy matching
@@ -559,6 +564,29 @@ mod tests {
         ];
         let result = complex_match_objects_keys("foo", &objects, &keys);
         assert_eq!(result, ComplexMatchResult::Single(v_int(3)));
+    }
+
+    #[test]
+    fn test_complex_match_objects_keys_best_match_across_aliases() {
+        // Regression test: ensure we find the best match type across ALL keys,
+        // not just the first match type found.
+        // For "heated pool" with keys ["heated pool", "pool"], matching "pool"
+        // should be an exact match (via "pool" alias), not a substring match.
+        let objects = vec![v_int(1)];
+        let keys = vec![v_list(&[v_str("heated pool"), v_str("pool")])];
+        let result = complex_match_objects_keys("pool", &objects, &keys);
+        assert_eq!(result, ComplexMatchResult::Single(v_int(1)));
+
+        // Verify it goes in exact_matches, not contain_matches, by testing
+        // that it beats a prefix match from another object
+        let objects = vec![v_int(1), v_int(2)];
+        let keys = vec![
+            v_list(&[v_str("heated pool"), v_str("pool")]), // exact via "pool"
+            v_list(&[v_str("poolside")]),                   // prefix match
+        ];
+        let result = complex_match_objects_keys("pool", &objects, &keys);
+        // Should return only the exact match, not both
+        assert_eq!(result, ComplexMatchResult::Single(v_int(1)));
     }
 
     #[test]
