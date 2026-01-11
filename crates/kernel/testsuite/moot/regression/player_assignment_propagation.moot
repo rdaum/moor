@@ -1,0 +1,26 @@
+// Test that player assignment propagates to called verbs only for wizards.
+// This matches LambdaMOO/ToastStunt behavior.
+
+@wizard
+
+// Create test object with two verbs
+; add_property(#0, "test_obj", create(#-1), {player, "rw"});
+; add_verb($test_obj, {player, "rxd", "get_player"}, {"this", "none", "this"});
+; set_verb_code($test_obj, "get_player", {"return player;"});
+; add_verb($test_obj, {player, "rxd", "call_with_player"}, {"this", "none", "this"});
+; set_verb_code($test_obj, "call_with_player", {"player = args[1];", "return this:get_player();"});
+
+// Create a non-wizard programmer to test with
+; add_property(#0, "nonwiz", create(#-1), {player, "rw"});
+; $nonwiz.programmer = 1;
+; add_verb($test_obj, {$nonwiz, "rxd", "nonwiz_call_with_player"}, {"this", "none", "this"});
+; set_verb_code($test_obj, "nonwiz_call_with_player", {"player = args[1];", "return this:get_player();"});
+
+// Wizard calling: player assignment should propagate
+; return $test_obj:call_with_player(#99);
+#99
+
+// Non-wizard calling: player assignment should NOT propagate
+// The called verb should see the original player, not the modified one
+; return $test_obj:nonwiz_call_with_player(#99);
+#3
