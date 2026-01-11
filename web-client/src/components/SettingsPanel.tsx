@@ -15,6 +15,7 @@
 
 import React from "react";
 import { CommandEchoToggle } from "./CommandEchoToggle";
+import { EmojiToggle } from "./EmojiToggle";
 import { FontSizeControl } from "./FontSizeControl";
 import { FontToggle } from "./FontToggle";
 import { SayModeToggle } from "./SayModeToggle";
@@ -69,6 +70,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                                 onIncrease={onIncreaseNarrativeFontSize}
                             />
                         </div>
+                        <EmojiToggle />
                     </div>
 
                     <div className="settings-section">

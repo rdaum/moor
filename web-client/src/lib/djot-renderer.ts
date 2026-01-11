@@ -15,6 +15,7 @@ import { parse, renderHTML } from "@djot/djot";
 import { AnsiUp } from "ansi_up";
 import DOMPurify from "dompurify";
 import Prism from "prismjs";
+import { convertEmoticons, getEmojiEnabled } from "../components/EmojiToggle";
 import "./prism-moo";
 
 /**
@@ -223,12 +224,19 @@ function escapeIdentifierUnderscores(content: string): string {
 }
 
 /**
- * Processes ANSI escape codes in text nodes recursively
+ * Processes ANSI escape codes and emoji conversion in text nodes recursively
  */
 function processTextNodesForAnsi(node: Node, ansi_up: AnsiUp): void {
     if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.textContent || "";
-        if (text.includes("\x1b[")) {
+        let text = node.textContent || "";
+
+        // Apply emoji conversion if enabled
+        const emojiEnabled = getEmojiEnabled();
+        if (emojiEnabled) {
+            text = convertEmoticons(text);
+        }
+
+        if (text.includes("\x1b[") || (emojiEnabled && text !== node.textContent)) {
             const ansiHtml = ansi_up.ansi_to_html(text);
             const span = document.createElement("span");
             span.innerHTML = ansiHtml;
@@ -362,8 +370,11 @@ export function renderHtmlContent(html: string): string {
  * Renders plain text to HTML, converting ANSI escape codes
  */
 export function renderPlainText(text: string): string {
+    // Apply emoji conversion if enabled
+    const processedText = getEmojiEnabled() ? convertEmoticons(text) : text;
+
     const ansi_up = new AnsiUp();
-    const htmlFromAnsi = ansi_up.ansi_to_html(text);
+    const htmlFromAnsi = ansi_up.ansi_to_html(processedText);
 
     // Sanitize with minimal allowed tags for plain text
     const sanitizedHtml = DOMPurify.sanitize(htmlFromAnsi, {
