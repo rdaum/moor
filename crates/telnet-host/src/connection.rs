@@ -63,7 +63,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> AsyncStream for T {}
 /// Type alias for a boxed async stream that can be either TcpStream or TlsStream.
 pub(crate) type BoxedAsyncIo = Pin<Box<dyn AsyncStream>>;
 
-use crate::djot_formatter::djot_to_ansi;
+use crate::djot_formatter::djot_to_terminal;
 
 /// Out of band messages are prefixed with this string, e.g. for MCP clients.
 const OUT_OF_BAND_PREFIX: &str = "#$#";
@@ -126,6 +126,8 @@ pub(crate) struct TelnetConnection {
     pub(crate) collecting_input: bool,
     /// Raw file descriptor for the socket (used for setting socket options like keep-alive)
     pub(crate) socket_fd: RawFd,
+    /// Whether the client supports UTF-8 (for fancy characters in output)
+    pub(crate) supports_utf8: bool,
 }
 
 /// The input modes the telnet session can be in.
@@ -343,7 +345,7 @@ impl InputMetadata {
                 .and_then(|v| v.as_integer())
                 .and_then(|w| if w > 0 { Some(w as usize) } else { None });
 
-            let formatted = djot_to_ansi(prompt);
+            let formatted = djot_to_terminal(prompt, conn.supports_utf8);
             conn.send_line(&formatted).await?;
         }
 
@@ -567,6 +569,11 @@ impl TelnetConnection {
             }
             "keep-alive" => {
                 self.set_tcp_keepalive(value)?;
+            }
+            "utf8" => {
+                let utf8 = value.as_ref().map(|v| v.is_true()).unwrap_or(false);
+                debug!("Setting UTF-8 support to {}", utf8);
+                self.supports_utf8 = utf8;
             }
             _ => {
                 warn!("Unsupported connection option: {}", option_str);
@@ -801,7 +808,8 @@ impl TelnetConnection {
                     .and_then(|v| v.as_integer())
                     .and_then(|w| if w > 0 { Some(w as usize) } else { None });
 
-                let Ok(formatted) = output_format(&value, content_type, width) else {
+                let Ok(formatted) = output_format(&value, content_type, width, self.supports_utf8)
+                else {
                     warn!("Failed to format message: {:?}", value);
                     return Ok(());
                 };
@@ -1457,6 +1465,14 @@ impl TelnetConnection {
                 }
                 Ok(true)
             }
+            ".UTF8" => {
+                // Toggle UTF-8 support for rich output
+                self.supports_utf8 = !self.supports_utf8;
+                let status = if self.supports_utf8 { "on" } else { "off" };
+                self.send_line(&format!("UTF-8 support is now {}", status))
+                    .await?;
+                Ok(true)
+            }
             _ => Ok(false),
         }
     }
@@ -1502,7 +1518,8 @@ impl TelnetConnection {
                             .and_then(|v| v.as_integer())
                             .and_then(|w| if w > 0 { Some(w as usize) } else { None });
 
-                        let formatted = output_format(msg, *content_type, width)?;
+                        let formatted =
+                            output_format(msg, *content_type, width, self.supports_utf8)?;
                         match formatted {
                             FormattedOutput::Plain(text) => self.send_line(&text).await,
                             FormattedOutput::Rich(text) => {
@@ -2023,10 +2040,11 @@ fn output_format(
     content: &Var,
     content_type: Option<Symbol>,
     width: Option<usize>,
+    utf8: bool,
 ) -> Result<FormattedOutput, eyre::Error> {
     match content.variant() {
-        Variant::Str(s) => output_str_format(s.as_str(), content_type, width),
-        Variant::Sym(s) => output_str_format(&s.as_arc_str(), content_type, width),
+        Variant::Str(s) => output_str_format(s.as_str(), content_type, width, utf8),
+        Variant::Sym(s) => output_str_format(&s.as_arc_str(), content_type, width, utf8),
         Variant::List(l) => {
             // If the content is a list, it must be a list of strings.
             let mut output = String::new();
@@ -2039,7 +2057,7 @@ fn output_format(
                 }
                 output.push_str(item_str);
             }
-            output_str_format(&output, content_type, width)
+            output_str_format(&output, content_type, width, utf8)
         }
         _ => bail!("Unsupported content type: {:?}", content.variant()),
     }
@@ -2049,6 +2067,7 @@ fn output_str_format(
     content: &str,
     content_type: Option<Symbol>,
     _width: Option<usize>,
+    utf8: bool,
 ) -> Result<FormattedOutput, eyre::Error> {
     let Some(content_type) = content_type else {
         debug!("output_str_format: no content_type, using plain");
@@ -2059,9 +2078,11 @@ fn output_str_format(
     Ok(match content_type_str.as_str() {
         CONTENT_TYPE_MARKDOWN | CONTENT_TYPE_MARKDOWN_SLASH => {
             // Use djot formatter for markdown too - djot handles most markdown syntax
-            FormattedOutput::Rich(djot_to_ansi(content))
+            FormattedOutput::Rich(djot_to_terminal(content, utf8))
         }
-        CONTENT_TYPE_DJOT | CONTENT_TYPE_DJOT_SLASH => FormattedOutput::Rich(djot_to_ansi(content)),
+        CONTENT_TYPE_DJOT | CONTENT_TYPE_DJOT_SLASH => {
+            FormattedOutput::Rich(djot_to_terminal(content, utf8))
+        }
         // text/plain, None, or unknown
         _ => FormattedOutput::Plain(content.to_string()),
     })

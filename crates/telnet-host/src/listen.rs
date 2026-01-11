@@ -543,6 +543,7 @@ impl Listener {
                 pending_line_mode: None,
                 collecting_input: false,
                 socket_fd,
+                supports_utf8: false,
             };
 
             tcp_connection.run().await?;

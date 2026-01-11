@@ -24,9 +24,11 @@ use tabled::{
 };
 
 /// Render djot markup to ANSI-colored terminal output.
-pub fn djot_to_ansi(input: &str) -> String {
+/// If `utf8` is true, use Unicode characters for bullets, quotes, tables, etc.
+/// If false, use ASCII-safe alternatives.
+pub fn djot_to_terminal(input: &str, utf8: bool) -> String {
     let parser = Parser::new(input);
-    let mut renderer = AnsiRenderer::new();
+    let mut renderer = TerminalRenderer::new(utf8);
     renderer.render(parser);
     renderer.output
 }
@@ -64,9 +66,11 @@ struct DefListState {
     in_term: bool,
 }
 
-/// Stateful renderer that processes jotdown events into ANSI output
-struct AnsiRenderer {
+/// Stateful renderer that processes jotdown events into terminal output
+struct TerminalRenderer {
     output: String,
+    /// Whether the client supports UTF-8 (for fancy characters)
+    utf8: bool,
     /// Style stack for nested inline styles
     style_stack: Vec<StyleModifier>,
     /// List nesting stack
@@ -98,10 +102,11 @@ enum StyleModifier {
     BgColor(Color),
 }
 
-impl AnsiRenderer {
-    fn new() -> Self {
+impl TerminalRenderer {
+    fn new(utf8: bool) -> Self {
         Self {
             output: String::new(),
+            utf8,
             style_stack: Vec::new(),
             list_stack: Vec::new(),
             indent_level: 0,
@@ -132,14 +137,14 @@ impl AnsiRenderer {
             Event::Str(s) => self.render_text(&s),
             Event::FootnoteReference(label) => self.render_footnote_ref(&label),
             Event::Symbol(sym) => self.render_symbol(&sym),
-            Event::LeftSingleQuote => self.emit_text("\u{2018}"), // '
-            Event::RightSingleQuote => self.emit_text("\u{2019}"), // '
-            Event::LeftDoubleQuote => self.emit_text("\u{201C}"), // "
-            Event::RightDoubleQuote => self.emit_text("\u{201D}"), // "
-            Event::Ellipsis => self.emit_text("\u{2026}"),        // …
-            Event::EnDash => self.emit_text("\u{2013}"),          // –
-            Event::EmDash => self.emit_text("\u{2014}"),          // —
-            Event::NonBreakingSpace => self.emit_text("\u{00A0}"), // NBSP
+            Event::LeftSingleQuote => self.emit_text(if self.utf8 { "\u{2018}" } else { "'" }),
+            Event::RightSingleQuote => self.emit_text(if self.utf8 { "\u{2019}" } else { "'" }),
+            Event::LeftDoubleQuote => self.emit_text(if self.utf8 { "\u{201C}" } else { "\"" }),
+            Event::RightDoubleQuote => self.emit_text(if self.utf8 { "\u{201D}" } else { "\"" }),
+            Event::Ellipsis => self.emit_text(if self.utf8 { "\u{2026}" } else { "..." }),
+            Event::EnDash => self.emit_text(if self.utf8 { "\u{2013}" } else { "--" }),
+            Event::EmDash => self.emit_text(if self.utf8 { "\u{2014}" } else { "---" }),
+            Event::NonBreakingSpace => self.emit_text(if self.utf8 { "\u{00A0}" } else { " " }),
             Event::Softbreak => {
                 // In code blocks, soft breaks become newlines; otherwise they're spaces
                 if self.in_code_block && self.table_state.is_none() {
@@ -168,7 +173,8 @@ impl AnsiRenderer {
             Event::ThematicBreak(_) => {
                 self.flush_pending_newlines();
                 self.emit_indent();
-                let rule = "─".repeat(40);
+                let rule_char = if self.utf8 { "\u{2500}" } else { "-" };
+                let rule = rule_char.repeat(40);
                 self.output.push_str(&rule.dimmed().to_string());
                 self.pending_newlines = 2;
             }
@@ -236,7 +242,9 @@ impl AnsiRenderer {
                 if let Some(list_state) = self.list_stack.last_mut() {
                     list_state.item_number += 1;
                     let marker = match &list_state.kind {
-                        ListKind::Unordered(_) => "• ".to_string(),
+                        ListKind::Unordered(_) => {
+                            if self.utf8 { "\u{2022} " } else { "* " }.to_string()
+                        }
                         ListKind::Ordered {
                             numbering, style, ..
                         } => {
@@ -248,7 +256,9 @@ impl AnsiRenderer {
                                 OrderedListStyle::ParenParen => format!("({}) ", num_str),
                             }
                         }
-                        ListKind::Task(_) => "☐ ".to_string(),
+                        ListKind::Task(_) => {
+                            if self.utf8 { "\u{2610} " } else { "[ ] " }.to_string()
+                        }
                     };
                     self.output.push_str(&marker.dimmed().to_string());
                 }
@@ -258,7 +268,11 @@ impl AnsiRenderer {
             Container::TaskListItem { checked } => {
                 self.flush_pending_newlines();
                 self.emit_indent();
-                let marker = if checked { "☑ " } else { "☐ " };
+                let marker = if self.utf8 {
+                    if checked { "\u{2611} " } else { "\u{2610} " }
+                } else {
+                    if checked { "[x] " } else { "[ ] " }
+                };
                 self.output.push_str(&marker.dimmed().to_string());
                 self.indent_level += 1;
                 self.at_line_start = false;
@@ -334,10 +348,10 @@ impl AnsiRenderer {
                 self.style_stack.push(StyleModifier::Dimmed);
             }
             Container::Subscript => {
-                self.emit_text("₍");
+                self.emit_text(if self.utf8 { "\u{208D}" } else { "_(" });
             }
             Container::Superscript => {
-                self.emit_text("⁽");
+                self.emit_text(if self.utf8 { "\u{207D}" } else { "^(" });
             }
             Container::Insert => {
                 self.style_stack.push(StyleModifier::FgColor(Color::Green));
@@ -470,10 +484,10 @@ impl AnsiRenderer {
                 self.style_stack.pop();
             }
             Container::Subscript => {
-                self.emit_text("₎");
+                self.emit_text(if self.utf8 { "\u{208E}" } else { ")" });
             }
             Container::Superscript => {
-                self.emit_text("⁾");
+                self.emit_text(if self.utf8 { "\u{207E}" } else { ")" });
             }
             Container::Insert => {
                 self.style_stack.pop();
@@ -508,7 +522,11 @@ impl AnsiRenderer {
         }
 
         let mut table = builder.build();
-        table.with(Style::rounded());
+        if self.utf8 {
+            table.with(Style::rounded());
+        } else {
+            table.with(Style::ascii());
+        }
 
         // Apply column alignments
         for (i, alignment) in state.column_alignments.iter().enumerate() {
@@ -546,7 +564,11 @@ impl AnsiRenderer {
         }
 
         let mut table = builder.build();
-        table.with(Style::rounded());
+        if self.utf8 {
+            table.with(Style::rounded());
+        } else {
+            table.with(Style::ascii());
+        }
 
         // Emit the table with proper indentation
         self.emit_indent();
@@ -661,7 +683,8 @@ impl AnsiRenderer {
                 .any(|s| matches!(s, StyleModifier::Dimmed))
                 && !self.in_code_block
             {
-                self.output.push_str(&"│ ".dimmed().to_string());
+                let quote_marker = if self.utf8 { "\u{2502} " } else { "| " };
+                self.output.push_str(&quote_marker.dimmed().to_string());
                 if self.indent_level > 1 {
                     self.output.push_str(&"  ".repeat(self.indent_level - 1));
                 }
@@ -769,25 +792,25 @@ mod tests {
 
     #[test]
     fn test_basic_paragraph() {
-        let output = djot_to_ansi("Hello world");
+        let output = djot_to_terminal("Hello world", true);
         assert!(output.contains("Hello world"));
     }
 
     #[test]
     fn test_strong_emphasis() {
-        let output = djot_to_ansi("This is *strong* text");
+        let output = djot_to_terminal("This is *strong* text", true);
         assert!(output.contains("strong"));
     }
 
     #[test]
     fn test_emphasis() {
-        let output = djot_to_ansi("This is _emphasized_ text");
+        let output = djot_to_terminal("This is _emphasized_ text", true);
         assert!(output.contains("emphasized"));
     }
 
     #[test]
     fn test_heading_no_markers() {
-        let output = djot_to_ansi("# Heading 1\n\nSome text");
+        let output = djot_to_terminal("# Heading 1\n\nSome text", true);
         assert!(output.contains("Heading 1"));
         // Should NOT contain the ## markers in output
         assert!(!output.contains("# Heading"));
@@ -796,7 +819,7 @@ mod tests {
     #[test]
     fn test_heading_has_ansi_styling() {
         colored::control::set_override(true);
-        let output = djot_to_ansi("## Heading 2");
+        let output = djot_to_terminal("## Heading 2", true);
         // Should contain ANSI escape codes for styling
         assert!(
             output.contains("\x1b["),
@@ -817,7 +840,7 @@ mod tests {
 
   Definition of term two
 "#;
-        let output = djot_to_ansi(djot);
+        let output = djot_to_terminal(djot, true);
         assert!(output.contains("Term One"));
         assert!(output.contains("Definition of term one"));
         // Should be rendered as a table with rounded borders
@@ -834,7 +857,7 @@ mod tests {
 - Item two
 - Item three
 "#;
-        let output = djot_to_ansi(djot);
+        let output = djot_to_terminal(djot, true);
         assert!(output.contains("Item one"));
         assert!(output.contains("•"));
     }
@@ -848,7 +871,7 @@ fn main() {
 }
 ```
 "#;
-        let output = djot_to_ansi(djot);
+        let output = djot_to_terminal(djot, true);
         assert!(output.contains("fn main()"));
         assert!(output.contains("[rust]"));
     }
@@ -856,14 +879,14 @@ fn main() {
     #[test]
     fn test_smart_quotes() {
         let djot = r#""Hello," she said."#;
-        let output = djot_to_ansi(djot);
+        let output = djot_to_terminal(djot, true);
         assert!(output.contains("\u{201C}") || output.contains("\u{201D}"));
     }
 
     #[test]
     fn test_link() {
         let djot = "[example](https://example.com)";
-        let output = djot_to_ansi(djot);
+        let output = djot_to_terminal(djot, true);
         assert!(output.contains("example"));
         // URL should NOT be shown in terminal output
         assert!(!output.contains("https://example.com"));
@@ -880,7 +903,7 @@ fn main() {
     #[test]
     fn test_blockquote() {
         let djot = "> This is a quote\n> with multiple lines";
-        let output = djot_to_ansi(djot);
+        let output = djot_to_terminal(djot, true);
         assert!(output.contains("This is a quote"));
         assert!(output.contains("│"));
     }
@@ -893,7 +916,7 @@ fn main() {
 | Alice | 30 |
 | Bob | 25 |
 "#;
-        let output = djot_to_ansi(djot);
+        let output = djot_to_terminal(djot, true);
         assert!(output.contains("Name"));
         assert!(output.contains("Alice"));
         assert!(output.contains("30"));
@@ -908,7 +931,7 @@ fn main() {
   - Nested item
 - Item two
 "#;
-        let output = djot_to_ansi(djot);
+        let output = djot_to_terminal(djot, true);
         assert!(output.contains("Item one"));
         assert!(output.contains("Nested item"));
     }
@@ -920,7 +943,7 @@ fn main() {
 2. Second
 3. Third
 "#;
-        let output = djot_to_ansi(djot);
+        let output = djot_to_terminal(djot, true);
         assert!(output.contains("1."));
         assert!(output.contains("First"));
     }
@@ -928,14 +951,14 @@ fn main() {
     #[test]
     fn test_thematic_break() {
         let djot = "Before\n\n---\n\nAfter";
-        let output = djot_to_ansi(djot);
+        let output = djot_to_terminal(djot, true);
         assert!(output.contains("─"));
     }
 
     #[test]
     fn test_insert_delete() {
         let djot = "{+inserted+} and {-deleted-}";
-        let output = djot_to_ansi(djot);
+        let output = djot_to_terminal(djot, true);
         assert!(output.contains("inserted"));
         assert!(output.contains("deleted"));
     }
@@ -943,7 +966,7 @@ fn main() {
     #[test]
     fn test_mark_highlight() {
         let djot = "{=highlighted text=}";
-        let output = djot_to_ansi(djot);
+        let output = djot_to_terminal(djot, true);
         assert!(output.contains("highlighted text"));
     }
 
@@ -954,7 +977,7 @@ fn main() {
 set_task_perms(caller_perms());
 return $look:mk(this, @this.contents);
 ```"#;
-        let output = djot_to_ansi(djot);
+        let output = djot_to_terminal(djot, true);
         // Should have syntax highlighting (ANSI codes)
         assert!(
             output.contains("\x1b["),
