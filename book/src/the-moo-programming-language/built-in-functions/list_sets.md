@@ -415,20 +415,21 @@ This function is particularly useful for implementing sophisticated object match
 Returns all matches from the best (highest priority) non-empty tier as a list.
 
 ```
-list complex_matches(STR token, LIST targets [, NUM fuzzy_threshold])
+list complex_matches(STR token, LIST targets [, LIST keys] [, NUM fuzzy_threshold])
 ```
 
-Unlike `complex_match()` which returns a single match (or uses ordinals to select one), `complex_matches()` returns all matching strings from the highest-priority non-empty tier.
+Unlike `complex_match()` which returns a single match (or uses ordinals to select one), `complex_matches()` returns all matching targets from the highest-priority non-empty tier.
 
 #### Arguments
 
 - `token` (STR): The search string to match against (ordinals are ignored)
-- `targets` (LIST): List of strings to search through
+- `targets` (LIST): List of values to return when matched
+- `keys` (LIST, optional): List of key lists for matching. Must have the same length as `targets`. Each element can be a string or a list of strings.
 - `fuzzy_threshold` (NUM, optional): Controls fuzzy matching sensitivity (default: 0.0, no fuzzy matching)
 
 #### Return values
 
-- Returns a list of all matches from the best non-empty tier
+- Returns a list of all matching targets from the best non-empty tier
 - Returns an empty list `{}` when no matches are found
 - Tier priority: exact > prefix > substring > fuzzy
 
@@ -453,4 +454,16 @@ complex_matches("xyz", {"abc", "def"})              => {}
 // Fuzzy matching with typos
 complex_matches("lammp", {"lamp", "table"}, 0.5)    => {"lamp"}
 complex_matches("lammp", {"lamp", "table"}, 0.0)    => {}  // fuzzy disabled
+
+// Matching with keys (single string per target)
+complex_matches("lamp", {#123, #456, #789}, {"lamp", "bottle", "book"})  => {#123}
+
+// Matching with keys (multiple strings per target)
+objs = {#123, #456, #789};
+keys = {{"lamp", "light"}, {"bottle", "container"}, {"book", "tome"}};
+complex_matches("light", objs, keys)                => {#123}
+complex_matches("b", objs, keys)                    => {#456, #789}  // prefix matches both
+
+// Keys with fuzzy matching
+complex_matches("lammp", {#123, #456}, {"lamp", "table"}, 0.5)  => {#123}
 ```

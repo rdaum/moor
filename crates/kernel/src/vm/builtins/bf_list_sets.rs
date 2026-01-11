@@ -16,7 +16,8 @@
 use ahash::HashMap;
 use lazy_static::lazy_static;
 use moor_common::matching::{
-    ComplexMatchResult, complex_match_objects_keys_with_fuzzy_threshold, complex_match_strings_all,
+    ComplexMatchResult, complex_match_objects_keys_all,
+    complex_match_objects_keys_with_fuzzy_threshold, complex_match_strings_all,
     complex_match_strings_with_fuzzy_threshold,
 };
 use moor_compiler::offset_for_builtin;
@@ -1255,11 +1256,12 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// Usage: `list complex_matches(str token, list targets [, num fuzzy_threshold])`
+/// Usage: `list complex_matches(str token, list targets [, list keys] [, num fuzzy_threshold])`
 /// Returns all matches from the best (highest priority) tier as a list.
 /// If no matches are found, returns an empty list.
+/// Keys can be a list of strings (one per target) or a list of lists of strings (multiple per target).
 fn bf_complex_matches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -1268,24 +1270,55 @@ fn bf_complex_matches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     let token = token.as_str();
 
-    let Variant::List(candidates) = bf_args.args[1].variant() else {
+    let Variant::List(targets) = bf_args.args[1].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
 
-    let fuzzy_threshold = if bf_args.args.len() == 3 {
-        match bf_args.args[2].variant() {
+    // Parse arguments: token, targets, [keys], [fuzzy_threshold]
+    // 2 args: complex_matches(token, targets) - fuzzy_threshold=0.0, no keys
+    // 3 args: complex_matches(token, targets, keys) OR complex_matches(token, targets, fuzzy)
+    // 4 args: complex_matches(token, targets, keys, fuzzy_threshold)
+
+    let use_keys = bf_args.args.len() >= 3 && matches!(bf_args.args[2].variant(), Variant::List(_));
+    let fuzzy_threshold = if bf_args.args.len() >= 4 || (bf_args.args.len() == 3 && !use_keys) {
+        let fuzzy_arg = if bf_args.args.len() >= 4 {
+            &bf_args.args[3]
+        } else {
+            &bf_args.args[2] // 3-arg form where third arg is fuzzy, not keys
+        };
+
+        match fuzzy_arg.variant() {
             Variant::Float(f) => f,
             Variant::Int(i) => i as f64,
             _ => {
                 // Backward compatibility: treat as boolean
-                if bf_args.args[2].is_true() { 0.5 } else { 0.0 }
+                if fuzzy_arg.is_true() { 0.5 } else { 0.0 }
             }
         }
     } else {
         0.0 // Default: no fuzzy matching
     };
 
-    let candidate_vars: Vec<Var> = candidates.iter().collect();
+    // If keys are provided, use the keys-based matching
+    if use_keys {
+        let Variant::List(keys) = bf_args.args[2].variant() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+
+        let target_vars: Vec<Var> = targets.iter().collect();
+        let key_vars: Vec<Var> = keys.iter().collect();
+
+        // Validate that keys and targets have the same length
+        if target_vars.len() != key_vars.len() {
+            return Err(BfErr::Code(E_INVARG));
+        }
+
+        let matches = complex_match_objects_keys_all(token, &target_vars, &key_vars, fuzzy_threshold);
+        return Ok(Ret(v_list(&matches)));
+    }
+
+    // No keys - match against targets directly
+    let candidate_vars: Vec<Var> = targets.iter().collect();
     let matches = complex_match_strings_all(token, &candidate_vars, fuzzy_threshold);
 
     Ok(Ret(v_list(&matches)))

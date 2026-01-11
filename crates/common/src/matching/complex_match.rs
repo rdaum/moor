@@ -474,6 +474,111 @@ pub fn complex_match_objects_keys_with_fuzzy_threshold(
     ComplexMatchResult::NoMatch
 }
 
+/// Return all matches from the best non-empty tier when matching with keys.
+/// Similar to `complex_match_strings_all` but for object/key matching.
+///
+/// Returns a Vec of all matching objects from the first non-empty tier
+/// (exact > prefix > substring > fuzzy).
+pub fn complex_match_objects_keys_all(
+    token: &str,
+    objects: &[Var],
+    keys: &[Var],
+    fuzzy_threshold: f64,
+) -> Vec<Var> {
+    // Strip any leading ordinal from the token
+    let (_, subject) = parse_input_token(token);
+
+    if subject.is_empty() || objects.is_empty() || keys.is_empty() {
+        return Vec::new();
+    }
+
+    let mut exact_matches = Vec::new();
+    let mut start_matches = Vec::new();
+    let mut contain_matches = Vec::new();
+    let mut fuzzy_matches = Vec::new();
+
+    let subject_lower = subject.to_lowercase();
+
+    // Match against keys, return corresponding objects
+    for (idx, key_set) in keys.iter().enumerate() {
+        if idx >= objects.len() {
+            break;
+        }
+
+        let obj_val = &objects[idx];
+
+        // Handle both list of strings and single string for keys
+        let key_strings: Vec<String> = match key_set.variant() {
+            moor_var::Variant::List(key_list) => {
+                let mut strings = Vec::new();
+                for k in key_list.iter() {
+                    if let Some(s) = k.as_string() {
+                        strings.push(s.to_string());
+                    }
+                }
+                strings
+            }
+            moor_var::Variant::Str(s) => vec![s.as_str().to_string()],
+            _ => continue,
+        };
+
+        // Find the best match type across ALL keys for this object
+        // Priority: exact (0) > prefix (1) > substring (2) > none (3)
+        let mut best_match: u8 = 3; // none
+
+        for key_str in &key_strings {
+            let key_lower = key_str.to_lowercase();
+
+            if key_lower == subject_lower {
+                best_match = 0; // exact - can't do better, stop checking
+                break;
+            } else if key_lower.starts_with(&subject_lower) {
+                best_match = best_match.min(1); // prefix
+            } else if key_lower.contains(&subject_lower) {
+                best_match = best_match.min(2); // substring
+            }
+        }
+
+        // Add object to the appropriate category based on best match found
+        match best_match {
+            0 => exact_matches.push(obj_val.clone()),
+            1 => start_matches.push(obj_val.clone()),
+            2 => contain_matches.push(obj_val.clone()),
+            _ => {}
+        }
+
+        // If no exact/prefix/substring match found, try fuzzy matching
+        if fuzzy_threshold > 0.0
+            && !exact_matches.iter().any(|v| v == obj_val)
+            && !start_matches.iter().any(|v| v == obj_val)
+            && !contain_matches.iter().any(|v| v == obj_val)
+        {
+            for key_str in &key_strings {
+                let key_lower = key_str.to_lowercase();
+                let distance = damerau_levenshtein(&subject_lower, &key_lower);
+                let max_distance = (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize;
+                if distance <= max_distance {
+                    fuzzy_matches.push(obj_val.clone());
+                    break;
+                }
+            }
+        }
+    }
+
+    // Return all matches from the best non-empty tier
+    if !exact_matches.is_empty() {
+        exact_matches
+    } else if !start_matches.is_empty() {
+        start_matches
+    } else if !contain_matches.is_empty() {
+        contain_matches
+    } else if fuzzy_threshold > 0.0 && !fuzzy_matches.is_empty() {
+        fuzzy_matches
+    } else {
+        Vec::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

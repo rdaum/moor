@@ -25,9 +25,9 @@ pub mod ws_match_env;
 
 pub use command_parse::DefaultParseCommand;
 pub use complex_match::{
-    ComplexMatchResult, complex_match_objects_keys, complex_match_objects_keys_with_fuzzy,
-    complex_match_objects_keys_with_fuzzy_threshold, complex_match_strings,
-    complex_match_strings_all, complex_match_strings_with_fuzzy,
+    ComplexMatchResult, complex_match_objects_keys, complex_match_objects_keys_all,
+    complex_match_objects_keys_with_fuzzy, complex_match_objects_keys_with_fuzzy_threshold,
+    complex_match_strings, complex_match_strings_all, complex_match_strings_with_fuzzy,
     complex_match_strings_with_fuzzy_threshold, parse_input_token, parse_ordinal,
 };
 pub use complex_object_matcher::ComplexObjectNameMatcher;
