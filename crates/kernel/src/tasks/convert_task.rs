@@ -33,7 +33,6 @@ use crate::{
         vm_host::VmHost as KernelVmHost,
     },
 };
-use moor_common::model::ObjFlag;
 use moor_common::util::BitEnum;
 use moor_compiler::{Label, Offset};
 use moor_schema::{
