@@ -173,13 +173,30 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
 
     const staleClass = isStale ? " content-stale" : "";
 
+    // Helper to wrap content with sr-only link hint when links are present
+    const wrapWithLinkHint = (contentElement: React.ReactElement, html: string) => {
+        // Check if the HTML contains interactive links (data-url attributes)
+        const hasLinks = html.includes("data-url=");
+        if (!hasLinks || isStale) {
+            return contentElement;
+        }
+        return (
+            <>
+                {contentElement}
+                <span className="sr-only">
+                    Interactive links available. Press Shift+Tab to navigate.
+                </span>
+            </>
+        );
+    };
+
     const renderedContent = useMemo(() => {
         switch (contentType) {
             case "text/html": {
                 const htmlContent = getContentString("\n");
                 const processedHtml = renderHtmlContent(htmlContent, enableEmoji);
 
-                return (
+                return wrapWithLinkHint(
                     <div
                         dangerouslySetInnerHTML={{ __html: processedHtml }}
                         onClick={handleLinkClick}
@@ -189,7 +206,8 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                         onTouchCancel={handleTouchCancel}
                         onContextMenu={handleContextMenu}
                         className={`content-html${staleClass}`}
-                    />
+                    />,
+                    processedHtml,
                 );
             }
 
@@ -205,7 +223,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                         enableEmoji,
                     });
 
-                    return (
+                    return wrapWithLinkHint(
                         <div
                             className={`text_djot content-html${staleClass}`}
                             dangerouslySetInnerHTML={{ __html: processedDjotHtml }}
@@ -215,7 +233,8 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                             onTouchEnd={handleTouchEnd}
                             onTouchCancel={handleTouchCancel}
                             onContextMenu={handleContextMenu}
-                        />
+                        />,
+                        processedDjotHtml,
                     );
                 } catch (error) {
                     console.warn("Failed to parse djot content:", error);
@@ -272,6 +291,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
         handleContextMenu,
         content,
         staleClass,
+        isStale,
         enableEmoji,
     ]);
 

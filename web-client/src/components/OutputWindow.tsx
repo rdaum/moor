@@ -420,31 +420,47 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                             result.push(
                                 <div key={message.id} className={wrapperClassName}>
                                     {isCollapsible && isThisCollapsed && (
-                                        <div className="look_collapsed_summary">
-                                            <button
-                                                type="button"
-                                                className="look_toggle_button"
-                                                onClick={() => toggleLookCollapse(collapseKey)}
-                                                aria-expanded={false}
-                                                aria-label="Expand description"
-                                            >
-                                                <span className="look_chevron collapsed" aria-hidden="true">▼</span>
-                                            </button>
-                                            <span className="look_collapsed_name">
-                                                {message.eventMetadata!.dobjName}
-                                            </span>
-                                        </div>
+                                        <>
+                                            {/* Visual collapsed state - hidden from screen readers */}
+                                            <div className="look_collapsed_summary" aria-hidden="true">
+                                                <button
+                                                    type="button"
+                                                    className="look_toggle_button"
+                                                    onClick={() => toggleLookCollapse(collapseKey)}
+                                                    tabIndex={-1}
+                                                >
+                                                    <span className="look_chevron collapsed">▼</span>
+                                                </button>
+                                                <span className="look_collapsed_name">
+                                                    {message.eventMetadata!.dobjName}
+                                                </span>
+                                            </div>
+                                            {/* Full content for screen readers when visually collapsed */}
+                                            <div className={`${baseClassName} sr-only`}>
+                                                {renderContentWithTts(
+                                                    message.content,
+                                                    message.contentType,
+                                                    message.ttsText,
+                                                    message.thumbnail,
+                                                    message.linkPreview,
+                                                    message.id,
+                                                    isMessageStale,
+                                                    message.eventMetadata?.enableEmojis,
+                                                )}
+                                            </div>
+                                        </>
                                     )}
                                     {!isThisCollapsed && isCollapsible && (
                                         <div className="look_toggle_row">
+                                            {/* Toggle button hidden from screen readers */}
                                             <button
                                                 type="button"
                                                 className="look_toggle_button"
                                                 onClick={() => toggleLookCollapse(collapseKey)}
-                                                aria-expanded={true}
-                                                aria-label="Collapse description"
+                                                aria-hidden="true"
+                                                tabIndex={-1}
                                             >
-                                                <span className="look_chevron" aria-hidden="true">▼</span>
+                                                <span className="look_chevron">▼</span>
                                             </button>
                                             <div className={baseClassName}>
                                                 {renderContentWithTts(
@@ -549,31 +565,51 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                     className={wrapperClassName}
                                 >
                                     {isCollapsible && isThisCollapsed && (
-                                        <div className="look_collapsed_summary">
-                                            <button
-                                                type="button"
-                                                className="look_toggle_button"
-                                                onClick={() => toggleLookCollapse(collapseKey)}
-                                                aria-expanded={false}
-                                                aria-label="Expand description"
-                                            >
-                                                <span className="look_chevron collapsed" aria-hidden="true">▼</span>
-                                            </button>
-                                            <span className="look_collapsed_name">
-                                                {firstMessage.eventMetadata!.dobjName}
-                                            </span>
-                                        </div>
+                                        <>
+                                            {/* Visual collapsed state - hidden from screen readers */}
+                                            <div className="look_collapsed_summary" aria-hidden="true">
+                                                <button
+                                                    type="button"
+                                                    className="look_toggle_button"
+                                                    onClick={() => toggleLookCollapse(collapseKey)}
+                                                    tabIndex={-1}
+                                                >
+                                                    <span className="look_chevron collapsed">▼</span>
+                                                </button>
+                                                <span className="look_collapsed_name">
+                                                    {firstMessage.eventMetadata!.dobjName}
+                                                </span>
+                                            </div>
+                                            {/* Full content for screen readers when visually collapsed */}
+                                            <div className="sr-only">
+                                                {group.map(msg => (
+                                                    <div key={msg.id} className={baseClassName}>
+                                                        {renderContentWithTts(
+                                                            msg.content,
+                                                            msg.contentType,
+                                                            msg.ttsText,
+                                                            msg.thumbnail,
+                                                            msg.linkPreview,
+                                                            msg.id,
+                                                            isGroupStale,
+                                                            msg.eventMetadata?.enableEmojis,
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </>
                                     )}
                                     {!isThisCollapsed && isCollapsible && (
                                         <div className="look_toggle_row">
+                                            {/* Toggle button hidden from screen readers */}
                                             <button
                                                 type="button"
                                                 className="look_toggle_button"
                                                 onClick={() => toggleLookCollapse(collapseKey)}
-                                                aria-expanded={true}
-                                                aria-label="Collapse description"
+                                                aria-hidden="true"
+                                                tabIndex={-1}
                                             >
-                                                <span className="look_chevron" aria-hidden="true">▼</span>
+                                                <span className="look_chevron">▼</span>
                                             </button>
                                             <div>
                                                 {group.map(msg => (
