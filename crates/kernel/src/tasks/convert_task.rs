@@ -14,7 +14,6 @@
 //! Conversion between kernel task types and FlatBuffer representations
 
 use crate::{
-    task_context::with_current_transaction,
     tasks::{
         TaskStart as KernelTaskStart,
         task::Task as KernelTask,
@@ -34,6 +33,8 @@ use crate::{
         vm_host::VmHost as KernelVmHost,
     },
 };
+use moor_common::model::ObjFlag;
+use moor_common::util::BitEnum;
 use moor_compiler::{Label, Offset};
 use moor_schema::{
     common as fb_common, convert as convert_schema,
@@ -1158,6 +1159,7 @@ pub(crate) fn activation_to_flatbuffer(
         verb_name: Box::new(fb_verb_name),
         verbdef: Box::new(fb_verbdef),
         permissions: Box::new(fb_permissions),
+        permissions_flags: activation.permissions_flags.to_u16(),
     })
 }
 
@@ -1213,8 +1215,10 @@ pub(crate) fn activation_from_ref(
     let permissions = convert_schema::obj_from_ref(permissions_ref)
         .map_err(|e| TaskConversionError::DecodingError(format!("permissions: {e}")))?;
 
-    let permissions_flags =
-        with_current_transaction(|ws| ws.flags_of(&permissions)).unwrap_or_default();
+    let permissions_flags_raw = fb
+        .permissions_flags()
+        .map_err(|e| TaskConversionError::DecodingError(format!("permissions_flags: {e}")))?;
+    let permissions_flags = BitEnum::from_u16(permissions_flags_raw);
 
     Ok(KernelActivation {
         frame,

@@ -377,6 +377,7 @@ table Activation {
     verb_name: MoorCommon.Symbol (required);
     verbdef: MoorCommon.VerbDef (required);
     permissions: MoorCommon.Obj (required);
+    permissions_flags: uint16;  // BitEnum<ObjFlag> - cached flags for permissions object
 }
 
 // ============================================================================
