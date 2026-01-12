@@ -56,6 +56,8 @@ interface VerbEditorProps {
     onNextEditor?: () => void; // Navigate to next editor
     editorCount?: number; // Total number of editors
     currentEditorIndex?: number; // Current editor index (0-based)
+    // Focus management
+    preventAutoFocus?: boolean; // When true, don't auto-focus the Monaco editor on mount (for embedded mode)
 }
 
 interface CompileError {
@@ -102,6 +104,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     onNextEditor,
     editorCount = 1,
     currentEditorIndex = 0,
+    preventAutoFocus = false,
 }) => {
     const isMobile = useMediaQuery("(max-width: 768px)");
     const isTouchDevice = useTouchDevice();
@@ -115,6 +118,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const errorDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
     const modelUriRef = useRef<string | null>(null);
     const contentRef = useRef(content);
+    const compileButtonRef = useRef<HTMLButtonElement | null>(null);
 
     // Keep contentRef in sync with content state
     useEffect(() => {
@@ -431,15 +435,17 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             mooCompletionManager.register(modelUri, { authToken, objectCurie, uploadAction }, monacoInstance);
         }
 
-        // Focus the editor
-        editor.focus();
+        // Focus the editor only if not in embedded/split mode where it would steal focus
+        if (!preventAutoFocus) {
+            editor.focus();
+        }
 
         // Force layout update to prevent artifacts
         setTimeout(() => {
             editor.layout();
         }, 100);
         editor.updateOptions({ fontSize });
-    }, [authToken, fontSize, monacoTheme, objectCurie, uploadAction]);
+    }, [authToken, fontSize, monacoTheme, objectCurie, uploadAction, preventAutoFocus]);
 
     const handleEditorChange = useCallback((value: string | undefined) => {
         setContent(value || "");
@@ -781,6 +787,11 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             }]);
         } finally {
             setIsCompiling(false);
+            // Return focus to compile button for accessibility
+            // Use setTimeout to ensure state updates have completed
+            setTimeout(() => {
+                compileButtonRef.current?.focus();
+            }, 0);
         }
     }, [authToken, content, objectCurie, verbName, uploadAction, onSendMessage, isCompiling]);
 
@@ -981,6 +992,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     </button>
                     {/* Compile button */}
                     <button
+                        ref={compileButtonRef}
                         onClick={(e) => {
                             e.stopPropagation();
                             compileVerb();
@@ -1034,9 +1046,14 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         >
             <TitleBar />
 
-            {/* Error panel */}
-            {errors.length > 0 && (
-                <div className="verb-compile-errors">
+            {/* Error panel - aria-live for screen reader announcement */}
+            <div
+                role="alert"
+                aria-live="assertive"
+                aria-atomic="true"
+                className={errors.length > 0 ? "verb-compile-errors" : "sr-only"}
+            >
+                {errors.length > 0 && (
                     <div className="verb-compile-errors-list">
                         {errors.map((error, index) => {
                             const isExpanded = expandedErrors.has(index);
@@ -1111,18 +1128,25 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             );
                         })}
                     </div>
-                </div>
-            )}
+                )}
+            </div>
 
-            {/* Success banner */}
-            {compileSuccess && (
-                <div className="verb-compile-success">
-                    <span className="verb-compile-success-icon">✓</span>
-                    <span className="verb-compile-success-text">
-                        Verb compiled successfully
-                    </span>
-                </div>
-            )}
+            {/* Success banner - aria-live for screen reader announcement */}
+            <div
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                className={`verb-compile-success ${compileSuccess ? "" : "sr-only"}`}
+            >
+                {compileSuccess && (
+                    <>
+                        <span className="verb-compile-success-icon" aria-hidden="true">✓</span>
+                        <span className="verb-compile-success-text">
+                            Verb compiled successfully
+                        </span>
+                    </>
+                )}
+            </div>
 
             {/* Verb metadata info panel */}
             {(owner || definer || permissions || argspec) && (

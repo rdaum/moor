@@ -2572,6 +2572,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     authToken={authToken}
                                     splitMode={true}
                                     isInSplitMode={true}
+                                    preventAutoFocus={true}
                                     onToggleSplitMode={onOpenVerbInEditor ? handleDetachVerbEditor : undefined}
                                     owner={selectedVerb.owner}
                                     definer={selectedVerb.location}
