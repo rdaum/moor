@@ -181,20 +181,22 @@ impl ConnectionCodec {
                 self.is_discarding = false;
                 self.last_input_was_cr = is_cr;
 
-                // Filter control characters and telnet protocol bytes (matches LambdaMOO)
+                // Filter control characters and telnet protocol bytes
+                // Only filter ASCII control chars (0x00-0x1F except tab, and 0x7F DEL)
+                // and telnet IAC (0xFF). Preserve all UTF-8 bytes (0x80-0xFE).
                 let line_bytes_filtered: Vec<u8> = line_bytes
                     .iter()
                     .copied()
                     .filter(|&b| {
                         if b == 0x09 {
-                            return true;
-                        } // tab
-                        if b >= 0xF0 {
-                            return false;
-                        } // telnet IAC and protocol bytes
-                        if (b & 0x60) == 0x00 || b == 0x7f {
-                            return false;
-                        } // control chars
+                            return true; // tab is allowed
+                        }
+                        if b == 0xFF {
+                            return false; // telnet IAC byte
+                        }
+                        if b < 0x20 || b == 0x7F {
+                            return false; // ASCII control chars and DEL
+                        }
                         true
                     })
                     .collect();
@@ -517,8 +519,8 @@ mod tests {
     fn test_completely_invalid_utf8() {
         let mut codec = ConnectionCodec::new();
 
-        // Bytes 0xF0+ are filtered (telnet protocol range)
         // Use incomplete multi-byte sequences that each produce a replacement char
+        // \xC0 is an invalid UTF-8 start byte (overlong encoding)
         let mut buf = BytesMut::from(&b"\xC0a\xC0b\xC0c\n"[..]);
 
         let item = codec.decode(&mut buf).unwrap().unwrap();
@@ -527,6 +529,40 @@ mod tests {
                 // Each \xC0 is an invalid start byte, producing replacement characters
                 assert_eq!(line.chars().filter(|&c| c == '\u{FFFD}').count(), 3);
                 assert!(line.contains('a') && line.contains('b') && line.contains('c'));
+            }
+            _ => panic!("Expected line"),
+        }
+    }
+
+    #[test]
+    fn test_utf8_cjk_characters() {
+        let mut codec = ConnectionCodec::new();
+
+        // Test CJK characters that have continuation bytes in 0x80-0x9F range
+        // 写 = E5 86 99 (0x86 and 0x99 are in the 0x80-0x9F range)
+        let test_str = "读写汉字 - 学中文";
+        let mut buf = BytesMut::from(format!("{}\n", test_str).as_bytes());
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        match item {
+            ConnectionItem::Line(line) => {
+                assert_eq!(line, test_str);
+            }
+            _ => panic!("Expected line"),
+        }
+    }
+
+    #[test]
+    fn test_telnet_iac_filtered() {
+        let mut codec = ConnectionCodec::new();
+
+        // Telnet IAC (0xFF) should be filtered out
+        let mut buf = BytesMut::from(&b"hello\xFFworld\n"[..]);
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        match item {
+            ConnectionItem::Line(line) => {
+                assert_eq!(line, "helloworld");
             }
             _ => panic!("Expected line"),
         }
