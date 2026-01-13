@@ -1367,10 +1367,16 @@ fn bf_is_uuobjid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// - When true, uses fuzzy matching (Levenshtein distance) for object names
 /// - Handles ordinal descriptors ("first", "second", "third") to differentiate multiple matching objects
 /// - Provides more flexible and forgiving object name matching
+///
+/// The optional fourth `fuzzy_threshold` argument (float, 0.0-1.0) controls fuzzy matching sensitivity:
+/// - 0.0 = disabled (exact/prefix/substring only)
+/// - 0.5 = reasonable default (allows minor typos)
+/// - 1.0 = very permissive
+/// Defaults to 0.5 when complex matching is enabled.
 fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
         return Err(BfErr::ErrValue(
-            E_ARGS.msg("parse_command() takes 2 or 3 arguments"),
+            E_ARGS.msg("parse_command() takes 2 to 4 arguments"),
         ));
     }
 
@@ -1387,6 +1393,11 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     let complex_match = bf_args.args.len() >= 3 && bf_args.args[2].is_true();
+    let fuzzy_threshold = if bf_args.args.len() >= 4 {
+        bf_args.args[3].as_float().unwrap_or(0.5)
+    } else {
+        0.5 // Default fuzzy threshold when complex matching is enabled
+    };
     let use_symbols = bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type;
     let mk_sym_or_str = |s: Symbol| {
         if use_symbols {
@@ -1515,6 +1526,7 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Box::new(moor_common::matching::ComplexObjectNameMatcher {
             env,
             player: bf_args.task_perms_who(),
+            fuzzy_threshold,
         })
     } else {
         Box::new(moor_common::matching::DefaultObjectNameMatcher {

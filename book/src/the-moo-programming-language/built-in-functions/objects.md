@@ -782,7 +782,7 @@ than the naive builtin one, while still using its components.
 ### `parse_command`
 
 ```
-map parse_command(str command, list environment [, bool complex])
+map parse_command(str command, list environment [, bool complex [, float fuzzy_threshold]])
 ```
 
 Parses a command string into its components (verb, objects, preposition) and returns a map with the results.
@@ -793,8 +793,12 @@ Parses a command string into its components (verb, objects, preposition) and ret
 - `environment`: A list of objects to search for object name matching. Each entry can be:
     - A simple object (e.g., `player`)
     - A list with format `{object, "name1", "name2", ...}` to provide custom aliases
-- `complex`: (Optional, default false) When true, enables fuzzy matching and ordinal support (e.g., "first lamp", "
-  second bottle")
+- `complex`: (Optional, default false) When true, enables enhanced matching with ordinal support (e.g., "first lamp", "
+  second bottle") and fuzzy matching
+- `fuzzy_threshold`: (Optional, default 0.5) Controls fuzzy matching sensitivity when `complex` is true:
+    - `0.0` = disabled (exact, prefix, and substring matching only)
+    - `0.5` = reasonable default (allows minor typos)
+    - `1.0` = very permissive
 
 **Returns:** A map with the following keys:
 
@@ -817,6 +821,7 @@ Parses a command string into its components (verb, objects, preposition) and ret
 - Object matching searches through the provided environment list
 - Multiple matching objects are reported in `ambiguous_dobj` or `ambiguous_iobj`
 - The `complex` parameter enables the enhanced matching system with ordinals and fuzzy matching
+- Fuzzy matching uses Damerau-Levenshtein distance to tolerate typos (e.g., "lammp" matches "lamp")
 - This is a wizard-only function when called directly; see [`find_command_verb`](#find_command_verb) for finding actual
   verbs
 

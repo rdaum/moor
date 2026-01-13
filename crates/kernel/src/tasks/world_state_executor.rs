@@ -463,6 +463,7 @@ pub fn match_object_ref(
             let matcher = ComplexObjectNameMatcher {
                 env: match_env,
                 player: *player,
+                fuzzy_threshold: 0.5,
             };
             let Ok(match_result) = matcher.match_object(object_name) else {
                 return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));

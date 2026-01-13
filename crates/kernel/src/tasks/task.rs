@@ -977,6 +977,7 @@ impl Task {
             let matcher = ComplexObjectNameMatcher {
                 env: me,
                 player: *player,
+                fuzzy_threshold: 0.5,
             };
             let command_parser = DefaultParseCommand::new();
             let parsed_command = match command_parser.parse_command(command, &matcher) {

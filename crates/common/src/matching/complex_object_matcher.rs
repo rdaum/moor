@@ -16,7 +16,7 @@
 use crate::{
     matching::{
         ComplexMatchResult, MatchEnvironment, MatchResult, ObjectNameMatcher,
-        complex_match_objects_keys,
+        complex_match_objects_keys_with_fuzzy_threshold,
     },
     model::{ValSet, WorldStateError},
 };
@@ -26,10 +26,12 @@ const ME: &str = "me";
 const HERE: &str = "here";
 
 /// Enhanced object name matcher that uses complex_match for sophisticated object resolution
-/// with ordinal support and three-tier matching (exact, prefix, substring)
+/// with ordinal support, three-tier matching (exact, prefix, substring), and optional fuzzy matching
 pub struct ComplexObjectNameMatcher<M: MatchEnvironment> {
     pub env: M,
     pub player: Obj,
+    /// Fuzzy matching threshold (0.0 = disabled, 0.5 = reasonable default, 1.0 = very permissive)
+    pub fuzzy_threshold: f64,
 }
 
 impl<M: MatchEnvironment> ObjectNameMatcher for ComplexObjectNameMatcher<M> {
@@ -103,8 +105,13 @@ impl<M: MatchEnvironment> ObjectNameMatcher for ComplexObjectNameMatcher<M> {
             });
         }
 
-        // Use complex_match to find the best match
-        match complex_match_objects_keys(object_name, &objects, &names_lists) {
+        // Use complex_match to find the best match (with optional fuzzy matching)
+        match complex_match_objects_keys_with_fuzzy_threshold(
+            object_name,
+            &objects,
+            &names_lists,
+            self.fuzzy_threshold,
+        ) {
             ComplexMatchResult::NoMatch => Ok(MatchResult {
                 result: Some(FAILED_MATCH),
                 candidates: Vec::new(),
@@ -172,6 +179,7 @@ mod tests {
         let matcher = ComplexObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
+            fuzzy_threshold: 0.5,
         };
         let result = matcher.match_object("").unwrap();
         assert_eq!(result.result, None);
@@ -184,6 +192,7 @@ mod tests {
         let matcher = ComplexObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
+            fuzzy_threshold: 0.5,
         };
         let result = matcher.match_object("#4").unwrap();
         assert_eq!(result.result, Some(MOCK_THING1));
@@ -196,6 +205,7 @@ mod tests {
         let matcher = ComplexObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
+            fuzzy_threshold: 0.5,
         };
         // Test with a UUID format object reference
         let match_result = matcher.match_object("#048D05-1234567890").unwrap();
@@ -211,6 +221,7 @@ mod tests {
         let matcher = ComplexObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
+            fuzzy_threshold: 0.5,
         };
         let result = matcher.match_object("me").unwrap();
         assert_eq!(result.result, Some(MOCK_PLAYER));
@@ -223,6 +234,7 @@ mod tests {
         let matcher = ComplexObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
+            fuzzy_threshold: 0.5,
         };
         let result = matcher.match_object("here").unwrap();
         assert_eq!(result.result, Some(MOCK_ROOM1));
@@ -235,6 +247,7 @@ mod tests {
         let matcher = ComplexObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
+            fuzzy_threshold: 0.5,
         };
         let result = matcher.match_object("thing1").unwrap();
         assert_eq!(result.result, Some(MOCK_THING1));
@@ -247,6 +260,7 @@ mod tests {
         let matcher = ComplexObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
+            fuzzy_threshold: 0.5,
         };
         let result = matcher.match_object("t2").unwrap();
         assert_eq!(result.result, Some(MOCK_THING2));
@@ -259,6 +273,7 @@ mod tests {
         let matcher = ComplexObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
+            fuzzy_threshold: 0.5,
         };
         // This should find the first object matching "t" (partial match)
         // In the mock environment, both thing1 and thing2 have aliases starting with "t"
@@ -276,6 +291,7 @@ mod tests {
         let matcher = ComplexObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
+            fuzzy_threshold: 0.5,
         };
         // "hing" should match "thing1" and "thing2" as substring
         let result = matcher.match_object("hing");
@@ -296,6 +312,7 @@ mod tests {
         let matcher = ComplexObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
+            fuzzy_threshold: 0.5,
         };
         let result = matcher.match_object("nonexistent").unwrap();
         assert_eq!(result.result, Some(FAILED_MATCH));
