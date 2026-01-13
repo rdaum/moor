@@ -22,18 +22,20 @@ use moor_common::tasks::{Event, Exception, SchedulerError};
 use moor_schema::convert::{narrative_event_from_ref, var_from_flatbuffer_ref};
 use moor_schema::rpc as moor_rpc;
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
-use rpc_async_client::pubsub_client::events_recv;
+use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
 use rpc_async_client::rpc_client::{CurveKeys, RpcClient};
 use rpc_async_client::zmq;
 use rpc_common::{
-    AuthToken, ClientToken, RpcError, mk_command_msg, mk_connection_establish_msg, mk_detach_msg,
-    mk_eval_msg, mk_invoke_verb_msg, mk_list_objects_msg, mk_program_msg, mk_properties_msg,
-    mk_resolve_msg, mk_retrieve_msg, mk_update_property_msg, mk_verbs_msg, read_reply_result,
-    scheduler_error_from_ref,
+    AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, RpcError, mk_client_pong_msg, mk_command_msg,
+    mk_connection_establish_msg, mk_detach_msg, mk_eval_msg, mk_invoke_verb_msg,
+    mk_list_objects_msg, mk_program_msg, mk_properties_msg, mk_resolve_msg, mk_retrieve_msg,
+    mk_update_property_msg, mk_verbs_msg, read_reply_result, scheduler_error_from_ref,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use tmq::subscribe;
+use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
@@ -75,6 +77,10 @@ pub struct MoorClient {
     player: Option<Obj>,
     /// Stored credentials for reconnection
     stored_credentials: Option<(String, String)>,
+    /// Handle to the background ping responder task
+    ping_responder_handle: Option<JoinHandle<()>>,
+    /// Kill switch for the ping responder
+    ping_kill_switch: Arc<AtomicBool>,
 }
 
 /// Result of a MOO task operation (command or verb invoke)
@@ -130,6 +136,8 @@ impl MoorClient {
             handler_object: SYSTEM_OBJECT,
             player: None,
             stored_credentials: None,
+            ping_responder_handle: None,
+            ping_kill_switch: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -316,9 +324,150 @@ impl MoorClient {
 
     /// Clear connection state without sending detach message
     fn clear_connection_state(&mut self) {
+        // Stop the ping responder if running
+        self.stop_ping_responder();
+
         self.client_token = None;
         self.auth_token = None;
         self.player = None;
+    }
+
+    /// Stop the ping responder background task
+    fn stop_ping_responder(&mut self) {
+        self.ping_kill_switch.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.ping_responder_handle.take() {
+            handle.abort();
+        }
+        // Reset kill switch for future use
+        self.ping_kill_switch = Arc::new(AtomicBool::new(false));
+    }
+
+    /// Start the ping responder background task
+    ///
+    /// This task listens for broadcast ping messages from the daemon and responds
+    /// with pong messages to keep the connection alive.
+    fn start_ping_responder(&mut self) -> Result<()> {
+        let client_token = self
+            .client_token
+            .clone()
+            .ok_or_else(|| eyre!("Not connected - no client token"))?;
+
+        let player = self
+            .player
+            .clone()
+            .ok_or_else(|| eyre!("Not authenticated - no player"))?;
+
+        // Create a new RPC client for the ping responder (needs its own socket)
+        let curve_keys = self
+            .config
+            .curve_keys
+            .as_ref()
+            .map(|(secret, public, server)| CurveKeys {
+                client_secret: secret.clone(),
+                client_public: public.clone(),
+                server_public: server.clone(),
+            });
+
+        let ping_rpc_client = RpcClient::new_with_defaults(
+            Arc::new(self.zmq_context.clone()),
+            self.config.rpc_address.clone(),
+            curve_keys,
+        );
+
+        // Create broadcast subscriber
+        let mut socket_builder = subscribe(&self.zmq_context);
+
+        // Configure CURVE encryption if keys provided
+        if let Some((client_secret, client_public, server_public)) = &self.config.curve_keys {
+            let client_secret_bytes =
+                zmq::z85_decode(client_secret).map_err(|_| eyre!("Invalid client secret key"))?;
+            let client_public_bytes =
+                zmq::z85_decode(client_public).map_err(|_| eyre!("Invalid client public key"))?;
+            let server_public_bytes =
+                zmq::z85_decode(server_public).map_err(|_| eyre!("Invalid server public key"))?;
+
+            socket_builder = socket_builder
+                .set_curve_secretkey(&client_secret_bytes)
+                .set_curve_publickey(&client_public_bytes)
+                .set_curve_serverkey(&server_public_bytes);
+        }
+
+        let broadcast_sub = socket_builder
+            .connect(&self.config.events_address)
+            .map_err(|e| eyre!("Unable to connect broadcast subscriber: {}", e))?;
+
+        let mut broadcast_sub = broadcast_sub
+            .subscribe(CLIENT_BROADCAST_TOPIC)
+            .map_err(|e| eyre!("Unable to subscribe to broadcast messages: {}", e))?;
+
+        let client_id = self.client_id;
+        let kill_switch = self.ping_kill_switch.clone();
+
+        // Spawn the ping responder task
+        let handle = tokio::spawn(async move {
+            debug!("Ping responder started for client {}", client_id);
+
+            loop {
+                if kill_switch.load(Ordering::Relaxed) {
+                    debug!("Ping responder killed for client {}", client_id);
+                    break;
+                }
+
+                match broadcast_recv(&mut broadcast_sub).await {
+                    Ok(event_msg) => {
+                        let Ok(event) = event_msg.event() else {
+                            continue;
+                        };
+
+                        let Ok(event_union) = event.event() else {
+                            continue;
+                        };
+
+                        match event_union {
+                            moor_rpc::ClientsBroadcastEventUnionRef::ClientsBroadcastPingPong(
+                                _,
+                            ) => {
+                                let timestamp = SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_nanos() as u64;
+
+                                let pong_msg = mk_client_pong_msg(
+                                    &client_token,
+                                    timestamp,
+                                    &player,
+                                    moor_rpc::HostType::WebSocket, // Use WebSocket type for MCP
+                                    "mcp-host".to_string(),
+                                );
+
+                                if let Err(e) = ping_rpc_client
+                                    .make_client_rpc_call(client_id, pong_msg)
+                                    .await
+                                {
+                                    warn!("Failed to send pong: {:?}", e);
+                                } else {
+                                    trace!("Sent pong for client {}", client_id);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        if !kill_switch.load(Ordering::Relaxed) {
+                            warn!("Error receiving broadcast: {:?}", e);
+                        }
+                        // Small delay before retrying on error
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                }
+            }
+
+            debug!("Ping responder stopped for client {}", client_id);
+        });
+
+        self.ping_responder_handle = Some(handle);
+        info!("Ping responder started");
+
+        Ok(())
     }
 
     /// Reconnect to the mooR daemon
@@ -449,6 +598,12 @@ impl MoorClient {
                         if !is_reconnect {
                             info!("Logged in as {:?}", self.player);
                         }
+
+                        // Start the ping responder to keep the connection alive
+                        if let Err(e) = self.start_ping_responder() {
+                            warn!("Failed to start ping responder: {}. Connection may timeout.", e);
+                        }
+
                         Ok(())
                     }
                     _ => Err(eyre!("Unexpected login response")),
@@ -1215,6 +1370,9 @@ impl MoorClient {
 
     /// Disconnect from the daemon
     pub async fn disconnect(&mut self) -> Result<()> {
+        // Stop the ping responder first
+        self.stop_ping_responder();
+
         if let Some(client_token) = &self.client_token {
             let detach_msg = mk_detach_msg(client_token, true);
             let _ = self
