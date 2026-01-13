@@ -447,6 +447,11 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         editor.updateOptions({ fontSize });
     }, [authToken, fontSize, monacoTheme, objectCurie, uploadAction, preventAutoFocus]);
 
+    const handleEditorWrapperFocus = useCallback((event: React.FocusEvent<HTMLDivElement>) => {
+        if (event.currentTarget !== event.target) return;
+        editorRef.current?.focus();
+    }, []);
+
     const handleEditorChange = useCallback((value: string | undefined) => {
         setContent(value || "");
     }, []);
@@ -1444,6 +1449,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     onChange={handleEditorChange}
                     beforeMount={handleEditorWillMount}
                     onMount={handleEditorDidMount}
+                    wrapperProps={preventAutoFocus ? { tabIndex: 0, onFocus: handleEditorWrapperFocus } : undefined}
                     options={{
                         minimap: { enabled: minimapEnabled },
                         fontSize,
