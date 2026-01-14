@@ -119,6 +119,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const modelUriRef = useRef<string | null>(null);
     const contentRef = useRef(content);
     const compileButtonRef = useRef<HTMLButtonElement | null>(null);
+    const editorAriaLabel = `Code editor for verb ${verbName} on ${objectCurie}`;
 
     // Keep contentRef in sync with content state
     useEffect(() => {
@@ -447,8 +448,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         editor.updateOptions({ fontSize });
     }, [authToken, fontSize, monacoTheme, objectCurie, uploadAction, preventAutoFocus]);
 
-    const handleEditorWrapperFocus = useCallback((event: React.FocusEvent<HTMLDivElement>) => {
-        if (event.currentTarget !== event.target) return;
+    const handleEditorProxyFocus = useCallback(() => {
         editorRef.current?.focus();
     }, []);
 
@@ -1442,6 +1442,14 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
             {/* Monaco Editor */}
             <div className="editor-monaco-wrapper">
+                {preventAutoFocus && (
+                    <textarea
+                        className="sr-only"
+                        aria-label={editorAriaLabel}
+                        aria-multiline="true"
+                        onFocus={handleEditorProxyFocus}
+                    />
+                )}
                 <Editor
                     value={content}
                     language="moo"
@@ -1449,7 +1457,6 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     onChange={handleEditorChange}
                     beforeMount={handleEditorWillMount}
                     onMount={handleEditorDidMount}
-                    wrapperProps={preventAutoFocus ? { tabIndex: 0, onFocus: handleEditorWrapperFocus } : undefined}
                     options={{
                         minimap: { enabled: minimapEnabled },
                         fontSize,
@@ -1474,7 +1481,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         },
                         // Accessibility options for screen readers
                         accessibilitySupport: "on",
-                        ariaLabel: `Code editor for verb ${verbName} on ${objectCurie}`,
+                        ariaLabel: editorAriaLabel,
                     }}
                 />
             </div>
