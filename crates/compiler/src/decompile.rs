@@ -1081,20 +1081,40 @@ impl Decompile {
                 let condition = self.pop_expr();
                 // Read up to the jump, decompiling as we go.
                 self.decompile_statements_up_to(&label)?;
-                // We should be findin' a jump now.
-                let Op::Jump { label: jump_label } = self.next()? else {
-                    return Err(MalformedProgram("expected Jump".to_string()));
-                };
-                let consequent = self.pop_expr();
-                // Now decompile up to and including jump_label's offset
-                self.decompile_statements_until(&jump_label)?;
-                let alternate = self.pop_expr();
-                let e = Expr::Cond {
-                    condition: Box::new(condition?),
-                    consequence: Box::new(consequent?),
-                    alternative: Box::new(alternate?),
-                };
-                self.push_expr(e);
+
+                // Check if this is a full ternary (with Jump) or a degenerate one-armed
+                // conditional (used for optional parameter defaults in lambdas)
+                let label_position = self.find_jump(&label)?.position.0 as usize;
+                let current_opcode = &self.opcode_vector()[self.position];
+
+                if let Op::Jump { label: jump_label } = current_opcode {
+                    // Full ternary: condition ? consequence | alternative
+                    let jump_label = *jump_label;
+                    self.position += 1; // consume the Jump
+                    let consequent = self.pop_expr();
+                    // Now decompile up to and including jump_label's offset
+                    self.decompile_statements_until(&jump_label)?;
+                    let alternate = self.pop_expr();
+                    let e = Expr::Cond {
+                        condition: Box::new(condition?),
+                        consequence: Box::new(consequent?),
+                        alternative: Box::new(alternate?),
+                    };
+                    self.push_expr(e);
+                } else if self.position + 1 == label_position {
+                    // Degenerate one-armed conditional (no alternative):
+                    // Used for optional parameter defaults: if (param == 0) param = default;
+                    // decompile_statements_up_to stops 1 position before the label.
+                    // The consequence was already decompiled and should be an assignment
+                    // statement on the statement list (Put followed by Pop made it a stmt).
+                    // Since this doesn't produce a value, we don't push anything.
+                    // The assignment statement was already added by the Put/Pop handling.
+                } else {
+                    return Err(MalformedProgram(format!(
+                        "expected Jump at position {} for IfQues, label at {}, got {:?}",
+                        self.position, label_position, current_opcode
+                    )));
+                }
             }
             Op::CheckListForSplice => {
                 let sp_expr = self.pop_expr()?;
@@ -1837,5 +1857,32 @@ return 0 && "Automatically Added Return";
         return f();"#;
         let (parse, decompiled) = parse_decompile(program);
         assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+    }
+
+    // Regression test: lambdas with optional parameters use IfQues without an
+    // alternative branch for default value assignment. The decompiler previously
+    // expected all IfQues to have a Jump between consequence and alternative.
+    // Issue: decompilation of fn...endfn with optional params failed with
+    // "malformed program: expected Jump"
+    #[test]
+    fn test_lambda_optional_param_decompile() {
+        let program = r#"fn f(?x = 0)
+                return x + 1;
+            endfn
+            return f();"#;
+
+        let compiled = compile(program, CompileOptions::default());
+        assert!(
+            compiled.is_ok(),
+            "Compile should succeed: {:?}",
+            compiled.err()
+        );
+        let binary = compiled.unwrap();
+        let decompiled = program_to_tree(&binary);
+        assert!(
+            decompiled.is_ok(),
+            "Decompile should succeed: {:?}",
+            decompiled.err()
+        );
     }
 }
