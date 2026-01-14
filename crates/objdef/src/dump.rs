@@ -30,11 +30,19 @@ pub enum ObjectDumpError {
     #[error("Worldstate error: {0}")]
     WorldState(#[from] moor_common::model::WorldStateError),
 
-    #[error("Failed to decompile verb binary for {obj}")]
-    DecompileError { obj: Obj },
+    #[error("Failed to decompile verb {obj}:{verb_name}: {reason}")]
+    DecompileError {
+        obj: Obj,
+        verb_name: String,
+        reason: String,
+    },
 
-    #[error("Failed to unparse verb binary for {obj}")]
-    UnparseError { obj: Obj },
+    #[error("Failed to unparse verb {obj}:{verb_name}: {reason}")]
+    UnparseError {
+        obj: Obj,
+        verb_name: String,
+        reason: String,
+    },
 
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
@@ -623,10 +631,23 @@ fn dump_verb(
 
     // decompile the verb
     let ProgramType::MooR(program) = &v.program;
-    let decompiled =
-        program_to_tree(program).map_err(|_| ObjectDumpError::DecompileError { obj: *obj })?;
-    let unparsed = unparse(&decompiled, false, true)
-        .map_err(|_| ObjectDumpError::UnparseError { obj: *obj })?;
+    let verb_name_for_error = v
+        .names
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<String>>()
+        .join(" ");
+    let decompiled = program_to_tree(program).map_err(|e| ObjectDumpError::DecompileError {
+        obj: *obj,
+        verb_name: verb_name_for_error.clone(),
+        reason: e.to_string(),
+    })?;
+    let unparsed =
+        unparse(&decompiled, false, true).map_err(|e| ObjectDumpError::UnparseError {
+            obj: *obj,
+            verb_name: verb_name_for_error.clone(),
+            reason: e.to_string(),
+        })?;
 
     verb_lines.push(format!(
         "{indent}verb {names} ({verbargsspec}) owner: {owner} flags: \"{vflags}\""

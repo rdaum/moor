@@ -54,8 +54,8 @@ use moor_db::{
     prop_cache::{ANCESTRY_CACHE_STATS, PROP_CACHE_STATS, VERB_CACHE_STATS},
 };
 use moor_var::{
-    Associative, E_ARGS, E_INTRPT, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Sequence,
-    Var, VarType::TYPE_NONE, v_arc_str, v_float, v_int, v_list, v_list_iter, v_map, v_none, v_obj,
+    Associative, E_ARGS, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Sequence, Var,
+    VarType::TYPE_NONE, v_arc_str, v_float, v_int, v_list, v_list_iter, v_map, v_none, v_obj,
     v_str, v_string, v_sym,
 };
 
@@ -665,13 +665,13 @@ fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         false
     };
 
-    if let Err(e) = current_task_scheduler_client().checkpoint_with_blocking(blocking) {
-        return Err(ErrValue(
-            E_INTRPT.with_msg(|| format!("dump_database() checkpoint failed: {e:?}")),
-        ));
+    match current_task_scheduler_client().checkpoint_with_blocking(blocking) {
+        Ok(()) => Ok(Ret(bf_args.v_bool(true))),
+        Err(e) => {
+            tracing::error!(?e, "dump_database() checkpoint failed");
+            Ok(Ret(bf_args.v_bool(false)))
+        }
     }
-
-    Ok(Ret(bf_args.v_bool(true)))
 }
 
 /// Usage: `none gc_collect()`

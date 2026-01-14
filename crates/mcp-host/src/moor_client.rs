@@ -31,8 +31,8 @@ use rpc_common::{
     mk_list_objects_msg, mk_program_msg, mk_properties_msg, mk_resolve_msg, mk_retrieve_msg,
     mk_update_property_msg, mk_verbs_msg, read_reply_result, scheduler_error_from_ref,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 use tmq::subscribe;
 use tokio::task::JoinHandle;
@@ -430,7 +430,8 @@ impl MoorClient {
                                 let timestamp = SystemTime::now()
                                     .duration_since(std::time::UNIX_EPOCH)
                                     .unwrap()
-                                    .as_nanos() as u64;
+                                    .as_nanos()
+                                    as u64;
 
                                 let pong_msg = mk_client_pong_msg(
                                     &client_token,
@@ -601,7 +602,10 @@ impl MoorClient {
 
                         // Start the ping responder to keep the connection alive
                         if let Err(e) = self.start_ping_responder() {
-                            warn!("Failed to start ping responder: {}. Connection may timeout.", e);
+                            warn!(
+                                "Failed to start ping responder: {}. Connection may timeout.",
+                                e
+                            );
                         }
 
                         Ok(())
