@@ -945,14 +945,26 @@ impl WorldStateTransaction {
                 name.to_string(),
             ));
         }
-        let check_locations = self.ancestors(location, true)?;
-        for location in check_locations.iter() {
-            let descendant_props = self.get_properties(&location)?;
 
-            // Verify we don't already have a property with this name. If we do, return an error.
+        // Check ancestors - can't define a property that already exists on a parent
+        let ancestors = self.ancestors(location, false)?;
+        for ancestor in ancestors.iter() {
+            let ancestor_props = self.get_properties(&ancestor)?;
+            if ancestor_props.find_first_named(name).is_some() {
+                return Err(WorldStateError::DuplicatePropertyDefinition(
+                    ancestor,
+                    name.to_string(),
+                ));
+            }
+        }
+
+        // Check descendants - can't define a property if a child already has one with that name
+        let descendants = self.descendants(location, false)?;
+        for descendant in descendants.iter() {
+            let descendant_props = self.get_properties(&descendant)?;
             if descendant_props.find_first_named(name).is_some() {
                 return Err(WorldStateError::DuplicatePropertyDefinition(
-                    location,
+                    descendant,
                     name.to_string(),
                 ));
             }

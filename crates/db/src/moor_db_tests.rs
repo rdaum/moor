@@ -4362,4 +4362,113 @@ mod tests {
 
         assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
+
+    /// Regression test: defining a property on a parent should fail if a child
+    /// already has a property with the same name. This prevents property name
+    /// conflicts in the inheritance hierarchy.
+    #[test]
+    fn test_define_property_fails_if_descendant_has_same_name() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Create parent -> child hierarchy
+        let parent = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
+            )
+            .unwrap();
+
+        let child = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child"),
+            )
+            .unwrap();
+
+        // Define property "foo" on the child first
+        tx.define_property(
+            &child,
+            &child,
+            Symbol::mk("foo"),
+            &NOTHING,
+            BitEnum::new(),
+            Some(v_str("child_value")),
+        )
+        .unwrap();
+
+        // Now try to define property "foo" on the parent - this should FAIL
+        // because the child already has a property with that name
+        let result = tx.define_property(
+            &parent,
+            &parent,
+            Symbol::mk("foo"),
+            &NOTHING,
+            BitEnum::new(),
+            Some(v_str("parent_value")),
+        );
+
+        assert!(
+            matches!(result, Err(WorldStateError::DuplicatePropertyDefinition(obj, _)) if obj == child),
+            "Expected DuplicatePropertyDefinition error for child object, got: {:?}",
+            result
+        );
+    }
+
+    /// Regression test: defining a property on a grandparent should fail if a
+    /// grandchild already has a property with the same name.
+    #[test]
+    fn test_define_property_fails_if_deep_descendant_has_same_name() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Create grandparent -> parent -> child hierarchy
+        let grandparent = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "grandparent"),
+            )
+            .unwrap();
+
+        let parent = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, grandparent, NOTHING, BitEnum::new(), "parent"),
+            )
+            .unwrap();
+
+        let child = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child"),
+            )
+            .unwrap();
+
+        // Define property "bar" on the grandchild first
+        tx.define_property(
+            &child,
+            &child,
+            Symbol::mk("bar"),
+            &NOTHING,
+            BitEnum::new(),
+            Some(v_str("child_value")),
+        )
+        .unwrap();
+
+        // Now try to define property "bar" on the grandparent - this should FAIL
+        let result = tx.define_property(
+            &grandparent,
+            &grandparent,
+            Symbol::mk("bar"),
+            &NOTHING,
+            BitEnum::new(),
+            Some(v_str("grandparent_value")),
+        );
+
+        assert!(
+            matches!(result, Err(WorldStateError::DuplicatePropertyDefinition(obj, _)) if obj == child),
+            "Expected DuplicatePropertyDefinition error for child object, got: {:?}",
+            result
+        );
+    }
 }
