@@ -270,8 +270,10 @@ impl TerminalRenderer {
                 self.emit_indent();
                 let marker = if self.utf8 {
                     if checked { "\u{2611} " } else { "\u{2610} " }
+                } else if checked {
+                    "[x] "
                 } else {
-                    if checked { "[x] " } else { "[ ] " }
+                    "[ ] "
                 };
                 self.output.push_str(&marker.dimmed().to_string());
                 self.indent_level += 1;

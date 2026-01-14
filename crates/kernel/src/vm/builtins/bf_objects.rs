@@ -1372,6 +1372,7 @@ fn bf_is_uuobjid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// - 0.0 = disabled (exact/prefix/substring only)
 /// - 0.5 = reasonable default (allows minor typos)
 /// - 1.0 = very permissive
+///
 /// Defaults to 0.5 when complex matching is enabled.
 fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 4 {

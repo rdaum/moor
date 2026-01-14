@@ -354,7 +354,6 @@ impl MoorClient {
 
         let player = self
             .player
-            .clone()
             .ok_or_else(|| eyre!("Not authenticated - no player"))?;
 
         // Create a new RPC client for the ping responder (needs its own socket)
