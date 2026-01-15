@@ -96,8 +96,9 @@ fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 /// Usage: `obj caller_perms()`
-/// Returns the object whose permissions are being used by the current verb call.
-/// Initially this is the programmer of the verb, but can be changed by set_task_perms.
+/// Returns the permissions in use by the verb that called the currently-executing verb.
+/// If the currently-executing verb was not called by another verb (i.e., it is the first
+/// verb called in a command or server task), then returns #-1.
 fn bf_caller_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
