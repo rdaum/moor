@@ -13,7 +13,7 @@
 
 //! Takes the AST and turns it into a list of opcodes.
 
-use std::sync::Arc;
+use triomphe::Arc;
 use tracing::warn;
 
 use moor_var::{ErrorCode, Symbol, Var, Variant, v_arc_str, v_int, v_sym};

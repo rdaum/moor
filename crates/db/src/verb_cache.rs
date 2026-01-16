@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::prop_cache::{ANCESTRY_CACHE_STATS, VERB_CACHE_STATS};
 use ahash::AHasher;
 use arc_swap::ArcSwap;
 use moor_common::model::VerbDef;
@@ -38,8 +39,6 @@ fn remove_entries_for_objects(
     });
     before - entries.len()
 }
-
-use crate::prop_cache::{ANCESTRY_CACHE_STATS, VERB_CACHE_STATS};
 
 pub struct VerbResolutionCache {
     inner: ArcSwap<Inner>,

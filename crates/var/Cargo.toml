@@ -44,6 +44,7 @@ papaya.workspace = true
 # Collections & Data Structures
 ahash.workspace = true
 imbl.workspace = true
+triomphe.workspace = true
 
 # Text Processing & Regex
 arcstr.workspace = true

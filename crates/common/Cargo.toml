@@ -25,6 +25,8 @@ serde_json.workspace = true
 
 # Collections & Data Structures
 itertools.workspace = true
+smallvec.workspace = true
+triomphe.workspace = true
 
 # Utilities & Helpers
 binary-layout.workspace = true

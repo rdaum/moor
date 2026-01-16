@@ -22,6 +22,9 @@ planus.workspace = true
 serde.workspace = true
 uuid.workspace = true
 
+# Collections & Data Structures
+triomphe.workspace = true
+
 # Error Handling
 eyre.workspace = true
 thiserror.workspace = true

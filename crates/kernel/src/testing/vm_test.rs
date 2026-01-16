@@ -17,6 +17,7 @@
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use triomphe::Arc as TArc;
 
     use moor_common::{
         model::{ObjectKind, PropFlag, VerbArgsSpec, VerbFlag, WorldStateSource},
@@ -33,7 +34,7 @@ mod tests {
     use moor_var::program::{ProgramType, program::PrgInner};
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
-        Program(Arc::new(PrgInner {
+        Program(TArc::new(PrgInner {
             literals,
             jump_labels: vec![],
             var_names,

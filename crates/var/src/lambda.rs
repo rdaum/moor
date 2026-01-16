@@ -15,7 +15,7 @@ use crate::{
     Var,
     program::{opcode::ScatterArgs, program::Program},
 };
-use std::sync::Arc;
+use triomphe::Arc;
 
 /// Lambda function value containing parameter specification, compiled body, and captured environment
 #[derive(Clone, Debug, PartialEq)]

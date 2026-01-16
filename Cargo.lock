@@ -3251,10 +3251,12 @@ dependencies = [
  "num-traits",
  "serde",
  "serde_json",
+ "smallvec",
  "strsim",
  "strum",
  "thiserror 2.0.17",
  "tracing-subscriber",
+ "triomphe",
  "uuid 1.19.0",
  "vergen",
  "vergen-gitcl",
@@ -3282,6 +3284,7 @@ dependencies = [
  "test-case",
  "thiserror 2.0.17",
  "tracing",
+ "triomphe",
  "unindent",
 ]
 
@@ -3477,6 +3480,7 @@ dependencies = [
  "test_each_file",
  "thiserror 2.0.17",
  "tracing",
+ "triomphe",
  "uuid 1.19.0",
  "xml-rs",
 ]
@@ -3587,6 +3591,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tracing",
  "tracing-subscriber",
+ "triomphe",
  "uuid 1.19.0",
 ]
 
@@ -3678,6 +3683,7 @@ dependencies = [
  "shuttle",
  "strum",
  "thiserror 2.0.17",
+ "triomphe",
  "unicase",
  "zerocopy",
 ]
@@ -6268,6 +6274,10 @@ name = "triomphe"
 version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd69c5aa8f924c7519d6372789a74eac5b94fb0f8fcf0d4a97eb0bfc3e785f39"
+dependencies = [
+ "serde",
+ "stable_deref_trait",
+]
 
 [[package]]
 name = "try-lock"

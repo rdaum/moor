@@ -22,10 +22,8 @@ use crate::{
     },
 };
 use lazy_static::lazy_static;
-use std::{
-    fmt::{Display, Formatter},
-    sync::Arc,
-};
+use std::fmt::{Display, Formatter};
+use triomphe::Arc;
 
 lazy_static! {
     pub static ref EMPTY_PROGRAM: Program = Program::new();

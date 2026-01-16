@@ -116,6 +116,7 @@ ahash.workspace = true
 arrayvec.workspace = true
 hierarchical_hash_wheel_timer.workspace = true
 smallvec.workspace = true
+triomphe.workspace = true
 
 # Error Handling & Logging
 thiserror.workspace = true

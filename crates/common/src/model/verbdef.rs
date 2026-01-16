@@ -20,9 +20,12 @@ use crate::{
     util::{BitEnum, verbcasecmp},
 };
 use moor_var::{ByteSized, Obj, Symbol};
-use std::sync::Arc;
+use smallvec::SmallVec;
+use triomphe::Arc;
 use uuid::Uuid;
 
+/// Verb definition - Arc-wrapped for cheap cloning in caches.
+/// Inner uses SmallVec to avoid heap allocation for verbs with 1 name (most common case).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct VerbDef {
     inner: Arc<VerbDefInner>,
@@ -35,7 +38,7 @@ struct VerbDefInner {
     owner: Obj,
     flags: BitEnum<VerbFlag>,
     args: VerbArgsSpec,
-    names: Vec<Symbol>,
+    names: SmallVec<[Symbol; 1]>,
 }
 
 impl VerbDef {
@@ -55,7 +58,7 @@ impl VerbDef {
                 owner,
                 flags,
                 args,
-                names: names.to_vec(),
+                names: SmallVec::from_slice(names),
             }),
         }
     }
@@ -69,6 +72,7 @@ impl VerbDef {
     pub fn owner(&self) -> Obj {
         self.inner.owner
     }
+
     #[must_use]
     pub fn flags(&self) -> BitEnum<VerbFlag> {
         self.inner.flags

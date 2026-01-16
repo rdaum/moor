@@ -36,6 +36,7 @@ pest_derive.workspace = true
 
 # Collections & Data Structures
 itertools.workspace = true
+triomphe.workspace = true
 
 # Error Handling & Logging
 thiserror.workspace = true

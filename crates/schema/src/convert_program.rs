@@ -46,7 +46,7 @@ use moor_var::program::{
 };
 use planus::{ReadAsRoot, WriteAsOffset};
 use std::collections::HashSet;
-use std::sync::Arc;
+use triomphe::Arc;
 
 const STORED_PROGRAM_VERSION: u16 = 2;
 

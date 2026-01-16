@@ -223,6 +223,10 @@ struct PopulatedCacheContext {
     ancestry_cache: Box<AncestryCache>,
     test_objs: Vec<Obj>,
     test_verbs: Vec<Symbol>,
+    // Pre-computed index pairs for each lookup type to avoid branching in benchmarks
+    hit_pairs: Vec<(usize, usize)>,
+    miss_pairs: Vec<(usize, usize)>,
+    cold_pairs: Vec<(usize, usize)>,
 }
 
 impl BenchContext for PopulatedCacheContext {
@@ -280,11 +284,28 @@ impl BenchContext for PopulatedCacheContext {
             }
         }
 
+        // Pre-compute index pairs for each lookup type
+        let mut hit_pairs = Vec::new();
+        let mut miss_pairs = Vec::new();
+        let mut cold_pairs = Vec::new();
+        for i in 0..test_objs.len() {
+            for j in 0..test_verbs.len() {
+                match (i + j) % 3 {
+                    0 => hit_pairs.push((i, j)),
+                    1 => miss_pairs.push((i, j)),
+                    _ => cold_pairs.push((i, j)),
+                }
+            }
+        }
+
         PopulatedCacheContext {
             verb_cache,
             ancestry_cache,
             test_objs,
             test_verbs,
+            hit_pairs,
+            miss_pairs,
+            cold_pairs,
         }
     }
 }
@@ -324,47 +345,38 @@ impl BenchContext for ConcurrentCacheContext {
 // === BENCHMARK FUNCTIONS ===
 
 fn verb_cache_lookup_hits(ctx: &mut PopulatedCacheContext, chunk_size: usize, _chunk_num: usize) {
+    let pairs = &ctx.hit_pairs;
+    let len = pairs.len();
     for i in 0..chunk_size {
-        let obj_idx = i % ctx.test_objs.len();
-        let verb_idx = i % ctx.test_verbs.len();
-
-        // Only lookup entries that should be cache hits
-        if (obj_idx + verb_idx).is_multiple_of(3) {
-            let result = ctx
-                .verb_cache
-                .lookup(&ctx.test_objs[obj_idx], &ctx.test_verbs[verb_idx]);
-            black_box(result);
-        }
+        let (obj_idx, verb_idx) = pairs[i % len];
+        let result = ctx
+            .verb_cache
+            .lookup(&ctx.test_objs[obj_idx], &ctx.test_verbs[verb_idx]);
+        black_box(result);
     }
 }
 
 fn verb_cache_lookup_misses(ctx: &mut PopulatedCacheContext, chunk_size: usize, _chunk_num: usize) {
+    let pairs = &ctx.miss_pairs;
+    let len = pairs.len();
     for i in 0..chunk_size {
-        let obj_idx = i % ctx.test_objs.len();
-        let verb_idx = i % ctx.test_verbs.len();
-
-        // Only lookup entries that should be cache misses
-        if (obj_idx + verb_idx) % 3 == 1 {
-            let result = ctx
-                .verb_cache
-                .lookup(&ctx.test_objs[obj_idx], &ctx.test_verbs[verb_idx]);
-            black_box(result);
-        }
+        let (obj_idx, verb_idx) = pairs[i % len];
+        let result = ctx
+            .verb_cache
+            .lookup(&ctx.test_objs[obj_idx], &ctx.test_verbs[verb_idx]);
+        black_box(result);
     }
 }
 
 fn verb_cache_lookup_cold(ctx: &mut PopulatedCacheContext, chunk_size: usize, _chunk_num: usize) {
+    let pairs = &ctx.cold_pairs;
+    let len = pairs.len();
     for i in 0..chunk_size {
-        let obj_idx = i % ctx.test_objs.len();
-        let verb_idx = i % ctx.test_verbs.len();
-
-        // Only lookup entries that are not cached (cold lookups)
-        if (obj_idx + verb_idx) % 3 == 2 {
-            let result = ctx
-                .verb_cache
-                .lookup(&ctx.test_objs[obj_idx], &ctx.test_verbs[verb_idx]);
-            black_box(result);
-        }
+        let (obj_idx, verb_idx) = pairs[i % len];
+        let result = ctx
+            .verb_cache
+            .lookup(&ctx.test_objs[obj_idx], &ctx.test_verbs[verb_idx]);
+        black_box(result);
     }
 }
 
