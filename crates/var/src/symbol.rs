@@ -27,6 +27,7 @@ use once_cell::sync::Lazy;
 use papaya::HashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{
+    cell::RefCell,
     fmt::{Debug, Display},
     hash::{BuildHasherDefault, Hash, Hasher},
     sync::{
@@ -36,6 +37,77 @@ use std::{
 };
 use unicase::UniCase;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
+
+// ============================================================================
+// Thread-Local Symbol Cache
+// ============================================================================
+
+/// Cache size for thread-local symbol lookup.
+/// Small size keeps cache hot in L1, while still capturing most repeated lookups.
+/// Linear search through 16 entries is faster than hash-based lookup for this size.
+const SYMBOL_CACHE_SIZE: usize = 16;
+
+/// A thread-local cache entry storing a string and its corresponding Symbol.
+struct CacheEntry {
+    /// The original string (we store an owned copy for cache validity checking).
+    string: String,
+    /// The cached symbol result.
+    symbol: Symbol,
+}
+
+/// Thread-local cache for recently used symbols.
+/// Uses a simple circular buffer with linear search.
+/// Linear search is faster than hashing for small cache sizes because
+/// the hash computation overhead exceeds the search cost.
+struct SymbolCache {
+    entries: [Option<CacheEntry>; SYMBOL_CACHE_SIZE],
+    /// Next slot to write to (circular).
+    next_slot: usize,
+}
+
+impl SymbolCache {
+    const fn new() -> Self {
+        const NONE: Option<CacheEntry> = None;
+        Self {
+            entries: [NONE; SYMBOL_CACHE_SIZE],
+            next_slot: 0,
+        }
+    }
+
+    /// Look up a symbol in the cache using linear search.
+    #[inline]
+    fn get(&self, s: &str) -> Option<Symbol> {
+        for entry in self.entries.iter().flatten() {
+            if entry.string == s {
+                return Some(entry.symbol);
+            }
+        }
+        None
+    }
+
+    /// Insert a symbol into the cache.
+    #[inline]
+    fn insert(&mut self, s: &str, symbol: Symbol) {
+        // Check if already present (update in place to avoid duplicate entries)
+        for entry in self.entries.iter_mut().flatten() {
+            if entry.string == s {
+                entry.symbol = symbol;
+                return;
+            }
+        }
+
+        // Insert in next slot (circular buffer)
+        self.entries[self.next_slot] = Some(CacheEntry {
+            string: s.to_string(),
+            symbol,
+        });
+        self.next_slot = (self.next_slot + 1) % SYMBOL_CACHE_SIZE;
+    }
+}
+
+thread_local! {
+    static SYMBOL_CACHE: RefCell<SymbolCache> = const { RefCell::new(SymbolCache::new()) };
+}
 
 // ============================================================================
 // Global Interner State
@@ -245,7 +317,34 @@ impl Symbol {
     ///
     /// This method interns the string, making subsequent creations of symbols
     /// with the same case-insensitive content very fast.
+    ///
+    /// Uses a thread-local cache to accelerate repeated lookups of the same string.
+    #[inline]
     pub fn mk(s: &str) -> Self {
+        // Fast path: check thread-local cache first
+        let cached = SYMBOL_CACHE.with(|cache| cache.borrow().get(s));
+        if let Some(symbol) = cached {
+            return symbol;
+        }
+
+        // Slow path: intern through global interner
+        let (compare_id, repr_id) = GLOBAL_INTERNER.intern(s);
+        let symbol = Symbol {
+            compare_id,
+            repr_id,
+        };
+
+        // Update thread-local cache
+        SYMBOL_CACHE.with(|cache| cache.borrow_mut().insert(s, symbol));
+
+        symbol
+    }
+
+    /// Create a new symbol without using the thread-local cache.
+    /// Only available in tests for benchmarking raw interner performance.
+    #[cfg(test)]
+    #[inline]
+    pub fn mk_no_cache(s: &str) -> Self {
         let (compare_id, repr_id) = GLOBAL_INTERNER.intern(s);
         Symbol {
             compare_id,

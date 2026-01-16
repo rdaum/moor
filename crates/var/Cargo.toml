@@ -29,6 +29,10 @@ harness = false
 name = "flyweight_benches"
 harness = false
 
+[[bench]]
+name = "symbol_benches"
+harness = false
+
 [dependencies]
 # Serialization & Data Formats
 serde.workspace = true
