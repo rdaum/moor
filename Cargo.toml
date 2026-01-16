@@ -96,11 +96,11 @@ debug = false # No debug symbols to save memory/disk during build
 
 [workspace.dependencies]
 # Core Runtime & System
-gdt-cpus = "25.5"
+gdt-cpus = "25.12"
 libc = "0.2"
 mimalloc = "0.1"
 minstant = { version = "0.1", features = ["fallback-coarse"] }
-signal-hook = "0.3"
+signal-hook = "0.4"
 
 # Command Line & Configuration
 clap = "4.5"
@@ -124,7 +124,7 @@ fs2 = "0.4"
 # Networking & Communication
 axum = { version = "0.8", features = ["ws"] }
 hickory-resolver = "0.25"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.12", default-features = false }
 rustls-pemfile = "2.2"
 socket2 = { version = "0.6", features = ["all"] }
 tmq = "0.5"
@@ -134,7 +134,7 @@ zmq = "0.10"
 # Async Runtime & Concurrency
 arc-swap = "1.7"
 boxcar = "0.2"
-flume = "0.11"
+flume = "0.12"
 futures = "0.3"
 futures-util = { version = "0.3", features = ["sink", "std"] }
 hierarchical_hash_wheel_timer = { version = "1.3", default-features = false, features = ["fx-hash"] }
