@@ -103,6 +103,8 @@ export const CONTENT_ALLOWED_ATTR = [
     "width",
     "height",
     "data-url",
+    "tabindex",
+    "role",
 ];
 
 /**
@@ -222,6 +224,7 @@ function processTextNodesForUrls(node: Node): void {
                     span.className = "moo-link-external moo-link-detected";
                     span.setAttribute("data-url", url);
                     span.setAttribute("tabindex", "0");
+                    span.setAttribute("role", "link");
                     span.title = url;
                     span.textContent = url;
                     fragment.appendChild(span);
@@ -422,11 +425,12 @@ function convertLinksAndTables(container: HTMLElement): void {
         }
 
         // Create span to replace the link with URL-based styling
-        // tabindex="0" makes it keyboard-focusable without role="link"
+        // tabindex="0" + role="link" makes it keyboard-focusable and recognized by screen readers
         const span = document.createElement("span");
         span.className = getLinkClass(href);
         span.setAttribute("data-url", href);
         span.setAttribute("tabindex", "0");
+        span.setAttribute("role", "link");
         span.title = href;
         span.textContent = linkText;
 
@@ -473,7 +477,7 @@ export function renderHtmlContent(html: string, enableEmoji: boolean = false): s
     // First sanitize (moo:// is allowed for internal MOO links)
     const sanitizedHtml = DOMPurify.sanitize(html, {
         ALLOWED_TAGS: CONTENT_ALLOWED_TAGS,
-        ALLOWED_ATTR: [...CONTENT_ALLOWED_ATTR, "tabindex"],
+        ALLOWED_ATTR: CONTENT_ALLOWED_ATTR,
         ALLOWED_URI_REGEXP: /^(https?|mailto|tel|callto|cid|xmpp|moo):/i,
     });
 
@@ -512,7 +516,7 @@ export function renderPlainText(text: string, enableEmoji: boolean = false): str
     // Include attributes needed for clickable URL spans
     const sanitizedHtml = DOMPurify.sanitize(withUrls, {
         ALLOWED_TAGS: ["span", "div", "br"],
-        ALLOWED_ATTR: ["style", "class", "data-url", "tabindex", "title"],
+        ALLOWED_ATTR: ["style", "class", "data-url", "tabindex", "title", "role"],
     });
 
     return sanitizedHtml;
@@ -562,9 +566,9 @@ export function renderDjot(content: string, options: DjotRenderOptions = {}): st
             // Determine CSS class based on URL scheme
             const linkClass = getLinkClass(href);
 
-            // tabindex="0" makes it keyboard-focusable/discoverable without role="link"
-            // which would cause screen readers to announce "link" during normal reading
-            return `<span class="${linkClass}" ${linkHandler.dataAttribute}="${href}" title="${href}" tabindex="0">${linkText}</span>`;
+            // tabindex="0" + role="link" makes it keyboard-focusable and recognized by screen readers
+            // for link navigation commands (next/previous link)
+            return `<span class="${linkClass}" ${linkHandler.dataAttribute}="${href}" title="${href}" tabindex="0" role="link">${linkText}</span>`;
         };
     }
 
@@ -592,10 +596,10 @@ export function renderDjot(content: string, options: DjotRenderOptions = {}): st
 
     const djotHtml = renderHTML(djotAst, { overrides });
 
-    // Sanitize HTML (include tabindex for clickable URL spans)
+    // Sanitize HTML
     const sanitizedHtml = DOMPurify.sanitize(djotHtml, {
         ALLOWED_TAGS: [...CONTENT_ALLOWED_TAGS, ...additionalAllowedTags],
-        ALLOWED_ATTR: [...CONTENT_ALLOWED_ATTR, "tabindex"],
+        ALLOWED_ATTR: CONTENT_ALLOWED_ATTR,
     });
 
     // Process for ANSI codes, syntax highlighting, and URL detection
