@@ -1832,13 +1832,12 @@
 }
 
 /* ====== STALE CONTENT STYLES ====== */
-/* Links in stale content are no longer actionable */
+/* MOO links in stale content are no longer actionable */
 
 .content-stale .moo-link,
 .content-stale .moo-link-cmd,
 .content-stale .moo-link-inspect,
-.content-stale .moo-link-help,
-.content-stale .moo-link-external {
+.content-stale .moo-link-help {
   opacity: 0.5;
   cursor: default;
   pointer-events: none;
@@ -1847,6 +1846,13 @@
 .content-stale .moo-link-cmd {
   background-color: var(--color-bg-tertiary);
   color: var(--color-text-muted);
+}
+
+/* External links remain clickable in stale/historical content */
+.content-stale .moo-link-external {
+  opacity: 0.85;
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 /* ====== INSPECT POPOVER STYLES ====== */
@@ -3120,4 +3126,78 @@ button:disabled {
   .say-mode-pill {
     padding: 6px 12px;
   }
+}
+
+/* ====== EXTERNAL LINK MODAL ====== */
+.external-link-context {
+  margin: 0 0 1em;
+  color: var(--color-text-secondary);
+  font-size: 0.95em;
+}
+
+.external-link-url-display {
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  padding: 0.75em 1em;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  word-break: break-all;
+  margin-bottom: 1em;
+  line-height: 1.5;
+}
+
+.external-link-protocol {
+  color: var(--color-text-secondary);
+}
+
+.external-link-hostname {
+  color: var(--color-text-accent);
+  font-weight: 700;
+  background: color-mix(in srgb, var(--color-text-accent) 15%, transparent);
+  padding: 0.1em 0.3em;
+  border-radius: var(--radius-sm);
+}
+
+.external-link-path {
+  color: var(--color-text-secondary);
+}
+
+.external-link-warning {
+  color: var(--color-text-secondary);
+  font-size: 0.9em;
+  line-height: 1.5;
+  margin-bottom: 1em;
+}
+
+.external-link-trust-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  cursor: pointer;
+  font-size: 0.9em;
+  color: var(--color-text-secondary);
+  user-select: none;
+}
+
+.external-link-trust-label:hover {
+  color: var(--color-text-primary);
+}
+
+.external-link-trust-checkbox {
+  width: 1.1em;
+  height: 1.1em;
+  cursor: pointer;
+  accent-color: var(--color-button-primary);
+  margin: 0;
+}
+
+.external-link-trust-label strong {
+  color: var(--color-text-primary);
+}
+
+/* Detected link indicator - subtle styling for auto-detected URLs */
+.moo-link-detected {
+  /* Uses moo-link-external styling by default */
+  /* Could add subtle border-bottom or different underline style if desired */
 }

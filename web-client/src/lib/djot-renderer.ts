@@ -154,6 +154,116 @@ export function isSafeUrl(url: string): boolean {
 }
 
 /**
+ * URL regex for detecting http/https URLs in plain text.
+ * Matches URLs that are not already inside HTML tags.
+ * Excludes:
+ * - Whitespace
+ * - HTML tag characters: < >
+ * - Straight quotes: " '
+ * - Curly/smart quotes: " " ' ' (U+201C, U+201D, U+2018, U+2019)
+ * - Common grouping characters that URLs are often wrapped in: ) ]
+ */
+const PLAIN_TEXT_URL_REGEX = /https?:\/\/[^\s<>"')\]\u201C\u201D\u2018\u2019]+/g;
+
+/**
+ * Cleans up a detected URL by removing trailing punctuation that's likely
+ * sentence-ending rather than part of the URL.
+ */
+function cleanupDetectedUrl(url: string): string {
+    // Remove trailing punctuation that's usually not part of URLs
+    return url.replace(/[.,;:!?]+$/, "");
+}
+
+/**
+ * Converts plain text URLs to clickable span elements.
+ * Processes text nodes in HTML, leaving existing tags and links untouched.
+ */
+function convertPlainTextUrls(html: string): string {
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = html;
+
+    processTextNodesForUrls(tempDiv);
+
+    return tempDiv.innerHTML;
+}
+
+/**
+ * Recursively processes text nodes to detect and wrap URLs.
+ */
+function processTextNodesForUrls(node: Node): void {
+    if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent || "";
+        // Reset regex state for each text node
+        PLAIN_TEXT_URL_REGEX.lastIndex = 0;
+
+        if (PLAIN_TEXT_URL_REGEX.test(text)) {
+            // Reset regex state after test
+            PLAIN_TEXT_URL_REGEX.lastIndex = 0;
+
+            const fragment = document.createDocumentFragment();
+            let lastIndex = 0;
+            let match;
+
+            while ((match = PLAIN_TEXT_URL_REGEX.exec(text)) !== null) {
+                // Add text before the URL
+                if (match.index > lastIndex) {
+                    fragment.appendChild(
+                        document.createTextNode(text.slice(lastIndex, match.index)),
+                    );
+                }
+
+                const rawUrl = match[0];
+                const url = cleanupDetectedUrl(rawUrl);
+                const trailingPunctuation = rawUrl.slice(url.length);
+
+                if (isSafeUrl(url)) {
+                    // Create clickable span with external link styling
+                    const span = document.createElement("span");
+                    span.className = "moo-link-external moo-link-detected";
+                    span.setAttribute("data-url", url);
+                    span.setAttribute("tabindex", "0");
+                    span.title = url;
+                    span.textContent = url;
+                    fragment.appendChild(span);
+
+                    // Add any trailing punctuation as plain text
+                    if (trailingPunctuation) {
+                        fragment.appendChild(document.createTextNode(trailingPunctuation));
+                    }
+                } else {
+                    // Keep as plain text if not safe
+                    fragment.appendChild(document.createTextNode(rawUrl));
+                }
+
+                lastIndex = match.index + rawUrl.length;
+            }
+
+            // Add remaining text after the last URL
+            if (lastIndex < text.length) {
+                fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+            }
+
+            node.parentNode?.replaceChild(fragment, node);
+        }
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = node as Element;
+        // Skip elements that already have data-url (already a link)
+        // Skip pre/code elements to avoid breaking code blocks
+        // Skip anchor tags
+        if (
+            element.hasAttribute("data-url")
+            || element.tagName === "PRE"
+            || element.tagName === "CODE"
+            || element.tagName === "A"
+        ) {
+            return;
+        }
+        // Process child nodes (copy to array since we may modify the DOM)
+        Array.from(node.childNodes).forEach(child => processTextNodesForUrls(child));
+    }
+}
+
+/**
  * Determines the CSS class for a link based on its URL scheme.
  * Returns the appropriate moo-link-* class for styling.
  */
@@ -333,7 +443,8 @@ function convertLinksAndTables(container: HTMLElement): void {
 }
 
 /**
- * Processes HTML content - handles ANSI escape codes in text and syntax highlighting in code blocks
+ * Processes HTML content - handles ANSI escape codes in text, syntax highlighting in code blocks,
+ * and detects plain text URLs to make them clickable.
  * This is the final rendering step for all content types
  * @param html - The HTML string to process
  * @param enableEmoji - Whether to convert emoticons to emoji (defaults to false)
@@ -345,6 +456,9 @@ export function processHtmlContent(html: string, enableEmoji: boolean = false): 
 
     processCodeBlocks(tempDiv, ansi_up);
     processTextNodesForAnsi(tempDiv, ansi_up, enableEmoji);
+
+    // Detect plain text URLs in text nodes and convert to clickable spans
+    processTextNodesForUrls(tempDiv);
 
     return tempDiv.innerHTML;
 }
@@ -359,7 +473,7 @@ export function renderHtmlContent(html: string, enableEmoji: boolean = false): s
     // First sanitize (moo:// is allowed for internal MOO links)
     const sanitizedHtml = DOMPurify.sanitize(html, {
         ALLOWED_TAGS: CONTENT_ALLOWED_TAGS,
-        ALLOWED_ATTR: CONTENT_ALLOWED_ATTR,
+        ALLOWED_ATTR: [...CONTENT_ALLOWED_ATTR, "tabindex"],
         ALLOWED_URI_REGEXP: /^(https?|mailto|tel|callto|cid|xmpp|moo):/i,
     });
 
@@ -367,6 +481,9 @@ export function renderHtmlContent(html: string, enableEmoji: boolean = false): s
     const tempDiv = document.createElement("div");
     tempDiv.innerHTML = sanitizedHtml;
     convertLinksAndTables(tempDiv);
+
+    // Detect plain text URLs in text nodes and convert to clickable spans
+    processTextNodesForUrls(tempDiv);
 
     // Process ANSI and syntax highlighting
     const ansi_up = new AnsiUp();
@@ -377,7 +494,7 @@ export function renderHtmlContent(html: string, enableEmoji: boolean = false): s
 }
 
 /**
- * Renders plain text to HTML, converting ANSI escape codes
+ * Renders plain text to HTML, converting ANSI escape codes and detecting URLs
  * @param text - The plain text to render
  * @param enableEmoji - Whether to convert emoticons to emoji (defaults to false)
  */
@@ -388,10 +505,14 @@ export function renderPlainText(text: string, enableEmoji: boolean = false): str
     const ansi_up = new AnsiUp();
     const htmlFromAnsi = ansi_up.ansi_to_html(processedText);
 
+    // Convert plain text URLs to clickable links
+    const withUrls = convertPlainTextUrls(htmlFromAnsi);
+
     // Sanitize with minimal allowed tags for plain text
-    const sanitizedHtml = DOMPurify.sanitize(htmlFromAnsi, {
+    // Include attributes needed for clickable URL spans
+    const sanitizedHtml = DOMPurify.sanitize(withUrls, {
         ALLOWED_TAGS: ["span", "div", "br"],
-        ALLOWED_ATTR: ["style", "class"],
+        ALLOWED_ATTR: ["style", "class", "data-url", "tabindex", "title"],
     });
 
     return sanitizedHtml;
@@ -471,12 +592,12 @@ export function renderDjot(content: string, options: DjotRenderOptions = {}): st
 
     const djotHtml = renderHTML(djotAst, { overrides });
 
-    // Sanitize HTML
+    // Sanitize HTML (include tabindex for clickable URL spans)
     const sanitizedHtml = DOMPurify.sanitize(djotHtml, {
         ALLOWED_TAGS: [...CONTENT_ALLOWED_TAGS, ...additionalAllowedTags],
-        ALLOWED_ATTR: CONTENT_ALLOWED_ATTR,
+        ALLOWED_ATTR: [...CONTENT_ALLOWED_ATTR, "tabindex"],
     });
 
-    // Process for ANSI codes and syntax highlighting
+    // Process for ANSI codes, syntax highlighting, and URL detection
     return processHtmlContent(sanitizedHtml, enableEmoji);
 }

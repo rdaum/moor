@@ -55,7 +55,11 @@ interface OutputWindowProps {
     }>;
     onLoadMoreHistory?: () => void;
     isLoadingHistory?: boolean;
-    onLinkClick?: (url: string, position?: { x: number; y: number }) => void;
+    onLinkClick?: (
+        url: string,
+        position?: { x: number; y: number },
+        metadata?: { actorName?: string; verb?: string },
+    ) => void;
     onLinkHoldStart?: (url: string, position: { x: number; y: number }) => void;
     onLinkHoldEnd?: () => void;
     fontSize?: number;
@@ -113,13 +117,19 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         });
     }, []);
 
-    // Create a wrapped link click handler that also marks the message as stale
-    const createLinkClickHandler = useCallback((messageId: string) => {
+    // Create a wrapped link click handler that also marks the message as stale for command links
+    const createLinkClickHandler = useCallback((messageId: string, eventMetadata?: EventMetadata) => {
         return (url: string, position?: { x: number; y: number }) => {
-            // Mark the message as stale when any link is clicked
-            onMessageLinkClicked?.(messageId);
-            // Then call the original handler
-            onLinkClick?.(url, position);
+            // Only mark message stale for MOO command links (which execute server actions)
+            // External http/https links should remain clickable
+            if (url.startsWith("moo://cmd/")) {
+                onMessageLinkClicked?.(messageId);
+            }
+            // Call the original handler with metadata
+            onLinkClick?.(url, position, {
+                actorName: eventMetadata?.actorName,
+                verb: eventMetadata?.verb,
+            });
         };
     }, [onLinkClick, onMessageLinkClicked]);
 
@@ -133,9 +143,10 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         messageId?: string,
         isStale?: boolean,
         enableEmojis?: boolean,
+        eventMetadata?: EventMetadata,
     ) => {
         // Use a wrapped handler that marks the message stale, or fall back to direct handler
-        const linkClickHandler = messageId ? createLinkClickHandler(messageId) : onLinkClick;
+        const linkClickHandler = messageId ? createLinkClickHandler(messageId, eventMetadata) : onLinkClick;
 
         // Enable emoji only if server says to AND client setting is on
         const enableEmoji = enableEmojis === true && getEmojiEnabled();
@@ -154,6 +165,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                             onLinkHoldEnd={onLinkHoldEnd}
                             isStale={isStale}
                             enableEmoji={enableEmoji}
+                            eventMetadata={eventMetadata}
                         />
                     </span>
                     {linkPreview && <LinkPreviewCard preview={linkPreview} />}
@@ -171,6 +183,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                     onLinkHoldEnd={onLinkHoldEnd}
                     isStale={isStale}
                     enableEmoji={enableEmoji}
+                    eventMetadata={eventMetadata}
                 />
                 {linkPreview && <LinkPreviewCard preview={linkPreview} />}
             </>
@@ -446,6 +459,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                     message.id,
                                                     isMessageStale,
                                                     message.eventMetadata?.enableEmojis,
+                                                    message.eventMetadata,
                                                 )}
                                             </div>
                                         </>
@@ -472,6 +486,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                     message.id,
                                                     isMessageStale,
                                                     message.eventMetadata?.enableEmojis,
+                                                    message.eventMetadata,
                                                 )}
                                             </div>
                                         </div>
@@ -487,6 +502,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                 message.id,
                                                 isMessageStale,
                                                 message.eventMetadata?.enableEmojis,
+                                                message.eventMetadata,
                                             )}
                                         </div>
                                     )}
@@ -512,6 +528,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                         message.id,
                                         isMessageStale,
                                         message.eventMetadata?.enableEmojis,
+                                        message.eventMetadata,
                                     )}
                                 </div>,
                             );
@@ -593,6 +610,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                             msg.id,
                                                             isGroupStale,
                                                             msg.eventMetadata?.enableEmojis,
+                                                            msg.eventMetadata,
                                                         )}
                                                     </div>
                                                 ))}
@@ -623,6 +641,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                             msg.id,
                                                             isGroupStale,
                                                             msg.eventMetadata?.enableEmojis,
+                                                            msg.eventMetadata,
                                                         )}
                                                     </div>
                                                 ))}
@@ -642,6 +661,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                         msg.id,
                                                         isGroupStale,
                                                         msg.eventMetadata?.enableEmojis,
+                                                        msg.eventMetadata,
                                                     )}
                                                 </div>
                                             ))}
@@ -696,6 +716,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                         firstMessage.id,
                                         isGroupStale,
                                         firstMessage.eventMetadata?.enableEmojis,
+                                        firstMessage.eventMetadata,
                                     )}
                                 </div>,
                             );

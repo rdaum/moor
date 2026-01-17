@@ -21,6 +21,7 @@ import { TopDock } from "./components/docks/TopDock";
 import { EncryptionPasswordPrompt } from "./components/EncryptionPasswordPrompt";
 import { EncryptionSetupPrompt } from "./components/EncryptionSetupPrompt";
 import { EvalPanel } from "./components/EvalPanel";
+import { ExternalLinkModal } from "./components/ExternalLinkModal";
 import { InspectData, InspectPopover } from "./components/InspectPopover";
 import { Login, useWelcomeMessage } from "./components/Login";
 import { MessageBoard, useSystemMessage } from "./components/MessageBoard";
@@ -50,6 +51,7 @@ import { useVerbEditor } from "./hooks/useVerbEditor";
 import { MoorVar } from "./lib/MoorVar";
 import { OAuth2UserInfo } from "./lib/oauth2";
 import { fetchServerFeatures, invokeVerbFlatBuffer } from "./lib/rpc-fb";
+import { addTrustedDomain, getHostname, isDomainTrusted } from "./lib/trusted-domains";
 import { stringToCurie } from "./lib/var";
 import { Presentation, PresentationData } from "./types/presentation";
 import "./styles/main.css";
@@ -150,6 +152,16 @@ function AppContent({
             isPreview?: boolean;
         } | null
     >(null);
+
+    // External link modal state
+    const [externalLinkModal, setExternalLinkModal] = useState<
+        {
+            url: string;
+            actorName?: string;
+            verb?: string;
+        } | null
+    >(null);
+
     const [hasShownHistoryUnavailable, setHasShownHistoryUnavailable] = useState(false);
 
     const splitRatioRef = useRef(splitRatio);
@@ -979,7 +991,11 @@ function AppContent({
         useWebSocketContext();
 
     // Handle MOO link clicks based on URL scheme
-    const handleLinkClick = useCallback(async (url: string, position?: { x: number; y: number }) => {
+    const handleLinkClick = useCallback(async (
+        url: string,
+        position?: { x: number; y: number },
+        metadata?: { actorName?: string; verb?: string },
+    ) => {
         if (url.startsWith("moo://cmd/")) {
             // Command link: send as if typed
             const command = decodeURIComponent(url.slice(10));
@@ -1015,8 +1031,18 @@ function AppContent({
             console.log("Help link clicked:", topic);
             showMessage("Help links not yet implemented", 2);
         } else if (url.startsWith("http://") || url.startsWith("https://")) {
-            // External link: open in new tab
-            window.open(url, "_blank", "noopener,noreferrer");
+            // External link: check if domain is trusted
+            if (isDomainTrusted(url)) {
+                // Trusted domain: open directly
+                window.open(url, "_blank", "noopener,noreferrer");
+            } else {
+                // Untrusted domain: show confirmation modal
+                setExternalLinkModal({
+                    url,
+                    actorName: metadata?.actorName,
+                    verb: metadata?.verb,
+                });
+            }
         } else {
             console.warn("Unknown link scheme:", url);
         }
@@ -1046,6 +1072,25 @@ function AppContent({
             return current;
         });
     }, []);
+
+    // Handle external link modal confirmation
+    const handleExternalLinkConfirm = useCallback((trustDomain: boolean) => {
+        if (!externalLinkModal) return;
+
+        if (trustDomain) {
+            // Remember this domain as trusted
+            const hostname = getHostname(externalLinkModal.url);
+            if (hostname) {
+                addTrustedDomain(hostname);
+            }
+        }
+
+        // Open the link
+        window.open(externalLinkModal.url, "_blank", "noopener,noreferrer");
+
+        // Close the modal
+        setExternalLinkModal(null);
+    }, [externalLinkModal]);
 
     // Track previous player OID to detect logout
     const previousPlayerOidRef = useRef<string | null>(null);
@@ -1989,6 +2034,17 @@ function AppContent({
                         return output;
                     }}
                     isPreview={inspectPopover.isPreview}
+                />
+            )}
+
+            {/* External link confirmation modal */}
+            {externalLinkModal && (
+                <ExternalLinkModal
+                    url={externalLinkModal.url}
+                    actorName={externalLinkModal.actorName}
+                    verb={externalLinkModal.verb}
+                    onConfirm={handleExternalLinkConfirm}
+                    onCancel={() => setExternalLinkModal(null)}
                 />
             )}
         </div>

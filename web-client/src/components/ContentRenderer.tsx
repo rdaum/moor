@@ -14,15 +14,29 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { renderDjot, renderHtmlContent, renderPlainText } from "../lib/djot-renderer";
 
+/** Metadata about the event that produced this content */
+export interface EventMetadata {
+    verb?: string;
+    actorName?: string;
+    thisName?: string;
+    dobjName?: string;
+}
+
 interface ContentRendererProps {
     content: string | string[];
     contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback" | "text/x-uri";
-    onLinkClick?: (url: string, position?: { x: number; y: number }) => void;
+    onLinkClick?: (
+        url: string,
+        position?: { x: number; y: number },
+        metadata?: { actorName?: string; verb?: string },
+    ) => void;
     onLinkHoldStart?: (url: string, position: { x: number; y: number }) => void;
     onLinkHoldEnd?: () => void;
     isStale?: boolean;
     /** Whether to enable emoji conversion for this content. Defaults to false. */
     enableEmoji?: boolean;
+    /** Metadata about the event that produced this content (for link context) */
+    eventMetadata?: EventMetadata;
 }
 
 const HOLD_THRESHOLD_MS = 300;
@@ -35,6 +49,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
     onLinkHoldEnd,
     isStale = false,
     enableEmoji = false,
+    eventMetadata,
 }) => {
     // Touch state tracking for tap vs hold detection
     const touchStateRef = useRef<
@@ -66,35 +81,47 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
         return typeof content === "string" ? content : String(content);
     }, [content]);
 
+    // Check if a URL is an external link (http/https)
+    const isExternalLink = (url: string) => url.startsWith("http://") || url.startsWith("https://");
+
     // Unified click handler for moo-link spans (all moo-link-* variants)
     const handleLinkClick = useCallback((e: React.MouseEvent) => {
-        // Ignore clicks when content is stale
-        if (isStale) return;
-
         const target = e.target as HTMLElement;
         // Check for data-url attribute which all our link spans have
         const url = target.getAttribute("data-url");
-        if (url && onLinkClick) {
-            e.preventDefault();
-            // Pass click position for popovers
-            onLinkClick(url, { x: e.clientX, y: e.clientY });
-        }
-    }, [onLinkClick, isStale]);
+        if (!url || !onLinkClick) return;
+
+        // For stale/historical content, only allow external links (http/https)
+        // MOO command links should remain disabled to prevent re-executing old commands
+        if (isStale && !isExternalLink(url)) return;
+
+        e.preventDefault();
+        // Pass click position and event metadata for context
+        onLinkClick(url, { x: e.clientX, y: e.clientY }, {
+            actorName: eventMetadata?.actorName,
+            verb: eventMetadata?.verb,
+        });
+    }, [onLinkClick, isStale, eventMetadata]);
 
     // Keyboard handler for Enter/Space on focused links
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-        if (isStale) return;
         if (e.key !== "Enter" && e.key !== " ") return;
 
         const target = e.target as HTMLElement;
         const url = target.getAttribute("data-url");
-        if (url && onLinkClick) {
-            e.preventDefault();
-            // Use element position for popovers since there's no mouse position
-            const rect = target.getBoundingClientRect();
-            onLinkClick(url, { x: rect.left + rect.width / 2, y: rect.bottom });
-        }
-    }, [onLinkClick, isStale]);
+        if (!url || !onLinkClick) return;
+
+        // For stale/historical content, only allow external links
+        if (isStale && !isExternalLink(url)) return;
+
+        e.preventDefault();
+        // Use element position for popovers since there's no mouse position
+        const rect = target.getBoundingClientRect();
+        onLinkClick(url, { x: rect.left + rect.width / 2, y: rect.bottom }, {
+            actorName: eventMetadata?.actorName,
+            verb: eventMetadata?.verb,
+        });
+    }, [onLinkClick, isStale, eventMetadata]);
 
     // Touch start: begin tracking for hold detection on inspect links
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -272,11 +299,14 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 const plainContent = getContentString("\n");
                 const renderedHtml = renderPlainText(plainContent, enableEmoji);
 
-                return (
+                return wrapWithLinkHint(
                     <div
                         dangerouslySetInnerHTML={{ __html: renderedHtml }}
+                        onClick={handleLinkClick}
+                        onKeyDown={handleKeyDown}
                         className={`content-text${staleClass}`}
-                    />
+                    />,
+                    renderedHtml,
                 );
             }
         }
