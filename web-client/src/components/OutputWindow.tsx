@@ -154,7 +154,9 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         if (ttsText) {
             return (
                 <>
-                    {thumbnail && <img src={thumbnail.data} alt="thumbnail" className="narrative_thumbnail" />}
+                    {thumbnail && (
+                        <img src={thumbnail.data} alt="" aria-hidden="true" className="narrative_thumbnail" />
+                    )}
                     <span className="sr-only">{ttsText}</span>
                     <span aria-hidden="true">
                         <ContentRenderer
@@ -174,7 +176,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         }
         return (
             <>
-                {thumbnail && <img src={thumbnail.data} alt="thumbnail" className="narrative_thumbnail" />}
+                {thumbnail && <img src={thumbnail.data} alt="" aria-hidden="true" className="narrative_thumbnail" />}
                 <ContentRenderer
                     content={content}
                     contentType={contentType}
