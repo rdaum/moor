@@ -1,0 +1,3 @@
+[submodule "cores/cowbell"]
+	path = cores/cowbell
+	url = ssh://git@codeberg.org/timbran/cowbell.git
