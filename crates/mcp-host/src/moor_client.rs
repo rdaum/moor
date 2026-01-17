@@ -1447,6 +1447,17 @@ impl MoorClient {
     }
 }
 
+impl Drop for MoorClient {
+    fn drop(&mut self) {
+        // Stop the ping responder task to prevent zombie tasks from sending pongs
+        // after the client is dropped.
+        self.ping_kill_switch.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.ping_responder_handle.take() {
+            handle.abort();
+        }
+    }
+}
+
 /// Information about a verb
 #[derive(Debug, Clone)]
 pub struct VerbInfo {

@@ -13,8 +13,8 @@
 
 //! Takes the AST and turns it into a list of opcodes.
 
-use triomphe::Arc;
 use tracing::warn;
+use triomphe::Arc;
 
 use moor_var::{ErrorCode, Symbol, Var, Variant, v_arc_str, v_int, v_sym};
 
