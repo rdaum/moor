@@ -7,7 +7,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### BREAKING: Database Migration Required
+
+**This release breaks binary database compatibility** for the world DB, tasks DB, and connections
+DB. This is due to the upgrade to fjall 3.0, and we took this opportunity to also improve opcode
+encoding and the task/connection DB formats. This is intended to be the final breaking change before
+the 1.0 stable release.
+
+**Migration steps:**
+
+1. Export your world to objdef format using `dump_database()` or the objdef dump tools
+2. Shut down the server
+3. Delete your entire binary database directory
+4. Restart the server and re-import from your objdef dump
+
+Databases from beta7 and earlier cannot be loaded directly.
+
 ### Added
+
+`kernel`:
+
+- New `hotp()`, `totp()`, `random_bytes()`, `encode_base32()`, and `decode_base32()` builtins for
+  two-factor authentication support (TOTP defaults to SHA256; use `'sha1` for Google Authenticator
+  compatibility)
+- `round()` now accepts optional second argument to specify decimal places
+- Flyweight slots can now be assigned in-place like maps and lists (e.g., `myfw.slot = value;`)
+  without using `flyslotset()`. This is a copy-on-write operation.
 
 `list_sets`:
 
@@ -21,6 +46,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 `web-client`:
 
 - Object browser can run `test_` verbs (single or all) with results dialog and test-verb toggle
+- External links in MOO output can now be opened (previously not supported); links are highlighted
+  and display a confirmation modal before opening
+- Auto-emoji conversion (e.g., `:-)` to unicode emoji) - enabled by default, configurable; requires
+  core support (event must explicitly mark that emojis are present)
+- Improved verb editor pop-out behavior (better positioning, deselects verb in object browser)
 
 `docs`:
 
@@ -31,22 +61,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 `list_sets`:
 
 - `complex_match()` now defaults to no fuzzy matching (threshold `0.0`)
-- Ordinals count across match tiers and `N.subject` tokens are supported
+- `complex_match` crdinals count across match tiers and `N.subject` tokens are supported
 
 `kernel`:
 
 - Fork dispatch now commits and requests a fresh transaction before scheduling new tasks
 - `queued_tasks()` prefers the top non-builtin activation for prepared tasks
+- `parse_command()` now accepts optional 4th argument to specify fuzzy match threshold
 
 `regex`:
 
 - `pcre_match()` now uses boolean args for `case_matters` and `repeat_until_no_matches`
+
+`daemon`:
+
+- Improved server/client heartbeat for better detection of lost connections
+
+`telnet-host`:
+
+- Default content output changed to plain ASCII
 
 ### Fixed
 
 `kernel`:
 
 - Allow task owners (not just wizards) to kill their suspended tasks
+- `suspend()` no longer hangs indefinitely for very short (sub-millisecond) delays
+- Property definition now correctly fails if a child already has a property with the same name
+- `queued_tasks()` and `active_tasks()` now filter by `task_perms` correctly
 
 `list_sets`:
 
@@ -59,6 +101,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 `var`:
 
 - `range_set()` on strings now returns `E_RANGE` when the start index is out of bounds
+
+`compiler`:
+
+- Decompilation for optional lambda arguments now handled correctly
+
+`daemon`:
+
+- Connection handling improvements for soft/hard detach behavior; ping timeout fixes
+
+`mcp-host`:
+
+- Added ping/pong support for proper connection liveness checking
+
+`telnet-host`:
+
+- UTF-8 multibyte character input sequences now handled correctly
+
+`web-client`:
+
+- Duplicate completions in verb editor fixed
+- Anonymous objects no longer shown in object browser
+- Various accessibility improvements (verb editor discoverability, eval panel ARIA, room
+  descriptions)
 
 ## [1.0.0-beta7] - 2026-01-01
 
