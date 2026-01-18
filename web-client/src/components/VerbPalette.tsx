@@ -63,6 +63,10 @@ export const VerbPalette: React.FC<VerbPaletteProps> = ({ visible, onVerbSelect 
     const [scrollPosition, setScrollPosition] = useState<ScrollPosition>("no-overflow");
     const touchStartRef = useRef<{ x: number; y: number; verb: string } | null>(null);
 
+    // Roving tabindex state - track which button is focusable
+    const [focusedIndex, setFocusedIndex] = useState(0);
+    const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
     // Mouse drag-to-scroll state
     const isDraggingRef = useRef(false);
     const dragStartXRef = useRef(0);
@@ -204,6 +208,53 @@ export const VerbPalette: React.FC<VerbPaletteProps> = ({ visible, onVerbSelect 
         touchStartRef.current = null;
     }, [onVerbSelect]);
 
+    // Keyboard navigation for roving tabindex
+    const handleKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
+        const buttons = buttonRefs.current.filter(Boolean);
+        const count = buttons.length;
+        if (count === 0) return;
+
+        let newIndex = index;
+
+        switch (e.key) {
+            case "ArrowRight":
+            case "ArrowDown":
+                e.preventDefault();
+                newIndex = (index + 1) % count;
+                break;
+            case "ArrowLeft":
+            case "ArrowUp":
+                e.preventDefault();
+                newIndex = (index - 1 + count) % count;
+                break;
+            case "Home":
+                e.preventDefault();
+                newIndex = 0;
+                break;
+            case "End":
+                e.preventDefault();
+                newIndex = count - 1;
+                break;
+            default:
+                return;
+        }
+
+        setFocusedIndex(newIndex);
+        buttonRefs.current[newIndex]?.focus();
+
+        // Scroll the button into view
+        buttonRefs.current[newIndex]?.scrollIntoView({
+            behavior: "smooth",
+            block: "nearest",
+            inline: "nearest",
+        });
+    }, []);
+
+    // Reset focused index when verbs change
+    useEffect(() => {
+        setFocusedIndex(0);
+    }, [displayVerbs.length]);
+
     if (!visible) return null;
 
     const showLeftIndicator = scrollPosition === "scrolled-middle" || scrollPosition === "scrolled-end";
@@ -219,20 +270,26 @@ export const VerbPalette: React.FC<VerbPaletteProps> = ({ visible, onVerbSelect 
                     ref={paletteRef}
                     className="verb-palette"
                     role="toolbar"
-                    aria-label="Quick command buttons. Select a verb to start a command. Swipe down on a verb to select it."
+                    aria-label="Quick commands. Use arrow keys to navigate, Enter to select."
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onMouseLeave={handleMouseLeave}
                 >
-                    {displayVerbs.map(({ verb, label, placeholder }) => (
+                    {displayVerbs.map(({ verb, label, placeholder }, index) => (
                         <button
                             key={verb}
+                            ref={(el) => {
+                                buttonRefs.current[index] = el;
+                            }}
                             className="verb-chip"
                             onClick={(e) => handleClick(e, verb, placeholder)}
                             onPointerDown={(e) => handlePointerDown(e, verb)}
                             onPointerUp={(e) => handlePointerUp(e, verb, placeholder)}
+                            onKeyDown={(e) => handleKeyDown(e, index)}
+                            onFocus={() => setFocusedIndex(index)}
                             type="button"
+                            tabIndex={index === focusedIndex ? 0 : -1}
                             aria-label={`${verb} command`}
                         >
                             {label}
