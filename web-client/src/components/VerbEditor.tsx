@@ -114,6 +114,8 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const [errors, setErrors] = useState<CompileError[]>([]);
     const [isCompiling, setIsCompiling] = useState(false);
     const [compileSuccess, setCompileSuccess] = useState(false);
+    // Single announcement for screenreaders - only updated when there's something meaningful to say
+    const [compileAnnouncement, setCompileAnnouncement] = useState("");
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const errorDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
     const modelUriRef = useRef<string | null>(null);
@@ -491,6 +493,10 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
                 // For now, assume success (real error handling would need server response parsing)
                 setErrors([]);
+                setCompileSuccess(true);
+                // Single announcement for screenreaders
+                setCompileAnnouncement("");
+                setTimeout(() => setCompileAnnouncement("Verb compiled successfully"), 50);
                 console.log("WebSocket compilation completed");
             } else {
                 // REST API compilation for present-triggered editors
@@ -601,6 +607,17 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     }
 
                     setErrors(compilationErrors);
+
+                    // Single announcement for screenreaders - summarize the error
+                    const firstError = compilationErrors[0];
+                    let errorAnnouncement = "Compilation failed. ";
+                    if (firstError?.type === "parse" && typeof firstError.line === "number") {
+                        errorAnnouncement += `Error at line ${firstError.line}: ${firstError.message}`;
+                    } else if (firstError) {
+                        errorAnnouncement += firstError.message;
+                    }
+                    setCompileAnnouncement("");
+                    setTimeout(() => setCompileAnnouncement(errorAnnouncement), 50);
 
                     // Set Monaco error markers
                     if (editorRef.current) {
@@ -727,6 +744,10 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     setErrors([]);
                     setCompileSuccess(true);
 
+                    // Single announcement for screenreaders
+                    setCompileAnnouncement("");
+                    setTimeout(() => setCompileAnnouncement("Verb compiled successfully"), 50);
+
                     // Auto-hide success message after 3 seconds
                     setTimeout(() => {
                         setCompileSuccess(false);
@@ -786,10 +807,14 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 }
             }
         } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown compilation error";
             setErrors([{
                 type: "other",
-                message: error instanceof Error ? error.message : "Unknown compilation error",
+                message: errorMessage,
             }]);
+            // Single announcement for screenreaders
+            setCompileAnnouncement("");
+            setTimeout(() => setCompileAnnouncement(`Compilation failed. ${errorMessage}`), 50);
         } finally {
             setIsCompiling(false);
             // Return focus to compile button for accessibility
@@ -1051,11 +1076,18 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         >
             <TitleBar />
 
-            {/* Error panel - aria-live for screen reader announcement */}
+            {/* Single announcement region for screenreaders - only updated on completion */}
             <div
-                role="alert"
-                aria-live="assertive"
+                role="status"
+                aria-live="polite"
                 aria-atomic="true"
+                className="sr-only"
+            >
+                {compileAnnouncement}
+            </div>
+
+            {/* Error panel - visual only, announcements handled by dedicated region above */}
+            <div
                 className={errors.length > 0 ? "verb-compile-errors" : "sr-only"}
             >
                 {errors.length > 0 && (
@@ -1136,11 +1168,8 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 )}
             </div>
 
-            {/* Success banner - aria-live for screen reader announcement */}
+            {/* Success banner - visual only, announcements handled by dedicated region above */}
             <div
-                role="status"
-                aria-live="polite"
-                aria-atomic="true"
                 className={`verb-compile-success ${compileSuccess ? "" : "sr-only"}`}
             >
                 {compileSuccess && (
