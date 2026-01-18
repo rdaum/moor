@@ -116,6 +116,9 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const [compileSuccess, setCompileSuccess] = useState(false);
     // Single announcement for screenreaders - only updated when there's something meaningful to say
     const [compileAnnouncement, setCompileAnnouncement] = useState("");
+    // Track unsaved changes - content since last successful compile
+    const [lastCompiledContent, setLastCompiledContent] = useState(initialContent);
+    const [showUnsavedChangesDialog, setShowUnsavedChangesDialog] = useState(false);
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const errorDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
     const modelUriRef = useRef<string | null>(null);
@@ -202,6 +205,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     // Reset content when initial content changes
     useEffect(() => {
         setContent(initialContent);
+        setLastCompiledContent(initialContent);
         setErrors([]);
         setCompileSuccess(false);
         if (editorRef.current) {
@@ -494,6 +498,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 // For now, assume success (real error handling would need server response parsing)
                 setErrors([]);
                 setCompileSuccess(true);
+                setLastCompiledContent(content);
                 // Single announcement for screenreaders
                 setCompileAnnouncement("");
                 setTimeout(() => setCompileAnnouncement("Verb compiled successfully"), 50);
@@ -743,6 +748,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     // Successful compilation
                     setErrors([]);
                     setCompileSuccess(true);
+                    setLastCompiledContent(content);
 
                     // Single announcement for screenreaders
                     setCompileAnnouncement("");
@@ -782,8 +788,9 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             const editor = editorRef.current;
                             const savedPosition = editor?.getPosition();
 
-                            // Update content with reloaded code
+                            // Update content with reloaded code (server may have reformatted)
                             setContent(newCode);
+                            setLastCompiledContent(newCode);
 
                             // Restore cursor position after content update (clamped to valid range)
                             if (editor && savedPosition) {
@@ -875,8 +882,50 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         setExpandedErrors(new Set());
     }, [errors]);
 
-    // Track if content has changed from original
-    const hasUnsavedChanges = content !== initialContent;
+    // Track if content has changed since last successful compile
+    const hasUnsavedChanges = content !== lastCompiledContent;
+
+    // Handle close request with unsaved changes protection
+    const handleCloseRequest = useCallback(() => {
+        if (hasUnsavedChanges) {
+            setShowUnsavedChangesDialog(true);
+        } else {
+            onClose();
+        }
+    }, [hasUnsavedChanges, onClose]);
+
+    // Force close without saving (called from confirmation dialog)
+    const handleForceClose = useCallback(() => {
+        setShowUnsavedChangesDialog(false);
+        onClose();
+    }, [onClose]);
+
+    // Handle Escape key for splitMode - EditorWindow doesn't handle Escape in splitMode,
+    // so we need to handle it ourselves to show the unsaved changes dialog
+    useEffect(() => {
+        if (!splitMode || !visible) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                // Stop propagation to prevent parent (e.g., ObjectBrowser) from closing
+                e.stopPropagation();
+                e.preventDefault();
+
+                if (hasUnsavedChanges) {
+                    setShowUnsavedChangesDialog(true);
+                } else {
+                    onClose();
+                }
+            }
+        };
+
+        // Use capture phase to intercept before other handlers
+        document.addEventListener("keydown", handleKeyDown, true);
+
+        return () => {
+            document.removeEventListener("keydown", handleKeyDown, true);
+        };
+    }, [splitMode, visible, hasUnsavedChanges, onClose]);
 
     // Title bar component that uses the drag hook (must be inside EditorWindow)
     const TitleBar: React.FC = () => {
@@ -1051,7 +1100,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     )}
                     {!splitMode && (
                         <button
-                            onClick={onClose}
+                            onClick={handleCloseRequest}
                             aria-label="Close verb editor"
                             className="editor-btn-close"
                         >
@@ -1066,7 +1115,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     return (
         <EditorWindow
             visible={visible}
-            onClose={onClose}
+            onClose={handleCloseRequest}
             splitMode={splitMode}
             defaultPosition={{ x: 100, y: 100 }}
             defaultSize={{ width: 800, height: 600 }}
@@ -1466,6 +1515,38 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             </button>
                         </div>
                     </form>
+                </DialogSheet>
+            )}
+
+            {/* Unsaved changes confirmation dialog */}
+            {showUnsavedChangesDialog && (
+                <DialogSheet
+                    title="Unsaved Changes"
+                    titleId="unsaved-changes-dialog"
+                    onCancel={() => setShowUnsavedChangesDialog(false)}
+                >
+                    <div className="dialog-sheet-content form-stack">
+                        <p style={{ margin: "0 0 1em 0" }}>
+                            You have unsaved changes that have not been compiled. Are you sure you want to close without
+                            saving?
+                        </p>
+                        <div className="button-group">
+                            <button
+                                type="button"
+                                onClick={() => setShowUnsavedChangesDialog(false)}
+                                className="btn btn-secondary"
+                            >
+                                Keep Editing
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleForceClose}
+                                className="btn btn-warning"
+                            >
+                                Discard Changes
+                            </button>
+                        </div>
+                    </div>
                 </DialogSheet>
             )}
 
