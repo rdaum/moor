@@ -129,6 +129,7 @@ fn get_verbdef(obj: &Obj, verbspec: Var, bf_args: &BfCallState<'_>) -> Result<Ve
                 format!("Verb ({}) Not Found", to_literal(&verbspec))
             })))
         }
+        Err(WorldStateError::VerbPermissionDenied) => Err(BfErr::Code(E_PERM)),
         Err(e) => {
             error!("get_verbdef: unexpected error: {:?}", e);
             Err(BfErr::Code(E_INVIND))
