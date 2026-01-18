@@ -87,10 +87,13 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
     const previousScrollHeight = useRef<number>(0);
     const [isViewingHistory, setIsViewingHistory] = useState(false);
 
-    // Track announcements for screenreaders - separate from main content to avoid re-reading
-    const [announcement, setAnnouncement] = useState<string>("");
-    const previousMessageCountRef = useRef<number>(0);
-    const previousLastMessageIdRef = useRef<string | null>(null);
+    // Track announcements for screenreaders - use array of items so each is a separate DOM element
+    // This prevents re-reading when new content is added (aria-relevant="additions" only reads new children)
+    const [announcements, setAnnouncements] = useState<Array<{ id: string; text: string }>>([]);
+    // Track which message IDs have been announced to avoid duplicates
+    const announcedIdsRef = useRef<Set<string>>(new Set());
+    // Timer to clear announcements after quiet period
+    const clearAnnouncementTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Track collapsed look descriptions by groupId
     const [collapsedLooks, setCollapsedLooks] = useState<Set<string>>(() => {
@@ -241,45 +244,66 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         }
     }, [messages.length]);
 
-    // Announce only genuinely new messages to screenreaders
-    // This avoids re-reading content when React re-renders for grouping/styling
+    // Announce new messages to screenreaders immediately - no delay
+    // Each message becomes a separate DOM element so aria-relevant="additions" works correctly
     useEffect(() => {
-        const currentCount = messages.length;
-        const previousCount = previousMessageCountRef.current;
-        const lastMessage = messages[messages.length - 1];
-        const lastMessageId = lastMessage?.id ?? null;
+        const newItems: Array<{ id: string; text: string }> = [];
 
-        // Only announce if we have more messages than before AND it's a different message
-        // (not just a re-render of the same state)
-        if (
-            currentCount > previousCount
-            && lastMessageId !== previousLastMessageIdRef.current
-            && lastMessage
-            && !lastMessage.isHistorical
-        ) {
+        // Find messages that haven't been announced yet
+        for (const msg of messages) {
+            // Skip if already announced or historical
+            if (announcedIdsRef.current.has(msg.id) || msg.isHistorical) continue;
+
+            // Mark as announced
+            announcedIdsRef.current.add(msg.id);
+
             // Use ttsText if available, otherwise extract plain text from content
-            let textToAnnounce = lastMessage.ttsText;
-            if (!textToAnnounce) {
-                const rawContent = typeof lastMessage.content === "string"
-                    ? lastMessage.content
-                    : Array.isArray(lastMessage.content)
-                    ? lastMessage.content.join(" ")
+            let text = msg.ttsText;
+            if (!text) {
+                const rawContent = typeof msg.content === "string"
+                    ? msg.content
+                    : Array.isArray(msg.content)
+                    ? msg.content.join(" ")
                     : "";
                 // Strip HTML tags for plain text announcement
-                textToAnnounce = rawContent.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+                text = rawContent.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
             }
 
-            if (textToAnnounce.trim()) {
-                // Clear then set to ensure re-announcement of identical content
-                // Use requestAnimationFrame for minimal delay (vs setTimeout)
-                setAnnouncement("");
-                requestAnimationFrame(() => setAnnouncement(textToAnnounce));
+            if (text?.trim()) {
+                newItems.push({ id: msg.id, text: text.trim() });
             }
         }
 
-        previousMessageCountRef.current = currentCount;
-        previousLastMessageIdRef.current = lastMessageId;
+        // If we have new items, add them to the announcements array
+        if (newItems.length > 0) {
+            setAnnouncements(prev => [...prev, ...newItems]);
+
+            // Reset the clear timer - we'll clear after 500ms of quiet
+            if (clearAnnouncementTimerRef.current) {
+                clearTimeout(clearAnnouncementTimerRef.current);
+            }
+            clearAnnouncementTimerRef.current = setTimeout(() => {
+                setAnnouncements([]);
+            }, 500);
+        }
+
+        // Limit the size of announced IDs set to prevent memory leak
+        const currentIds = new Set(messages.map(m => m.id));
+        for (const id of announcedIdsRef.current) {
+            if (!currentIds.has(id)) {
+                announcedIdsRef.current.delete(id);
+            }
+        }
     }, [messages]);
+
+    // Cleanup clear timer on unmount
+    useEffect(() => {
+        return () => {
+            if (clearAnnouncementTimerRef.current) {
+                clearTimeout(clearAnnouncementTimerRef.current);
+            }
+        };
+    }, []);
 
     // Jump to the bottom (latest messages)
     const jumpToNow = useCallback(() => {
@@ -352,14 +376,18 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
 
     return (
         <>
-            {/* Separate aria-live region for announcements - prevents re-reading on React re-renders */}
+            {
+                /* Separate aria-live region for announcements - each item is a separate element
+                so aria-relevant="additions" only announces new items, not the whole region */
+            }
             <div
                 role="status"
                 aria-live="polite"
-                aria-atomic="true"
+                aria-atomic="false"
+                aria-relevant="additions"
                 className="sr-only"
             >
-                {announcement}
+                {announcements.map(item => <span key={item.id}>{item.text}</span>)}
             </div>
             <div
                 ref={outputRef}
