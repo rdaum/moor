@@ -366,7 +366,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                 id="output_window"
                 className="output_window"
                 role="log"
-                aria-atomic="false"
+                aria-live="off"
                 onScroll={handleScroll}
                 style={{
                     paddingBottom: "1rem",
