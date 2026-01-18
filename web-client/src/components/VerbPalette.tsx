@@ -58,6 +58,51 @@ function suggestionToDisplay(suggestion: VerbSuggestion): PaletteVerb {
     };
 }
 
+// Build accessible label for verb button
+// Converts technical placeholders like "<what>" to screenreader-friendly descriptions
+function buildVerbAriaLabel(verb: string, placeholder: string | null): string {
+    if (!placeholder) {
+        return `${verb} command`;
+    }
+
+    // Server hints often have format: "[syntax] -- description" or just "-- description"
+    // Extract the human-readable description part after "--"
+    const descriptionMatch = placeholder.match(/--\s*(.+)$/);
+    let description = descriptionMatch ? descriptionMatch[1].trim() : null;
+
+    // If we found a description after "--", use it directly
+    if (description) {
+        // Capitalize first letter if needed
+        if (description[0] && description[0] === description[0].toLowerCase()) {
+            description = description[0].toUpperCase() + description.slice(1);
+        }
+        return `${verb} command. ${description}`;
+    }
+
+    // No "--" separator, clean up the placeholder directly
+    let cleaned = placeholder
+        .replace(/<[^>]+>/g, "argument") // Replace <what>, <target> etc with "argument"
+        .replace(/\s+/g, " ") // Normalize whitespace
+        .trim();
+
+    // If it's just "argument" or "argument ..." or empty, say "takes an argument"
+    if (!cleaned || /^argument(\s*\.\.\.)?$/.test(cleaned)) {
+        return `${verb} command, takes an argument`;
+    }
+
+    // If placeholder is a question (ends with ?), append it as guidance
+    if (cleaned.endsWith("?")) {
+        return `${verb} command. ${cleaned}`;
+    }
+
+    // Otherwise it's a description - capitalize first letter if needed
+    if (cleaned[0] && cleaned[0] === cleaned[0].toLowerCase()) {
+        cleaned = cleaned[0].toUpperCase() + cleaned.slice(1);
+    }
+
+    return `${verb} command. ${cleaned}`;
+}
+
 export const VerbPalette: React.FC<VerbPaletteProps> = ({ visible, onVerbSelect }) => {
     const paletteRef = useRef<HTMLDivElement>(null);
     const [scrollPosition, setScrollPosition] = useState<ScrollPosition>("no-overflow");
@@ -290,7 +335,7 @@ export const VerbPalette: React.FC<VerbPaletteProps> = ({ visible, onVerbSelect 
                             onFocus={() => setFocusedIndex(index)}
                             type="button"
                             tabIndex={index === focusedIndex ? 0 : -1}
-                            aria-label={`${verb} command`}
+                            aria-label={buildVerbAriaLabel(verb, placeholder)}
                         >
                             {label}
                         </button>
