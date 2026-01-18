@@ -270,10 +270,10 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
             }
 
             if (textToAnnounce.trim()) {
-                // Clear first to ensure re-announcement of identical content
+                // Clear then set to ensure re-announcement of identical content
+                // Use requestAnimationFrame for minimal delay (vs setTimeout)
                 setAnnouncement("");
-                // Use setTimeout to ensure the clear takes effect before setting new content
-                setTimeout(() => setAnnouncement(textToAnnounce), 50);
+                requestAnimationFrame(() => setAnnouncement(textToAnnounce));
             }
         }
 

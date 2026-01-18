@@ -32,7 +32,8 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
     const title = useTitle();
 
     return (
-        <div className="top-nav-bar">
+        <header className="top-nav-bar">
+            <h1 className="sr-only">mooR Web Client</h1>
             <button
                 className="account-icon"
                 onClick={onSettingsToggle}
@@ -93,6 +94,6 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                     </svg>
                 </button>
             </div>
-        </div>
+        </header>
     );
 };

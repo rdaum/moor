@@ -1584,9 +1584,6 @@ function AppContent({
 
     return (
         <div className="app-root">
-            {/* Screen reader heading for main application */}
-            <h1 className="sr-only">mooR Web Client</h1>
-
             {/* Main container (primarily for styling) */}
             <div className="main" />
 
