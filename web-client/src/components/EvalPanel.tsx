@@ -54,6 +54,8 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
         { message: string; span?: { start: number; end: number }; line?: number; col?: number } | null
     >(null);
     const [isEvaluating, setIsEvaluating] = useState(false);
+    // Single announcement for screenreaders - only updated when there's something meaningful to say
+    const [evalAnnouncement, setEvalAnnouncement] = useState("");
     const [position, setPosition] = useState({ x: 50, y: 50 });
     const [size, setSize] = useState({ width: 800, height: 600 });
     const [isDragging, setIsDragging] = useState(false);
@@ -214,6 +216,7 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
         setIsEvaluating(true);
         setError(null);
         setResult(null);
+        setEvalAnnouncement(""); // Clear previous announcement
 
         try {
             const moorVar = await performEvalMoorVar(authToken, content);
@@ -221,17 +224,26 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
             // Use MOO literal representation for display
             const literal = moorVar.toLiteral();
             setResult(literal);
+            // Announce success with a summary of the result
+            const resultPreview = literal.length > 100 ? literal.substring(0, 100) + "..." : literal;
+            setEvalAnnouncement(`Evaluation complete. Result: ${resultPreview}`);
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : String(err);
             // Try to extract span information from error message if available
             // Parse error format: "Eval failed: Parse error at line 2, col 4: message (span info in debug output)"
             const parseErrorMatch = errorMsg.match(/Parse error at line (\d+), col (\d+)/);
 
+            const line = parseErrorMatch ? parseInt(parseErrorMatch[1], 10) : undefined;
+            const col = parseErrorMatch ? parseInt(parseErrorMatch[2], 10) : undefined;
+
             setError({
                 message: errorMsg,
-                line: parseErrorMatch ? parseInt(parseErrorMatch[1], 10) : undefined,
-                col: parseErrorMatch ? parseInt(parseErrorMatch[2], 10) : undefined,
+                line,
+                col,
             });
+            // Announce error with location if available
+            const locationInfo = line && col ? ` at line ${line}, column ${col}` : "";
+            setEvalAnnouncement(`Evaluation error${locationInfo}: ${errorMsg}`);
         } finally {
             setIsEvaluating(false);
         }
@@ -562,9 +574,18 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
                     }}
                 />
 
-                {/* Results pane */}
+                {/* Single announcement region for screenreaders - only updated on completion */}
                 <div
+                    role="status"
                     aria-live="polite"
+                    aria-atomic="true"
+                    className="sr-only"
+                >
+                    {evalAnnouncement}
+                </div>
+
+                {/* Results pane - visual only, announcements handled by dedicated region above */}
+                <div
                     aria-label="Evaluation results"
                     role="region"
                     style={{
@@ -580,7 +601,7 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
                             <div style={{ padding: "12px 16px" }}>
                                 {error
                                     ? (
-                                        <div className="editor-error-text" role="alert">
+                                        <div className="editor-error-text">
                                             <strong>Error</strong>
                                             {error.line && error.col && (
                                                 <div aria-label={`Error at line ${error.line}, column ${error.col}`}>
