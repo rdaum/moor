@@ -13,7 +13,7 @@
 
 // ! Account menu with user-specific settings and logout
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import AvatarEditor from "react-avatar-editor";
 import { usePlayerDescription } from "../hooks/usePlayerDescription";
 import { useProfilePicture } from "../hooks/useProfilePicture";
@@ -60,6 +60,9 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const editorRef = useRef<AvatarEditor>(null);
+    const closeButtonRef = useRef<HTMLButtonElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
+    const previousActiveElementRef = useRef<HTMLElement | null>(null);
     const [editorOpen, setEditorOpen] = useState(false);
     const [selectedImage, setSelectedImage] = useState<File | null>(null);
     const [editorScale, setEditorScale] = useState(1.0);
@@ -67,6 +70,67 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
     // Description editor state
     const [descriptionEditorOpen, setDescriptionEditorOpen] = useState(false);
     const [editingDescription, setEditingDescription] = useState("");
+
+    // Store the previously focused element and focus the close button when opened
+    useEffect(() => {
+        if (isOpen) {
+            previousActiveElementRef.current = document.activeElement as HTMLElement;
+            // Small delay to ensure the panel is rendered
+            requestAnimationFrame(() => {
+                closeButtonRef.current?.focus();
+            });
+        }
+    }, [isOpen]);
+
+    // Return focus to the previous element when closed
+    useEffect(() => {
+        if (!isOpen && previousActiveElementRef.current) {
+            previousActiveElementRef.current.focus();
+            previousActiveElementRef.current = null;
+        }
+    }, [isOpen]);
+
+    // Handle Escape key to close (only when no nested modals are open)
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && !editorOpen && !descriptionEditorOpen) {
+                e.preventDefault();
+                e.stopPropagation();
+                onClose();
+            }
+        };
+
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [isOpen, editorOpen, descriptionEditorOpen, onClose]);
+
+    // Trap focus within the dialog (only when no nested modals are open)
+    useEffect(() => {
+        if (!isOpen || editorOpen || descriptionEditorOpen) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== "Tab" || !panelRef.current) return;
+
+            const focusableElements = panelRef.current.querySelectorAll<HTMLElement>(
+                "button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])",
+            );
+            const firstElement = focusableElements[0];
+            const lastElement = focusableElements[focusableElements.length - 1];
+
+            if (e.shiftKey && document.activeElement === firstElement) {
+                e.preventDefault();
+                lastElement?.focus();
+            } else if (!e.shiftKey && document.activeElement === lastElement) {
+                e.preventDefault();
+                firstElement?.focus();
+            }
+        };
+
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [isOpen, editorOpen, descriptionEditorOpen]);
 
     // Convert binary data to blob URL for display
     const profilePictureUrl = useMemo(() => {
@@ -183,13 +247,24 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
     return (
         <>
             {/* Backdrop */}
-            <div className="settings-backdrop" onClick={onClose} />
+            <div
+                className="settings-backdrop"
+                onClick={onClose}
+                aria-hidden="true"
+            />
 
-            {/* Account menu */}
-            <div className="account-menu">
+            {/* Account menu - proper dialog */}
+            <div
+                ref={panelRef}
+                className="account-menu"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="account-dialog-title"
+            >
                 <div className="settings-header">
-                    <h2>Account</h2>
+                    <h2 id="account-dialog-title">Account</h2>
                     <button
+                        ref={closeButtonRef}
                         className="settings-close"
                         onClick={onClose}
                         aria-label="Close account menu"
@@ -264,6 +339,7 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
                                 accept="image/*"
                                 onChange={handleFileSelect}
                                 style={{ display: "none" }}
+                                aria-label="Select profile picture"
                             />
                             <button
                                 className="btn btn-secondary"
@@ -357,6 +433,7 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
                                                 }
                                             }}
                                             disabled={pronounsLoading}
+                                            aria-label="Select pronouns"
                                             style={{
                                                 padding: "8px 12px",
                                                 borderRadius: "6px",
@@ -401,10 +478,15 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
             {/* Avatar Editor Modal */}
             {editorOpen && selectedImage && (
                 <>
-                    <div className="dialog-backdrop" onClick={handleCropCancel} />
-                    <div className="dialog-sheet dialog-form">
+                    <div className="dialog-backdrop" onClick={handleCropCancel} aria-hidden="true" />
+                    <div
+                        className="dialog-sheet dialog-form"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="crop-dialog-title"
+                    >
                         <div className="dialog-sheet-header">
-                            <h2>Crop Profile Picture</h2>
+                            <h2 id="crop-dialog-title">Crop Profile Picture</h2>
                         </div>
 
                         <div className="dialog-sheet-content">
@@ -478,10 +560,15 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
             {/* Description Editor Modal */}
             {descriptionEditorOpen && (
                 <>
-                    <div className="dialog-backdrop" onClick={handleDescriptionCancel} />
-                    <div className="dialog-sheet dialog-form">
+                    <div className="dialog-backdrop" onClick={handleDescriptionCancel} aria-hidden="true" />
+                    <div
+                        className="dialog-sheet dialog-form"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="description-dialog-title"
+                    >
                         <div className="dialog-sheet-header">
-                            <h2>Edit Description</h2>
+                            <h2 id="description-dialog-title">Edit Description</h2>
                         </div>
 
                         <div className="dialog-sheet-content">

@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ContentRenderer } from "./ContentRenderer";
 import { getEmojiEnabled } from "./EmojiToggle";
 import { LinkPreview, LinkPreviewCard } from "./LinkPreviewCard";
