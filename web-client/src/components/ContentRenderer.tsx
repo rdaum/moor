@@ -62,7 +62,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
     >(null);
 
     // Ref to container for updating tabindex on stale change
-    const containerRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLSpanElement>(null);
 
     // Update tabindex on links when stale state or content changes
     useEffect(() => {
@@ -224,7 +224,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 const processedHtml = renderHtmlContent(htmlContent, enableEmoji);
 
                 return wrapWithLinkHint(
-                    <div
+                    <span
                         dangerouslySetInnerHTML={{ __html: processedHtml }}
                         onClick={handleLinkClick}
                         onKeyDown={handleKeyDown}
@@ -251,7 +251,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                     });
 
                     return wrapWithLinkHint(
-                        <div
+                        <span
                             className={`text_djot content-html${staleClass}`}
                             dangerouslySetInnerHTML={{ __html: processedDjotHtml }}
                             onClick={handleLinkClick}
@@ -266,9 +266,9 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 } catch (error) {
                     console.warn("Failed to parse djot content:", error);
                     return (
-                        <div className={`content-text${staleClass}`}>
+                        <span className={`content-text${staleClass}`}>
                             {content}
-                        </div>
+                        </span>
                     );
                 }
             }
@@ -300,7 +300,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 const renderedHtml = renderPlainText(plainContent, enableEmoji);
 
                 return wrapWithLinkHint(
-                    <div
+                    <span
                         dangerouslySetInnerHTML={{ __html: renderedHtml }}
                         onClick={handleLinkClick}
                         onKeyDown={handleKeyDown}
@@ -325,5 +325,5 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
         enableEmoji,
     ]);
 
-    return <div ref={containerRef}>{renderedContent}</div>;
+    return <span ref={containerRef} className="content-renderer">{renderedContent}</span>;
 };

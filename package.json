@@ -5,6 +5,8 @@
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
     "dev": "VITE_WEBHOOKS_ENABLED=true vite",
     "build": "tsc && vite build",
     "build:deb": "npm run build && mkdir -p debian-build && cp -r dist/* debian-build/",
@@ -38,6 +40,9 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.35.0",
+    "@guidepup/virtual-screen-reader": "^0.32.1",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.1",
     "@types/prismjs": "^1.26.4",
     "@types/react": "^18.3.27",
     "@types/react-avatar-editor": "^13.0.4",
@@ -49,11 +54,13 @@
     "eslint": "^9.35.0",
     "eslint-plugin-react-hooks": "^7.0.1",
     "globals": "^16.4.0",
+    "jsdom": "^27.4.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.9.2",
     "vite": "^7.1.5",
     "vite-plugin-top-level-await": "^1.6.0",
-    "vite-plugin-wasm": "^3.5.0"
+    "vite-plugin-wasm": "^3.5.0",
+    "vitest": "^4.0.17"
   },
   "dependencies": {
     "@djot/djot": "^0.3.2",

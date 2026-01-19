@@ -540,6 +540,11 @@ export function renderDjot(content: string, options: DjotRenderOptions = {}): st
     const djotAst = parse(escapedContent);
     const overrides: any = {};
 
+    // Override doc element to not wrap in a div (prevents screenreader "group" announcement)
+    overrides.doc = (node: any, context: any) => {
+        return context.renderChildren(node);
+    };
+
     // Link handling
     if (linkHandler) {
         overrides.link = (node: any, _context: any) => {

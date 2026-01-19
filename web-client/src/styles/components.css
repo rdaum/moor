@@ -41,6 +41,15 @@
   -moz-tab-size: 8;
 }
 
+/* Make span wrappers display as blocks (avoids screenreader "group" announcement) */
+.message-block,
+.content-renderer,
+.content-html,
+.content-text,
+.text_djot {
+  display: block;
+}
+
 /* Inset presentation styling */
 .presentation_inset {
   position: relative;

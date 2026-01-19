@@ -87,14 +87,6 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
     const previousScrollHeight = useRef<number>(0);
     const [isViewingHistory, setIsViewingHistory] = useState(false);
 
-    // Track announcements for screenreaders - use array of items so each is a separate DOM element
-    // This prevents re-reading when new content is added (aria-relevant="additions" only reads new children)
-    const [announcements, setAnnouncements] = useState<Array<{ id: string; text: string }>>([]);
-    // Track which message IDs have been announced to avoid duplicates
-    const announcedIdsRef = useRef<Set<string>>(new Set());
-    // Timer to clear announcements after quiet period
-    const clearAnnouncementTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
     // Track collapsed look descriptions by groupId
     const [collapsedLooks, setCollapsedLooks] = useState<Set<string>>(() => {
         if (typeof window === "undefined") return new Set();
@@ -244,67 +236,6 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         }
     }, [messages.length]);
 
-    // Announce new messages to screenreaders immediately - no delay
-    // Each message becomes a separate DOM element so aria-relevant="additions" works correctly
-    useEffect(() => {
-        const newItems: Array<{ id: string; text: string }> = [];
-
-        // Find messages that haven't been announced yet
-        for (const msg of messages) {
-            // Skip if already announced or historical
-            if (announcedIdsRef.current.has(msg.id) || msg.isHistorical) continue;
-
-            // Mark as announced
-            announcedIdsRef.current.add(msg.id);
-
-            // Use ttsText if available, otherwise extract plain text from content
-            let text = msg.ttsText;
-            if (!text) {
-                const rawContent = typeof msg.content === "string"
-                    ? msg.content
-                    : Array.isArray(msg.content)
-                    ? msg.content.join(" ")
-                    : "";
-                // Strip HTML tags for plain text announcement
-                text = rawContent.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-            }
-
-            if (text?.trim()) {
-                newItems.push({ id: msg.id, text: text.trim() });
-            }
-        }
-
-        // If we have new items, add them to the announcements array
-        if (newItems.length > 0) {
-            setAnnouncements(prev => [...prev, ...newItems]);
-
-            // Reset the clear timer - we'll clear after 500ms of quiet
-            if (clearAnnouncementTimerRef.current) {
-                clearTimeout(clearAnnouncementTimerRef.current);
-            }
-            clearAnnouncementTimerRef.current = setTimeout(() => {
-                setAnnouncements([]);
-            }, 500);
-        }
-
-        // Limit the size of announced IDs set to prevent memory leak
-        const currentIds = new Set(messages.map(m => m.id));
-        for (const id of announcedIdsRef.current) {
-            if (!currentIds.has(id)) {
-                announcedIdsRef.current.delete(id);
-            }
-        }
-    }, [messages]);
-
-    // Cleanup clear timer on unmount
-    useEffect(() => {
-        return () => {
-            if (clearAnnouncementTimerRef.current) {
-                clearTimeout(clearAnnouncementTimerRef.current);
-            }
-        };
-    }, []);
-
     // Jump to the bottom (latest messages)
     const jumpToNow = useCallback(() => {
         if (outputRef.current) {
@@ -375,209 +306,181 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
     const resolvedFontSize = fontSize ?? 14;
 
     return (
-        <>
-            {
-                /* Separate aria-live region for announcements - each item is a separate element
-                so aria-relevant="additions" only announces new items, not the whole region */
-            }
-            <div
-                role="status"
-                aria-live="polite"
-                aria-atomic="false"
-                aria-relevant="additions"
-                className="sr-only"
-            >
-                {announcements.map(item => <span key={item.id}>{item.text}</span>)}
-            </div>
-            <div
-                ref={outputRef}
-                id="output_window"
-                className="output_window"
-                role="log"
-                aria-live="off"
-                onScroll={handleScroll}
-                style={{
-                    paddingBottom: "1rem",
-                    fontSize: `${resolvedFontSize}px`,
-                }}
-            >
-                {/* History indicator - "Jump to Now" button */}
-                {isViewingHistory && (
-                    <div className="history_indicator">
-                        <span>Viewing history</span>
-                        <button
-                            onClick={jumpToNow}
-                            aria-label="Return to latest messages"
-                            aria-describedby="history-status"
-                            className="history_indicator_button"
-                        >
-                            Jump to Now
-                        </button>
-                        <div id="history-status" className="sr-only">
-                            Currently viewing message history
-                        </div>
+        <div
+            ref={outputRef}
+            id="output_window"
+            className="output_window"
+            role="log"
+            aria-live="polite"
+            aria-atomic="false"
+            aria-relevant="additions"
+            onScroll={handleScroll}
+            style={{
+                paddingBottom: "1rem",
+                fontSize: `${resolvedFontSize}px`,
+            }}
+        >
+            {/* History indicator - "Jump to Now" button */}
+            {isViewingHistory && (
+                <div className="history_indicator">
+                    <span>Viewing history</span>
+                    <button
+                        onClick={jumpToNow}
+                        aria-label="Return to latest messages"
+                        aria-describedby="history-status"
+                        className="history_indicator_button"
+                    >
+                        Jump to Now
+                    </button>
+                    <div id="history-status" className="sr-only">
+                        Currently viewing message history
                     </div>
-                )}
+                </div>
+            )}
 
-                {/* Add minimal top padding to ensure scrollability */}
-                {onLoadMoreHistory && (
-                    <div className="output_window_load_more">
-                        {isLoadingHistory && (
-                            <span role="status" aria-live="polite">
-                                Loading more history...
-                            </span>
-                        )}
-                    </div>
-                )}
+            {/* Add minimal top padding to ensure scrollability */}
+            {onLoadMoreHistory && (
+                <div className="output_window_load_more">
+                    {isLoadingHistory && (
+                        <span role="status" aria-live="polite">
+                            Loading more history...
+                        </span>
+                    )}
+                </div>
+            )}
 
-                {/* Render all messages, grouping no_newline messages and consecutive messages with same presentationHint+groupId */}
-                {(() => {
-                    const groupedMessages: typeof messages[] = [];
-                    let currentGroup: typeof messages = [];
+            {/* Render all messages, grouping no_newline messages and consecutive messages with same presentationHint+groupId */}
+            {(() => {
+                const groupedMessages: typeof messages[] = [];
+                let currentGroup: typeof messages = [];
 
-                    for (let i = 0; i < messages.length; i++) {
-                        const message = messages[i];
-                        currentGroup.push(message);
+                for (let i = 0; i < messages.length; i++) {
+                    const message = messages[i];
+                    currentGroup.push(message);
 
-                        const nextMessage = i < messages.length - 1 ? messages[i + 1] : null;
+                    const nextMessage = i < messages.length - 1 ? messages[i + 1] : null;
 
-                        // Continue grouping if:
-                        // 1. This message has noNewline, OR
-                        // 2. This message has a presentationHint and the next message has the same hint AND same groupId
-                        //    AND same actor (for speech bubbles, we don't want to merge different speakers)
-                        const sameActor = () => {
-                            const a1 = message.eventMetadata?.actor;
-                            const a2 = nextMessage?.eventMetadata?.actor;
-                            if (!a1 || !a2) return true; // If no actor info, allow grouping
-                            if (a1.oid !== undefined && a2.oid !== undefined) return a1.oid === a2.oid;
-                            if (a1.uuid !== undefined && a2.uuid !== undefined) return a1.uuid === a2.uuid;
-                            return false; // Different actor representations = different actors
-                        };
-                        const sameHintGroup = message.presentationHint
-                            && nextMessage?.presentationHint === message.presentationHint
-                            && message.groupId === nextMessage?.groupId
-                            && sameActor();
-                        const shouldContinueGroup = message.noNewline || sameHintGroup;
+                    // Continue grouping if:
+                    // 1. This message has noNewline, OR
+                    // 2. This message has a presentationHint and the next message has the same hint AND same groupId
+                    //    AND same actor (for speech bubbles, we don't want to merge different speakers)
+                    const sameActor = () => {
+                        const a1 = message.eventMetadata?.actor;
+                        const a2 = nextMessage?.eventMetadata?.actor;
+                        if (!a1 || !a2) return true; // If no actor info, allow grouping
+                        if (a1.oid !== undefined && a2.oid !== undefined) return a1.oid === a2.oid;
+                        if (a1.uuid !== undefined && a2.uuid !== undefined) return a1.uuid === a2.uuid;
+                        return false; // Different actor representations = different actors
+                    };
+                    const sameHintGroup = message.presentationHint
+                        && nextMessage?.presentationHint === message.presentationHint
+                        && message.groupId === nextMessage?.groupId
+                        && sameActor();
+                    const shouldContinueGroup = message.noNewline || sameHintGroup;
 
-                        // If we shouldn't continue grouping or it's the last message, complete the current group
-                        if (!shouldContinueGroup || i === messages.length - 1) {
-                            groupedMessages.push(currentGroup);
-                            currentGroup = [];
-                        }
+                    // If we shouldn't continue grouping or it's the last message, complete the current group
+                    if (!shouldContinueGroup || i === messages.length - 1) {
+                        groupedMessages.push(currentGroup);
+                        currentGroup = [];
+                    }
+                }
+
+                return groupedMessages.map((group, groupIndex) => {
+                    const firstMessage = group[0];
+                    const isDividerGroup = shouldShowDisconnectDivider && !firstMessage.isHistorical
+                        && groupIndex > 0;
+                    const previousGroup = groupIndex > 0 ? groupedMessages[groupIndex - 1] : null;
+                    const shouldShowDivider = isDividerGroup && previousGroup
+                        && previousGroup[previousGroup.length - 1].isHistorical;
+
+                    const result = [];
+
+                    // Add divider if this is the first non-historical message and we should show it
+                    if (shouldShowDivider) {
+                        result.push(
+                            <div
+                                key={`divider_${groupIndex}`}
+                                className="history_separator"
+                                role="separator"
+                                aria-label="Reconnection point: messages before this occurred during a disconnection lasting more than 10 minutes"
+                            >
+                                <span aria-hidden="true">●●●</span>
+                            </div>,
+                        );
                     }
 
-                    return groupedMessages.map((group, groupIndex) => {
-                        const firstMessage = group[0];
-                        const isDividerGroup = shouldShowDisconnectDivider && !firstMessage.isHistorical
-                            && groupIndex > 0;
-                        const previousGroup = groupIndex > 0 ? groupedMessages[groupIndex - 1] : null;
-                        const shouldShowDivider = isDividerGroup && previousGroup
-                            && previousGroup[previousGroup.length - 1].isHistorical;
+                    if (group.length === 1) {
+                        // Single message
+                        const message = group[0];
 
-                        const result = [];
+                        if (message.presentationHint) {
+                            // If it has a presentationHint, wrap it like we do for groups
+                            const baseClassName = getMessageClassName(message.type, message.isHistorical);
+                            const showLookTitle = isLookEvent(message.presentationHint, message.eventMetadata);
+                            const groupId = message.groupId;
+                            const isMessageStale = staleMessageIds?.has(message.id) || message.isHistorical;
 
-                        // Add divider if this is the first non-historical message and we should show it
-                        if (shouldShowDivider) {
+                            // Use message.id for collapse key (unique per event)
+                            const collapseKey = message.id;
+                            const isCollapsible = showLookTitle && groupId;
+                            const isThisCollapsed = isCollapsible && collapsedLooks.has(collapseKey);
+
+                            const wrapperClassName = (() => {
+                                const classes: string[] = [];
+                                if (message.presentationHint === "inset") classes.push("presentation_inset");
+                                if (message.presentationHint === "processing") {
+                                    classes.push("presentation_processing");
+                                }
+                                if (message.presentationHint === "expired") classes.push("presentation_expired");
+                                return classes.join(" ");
+                            })();
+
                             result.push(
-                                <div
-                                    key={`divider_${groupIndex}`}
-                                    className="history_separator"
-                                    role="separator"
-                                    aria-label="Reconnection point: messages before this occurred during a disconnection lasting more than 10 minutes"
-                                >
-                                    <span aria-hidden="true">●●●</span>
-                                </div>,
-                            );
-                        }
-
-                        if (group.length === 1) {
-                            // Single message
-                            const message = group[0];
-
-                            if (message.presentationHint) {
-                                // If it has a presentationHint, wrap it like we do for groups
-                                const baseClassName = getMessageClassName(message.type, message.isHistorical);
-                                const showLookTitle = isLookEvent(message.presentationHint, message.eventMetadata);
-                                const groupId = message.groupId;
-                                const isMessageStale = staleMessageIds?.has(message.id) || message.isHistorical;
-
-                                // Use message.id for collapse key (unique per event)
-                                const collapseKey = message.id;
-                                const isCollapsible = showLookTitle && groupId;
-                                const isThisCollapsed = isCollapsible && collapsedLooks.has(collapseKey);
-
-                                const wrapperClassName = (() => {
-                                    const classes: string[] = [];
-                                    if (message.presentationHint === "inset") classes.push("presentation_inset");
-                                    if (message.presentationHint === "processing") {
-                                        classes.push("presentation_processing");
-                                    }
-                                    if (message.presentationHint === "expired") classes.push("presentation_expired");
-                                    return classes.join(" ");
-                                })();
-
-                                result.push(
-                                    <div key={message.id} className={wrapperClassName}>
-                                        {isCollapsible && isThisCollapsed && (
-                                            <>
-                                                {/* Visual collapsed state - hidden from screen readers */}
-                                                <div className="look_collapsed_summary" aria-hidden="true">
-                                                    <button
-                                                        type="button"
-                                                        className="look_toggle_button"
-                                                        onClick={() => toggleLookCollapse(collapseKey)}
-                                                        tabIndex={-1}
-                                                    >
-                                                        <span className="look_chevron collapsed">▼</span>
-                                                    </button>
-                                                    <span className="look_collapsed_name">
-                                                        {message.eventMetadata!.dobjName}
-                                                    </span>
-                                                </div>
-                                                {/* Full content for screen readers when visually collapsed */}
-                                                <div className={`${baseClassName} sr-only`}>
-                                                    {renderContentWithTts(
-                                                        message.content,
-                                                        message.contentType,
-                                                        message.ttsText,
-                                                        message.thumbnail,
-                                                        message.linkPreview,
-                                                        message.id,
-                                                        isMessageStale,
-                                                        message.eventMetadata?.enableEmojis,
-                                                        message.eventMetadata,
-                                                    )}
-                                                </div>
-                                            </>
-                                        )}
-                                        {!isThisCollapsed && isCollapsible && (
-                                            <div className="look_toggle_row">
-                                                {/* Toggle button hidden from screen readers */}
+                                <div key={message.id} className={wrapperClassName}>
+                                    {isCollapsible && isThisCollapsed && (
+                                        <>
+                                            {/* Visual collapsed state - hidden from screen readers */}
+                                            <div className="look_collapsed_summary" aria-hidden="true">
                                                 <button
                                                     type="button"
                                                     className="look_toggle_button"
                                                     onClick={() => toggleLookCollapse(collapseKey)}
-                                                    aria-hidden="true"
                                                     tabIndex={-1}
                                                 >
-                                                    <span className="look_chevron">▼</span>
+                                                    <span className="look_chevron collapsed">▼</span>
                                                 </button>
-                                                <div className={baseClassName}>
-                                                    {renderContentWithTts(
-                                                        message.content,
-                                                        message.contentType,
-                                                        message.ttsText,
-                                                        message.thumbnail,
-                                                        message.linkPreview,
-                                                        message.id,
-                                                        isMessageStale,
-                                                        message.eventMetadata?.enableEmojis,
-                                                        message.eventMetadata,
-                                                    )}
-                                                </div>
+                                                <span className="look_collapsed_name">
+                                                    {message.eventMetadata!.dobjName}
+                                                </span>
                                             </div>
-                                        )}
-                                        {!isThisCollapsed && !isCollapsible && (
+                                            {/* Full content for screen readers when visually collapsed */}
+                                            <div className={`${baseClassName} sr-only`}>
+                                                {renderContentWithTts(
+                                                    message.content,
+                                                    message.contentType,
+                                                    message.ttsText,
+                                                    message.thumbnail,
+                                                    message.linkPreview,
+                                                    message.id,
+                                                    isMessageStale,
+                                                    message.eventMetadata?.enableEmojis,
+                                                    message.eventMetadata,
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
+                                    {!isThisCollapsed && isCollapsible && (
+                                        <div className="look_toggle_row">
+                                            {/* Toggle button hidden from screen readers */}
+                                            <button
+                                                type="button"
+                                                className="look_toggle_button"
+                                                onClick={() => toggleLookCollapse(collapseKey)}
+                                                aria-hidden="true"
+                                                tabIndex={-1}
+                                            >
+                                                <span className="look_chevron">▼</span>
+                                            </button>
                                             <div className={baseClassName}>
                                                 {renderContentWithTts(
                                                     message.content,
@@ -591,153 +494,118 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                     message.eventMetadata,
                                                 )}
                                             </div>
-                                        )}
-                                    </div>,
-                                );
-                            } else {
-                                // Regular message without presentationHint
-                                const isMessageStale = staleMessageIds?.has(message.id) || message.isHistorical;
-                                result.push(
-                                    <div
-                                        key={message.id}
-                                        className={getMessageClassName(
+                                        </div>
+                                    )}
+                                    {!isThisCollapsed && !isCollapsible && (
+                                        <div className={baseClassName}>
+                                            {renderContentWithTts(
+                                                message.content,
+                                                message.contentType,
+                                                message.ttsText,
+                                                message.thumbnail,
+                                                message.linkPreview,
+                                                message.id,
+                                                isMessageStale,
+                                                message.eventMetadata?.enableEmojis,
+                                                message.eventMetadata,
+                                            )}
+                                        </div>
+                                    )}
+                                </div>,
+                            );
+                        } else {
+                            // Regular message without presentationHint
+                            const isMessageStale = staleMessageIds?.has(message.id) || message.isHistorical;
+                            result.push(
+                                <span
+                                    key={message.id}
+                                    className={`${
+                                        getMessageClassName(
                                             message.type,
                                             message.isHistorical,
-                                        )}
-                                    >
-                                        {renderContentWithTts(
-                                            message.content,
-                                            message.contentType,
-                                            message.ttsText,
-                                            message.thumbnail,
-                                            message.linkPreview,
-                                            message.id,
-                                            isMessageStale,
-                                            message.eventMetadata?.enableEmojis,
-                                            message.eventMetadata,
-                                        )}
-                                    </div>,
-                                );
-                            }
+                                        )
+                                    } message-block`}
+                                >
+                                    {renderContentWithTts(
+                                        message.content,
+                                        message.contentType,
+                                        message.ttsText,
+                                        message.thumbnail,
+                                        message.linkPreview,
+                                        message.id,
+                                        isMessageStale,
+                                        message.eventMetadata?.enableEmojis,
+                                        message.eventMetadata,
+                                    )}
+                                </span>,
+                            );
+                        }
 
-                            return result;
-                        } else {
-                            // Multiple messages grouped together
+                        return result;
+                    } else {
+                        // Multiple messages grouped together
 
-                            // Check if this group is for presentationHint or noNewline
-                            const isHintGroup = firstMessage.presentationHint
-                                && group.every(msg =>
-                                    msg.presentationHint === firstMessage.presentationHint
-                                    && msg.groupId === firstMessage.groupId
-                                );
+                        // Check if this group is for presentationHint or noNewline
+                        const isHintGroup = firstMessage.presentationHint
+                            && group.every(msg =>
+                                msg.presentationHint === firstMessage.presentationHint
+                                && msg.groupId === firstMessage.groupId
+                            );
 
-                            if (isHintGroup) {
-                                // Hint group - render each on its own line
-                                const baseClassName = getMessageClassName(
-                                    firstMessage.type,
-                                    firstMessage.isHistorical,
-                                );
-                                const showLookTitle = isLookEvent(
-                                    firstMessage.presentationHint,
-                                    firstMessage.eventMetadata,
-                                );
-                                const groupId = firstMessage.groupId;
-                                // Group is stale if any message in it is stale or historical
-                                const isGroupStale = group.some(msg =>
-                                    staleMessageIds?.has(msg.id) || msg.isHistorical
-                                );
+                        if (isHintGroup) {
+                            // Hint group - render each on its own line
+                            const baseClassName = getMessageClassName(
+                                firstMessage.type,
+                                firstMessage.isHistorical,
+                            );
+                            const showLookTitle = isLookEvent(
+                                firstMessage.presentationHint,
+                                firstMessage.eventMetadata,
+                            );
+                            const groupId = firstMessage.groupId;
+                            // Group is stale if any message in it is stale or historical
+                            const isGroupStale = group.some(msg => staleMessageIds?.has(msg.id) || msg.isHistorical);
 
-                                // Use firstMessage.id for collapse key (unique per event group)
-                                const collapseKey = firstMessage.id;
-                                const isCollapsible = showLookTitle && groupId;
-                                const isThisCollapsed = isCollapsible && collapsedLooks.has(collapseKey);
+                            // Use firstMessage.id for collapse key (unique per event group)
+                            const collapseKey = firstMessage.id;
+                            const isCollapsible = showLookTitle && groupId;
+                            const isThisCollapsed = isCollapsible && collapsedLooks.has(collapseKey);
 
-                                const wrapperClassName = (() => {
-                                    const classes: string[] = [];
-                                    if (firstMessage.presentationHint === "inset") classes.push("presentation_inset");
-                                    if (firstMessage.presentationHint === "processing") {
-                                        classes.push("presentation_processing");
-                                    }
-                                    if (firstMessage.presentationHint === "expired") {
-                                        classes.push("presentation_expired");
-                                    }
-                                    return classes.join(" ");
-                                })();
+                            const wrapperClassName = (() => {
+                                const classes: string[] = [];
+                                if (firstMessage.presentationHint === "inset") classes.push("presentation_inset");
+                                if (firstMessage.presentationHint === "processing") {
+                                    classes.push("presentation_processing");
+                                }
+                                if (firstMessage.presentationHint === "expired") {
+                                    classes.push("presentation_expired");
+                                }
+                                return classes.join(" ");
+                            })();
 
-                                result.push(
-                                    <div
-                                        key={`hint_${firstMessage.id}`}
-                                        className={wrapperClassName}
-                                    >
-                                        {isCollapsible && isThisCollapsed && (
-                                            <>
-                                                {/* Visual collapsed state - hidden from screen readers */}
-                                                <div className="look_collapsed_summary" aria-hidden="true">
-                                                    <button
-                                                        type="button"
-                                                        className="look_toggle_button"
-                                                        onClick={() => toggleLookCollapse(collapseKey)}
-                                                        tabIndex={-1}
-                                                    >
-                                                        <span className="look_chevron collapsed">▼</span>
-                                                    </button>
-                                                    <span className="look_collapsed_name">
-                                                        {firstMessage.eventMetadata!.dobjName}
-                                                    </span>
-                                                </div>
-                                                {/* Full content for screen readers when visually collapsed */}
-                                                <div className="sr-only">
-                                                    {group.map(msg => (
-                                                        <div key={msg.id} className={baseClassName}>
-                                                            {renderContentWithTts(
-                                                                msg.content,
-                                                                msg.contentType,
-                                                                msg.ttsText,
-                                                                msg.thumbnail,
-                                                                msg.linkPreview,
-                                                                msg.id,
-                                                                isGroupStale,
-                                                                msg.eventMetadata?.enableEmojis,
-                                                                msg.eventMetadata,
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </>
-                                        )}
-                                        {!isThisCollapsed && isCollapsible && (
-                                            <div className="look_toggle_row">
-                                                {/* Toggle button hidden from screen readers */}
+                            result.push(
+                                <div
+                                    key={`hint_${firstMessage.id}`}
+                                    className={wrapperClassName}
+                                >
+                                    {isCollapsible && isThisCollapsed && (
+                                        <>
+                                            {/* Visual collapsed state - hidden from screen readers */}
+                                            <div className="look_collapsed_summary" aria-hidden="true">
                                                 <button
                                                     type="button"
                                                     className="look_toggle_button"
                                                     onClick={() => toggleLookCollapse(collapseKey)}
-                                                    aria-hidden="true"
                                                     tabIndex={-1}
                                                 >
-                                                    <span className="look_chevron">▼</span>
+                                                    <span className="look_chevron collapsed">▼</span>
                                                 </button>
-                                                <div>
-                                                    {group.map(msg => (
-                                                        <div key={msg.id} className={baseClassName}>
-                                                            {renderContentWithTts(
-                                                                msg.content,
-                                                                msg.contentType,
-                                                                msg.ttsText,
-                                                                msg.thumbnail,
-                                                                msg.linkPreview,
-                                                                msg.id,
-                                                                isGroupStale,
-                                                                msg.eventMetadata?.enableEmojis,
-                                                                msg.eventMetadata,
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </div>
+                                                <span className="look_collapsed_name">
+                                                    {firstMessage.eventMetadata!.dobjName}
+                                                </span>
                                             </div>
-                                        )}
-                                        {!isThisCollapsed && !isCollapsible && (
-                                            <>
+                                            {/* Full content for screen readers when visually collapsed */}
+                                            <div className="sr-only">
                                                 {group.map(msg => (
                                                     <div key={msg.id} className={baseClassName}>
                                                         {renderContentWithTts(
@@ -753,73 +621,121 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                                         )}
                                                     </div>
                                                 ))}
-                                            </>
-                                        )}
-                                    </div>,
-                                );
-                            } else {
-                                // noNewline group - combine content on same line
-                                const combinedHtml = group.map(msg => {
-                                    const content = typeof msg.content === "string"
-                                        ? msg.content
-                                        : Array.isArray(msg.content)
-                                        ? msg.content.join("")
-                                        : "";
+                                            </div>
+                                        </>
+                                    )}
+                                    {!isThisCollapsed && isCollapsible && (
+                                        <div className="look_toggle_row">
+                                            {/* Toggle button hidden from screen readers */}
+                                            <button
+                                                type="button"
+                                                className="look_toggle_button"
+                                                onClick={() => toggleLookCollapse(collapseKey)}
+                                                aria-hidden="true"
+                                                tabIndex={-1}
+                                            >
+                                                <span className="look_chevron">▼</span>
+                                            </button>
+                                            <div>
+                                                {group.map(msg => (
+                                                    <div key={msg.id} className={baseClassName}>
+                                                        {renderContentWithTts(
+                                                            msg.content,
+                                                            msg.contentType,
+                                                            msg.ttsText,
+                                                            msg.thumbnail,
+                                                            msg.linkPreview,
+                                                            msg.id,
+                                                            isGroupStale,
+                                                            msg.eventMetadata?.enableEmojis,
+                                                            msg.eventMetadata,
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {!isThisCollapsed && !isCollapsible && (
+                                        <>
+                                            {group.map(msg => (
+                                                <div key={msg.id} className={baseClassName}>
+                                                    {renderContentWithTts(
+                                                        msg.content,
+                                                        msg.contentType,
+                                                        msg.ttsText,
+                                                        msg.thumbnail,
+                                                        msg.linkPreview,
+                                                        msg.id,
+                                                        isGroupStale,
+                                                        msg.eventMetadata?.enableEmojis,
+                                                        msg.eventMetadata,
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </>
+                                    )}
+                                </div>,
+                            );
+                        } else {
+                            // noNewline group - combine content on same line
+                            const combinedHtml = group.map(msg => {
+                                const content = typeof msg.content === "string"
+                                    ? msg.content
+                                    : Array.isArray(msg.content)
+                                    ? msg.content.join("")
+                                    : "";
 
-                                    // If it's HTML, use as-is; if it's plain text, escape it
-                                    if (msg.contentType === "text/html") {
-                                        return content;
-                                    } else {
-                                        // Escape HTML characters for non-HTML content
-                                        return content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(
-                                            />/g,
-                                            "&gt;",
-                                        );
-                                    }
-                                }).join("");
+                                // If it's HTML, use as-is; if it's plain text, escape it
+                                if (msg.contentType === "text/html") {
+                                    return content;
+                                } else {
+                                    // Escape HTML characters for non-HTML content
+                                    return content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(
+                                        />/g,
+                                        "&gt;",
+                                    );
+                                }
+                            }).join("");
 
-                                // Combine ttsText from all messages in the group
-                                const combinedTtsText = group
-                                    .filter(msg => msg.ttsText)
-                                    .map(msg => msg.ttsText)
-                                    .join(" ");
+                            // Combine ttsText from all messages in the group
+                            const combinedTtsText = group
+                                .filter(msg => msg.ttsText)
+                                .map(msg => msg.ttsText)
+                                .join(" ");
 
-                                // Get linkPreview from the last message in the group (if any)
-                                const lastLinkPreview = group.find(msg => msg.linkPreview)?.linkPreview;
+                            // Get linkPreview from the last message in the group (if any)
+                            const lastLinkPreview = group.find(msg => msg.linkPreview)?.linkPreview;
 
-                                // Group is stale if any message in it is stale or historical
-                                const isGroupStale = group.some(msg =>
-                                    staleMessageIds?.has(msg.id) || msg.isHistorical
-                                );
+                            // Group is stale if any message in it is stale or historical
+                            const isGroupStale = group.some(msg => staleMessageIds?.has(msg.id) || msg.isHistorical);
 
-                                result.push(
-                                    <div
-                                        key={`noline_${firstMessage.id}`}
-                                        className={getMessageClassName(
-                                            firstMessage.type,
-                                            firstMessage.isHistorical,
-                                        )}
-                                    >
-                                        {renderContentWithTts(
-                                            combinedHtml,
-                                            "text/html",
-                                            combinedTtsText || undefined,
-                                            undefined,
-                                            lastLinkPreview,
-                                            firstMessage.id,
-                                            isGroupStale,
-                                            firstMessage.eventMetadata?.enableEmojis,
-                                            firstMessage.eventMetadata,
-                                        )}
-                                    </div>,
-                                );
-                            }
-
-                            return result;
+                            result.push(
+                                <div
+                                    key={`noline_${firstMessage.id}`}
+                                    className={getMessageClassName(
+                                        firstMessage.type,
+                                        firstMessage.isHistorical,
+                                    )}
+                                >
+                                    {renderContentWithTts(
+                                        combinedHtml,
+                                        "text/html",
+                                        combinedTtsText || undefined,
+                                        undefined,
+                                        lastLinkPreview,
+                                        firstMessage.id,
+                                        isGroupStale,
+                                        firstMessage.eventMetadata?.enableEmojis,
+                                        firstMessage.eventMetadata,
+                                    )}
+                                </div>,
+                            );
                         }
-                    });
-                })()}
-            </div>
-        </>
+
+                        return result;
+                    }
+                });
+            })()}
+        </div>
     );
 };
