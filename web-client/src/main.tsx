@@ -1424,9 +1424,11 @@ function AppContent({
                     .then(async (historicalMessages) => {
                         setPendingHistoricalMessages(historicalMessages);
 
-                        if (historicalMessages.length > 0) {
+                        // Show toast for initial load, but not for background resyncs
+                        if (historicalMessages.length > 0 && !isHistoryResyncRef.current) {
                             showMessage("History loaded successfully", 2);
                         }
+                        isHistoryResyncRef.current = false;
 
                         try {
                             await fetchCurrentPresentations(authToken, encryptionKeyForHistory);
@@ -1439,7 +1441,10 @@ function AppContent({
                         }
                     })
                     .catch(async (_error) => {
-                        showMessage("Failed to load history, continuing anyway...", 3);
+                        if (!isHistoryResyncRef.current) {
+                            showMessage("Failed to load history, continuing anyway...", 3);
+                        }
+                        isHistoryResyncRef.current = false;
 
                         try {
                             await fetchCurrentPresentations(authToken, encryptionKeyForHistory);
@@ -1482,6 +1487,54 @@ function AppContent({
             wasConnectedRef.current = false;
         }
     }, [wsState.connectionStatus, historyLoaded]);
+
+    // Refs to track current state for visibility handler (avoids re-adding listener on every render)
+    const wsConnectedRef = useRef(wsState.isConnected);
+    const historyLoadedRef = useRef(historyLoaded);
+    // Track if history reload is a background resync (skip toast) vs initial load (show toast)
+    const isHistoryResyncRef = useRef(false);
+
+    useEffect(() => {
+        wsConnectedRef.current = wsState.isConnected;
+    }, [wsState.isConnected]);
+
+    useEffect(() => {
+        historyLoadedRef.current = historyLoaded;
+    }, [historyLoaded]);
+
+    // Refetch history when tab becomes visible to catch up on messages missed while backgrounded
+    // This handles cases where the websocket reconnected while backgrounded but the fetch was throttled
+    // Only triggers if tab was hidden for at least 30 seconds to avoid reload on quick tab switches
+    useEffect(() => {
+        if (typeof document === "undefined") {
+            return;
+        }
+
+        const MIN_HIDDEN_DURATION_MS = 30000;
+        let hiddenTimestamp: number | null = null;
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                hiddenTimestamp = Date.now();
+            } else {
+                const wasHiddenLongEnough = hiddenTimestamp !== null
+                    && (Date.now() - hiddenTimestamp) >= MIN_HIDDEN_DURATION_MS;
+                hiddenTimestamp = null;
+
+                if (wasHiddenLongEnough && wsConnectedRef.current && historyLoadedRef.current) {
+                    console.log("[History] Tab became visible after being backgrounded - refetching history");
+                    isHistoryResyncRef.current = true;
+                    setHistoryLoaded(false);
+                }
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        return () => {
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
+    }, []);
 
     // Handle split divider dragging
     const [isDraggingSplit, setIsDraggingSplit] = useState(false);
