@@ -140,6 +140,68 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     const currentStorageKey = getCommandHistoryStorageKey(playerOid);
     const rewritableIndexRef = useRef<Map<string, string>>(new Map());
 
+    // Screen reader compatibility: stagger rapid DOM additions
+    // to prevent Orca's event coalescing from dropping announcements
+    const lastDomAdditionRef = useRef<number>(0);
+    const pendingMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pendingMessagesRef = useRef<{
+        message: NarrativeMessage;
+        idsToStale?: string[];
+        isInputEcho?: boolean;
+    }[]>([]);
+
+    // Minimum time between DOM additions (ms) - only applies when messages arrive rapidly
+    // Normal messages (arriving >100ms apart) have zero delay
+    const MIN_DOM_ADDITION_INTERVAL = 100;
+
+    // Add a message to the DOM and update timestamp
+    const commitMessageToDOM = useCallback((
+        message: NarrativeMessage,
+        idsToStale?: string[],
+        isInputEcho?: boolean,
+    ) => {
+        if (idsToStale && idsToStale.length > 0) {
+            setStaleMessageIds(prevStale => {
+                const next = new Set(prevStale);
+                idsToStale.forEach(id => next.add(id));
+                return next;
+            });
+        }
+
+        setMessages(prev => [...prev, message]);
+        lastDomAdditionRef.current = performance.now();
+
+        if (!isInputEcho) {
+            onMessageAppended?.(message);
+        }
+    }, [onMessageAppended]);
+
+    // Process queued messages one at a time with spacing
+    const processNextPendingMessage = useCallback(() => {
+        pendingMessageTimerRef.current = null;
+
+        const item = pendingMessagesRef.current.shift();
+        if (!item) return;
+
+        commitMessageToDOM(item.message, item.idsToStale, item.isInputEcho);
+
+        if (pendingMessagesRef.current.length > 0) {
+            pendingMessageTimerRef.current = setTimeout(
+                processNextPendingMessage,
+                MIN_DOM_ADDITION_INTERVAL,
+            );
+        }
+    }, [commitMessageToDOM]);
+
+    // Cleanup timer on unmount
+    useEffect(() => {
+        return () => {
+            if (pendingMessageTimerRef.current) {
+                clearTimeout(pendingMessageTimerRef.current);
+            }
+        };
+    }, []);
+
     if (storageKeyRef.current !== currentStorageKey) {
         previousStorageKeyRef.current = storageKeyRef.current;
         storageKeyRef.current = currentStorageKey;
@@ -269,34 +331,45 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         // Track the latest message timestamp (update even for input echo)
         lastMessageTimestampRef.current = now;
 
-        // If this message has a verb that triggers staleness, mark previous messages
-        // with the same verb as stale
+        // Compute staleness IDs upfront (need current messages state)
+        let idsToStale: string[] | undefined;
         const verb = eventMetadata?.verb;
         if (verb && STALENESS_VERBS.has(verb)) {
             setMessages(prev => {
-                // Find all previous messages with the same verb and mark them stale
-                const idsToStale = prev
+                idsToStale = prev
                     .filter(msg => msg.eventMetadata?.verb === verb)
                     .map(msg => msg.id);
-
-                if (idsToStale.length > 0) {
-                    setStaleMessageIds(prevStale => {
-                        const next = new Set(prevStale);
-                        idsToStale.forEach(id => next.add(id));
-                        return next;
-                    });
-                }
-
-                return [...prev, newMessage];
+                return prev; // Don't modify, just read
             });
-        } else {
-            setMessages(prev => [...prev, newMessage]);
         }
 
-        if (type !== "input_echo") {
-            onMessageAppended?.(newMessage);
+        const isInputEcho = type === "input_echo";
+
+        // Smart delay: only stagger when messages arrive rapidly
+        const timeSinceLastAddition = performance.now() - lastDomAdditionRef.current;
+        const hasPendingMessages = pendingMessagesRef.current.length > 0;
+
+        if (timeSinceLastAddition >= MIN_DOM_ADDITION_INTERVAL && !hasPendingMessages) {
+            // Enough time has passed - add immediately (zero delay)
+            commitMessageToDOM(newMessage, idsToStale, isInputEcho);
+        } else {
+            // Too soon or queue active - add to queue for staggered processing
+            pendingMessagesRef.current.push({
+                message: newMessage,
+                idsToStale,
+                isInputEcho,
+            });
+
+            // Start processing if not already running
+            if (!pendingMessageTimerRef.current) {
+                const delay = Math.max(0, MIN_DOM_ADDITION_INTERVAL - timeSinceLastAddition);
+                pendingMessageTimerRef.current = setTimeout(
+                    processNextPendingMessage,
+                    delay,
+                );
+            }
         }
-    }, [onMessageAppended]);
+    }, [commitMessageToDOM, processNextPendingMessage]);
 
     // Handle sending messages
     const handleSendMessage = useCallback((message: string | Uint8Array | ArrayBuffer) => {
