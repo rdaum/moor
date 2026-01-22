@@ -35,7 +35,6 @@ use crate::task_context::{
 use flume::Sender;
 use lazy_static::lazy_static;
 use moor_compiler::to_literal;
-use rand::Rng;
 use tracing::{error, warn};
 
 use crate::{
@@ -330,8 +329,10 @@ impl Task {
                         Ok((new_world_state, ()))
                     }) {
                         Ok((CommitResult::Success { .. }, _)) => {
-                            self.retry_state = self.vm_host.snapshot_state();
+                            // Resume first (which resets start_time), then snapshot
+                            // so retry_state has fresh timing if we need to restore
                             self.vm_host.resume_execution(resume_value);
+                            self.retry_state = self.vm_host.snapshot_state();
                             return Some(self);
                         }
                         Ok((CommitResult::ConflictRetry, _)) => {
@@ -494,12 +495,7 @@ impl Task {
                     );
                     session.rollback().unwrap();
 
-                    // Add randomized backoff to prevent retry storms. Base delay is 10-50ms, multiplied by retry count.
-                    let mut rng = rand::rng();
-                    let base_delay_ms = rng.random_range(10..=50);
-                    let delay_ms = base_delay_ms * (self.retries + 1) as u64; // +1 since retries will be incremented in scheduler
-                    std::thread::sleep(std::time::Duration::from_millis(delay_ms));
-
+                    // Backoff is handled by the scheduler via suspension-based retry
                     task_scheduler_client.conflict_retry(self);
                     return None;
                 };

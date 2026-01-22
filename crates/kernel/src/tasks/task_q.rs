@@ -197,6 +197,8 @@ pub enum WakeCondition {
     Worker(Uuid),
     /// Wake when garbage collection completes
     GCComplete,
+    /// Wake for retry after transaction conflict - includes backoff time
+    Retry(Instant),
 }
 
 #[repr(u8)]
@@ -208,6 +210,7 @@ pub enum WakeConditionType {
     Immediate = 4,
     Worker = 5,
     GCComplete = 6,
+    Retry = 7,
 }
 
 impl WakeCondition {
@@ -220,6 +223,7 @@ impl WakeCondition {
             WakeCondition::Immediate(_) => WakeConditionType::Immediate,
             WakeCondition::Worker(_) => WakeConditionType::Worker,
             WakeCondition::GCComplete => WakeConditionType::GCComplete,
+            WakeCondition::Retry(_) => WakeConditionType::Retry,
         }
     }
 }
@@ -252,6 +256,9 @@ pub struct SuspensionQ {
     /// Tasks waiting for GC completion
     gc_waiting_tasks: Vec<TaskId>,
 
+    /// Tasks waiting for retry after transaction conflict
+    retry_tasks: Vec<TaskId>,
+
     tasks_database: Box<dyn TasksDb>,
 }
 
@@ -269,6 +276,7 @@ impl SuspensionQ {
             input_requests: HashMap::default(),
             worker_requests: HashMap::default(),
             gc_waiting_tasks: Vec::new(),
+            retry_tasks: Vec::new(),
             tasks_database,
         }
     }
@@ -381,6 +389,21 @@ impl SuspensionQ {
                 WakeCondition::GCComplete => {
                     self.gc_waiting_tasks.push(task_id);
                 }
+                WakeCondition::Retry(wake_time) => {
+                    // Retry tasks shouldn't be persisted, but handle gracefully if loaded
+                    self.retry_tasks.push(task_id);
+                    let now = Instant::now();
+                    let inserted = *wake_time > now && {
+                        let delay = wake_time.duration_since(now);
+                        let timer_entry = TimerEntry { task_id, delay };
+                        self.timer_wheel
+                            .insert_with_delay(timer_entry, delay)
+                            .is_ok()
+                    };
+                    if !inserted {
+                        let _ = self.immediate_wake_sender.send(task_id);
+                    }
+                }
             }
 
             self.tasks.insert(task_id, task);
@@ -448,6 +471,21 @@ impl SuspensionQ {
             }
             WakeCondition::Never => true,
             WakeCondition::GCComplete => true,
+            WakeCondition::Retry(wake_time) => {
+                self.retry_tasks.push(task_id);
+                let inserted = *wake_time > now && {
+                    let delay = wake_time.duration_since(now);
+                    let timer_entry = TimerEntry { task_id, delay };
+                    self.timer_wheel
+                        .insert_with_delay(timer_entry, delay)
+                        .is_ok()
+                };
+                if !inserted {
+                    // Past deadline - wake immediately for retry
+                    let _ = self.immediate_wake_sender.send(task_id);
+                }
+                false // Don't persist retry tasks - they're transient
+            }
         };
 
         let sr = SuspendedTask {
@@ -499,6 +537,9 @@ impl SuspensionQ {
                 WakeCondition::GCComplete => {
                     self.gc_waiting_tasks.retain(|&id| id != task_id);
                 }
+                WakeCondition::Retry(_) => {
+                    self.retry_tasks.retain(|&id| id != task_id);
+                }
             }
 
             // Try to delete from database - will be a no-op for tasks that were never persisted
@@ -510,6 +551,11 @@ impl SuspensionQ {
     /// Synchronize the suspended tasks with the tasks database. Called on shutdown.
     pub(crate) fn save_tasks(&self) {
         for (_, st) in self.tasks.iter() {
+            // Skip retry tasks - they're transient and their transaction context
+            // would be invalid after restart anyway
+            if matches!(st.wake_condition, WakeCondition::Retry(_)) {
+                continue;
+            }
             if let Err(e) = self.tasks_database.save_task(st) {
                 error!(?e, "Could not save suspended task");
             }

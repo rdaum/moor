@@ -18,6 +18,7 @@ use crate::{
 use flume::{Receiver, Sender};
 use lazy_static::lazy_static;
 use minstant::Instant;
+use rand::Rng;
 use std::{
     sync::{
         Arc,
@@ -377,6 +378,7 @@ impl Scheduler {
             if let Some(to_wake) = self.task_q.collect_wake_tasks(self.gc_sweep_in_progress) {
                 for sr in to_wake {
                     let task_id = sr.task.task_id;
+                    let is_retry = matches!(sr.wake_condition, WakeCondition::Retry(_));
 
                     #[cfg(feature = "trace_events")]
                     {
@@ -393,6 +395,7 @@ impl Scheduler {
                                 ("GCComplete", "Garbage collection completed")
                             }
                             WakeCondition::Never => ("Never", "Manual wake"),
+                            WakeCondition::Retry(_) => ("Retry", "Transaction retry backoff"),
                         };
 
                         trace_task_resume!(
@@ -405,7 +408,18 @@ impl Scheduler {
                         );
                     }
 
-                    if let Err(e) = self.task_q.wake_task_thread(
+                    if is_retry {
+                        // Retry tasks need special handling - restore state and restart
+                        self.task_q.wake_retry_task(
+                            sr.task,
+                            sr.session,
+                            sr.result_sender,
+                            &self.task_control_sender,
+                            self.database.as_ref(),
+                            self.builtin_registry.clone(),
+                            self.config.clone(),
+                        );
+                    } else if let Err(e) = self.task_q.wake_task_thread(
                         sr.task,
                         ResumeAction::Return(v_int(0)),
                         sr.session,
@@ -1010,19 +1024,56 @@ impl Scheduler {
                 };
                 self.task_q.send_task_result(task_id, Ok(value))
             }
-            TaskControlMsg::TaskConflictRetry(task) => {
+            TaskControlMsg::TaskConflictRetry(mut task) => {
                 let perfc = sched_counters();
                 let _t = PerfTimerGuard::new(&perfc.task_conflict_retry);
 
-                // Ask the task to restart itself, using its stashed original start info, but with
-                // a brand new transaction.
-                self.task_q.retry_task(
+                // Make sure the old thread is dead.
+                task.kill_switch.store(true, Ordering::SeqCst);
+
+                // Remove from active tasks to get session/result_sender
+                let Some(old_tc) = self.task_q.active.remove(&task_id) else {
+                    error!(
+                        task_id,
+                        "Task not found for retry suspension, ignoring -- consistency issue!"
+                    );
+                    return;
+                };
+
+                // If the number of retries has been exceeded, abort immediately
+                if task.retries >= self.server_options.max_task_retries {
+                    info!(
+                        "Maximum number of retries exceeded for task {}.  Aborting.",
+                        task.task_id
+                    );
+                    TaskQ::send_task_result_direct(
+                        task_id,
+                        old_tc.result_sender,
+                        Err(TaskAbortedError),
+                    );
+                    return;
+                }
+                task.retries += 1;
+
+                // Calculate backoff time: 10-50ms base, multiplied by retry count
+                let mut rng = rand::rng();
+                let base_delay_ms = rng.random_range(10u64..=50u64);
+                let delay_ms = base_delay_ms * task.retries as u64;
+                let wake_time = Instant::now() + Duration::from_millis(delay_ms);
+
+                debug!(
+                    task_id,
+                    retries = task.retries,
+                    delay_ms,
+                    "Suspending task for retry backoff"
+                );
+
+                // Add to suspension queue with retry wake condition
+                self.task_q.suspended.add_task(
+                    WakeCondition::Retry(wake_time),
                     task,
-                    &self.task_control_sender,
-                    self.database.as_ref(),
-                    self.builtin_registry.clone(),
-                    self.config.clone(),
-                    self.server_options.max_task_retries,
+                    old_tc.session,
+                    old_tc.result_sender,
                 );
             }
             TaskControlMsg::TaskVerbNotFound(who, what) => {
@@ -2380,6 +2431,15 @@ impl TaskQ {
             return;
         };
         let result_sender = task_control.result_sender.take();
+        Self::send_task_result_direct(task_id, result_sender, result);
+    }
+
+    /// Send task result directly with an explicit result_sender (for tasks not in active queue)
+    fn send_task_result_direct(
+        task_id: TaskId,
+        result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
+        result: Result<Var, SchedulerError>,
+    ) {
         let Some(result_sender) = result_sender else {
             return;
         };
@@ -2387,62 +2447,43 @@ impl TaskQ {
         result_sender.send((task_id, result)).ok();
     }
 
-    fn retry_task(
+    /// Wake a task that was suspended for retry backoff
+    #[allow(clippy::too_many_arguments)]
+    fn wake_retry_task(
         &mut self,
         mut task: Box<Task>,
+        session: Arc<dyn Session>,
+        result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
         builtin_registry: BuiltinRegistry,
         config: Arc<Config>,
-        max_task_retries: u8,
     ) {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.retry_task);
 
         let task_id = task.task_id;
 
-        // Make sure the old thread is dead.
-        task.kill_switch.store(true, Ordering::SeqCst);
-
-        // Remove this from the running tasks.
-        // By definition we can't respond to a retry for a suspended task, so if it's not in the
-        // running tasks there's something very wrong.
-        let Some(old_tc) = self.active.remove(&task_id) else {
-            error!(
-                task_id,
-                "Task not found for retry for {task_id}, ignoring -- consistency issue!"
-            );
-            return;
-        };
-
-        // If the number of retries has been exceeded, we'll just immediately respond with abort.
-        if task.retries > max_task_retries {
-            info!(
-                "Maximum number of retries exceeded for task {}.  Aborting.",
-                task.task_id
-            );
-            self.send_task_result(task_id, Err(TaskAbortedError));
-            return;
-        }
-        task.retries += 1;
-
         // Restore the VM state from its last snapshot, which would either be the original state of
         // the task, or its state as of the last commit.
         task.vm_host.restore_state(&task.retry_state);
 
-        // Start a new session.
-        let new_session = old_tc.session.fork().unwrap();
+        // Reset the execution time limit - the restored state has the old start_time from when
+        // the snapshot was taken, which could cause immediate timeout if enough time has passed.
+        task.vm_host.reset_time();
 
-        // Brand new kill switch for the retried task. The old one was toggled to die.
+        // Fork the session for the new attempt
+        let new_session = session.fork().unwrap();
+
+        // Brand new kill switch for the retried task
         let kill_switch = Arc::new(AtomicBool::new(false));
         task.kill_switch = kill_switch.clone();
 
-        // Otherwise, we create a task control record and fire up a thread.
         let task_control = RunningTask {
-            player: old_tc.player,
+            player: task.player,
             kill_switch,
             session: new_session.clone(),
-            result_sender: old_tc.result_sender,
+            result_sender,
             task_start: task.state.task_start().clone(),
         };
 
@@ -2454,25 +2495,26 @@ impl TaskQ {
         let world_state = match database.new_world_state() {
             Ok(ws) => ws,
             Err(e) => {
-                // We panic here because this is a fundamental issue that will require admin
-                // intervention.
-                panic!("Could not start transaction for retry task due to DB error: {e:?}");
+                panic!("Could not start transaction for retry wake task due to DB error: {e:?}");
             }
         };
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
-        let player = task.player; // Capture for panic logging
+        let player = task.player;
         self.thread_pool.spawn(move || {
             let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                // Set up transaction context for this thread
                 let _tx_guard = TaskGuard::new(
                     world_state,
                     task_scheduler_client.clone(),
                     task_id,
-                    task.player,
+                    player,
                     new_session.clone(),
                 );
 
-                info!(?task.task_id, "Restarting retry task");
+                info!(
+                    ?task_id,
+                    retries = task.retries,
+                    "Waking retry task from suspension"
+                );
                 Task::run_task_loop(
                     task,
                     &task_scheduler_client,
@@ -2483,7 +2525,6 @@ impl TaskQ {
             }));
 
             if let Err(panic_payload) = panic_result {
-                // Task thread panicked - extract panic message and log it
                 let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
                     s.to_string()
                 } else if let Some(s) = panic_payload.downcast_ref::<String>() {
@@ -2498,19 +2539,15 @@ impl TaskQ {
                     ?player,
                     panic_msg,
                     ?backtrace,
-                    "Task thread panicked"
+                    "Retry task thread panicked"
                 );
 
-                // Note: TaskGuard drop handler already rolled back the transaction during unwind
-                // (silently, since std::thread::panicking() returns true during panic cleanup)
-
-                // Send panic abort to scheduler
                 control_sender
                     .send((
                         task_id,
                         TaskControlMsg::TaskAbortPanicked(panic_msg, Box::new(backtrace)),
                     ))
-                    .ok(); // Ignore send errors - scheduler might be shutting down
+                    .ok();
             }
         });
     }

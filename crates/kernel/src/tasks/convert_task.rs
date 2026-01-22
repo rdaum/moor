@@ -227,6 +227,12 @@ pub(crate) fn wake_condition_to_flatbuffer(
             }))
         }
         KernelWakeCondition::GCComplete => WakeGcComplete(Box::new(fb::WakeGcComplete {})),
+        KernelWakeCondition::Retry(_) => {
+            // Retry tasks are transient and should never be persisted
+            return Err(TaskConversionError::EncodingError(
+                "Retry wake condition should not be serialized".to_string(),
+            ));
+        }
     };
 
     Ok(WakeCondition { condition })
