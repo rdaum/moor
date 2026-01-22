@@ -151,6 +151,23 @@ pub fn parse_input_token(token: &str) -> (i64, String) {
     }
 }
 
+/// Check if the token has an "all " or "*." prefix for all-tier matching.
+/// Returns None if no prefix, or Some(subject) if prefix found and subject is non-empty.
+/// When the token is exactly "all" or "*." with no subject, returns None to treat it as a literal.
+pub fn parse_all_tiers_prefix(token: &str) -> Option<String> {
+    if let Some(rest) = token.strip_prefix("all ") {
+        if !rest.is_empty() {
+            return Some(rest.to_string());
+        }
+    }
+    if let Some(rest) = token.strip_prefix("*.") {
+        if !rest.is_empty() {
+            return Some(rest.to_string());
+        }
+    }
+    None
+}
+
 /// Perform complex matching on a list of strings, returning the matching strings
 pub fn complex_match_strings(token: &str, strings: &[Var]) -> ComplexMatchResult<Var> {
     complex_match_strings_with_fuzzy_threshold(token, strings, 0.0)
@@ -266,9 +283,79 @@ pub fn complex_match_strings_with_fuzzy_threshold(
 
 /// Return all matches from the best (highest priority) non-empty tier
 ///
-/// This function ignores ordinals and returns all matching strings from the
-/// first non-empty tier (exact > prefix > substring > fuzzy).
+/// If an ordinal is provided (e.g., "1.foo", "2nd foo"), returns only that
+/// specific match as a single-element list. Otherwise returns all matches
+/// from the first non-empty tier (exact > prefix > substring > fuzzy).
 pub fn complex_match_strings_all(token: &str, strings: &[Var], fuzzy_threshold: f64) -> Vec<Var> {
+    let (ordinal, subject) = parse_input_token(token);
+
+    if subject.is_empty() {
+        return Vec::new();
+    }
+
+    let mut exact_matches = Vec::new();
+    let mut start_matches = Vec::new();
+    let mut contain_matches = Vec::new();
+    let mut fuzzy_matches = Vec::new();
+
+    let subject_lower = subject.to_lowercase();
+
+    for string_var in strings.iter() {
+        let Some(string_val) = string_var.as_string() else {
+            continue;
+        };
+
+        let string_lower = string_val.to_lowercase();
+
+        if string_lower == subject_lower {
+            exact_matches.push(string_var.clone());
+        } else if string_lower.starts_with(&subject_lower) {
+            start_matches.push(string_var.clone());
+        } else if string_lower.contains(&subject_lower) {
+            contain_matches.push(string_var.clone());
+        } else if fuzzy_threshold > 0.0 {
+            let distance = damerau_levenshtein(&subject_lower, &string_lower);
+            let max_distance = (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize;
+            if distance <= max_distance {
+                fuzzy_matches.push(string_var.clone());
+            }
+        }
+    }
+
+    // Get all matches from the best non-empty tier
+    let matches = if !exact_matches.is_empty() {
+        exact_matches
+    } else if !start_matches.is_empty() {
+        start_matches
+    } else if !contain_matches.is_empty() {
+        contain_matches
+    } else if fuzzy_threshold > 0.0 && !fuzzy_matches.is_empty() {
+        fuzzy_matches
+    } else {
+        return Vec::new();
+    };
+
+    // If ordinal specified, return only that match (as single-element list)
+    if ordinal > 0 {
+        if ordinal <= matches.len() as i64 {
+            return vec![matches[(ordinal - 1) as usize].clone()];
+        }
+        return Vec::new(); // Ordinal out of range
+    }
+
+    matches
+}
+
+/// Return all matches from ALL tiers concatenated in priority order.
+///
+/// Unlike `complex_match_strings_all` which returns only the best tier,
+/// this function returns matches from every tier (exact, prefix, contains, fuzzy)
+/// in that order. Used when the "all " or "*." prefix is specified.
+pub fn complex_match_strings_all_tiers(
+    token: &str,
+    strings: &[Var],
+    fuzzy_threshold: f64,
+) -> Vec<Var> {
     // Strip any leading ordinal from the token
     let (_, subject) = parse_input_token(token);
 
@@ -305,18 +392,15 @@ pub fn complex_match_strings_all(token: &str, strings: &[Var], fuzzy_threshold: 
         }
     }
 
-    // Return all matches from the best non-empty tier
-    if !exact_matches.is_empty() {
-        exact_matches
-    } else if !start_matches.is_empty() {
-        start_matches
-    } else if !contain_matches.is_empty() {
-        contain_matches
-    } else if fuzzy_threshold > 0.0 && !fuzzy_matches.is_empty() {
-        fuzzy_matches
-    } else {
-        Vec::new()
+    // Concatenate all tiers in priority order
+    let mut result = Vec::new();
+    result.append(&mut exact_matches);
+    result.append(&mut start_matches);
+    result.append(&mut contain_matches);
+    if fuzzy_threshold > 0.0 {
+        result.append(&mut fuzzy_matches);
     }
+    result
 }
 
 /// Perform complex matching with separate objects and keys lists
@@ -477,9 +561,123 @@ pub fn complex_match_objects_keys_with_fuzzy_threshold(
 /// Return all matches from the best non-empty tier when matching with keys.
 /// Similar to `complex_match_strings_all` but for object/key matching.
 ///
-/// Returns a Vec of all matching objects from the first non-empty tier
-/// (exact > prefix > substring > fuzzy).
+/// If an ordinal is provided (e.g., "1.foo", "2nd foo"), returns only that
+/// specific match as a single-element list. Otherwise returns all matching
+/// objects from the first non-empty tier (exact > prefix > substring > fuzzy).
 pub fn complex_match_objects_keys_all(
+    token: &str,
+    objects: &[Var],
+    keys: &[Var],
+    fuzzy_threshold: f64,
+) -> Vec<Var> {
+    let (ordinal, subject) = parse_input_token(token);
+
+    if subject.is_empty() || objects.is_empty() || keys.is_empty() {
+        return Vec::new();
+    }
+
+    let mut exact_matches = Vec::new();
+    let mut start_matches = Vec::new();
+    let mut contain_matches = Vec::new();
+    let mut fuzzy_matches = Vec::new();
+
+    let subject_lower = subject.to_lowercase();
+
+    // Match against keys, return corresponding objects
+    for (idx, key_set) in keys.iter().enumerate() {
+        if idx >= objects.len() {
+            break;
+        }
+
+        let obj_val = &objects[idx];
+
+        // Handle both list of strings and single string for keys
+        let key_strings: Vec<String> = match key_set.variant() {
+            moor_var::Variant::List(key_list) => {
+                let mut strings = Vec::new();
+                for k in key_list.iter() {
+                    if let Some(s) = k.as_string() {
+                        strings.push(s.to_string());
+                    }
+                }
+                strings
+            }
+            moor_var::Variant::Str(s) => vec![s.as_str().to_string()],
+            _ => continue,
+        };
+
+        // Find the best match type across ALL keys for this object
+        // Priority: exact (0) > prefix (1) > substring (2) > none (3)
+        let mut best_match: u8 = 3; // none
+
+        for key_str in &key_strings {
+            let key_lower = key_str.to_lowercase();
+
+            if key_lower == subject_lower {
+                best_match = 0; // exact - can't do better, stop checking
+                break;
+            } else if key_lower.starts_with(&subject_lower) {
+                best_match = best_match.min(1); // prefix
+            } else if key_lower.contains(&subject_lower) {
+                best_match = best_match.min(2); // substring
+            }
+        }
+
+        // Add object to the appropriate category based on best match found
+        match best_match {
+            0 => exact_matches.push(obj_val.clone()),
+            1 => start_matches.push(obj_val.clone()),
+            2 => contain_matches.push(obj_val.clone()),
+            _ => {}
+        }
+
+        // If no exact/prefix/substring match found, try fuzzy matching
+        if fuzzy_threshold > 0.0
+            && !exact_matches.iter().any(|v| v == obj_val)
+            && !start_matches.iter().any(|v| v == obj_val)
+            && !contain_matches.iter().any(|v| v == obj_val)
+        {
+            for key_str in &key_strings {
+                let key_lower = key_str.to_lowercase();
+                let distance = damerau_levenshtein(&subject_lower, &key_lower);
+                let max_distance = (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize;
+                if distance <= max_distance {
+                    fuzzy_matches.push(obj_val.clone());
+                    break;
+                }
+            }
+        }
+    }
+
+    // Get all matches from the best non-empty tier
+    let matches = if !exact_matches.is_empty() {
+        exact_matches
+    } else if !start_matches.is_empty() {
+        start_matches
+    } else if !contain_matches.is_empty() {
+        contain_matches
+    } else if fuzzy_threshold > 0.0 && !fuzzy_matches.is_empty() {
+        fuzzy_matches
+    } else {
+        return Vec::new();
+    };
+
+    // If ordinal specified, return only that match (as single-element list)
+    if ordinal > 0 {
+        if ordinal <= matches.len() as i64 {
+            return vec![matches[(ordinal - 1) as usize].clone()];
+        }
+        return Vec::new(); // Ordinal out of range
+    }
+
+    matches
+}
+
+/// Return all matches from ALL tiers when matching with keys.
+/// Unlike `complex_match_objects_keys_all` which returns only the best tier,
+/// this function returns matches from every tier (exact, prefix, contains, fuzzy)
+/// in that order. Used when the "all " or "*." prefix is specified.
+pub fn complex_match_objects_keys_all_tiers(
     token: &str,
     objects: &[Var],
     keys: &[Var],
@@ -565,18 +763,15 @@ pub fn complex_match_objects_keys_all(
         }
     }
 
-    // Return all matches from the best non-empty tier
-    if !exact_matches.is_empty() {
-        exact_matches
-    } else if !start_matches.is_empty() {
-        start_matches
-    } else if !contain_matches.is_empty() {
-        contain_matches
-    } else if fuzzy_threshold > 0.0 && !fuzzy_matches.is_empty() {
-        fuzzy_matches
-    } else {
-        Vec::new()
+    // Concatenate all tiers in priority order
+    let mut result = Vec::new();
+    result.append(&mut exact_matches);
+    result.append(&mut start_matches);
+    result.append(&mut contain_matches);
+    if fuzzy_threshold > 0.0 {
+        result.append(&mut fuzzy_matches);
     }
+    result
 }
 
 #[cfg(test)]
@@ -887,10 +1082,136 @@ mod tests {
         let result = complex_match_strings_all("foo", &strings, 0.5);
         assert_eq!(result, vec![v_str("foo"), v_str("foo")]);
 
-        // Test that ordinals are stripped from input
-        let strings = vec![v_str("foo"), v_str("foobar"), v_str("foobaz")];
-        let result = complex_match_strings_all("2nd foo", &strings, 0.5);
-        // Should still return all matches, ignoring the ordinal
-        assert_eq!(result, vec![v_str("foo")]);
+        // Test ordinal selection - returns Nth match as single-element list
+        let strings = vec![v_str("foobar"), v_str("foobaz")];
+        let result = complex_match_strings_all("1.foo", &strings, 0.0);
+        assert_eq!(result, vec![v_str("foobar")]);
+
+        let result = complex_match_strings_all("2.foo", &strings, 0.0);
+        assert_eq!(result, vec![v_str("foobaz")]);
+
+        // Ordinal with word form
+        let result = complex_match_strings_all("first foo", &strings, 0.0);
+        assert_eq!(result, vec![v_str("foobar")]);
+
+        let result = complex_match_strings_all("2nd foo", &strings, 0.0);
+        assert_eq!(result, vec![v_str("foobaz")]);
+
+        // Ordinal out of range returns empty list
+        let result = complex_match_strings_all("3.foo", &strings, 0.0);
+        assert_eq!(result, Vec::<Var>::new());
+    }
+
+    #[test]
+    fn test_parse_all_tiers_prefix() {
+        // "all " prefix should return the subject
+        assert_eq!(parse_all_tiers_prefix("all foo"), Some("foo".to_string()));
+        assert_eq!(
+            parse_all_tiers_prefix("all bar baz"),
+            Some("bar baz".to_string())
+        );
+
+        // "*." prefix should return the subject
+        assert_eq!(parse_all_tiers_prefix("*.foo"), Some("foo".to_string()));
+        assert_eq!(
+            parse_all_tiers_prefix("*.bar baz"),
+            Some("bar baz".to_string())
+        );
+
+        // Just "all" or "*." with no subject should return None (treat as literal)
+        assert_eq!(parse_all_tiers_prefix("all"), None);
+        assert_eq!(parse_all_tiers_prefix("all "), None); // Empty after stripping
+        assert_eq!(parse_all_tiers_prefix("*."), None);
+
+        // No prefix should return None
+        assert_eq!(parse_all_tiers_prefix("foo"), None);
+        assert_eq!(parse_all_tiers_prefix("allover"), None); // Not "all " prefix
+    }
+
+    #[test]
+    fn test_complex_match_strings_all_tiers() {
+        // Test that "all foo" returns matches from ALL tiers in order
+        // foo = exact, foobar = prefix, bofooer = contains
+        let strings = vec![v_str("foo"), v_str("foobar"), v_str("bofooer")];
+        let result = complex_match_strings_all_tiers("foo", &strings, 0.0);
+        // Should return exact, then prefix, then contains
+        assert_eq!(result, vec![v_str("foo"), v_str("foobar"), v_str("bofooer")]);
+
+        // Test with no exact match - should still get prefix and contains
+        let strings = vec![v_str("foobar"), v_str("bofooer"), v_str("bar")];
+        let result = complex_match_strings_all_tiers("foo", &strings, 0.0);
+        assert_eq!(result, vec![v_str("foobar"), v_str("bofooer")]);
+
+        // Test with fuzzy matching enabled
+        let strings = vec![v_str("foo"), v_str("foobar"), v_str("bofooer"), v_str("foi")];
+        let result = complex_match_strings_all_tiers("foo", &strings, 0.5);
+        // foi is 1 edit from foo, so fuzzy should match it
+        assert_eq!(
+            result,
+            vec![v_str("foo"), v_str("foobar"), v_str("bofooer"), v_str("foi")]
+        );
+
+        // Test empty subject returns empty
+        let result = complex_match_strings_all_tiers("", &strings, 0.0);
+        assert_eq!(result, Vec::<Var>::new());
+    }
+
+    #[test]
+    fn test_all_as_literal_matches_allover() {
+        // When token is just "all" (no space after), treat as literal
+        let strings = vec![v_str("allover"), v_str("foobar"), v_str("bar")];
+
+        // "all" should match "allover" as a prefix match (literal matching)
+        let result = complex_match_strings_all("all", &strings, 0.0);
+        assert_eq!(result, vec![v_str("allover")]);
+
+        // Same for all_tiers
+        let result = complex_match_strings_all_tiers("all", &strings, 0.0);
+        assert_eq!(result, vec![v_str("allover")]);
+    }
+
+    #[test]
+    fn test_star_dot_prefix() {
+        // "*.foo" should behave same as "all foo"
+        let strings = vec![v_str("foo"), v_str("foobar"), v_str("bofooer")];
+        let result = complex_match_strings_all_tiers("foo", &strings, 0.0);
+        assert_eq!(result, vec![v_str("foo"), v_str("foobar"), v_str("bofooer")]);
+    }
+
+    #[test]
+    fn test_complex_match_objects_keys_all_tiers() {
+        let objects = vec![v_int(1), v_int(2), v_int(3)];
+        let keys = vec![v_str("foo"), v_str("foobar"), v_str("bofooer")];
+
+        // Should return all matching objects from all tiers
+        let result = complex_match_objects_keys_all_tiers("foo", &objects, &keys, 0.0);
+        assert_eq!(result, vec![v_int(1), v_int(2), v_int(3)]);
+
+        // With no exact match
+        let objects = vec![v_int(1), v_int(2), v_int(3)];
+        let keys = vec![v_str("foobar"), v_str("bofooer"), v_str("bar")];
+        let result = complex_match_objects_keys_all_tiers("foo", &objects, &keys, 0.0);
+        assert_eq!(result, vec![v_int(1), v_int(2)]);
+    }
+
+    #[test]
+    fn test_complex_match_objects_keys_all_ordinal() {
+        let objects = vec![v_int(1), v_int(2), v_int(3)];
+        let keys = vec![v_str("foobar"), v_str("foobaz"), v_str("bar")];
+
+        // Ordinal selects Nth match
+        let result = complex_match_objects_keys_all("1.foo", &objects, &keys, 0.0);
+        assert_eq!(result, vec![v_int(1)]);
+
+        let result = complex_match_objects_keys_all("2.foo", &objects, &keys, 0.0);
+        assert_eq!(result, vec![v_int(2)]);
+
+        // Ordinal out of range returns empty list
+        let result = complex_match_objects_keys_all("3.foo", &objects, &keys, 0.0);
+        assert_eq!(result, Vec::<Var>::new());
+
+        // Without ordinal returns all matches
+        let result = complex_match_objects_keys_all("foo", &objects, &keys, 0.0);
+        assert_eq!(result, vec![v_int(1), v_int(2)]);
     }
 }

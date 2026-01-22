@@ -422,7 +422,7 @@ Unlike `complex_match()` which returns a single match (or uses ordinals to selec
 
 #### Arguments
 
-- `token` (STR): The search string to match against (ordinals are ignored)
+- `token` (STR): The search string to match against. Supports ordinals (e.g., `"1.foo"`, `"2nd foo"`) to select the Nth match.
 - `targets` (LIST): List of values to return when matched
 - `keys` (LIST, optional): List of key lists for matching. Must have the same length as `targets`. Each element can be a string or a list of strings.
 - `fuzzy_threshold` (NUM, optional): Controls fuzzy matching sensitivity (default: 0.0, no fuzzy matching)
@@ -430,8 +430,20 @@ Unlike `complex_match()` which returns a single match (or uses ordinals to selec
 #### Return values
 
 - Returns a list of all matching targets from the best non-empty tier
-- Returns an empty list `{}` when no matches are found
+- If an ordinal is specified, returns only the Nth match as a single-element list
+- Returns an empty list `{}` when no matches are found (or ordinal is out of range)
 - Tier priority: exact > prefix > substring > fuzzy
+
+#### All-tiers prefix
+
+By default, `complex_matches()` returns only matches from the best (highest priority) non-empty tier. To return matches from **all** tiers combined, prefix the token with `"all "` or `"*."`:
+
+- `"all foo"` - returns all exact, prefix, substring, and fuzzy matches for "foo"
+- `"*.foo"` - same behavior as "all foo"
+
+Results are returned in tier priority order: exact matches first, then prefix, then substring, then fuzzy.
+
+If the token is exactly `"all"` or `"*."` with no subject following, it is treated as a literal search term (not a prefix).
 
 #### Examples
 
@@ -445,8 +457,11 @@ complex_matches("foo", {"foobar", "food", "bar"})   => {"foobar", "food"}
 // Returns all substring matches when no exact/prefix
 complex_matches("oo", {"foobar", "boo", "bar"})     => {"foobar", "boo"}
 
-// Ordinals in token are stripped (returns all matches, not Nth)
-complex_matches("2nd foo", {"foo", "foobar"})       => {"foo"}
+// Ordinals select the Nth match (returns single-element list)
+complex_matches("1.foo", {"foobar", "foobaz"})      => {"foobar"}
+complex_matches("2.foo", {"foobar", "foobaz"})      => {"foobaz"}
+complex_matches("2nd foo", {"foobar", "foobaz"})    => {"foobaz"}
+complex_matches("3.foo", {"foobar", "foobaz"})      => {}  // out of range
 
 // No matches returns empty list
 complex_matches("xyz", {"abc", "def"})              => {}
@@ -466,4 +481,14 @@ complex_matches("b", objs, keys)                    => {#456, #789}  // prefix m
 
 // Keys with fuzzy matching
 complex_matches("lammp", {#123, #456}, {"lamp", "table"}, 0.5)  => {#123}
+
+// All-tiers prefix: returns matches from ALL tiers in priority order
+complex_matches("all foo", {"foo", "foobar", "bofooer"})  => {"foo", "foobar", "bofooer"}
+// "foo" = exact, "foobar" = prefix, "bofooer" = substring
+
+// "*." prefix works the same as "all "
+complex_matches("*.foo", {"foo", "foobar", "bofooer"})    => {"foo", "foobar", "bofooer"}
+
+// "all" without subject is treated as literal (matches "allover" as prefix)
+complex_matches("all", {"allover", "foobar", "bar"})      => {"allover"}
 ```

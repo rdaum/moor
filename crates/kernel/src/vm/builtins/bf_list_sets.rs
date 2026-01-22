@@ -16,9 +16,10 @@
 use ahash::HashMap;
 use lazy_static::lazy_static;
 use moor_common::matching::{
-    ComplexMatchResult, complex_match_objects_keys_all,
+    ComplexMatchResult, complex_match_objects_keys_all, complex_match_objects_keys_all_tiers,
     complex_match_objects_keys_with_fuzzy_threshold, complex_match_strings_all,
-    complex_match_strings_with_fuzzy_threshold,
+    complex_match_strings_all_tiers, complex_match_strings_with_fuzzy_threshold,
+    parse_all_tiers_prefix,
 };
 use moor_compiler::offset_for_builtin;
 use moor_var::{
@@ -1260,6 +1261,10 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// Returns all matches from the best (highest priority) tier as a list.
 /// If no matches are found, returns an empty list.
 /// Keys can be a list of strings (one per target) or a list of lists of strings (multiple per target).
+///
+/// If the token is prefixed with "all " or "*.", returns matches from ALL tiers
+/// (exact, prefix, contains, fuzzy) in that order, rather than just the best tier.
+/// If the token is exactly "all" or "*." with no subject, it is treated as a literal.
 fn bf_complex_matches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
         return Err(BfErr::Code(E_ARGS));
@@ -1273,6 +1278,10 @@ fn bf_complex_matches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::List(targets) = bf_args.args[1].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
+
+    // Check for "all " or "*." prefix to return all tiers
+    let all_tiers_subject = parse_all_tiers_prefix(token);
+    let effective_token = all_tiers_subject.as_deref().unwrap_or(token);
 
     // Parse arguments: token, targets, [keys], [fuzzy_threshold]
     // 2 args: complex_matches(token, targets) - fuzzy_threshold=0.0, no keys
@@ -1313,14 +1322,26 @@ fn bf_complex_matches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             return Err(BfErr::Code(E_INVARG));
         }
 
-        let matches =
-            complex_match_objects_keys_all(token, &target_vars, &key_vars, fuzzy_threshold);
+        let matches = if all_tiers_subject.is_some() {
+            complex_match_objects_keys_all_tiers(
+                effective_token,
+                &target_vars,
+                &key_vars,
+                fuzzy_threshold,
+            )
+        } else {
+            complex_match_objects_keys_all(token, &target_vars, &key_vars, fuzzy_threshold)
+        };
         return Ok(Ret(v_list(&matches)));
     }
 
     // No keys - match against targets directly
     let candidate_vars: Vec<Var> = targets.iter().collect();
-    let matches = complex_match_strings_all(token, &candidate_vars, fuzzy_threshold);
+    let matches = if all_tiers_subject.is_some() {
+        complex_match_strings_all_tiers(effective_token, &candidate_vars, fuzzy_threshold)
+    } else {
+        complex_match_strings_all(token, &candidate_vars, fuzzy_threshold)
+    };
 
     Ok(Ret(v_list(&matches)))
 }

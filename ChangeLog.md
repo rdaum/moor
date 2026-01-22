@@ -37,6 +37,8 @@ Databases from beta7 and earlier cannot be loaded directly.
 `list_sets`:
 
 - New `complex_matches()` builtin to return all matches from the best match tier
+- `complex_matches()` now supports `"all "` and `"*."` prefixes to return matches from all tiers
+  (exact, prefix, substring, fuzzy) in priority order instead of just the best tier
 
 `tools/moorc`:
 
