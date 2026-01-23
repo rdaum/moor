@@ -801,6 +801,43 @@ fn main() -> Result<(), Report> {
 
     signal_hook::flag::register(signal_hook::consts::SIGTERM, kill_switch.clone())?;
     signal_hook::flag::register(signal_hook::consts::SIGINT, kill_switch.clone())?;
+
+    // SIGUSR1: Emergency checkpoint then shutdown (used by fatal DB error handler when MOOR_DUMP_ON_FATAL=1)
+    let emergency_checkpoint = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGUSR1, emergency_checkpoint.clone())?;
+
+    // Thread to handle SIGUSR1 (emergency checkpoint before shutdown)
+    let sigusr1_kill_switch = kill_switch.clone();
+    let sigusr1_scheduler_client = scheduler_client.clone();
+    let sigusr1_emergency_checkpoint = emergency_checkpoint.clone();
+    std::thread::Builder::new()
+        .name("moor-sigusr1".to_string())
+        .spawn(move || {
+            loop {
+                if sigusr1_kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
+                    break;
+                }
+                if sigusr1_emergency_checkpoint.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                    warn!("SIGUSR1 received: Performing emergency checkpoint before shutdown...");
+                    match sigusr1_scheduler_client.request_checkpoint_blocking() {
+                        Ok(()) => {
+                            info!("Emergency checkpoint completed successfully.");
+                        }
+                        Err(e) => {
+                            error!(
+                                "Emergency checkpoint failed: {}. Proceeding with shutdown anyway.",
+                                e
+                            );
+                        }
+                    }
+                    // Now trigger the actual shutdown
+                    sigusr1_kill_switch.store(true, std::sync::atomic::Ordering::SeqCst);
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        })?;
+
     info!(
         version = build::PKG_VERSION,
         commit = build::short_commit(),

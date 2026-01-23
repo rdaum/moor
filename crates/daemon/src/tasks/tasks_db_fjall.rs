@@ -12,7 +12,7 @@
 //
 
 use fjall::{Database, Keyspace, KeyspaceCreateOptions};
-use moor_common::tasks::TaskId;
+use moor_common::{tasks::TaskId, util::signal_fatal_db_error};
 use moor_kernel::{
     SuspendedTask,
     tasks::{
@@ -29,6 +29,15 @@ use std::{
     },
 };
 use tracing::{debug, error, warn};
+
+/// Handle a fjall error, with special handling for Poisoned errors.
+fn handle_fjall_error(e: &fjall::Error, operation: &str) {
+    if matches!(e, fjall::Error::Poisoned) {
+        signal_fatal_db_error(operation, "database poisoned (fsync failure)");
+    } else {
+        error!("Tasks DB error during {operation}: {e:?}");
+    }
+}
 
 pub struct FjallTasksDB {
     keyspace: Database,
@@ -107,7 +116,7 @@ impl TasksDb for FjallTasksDB {
         self.tasks_partition
             .insert(task_id, task_bytes)
             .map_err(|e| {
-                error!("Failed to insert record: {:?}", e);
+                handle_fjall_error(&e, "save_task insert");
                 TasksDbError::CouldNotSaveTask
             })?;
 
@@ -117,7 +126,7 @@ impl TasksDb for FjallTasksDB {
     fn delete_task(&self, task_id: TaskId) -> Result<(), TasksDbError> {
         let task_id = task_id.to_le_bytes();
         self.tasks_partition.remove(task_id).map_err(|e| {
-            error!("Failed to delete record: {:?}", e);
+            handle_fjall_error(&e, "delete_task");
             TasksDbError::CouldNotDeleteTask
         })?;
         Ok(())
@@ -129,7 +138,7 @@ impl TasksDb for FjallTasksDB {
                 .into_inner()
                 .map_err(|_| TasksDbError::CouldNotDeleteTask)?;
             self.tasks_partition.remove(key).map_err(|e| {
-                error!("Failed to delete record: {:?}", e);
+                handle_fjall_error(&e, "delete_all_tasks");
                 TasksDbError::CouldNotDeleteTask
             })?;
         }
@@ -148,7 +157,7 @@ impl TasksDb for FjallTasksDB {
         std::thread::spawn(move || {
             debug!("Tasks database compaction starting");
             if let Err(e) = keyspace.persist(fjall::PersistMode::SyncAll) {
-                error!("Failed to compact tasks database: {:?}", e);
+                handle_fjall_error(&e, "compact/persist");
             }
             guard.store(false, Ordering::SeqCst);
         });

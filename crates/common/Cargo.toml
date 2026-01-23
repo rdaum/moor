@@ -44,7 +44,12 @@ eyre.workspace = true
 thiserror.workspace = true
 
 # Tracing & Logging
+tracing-log.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing.workspace = true
+
+# System
+libc.workspace = true
 
 # Text Processing
 strsim.workspace = true

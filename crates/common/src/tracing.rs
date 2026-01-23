@@ -21,6 +21,7 @@ use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*};
 /// - Falls back to provided debug flag when `RUST_LOG` is not set
 /// - Uses layered subscriber architecture for flexibility
 /// - Provides consistent formatting across all binaries
+/// - Bridges `log` crate messages (from dependencies like fjall) into tracing
 ///
 /// # Arguments
 /// * `debug_fallback` - If true and `RUST_LOG` is not set, uses DEBUG level; otherwise INFO
@@ -29,6 +30,9 @@ use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*};
 /// * `Ok(())` on successful initialization
 /// * `Err(eyre::Report)` if tracing initialization fails
 pub fn init_tracing(debug_fallback: bool) -> Result<(), eyre::Report> {
+    // Note: tracing-subscriber's .init() automatically sets up the log -> tracing bridge
+    // via the tracing-log feature, so fjall's log::error! messages will be captured.
+
     let filter = if let Ok(env_filter) = EnvFilter::try_from_default_env() {
         // User has set RUST_LOG, respect it but still suppress gdt_cpus
         env_filter.add_directive("gdt_cpus=off".parse().unwrap())
@@ -58,6 +62,7 @@ pub fn init_tracing(debug_fallback: bool) -> Result<(), eyre::Report> {
 /// Initialize tracing with simplified formatting (no file/line info)
 ///
 /// Used for binaries that prefer cleaner output like moorc
+/// Bridges `log` crate messages (from dependencies like fjall) into tracing
 ///
 /// # Arguments
 /// * `debug_fallback` - If true and `RUST_LOG` is not set, uses DEBUG level; otherwise INFO
@@ -66,6 +71,9 @@ pub fn init_tracing(debug_fallback: bool) -> Result<(), eyre::Report> {
 /// * `Ok(())` on successful initialization
 /// * `Err(eyre::Report)` if tracing initialization fails
 pub fn init_tracing_simple(debug_fallback: bool) -> Result<(), eyre::Report> {
+    // Note: tracing-subscriber's .init() automatically sets up the log -> tracing bridge
+    // via the tracing-log feature, so fjall's log::error! messages will be captured.
+
     let filter = if let Ok(env_filter) = EnvFilter::try_from_default_env() {
         // User has set RUST_LOG, respect it but still suppress gdt_cpus
         env_filter.add_directive("gdt_cpus=off".parse().unwrap())

@@ -50,6 +50,7 @@ use fjall::Slice;
 use flume::Sender;
 use gdt_cpus::ThreadPriority;
 use moor_common::util::PerfTimerGuard;
+use moor_common::util::signal_fatal_db_error;
 use planus::{ReadAsRoot, WriteAsOffset};
 use std::{
     collections::{HashMap, HashSet},
@@ -61,6 +62,21 @@ use std::{
     time::Duration,
 };
 use tracing::error;
+
+/// Handle a fjall error, with special handling for Poisoned errors.
+/// Returns true if this was a Poisoned error (caller should stop retrying).
+fn handle_fjall_error(e: &fjall::Error, operation: &str) -> bool {
+    if matches!(e, fjall::Error::Poisoned) {
+        // Use the common fatal error handler - it will log once and signal shutdown
+        signal_fatal_db_error(operation, "database poisoned (fsync failure)");
+        // Don't log subsequent Poisoned errors - they'd just flood the log
+        true
+    } else {
+        // Non-poisoned errors get logged normally
+        error!("Database error during {operation}: {e}");
+        false
+    }
+}
 
 /// Tracks operations that have been submitted to the background thread but not yet completed
 struct PendingOperations<Domain, Codomain>
@@ -214,7 +230,7 @@ where
                             }
 
                             if let Err(e) = write_result {
-                                error!("failed to insert into database: {}", e);
+                                handle_fjall_error(&e, "insert");
                             }
                         }
                         WriteOp::Delete(key_bytes, domain) => {
@@ -228,7 +244,7 @@ where
                             }
 
                             if let Err(e) = delete_result {
-                                error!("failed to delete from database: {}", e);
+                                handle_fjall_error(&e, "delete");
                             }
                         }
                         WriteOp::Barrier(timestamp, reply) => {
@@ -814,7 +830,7 @@ impl SequenceWriter {
     fn write_sequences(keyspace: &fjall::Keyspace, seq_values: &[i64; 16]) {
         for (i, val) in seq_values.iter().enumerate() {
             if let Err(e) = keyspace.insert(i.to_le_bytes(), val.to_le_bytes()) {
-                error!("Failed to persist sequence {}: {}", i, e);
+                handle_fjall_error(&e, &format!("sequence {i} persist"));
             }
         }
     }

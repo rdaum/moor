@@ -198,6 +198,7 @@ color-eyre = "0.6"
 eyre = "0.6"
 thiserror = "2.0"
 tracing = "0.1"
+tracing-log = "0.2"
 tracing-subscriber = "0.3"
 
 # Utilities & Helpers
