@@ -57,7 +57,7 @@ where
 
     match loader.commit()? {
         CommitResult::Success { .. } => Ok((obj, prop_symbols)),
-        CommitResult::ConflictRetry => Err(eyre::eyre!("Conflict during setup")),
+        CommitResult::ConflictRetry { .. } => Err(eyre::eyre!("Conflict during setup")),
     }
 }
 

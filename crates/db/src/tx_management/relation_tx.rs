@@ -11,10 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tx_management::{Canonical, Error, Timestamp, Tx, indexes::RelationIndex};
+use crate::tx_management::{
+    Canonical, ConflictInfo, ConflictType, Error, Timestamp, Tx, indexes::RelationIndex,
+};
 use ahash::AHasher;
 use indexmap::IndexMap;
 use moor_common::model::WorldStateError;
+use moor_var::Symbol;
 use std::collections::HashSet;
 use std::{
     collections::HashMap,
@@ -28,10 +31,11 @@ use std::{
 pub struct RelationTransaction<Domain, Codomain, Source>
 where
     Source: Canonical<Domain, Codomain>,
-    Domain: Hash + Eq + Clone + Send + Sync + 'static,
+    Domain: Hash + Eq + Clone + Send + Sync + std::fmt::Debug + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     tx: Tx,
+    relation_name: Symbol,
 
     // Note: This is RefCell for interior mutability since even get/scan operations can modify the
     //   index.
@@ -151,11 +155,12 @@ where
 impl<Domain, Codomain, Source> RelationTransaction<Domain, Codomain, Source>
 where
     Source: Canonical<Domain, Codomain>,
-    Domain: Clone + Hash + Eq + Send + Sync + 'static,
+    Domain: Clone + Hash + Eq + Send + Sync + std::fmt::Debug + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     pub fn new(
         tx: Tx,
+        relation_name: Symbol,
         canonical: Box<dyn RelationIndex<Domain, Codomain>>,
         backing_source: Source,
     ) -> RelationTransaction<Domain, Codomain, Source> {
@@ -168,8 +173,18 @@ where
         };
         RelationTransaction {
             tx,
+            relation_name,
             index: inner,
             backing_source: backing_source.into(),
+        }
+    }
+
+    /// Helper to create a ConflictInfo for this relation.
+    fn make_conflict_info(&self, domain: &Domain, conflict_type: ConflictType) -> ConflictInfo {
+        ConflictInfo {
+            relation_name: self.relation_name,
+            domain_key: format!("{:?}", domain),
+            conflict_type,
         }
     }
 
@@ -327,7 +342,9 @@ where
         // commit, so we may as well mark it as a conflict *now*.
         // (Let's just hope the "upper layers" try to do the right thing here)
         if read_ts >= self.tx.ts {
-            return Err(Error::Conflict);
+            return Err(Error::Conflict(
+                self.make_conflict_info(domain, ConflictType::ConcurrentWrite),
+            ));
         }
 
         // Put in operations log

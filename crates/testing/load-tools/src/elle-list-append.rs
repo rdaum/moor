@@ -101,7 +101,7 @@ fn setup_database(db: &TxDB, num_props: usize) -> Result<(Obj, Vec<Symbol>), eyr
 
     match loader.commit()? {
         moor_common::model::CommitResult::Success { .. } => Ok((obj, prop_symbols)),
-        moor_common::model::CommitResult::ConflictRetry => {
+        moor_common::model::CommitResult::ConflictRetry { .. } => {
             Err(eyre::eyre!("Conflict during setup"))
         }
     }
@@ -172,7 +172,7 @@ fn workload_thread(
                         ));
                         break 'retry; // Success, move to next iteration
                     }
-                    moor_common::model::CommitResult::ConflictRetry => {
+                    moor_common::model::CommitResult::ConflictRetry { .. } => {
                         // Retry the same read
                         continue 'retry;
                     }
@@ -234,7 +234,7 @@ fn workload_thread(
                         ));
                         break 'retry; // Success, move to next iteration
                     }
-                    moor_common::model::CommitResult::ConflictRetry => {
+                    moor_common::model::CommitResult::ConflictRetry { .. } => {
                         // Retry on conflict with the same values
                         counter -= num_values as i64;
                         continue 'retry;

@@ -51,7 +51,7 @@ fn upsert<Domain, Codomain>(
     c: Codomain,
 ) -> Result<Option<Codomain>, Error>
 where
-    Domain: Clone + Eq + Hash + Send + Sync + 'static,
+    Domain: Clone + Eq + Hash + Send + Sync + std::fmt::Debug + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
     FjallProvider<Domain, Codomain>:
         EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
@@ -65,7 +65,7 @@ fn insert_guaranteed_unique<Domain, Codomain>(
     c: Codomain,
 ) -> Result<(), Error>
 where
-    Domain: Clone + Eq + Hash + Send + Sync + 'static,
+    Domain: Clone + Eq + Hash + Send + Sync + std::fmt::Debug + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
     FjallProvider<Domain, Codomain>:
         EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
@@ -1291,7 +1291,7 @@ impl WorldStateTransaction {
                             .add(elapsed_nanos);
                     }
                 }
-                CommitResult::ConflictRetry => {
+                CommitResult::ConflictRetry { .. } => {
                     counters.commit_conflict.invocations().add(1);
                     counters
                         .commit_conflict

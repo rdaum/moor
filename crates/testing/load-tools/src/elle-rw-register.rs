@@ -104,7 +104,7 @@ fn workload_thread(
                         ));
                         break;
                     }
-                    CommitResult::ConflictRetry => continue,
+                    CommitResult::ConflictRetry { .. } => continue,
                 }
             }
         } else {
@@ -146,7 +146,7 @@ fn workload_thread(
                         ));
                         break;
                     }
-                    CommitResult::ConflictRetry => continue,
+                    CommitResult::ConflictRetry { .. } => continue,
                 }
             }
         }

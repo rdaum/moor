@@ -2202,7 +2202,7 @@ impl Scheduler {
         // Commit the sweep phase transaction
         match gc.commit() {
             Ok(CommitResult::Success { .. }) => Ok(()),
-            Ok(CommitResult::ConflictRetry) => {
+            Ok(CommitResult::ConflictRetry { .. }) => {
                 // Transaction conflict - our optimism wasn't justified
                 warn!("GC sweep transaction conflict - retry needed");
                 Err(SchedulerError::GarbageCollectionFailed(

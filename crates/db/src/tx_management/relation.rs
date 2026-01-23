@@ -16,7 +16,7 @@
 use crate::{
     provider::Provider,
     tx_management::{
-        Canonical, Error, Timestamp, Tx,
+        Canonical, ConflictInfo, ConflictType, Error, Timestamp, Tx,
         indexes::{HashRelationIndex, RelationIndex},
         relation_tx::{OpType, RelationTransaction, WorkingSet},
     },
@@ -100,7 +100,7 @@ where
 /// Obtained lock-free via ArcSwap, enabling concurrent transaction starts.
 pub struct CheckRelation<Domain, Codomain, P>
 where
-    Domain: Clone + Hash + Eq + Send + Sync + 'static,
+    Domain: Clone + Hash + Eq + Send + Sync + std::fmt::Debug + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
     P: Provider<Domain, Codomain>,
 {
@@ -112,7 +112,7 @@ where
 
 impl<Domain, Codomain, P> CheckRelation<Domain, Codomain, P>
 where
-    Domain: Clone + Hash + Eq + Send + Sync + 'static,
+    Domain: Clone + Hash + Eq + Send + Sync + std::fmt::Debug + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
     P: Provider<Domain, Codomain>,
 {
@@ -122,6 +122,20 @@ where
 
     pub fn dirty(&self) -> bool {
         self.dirty
+    }
+
+    /// Returns the name of this relation (for conflict reporting).
+    pub fn relation_name(&self) -> Symbol {
+        self.relation_name
+    }
+
+    /// Helper to create a ConflictInfo for this relation.
+    fn make_conflict_info(&self, domain: &Domain, conflict_type: ConflictType) -> ConflictInfo {
+        ConflictInfo {
+            relation_name: self.relation_name,
+            domain_key: format!("{:?}", domain),
+            conflict_type,
+        }
     }
 
     /// Check the forked index for conflicts with the given working set.
@@ -154,14 +168,18 @@ where
                 // If what we have is an insert, and there's something already there, that's a
                 // conflict.
                 if op.operation.is_insert() {
-                    return Err(Error::Conflict);
+                    return Err(Error::Conflict(
+                        self.make_conflict_info(domain, ConflictType::InsertDuplicate),
+                    ));
                 }
 
                 let ts = local_entry.ts;
                 // If the ts there is greater than the read-ts of our own op, that's a conflict
                 // Someone got to it first.
                 if ts > op.read_ts {
-                    return Err(Error::Conflict);
+                    return Err(Error::Conflict(
+                        self.make_conflict_info(domain, ConflictType::ConcurrentWrite),
+                    ));
                 }
                 // If the transactions *write stamp* is earlier than the read stamp, that's a
                 // conflict indicating that the transaction is trying to update something
@@ -169,7 +187,9 @@ where
                 // (This only happens because we're not able to early-bail on update operations
                 // like this, so there's some waste here.)
                 if op.read_ts > op.write_ts {
-                    return Err(Error::Conflict);
+                    return Err(Error::Conflict(
+                        self.make_conflict_info(domain, ConflictType::StaleRead),
+                    ));
                 }
                 continue;
             }
@@ -181,14 +201,23 @@ where
 
                 // If what we have is an insert, and there's something already there, that's also
                 // a conflict.
-                if op.operation.is_insert() || ts > op.read_ts {
-                    return Err(Error::Conflict);
+                if op.operation.is_insert() {
+                    return Err(Error::Conflict(
+                        self.make_conflict_info(domain, ConflictType::InsertDuplicate),
+                    ));
+                }
+                if ts > op.read_ts {
+                    return Err(Error::Conflict(
+                        self.make_conflict_info(domain, ConflictType::ConcurrentWrite),
+                    ));
                 }
             } else {
                 // If upstream doesn't have it, and it's not an insert or delete, that's a conflict, this
                 // should not have happened.
                 if op.operation.is_update() {
-                    return Err(Error::Conflict);
+                    return Err(Error::Conflict(
+                        self.make_conflict_info(domain, ConflictType::UpdateNonExistent),
+                    ));
                 }
             }
         }
@@ -248,12 +277,12 @@ where
 impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
 where
     Source: Provider<Domain, Codomain>,
-    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + std::fmt::Debug + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     pub fn start(&self, tx: &Tx) -> RelationTransaction<Domain, Codomain, Self> {
         let index = self.index.load();
-        RelationTransaction::new(*tx, (**index).fork(), self.clone())
+        RelationTransaction::new(*tx, self.relation_name, (**index).fork(), self.clone())
     }
 
     pub fn begin_check(&self) -> CheckRelation<Domain, Codomain, Source> {
@@ -505,7 +534,7 @@ mod tests {
 
             // This should fail because the first insert has already happened.
             let check_result = cr_b.check(&ws_b);
-            assert!(matches!(check_result, Err(Error::Conflict)));
+            assert!(matches!(check_result, Err(Error::Conflict(_))));
         }
     }
 
@@ -549,7 +578,7 @@ mod tests {
 
         // Now T1 tries to update based on its read - this should conflict
         let check_result = r_tx_1.update(&domain, TestCodomain(11));
-        assert!(matches!(check_result, Err(Error::Conflict)));
+        assert!(matches!(check_result, Err(Error::Conflict(_))));
     }
 
     #[test]
@@ -593,7 +622,7 @@ mod tests {
         // T2 should conflict
         let mut cr_2 = relation.begin_check();
         let check_result = cr_2.check(&ws_2);
-        assert!(matches!(check_result, Err(Error::Conflict)));
+        assert!(matches!(check_result, Err(Error::Conflict(_))));
     }
 
     #[test]
@@ -792,7 +821,7 @@ mod tests {
         {
             let mut cr_2 = relation.begin_check();
             let check_result = cr_2.check(&ws_2);
-            assert!(matches!(check_result, Err(Error::Conflict)));
+            assert!(matches!(check_result, Err(Error::Conflict(_))));
         }
 
         // T3: Should be able to read T1's committed changes and make updates
@@ -861,7 +890,7 @@ mod tests {
 
         // Now older transaction tries to update - should conflict due to newer timestamp in cache
         let check_result = r_tx_older.update(&domain, TestCodomain(300));
-        assert!(matches!(check_result, Err(Error::Conflict)));
+        assert!(matches!(check_result, Err(Error::Conflict(_))));
     }
 
     #[test]

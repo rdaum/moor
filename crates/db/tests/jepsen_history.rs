@@ -315,7 +315,7 @@ mod tests {
                         let mut cr = backing_store.begin_check();
 
                         match cr.check(&ws) {
-                            Err(Error::Conflict) => {
+                            Err(Error::Conflict(_)) => {
                                 return Ok(());
                             }
                             Err(e) => panic!("unexpected error: {e:?}"),
@@ -323,7 +323,7 @@ mod tests {
                         };
                         match cr.apply(ws) {
                             Ok(_) => bail!("Expected conflict, got none in {entry:?}"),
-                            Err(Error::Conflict) => {}
+                            Err(Error::Conflict(_)) => {}
                             Err(e) => panic!("unexpected error: {e:?}"),
                         }
                         cr.commit(backing_store.index());

@@ -42,6 +42,52 @@ mod world_state;
 use moor_var::Symbol;
 pub use world_state::{WorldStateError, WorldStatePerf};
 
+/// Information about a transaction conflict.
+/// Used to help diagnose which relation and key caused a commit conflict.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct ConflictInfo {
+    /// The name of the relation where the conflict occurred
+    pub relation_name: Symbol,
+    /// A string representation of the domain key that caused the conflict
+    pub domain_key: String,
+    /// Description of the conflict type
+    pub conflict_type: ConflictType,
+}
+
+/// The type of conflict that occurred during commit
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum ConflictType {
+    /// An insert was attempted but the key already exists
+    InsertDuplicate,
+    /// A concurrent transaction modified this key with a newer timestamp
+    ConcurrentWrite,
+    /// The read timestamp was newer than the write timestamp (stale read)
+    StaleRead,
+    /// An update was attempted on a non-existent key
+    UpdateNonExistent,
+}
+
+impl std::fmt::Display for ConflictType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConflictType::InsertDuplicate => write!(f, "insert_duplicate"),
+            ConflictType::ConcurrentWrite => write!(f, "concurrent_write"),
+            ConflictType::StaleRead => write!(f, "stale_read"),
+            ConflictType::UpdateNonExistent => write!(f, "update_non_existent"),
+        }
+    }
+}
+
+impl std::fmt::Display for ConflictInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "conflict in relation '{}' on key '{}' ({})",
+            self.relation_name, self.domain_key, self.conflict_type
+        )
+    }
+}
+
 /// The result code from a commit/complete operation on the world's state.
 #[derive(Debug, Eq, PartialEq)]
 pub enum CommitResult {
@@ -49,7 +95,11 @@ pub enum CommitResult {
         mutations_made: bool,
         timestamp: u64,
     }, // Value was committed
-    ConflictRetry, // Value was not committed due to conflict, caller should abort and retry tx_management
+    ConflictRetry {
+        /// Optional information about what caused the conflict.
+        /// May be None if conflict was detected during apply phase without details.
+        conflict_info: Option<ConflictInfo>,
+    }, // Value was not committed due to conflict, caller should abort and retry tx_management
 }
 
 pub trait ValSet<V>: FromIterator<V> {

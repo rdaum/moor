@@ -115,9 +115,23 @@ macro_rules! define_relations {
             impl RelationCheckers {
                 /// Check all relations for conflicts with the given working sets.
                 ///
-                /// Returns `true` if all relations pass conflict checking, `false` if any fail.
-                fn check_all(&mut self, ws: &RelationWorkingSets) -> bool {
-                    true $( && self.$field.check(&ws.$field).is_ok() )*
+                /// Returns `Ok(())` if all relations pass conflict checking,
+                /// `Err(ConflictInfo)` if any relation has a conflict.
+                fn check_all(&mut self, ws: &RelationWorkingSets) -> Result<(), moor_common::model::ConflictInfo> {
+                    $(
+                        if let Err(e) = self.$field.check(&ws.$field) {
+                            if let crate::tx_management::Error::Conflict(info) = e {
+                                return Err(info);
+                            }
+                            // For other errors, create a generic conflict info
+                            return Err(moor_common::model::ConflictInfo {
+                                relation_name: self.$field.relation_name(),
+                                domain_key: format!("<unknown>"),
+                                conflict_type: moor_common::model::ConflictType::ConcurrentWrite,
+                            });
+                        }
+                    )*
+                    Ok(())
                 }
 
                 /// Apply all working sets to their respective relations.

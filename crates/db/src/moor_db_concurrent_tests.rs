@@ -135,7 +135,7 @@ mod tests {
                                             counter.fetch_add(1, Ordering::Relaxed);
                                             break;
                                         }
-                                        Ok(CommitResult::ConflictRetry) => {
+                                        Ok(CommitResult::ConflictRetry { .. }) => {
                                             conflict_count.fetch_add(1, Ordering::Relaxed);
                                             continue;
                                         }
@@ -394,7 +394,7 @@ mod tests {
                                             properties_defined.fetch_add(1, Ordering::Relaxed);
                                             break;
                                         }
-                                        Ok(CommitResult::ConflictRetry) => {
+                                        Ok(CommitResult::ConflictRetry { .. }) => {
                                             conflict_count.fetch_add(1, Ordering::Relaxed);
                                             continue;
                                         }
@@ -743,7 +743,7 @@ mod tests {
                                             successful_updates.fetch_add(1, Ordering::Relaxed);
                                             break;
                                         }
-                                        Ok(CommitResult::ConflictRetry) => {
+                                        Ok(CommitResult::ConflictRetry { .. }) => {
                                             // Expected - retry
                                             continue;
                                         }

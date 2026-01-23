@@ -291,7 +291,7 @@ impl Task {
                         }
                         Some(self)
                     }
-                    Ok((CommitResult::ConflictRetry, _)) => {
+                    Ok((CommitResult::ConflictRetry { .. }, _)) => {
                         warn!("Conflict during commit before fork dispatch");
                         session.rollback().unwrap();
                         task_scheduler_client.conflict_retry(self);
@@ -335,7 +335,7 @@ impl Task {
                             self.retry_state = self.vm_host.snapshot_state();
                             return Some(self);
                         }
-                        Ok((CommitResult::ConflictRetry, _)) => {
+                        Ok((CommitResult::ConflictRetry { .. }, _)) => {
                             warn!("Conflict during immediate resume transaction");
                             session.rollback().unwrap();
                             task_scheduler_client.conflict_retry(self);
@@ -355,7 +355,7 @@ impl Task {
                 let commit_result = commit_current_transaction()
                     .expect("Could not commit world state before suspend");
 
-                if let CommitResult::ConflictRetry = commit_result {
+                if let CommitResult::ConflictRetry { .. } = commit_result {
                     warn!("Conflict during commit before suspend");
                     session.rollback().unwrap();
                     task_scheduler_client.conflict_retry(self);
@@ -383,7 +383,7 @@ impl Task {
                 let commit_result = commit_current_transaction()
                     .expect("Could not commit world state before suspend");
 
-                if let CommitResult::ConflictRetry = commit_result {
+                if let CommitResult::ConflictRetry { .. } = commit_result {
                     warn!("Conflict during commit before suspend");
                     session.rollback().unwrap();
                     task_scheduler_client.conflict_retry(self);

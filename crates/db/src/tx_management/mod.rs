@@ -27,12 +27,14 @@ pub struct Tx {
     pub snapshot_version: u64,
 }
 
+pub use moor_common::model::{ConflictInfo, ConflictType};
+
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum Error {
     #[error("Duplicate key")]
     Duplicate,
-    #[error("Conflict detected")]
-    Conflict,
+    #[error("Conflict detected: {0}")]
+    Conflict(ConflictInfo),
     #[error("Retrieval error from backing store")]
     RetrievalFailure(String),
     #[error("Store failure when writing to backing store: #{0}")]

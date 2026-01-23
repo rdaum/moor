@@ -202,7 +202,9 @@ fn setup_database(
             );
             Ok((player, opcodes_per_invocation))
         }
-        CommitResult::ConflictRetry => Err(eyre::eyre!("Database conflict during initialization")),
+        CommitResult::ConflictRetry { .. } => {
+            Err(eyre::eyre!("Database conflict during initialization"))
+        }
     }
 }
 

@@ -103,7 +103,9 @@ fn setup_bench_database(database: &TxDB) -> Result<Obj, eyre::Error> {
             info!("Successfully initialized benchmark database");
             Ok(player)
         }
-        CommitResult::ConflictRetry => Err(eyre::eyre!("Database conflict during initialization")),
+        CommitResult::ConflictRetry { .. } => {
+            Err(eyre::eyre!("Database conflict during initialization"))
+        }
     }
 }
 

@@ -351,9 +351,9 @@ where
 
             Ok((commit_result, Some(result)))
         }
-        CommitResult::ConflictRetry => {
+        CommitResult::ConflictRetry { conflict_info } => {
             // On conflict, we don't create a new transaction
-            Ok((CommitResult::ConflictRetry, None))
+            Ok((CommitResult::ConflictRetry { conflict_info }, None))
         }
     }
 }

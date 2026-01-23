@@ -62,9 +62,13 @@ impl WorldStateActionExecutor {
         } else {
             match self.tx.commit() {
                 Ok(CommitResult::Success { .. }) => {}
-                Ok(CommitResult::ConflictRetry) => {
+                Ok(CommitResult::ConflictRetry { conflict_info }) => {
+                    let message = match conflict_info {
+                        Some(info) => format!("Transaction conflict: {}", info),
+                        None => "Transaction conflict".to_string(),
+                    };
                     return Err(CommandExecutionError(CommandError::DatabaseError(
-                        WorldStateError::DatabaseError("Transaction conflict".to_string()),
+                        WorldStateError::DatabaseError(message),
                     )));
                 }
                 Err(e) => {

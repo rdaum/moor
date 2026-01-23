@@ -219,7 +219,9 @@ fn setup_test_database(
                 property_names,
             })
         }
-        CommitResult::ConflictRetry => Err(eyre::eyre!("Database conflict during initialization")),
+        CommitResult::ConflictRetry { .. } => {
+            Err(eyre::eyre!("Database conflict during initialization"))
+        }
     }
 }
 
@@ -271,7 +273,7 @@ fn run_worker(
                     commit_latencies.push(commit_start.elapsed());
                     break;
                 }
-                CommitResult::ConflictRetry => {
+                CommitResult::ConflictRetry { .. } => {
                     conflicts += 1;
                     // Decrement the counter since we'll retry
                     if is_read {
@@ -626,7 +628,7 @@ fn run_swamp_mode(
                                 }
                                 break;
                             }
-                            CommitResult::ConflictRetry => {
+                            CommitResult::ConflictRetry { .. } => {
                                 conflicts.fetch_add(1, Ordering::Relaxed);
                                 continue;
                             }

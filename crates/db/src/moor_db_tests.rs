@@ -2165,7 +2165,10 @@ mod tests {
         assert!(matches!(tx2.commit(), Ok(CommitResult::Success { .. })));
 
         // Second commit should fail due to conflict
-        assert_eq!(tx3.commit().unwrap(), CommitResult::ConflictRetry);
+        assert!(matches!(
+            tx3.commit().unwrap(),
+            CommitResult::ConflictRetry { .. }
+        ));
 
         // Verify final value
         let tx4 = db.start_transaction();
