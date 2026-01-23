@@ -98,6 +98,18 @@ impl TaskQ {
         }
     }
 
+    /// Check if a task exists and return its owner (permissions).
+    /// Checks both active and suspended tasks atomically.
+    pub(crate) fn task_owner(&self, task_id: TaskId) -> Option<Obj> {
+        // Check active tasks first
+        if let Some(running) = self.active.get(&task_id) {
+            return Some(running.player);
+        }
+
+        // Check suspended tasks
+        self.suspended.task_owner(task_id)
+    }
+
     /// Collect tasks that need to be woken up, pull them from our suspended list, and return them.
     /// Uses segmented storage types for O(1) operations instead of O(n) linear scan.
     /// Note: Immediate wake tasks are handled via channel in scheduler select loop.
@@ -279,6 +291,11 @@ impl SuspensionQ {
             retry_tasks: Vec::new(),
             tasks_database,
         }
+    }
+
+    /// Check if a suspended task exists and return its owner (perms).
+    pub(crate) fn task_owner(&self, task_id: TaskId) -> Option<Obj> {
+        self.tasks.get(&task_id).map(|st| st.task.perms)
     }
 
     /// Get the receiver for immediate wake tasks. Used by scheduler for select loop.

@@ -628,23 +628,12 @@ fn bf_valid_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let task_id = task_id as TaskId;
 
-    if current_task_scheduler_client()
-        .task_list()
-        .iter()
-        .any(|task| task.task_id == task_id)
-    {
-        return Ok(Ret(bf_args.v_bool(true)));
-    }
+    // Use atomic check that looks at both suspended and active tasks
+    let exists = current_task_scheduler_client()
+        .task_exists(task_id)
+        .is_some();
 
-    let active_tasks = match current_task_scheduler_client().active_tasks() {
-        Ok(tasks) => tasks,
-        Err(e) => {
-            return Err(ErrValue(e));
-        }
-    };
-
-    let is_active = active_tasks.iter().any(|(id, _, _)| *id == task_id);
-    Ok(Ret(bf_args.v_bool(is_active)))
+    Ok(Ret(bf_args.v_bool(exists)))
 }
 
 pub(crate) fn register_bf_task(builtins: &mut [BuiltinFunction]) {

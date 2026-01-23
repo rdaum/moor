@@ -182,6 +182,24 @@ impl TaskSchedulerClient {
             .expect("Could not receive queued tasks -- scheduler shut down?")
     }
 
+    /// Check if a task exists (suspended or active) atomically.
+    /// Returns Some(owner) if the task exists, None otherwise.
+    pub fn task_exists(&self, task_id: TaskId) -> Option<Obj> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((
+                self.task_id,
+                TaskControlMsg::TaskExists {
+                    task_id,
+                    result_sender: reply,
+                },
+            ))
+            .expect("Could not deliver client message -- scheduler shut down?");
+        receive
+            .recv()
+            .expect("Could not receive task exists result -- scheduler shut down?")
+    }
+
     /// Request that the scheduler abort another task.
     pub fn kill_task(&self, victim_task_id: TaskId, sender_permissions: Perms) -> Var {
         let _timer = PerfTimerGuard::new(&sched_counters().task_kill_task_latency);
@@ -527,6 +545,12 @@ pub enum TaskControlMsg {
     TaskRequestInput(Box<Task>, Option<Vec<(Symbol, Var)>>),
     /// Task is requesting a list of all other tasks known to the scheduler.
     RequestTasks(oneshot::Sender<Vec<TaskDescription>>),
+    /// Task is requesting to check if a task exists (suspended or active).
+    /// Returns Some(owner) if task exists, None otherwise.
+    TaskExists {
+        task_id: TaskId,
+        result_sender: oneshot::Sender<Option<Obj>>,
+    },
     /// Task is requesting that the scheduler abort another task.
     KillTask {
         victim_task_id: TaskId,

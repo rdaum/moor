@@ -1353,6 +1353,16 @@ impl Scheduler {
                 }
                 // TODO: add non-queued tasks.
             }
+            TaskControlMsg::TaskExists {
+                task_id: check_task_id,
+                result_sender,
+            } => {
+                // Check both suspended and active tasks atomically
+                let owner = self.task_q.task_owner(check_task_id);
+                if let Err(e) = result_sender.send(owner) {
+                    error!(?e, "Could not send task exists result to requester");
+                }
+            }
             TaskControlMsg::KillTask {
                 victim_task_id,
                 sender_permissions,
