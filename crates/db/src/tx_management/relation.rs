@@ -19,7 +19,7 @@ use crate::{
         Canonical, ConflictInfo, ConflictType, Error, RelationCodomain, RelationCodomainHashable,
         RelationDomain, Timestamp, Tx,
         indexes::{HashRelationIndex, RelationIndex},
-        relation_tx::{OpType, RelationTransaction, WorkingSet},
+        relation_tx::{Op, OpType, RelationTransaction, WorkingSet},
     },
 };
 use arc_swap::ArcSwap;
@@ -30,6 +30,133 @@ use std::{sync::Arc, time::Duration};
 use tracing::warn;
 
 use crate::db_worldstate::db_counters;
+
+/// Represents a detected conflict during transaction commit that may be resolvable.
+///
+/// Contains all information needed for 3-way merge conflict resolution:
+/// - **base**: What we saw when the transaction started ("where I came from")
+/// - **theirs**: What's currently in canonical state ("what replaced where I came from")
+/// - **mine**: What we want to write ("my value")
+#[derive(Debug, Clone)]
+pub struct PotentialConflict<Domain, Codomain>
+where
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
+{
+    /// The conflict metadata (relation name, domain key string, conflict type)
+    pub info: ConflictInfo,
+    /// The domain (key) that is in conflict
+    pub domain: Domain,
+    /// BASE: The value at transaction start - "where I came from" (None if didn't exist)
+    pub base: Option<(Timestamp, Codomain)>,
+    /// THEIRS: The current canonical value - "what replaced where I came from" (None if doesn't exist)
+    pub theirs: Option<(Timestamp, Codomain)>,
+    /// MINE: Our proposed operation that caused the conflict
+    pub mine: ProposedOp<Codomain>,
+    /// The timestamp we read at
+    pub read_ts: Timestamp,
+    /// The timestamp we're trying to write at
+    pub write_ts: Timestamp,
+}
+
+/// The operation we're proposing that conflicts with canonical state.
+#[derive(Debug, Clone)]
+pub enum ProposedOp<Codomain>
+where
+    Codomain: RelationCodomain,
+{
+    /// We want to insert this value, but something already exists
+    Insert(Codomain),
+    /// We want to update to this value, but canonical has changed
+    Update(Codomain),
+    /// We want to delete, but canonical has changed
+    Delete,
+}
+
+impl<Codomain: RelationCodomain> ProposedOp<Codomain> {
+    /// Extract the proposed value, if any
+    pub fn value(&self) -> Option<&Codomain> {
+        match self {
+            ProposedOp::Insert(v) | ProposedOp::Update(v) => Some(v),
+            ProposedOp::Delete => None,
+        }
+    }
+}
+
+/// Trait for conflict resolution strategies.
+///
+/// Implement this to provide custom conflict resolution logic. The resolver
+/// is called for each detected conflict and can either:
+/// - Return `Ok(())` to accept/resolve the conflict and continue checking
+/// - Return `Err(Error::Conflict(...))` to abort with that conflict
+pub trait ConflictResolver<Domain, Codomain>
+where
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
+{
+    /// Attempt to resolve a conflict.
+    ///
+    /// Called when a conflict is detected during the check phase.
+    /// Return `Ok(())` if the conflict is resolved/acceptable, or
+    /// `Err` to abort the check.
+    fn resolve(&mut self, conflict: &PotentialConflict<Domain, Codomain>) -> Result<(), Error>;
+}
+
+/// A resolver that always fails on conflict (the default behavior).
+pub struct FailOnConflict;
+
+impl<Domain, Codomain> ConflictResolver<Domain, Codomain> for FailOnConflict
+where
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
+{
+    fn resolve(&mut self, conflict: &PotentialConflict<Domain, Codomain>) -> Result<(), Error> {
+        Err(Error::Conflict(conflict.info.clone()))
+    }
+}
+
+/// A resolver that accepts conflicts where theirs == mine (identical values).
+/// If both transactions wrote the same value, there's no real conflict.
+pub struct AcceptIdentical;
+
+impl<Domain, Codomain> ConflictResolver<Domain, Codomain> for AcceptIdentical
+where
+    Domain: RelationDomain,
+    Codomain: RelationCodomain, // PartialEq is already required by RelationCodomain
+{
+    fn resolve(&mut self, conflict: &PotentialConflict<Domain, Codomain>) -> Result<(), Error> {
+        // Check if theirs == mine (using PartialEq)
+        let identical = match (&conflict.theirs, &conflict.mine) {
+            // Both have values - compare them
+            (
+                Some((_, theirs_val)),
+                ProposedOp::Insert(mine_val) | ProposedOp::Update(mine_val),
+            ) => theirs_val == mine_val,
+            // Both are effectively "no value" (theirs doesn't exist, we're deleting)
+            (None, ProposedOp::Delete) => true,
+            // Otherwise, real conflict
+            _ => false,
+        };
+
+        if identical {
+            Ok(())
+        } else {
+            Err(Error::Conflict(conflict.info.clone()))
+        }
+    }
+}
+
+/// Implement ConflictResolver for closures for convenience.
+impl<Domain, Codomain, F> ConflictResolver<Domain, Codomain> for F
+where
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
+    F: FnMut(&PotentialConflict<Domain, Codomain>) -> Result<(), Error>,
+{
+    fn resolve(&mut self, conflict: &PotentialConflict<Domain, Codomain>) -> Result<(), Error> {
+        self(conflict)
+    }
+}
 
 /// Represents the current "canonical" state of a relation.
 pub struct Relation<Domain, Codomain, Source>
@@ -143,11 +270,40 @@ where
     /// Operates on a lock-free snapshot, so does not block concurrent transaction starts.
     /// This is the first phase of transaction commit, and does not mutate the contents of
     /// the canonical index.
+    ///
+    /// By default, accepts conflicts where both transactions wrote identical values
+    /// (no real conflict). For custom resolution, use `check_with_resolver`.
     pub fn check(&mut self, working_set: &WorkingSet<Domain, Codomain>) -> Result<(), Error> {
+        self.check_with_resolver(working_set, AcceptIdentical)
+    }
+
+    /// Check the forked index for conflicts with the given working set, calling
+    /// the resolver for each detected conflict.
+    ///
+    /// This enables conflict resolution algorithms to attempt reconciliation on
+    /// each conflict as it's detected. The resolver receives full 3-way merge context:
+    /// - **base**: What we saw at transaction start (from working_set.base_value)
+    /// - **theirs**: Current canonical state
+    /// - **mine**: Our proposed operation
+    ///
+    /// The resolver can either resolve the conflict (return Ok) or abort (return Err).
+    ///
+    /// Operates on a lock-free snapshot, so does not block concurrent transaction starts.
+    /// This is the first phase of transaction commit, and does not mutate the contents of
+    /// the canonical index.
+    pub fn check_with_resolver<R>(
+        &mut self,
+        working_set: &WorkingSet<Domain, Codomain>,
+        mut resolver: R,
+    ) -> Result<(), Error>
+    where
+        R: ConflictResolver<Domain, Codomain>,
+    {
         let start_time = Instant::now();
         let mut last_check_time = start_time;
         let total_ops = working_set.len();
         self.dirty = !working_set.is_empty();
+
         // Check phase first.
         for (n, (domain, op)) in working_set.tuples_ref().iter().enumerate() {
             if last_check_time.elapsed() > Duration::from_secs(5) {
@@ -164,23 +320,40 @@ where
                 continue;
             }
 
+            // Look up the base value (what we saw at transaction start) for 3-way merge
+            let base = working_set.base_value(domain);
+
             // Check local to see if we have one first, to see if there's a conflict.
             if let Some(local_entry) = self.index.index_lookup(domain) {
+                let theirs = Some((local_entry.ts, local_entry.value.clone()));
+
                 // If what we have is an insert, and there's something already there, that's a
                 // conflict.
                 if op.operation.is_insert() {
-                    return Err(Error::Conflict(
-                        self.make_conflict_info(domain, ConflictType::InsertDuplicate),
-                    ));
+                    let conflict = self.make_potential_conflict(
+                        domain,
+                        ConflictType::InsertDuplicate,
+                        base,
+                        theirs,
+                        op,
+                    );
+                    resolver.resolve(&conflict)?;
+                    continue;
                 }
 
                 let ts = local_entry.ts;
                 // If the ts there is greater than the read-ts of our own op, that's a conflict
                 // Someone got to it first.
                 if ts > op.read_ts {
-                    return Err(Error::Conflict(
-                        self.make_conflict_info(domain, ConflictType::ConcurrentWrite),
-                    ));
+                    let conflict = self.make_potential_conflict(
+                        domain,
+                        ConflictType::ConcurrentWrite,
+                        base,
+                        theirs,
+                        op,
+                    );
+                    resolver.resolve(&conflict)?;
+                    continue;
                 }
                 // If the transactions *write stamp* is earlier than the read stamp, that's a
                 // conflict indicating that the transaction is trying to update something
@@ -188,9 +361,15 @@ where
                 // (This only happens because we're not able to early-bail on update operations
                 // like this, so there's some waste here.)
                 if op.read_ts > op.write_ts {
-                    return Err(Error::Conflict(
-                        self.make_conflict_info(domain, ConflictType::StaleRead),
-                    ));
+                    let conflict = self.make_potential_conflict(
+                        domain,
+                        ConflictType::StaleRead,
+                        base,
+                        theirs,
+                        op,
+                    );
+                    resolver.resolve(&conflict)?;
+                    continue;
                 }
                 continue;
             }
@@ -200,29 +379,74 @@ where
                 self.index
                     .insert_entry(ts, domain.clone(), codomain.clone());
 
+                let theirs = Some((ts, codomain));
+
                 // If what we have is an insert, and there's something already there, that's also
                 // a conflict.
                 if op.operation.is_insert() {
-                    return Err(Error::Conflict(
-                        self.make_conflict_info(domain, ConflictType::InsertDuplicate),
-                    ));
+                    let conflict = self.make_potential_conflict(
+                        domain,
+                        ConflictType::InsertDuplicate,
+                        base,
+                        theirs,
+                        op,
+                    );
+                    resolver.resolve(&conflict)?;
+                    continue;
                 }
                 if ts > op.read_ts {
-                    return Err(Error::Conflict(
-                        self.make_conflict_info(domain, ConflictType::ConcurrentWrite),
-                    ));
+                    let conflict = self.make_potential_conflict(
+                        domain,
+                        ConflictType::ConcurrentWrite,
+                        base,
+                        theirs,
+                        op,
+                    );
+                    resolver.resolve(&conflict)?;
+                    continue;
                 }
             } else {
                 // If upstream doesn't have it, and it's not an insert or delete, that's a conflict, this
                 // should not have happened.
                 if op.operation.is_update() {
-                    return Err(Error::Conflict(
-                        self.make_conflict_info(domain, ConflictType::UpdateNonExistent),
-                    ));
+                    let conflict = self.make_potential_conflict(
+                        domain,
+                        ConflictType::UpdateNonExistent,
+                        base,
+                        None, // theirs doesn't exist
+                        op,
+                    );
+                    resolver.resolve(&conflict)?;
+                    continue;
                 }
             }
         }
         Ok(())
+    }
+
+    /// Helper to construct a PotentialConflict from the current state.
+    fn make_potential_conflict(
+        &self,
+        domain: &Domain,
+        conflict_type: ConflictType,
+        base: Option<(Timestamp, Codomain)>,
+        theirs: Option<(Timestamp, Codomain)>,
+        op: &Op<Codomain>,
+    ) -> PotentialConflict<Domain, Codomain> {
+        let mine = match &op.operation {
+            OpType::Insert(v) => ProposedOp::Insert(v.clone()),
+            OpType::Update(v) => ProposedOp::Update(v.clone()),
+            OpType::Delete => ProposedOp::Delete,
+        };
+        PotentialConflict {
+            info: self.make_conflict_info(domain, conflict_type),
+            domain: domain.clone(),
+            base,
+            theirs,
+            mine,
+            read_ts: op.read_ts,
+            write_ts: op.write_ts,
+        }
     }
 
     /// Apply the given working set to the cache.

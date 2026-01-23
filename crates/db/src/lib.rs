@@ -56,8 +56,9 @@ pub use db_worldstate::db_counters;
 pub use gc::{GCError, GCInterface};
 use moor_common::util::ConcurrentCounter;
 pub use tx_management::{
-    Error, Relation, RelationCodomain, RelationCodomainHashable, RelationDomain,
-    RelationTransaction, Timestamp, Tx, WorkingSet,
+    AcceptIdentical, ConflictResolver, Error, FailOnConflict, PotentialConflict, ProposedOp,
+    Relation, RelationCodomain, RelationCodomainHashable, RelationDomain, RelationTransaction,
+    Timestamp, Tx, WorkingSet,
 };
 
 // Re-export sequence constants for use in VM

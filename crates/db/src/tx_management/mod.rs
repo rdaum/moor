@@ -15,7 +15,10 @@ mod indexes;
 mod relation;
 mod relation_tx;
 
-pub use relation::{CheckRelation, Relation};
+pub use relation::{
+    AcceptIdentical, CheckRelation, ConflictResolver, FailOnConflict, PotentialConflict,
+    ProposedOp, Relation,
+};
 pub use relation_tx::{RelationTransaction, WorkingSet};
 
 use std::fmt::{Debug, Display};

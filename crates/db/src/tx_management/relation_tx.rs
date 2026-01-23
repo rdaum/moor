@@ -100,6 +100,12 @@ where
     Codomain: RelationCodomain,
 {
     tuples: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
+    /// The base index - a snapshot of the canonical state when the transaction started.
+    /// Used for 3-way merge during conflict resolution:
+    /// - base (this) = what we saw at transaction start
+    /// - mine = our operation in tuples
+    /// - theirs = current canonical state at commit time
+    base_index: Box<dyn RelationIndex<Domain, Codomain>>,
     provider_fully_loaded: bool,
 }
 
@@ -110,19 +116,23 @@ where
 {
     pub fn new(
         tuples: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
+        base_index: Box<dyn RelationIndex<Domain, Codomain>>,
     ) -> WorkingSet<Domain, Codomain> {
         WorkingSet {
             tuples,
+            base_index,
             provider_fully_loaded: false,
         }
     }
 
     pub fn new_with_fully_loaded(
         tuples: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
+        base_index: Box<dyn RelationIndex<Domain, Codomain>>,
         provider_fully_loaded: bool,
     ) -> WorkingSet<Domain, Codomain> {
         WorkingSet {
             tuples,
+            base_index,
             provider_fully_loaded,
         }
     }
@@ -141,6 +151,18 @@ where
 
     pub fn tuples_ref(&self) -> &IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>> {
         &self.tuples
+    }
+
+    /// Get the base index for looking up what values existed at transaction start.
+    pub fn base_index(&self) -> &dyn RelationIndex<Domain, Codomain> {
+        &*self.base_index
+    }
+
+    /// Look up the base value for a domain (what we saw at transaction start).
+    pub fn base_value(&self, domain: &Domain) -> Option<(Timestamp, Codomain)> {
+        self.base_index
+            .index_lookup(domain)
+            .map(|entry| (entry.ts, entry.value.clone()))
     }
 
     pub fn provider_fully_loaded(&self) -> bool {
@@ -833,6 +855,7 @@ where
     pub fn working_set(self) -> Result<WorkingSet<Domain, Codomain>, WorldStateError> {
         Ok(WorkingSet::new_with_fully_loaded(
             self.index.local_operations,
+            self.index.master_entries,
             self.index.provider_fully_loaded,
         ))
     }
