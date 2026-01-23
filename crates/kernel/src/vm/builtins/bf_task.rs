@@ -56,6 +56,10 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         TaskSuspend::Timed(Duration::from_secs_f64(seconds))
     };
 
+    // Set a default return value for task retry scenarios. The actual return value
+    // is set by resume_execution when the task resumes normally.
+    bf_args.exec_state.set_return_value(v_int(0));
+
     Ok(VmInstr(ExecutionResult::TaskSuspend(suspend_condition)))
 }
 
@@ -97,8 +101,11 @@ fn bf_suspend_if_needed(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // If we're within the threshold, suspend with commit (immediate commit/resume)
     if ticks_left < threshold as usize {
+        let return_value = bf_args.v_bool(true);
+        // Set return value for task retry scenarios
+        bf_args.exec_state.set_return_value(return_value.clone());
         Ok(VmInstr(ExecutionResult::TaskSuspend(TaskSuspend::Commit(
-            bf_args.v_bool(true),
+            return_value,
         ))))
     } else {
         // Otherwise, just return without suspending
@@ -119,6 +126,9 @@ fn bf_commit(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     } else {
         bf_args.args[0].clone()
     };
+
+    // Set return value for task retry scenarios
+    bf_args.exec_state.set_return_value(return_value.clone());
 
     Ok(VmInstr(ExecutionResult::TaskSuspend(TaskSuspend::Commit(
         return_value,
@@ -142,6 +152,9 @@ fn bf_rollback(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let output_session = !bf_args.args.is_empty() && bf_args.args[0].is_true();
 
+    // Set return value for task retry scenarios
+    bf_args.exec_state.set_return_value(v_int(0));
+
     Ok(VmInstr(ExecutionResult::TaskRollback(output_session)))
 }
 
@@ -158,6 +171,9 @@ fn bf_wait_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_TYPE.msg("wait_task() requires an integer as the first argument"),
         ));
     };
+
+    // Set return value for task retry scenarios
+    bf_args.exec_state.set_return_value(v_int(0));
 
     Ok(VmInstr(ExecutionResult::TaskSuspend(
         TaskSuspend::WaitTask(task_id as TaskId),
@@ -238,6 +254,9 @@ fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     } else {
         None
     };
+
+    // Set return value for task retry scenarios
+    bf_args.exec_state.set_return_value(v_str(""));
 
     Ok(VmInstr(ExecutionResult::TaskNeedInput(metadata)))
 }

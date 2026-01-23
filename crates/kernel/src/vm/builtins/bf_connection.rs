@@ -123,6 +123,10 @@ fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             }
         }
     }
+
+    // Set return value for task retry scenarios
+    bf_args.exec_state.set_return_value(v_int(0));
+
     Ok(VmInstr(ExecutionResult::TaskSuspend(
         TaskSuspend::WorkerRequest(worker_type, request_params, timeout),
     )))
