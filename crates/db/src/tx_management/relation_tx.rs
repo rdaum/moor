@@ -94,12 +94,16 @@ where
     pub(crate) guaranteed_unique: bool,
 }
 
+/// Alias for the internal map of operations in a working set.
+pub type WorkingSetTuples<Domain, Codomain> =
+    IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>;
+
 pub struct WorkingSet<Domain, Codomain>
 where
     Domain: RelationDomain,
     Codomain: RelationCodomain,
 {
-    tuples: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
+    tuples: Box<WorkingSetTuples<Domain, Codomain>>,
     /// The base index - a snapshot of the canonical state when the transaction started.
     /// Used for 3-way merge during conflict resolution:
     /// - base (this) = what we saw at transaction start
@@ -115,7 +119,7 @@ where
     Codomain: RelationCodomain,
 {
     pub fn new(
-        tuples: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
+        tuples: Box<WorkingSetTuples<Domain, Codomain>>,
         base_index: Box<dyn RelationIndex<Domain, Codomain>>,
     ) -> WorkingSet<Domain, Codomain> {
         WorkingSet {
@@ -126,7 +130,7 @@ where
     }
 
     pub fn new_with_fully_loaded(
-        tuples: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
+        tuples: Box<WorkingSetTuples<Domain, Codomain>>,
         base_index: Box<dyn RelationIndex<Domain, Codomain>>,
         provider_fully_loaded: bool,
     ) -> WorkingSet<Domain, Codomain> {
@@ -145,24 +149,22 @@ where
         self.tuples.is_empty()
     }
 
-    pub fn tuples(self) -> Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>> {
+    pub fn tuples(self) -> Box<WorkingSetTuples<Domain, Codomain>> {
         self.tuples
     }
 
-    pub fn tuples_ref(&self) -> &IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>> {
+    pub fn tuples_ref(&self) -> &WorkingSetTuples<Domain, Codomain> {
         &self.tuples
     }
 
-    pub fn tuples_mut(
-        &mut self,
-    ) -> &mut IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>> {
+    pub fn tuples_mut(&mut self) -> &mut WorkingSetTuples<Domain, Codomain> {
         &mut self.tuples
     }
 
     pub fn parts_mut(
         &mut self,
     ) -> (
-        &mut IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>,
+        &mut WorkingSetTuples<Domain, Codomain>,
         &dyn RelationIndex<Domain, Codomain>,
     ) {
         (&mut self.tuples, &*self.base_index)

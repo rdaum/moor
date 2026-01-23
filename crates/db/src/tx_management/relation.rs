@@ -194,10 +194,9 @@ where
         if let Some((_, base_val)) = &conflict.base
             && let Some((_, theirs_val)) = &conflict.theirs
             && let Some(mine_val) = conflict.mine.value()
+            && let Some(merged) = mine_val.try_merge(base_val, theirs_val)
         {
-            if let Some(merged) = mine_val.try_merge(base_val, theirs_val) {
-                return Ok(Resolution::Rewrite(merged));
-            }
+            return Ok(Resolution::Rewrite(merged));
         }
 
         // 3. Fail

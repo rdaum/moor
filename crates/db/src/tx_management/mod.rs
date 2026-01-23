@@ -80,15 +80,9 @@ impl RelationCodomain for Var {
                 // List append merge: Base + (Theirs - Base) + (Mine - Base)
                 // We need to verify that both Mine and Theirs start with Base
                 // Structural sharing checks should be fast
-                let Some(mine_list) = self.as_list() else {
-                    return None;
-                };
-                let Some(their_list) = theirs.as_list() else {
-                    return None;
-                };
-                let Some(base_list) = base.as_list() else {
-                    return None;
-                };
+                let mine_list = self.as_list()?;
+                let their_list = theirs.as_list()?;
+                let base_list = base.as_list()?;
 
                 // Both must be longer than base (appended)
                 if mine_list.len() <= base_list.len() || their_list.len() <= base_list.len() {
@@ -124,15 +118,9 @@ impl RelationCodomain for Var {
             }
             OP_HINT_MAP_INSERT => {
                 // Map insert merge: Two concurrent inserts of DIFFERENT keys.
-                let Some(mine_map) = self.as_map() else {
-                    return None;
-                };
-                let Some(their_map) = theirs.as_map() else {
-                    return None;
-                };
-                let Some(base_map) = base.as_map() else {
-                    return None;
-                };
+                let mine_map = self.as_map()?;
+                let their_map = theirs.as_map()?;
+                let base_map = base.as_map()?;
 
                 if mine_map.len() != base_map.len() + 1 || their_map.len() != base_map.len() + 1 {
                     // Only support single item insert for safety/speed for now
@@ -150,9 +138,7 @@ impl RelationCodomain for Var {
                         break;
                     }
                 }
-                let (Some(k_mine), Some(v_mine)) = (my_key, my_val) else {
-                    return None;
-                };
+                let (k_mine, v_mine) = (my_key?, my_val?);
 
                 // Check if Theirs has this key
                 if their_map.contains_key(&k_mine, false).unwrap_or(false) {
@@ -161,10 +147,7 @@ impl RelationCodomain for Var {
                 }
 
                 // Merge: Take Theirs, insert My Key/Value
-                match their_map.set(&k_mine, &v_mine) {
-                    Ok(v) => Some(v),
-                    Err(_) => None,
-                }
+                their_map.set(&k_mine, &v_mine).ok()
             }
             _ => None,
         }
