@@ -61,34 +61,47 @@ having only one cashier at a busy store: everyone has to wait in line.
 
 ### mooR's solution
 
-mooR introduces a transactional model that lets multiple commands work at the same time safely, like having multiple
-cashiers who can coordinate with each other. Each command runs in its own transaction, which automatically gets "
-committed" (finalized) when the command completes successfully.
+mooR uses a modern approach to let multiple commands run at the same time safely. It works by giving every command a
+perfect, consistent **snapshot** of the world the moment it starts.
 
-The key insight is that mooR uses **serializable transactions** to automatically avoid race conditions and deadlocks. If
-two commands conflict, the database detects this and automatically retries one of them—no corruption, no deadlocks, no
-waiting in line.
+Think of it like pausing a movie. Even if other players are moving around or changing things, your command sees the
+world exactly as it was when you started typing. You make your changes to this "snapshot," and if nobody else touched
+the same things you did, your changes are merged back in instantly.
+
+The database automatically avoids most race conditions and deadlocks. If two commands conflict on a specific piece of
+data, the database detects this and automatically retries one of them—no corruption, no deadlocks, and no waiting in
+line.
 
 **Trade-offs:**
 
-- mooR might be slightly slower for a single user (a bit more overhead)
-- But it's much faster when many users are online and active
-- No more waiting in line behind slow commands!
+- mooR can be slower for a single user due to transaction overhead.
+
+- It's much faster when many users are online and active.
+
+- It prevents "Lost Updates" and "Dirty Reads," ensuring you always see a consistent view of the world.
 
 ## How transactions keep things consistent
 
-mooR offers a consistent (serializable) isolation level, which is a fancy way of saying that even though multiple
-commands might be running at the same time, the end result looks like they happened one after another in some order.
+mooR offers a consistent isolation level, which is a fancy way of saying that even though multiple commands might be
+running at the same time, the end result is almost always the same as if they happened one after another.
 
 **What this means for you:**
 
-- Changes you make aren't visible to other players until your command finishes
-- You won't see half-completed changes from other players' commands
-- The database stays consistent even with lots of activity
+- Changes you make aren't visible to other players until your command finishes.
+
+- You won't see half-completed changes from other players' commands.
+
+- The database stays consistent even with lots of activity.
 
 If two commands try to change the same thing at the same time (like two players trying to pick up the same object), mooR
-detects this conflict and automatically retries one of the commands. You don't have to worry about this—it happens
-behind the scenes.
+detects this conflict and automatically retries one of the commands.
+
+### Smart Conflict Resolution
+
+mooR includes a special optimization for **identical changes**. If two players try to set a value to the *exact same
+thing* (for example, two workers both trying to ensure a "lights_on" property is set to `1`), mooR recognizes that the
+result is identical and allows both to succeed without a conflict. This reduces unnecessary retries in high-concurrency
+situations.
 
 ## When do transactions happen?
 
@@ -126,25 +139,37 @@ the command finishes successfully. This means:
 
 This keeps the output clean and prevents confusing partial results from appearing on your screen.
 
-> **Technical Details: Serializable Isolation**
+> **Technical Details: Snapshot Isolation (SI)**
 >
-> For those familiar with database systems, mooR implements **serializable** isolation (but not strict/strong
-> serializable). This means:
+> For those familiar with database systems, mooR implements **Snapshot Isolation (SI)** with write-write conflict
+> detection. This provides strong consistency guarantees with excellent performance for typical MOO workloads.
 >
 > **What you get:**
-> - Transactions appear to execute in some serial order, even though they run concurrently
-> - No dirty reads, phantom reads, or other common concurrency anomalies
-> - The final database state is consistent with some sequential execution of all transactions
+> - Every command sees a consistent "snapshot" of the database from the moment it started.
+> - **No Lost Updates**: If two commands try to change the same specific piece of data, the conflict is caught.
+> - **No Dirty Reads**: You never see half-finished work from others.
 >
-> **What this means for your code:**
-> - You can write MOO code as if transactions run one at a time
-> - Conflicts are detected and resolved automatically through retries
-> - You don't need to worry about most concurrency issues
+> **How Conflicts Are Detected:**
+> mooR tracks timestamps for each piece of data. During commit, it checks whether any data you're **writing** has
+> been modified by another transaction that committed after you started. This catches write-write conflicts on the
+> same key.
+>
+> **The Trade-off: Write Skew**
+> Unlike full Serializable Snapshot Isolation (SSI), mooR does not track read sets, which means it's vulnerable to
+> **write skew**. This happens when two transactions read overlapping data but write to *different* keys, each
+> making a decision that would be invalid if they could see the other's write.
+>
+> Example: Two doctors checking if they can go off-call by reading both `doctor1_on_call` and `doctor2_on_call`,
+> then each writing only their own property. Both see the other is on-call, both go off-call, now no one is on-call.
+>
+> In practice, this is rarely an issue for MOO. When it matters, you can prevent it by "touching" (writing to) the
+> data you depend on to force a conflict check, or by storing related data in a single property.
 >
 > **Limitations:**
-> - Real-time ordering isn't guaranteed (transactions might appear to execute in a different order than their actual
-    wall-clock timing)
-> - External side effects (like network calls) might happen in a different order than the final transaction commit order
+> - **Not Linearizable**: Real-time ordering isn't guaranteed. Transactions might appear to execute in a different
+>   order than their actual wall-clock timing.
+> - **External Side Effects**: Network calls or other external operations might happen in a different order than
+>   the final transaction commit order.
 >
-> This design prioritizes performance and simplicity over strict real-time ordering, which is well-suited for MOO's
+> This design prioritizes performance and simplicity over strict serializability, which is well-suited for MOO's
 > interactive nature.
