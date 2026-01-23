@@ -16,7 +16,8 @@
 use crate::{
     provider::Provider,
     tx_management::{
-        Canonical, ConflictInfo, ConflictType, Error, Timestamp, Tx,
+        Canonical, ConflictInfo, ConflictType, Error, RelationCodomain, RelationCodomainHashable,
+        RelationDomain, Timestamp, Tx,
         indexes::{HashRelationIndex, RelationIndex},
         relation_tx::{OpType, RelationTransaction, WorkingSet},
     },
@@ -25,7 +26,7 @@ use arc_swap::ArcSwap;
 use minstant::Instant;
 use moor_common::util::PerfTimerGuard;
 use moor_var::Symbol;
-use std::{hash::Hash, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 use tracing::warn;
 
 use crate::db_worldstate::db_counters;
@@ -34,8 +35,8 @@ use crate::db_worldstate::db_counters;
 pub struct Relation<Domain, Codomain, Source>
 where
     Source: Provider<Domain, Codomain>,
-    Domain: Clone + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     relation_name: Symbol,
 
@@ -46,8 +47,8 @@ where
 
 impl<Domain, Codomain, Source> Clone for Relation<Domain, Codomain, Source>
 where
-    Domain: Clone + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
     Source: Provider<Domain, Codomain>,
 {
     fn clone(&self) -> Self {
@@ -61,8 +62,8 @@ where
 
 impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
 where
-    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
     Source: Provider<Domain, Codomain>,
 {
     pub fn new(relation_name: Symbol, provider: Arc<Source>) -> Self {
@@ -75,7 +76,7 @@ where
 
     pub fn new_with_secondary(relation_name: Symbol, provider: Arc<Source>) -> Self
     where
-        Codomain: Hash + Eq,
+        Codomain: RelationCodomainHashable,
     {
         use crate::tx_management::indexes::SecondaryIndexRelation;
         Self {
@@ -100,8 +101,8 @@ where
 /// Obtained lock-free via ArcSwap, enabling concurrent transaction starts.
 pub struct CheckRelation<Domain, Codomain, P>
 where
-    Domain: Clone + Hash + Eq + Send + Sync + std::fmt::Display + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
     P: Provider<Domain, Codomain>,
 {
     index: Box<dyn RelationIndex<Domain, Codomain>>,
@@ -112,8 +113,8 @@ where
 
 impl<Domain, Codomain, P> CheckRelation<Domain, Codomain, P>
 where
-    Domain: Clone + Hash + Eq + Send + Sync + std::fmt::Display + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
     P: Provider<Domain, Codomain>,
 {
     pub fn num_entries(&self) -> usize {
@@ -277,8 +278,8 @@ where
 impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
 where
     Source: Provider<Domain, Codomain>,
-    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + std::fmt::Display + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     pub fn start(&self, tx: &Tx) -> RelationTransaction<Domain, Codomain, Self> {
         let index = self.index.load();
@@ -307,8 +308,8 @@ where
 
 impl<Domain, Codomain, Source> Canonical<Domain, Codomain> for Relation<Domain, Codomain, Source>
 where
-    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
     Source: Provider<Domain, Codomain>,
 {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
@@ -380,8 +381,8 @@ where
 }
 impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
 where
-    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
     Source: Provider<Domain, Codomain>,
 {
     pub fn stop_provider(&self) -> Result<(), Error> {

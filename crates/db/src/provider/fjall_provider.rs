@@ -43,7 +43,7 @@
 
 use crate::{
     db_counters,
-    tx_management::{EncodeFor, Error, Timestamp},
+    tx_management::{EncodeFor, Error, RelationCodomain, RelationDomain, Timestamp},
 };
 use byteview::ByteView;
 use fjall::Slice;
@@ -81,8 +81,8 @@ fn handle_fjall_error(e: &fjall::Error, operation: &str) -> bool {
 /// Tracks operations that have been submitted to the background thread but not yet completed
 struct PendingOperations<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
-    Codomain: Clone + PartialEq + Send + Sync,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     /// Keys that have been deleted but delete hasn't flushed to backing store yet
     pending_deletes: HashSet<Domain>,
@@ -92,8 +92,8 @@ where
 
 impl<Domain, Codomain> Default for PendingOperations<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
-    Codomain: Clone + PartialEq + Send + Sync,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     fn default() -> Self {
         Self {
@@ -106,7 +106,7 @@ where
 // Background thread operations work with pre-encoded bytes
 enum WriteOp<Domain>
 where
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
+    Domain: RelationDomain,
 {
     /// Insert with pre-encoded key and value bytes
     Insert(Vec<u8>, Vec<u8>, Domain), // key_bytes, value_bytes, domain (for pending ops tracking)
@@ -120,8 +120,8 @@ where
 #[derive(Clone)]
 pub(crate) struct FjallProvider<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
-    Codomain: Clone + PartialEq + Send + Sync,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     fjall_keyspace: fjall::Keyspace,
     ops: Sender<WriteOp<Domain>>,
@@ -167,8 +167,8 @@ where
 
 impl<Domain, Codomain> FjallProvider<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     pub fn new(relation_name: &str, fjall_keyspace: fjall::Keyspace) -> Self
     where
@@ -336,8 +336,8 @@ const MAX_TOMBSTONE_COUNT: usize = 100_000;
 
 impl<Domain, Codomain> Provider<Domain, Codomain> for FjallProvider<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
-    Codomain: Clone + PartialEq + Send + Sync,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
     Self: EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
 {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
@@ -509,8 +509,8 @@ where
 // Non-trait impl for stop - doesn't require EncodeFor constraints
 impl<Domain, Codomain> FjallProvider<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
-    Codomain: Clone + PartialEq + Send + Sync,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     fn stop_internal(&self) -> Result<(), Error> {
         self.kill_switch
@@ -528,8 +528,8 @@ where
 
 impl<Domain, Codomain> Drop for FjallProvider<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
-    Codomain: Clone + PartialEq + Send + Sync,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     fn drop(&mut self) {
         self.stop_internal().unwrap();
@@ -760,8 +760,8 @@ impl EncodeFor<ProgramType> for FjallCodec {
 
 impl<Domain, Codomain, T> EncodeFor<T> for FjallProvider<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
-    Codomain: Clone + PartialEq + Send + Sync,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
     FjallCodec: EncodeFor<T, Stored = ByteView>,
 {
     type Stored = ByteView;

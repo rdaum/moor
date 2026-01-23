@@ -55,7 +55,10 @@ pub mod verb_cache;
 pub use db_worldstate::db_counters;
 pub use gc::{GCError, GCInterface};
 use moor_common::util::ConcurrentCounter;
-pub use tx_management::{Error, Relation, RelationTransaction, Timestamp, Tx, WorkingSet};
+pub use tx_management::{
+    Error, Relation, RelationCodomain, RelationCodomainHashable, RelationDomain,
+    RelationTransaction, Timestamp, Tx, WorkingSet,
+};
 
 // Re-export sequence constants for use in VM
 pub use moor_db::SEQUENCE_MAX_OBJECT;

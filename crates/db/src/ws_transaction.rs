@@ -36,6 +36,7 @@ use std::{
     hash::Hash,
     time::{Duration, Instant},
 };
+use std::fmt::Display;
 use tracing::warn;
 use uuid::Uuid;
 

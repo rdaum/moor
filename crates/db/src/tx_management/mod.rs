@@ -18,6 +18,46 @@ mod relation_tx;
 pub use relation::{CheckRelation, Relation};
 pub use relation_tx::{RelationTransaction, WorkingSet};
 
+use std::fmt::{Debug, Display};
+use std::hash::Hash;
+
+// ============================================================================
+// Trait Bounds for Relation Domain and Codomain Types
+// ============================================================================
+//
+// These traits reduce boilerplate in type parameter bounds throughout the
+// tx_management and provider modules. They use the blanket impl pattern since
+// Rust stable doesn't have native trait aliases.
+
+/// Trait alias for types that can be used as a domain (key) in a relation.
+///
+/// Domain types must support:
+/// - `Hash + Eq`: For use in hash-based indexes
+/// - `Clone`: For copying keys during operations
+/// - `Debug`: For error messages and conflict reporting
+/// - `Send + Sync + 'static`: For thread-safe, owned storage
+pub trait RelationDomain: Hash + Eq + Clone + Debug + Display + Send + Sync + 'static {}
+
+impl<T> RelationDomain for T where T: Hash + Eq + Clone + Debug + Display + Send + Sync + 'static {}
+
+/// Trait alias for types that can be used as a codomain (value) in a relation.
+///
+/// Codomain types must support:
+/// - `Clone`: For copying values during operations
+/// - `PartialEq`: For conflict detection and comparison
+/// - `Send + Sync + 'static`: For thread-safe, owned storage
+pub trait RelationCodomain: Clone + PartialEq + Send + Sync + 'static {}
+
+impl<T> RelationCodomain for T where T: Clone + PartialEq + Send + Sync + 'static {}
+
+/// Extended trait alias for codomain types that can be used with secondary indexes.
+///
+/// In addition to `RelationCodomain` bounds, these types must also support:
+/// - `Hash + Eq`: For reverse lookups in secondary indexes
+pub trait RelationCodomainHashable: RelationCodomain + Hash + Eq {}
+
+impl<T> RelationCodomainHashable for T where T: RelationCodomain + Hash + Eq {}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Timestamp(pub u64);
 

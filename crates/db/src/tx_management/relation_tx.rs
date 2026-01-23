@@ -12,18 +12,15 @@
 //
 
 use crate::tx_management::{
-    Canonical, ConflictInfo, ConflictType, Error, Timestamp, Tx, indexes::RelationIndex,
+    Canonical, ConflictInfo, ConflictType, Error, RelationCodomain, RelationDomain, Timestamp, Tx,
+    indexes::RelationIndex,
 };
 use ahash::AHasher;
 use indexmap::IndexMap;
 use moor_common::model::WorldStateError;
 use moor_var::Symbol;
 use std::collections::HashSet;
-use std::{
-    collections::HashMap,
-    hash::{BuildHasherDefault, Hash},
-    sync::Arc,
-};
+use std::{collections::HashMap, hash::BuildHasherDefault, sync::Arc};
 
 /// A key-value caching store that is scoped for the lifetime of a transaction.
 /// When the transaction is completed, it collapses into a WorkingSet which can be applied to the
@@ -31,8 +28,8 @@ use std::{
 pub struct RelationTransaction<Domain, Codomain, Source>
 where
     Source: Canonical<Domain, Codomain>,
-    Domain: Hash + Eq + Clone + Send + Sync + std::fmt::Display + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     tx: Tx,
     relation_name: Symbol,
@@ -45,8 +42,8 @@ where
 
 struct Inner<Domain, Codomain>
 where
-    Domain: Clone + Hash + Eq + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     local_operations: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
     master_entries: Box<dyn RelationIndex<Domain, Codomain>>,
@@ -99,8 +96,8 @@ where
 
 pub struct WorkingSet<Domain, Codomain>
 where
-    Domain: Clone + Hash + Eq + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     tuples: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
     provider_fully_loaded: bool,
@@ -108,8 +105,8 @@ where
 
 impl<Domain, Codomain> WorkingSet<Domain, Codomain>
 where
-    Domain: Clone + Hash + Eq + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     pub fn new(
         tuples: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
@@ -155,8 +152,8 @@ where
 impl<Domain, Codomain, Source> RelationTransaction<Domain, Codomain, Source>
 where
     Source: Canonical<Domain, Codomain>,
-    Domain: Clone + Hash + Eq + Send + Sync + std::fmt::Display + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     pub fn new(
         tx: Tx,

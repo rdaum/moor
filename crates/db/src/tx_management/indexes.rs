@@ -12,12 +12,10 @@
 //
 
 use crate::Timestamp;
+use crate::tx_management::{RelationCodomain, RelationCodomainHashable, RelationDomain};
 use ahash::AHasher;
 use imbl::shared_ptr::DefaultSharedPtr;
-use std::{
-    any::Any,
-    hash::{BuildHasherDefault, Hash},
-};
+use std::{any::Any, hash::BuildHasherDefault};
 
 /// Type alias for imbl HashMap with AHasher
 type ImblHashMap<K, V> = imbl::GenericHashMap<K, V, BuildHasherDefault<AHasher>, DefaultSharedPtr>;
@@ -34,8 +32,8 @@ pub struct Entry<T: Clone + PartialEq> {
 /// Trait for different indexing strategies for relation caches
 pub trait RelationIndex<Domain, Codomain>: Send + Sync
 where
-    Domain: Clone + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     fn insert_entry(
         &mut self,
@@ -75,8 +73,8 @@ where
 #[derive(Clone)]
 pub struct HashRelationIndex<Domain, Codomain>
 where
-    Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     /// Internal index of the cache.
     pub entries: ImblHashMap<Domain, Entry<Codomain>>,
@@ -92,8 +90,8 @@ where
 // Basic constructor for any Domain that supports Hash
 impl<Domain, Codomain> HashRelationIndex<Domain, Codomain>
 where
-    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     pub fn new() -> Self {
         Self {
@@ -104,11 +102,11 @@ where
     }
 }
 
-// Secondary index constructor - requires both Domain and Codomain to support Hash+Eq
+// Secondary index constructor - requires Codomain to also support Hash+Eq
 impl<Domain, Codomain> HashRelationIndex<Domain, Codomain>
 where
-    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
-    Codomain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomainHashable,
 {
     pub fn new_with_secondary() -> Self {
         Self {
@@ -122,8 +120,8 @@ where
 // Basic implementation for all types
 impl<Domain, Codomain> RelationIndex<Domain, Codomain> for HashRelationIndex<Domain, Codomain>
 where
-    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
 {
     fn insert_entry(
         &mut self,
@@ -191,16 +189,16 @@ where
 /// Wrapper that adds proper secondary index support to HashRelationIndex
 pub struct SecondaryIndexRelation<Domain, Codomain>
 where
-    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
-    Codomain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomainHashable,
 {
     inner: HashRelationIndex<Domain, Codomain>,
 }
 
 impl<Domain, Codomain> SecondaryIndexRelation<Domain, Codomain>
 where
-    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
-    Codomain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomainHashable,
 {
     pub fn new() -> Self {
         Self {
@@ -233,8 +231,8 @@ where
 
 impl<Domain, Codomain> RelationIndex<Domain, Codomain> for SecondaryIndexRelation<Domain, Codomain>
 where
-    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
-    Codomain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+    Domain: RelationDomain,
+    Codomain: RelationCodomainHashable,
 {
     fn insert_entry(
         &mut self,
