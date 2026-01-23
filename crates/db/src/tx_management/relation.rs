@@ -100,7 +100,7 @@ where
 /// Obtained lock-free via ArcSwap, enabling concurrent transaction starts.
 pub struct CheckRelation<Domain, Codomain, P>
 where
-    Domain: Clone + Hash + Eq + Send + Sync + std::fmt::Debug + 'static,
+    Domain: Clone + Hash + Eq + Send + Sync + std::fmt::Display + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
     P: Provider<Domain, Codomain>,
 {
@@ -112,7 +112,7 @@ where
 
 impl<Domain, Codomain, P> CheckRelation<Domain, Codomain, P>
 where
-    Domain: Clone + Hash + Eq + Send + Sync + std::fmt::Debug + 'static,
+    Domain: Clone + Hash + Eq + Send + Sync + std::fmt::Display + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
     P: Provider<Domain, Codomain>,
 {
@@ -133,7 +133,7 @@ where
     fn make_conflict_info(&self, domain: &Domain, conflict_type: ConflictType) -> ConflictInfo {
         ConflictInfo {
             relation_name: self.relation_name,
-            domain_key: format!("{:?}", domain),
+            domain_key: format!("{}", domain),
             conflict_type,
         }
     }
@@ -277,7 +277,7 @@ where
 impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
 where
     Source: Provider<Domain, Codomain>,
-    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + std::fmt::Debug + 'static,
+    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + std::fmt::Display + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     pub fn start(&self, tx: &Tx) -> RelationTransaction<Domain, Codomain, Self> {
@@ -412,6 +412,12 @@ mod tests {
 
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     struct TestDomain(u64);
+
+    impl std::fmt::Display for TestDomain {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "TestDomain({})", self.0)
+        }
+    }
 
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     struct TestCodomain(u64);

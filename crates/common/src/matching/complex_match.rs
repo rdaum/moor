@@ -1135,7 +1135,10 @@ mod tests {
         let strings = vec![v_str("foo"), v_str("foobar"), v_str("bofooer")];
         let result = complex_match_strings_all_tiers("foo", &strings, 0.0);
         // Should return exact, then prefix, then contains
-        assert_eq!(result, vec![v_str("foo"), v_str("foobar"), v_str("bofooer")]);
+        assert_eq!(
+            result,
+            vec![v_str("foo"), v_str("foobar"), v_str("bofooer")]
+        );
 
         // Test with no exact match - should still get prefix and contains
         let strings = vec![v_str("foobar"), v_str("bofooer"), v_str("bar")];
@@ -1143,12 +1146,22 @@ mod tests {
         assert_eq!(result, vec![v_str("foobar"), v_str("bofooer")]);
 
         // Test with fuzzy matching enabled
-        let strings = vec![v_str("foo"), v_str("foobar"), v_str("bofooer"), v_str("foi")];
+        let strings = vec![
+            v_str("foo"),
+            v_str("foobar"),
+            v_str("bofooer"),
+            v_str("foi"),
+        ];
         let result = complex_match_strings_all_tiers("foo", &strings, 0.5);
         // foi is 1 edit from foo, so fuzzy should match it
         assert_eq!(
             result,
-            vec![v_str("foo"), v_str("foobar"), v_str("bofooer"), v_str("foi")]
+            vec![
+                v_str("foo"),
+                v_str("foobar"),
+                v_str("bofooer"),
+                v_str("foi")
+            ]
         );
 
         // Test empty subject returns empty
@@ -1175,7 +1188,10 @@ mod tests {
         // "*.foo" should behave same as "all foo"
         let strings = vec![v_str("foo"), v_str("foobar"), v_str("bofooer")];
         let result = complex_match_strings_all_tiers("foo", &strings, 0.0);
-        assert_eq!(result, vec![v_str("foo"), v_str("foobar"), v_str("bofooer")]);
+        assert_eq!(
+            result,
+            vec![v_str("foo"), v_str("foobar"), v_str("bofooer")]
+        );
     }
 
     #[test]

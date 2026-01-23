@@ -307,6 +307,12 @@ impl std::hash::Hash for ObjAndUUIDHolder {
     }
 }
 
+impl std::fmt::Display for ObjAndUUIDHolder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.obj, Uuid::from_bytes(self.uuid))
+    }
+}
+
 impl AnonymousObjectMetadata {
     pub fn new() -> Result<Self, EncodingError> {
         let now = std::time::SystemTime::now();

@@ -31,7 +31,7 @@ use std::{
 pub struct RelationTransaction<Domain, Codomain, Source>
 where
     Source: Canonical<Domain, Codomain>,
-    Domain: Hash + Eq + Clone + Send + Sync + std::fmt::Debug + 'static,
+    Domain: Hash + Eq + Clone + Send + Sync + std::fmt::Display + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     tx: Tx,
@@ -155,7 +155,7 @@ where
 impl<Domain, Codomain, Source> RelationTransaction<Domain, Codomain, Source>
 where
     Source: Canonical<Domain, Codomain>,
-    Domain: Clone + Hash + Eq + Send + Sync + std::fmt::Debug + 'static,
+    Domain: Clone + Hash + Eq + Send + Sync + std::fmt::Display + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     pub fn new(
@@ -183,7 +183,7 @@ where
     fn make_conflict_info(&self, domain: &Domain, conflict_type: ConflictType) -> ConflictInfo {
         ConflictInfo {
             relation_name: self.relation_name,
-            domain_key: format!("{:?}", domain),
+            domain_key: format!("{}", domain),
             conflict_type,
         }
     }
