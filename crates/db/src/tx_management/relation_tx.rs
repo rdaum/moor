@@ -153,6 +153,21 @@ where
         &self.tuples
     }
 
+    pub fn tuples_mut(
+        &mut self,
+    ) -> &mut IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>> {
+        &mut self.tuples
+    }
+
+    pub fn parts_mut(
+        &mut self,
+    ) -> (
+        &mut IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>,
+        &dyn RelationIndex<Domain, Codomain>,
+    ) {
+        (&mut self.tuples, &*self.base_index)
+    }
+
     /// Get the base index for looking up what values existed at transaction start.
     pub fn base_index(&self) -> &dyn RelationIndex<Domain, Codomain> {
         &*self.base_index

@@ -52,8 +52,8 @@ fn upsert<Domain, Codomain>(
     c: Codomain,
 ) -> Result<Option<Codomain>, Error>
 where
-    Domain: Clone + Eq + Hash + Send + Sync + std::fmt::Display + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: Clone + Eq + Hash + Send + Sync + std::fmt::Debug + Display + 'static,
+    Codomain: crate::tx_management::RelationCodomain,
     FjallProvider<Domain, Codomain>:
         EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
 {
@@ -66,8 +66,8 @@ fn insert_guaranteed_unique<Domain, Codomain>(
     c: Codomain,
 ) -> Result<(), Error>
 where
-    Domain: Clone + Eq + Hash + Send + Sync + std::fmt::Display + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Domain: Clone + Eq + Hash + Send + Sync + std::fmt::Debug + Display + 'static,
+    Codomain: crate::tx_management::RelationCodomain,
     FjallProvider<Domain, Codomain>:
         EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
 {

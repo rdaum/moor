@@ -53,6 +53,12 @@ const TAG_FLYWEIGHT: u8 = COMPLEX_FLAG | 5;
 const TAG_BINARY: u8 = COMPLEX_FLAG | 6;
 const TAG_LAMBDA: u8 = COMPLEX_FLAG | 7;
 
+// Operation Hints (stored in meta[6])
+// These provide hints to the conflict resolver about how this value was created.
+pub const OP_HINT_NONE: u8 = 0;
+pub const OP_HINT_LIST_APPEND: u8 = 1;
+pub const OP_HINT_MAP_INSERT: u8 = 2;
+
 /// Cached empty string Var.
 static EMPTY_STR_VAR: Lazy<Var> = Lazy::new(|| Var::from_str_type(Str::mk_str("")));
 
@@ -66,7 +72,7 @@ pub struct Var {
     /// Type tag with COMPLEX_FLAG for refcounted types
     tag: u8,
     /// Metadata bytes - interpretation depends on tag (union semantics).
-    /// For List/Map: bytes[0..2] = cached element count (u16 native-endian), rest reserved.
+    /// For List/Map: bytes[0..2] = cached element count (u16 native-endian), byte[6] = op hint.
     /// For String: bytes[0..2] = cached char count, byte[2] = ASCII flag (1 if pure ASCII).
     /// For other types: unused (all zeros).
     meta: [u8; 7],
@@ -84,16 +90,28 @@ impl Var {
         u16::from_ne_bytes([self.meta[0], self.meta[1]])
     }
 
+    /// Get the operation hint from meta bytes.
+    #[inline(always)]
+    pub fn op_hint(&self) -> u8 {
+        self.meta[6]
+    }
+
     /// Create meta bytes with cached length.
     #[inline(always)]
     fn meta_with_len(len: usize) -> [u8; 7] {
+        Self::meta_with_len_and_hint(len, OP_HINT_NONE)
+    }
+
+    /// Create meta bytes with cached length and operation hint.
+    #[inline(always)]
+    fn meta_with_len_and_hint(len: usize, hint: u8) -> [u8; 7] {
         let len16 = if len >= LEN_OVERFLOW as usize {
             LEN_OVERFLOW
         } else {
             len as u16
         };
         let bytes = len16.to_ne_bytes();
-        [bytes[0], bytes[1], 0, 0, 0, 0, 0]
+        [bytes[0], bytes[1], 0, 0, 0, 0, hint]
     }
 
     /// Create meta bytes with cached length and ASCII flag for strings.
@@ -293,12 +311,17 @@ impl Var {
 
     /// Create a Var from a List directly
     pub fn from_list(list: List) -> Self {
+        Self::from_list_with_hint(list, OP_HINT_NONE)
+    }
+
+    /// Create a Var from a List with an operation hint
+    pub fn from_list_with_hint(list: List, hint: u8) -> Self {
         let len = list.len();
         // SAFETY: List is #[repr(transparent)] around Box<Vector>, exactly 8 bytes
         let data: u64 = unsafe { std::mem::transmute(list) };
         Self {
             tag: TAG_LIST,
-            meta: Self::meta_with_len(len),
+            meta: Self::meta_with_len_and_hint(len, hint),
             data,
         }
     }
@@ -313,12 +336,17 @@ impl Var {
 
     /// Create a Var from a Map directly
     pub fn from_map(m: map::Map) -> Self {
+        Self::from_map_with_hint(m, OP_HINT_NONE)
+    }
+
+    /// Create a Var from a Map with an operation hint
+    pub fn from_map_with_hint(m: map::Map, hint: u8) -> Self {
         let len = m.len();
         // SAFETY: Map is #[repr(transparent)] around Box<OrdMap>, exactly 8 bytes
         let data: u64 = unsafe { std::mem::transmute(m) };
         Self {
             tag: TAG_MAP,
-            meta: Self::meta_with_len(len),
+            meta: Self::meta_with_len_and_hint(len, hint),
             data,
         }
     }

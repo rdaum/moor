@@ -338,8 +338,9 @@ mod tests {
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     struct TestDomain(u64);
 
-    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    #[derive(Clone, PartialEq, Eq, Hash, Debug)]
     struct TestCodomain(u64);
+    impl RelationCodomain for TestCodomain {}
 
     #[test]
     fn test_basic_hash_relation_index() {

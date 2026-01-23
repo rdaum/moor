@@ -21,7 +21,10 @@ mod tests {
         },
         util::BitEnum,
     };
-    use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, program::ProgramType, v_int, v_str};
+    use moor_var::{
+        Associative, NOTHING, Obj, SYSTEM_OBJECT, Sequence, Symbol, program::ProgramType,
+        v_empty_list, v_empty_map, v_int, v_str,
+    };
     use shuttle::{check_random, sync::Arc, thread};
     use std::{
         collections::HashMap,
@@ -864,6 +867,169 @@ mod tests {
                 );
             },
             100, // Run many shuttle iterations to explore different schedules
+        );
+    }
+
+    #[test]
+    fn test_concurrent_list_append_merge() {
+        check_random(
+            || {
+                let db = setup_test_db();
+                let obj = Obj::mk_id(1);
+                let prop_name = Symbol::mk("append_test");
+
+                // Initialize property with empty list
+                {
+                    let tx = db.start_transaction();
+                    let mut ws = DbWorldState { tx };
+                    ws.define_property(
+                        &SYSTEM_OBJECT,
+                        &obj,
+                        &obj,
+                        prop_name,
+                        &SYSTEM_OBJECT,
+                        BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
+                        Some(v_empty_list()),
+                    )
+                    .unwrap();
+                    Box::new(ws).commit().unwrap();
+                }
+
+                let success_count = Arc::new(AtomicUsize::new(0));
+
+                let handles: Vec<_> = (0..2)
+                    .map(|thread_id| {
+                        let db = db.clone();
+                        let success_count = success_count.clone();
+
+                        thread::spawn(move || {
+                            let tx = db.start_transaction();
+                            let mut ws = DbWorldState { tx };
+
+                            // Read list (this snapshot read will be the 'base' for merge)
+                            let current_list = ws
+                                .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
+                                .unwrap();
+
+                            // Append value - this sets OP_HINT_LIST_APPEND
+                            let val = v_int(thread_id as i64);
+                            let new_list = current_list.push(&val).unwrap();
+
+                            ws.update_property(&SYSTEM_OBJECT, &obj, prop_name, &new_list)
+                                .unwrap();
+
+                            if let Ok(CommitResult::Success { .. }) = Box::new(ws).commit() {
+                                success_count.fetch_add(1, Ordering::Relaxed);
+                            }
+                        })
+                    })
+                    .collect();
+
+                for handle in handles {
+                    handle.join().unwrap();
+                }
+
+                // Both should succeed due to smart merging
+                assert_eq!(success_count.load(Ordering::Relaxed), 2);
+
+                // Verify final state
+                let tx = db.start_transaction();
+                let ws = DbWorldState { tx };
+                let final_list = ws
+                    .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
+                    .unwrap();
+
+                // Should contain both 0 and 1
+                let list = final_list.as_list().unwrap();
+                assert_eq!(list.len(), 2);
+                assert!(list.contains(&v_int(0), false).unwrap());
+                assert!(list.contains(&v_int(1), false).unwrap());
+            },
+            10,
+        );
+    }
+
+    #[test]
+    fn test_concurrent_map_insert_merge() {
+        check_random(
+            || {
+                let db = setup_test_db();
+                let obj = Obj::mk_id(1);
+                let prop_name = Symbol::mk("map_merge_test");
+
+                // Initialize property with empty map
+                {
+                    let tx = db.start_transaction();
+                    let mut ws = DbWorldState { tx };
+                    ws.define_property(
+                        &SYSTEM_OBJECT,
+                        &obj,
+                        &obj,
+                        prop_name,
+                        &SYSTEM_OBJECT,
+                        BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
+                        Some(v_empty_map()),
+                    )
+                    .unwrap();
+                    Box::new(ws).commit().unwrap();
+                }
+
+                let success_count = Arc::new(AtomicUsize::new(0));
+
+                let handles: Vec<_> = (0..2)
+                    .map(|thread_id| {
+                        let db = db.clone();
+                        let success_count = success_count.clone();
+
+                        thread::spawn(move || {
+                            let tx = db.start_transaction();
+                            let mut ws = DbWorldState { tx };
+
+                            // Read map (base for merge)
+                            let current_map = ws
+                                .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
+                                .unwrap();
+
+                            // Insert unique key-value pair - this sets OP_HINT_MAP_INSERT
+                            let key = v_str(&format!("key_{thread_id}"));
+                            let val = v_int(thread_id as i64);
+                            
+                            // Map::set returns Result<Var, Error>
+                            let new_map = current_map
+                                .set(&key, &val, moor_var::IndexMode::ZeroBased)
+                                .unwrap();
+
+                            ws.update_property(&SYSTEM_OBJECT, &obj, prop_name, &new_map)
+                                .unwrap();
+
+                            if let Ok(CommitResult::Success { .. }) = Box::new(ws).commit() {
+                                success_count.fetch_add(1, Ordering::Relaxed);
+                            }
+                        })
+                    })
+                    .collect();
+
+                for handle in handles {
+                    handle.join().unwrap();
+                }
+
+                // Both should succeed
+                assert_eq!(success_count.load(Ordering::Relaxed), 2);
+
+                // Verify final state
+                let tx = db.start_transaction();
+                let ws = DbWorldState { tx };
+                let final_map = ws
+                    .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
+                    .unwrap();
+
+                // Should contain both keys
+                let map = final_map.as_map().unwrap();
+                assert_eq!(map.len(), 2);
+                assert!(map.contains_key(&v_str("key_0"), false).unwrap());
+                assert!(map.contains_key(&v_str("key_1"), false).unwrap());
+            },
+            10,
         );
     }
 }

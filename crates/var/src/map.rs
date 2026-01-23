@@ -14,7 +14,7 @@
 use crate::{
     Associative, Error,
     error::ErrorCode::{E_RANGE, E_TYPE},
-    variant::Var,
+    variant::{OP_HINT_MAP_INSERT, Var},
 };
 use std::{cmp::Ordering, hash::Hash};
 
@@ -104,9 +104,18 @@ impl Associative for Map {
         }
 
         // With OrdMap, this is an efficient O(log n) structural operation
+        let old_len = self.0.len();
         let new_map = self.0.update(key.clone(), value.clone());
+        let new_len = new_map.len();
+
+        let hint = if new_len > old_len {
+            OP_HINT_MAP_INSERT
+        } else {
+            0
+        };
+
         let m = Map(Box::new(new_map));
-        Ok(Var::from_map(m))
+        Ok(Var::from_map_with_hint(m, hint))
     }
 
     fn index(&self, index: usize) -> Result<(Var, Var), Error> {

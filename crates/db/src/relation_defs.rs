@@ -117,9 +117,9 @@ macro_rules! define_relations {
                 ///
                 /// Returns `Ok(())` if all relations pass conflict checking,
                 /// `Err(ConflictInfo)` if any relation has a conflict.
-                fn check_all(&mut self, ws: &RelationWorkingSets) -> Result<(), moor_common::model::ConflictInfo> {
+                fn check_all(&mut self, ws: &mut RelationWorkingSets) -> Result<(), moor_common::model::ConflictInfo> {
                     $(
-                        if let Err(e) = self.$field.check(&ws.$field) {
+                        if let Err(e) = self.$field.check(&mut ws.$field) {
                             if let crate::tx_management::Error::Conflict(info) = e {
                                 return Err(info);
                             }

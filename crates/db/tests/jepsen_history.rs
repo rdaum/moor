@@ -138,7 +138,7 @@ mod tests {
     use crate::{Operation, Type};
     use eyre::bail;
     use moor_common::model::WorldStateError;
-    use moor_db::{Error, Provider, Relation, Timestamp, Tx};
+    use moor_db::{Error, Provider, Relation, RelationCodomain, Timestamp, Tx};
     use moor_var::Symbol;
     use std::{
         collections::HashMap,
@@ -163,6 +163,7 @@ mod tests {
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct TestCodomain(Vec<i32>);
+    impl RelationCodomain for TestCodomain {}
 
     #[derive(Clone)]
     struct TestProvider {
@@ -275,11 +276,11 @@ mod tests {
                         }
                     }
 
-                    let ws = cache.working_set().expect("check failed in working set");
+                    let mut ws = cache.working_set().expect("check failed in working set");
 
                     {
                         let mut cr = backing_store.begin_check();
-                        cr.check(&ws).expect("check failed in begin");
+                        cr.check(&mut ws).expect("check failed in begin");
                         cr.apply(ws).expect("apply failed in begin");
                         cr.commit(backing_store.index());
                     }
@@ -309,7 +310,7 @@ mod tests {
                                 }
                             }
                         }
-                        let ws = match cache.working_set() {
+                        let mut ws = match cache.working_set() {
                             Ok(ws) => ws,
                             Err(WorldStateError::RollbackRetry) => {
                                 return Ok(());
@@ -320,20 +321,16 @@ mod tests {
                         };
                         let mut cr = backing_store.begin_check();
 
-                        match cr.check(&ws) {
+                        match cr.check(&mut ws) {
+                            Ok(_) => {
+                                return Err(eyre::eyre!("Expected conflict, check succeeded"));
+                            }
                             Err(Error::Conflict(_)) => {
                                 return Ok(());
                             }
                             Err(e) => panic!("unexpected error: {e:?}"),
-                            Ok(lock) => lock,
-                        };
-                        match cr.apply(ws) {
-                            Ok(_) => bail!("Expected conflict, got none in {entry:?}"),
-                            Err(Error::Conflict(_)) => {}
-                            Err(e) => panic!("unexpected error: {e:?}"),
                         }
-                        cr.commit(backing_store.index());
-                        Ok(())
+                        // Code after here is unreachable because we either return or panic above
                     };
                     return fail_check_fn();
                 }

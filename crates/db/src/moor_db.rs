@@ -445,7 +445,7 @@ impl MoorDB {
                     let tx_timestamp = ws.tx.ts;
                     let snapshot_version = ws.tx.snapshot_version;
                     let has_mutations = ws.has_mutations;
-                    let (relation_ws, verb_cache, prop_cache, ancestry_cache) = ws.extract_relation_working_sets();
+                    let (mut relation_ws, verb_cache, prop_cache, ancestry_cache) = ws.extract_relation_working_sets();
 
                     // Optimization: If no commits completed since transaction start, skip conflict checking.
                     // The transaction already validated against its snapshot when creating operations.
@@ -456,7 +456,7 @@ impl MoorDB {
                     {
                         // Conflict validation - can skip if no concurrent commits
                         if !skip_conflict_check
-                            && let Err(conflict_info) = checkers.check_all(&relation_ws)
+                            && let Err(conflict_info) = checkers.check_all(&mut relation_ws)
                         {
                             warn!("Transaction conflict during commit: {}", conflict_info);
                             reply

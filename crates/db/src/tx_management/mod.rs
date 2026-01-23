@@ -24,6 +24,11 @@ pub use relation_tx::{RelationTransaction, WorkingSet};
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
+use crate::{AnonymousObjectMetadata, ObjAndUUIDHolder, StringHolder};
+use moor_common::model::{ObjFlag, PropDefs, PropPerms, VerbDefs};
+use moor_common::util::BitEnum;
+use moor_var::{Associative, Obj, Sequence, Var, program::ProgramType};
+
 // ============================================================================
 // Trait Bounds for Relation Domain and Codomain Types
 // ============================================================================
@@ -49,9 +54,148 @@ impl<T> RelationDomain for T where T: Hash + Eq + Clone + Debug + Display + Send
 /// - `Clone`: For copying values during operations
 /// - `PartialEq`: For conflict detection and comparison
 /// - `Send + Sync + 'static`: For thread-safe, owned storage
-pub trait RelationCodomain: Clone + PartialEq + Send + Sync + 'static {}
+pub trait RelationCodomain: Clone + PartialEq + Send + Sync + 'static {
+    /// Attempt to merge conflicting values.
+    /// Returns Some(merged_value) if successful, None if conflict is unresolvable.
+    fn try_merge(&self, _base: &Self, _theirs: &Self) -> Option<Self> {
+        None
+    }
+}
 
-impl<T> RelationCodomain for T where T: Clone + PartialEq + Send + Sync + 'static {}
+// Implement for Var with smart merge logic
+impl RelationCodomain for Var {
+    fn try_merge(&self, base: &Self, theirs: &Self) -> Option<Self> {
+        // Only merge if both operations provided a hint
+        use moor_var::{OP_HINT_LIST_APPEND, OP_HINT_MAP_INSERT};
+
+        let my_hint = self.op_hint();
+        let their_hint = theirs.op_hint();
+
+        if my_hint != their_hint {
+            return None;
+        }
+
+        match my_hint {
+            OP_HINT_LIST_APPEND => {
+                // List append merge: Base + (Theirs - Base) + (Mine - Base)
+                // We need to verify that both Mine and Theirs start with Base
+                // Structural sharing checks should be fast
+                let Some(mine_list) = self.as_list() else {
+                    return None;
+                };
+                let Some(their_list) = theirs.as_list() else {
+                    return None;
+                };
+                let Some(base_list) = base.as_list() else {
+                    return None;
+                };
+
+                // Both must be longer than base (appended)
+                if mine_list.len() <= base_list.len() || their_list.len() <= base_list.len() {
+                    return None;
+                }
+
+                let base_len = base_list.len();
+
+                // Check prefixes
+                if !mine_list.iter().take(base_len).eq(base_list.iter()) {
+                    return None;
+                }
+                if !their_list.iter().take(base_len).eq(base_list.iter()) {
+                    return None;
+                }
+
+                // Merge: Take `theirs` (which is Base + TheirSuffix) and append Mine's suffix
+                let mut result = their_list.clone(); // Result starts as Theirs
+
+                // Append Mine's suffix
+                for item in mine_list.iter().skip(base_len) {
+                    result = match result.push(&item) {
+                        Ok(r) => match r.variant() {
+                            moor_var::Variant::List(l) => l.clone(),
+                            _ => return None,
+                        },
+                        Err(_) => return None,
+                    };
+                }
+
+                // Return result wrapped in Var, preserving the hint (it's still an append result!)
+                Some(Var::from_list_with_hint(result, OP_HINT_LIST_APPEND))
+            }
+            OP_HINT_MAP_INSERT => {
+                // Map insert merge: Two concurrent inserts of DIFFERENT keys.
+                let Some(mine_map) = self.as_map() else {
+                    return None;
+                };
+                let Some(their_map) = theirs.as_map() else {
+                    return None;
+                };
+                let Some(base_map) = base.as_map() else {
+                    return None;
+                };
+
+                if mine_map.len() != base_map.len() + 1 || their_map.len() != base_map.len() + 1 {
+                    // Only support single item insert for safety/speed for now
+                    return None;
+                }
+
+                // Find the added key in Mine
+                // Iterate Mine, check if in Base. The one that isn't is our key.
+                let mut my_key = None;
+                let mut my_val = None;
+                for (k, v) in mine_map.iter() {
+                    if !base_map.contains_key(&k, false).unwrap_or(false) {
+                        my_key = Some(k);
+                        my_val = Some(v);
+                        break;
+                    }
+                }
+                let (Some(k_mine), Some(v_mine)) = (my_key, my_val) else {
+                    return None;
+                };
+
+                // Check if Theirs has this key
+                if their_map.contains_key(&k_mine, false).unwrap_or(false) {
+                    // Conflict! Both inserted same key (but different values, since AcceptIdentical failed)
+                    return None;
+                }
+
+                // Merge: Take Theirs, insert My Key/Value
+                match their_map.set(&k_mine, &v_mine) {
+                    Ok(v) => Some(v),
+                    Err(_) => None,
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
+// Macro to implement RelationCodomain for other types (no-op merge)
+macro_rules! impl_relation_codomain {
+    ($($t:ty),*) => {
+        $(
+            impl RelationCodomain for $t {}
+        )*
+    };
+}
+
+impl_relation_codomain!(
+    Obj,
+    BitEnum<ObjFlag>,
+    StringHolder,
+    VerbDefs,
+    ProgramType,
+    PropDefs,
+    PropPerms,
+    AnonymousObjectMetadata,
+    ObjAndUUIDHolder,
+    crate::tx_management::relation_tx::Op<Var> // Wait, Op<Var> isn't a codomain?
+                                               // RelationCodomain is used for T in Relation<K, V>.
+);
+
+// We also need to implement for TestCodomain used in tests
+// (TestCodomain is defined in tests)
 
 /// Extended trait alias for codomain types that can be used with secondary indexes.
 ///

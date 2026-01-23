@@ -15,6 +15,7 @@ use crate::{
     Error, Sequence, Var,
     error::ErrorCode::{E_RANGE, E_TYPE},
     v_list_iter,
+    variant::OP_HINT_LIST_APPEND,
 };
 use num_traits::ToPrimitive;
 use std::{
@@ -153,7 +154,10 @@ impl Sequence for List {
     fn push(&self, value: &Var) -> Result<Var, Error> {
         let mut new = (*self.0).clone();
         new.push_back(value.clone());
-        Ok(Var::from_list(List(Box::new(new))))
+        Ok(Var::from_list_with_hint(
+            List(Box::new(new)),
+            OP_HINT_LIST_APPEND,
+        ))
     }
 
     fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
@@ -246,7 +250,10 @@ impl Sequence for List {
 
         let mut result = (*self.0).clone();
         result.append(other.0.as_ref().clone());
-        Ok(Var::from_list(List(Box::new(result))))
+        Ok(Var::from_list_with_hint(
+            List(Box::new(result)),
+            OP_HINT_LIST_APPEND,
+        ))
     }
 
     fn remove_at(&self, index: usize) -> Result<Var, Error> {

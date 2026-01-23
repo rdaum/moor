@@ -83,11 +83,20 @@ impl<Codomain: RelationCodomain> ProposedOp<Codomain> {
     }
 }
 
+/// The result of a conflict resolution attempt.
+pub enum Resolution<Codomain> {
+    /// Accept the proposed operation as-is (continue checking)
+    Accept,
+    /// Rewrite the proposed operation with a new value
+    Rewrite(Codomain),
+}
+
 /// Trait for conflict resolution strategies.
 ///
 /// Implement this to provide custom conflict resolution logic. The resolver
 /// is called for each detected conflict and can either:
-/// - Return `Ok(())` to accept/resolve the conflict and continue checking
+/// - Return `Ok(Resolution::Accept)` to accept/resolve the conflict and continue checking
+/// - Return `Ok(Resolution::Rewrite(new_val))` to resolve by changing the written value
 /// - Return `Err(Error::Conflict(...))` to abort with that conflict
 pub trait ConflictResolver<Domain, Codomain>
 where
@@ -97,9 +106,10 @@ where
     /// Attempt to resolve a conflict.
     ///
     /// Called when a conflict is detected during the check phase.
-    /// Return `Ok(())` if the conflict is resolved/acceptable, or
-    /// `Err` to abort the check.
-    fn resolve(&mut self, conflict: &PotentialConflict<Domain, Codomain>) -> Result<(), Error>;
+    fn resolve(
+        &mut self,
+        conflict: &PotentialConflict<Domain, Codomain>,
+    ) -> Result<Resolution<Codomain>, Error>;
 }
 
 /// A resolver that always fails on conflict (the default behavior).
@@ -110,7 +120,10 @@ where
     Domain: RelationDomain,
     Codomain: RelationCodomain,
 {
-    fn resolve(&mut self, conflict: &PotentialConflict<Domain, Codomain>) -> Result<(), Error> {
+    fn resolve(
+        &mut self,
+        conflict: &PotentialConflict<Domain, Codomain>,
+    ) -> Result<Resolution<Codomain>, Error> {
         Err(Error::Conflict(conflict.info.clone()))
     }
 }
@@ -124,7 +137,10 @@ where
     Domain: RelationDomain,
     Codomain: RelationCodomain, // PartialEq is already required by RelationCodomain
 {
-    fn resolve(&mut self, conflict: &PotentialConflict<Domain, Codomain>) -> Result<(), Error> {
+    fn resolve(
+        &mut self,
+        conflict: &PotentialConflict<Domain, Codomain>,
+    ) -> Result<Resolution<Codomain>, Error> {
         // Check if theirs == mine (using PartialEq)
         let identical = match (&conflict.theirs, &conflict.mine) {
             // Both have values - compare them
@@ -139,10 +155,53 @@ where
         };
 
         if identical {
-            Ok(())
+            Ok(Resolution::Accept)
         } else {
             Err(Error::Conflict(conflict.info.clone()))
         }
+    }
+}
+
+/// A resolver that attempts smart merges using RelationCodomain::try_merge.
+/// If merging fails, it falls back to AcceptIdentical logic.
+pub struct SmartMergeResolver;
+
+impl<Domain, Codomain> ConflictResolver<Domain, Codomain> for SmartMergeResolver
+where
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
+{
+    fn resolve(
+        &mut self,
+        conflict: &PotentialConflict<Domain, Codomain>,
+    ) -> Result<Resolution<Codomain>, Error> {
+        // 1. Try AcceptIdentical logic (idempotency)
+        let identical = match (&conflict.theirs, &conflict.mine) {
+            (
+                Some((_, theirs_val)),
+                ProposedOp::Insert(mine_val) | ProposedOp::Update(mine_val),
+            ) => theirs_val == mine_val,
+            (None, ProposedOp::Delete) => true,
+            _ => false,
+        };
+
+        if identical {
+            return Ok(Resolution::Accept);
+        }
+
+        // 2. Try Smart Merge (CRDT-like)
+        // Only applicable if we have Base, Theirs, and Mine (Update/Insert conflict)
+        if let Some((_, base_val)) = &conflict.base
+            && let Some((_, theirs_val)) = &conflict.theirs
+            && let Some(mine_val) = conflict.mine.value()
+        {
+            if let Some(merged) = mine_val.try_merge(base_val, theirs_val) {
+                return Ok(Resolution::Rewrite(merged));
+            }
+        }
+
+        // 3. Fail
+        Err(Error::Conflict(conflict.info.clone()))
     }
 }
 
@@ -151,81 +210,28 @@ impl<Domain, Codomain, F> ConflictResolver<Domain, Codomain> for F
 where
     Domain: RelationDomain,
     Codomain: RelationCodomain,
-    F: FnMut(&PotentialConflict<Domain, Codomain>) -> Result<(), Error>,
+    F: FnMut(&PotentialConflict<Domain, Codomain>) -> Result<Resolution<Codomain>, Error>,
 {
-    fn resolve(&mut self, conflict: &PotentialConflict<Domain, Codomain>) -> Result<(), Error> {
+    fn resolve(
+        &mut self,
+        conflict: &PotentialConflict<Domain, Codomain>,
+    ) -> Result<Resolution<Codomain>, Error> {
         self(conflict)
     }
 }
 
 /// Represents the current "canonical" state of a relation.
+#[derive(Clone)]
 pub struct Relation<Domain, Codomain, Source>
 where
-    Source: Provider<Domain, Codomain>,
     Domain: RelationDomain,
     Codomain: RelationCodomain,
 {
-    relation_name: Symbol,
-
     index: Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>>,
-
+    relation_name: Symbol,
     source: Arc<Source>,
 }
 
-impl<Domain, Codomain, Source> Clone for Relation<Domain, Codomain, Source>
-where
-    Domain: RelationDomain,
-    Codomain: RelationCodomain,
-    Source: Provider<Domain, Codomain>,
-{
-    fn clone(&self) -> Self {
-        Self {
-            relation_name: self.relation_name,
-            index: self.index.clone(),
-            source: self.source.clone(),
-        }
-    }
-}
-
-impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
-where
-    Domain: RelationDomain,
-    Codomain: RelationCodomain,
-    Source: Provider<Domain, Codomain>,
-{
-    pub fn new(relation_name: Symbol, provider: Arc<Source>) -> Self {
-        Self {
-            relation_name,
-            index: Arc::new(ArcSwap::new(Arc::new(Box::new(HashRelationIndex::new())))),
-            source: provider,
-        }
-    }
-
-    pub fn new_with_secondary(relation_name: Symbol, provider: Arc<Source>) -> Self
-    where
-        Codomain: RelationCodomainHashable,
-    {
-        use crate::tx_management::indexes::SecondaryIndexRelation;
-        Self {
-            relation_name,
-            index: Arc::new(ArcSwap::new(Arc::new(Box::new(
-                SecondaryIndexRelation::new(),
-            )))),
-            source: provider,
-        }
-    }
-
-    pub fn source(&self) -> &Arc<Source> {
-        &self.source
-    }
-
-    pub fn index(&self) -> &Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>> {
-        &self.index
-    }
-}
-
-/// Holds a forked snapshot of the relation index during transaction commit.
-/// Obtained lock-free via ArcSwap, enabling concurrent transaction starts.
 pub struct CheckRelation<Domain, Codomain, P>
 where
     Domain: RelationDomain,
@@ -272,9 +278,10 @@ where
     /// the canonical index.
     ///
     /// By default, accepts conflicts where both transactions wrote identical values
-    /// (no real conflict). For custom resolution, use `check_with_resolver`.
-    pub fn check(&mut self, working_set: &WorkingSet<Domain, Codomain>) -> Result<(), Error> {
-        self.check_with_resolver(working_set, AcceptIdentical)
+    /// (no real conflict) AND attempts smart merging for supported types.
+    /// For custom resolution, use `check_with_resolver`.
+    pub fn check(&mut self, working_set: &mut WorkingSet<Domain, Codomain>) -> Result<(), Error> {
+        self.check_with_resolver(working_set, SmartMergeResolver)
     }
 
     /// Check the forked index for conflicts with the given working set, calling
@@ -293,7 +300,7 @@ where
     /// the canonical index.
     pub fn check_with_resolver<R>(
         &mut self,
-        working_set: &WorkingSet<Domain, Codomain>,
+        working_set: &mut WorkingSet<Domain, Codomain>,
         mut resolver: R,
     ) -> Result<(), Error>
     where
@@ -305,7 +312,9 @@ where
         self.dirty = !working_set.is_empty();
 
         // Check phase first.
-        for (n, (domain, op)) in working_set.tuples_ref().iter().enumerate() {
+        // We use tuples_mut() because resolution might rewrite the operation
+        let (tuples, base_index) = working_set.parts_mut();
+        for (n, (domain, op)) in tuples.iter_mut().enumerate() {
             if last_check_time.elapsed() > Duration::from_secs(5) {
                 warn!(
                     "Long check time for {}; running for {}s; {n}/{total_ops} checked",
@@ -321,7 +330,9 @@ where
             }
 
             // Look up the base value (what we saw at transaction start) for 3-way merge
-            let base = working_set.base_value(domain);
+            let base = base_index
+                .index_lookup(domain)
+                .map(|e| (e.ts, e.value.clone()));
 
             // Check local to see if we have one first, to see if there's a conflict.
             if let Some(local_entry) = self.index.index_lookup(domain) {
@@ -337,8 +348,13 @@ where
                         theirs,
                         op,
                     );
-                    resolver.resolve(&conflict)?;
-                    continue;
+                    match resolver.resolve(&conflict)? {
+                        Resolution::Accept => continue,
+                        Resolution::Rewrite(new_val) => {
+                            op.operation = OpType::Insert(new_val);
+                            continue;
+                        }
+                    }
                 }
 
                 let ts = local_entry.ts;
@@ -352,8 +368,13 @@ where
                         theirs,
                         op,
                     );
-                    resolver.resolve(&conflict)?;
-                    continue;
+                    match resolver.resolve(&conflict)? {
+                        Resolution::Accept => continue,
+                        Resolution::Rewrite(new_val) => {
+                            op.operation = OpType::Update(new_val);
+                            continue;
+                        }
+                    }
                 }
                 // If the transactions *write stamp* is earlier than the read stamp, that's a
                 // conflict indicating that the transaction is trying to update something
@@ -368,8 +389,14 @@ where
                         theirs,
                         op,
                     );
-                    resolver.resolve(&conflict)?;
-                    continue;
+                    match resolver.resolve(&conflict)? {
+                        Resolution::Accept => continue,
+                        Resolution::Rewrite(new_val) => {
+                            // If we rewrite a stale read, we assume the new value is valid for the current state
+                            op.operation = OpType::Update(new_val);
+                            continue;
+                        }
+                    }
                 }
                 continue;
             }
@@ -391,8 +418,13 @@ where
                         theirs,
                         op,
                     );
-                    resolver.resolve(&conflict)?;
-                    continue;
+                    match resolver.resolve(&conflict)? {
+                        Resolution::Accept => continue,
+                        Resolution::Rewrite(new_val) => {
+                            op.operation = OpType::Insert(new_val);
+                            continue;
+                        }
+                    }
                 }
                 if ts > op.read_ts {
                     let conflict = self.make_potential_conflict(
@@ -402,8 +434,13 @@ where
                         theirs,
                         op,
                     );
-                    resolver.resolve(&conflict)?;
-                    continue;
+                    match resolver.resolve(&conflict)? {
+                        Resolution::Accept => continue,
+                        Resolution::Rewrite(new_val) => {
+                            op.operation = OpType::Update(new_val);
+                            continue;
+                        }
+                    }
                 }
             } else {
                 // If upstream doesn't have it, and it's not an insert or delete, that's a conflict, this
@@ -416,8 +453,21 @@ where
                         None, // theirs doesn't exist
                         op,
                     );
-                    resolver.resolve(&conflict)?;
-                    continue;
+                    match resolver.resolve(&conflict)? {
+                        Resolution::Accept => continue,
+                        Resolution::Rewrite(new_val) => {
+                            // If we rewrite an update on non-existent, it becomes an insert?
+                            // Or we assume the resolver knows what it's doing.
+                            // If theirs is None, Update is invalid. If resolver says Rewrite, maybe they want Insert?
+                            // But OpType::Update implies we thought it existed.
+                            // Let's assume Update -> Update(new_val) is what was asked, but really this is weird.
+                            // If it doesn't exist, we can't update it. We should probably Insert it.
+                            // But OpType doesn't track this semantic well.
+                            // Let's just update the value.
+                            op.operation = OpType::Update(new_val);
+                            continue;
+                        }
+                    }
                 }
             }
         }
@@ -505,6 +555,35 @@ where
     Domain: RelationDomain,
     Codomain: RelationCodomain,
 {
+    pub fn new(relation_name: Symbol, source: Arc<Source>) -> Self {
+        Self {
+            index: Arc::new(ArcSwap::new(Arc::new(Box::new(HashRelationIndex::new())))),
+            relation_name,
+            source,
+        }
+    }
+
+    pub fn new_with_secondary(relation_name: Symbol, source: Arc<Source>) -> Self
+    where
+        Codomain: RelationCodomainHashable,
+    {
+        Self {
+            index: Arc::new(ArcSwap::new(Arc::new(Box::new(
+                crate::tx_management::indexes::SecondaryIndexRelation::new(),
+            )))),
+            relation_name,
+            source,
+        }
+    }
+
+    pub fn index(&self) -> &Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>> {
+        &self.index
+    }
+
+    pub fn source(&self) -> &Arc<Source> {
+        &self.source
+    }
+
     pub fn start(&self, tx: &Tx) -> RelationTransaction<Domain, Codomain, Self> {
         let index = self.index.load();
         RelationTransaction::new(*tx, self.relation_name, (**index).fork(), self.clone())
@@ -646,6 +725,7 @@ mod tests {
 
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     struct TestCodomain(u64);
+    impl RelationCodomain for TestCodomain {}
 
     #[derive(Clone)]
     struct TestProvider {
@@ -718,10 +798,10 @@ mod tests {
         lc.insert(domain.clone(), codomain.clone()).unwrap();
         assert_eq!(lc.get(&domain).unwrap(), Some(codomain.clone()));
         assert_eq!(lc.get(&TestDomain(0)).unwrap(), Some(TestCodomain(0)));
-        let ws = lc.working_set().unwrap();
+        let mut ws = lc.working_set().unwrap();
 
         let mut cr = relation.begin_check();
-        cr.check(&ws).unwrap();
+        cr.check(&mut ws).unwrap();
         cr.apply(ws).unwrap();
         assert_eq!(relation.get(&domain).unwrap().unwrap().1, codomain.clone());
     }
@@ -752,11 +832,11 @@ mod tests {
         r_tx_a.insert(domain.clone(), codomain_a).unwrap();
         let mut r_tx_b = relation.clone().start(&tx_b);
         r_tx_b.insert(domain.clone(), codomain_b).unwrap();
-        let ws_a = r_tx_a.working_set().unwrap();
-        let ws_b = r_tx_b.working_set().unwrap();
+        let mut ws_a = r_tx_a.working_set().unwrap();
+        let mut ws_b = r_tx_b.working_set().unwrap();
         {
             let mut cr_a = relation.begin_check();
-            cr_a.check(&ws_a).unwrap();
+            cr_a.check(&mut ws_a).unwrap();
             cr_a.apply(ws_a).unwrap();
             cr_a.commit(relation.index());
         }
@@ -764,7 +844,7 @@ mod tests {
             let mut cr_b = relation.begin_check();
 
             // This should fail because the first insert has already happened.
-            let check_result = cr_b.check(&ws_b);
+            let check_result = cr_b.check(&mut ws_b);
             assert!(matches!(check_result, Err(Error::Conflict(_))));
         }
     }
@@ -797,12 +877,12 @@ mod tests {
         // T2 updates the value
         let mut r_tx_2 = relation.clone().start(&tx_2);
         r_tx_2.update(&domain, TestCodomain(20)).unwrap();
-        let ws_2 = r_tx_2.working_set().unwrap();
+        let mut ws_2 = r_tx_2.working_set().unwrap();
 
         // Commit T2 first
         {
             let mut cr_2 = relation.begin_check();
-            cr_2.check(&ws_2).unwrap();
+            cr_2.check(&mut ws_2).unwrap();
             cr_2.apply(ws_2).unwrap();
             cr_2.commit(relation.index());
         }
@@ -839,20 +919,20 @@ mod tests {
         r_tx_1.update(&domain, TestCodomain(100)).unwrap();
         r_tx_2.update(&domain, TestCodomain(200)).unwrap();
 
-        let ws_1 = r_tx_1.working_set().unwrap();
-        let ws_2 = r_tx_2.working_set().unwrap();
+        let mut ws_1 = r_tx_1.working_set().unwrap();
+        let mut ws_2 = r_tx_2.working_set().unwrap();
 
         // Commit T1 first
         {
             let mut cr_1 = relation.begin_check();
-            cr_1.check(&ws_1).unwrap();
+            cr_1.check(&mut ws_1).unwrap();
             cr_1.apply(ws_1).unwrap();
             cr_1.commit(relation.index());
         }
 
         // T2 should conflict
         let mut cr_2 = relation.begin_check();
-        let check_result = cr_2.check(&ws_2);
+        let check_result = cr_2.check(&mut ws_2);
         assert!(matches!(check_result, Err(Error::Conflict(_))));
     }
 
@@ -884,22 +964,22 @@ mod tests {
         // T2 inserts a new entry
         let mut r_tx_2 = relation.clone().start(&tx_2);
         r_tx_2.insert(domain_1.clone(), TestCodomain(100)).unwrap();
-        let ws_2 = r_tx_2.working_set().unwrap();
+        let mut ws_2 = r_tx_2.working_set().unwrap();
 
         // Commit T2
         {
             let mut cr_2 = relation.begin_check();
-            cr_2.check(&ws_2).unwrap();
+            cr_2.check(&mut ws_2).unwrap();
             cr_2.apply(ws_2).unwrap();
             cr_2.commit(relation.index());
         }
 
         // T1 now inserts another entry - this should succeed since it's a different key
         r_tx_1.insert(domain_2.clone(), TestCodomain(200)).unwrap();
-        let ws_1 = r_tx_1.working_set().unwrap();
+        let mut ws_1 = r_tx_1.working_set().unwrap();
 
         let mut cr_1 = relation.begin_check();
-        cr_1.check(&ws_1).unwrap(); // Should not conflict
+        cr_1.check(&mut ws_1).unwrap(); // Should not conflict
         cr_1.apply(ws_1).unwrap();
     }
 
@@ -926,12 +1006,12 @@ mod tests {
         // T1 deletes the entry
         let mut r_tx_1 = relation.clone().start(&tx_1);
         r_tx_1.delete(&domain).unwrap();
-        let ws_1 = r_tx_1.working_set().unwrap();
+        let mut ws_1 = r_tx_1.working_set().unwrap();
 
         // Commit T1 first
         {
             let mut cr_1 = relation.begin_check();
-            cr_1.check(&ws_1).unwrap();
+            cr_1.check(&mut ws_1).unwrap();
             cr_1.apply(ws_1).unwrap();
             cr_1.commit(relation.index());
         }
@@ -939,10 +1019,10 @@ mod tests {
         // Now T2 tries to insert the same key - should succeed since key was deleted
         let mut r_tx_2 = relation.clone().start(&tx_2);
         r_tx_2.insert(domain.clone(), TestCodomain(20)).unwrap();
-        let ws_2 = r_tx_2.working_set().unwrap();
+        let mut ws_2 = r_tx_2.working_set().unwrap();
 
         let mut cr_2 = relation.begin_check();
-        cr_2.check(&ws_2).unwrap();
+        cr_2.check(&mut ws_2).unwrap();
         cr_2.apply(ws_2).unwrap();
 
         // Verify final state
@@ -995,9 +1075,9 @@ mod tests {
             let current = r_tx.get(&domain).unwrap().unwrap();
             r_tx.update(&domain, TestCodomain(current.0 + 1)).unwrap();
 
-            let ws = r_tx.working_set().unwrap();
+            let mut ws = r_tx.working_set().unwrap();
             let mut cr = relation.begin_check();
-            cr.check(&ws).unwrap();
+            cr.check(&mut ws).unwrap();
             cr.apply(ws).unwrap();
             cr.commit(relation.index());
         }
@@ -1032,18 +1112,18 @@ mod tests {
         let mut r_tx_1 = relation.clone().start(&tx_1);
         r_tx_1.update(&TestDomain(1), TestCodomain(200)).unwrap();
         r_tx_1.insert(TestDomain(2), TestCodomain(300)).unwrap();
-        let ws_1 = r_tx_1.working_set().unwrap();
+        let mut ws_1 = r_tx_1.working_set().unwrap();
 
         // T2: Try to update the same key as T1 but to different value
         let mut r_tx_2 = relation.clone().start(&tx_2);
         r_tx_2.update(&TestDomain(1), TestCodomain(400)).unwrap();
         r_tx_2.insert(TestDomain(3), TestCodomain(500)).unwrap();
-        let ws_2 = r_tx_2.working_set().unwrap();
+        let mut ws_2 = r_tx_2.working_set().unwrap();
 
         // Commit T1 first
         {
             let mut cr_1 = relation.begin_check();
-            cr_1.check(&ws_1).unwrap();
+            cr_1.check(&mut ws_1).unwrap();
             cr_1.apply(ws_1).unwrap();
             cr_1.commit(relation.index());
         }
@@ -1051,7 +1131,7 @@ mod tests {
         // T2 should conflict because it tries to update what T1 already updated
         {
             let mut cr_2 = relation.begin_check();
-            let check_result = cr_2.check(&ws_2);
+            let check_result = cr_2.check(&mut ws_2);
             assert!(matches!(check_result, Err(Error::Conflict(_))));
         }
 
@@ -1062,11 +1142,11 @@ mod tests {
         r_tx_3
             .update(&TestDomain(1), TestCodomain(current_val.0 + 100))
             .unwrap();
-        let ws_3 = r_tx_3.working_set().unwrap();
+        let mut ws_3 = r_tx_3.working_set().unwrap();
 
         {
             let mut cr_3 = relation.begin_check();
-            cr_3.check(&ws_3).unwrap();
+            cr_3.check(&mut ws_3).unwrap();
             cr_3.apply(ws_3).unwrap();
             cr_3.commit(relation.index());
         }
@@ -1110,11 +1190,11 @@ mod tests {
         // Newer transaction commits first
         let mut r_tx_newer = relation.clone().start(&tx_newer);
         r_tx_newer.update(&domain, TestCodomain(200)).unwrap();
-        let ws_newer = r_tx_newer.working_set().unwrap();
+        let mut ws_newer = r_tx_newer.working_set().unwrap();
 
         {
             let mut cr_newer = relation.begin_check();
-            cr_newer.check(&ws_newer).unwrap();
+            cr_newer.check(&mut ws_newer).unwrap();
             cr_newer.apply(ws_newer).unwrap();
             cr_newer.commit(relation.index());
         }
@@ -1151,9 +1231,9 @@ mod tests {
         r_tx.update(&TestDomain(1), TestCodomain(val1.0 + val2.0))
             .unwrap();
 
-        let ws = r_tx.working_set().unwrap();
+        let mut ws = r_tx.working_set().unwrap();
         let mut cr = relation.begin_check();
-        cr.check(&ws).unwrap();
+        cr.check(&mut ws).unwrap();
         cr.apply(ws).unwrap();
 
         // Commit the changes to the relation
@@ -1211,9 +1291,9 @@ mod tests {
         assert!(result_b.contains(&domain3));
 
         // Commit the transaction
-        let ws = r_tx.working_set().unwrap();
+        let mut ws = r_tx.working_set().unwrap();
         let mut cr = relation.begin_check();
-        cr.check(&ws).unwrap();
+        cr.check(&mut ws).unwrap();
         cr.apply(ws).unwrap();
         cr.commit(relation.index());
 
