@@ -14,7 +14,7 @@
 //! Builtin functions for verb manipulation and introspection.
 
 use strum::EnumCount;
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 
 use crate::{
     task_context::{with_current_transaction, with_current_transaction_mut},
