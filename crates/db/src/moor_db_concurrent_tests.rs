@@ -22,8 +22,9 @@ mod tests {
         util::BitEnum,
     };
     use moor_var::{
-        Associative, NOTHING, Obj, SYSTEM_OBJECT, Sequence, Symbol, program::ProgramType,
-        v_empty_list, v_empty_map, v_int, v_str,
+        Associative, NOTHING, OP_HINT_FLYWEIGHT_ADD_SLOT, OP_HINT_FLYWEIGHT_APPEND_CONTENTS, Obj,
+        SYSTEM_OBJECT, Sequence, Symbol, Var, program::ProgramType, v_empty_list, v_empty_map,
+        v_flyweight, v_int, v_str,
     };
     use shuttle::{check_random, sync::Arc, thread};
     use std::{
@@ -993,7 +994,7 @@ mod tests {
                             // Insert unique key-value pair - this sets OP_HINT_MAP_INSERT
                             let key = v_str(&format!("key_{thread_id}"));
                             let val = v_int(thread_id as i64);
-                            
+
                             // Map::set returns Result<Var, Error>
                             let new_map = current_map
                                 .set(&key, &val, moor_var::IndexMode::ZeroBased)
@@ -1028,6 +1029,187 @@ mod tests {
                 assert_eq!(map.len(), 2);
                 assert!(map.contains_key(&v_str("key_0"), false).unwrap());
                 assert!(map.contains_key(&v_str("key_1"), false).unwrap());
+            },
+            10,
+        );
+    }
+
+    #[test]
+    fn test_concurrent_flyweight_slot_merge() {
+        check_random(
+            || {
+                let db = setup_test_db();
+                let obj = Obj::mk_id(1);
+                let prop_name = Symbol::mk("flyweight_merge_test");
+
+                // Initialize property with empty flyweight
+                {
+                    let tx = db.start_transaction();
+                    let mut ws = DbWorldState { tx };
+                    ws.define_property(
+                        &SYSTEM_OBJECT,
+                        &obj,
+                        &obj,
+                        prop_name,
+                        &SYSTEM_OBJECT,
+                        BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
+                        Some(v_flyweight(
+                            SYSTEM_OBJECT,
+                            &[],
+                            v_empty_list().as_list().unwrap().clone(),
+                        )),
+                    )
+                    .unwrap();
+                    Box::new(ws).commit().unwrap();
+                }
+
+                let success_count = Arc::new(AtomicUsize::new(0));
+
+                let handles: Vec<_> = (0..2)
+                    .map(|thread_id| {
+                        let db = db.clone();
+                        let success_count = success_count.clone();
+
+                        thread::spawn(move || {
+                            let tx = db.start_transaction();
+                            let mut ws = DbWorldState { tx };
+
+                            // Read flyweight
+                            let current_fw_var = ws
+                                .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
+                                .unwrap();
+                            let current_fw = current_fw_var.as_flyweight().unwrap();
+
+                            // Add a slot - this sets OP_HINT_FLYWEIGHT_ADD_SLOT if we use the right constructor
+                            let slot_name = Symbol::mk(&format!("slot_{thread_id}"));
+                            let val = v_int(thread_id as i64);
+                            let new_fw = current_fw.add_slot(slot_name, val);
+
+                            // Manually apply hint for test (in real usage the builtin would do this)
+                            let new_fw_var =
+                                Var::from_flyweight_with_hint(new_fw, OP_HINT_FLYWEIGHT_ADD_SLOT);
+
+                            ws.update_property(&SYSTEM_OBJECT, &obj, prop_name, &new_fw_var)
+                                .unwrap();
+
+                            if let Ok(CommitResult::Success { .. }) = Box::new(ws).commit() {
+                                success_count.fetch_add(1, Ordering::Relaxed);
+                            }
+                        })
+                    })
+                    .collect();
+
+                for handle in handles {
+                    handle.join().unwrap();
+                }
+
+                // Both should succeed
+                assert_eq!(success_count.load(Ordering::Relaxed), 2);
+
+                // Verify final state
+                let tx = db.start_transaction();
+                let ws = DbWorldState { tx };
+                let final_fw_var = ws
+                    .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
+                    .unwrap();
+                let final_fw = final_fw_var.as_flyweight().unwrap();
+
+                // Should contain both slots
+                assert_eq!(final_fw.get_slot(&Symbol::mk("slot_0")), Some(&v_int(0)));
+                assert_eq!(final_fw.get_slot(&Symbol::mk("slot_1")), Some(&v_int(1)));
+            },
+            10,
+        );
+    }
+
+    #[test]
+    fn test_concurrent_flyweight_contents_merge() {
+        check_random(
+            || {
+                let db = setup_test_db();
+                let obj = Obj::mk_id(1);
+                let prop_name = Symbol::mk("flyweight_contents_merge_test");
+
+                // Initialize property with empty flyweight
+                {
+                    let tx = db.start_transaction();
+                    let mut ws = DbWorldState { tx };
+                    ws.define_property(
+                        &SYSTEM_OBJECT,
+                        &obj,
+                        &obj,
+                        prop_name,
+                        &SYSTEM_OBJECT,
+                        BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
+                        Some(v_flyweight(
+                            SYSTEM_OBJECT,
+                            &[],
+                            v_empty_list().as_list().unwrap().clone(),
+                        )),
+                    )
+                    .unwrap();
+                    Box::new(ws).commit().unwrap();
+                }
+
+                let success_count = Arc::new(AtomicUsize::new(0));
+
+                let handles: Vec<_> = (0..2)
+                    .map(|thread_id| {
+                        let db = db.clone();
+                        let success_count = success_count.clone();
+
+                        thread::spawn(move || {
+                            let tx = db.start_transaction();
+                            let mut ws = DbWorldState { tx };
+
+                            // Read flyweight
+                            let current_fw_var = ws
+                                .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
+                                .unwrap();
+                            let current_fw = current_fw_var.as_flyweight().unwrap();
+
+                            // Append to contents - this sets OP_HINT_FLYWEIGHT_APPEND_CONTENTS if we use right constructor
+                            let val = v_int(thread_id as i64);
+                            let new_contents = current_fw.contents().push(&val).unwrap();
+                            let new_fw =
+                                current_fw.with_contents(new_contents.as_list().unwrap().clone());
+
+                            // Manually apply hint for test
+                            let new_fw_var = Var::from_flyweight_with_hint(
+                                new_fw,
+                                OP_HINT_FLYWEIGHT_APPEND_CONTENTS,
+                            );
+
+                            ws.update_property(&SYSTEM_OBJECT, &obj, prop_name, &new_fw_var)
+                                .unwrap();
+
+                            if let Ok(CommitResult::Success { .. }) = Box::new(ws).commit() {
+                                success_count.fetch_add(1, Ordering::Relaxed);
+                            }
+                        })
+                    })
+                    .collect();
+
+                for handle in handles {
+                    handle.join().unwrap();
+                }
+
+                // Both should succeed
+                assert_eq!(success_count.load(Ordering::Relaxed), 2);
+
+                // Verify final state
+                let tx = db.start_transaction();
+                let ws = DbWorldState { tx };
+                let final_fw_var = ws
+                    .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
+                    .unwrap();
+                let final_fw = final_fw_var.as_flyweight().unwrap();
+
+                // Contents should contain both 0 and 1
+                let contents = final_fw.contents();
+                assert_eq!(contents.len(), 2);
+                assert!(contents.contains(&v_int(0), false).unwrap());
+                assert!(contents.contains(&v_int(1), false).unwrap());
             },
             10,
         );

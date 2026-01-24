@@ -66,7 +66,10 @@ pub trait RelationCodomain: Clone + PartialEq + Send + Sync + 'static {
 impl RelationCodomain for Var {
     fn try_merge(&self, base: &Self, theirs: &Self) -> Option<Self> {
         // Only merge if both operations provided a hint
-        use moor_var::{OP_HINT_LIST_APPEND, OP_HINT_MAP_INSERT};
+        use moor_var::{
+            OP_HINT_FLYWEIGHT_ADD_SLOT, OP_HINT_FLYWEIGHT_APPEND_CONTENTS, OP_HINT_LIST_APPEND,
+            OP_HINT_MAP_INSERT,
+        };
 
         let my_hint = self.op_hint();
         let their_hint = theirs.op_hint();
@@ -77,21 +80,18 @@ impl RelationCodomain for Var {
 
         match my_hint {
             OP_HINT_LIST_APPEND => {
-                // List append merge: Base + (Theirs - Base) + (Mine - Base)
-                // We need to verify that both Mine and Theirs start with Base
-                // Structural sharing checks should be fast
+                // ... (existing list merge)
+                // (Keeping the code but removing the ... for replacement)
                 let mine_list = self.as_list()?;
                 let their_list = theirs.as_list()?;
                 let base_list = base.as_list()?;
 
-                // Both must be longer than base (appended)
                 if mine_list.len() <= base_list.len() || their_list.len() <= base_list.len() {
                     return None;
                 }
 
                 let base_len = base_list.len();
 
-                // Check prefixes
                 if !mine_list.iter().take(base_len).eq(base_list.iter()) {
                     return None;
                 }
@@ -99,10 +99,7 @@ impl RelationCodomain for Var {
                     return None;
                 }
 
-                // Merge: Take `theirs` (which is Base + TheirSuffix) and append Mine's suffix
-                let mut result = their_list.clone(); // Result starts as Theirs
-
-                // Append Mine's suffix
+                let mut result = their_list.clone();
                 for item in mine_list.iter().skip(base_len) {
                     result = match result.push(&item) {
                         Ok(r) => match r.variant() {
@@ -112,23 +109,18 @@ impl RelationCodomain for Var {
                         Err(_) => return None,
                     };
                 }
-
-                // Return result wrapped in Var, preserving the hint (it's still an append result!)
                 Some(Var::from_list_with_hint(result, OP_HINT_LIST_APPEND))
             }
             OP_HINT_MAP_INSERT => {
-                // Map insert merge: Two concurrent inserts of DIFFERENT keys.
+                // ... (existing map merge)
                 let mine_map = self.as_map()?;
                 let their_map = theirs.as_map()?;
                 let base_map = base.as_map()?;
 
                 if mine_map.len() != base_map.len() + 1 || their_map.len() != base_map.len() + 1 {
-                    // Only support single item insert for safety/speed for now
                     return None;
                 }
 
-                // Find the added key in Mine
-                // Iterate Mine, check if in Base. The one that isn't is our key.
                 let mut my_key = None;
                 let mut my_val = None;
                 for (k, v) in mine_map.iter() {
@@ -140,14 +132,89 @@ impl RelationCodomain for Var {
                 }
                 let (k_mine, v_mine) = (my_key?, my_val?);
 
-                // Check if Theirs has this key
                 if their_map.contains_key(&k_mine, false).unwrap_or(false) {
-                    // Conflict! Both inserted same key (but different values, since AcceptIdentical failed)
                     return None;
                 }
 
-                // Merge: Take Theirs, insert My Key/Value
                 their_map.set(&k_mine, &v_mine).ok()
+            }
+            OP_HINT_FLYWEIGHT_ADD_SLOT => {
+                // Flyweight slot insert merge
+                let mine_fw = self.as_flyweight()?;
+                let their_fw = theirs.as_flyweight()?;
+                let base_fw = base.as_flyweight()?;
+
+                // Delegate must match
+                if mine_fw.delegate() != base_fw.delegate()
+                    || their_fw.delegate() != base_fw.delegate()
+                {
+                    return None;
+                }
+
+                // Verify sizes: both added exactly 1 item to slots
+                let mine_slots = mine_fw.slots_storage();
+                let their_slots = their_fw.slots_storage();
+                let base_slots = base_fw.slots_storage();
+
+                if mine_slots.len() != base_slots.len() + 1
+                    || their_slots.len() != base_slots.len() + 1
+                {
+                    return None;
+                }
+
+                // Find the added slot in Mine
+                // Slots are sorted by Symbol (compare_id)
+                let mut my_slot = None;
+                for (k, v) in mine_slots.iter() {
+                    if base_fw.get_slot(k).is_none() {
+                        my_slot = Some((*k, v.clone()));
+                        break;
+                    }
+                }
+                let (k_mine, v_mine) = my_slot?;
+
+                // Check if Theirs has this key
+                if their_fw.get_slot(&k_mine).is_some() {
+                    return None;
+                }
+
+                // Merge: Take Theirs, add My slot
+                Some(Var::from_flyweight_with_hint(
+                    their_fw.add_slot(k_mine, v_mine),
+                    OP_HINT_FLYWEIGHT_ADD_SLOT,
+                ))
+            }
+            OP_HINT_FLYWEIGHT_APPEND_CONTENTS => {
+                // Flyweight contents append merge
+                let mine_fw = self.as_flyweight()?;
+                let their_fw = theirs.as_flyweight()?;
+                let base_fw = base.as_flyweight()?;
+
+                // Slots and Delegate must match (only contents changed)
+                if mine_fw.delegate() != base_fw.delegate()
+                    || their_fw.delegate() != base_fw.delegate()
+                    || mine_fw.slots_storage() != base_fw.slots_storage()
+                    || their_fw.slots_storage() != base_fw.slots_storage()
+                {
+                    return None;
+                }
+
+                // Delegate to List merge for contents
+                let base_contents = Var::from_list(base_fw.contents().clone());
+
+                let mine_contents_hinted =
+                    Var::from_list_with_hint(mine_fw.contents().clone(), OP_HINT_LIST_APPEND);
+                let their_contents_hinted =
+                    Var::from_list_with_hint(their_fw.contents().clone(), OP_HINT_LIST_APPEND);
+
+                let merged_contents_var =
+                    mine_contents_hinted.try_merge(&base_contents, &their_contents_hinted)?;
+                let merged_contents = merged_contents_var.as_list()?.clone();
+
+                Some(Var::from_flyweight_with_hint(
+                    their_fw.with_contents(merged_contents),
+                    OP_HINT_FLYWEIGHT_APPEND_CONTENTS,
+                ))
             }
             _ => None,
         }

@@ -58,6 +58,8 @@ const TAG_LAMBDA: u8 = COMPLEX_FLAG | 7;
 pub const OP_HINT_NONE: u8 = 0;
 pub const OP_HINT_LIST_APPEND: u8 = 1;
 pub const OP_HINT_MAP_INSERT: u8 = 2;
+pub const OP_HINT_FLYWEIGHT_ADD_SLOT: u8 = 3;
+pub const OP_HINT_FLYWEIGHT_APPEND_CONTENTS: u8 = 4;
 
 /// Cached empty string Var.
 static EMPTY_STR_VAR: Lazy<Var> = Lazy::new(|| Var::from_str_type(Str::mk_str("")));
@@ -380,10 +382,15 @@ impl Var {
 
     /// Create a Var from a Flyweight directly
     pub fn from_flyweight(f: Flyweight) -> Self {
+        Self::from_flyweight_with_hint(f, OP_HINT_NONE)
+    }
+
+    /// Create a Var from a Flyweight with an operation hint
+    pub fn from_flyweight_with_hint(f: Flyweight, hint: u8) -> Self {
         let boxed = Box::new(f);
         Self {
             tag: TAG_FLYWEIGHT,
-            meta: [0; 7],
+            meta: [0, 0, 0, 0, 0, 0, hint],
             data: Box::into_raw(boxed) as u64,
         }
     }

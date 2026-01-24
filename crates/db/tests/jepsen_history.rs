@@ -323,10 +323,10 @@ mod tests {
 
                         match cr.check(&mut ws) {
                             Ok(_) => {
-                                return Err(eyre::eyre!("Expected conflict, check succeeded"));
+                                Err(eyre::eyre!("Expected conflict, check succeeded"))
                             }
                             Err(Error::Conflict(_)) => {
-                                return Ok(());
+                                Ok(())
                             }
                             Err(e) => panic!("unexpected error: {e:?}"),
                         }
