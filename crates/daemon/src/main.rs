@@ -613,6 +613,8 @@ fn main() -> Result<(), Report> {
     let has_tcp_endpoint =
         |endpoints: &str| endpoints.split(',').any(|e| e.trim().starts_with("tcp://"));
     let use_curve = has_tcp_endpoint(&args.rpc_listen) || has_tcp_endpoint(&args.events_listen);
+    let use_curve_for_workers = has_tcp_endpoint(&args.workers_request_listen)
+        || has_tcp_endpoint(&args.workers_response_listen);
 
     if use_curve {
         // Start ZAP authentication handler for CURVE
@@ -680,13 +682,13 @@ fn main() -> Result<(), Report> {
 
     let (worker_scheduler_send, worker_scheduler_recv) = flume::unbounded();
 
-    // Workers RPC server
+    // Workers RPC server (only use CURVE if workers endpoints are TCP)
     let mut workers_server = WorkersServer::new(
         kill_switch.clone(),
         zmq_ctx.clone(),
         &args.workers_request_listen,
         worker_scheduler_send,
-        if use_curve {
+        if use_curve_for_workers {
             Some(daemon_curve_keypair.secret.clone())
         } else {
             None
