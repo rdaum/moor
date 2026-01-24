@@ -455,19 +455,16 @@ impl MoorDB {
 
                     {
                         // Conflict validation - can skip if no concurrent commits
-                        if !skip_conflict_check {
-                            if let Err(conflict_info) = checkers.check_all(&relation_ws) {
-                                warn!(
-                                    "Transaction conflict during commit: {}",
-                                    conflict_info
-                                );
-                                reply
-                                    .send(CommitResult::ConflictRetry {
-                                        conflict_info: Some(conflict_info),
-                                    })
-                                    .ok();
-                                continue;
-                            }
+                        if !skip_conflict_check
+                            && let Err(conflict_info) = checkers.check_all(&relation_ws)
+                        {
+                            warn!("Transaction conflict during commit: {}", conflict_info);
+                            reply
+                                .send(CommitResult::ConflictRetry {
+                                    conflict_info: Some(conflict_info),
+                                })
+                                .ok();
+                            continue;
                         }
                         drop(_t);
 
