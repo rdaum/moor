@@ -78,6 +78,11 @@ services:
         --generate-keypair
         --import=/db/cores/lambda-moor/src --import-format=objdef
         --export=/db/export
+    ports:
+      # TCP RPC with CURVE (for external/remote access)
+      - "7899:7899"
+      # TCP Events with CURVE (for external/remote access)
+      - "7898:7898"
     networks:
       - moor_net
 
