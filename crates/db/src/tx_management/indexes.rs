@@ -337,6 +337,11 @@ mod tests {
 
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     struct TestDomain(u64);
+    impl std::fmt::Display for TestDomain {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.0)
+        }
+    }
 
     #[derive(Clone, PartialEq, Eq, Hash, Debug)]
     struct TestCodomain(u64);
