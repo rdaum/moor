@@ -18,6 +18,8 @@ object GAME_UPDATE
     "Based on bitMuse game update loop, adapter for benchmarking game-tick type update loops.";
     ":process_updates() => NONE";
     "  The meat of the loop that runs :fixed_update(@state)";
+    "Ensure own transaction, and up to date with world...";
+    suspend(0);
     if (task_id() != this.task_id)
       "guard statement that allows us to abort if someone called this on the wrong task";
       "it's okay if this happens here we can silently abort";
@@ -64,11 +66,13 @@ object GAME_UPDATE
             commit();
           endtry
         endfor
+        commit();
         runtime = ftime(true) - start_time;
         update_time = 1.0 / this.update_hertz;
         this.latency = {runtime, @this.latency}[1..min(5, $)];
         suspend(max(0.0, update_time - runtime));
         this:prune_interrupts();
+        commit();
         interrupts = this.interrupts;
       except e (ANY)
         server_log(toliteral(e));

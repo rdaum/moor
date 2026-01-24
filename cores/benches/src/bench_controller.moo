@@ -7,7 +7,7 @@ object BENCH_CONTROLLER
   property subscribers (owner: ARCH_WIZARD, flags: "rw") = {};
   property running (owner: ARCH_WIZARD, flags: "r") = 0;
   property cycles_per_sample (owner: ARCH_WIZARD, flags: "rw") = 20;
-  property samples_per_level (owner: ARCH_WIZARD, flags: "rw") = 3;
+  property samples_per_level (owner: ARCH_WIZARD, flags: "rw") = 10;
   property subscriber_counts (owner: ARCH_WIZARD, flags: "rw") = {1, 4, 16, 64, 256, 512, 1024};
   property work_iterations (owner: ARCH_WIZARD, flags: "rw") = 10;
 
