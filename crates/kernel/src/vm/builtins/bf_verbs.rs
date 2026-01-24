@@ -719,16 +719,26 @@ fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     };
 
+    let task_perms = bf_args.task_perms_who();
+
+    // Invalid object is E_INVARG.
     if !with_current_transaction(|world_state| world_state.valid(&obj))
         .map_err(world_state_bf_err)?
     {
         return Err(BfErr::Code(E_INVARG));
     }
 
+    // Invalid task perms is false
+    if !with_current_transaction(|world_state| world_state.valid(&task_perms))
+        .map_err(world_state_bf_err)?
+    {
+        return Ok(Ret(bf_args.v_bool(false)));
+    }
+
     let name = bf_args.args[1].as_symbol().map_err(BfErr::ErrValue)?;
 
     let Ok((_, vd)) = with_current_transaction(|world_state| {
-        world_state.find_method_verb_on(&bf_args.task_perms_who(), &obj, name)
+        world_state.find_method_verb_on(&task_perms, &obj, name)
     }) else {
         return Ok(Ret(bf_args.v_bool(false)));
     };
@@ -736,7 +746,7 @@ fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let oflags = with_current_transaction(|world_state| world_state.flags_of(&obj))
         .map_err(world_state_bf_err)?;
 
-    if with_current_transaction(|world_state| world_state.controls(&bf_args.task_perms_who(), &obj))
+    if with_current_transaction(|world_state| world_state.controls(&task_perms, &obj))
         .map_err(world_state_bf_err)?
         || oflags.contains(ObjFlag::Read)
     {
@@ -750,11 +760,6 @@ fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let result = v_list(&[v_obj(vd.location()), names]);
         Ok(Ret(result))
     } else {
-        info!(
-            "rejected caller_perms: {:?} is_readable: {}",
-            bf_args.caller_perms(),
-            oflags.contains(ObjFlag::Read)
-        );
         Ok(Ret(bf_args.v_bool(true)))
     }
 }
