@@ -92,6 +92,14 @@ pub struct Args {
     run_tests: Option<bool>,
 
     #[clap(
+        long,
+        help = "Filter which unit tests to run. Format: 'objectid:verb_name' (e.g., '#123:test_foo'). \
+                The objectid is parsed with Obj::try_from (supports #N or UUID format). \
+                If only objectid is given, runs all test_ verbs on that object."
+    )]
+    test_filter: Option<String>,
+
+    #[clap(
         long = "test-files",
         visible_alias = "test-directory",
         help = "Run integration `moot` tests from directory (recursive) or glob pattern (e.g., 'tests/**/*.moot')"
@@ -210,7 +218,8 @@ fn collect_moot_files(input: &str) -> Result<Vec<PathBuf>, eyre::Report> {
         // Treat as directory path
         let path = PathBuf::from(input);
         if !path.exists() {
-            return Err(eyre::eyre!("Path does not exist: {}", input));
+            // Path doesn't exist, just return empty list (caller will warn)
+            return Ok(files);
         }
         if path.is_file() {
             // Single file specified
@@ -476,6 +485,39 @@ fn main() -> Result<(), eyre::Report> {
             }
         }
         info!("Found {} tests", unit_tests.len());
+
+        // Apply test filter if specified
+        if let Some(ref filter) = args.test_filter {
+            let (filter_obj, filter_verb): (Option<Obj>, Option<&str>) =
+                if let Some((obj_part, verb_part)) = filter.split_once(':') {
+                    let obj = Obj::try_from(obj_part).unwrap_or_else(|e| {
+                        error!("Failed to parse object id '{}': {}", obj_part, e);
+                        std::process::exit(1);
+                    });
+                    (Some(obj), Some(verb_part))
+                } else {
+                    // Only object id specified, run all test_ verbs on that object
+                    let obj = Obj::try_from(filter.as_str()).unwrap_or_else(|e| {
+                        error!("Failed to parse object id '{}': {}", filter, e);
+                        std::process::exit(1);
+                    });
+                    (Some(obj), None)
+                };
+
+            let before_count = unit_tests.len();
+            unit_tests.retain(|(o, verb)| {
+                let obj_matches = filter_obj.as_ref().is_none_or(|fo| fo == o);
+                let verb_matches =
+                    filter_verb.is_none_or(|fv| verb.as_arc_str().as_str() == fv);
+                obj_matches && verb_matches
+            });
+            info!(
+                "Filtered tests from {} to {} (filter: {:?})",
+                before_count,
+                unit_tests.len(),
+                filter
+            );
+        }
     }
 
     let config = Config {
