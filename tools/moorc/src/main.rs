@@ -507,8 +507,7 @@ fn main() -> Result<(), eyre::Report> {
             let before_count = unit_tests.len();
             unit_tests.retain(|(o, verb)| {
                 let obj_matches = filter_obj.as_ref().is_none_or(|fo| fo == o);
-                let verb_matches =
-                    filter_verb.is_none_or(|fv| verb.as_arc_str().as_str() == fv);
+                let verb_matches = filter_verb.is_none_or(|fv| verb.as_arc_str().as_str() == fv);
                 obj_matches && verb_matches
             });
             info!(

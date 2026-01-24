@@ -155,15 +155,15 @@ pub fn parse_input_token(token: &str) -> (i64, String) {
 /// Returns None if no prefix, or Some(subject) if prefix found and subject is non-empty.
 /// When the token is exactly "all" or "*." with no subject, returns None to treat it as a literal.
 pub fn parse_all_tiers_prefix(token: &str) -> Option<String> {
-    if let Some(rest) = token.strip_prefix("all ") {
-        if !rest.is_empty() {
-            return Some(rest.to_string());
-        }
+    if let Some(rest) = token.strip_prefix("all ")
+        && !rest.is_empty()
+    {
+        return Some(rest.to_string());
     }
-    if let Some(rest) = token.strip_prefix("*.") {
-        if !rest.is_empty() {
-            return Some(rest.to_string());
-        }
+    if let Some(rest) = token.strip_prefix("*.")
+        && !rest.is_empty()
+    {
+        return Some(rest.to_string());
     }
     None
 }
