@@ -60,6 +60,7 @@ pub const OP_HINT_LIST_APPEND: u8 = 1;
 pub const OP_HINT_MAP_INSERT: u8 = 2;
 pub const OP_HINT_FLYWEIGHT_ADD_SLOT: u8 = 3;
 pub const OP_HINT_FLYWEIGHT_APPEND_CONTENTS: u8 = 4;
+pub const OP_HINT_STR_APPEND: u8 = 5;
 
 /// Cached empty string Var.
 static EMPTY_STR_VAR: Lazy<Var> = Lazy::new(|| Var::from_str_type(Str::mk_str("")));
@@ -116,10 +117,9 @@ impl Var {
         [bytes[0], bytes[1], 0, 0, 0, 0, hint]
     }
 
-    /// Create meta bytes with cached length and ASCII flag for strings.
-    /// meta[0..2] = char count, meta[2] = 1 if ASCII, 0 otherwise.
+    /// Create meta bytes with cached length, ASCII flag, and hint for strings.
     #[inline(always)]
-    fn meta_with_str_info(char_len: usize, byte_len: usize) -> [u8; 7] {
+    fn meta_with_str_info(char_len: usize, byte_len: usize, hint: u8) -> [u8; 7] {
         let len16 = if char_len >= LEN_OVERFLOW as usize {
             LEN_OVERFLOW
         } else {
@@ -127,7 +127,7 @@ impl Var {
         };
         let bytes = len16.to_ne_bytes();
         let is_ascii = if byte_len == char_len { 1 } else { 0 };
-        [bytes[0], bytes[1], is_ascii, 0, 0, 0, 0]
+        [bytes[0], bytes[1], is_ascii, 0, 0, 0, hint]
     }
 
     /// Check if a string Var contains only ASCII characters.
@@ -143,9 +143,8 @@ impl Var {
     /// Uses cached ASCII flag for fast path when both strings are ASCII.
     #[inline]
     pub fn str_find(&self, needle: &Var, case_matters: bool, skip: usize) -> Option<usize> {
-        let (Some(subject), Some(needle_str)) = (self.as_str(), needle.as_str()) else {
-            return None;
-        };
+        let subject: &string::Str = self.as_str()?;
+        let needle_str: &string::Str = needle.as_str()?;
         let is_ascii = self.str_is_ascii() && needle.str_is_ascii();
         string::str_find(
             subject.as_str(),
@@ -165,9 +164,8 @@ impl Var {
         case_matters: bool,
         skip_from_end: usize,
     ) -> Option<usize> {
-        let (Some(subject), Some(needle_str)) = (self.as_str(), needle.as_str()) else {
-            return None;
-        };
+        let subject: &string::Str = self.as_str()?;
+        let needle_str: &string::Str = needle.as_str()?;
         let is_ascii = self.str_is_ascii() && needle.str_is_ascii();
         string::str_rfind(
             subject.as_str(),
@@ -182,11 +180,9 @@ impl Var {
     /// Uses cached ASCII flag for fast path when all strings are ASCII.
     #[inline]
     pub fn str_replace(&self, what: &Var, with: &Var, case_matters: bool) -> Option<Var> {
-        let (Some(subject), Some(what_str), Some(with_str)) =
-            (self.as_str(), what.as_str(), with.as_str())
-        else {
-            return None;
-        };
+        let subject: &string::Str = self.as_str()?;
+        let what_str: &string::Str = what.as_str()?;
+        let with_str: &string::Str = with.as_str()?;
         let is_ascii = self.str_is_ascii() && what.str_is_ascii() && with.str_is_ascii();
         let result = string::str_replace(
             subject.as_str(),
@@ -291,6 +287,11 @@ impl Var {
 
     /// Create a Var from a Str type directly
     pub fn from_str_type(s: string::Str) -> Self {
+        Self::from_str_type_with_hint(s, OP_HINT_NONE)
+    }
+
+    /// Create a Var from a Str type with an operation hint
+    pub fn from_str_type_with_hint(s: string::Str, hint: u8) -> Self {
         let str_ref = s.as_str();
         let byte_len = str_ref.len();
         let char_len = str_ref.chars().count();
@@ -298,7 +299,7 @@ impl Var {
         let data: u64 = unsafe { std::mem::transmute(s) };
         Self {
             tag: TAG_STR,
-            meta: Self::meta_with_str_info(char_len, byte_len),
+            meta: Self::meta_with_str_info(char_len, byte_len, hint),
             data,
         }
     }
@@ -577,7 +578,7 @@ impl Var {
     /// Extract the string value if this is a string, otherwise None.
     #[inline]
     pub fn as_string(&self) -> Option<&str> {
-        self.as_str().map(|s| s.as_str())
+        self.as_str().map(|s: &string::Str| s.as_str())
     }
 
     #[inline(always)]

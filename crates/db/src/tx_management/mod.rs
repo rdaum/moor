@@ -68,7 +68,7 @@ impl RelationCodomain for Var {
         // Only merge if both operations provided a hint
         use moor_var::{
             OP_HINT_FLYWEIGHT_ADD_SLOT, OP_HINT_FLYWEIGHT_APPEND_CONTENTS, OP_HINT_LIST_APPEND,
-            OP_HINT_MAP_INSERT,
+            OP_HINT_MAP_INSERT, OP_HINT_STR_APPEND,
         };
 
         let my_hint = self.op_hint();
@@ -80,18 +80,19 @@ impl RelationCodomain for Var {
 
         match my_hint {
             OP_HINT_LIST_APPEND => {
-                // ... (existing list merge)
-                // (Keeping the code but removing the ... for replacement)
+                // List append merge: Base + (Theirs - Base) + (Mine - Base)
                 let mine_list = self.as_list()?;
                 let their_list = theirs.as_list()?;
                 let base_list = base.as_list()?;
 
+                // Both must be longer than base (appended)
                 if mine_list.len() <= base_list.len() || their_list.len() <= base_list.len() {
                     return None;
                 }
 
                 let base_len = base_list.len();
 
+                // Check prefixes
                 if !mine_list.iter().take(base_len).eq(base_list.iter()) {
                     return None;
                 }
@@ -99,7 +100,10 @@ impl RelationCodomain for Var {
                     return None;
                 }
 
-                let mut result = their_list.clone();
+                // Merge: Take `theirs` (which is Base + TheirSuffix) and append Mine's suffix
+                let mut result = their_list.clone(); // Result starts as Theirs
+
+                // Append Mine's suffix
                 for item in mine_list.iter().skip(base_len) {
                     result = match result.push(&item) {
                         Ok(r) => match r.variant() {
@@ -109,18 +113,23 @@ impl RelationCodomain for Var {
                         Err(_) => return None,
                     };
                 }
+
+                // Return result wrapped in Var, preserving the hint (it's still an append result!)
                 Some(Var::from_list_with_hint(result, OP_HINT_LIST_APPEND))
             }
             OP_HINT_MAP_INSERT => {
-                // ... (existing map merge)
+                // Map insert merge: Two concurrent inserts of DIFFERENT keys.
                 let mine_map = self.as_map()?;
                 let their_map = theirs.as_map()?;
                 let base_map = base.as_map()?;
 
                 if mine_map.len() != base_map.len() + 1 || their_map.len() != base_map.len() + 1 {
+                    // Only support single item insert for safety/speed for now
                     return None;
                 }
 
+                // Find the added key in Mine
+                // Iterate Mine, check if in Base. The one that isn't is our key.
                 let mut my_key = None;
                 let mut my_val = None;
                 for (k, v) in mine_map.iter() {
@@ -132,10 +141,13 @@ impl RelationCodomain for Var {
                 }
                 let (k_mine, v_mine) = (my_key?, my_val?);
 
+                // Check if Theirs has this key
                 if their_map.contains_key(&k_mine, false).unwrap_or(false) {
+                    // Conflict! Both inserted same key (but different values, since AcceptIdentical failed)
                     return None;
                 }
 
+                // Merge: Take Theirs, insert My Key/Value
                 their_map.set(&k_mine, &v_mine).ok()
             }
             OP_HINT_FLYWEIGHT_ADD_SLOT => {
@@ -163,7 +175,6 @@ impl RelationCodomain for Var {
                 }
 
                 // Find the added slot in Mine
-                // Slots are sorted by Symbol (compare_id)
                 let mut my_slot = None;
                 for (k, v) in mine_slots.iter() {
                     if base_fw.get_slot(k).is_none() {
@@ -216,6 +227,31 @@ impl RelationCodomain for Var {
                     OP_HINT_FLYWEIGHT_APPEND_CONTENTS,
                 ))
             }
+            OP_HINT_STR_APPEND => {
+                // String append merge
+                let mine_str = self.as_string()?;
+                let their_str = theirs.as_string()?;
+                let base_str = base.as_string()?;
+
+                // Both must be longer than base
+                if mine_str.len() <= base_str.len() || their_str.len() <= base_str.len() {
+                    return None;
+                }
+
+                // Verify base prefix
+                if !mine_str.starts_with(base_str) || !their_str.starts_with(base_str) {
+                    return None;
+                }
+
+                // Merge: Take theirs, append mine's suffix
+                let mut result = their_str.to_string();
+                result.push_str(&mine_str[base_str.len()..]);
+
+                Some(Var::from_str_type_with_hint(
+                    moor_var::Str::mk_string(result),
+                    OP_HINT_STR_APPEND,
+                ))
+            }
             _ => None,
         }
     }
@@ -239,9 +275,7 @@ impl_relation_codomain!(
     PropDefs,
     PropPerms,
     AnonymousObjectMetadata,
-    ObjAndUUIDHolder,
-    crate::tx_management::relation_tx::Op<Var> // Wait, Op<Var> isn't a codomain?
-                                               // RelationCodomain is used for T in Relation<K, V>.
+    ObjAndUUIDHolder
 );
 
 // We also need to implement for TestCodomain used in tests

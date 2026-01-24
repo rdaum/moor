@@ -322,12 +322,8 @@ mod tests {
                         let mut cr = backing_store.begin_check();
 
                         match cr.check(&mut ws) {
-                            Ok(_) => {
-                                Err(eyre::eyre!("Expected conflict, check succeeded"))
-                            }
-                            Err(Error::Conflict(_)) => {
-                                Ok(())
-                            }
+                            Ok(_) => Err(eyre::eyre!("Expected conflict, check succeeded")),
+                            Err(Error::Conflict(_)) => Ok(()),
                             Err(e) => panic!("unexpected error: {e:?}"),
                         }
                         // Code after here is unreachable because we either return or panic above

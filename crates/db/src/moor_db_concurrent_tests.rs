@@ -1214,4 +1214,84 @@ mod tests {
             10,
         );
     }
+
+    #[test]
+    fn test_concurrent_string_append_merge() {
+        check_random(
+            || {
+                let db = setup_test_db();
+                let obj = Obj::mk_id(1);
+                let prop_name = Symbol::mk("string_append_test");
+
+                // Initialize property with empty string
+                {
+                    let tx = db.start_transaction();
+                    let mut ws = DbWorldState { tx };
+                    ws.define_property(
+                        &SYSTEM_OBJECT,
+                        &obj,
+                        &obj,
+                        prop_name,
+                        &SYSTEM_OBJECT,
+                        BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
+                        Some(v_str("Base")),
+                    )
+                    .unwrap();
+                    Box::new(ws).commit().unwrap();
+                }
+
+                let success_count = Arc::new(AtomicUsize::new(0));
+
+                let handles: Vec<_> = (0..2)
+                    .map(|thread_id| {
+                        let db = db.clone();
+                        let success_count = success_count.clone();
+
+                        thread::spawn(move || {
+                            let tx = db.start_transaction();
+                            let mut ws = DbWorldState { tx };
+
+                            // Read string
+                            let current_str = ws
+                                .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
+                                .unwrap();
+
+                            // Append value - Var::add for strings sets OP_HINT_STR_APPEND via Str::str_append
+                            let suffix = v_str(&format!("+Suffix{}", thread_id));
+                            let new_str = current_str.add(&suffix).unwrap();
+
+                            ws.update_property(&SYSTEM_OBJECT, &obj, prop_name, &new_str)
+                                .unwrap();
+
+                            if let Ok(CommitResult::Success { .. }) = Box::new(ws).commit() {
+                                success_count.fetch_add(1, Ordering::Relaxed);
+                            }
+                        })
+                    })
+                    .collect();
+
+                for handle in handles {
+                    handle.join().unwrap();
+                }
+
+                // Both should succeed
+                assert_eq!(success_count.load(Ordering::Relaxed), 2);
+
+                // Verify final state
+                let tx = db.start_transaction();
+                let ws = DbWorldState { tx };
+                let final_str = ws
+                    .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
+                    .unwrap();
+                let s = final_str.as_string().unwrap();
+
+                // Should contain Base and both suffixes
+                assert!(s.starts_with("Base"));
+                assert!(s.contains("+Suffix0"));
+                assert!(s.contains("+Suffix1"));
+                assert_eq!(s.len(), "Base+Suffix0+Suffix1".len());
+            },
+            10,
+        );
+    }
 }

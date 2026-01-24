@@ -22,6 +22,7 @@ use std::{
 use crate::{
     Error, Sequence,
     error::ErrorCode::{E_INVARG, E_RANGE, E_TYPE},
+    variant::OP_HINT_STR_APPEND,
     variant::Var,
 };
 
@@ -53,7 +54,7 @@ impl Str {
     pub fn str_append(&self, other: &Self) -> Var {
         let mut s = String::from(&*self.0);
         s.push_str(other.as_str());
-        Var::from_str_type(Str(ArcStr::from(s)))
+        Var::from_str_type_with_hint(Str(ArcStr::from(s)), OP_HINT_STR_APPEND)
     }
 }
 
@@ -579,7 +580,10 @@ impl Sequence for Str {
 
         let mut new_copy = self.as_str().to_string();
         new_copy.push_str(value.as_str());
-        Ok(Var::from_str_type(Str(ArcStr::from(new_copy))))
+        Ok(Var::from_str_type_with_hint(
+            Str(ArcStr::from(new_copy)),
+            OP_HINT_STR_APPEND,
+        ))
     }
 
     fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
