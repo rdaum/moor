@@ -396,12 +396,12 @@ impl RpcMessageHandler {
 
     pub fn client_auth(&self, token: ClientToken, client_id: Uuid) -> Result<Obj, RpcMessageError> {
         let Some(connection) = self.connections.connection_object_for_client(client_id) else {
-            warn!(client_id = ?client_id, "client_auth: no connection found for client_id");
+            debug!(client_id = ?client_id, "client_auth: no connection found for client_id");
             return Err(RpcMessageError::NoConnection);
         };
 
         if let Err(e) = self.validate_client_token_impl(token, client_id) {
-            warn!(client_id = ?client_id, error = ?e, "client_auth: token validation failed");
+            debug!(client_id = ?client_id, error = ?e, "client_auth: token validation failed");
             return Err(e);
         }
         Ok(connection)
