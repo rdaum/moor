@@ -297,11 +297,18 @@ fn create_rpc_transport(
     zmq_context: zmq::Context,
     kill_switch: Arc<AtomicBool>,
     events_listen: &str,
+    rpc_listen: &str,
     curve_secret_key: Option<String>,
 ) -> Result<Arc<dyn Transport>, Report> {
     let transport = Arc::new(
-        RpcTransport::new(zmq_context, kill_switch, events_listen, curve_secret_key)
-            .map_err(|e| eyre!("Failed to create RPC transport: {}", e))?,
+        RpcTransport::new(
+            zmq_context,
+            kill_switch,
+            events_listen,
+            rpc_listen,
+            curve_secret_key,
+        )
+        .map_err(|e| eyre!("Failed to create RPC transport: {}", e))?,
     ) as Arc<dyn Transport>;
     Ok(transport)
 }
@@ -602,8 +609,10 @@ fn main() -> Result<(), Report> {
     let resolved_events_db_path = args.resolved_events_db_path();
 
     // Check if we need CURVE encryption (only for TCP endpoints, not IPC)
-    let use_curve =
-        args.rpc_listen.starts_with("tcp://") || args.events_listen.starts_with("tcp://");
+    // Endpoints can be comma-separated, so check if any of them is TCP
+    let has_tcp_endpoint =
+        |endpoints: &str| endpoints.split(',').any(|e| e.trim().starts_with("tcp://"));
+    let use_curve = has_tcp_endpoint(&args.rpc_listen) || has_tcp_endpoint(&args.events_listen);
 
     if use_curve {
         // Start ZAP authentication handler for CURVE
@@ -634,6 +643,7 @@ fn main() -> Result<(), Report> {
         zmq_ctx.clone(),
         kill_switch.clone(),
         args.events_listen.as_str(),
+        args.rpc_listen.as_str(),
         if use_curve {
             Some(daemon_curve_keypair.secret.clone())
         } else {

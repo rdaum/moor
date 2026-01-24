@@ -98,7 +98,7 @@ pub struct Args {
     #[arg(
         long,
         value_name = "rpc-listen",
-        help = "RPC server address",
+        help = "RPC server address(es). Comma-separated list of endpoints (e.g. ipc:///path/rpc.sock,tcp://0.0.0.0:7899). IPC endpoints have no encryption; TCP endpoints use CURVE encryption.",
         default_value = "ipc:///tmp/moor_rpc.sock"
     )]
     pub rpc_listen: String,
@@ -106,7 +106,7 @@ pub struct Args {
     #[arg(
         long,
         value_name = "events-listen",
-        help = "Events publisher listen address",
+        help = "Events publisher address(es). Comma-separated list of endpoints (e.g. ipc:///path/events.sock,tcp://0.0.0.0:7898). IPC endpoints have no encryption; TCP endpoints use CURVE encryption.",
         default_value = "ipc:///tmp/moor_events.sock"
     )]
     pub events_listen: String,

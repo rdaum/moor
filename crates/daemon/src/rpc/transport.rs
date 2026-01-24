@@ -70,51 +70,110 @@ pub trait Transport: Send + Sync {
 pub struct RpcTransport {
     zmq_context: zmq::Context,
     kill_switch: Arc<AtomicBool>,
-    events_publish: Arc<Mutex<Socket>>,
+    /// IPC PUB socket for local connections (no CURVE) - binds all IPC endpoints
+    events_publish_ipc: Option<Arc<Mutex<Socket>>>,
+    /// TCP PUB socket for remote connections (with CURVE) - binds all TCP endpoints
+    events_publish_tcp: Option<Arc<Mutex<Socket>>>,
     curve_secret_key: Option<String>, // Z85-encoded CURVE secret key for server mode
+    /// IPC endpoints for RPC (no CURVE)
+    ipc_rpc_endpoints: Vec<String>,
+    /// TCP endpoints for RPC (with CURVE)
+    tcp_rpc_endpoints: Vec<String>,
 }
 
 impl RpcTransport {
+    /// Parse comma-separated endpoints and group by type (IPC vs TCP)
+    fn parse_endpoints(endpoints_str: &str) -> (Vec<String>, Vec<String>) {
+        let mut ipc_endpoints = Vec::new();
+        let mut tcp_endpoints = Vec::new();
+
+        for endpoint in endpoints_str.split(',') {
+            let endpoint = endpoint.trim();
+            if endpoint.is_empty() {
+                continue;
+            }
+            if endpoint.starts_with("tcp://") {
+                tcp_endpoints.push(endpoint.to_string());
+            } else {
+                // IPC or other local transports
+                ipc_endpoints.push(endpoint.to_string());
+            }
+        }
+
+        (ipc_endpoints, tcp_endpoints)
+    }
+
     pub fn new(
         zmq_context: zmq::Context,
         kill_switch: Arc<AtomicBool>,
-        narrative_endpoint: &str,
+        events_endpoints: &str,
+        rpc_endpoints: &str,
         curve_secret_key: Option<String>,
     ) -> Result<Self, eyre::Error> {
-        // Create the socket for publishing narrative events
-        let publish = zmq_context
-            .socket(zmq::SocketType::PUB)
-            .context("Unable to create ZMQ PUB socket")?;
+        // Parse endpoints into IPC and TCP groups
+        let (ipc_events_endpoints, tcp_events_endpoints) = Self::parse_endpoints(events_endpoints);
+        let (ipc_rpc_endpoints, tcp_rpc_endpoints) = Self::parse_endpoints(rpc_endpoints);
 
-        // Configure CURVE encryption if key provided
-        if let Some(ref secret_key) = curve_secret_key {
-            // Set ZAP domain for authentication
-            publish
-                .set_zap_domain("moor")
-                .context("Failed to set ZAP domain on PUB socket in `moor` domain")?;
-            publish
-                .set_curve_server(true)
-                .context("Failed to enable CURVE server on PUB socket")?;
-            // Decode Z85-encoded secret key to bytes
-            let secret_key_bytes =
-                zmq::z85_decode(secret_key).context("Failed to decode Z85 secret key")?;
-            publish
-                .set_curve_secretkey(&secret_key_bytes)
-                .context("Failed to set CURVE secret key on PUB socket")?;
-            info!("CURVE encryption enabled on events publisher with ZAP authentication");
-        }
+        // Create IPC PUB socket if we have any IPC endpoints
+        let events_publish_ipc = if !ipc_events_endpoints.is_empty() {
+            let ipc_publish = zmq_context
+                .socket(zmq::SocketType::PUB)
+                .context("Unable to create IPC PUB socket")?;
 
-        publish
-            .bind(narrative_endpoint)
-            .with_context(|| format!("Unable to bind ZMQ PUB socket @ {narrative_endpoint})"))?;
+            for endpoint in &ipc_events_endpoints {
+                ipc_publish
+                    .bind(endpoint)
+                    .with_context(|| format!("Unable to bind IPC PUB socket @ {endpoint}"))?;
+                info!("IPC events endpoint bound at {}", endpoint);
+            }
 
-        let events_publish = Arc::new(Mutex::new(publish));
+            Some(Arc::new(Mutex::new(ipc_publish)))
+        } else {
+            None
+        };
+
+        // Create TCP PUB socket with CURVE if we have any TCP endpoints
+        let events_publish_tcp = if !tcp_events_endpoints.is_empty() {
+            let tcp_publish = zmq_context
+                .socket(zmq::SocketType::PUB)
+                .context("Unable to create TCP PUB socket")?;
+
+            // Configure CURVE encryption
+            if let Some(ref secret_key) = curve_secret_key {
+                tcp_publish
+                    .set_zap_domain("moor")
+                    .context("Failed to set ZAP domain on TCP PUB socket")?;
+                tcp_publish
+                    .set_curve_server(true)
+                    .context("Failed to enable CURVE server on TCP PUB socket")?;
+                let secret_key_bytes =
+                    zmq::z85_decode(secret_key).context("Failed to decode Z85 secret key")?;
+                tcp_publish
+                    .set_curve_secretkey(&secret_key_bytes)
+                    .context("Failed to set CURVE secret key on TCP PUB socket")?;
+                info!("CURVE encryption enabled on TCP events publisher with ZAP authentication");
+            }
+
+            for endpoint in &tcp_events_endpoints {
+                tcp_publish
+                    .bind(endpoint)
+                    .with_context(|| format!("Unable to bind TCP PUB socket @ {endpoint}"))?;
+                info!("TCP events endpoint bound at {}", endpoint);
+            }
+
+            Some(Arc::new(Mutex::new(tcp_publish)))
+        } else {
+            None
+        };
 
         Ok(Self {
             zmq_context,
             kill_switch,
-            events_publish,
+            events_publish_ipc,
+            events_publish_tcp,
             curve_secret_key,
+            ipc_rpc_endpoints,
+            tcp_rpc_endpoints,
         })
     }
 
@@ -124,9 +183,18 @@ impl RpcTransport {
         kill_switch: Arc<AtomicBool>,
         scheduler_client: SchedulerClient,
         message_handler: Arc<dyn MessageHandler>,
+        connect_ipc: bool,
+        connect_tcp: bool,
     ) -> eyre::Result<()> {
         let rpc_socket = zmq_context.socket(zmq::REP)?;
-        rpc_socket.connect("inproc://rpc-workers")?;
+        // Connect to IPC workers if IPC endpoints are configured
+        if connect_ipc {
+            rpc_socket.connect("inproc://rpc-workers-ipc")?;
+        }
+        // Connect to TCP workers if TCP endpoints are configured
+        if connect_tcp {
+            rpc_socket.connect("inproc://rpc-workers-tcp")?;
+        }
 
         loop {
             if kill_switch.load(Ordering::Relaxed) {
@@ -469,75 +537,143 @@ impl Transport for RpcTransport {
     /// Start the request processing loop with ZMQ proxy architecture
     fn start_request_loop(
         &self,
-        rpc_endpoint: String,
+        _rpc_endpoint: String, // Ignored - we use ipc_rpc_endpoints and tcp_rpc_endpoints
         scheduler_client: SchedulerClient,
         message_handler: Arc<dyn MessageHandler>,
     ) -> eyre::Result<()> {
         let num_io_threads = self.zmq_context.get_io_threads()?;
-        info!("0mq server listening on {rpc_endpoint} with {num_io_threads} IO threads");
+        let has_ipc = !self.ipc_rpc_endpoints.is_empty();
+        let has_tcp = !self.tcp_rpc_endpoints.is_empty();
 
-        let mut clients = self.zmq_context.socket(zmq::ROUTER)?;
-        let mut workers = self.zmq_context.socket(zmq::DEALER)?;
+        info!(
+            "Starting RPC server with {} IO threads, IPC endpoints: {:?}, TCP endpoints: {:?}",
+            num_io_threads, self.ipc_rpc_endpoints, self.tcp_rpc_endpoints
+        );
 
-        // Configure CURVE encryption on the public-facing ROUTER socket
-        if let Some(ref secret_key) = self.curve_secret_key {
-            // Set ZAP domain for authentication
-            clients
-                .set_zap_domain("moor")
-                .context("Failed to set ZAP domain on ROUTER socket")?;
+        // Set up IPC ROUTER/DEALER if we have IPC endpoints
+        if has_ipc {
+            let mut ipc_clients = self.zmq_context.socket(zmq::ROUTER)?;
+            let mut ipc_workers = self.zmq_context.socket(zmq::DEALER)?;
 
-            clients
-                .set_curve_server(true)
-                .context("Failed to enable CURVE server on ROUTER socket")?;
-            // Decode Z85-encoded secret key to bytes
-            let secret_key_bytes =
-                zmq::z85_decode(secret_key).context("Failed to decode Z85 secret key")?;
-            clients
-                .set_curve_secretkey(&secret_key_bytes)
-                .context("Failed to set CURVE secret key on ROUTER socket")?;
-            info!("CURVE encryption enabled on RPC server with ZAP authentication");
+            // Bind all IPC endpoints to the same socket (no CURVE)
+            for endpoint in &self.ipc_rpc_endpoints {
+                ipc_clients.bind(endpoint)?;
+                info!("IPC RPC endpoint bound at {}", endpoint);
+            }
+            ipc_workers.bind("inproc://rpc-workers-ipc")?;
+
+            // Start IPC proxy
+            let mut ipc_control_socket = self.zmq_context.socket(zmq::REP)?;
+            ipc_control_socket.bind("inproc://rpc-proxy-ipc-steer")?;
+            std::thread::Builder::new()
+                .name("moor-rpc-proxy-ipc".to_string())
+                .spawn(move || {
+                    zmq::proxy_steerable(
+                        &mut ipc_clients,
+                        &mut ipc_workers,
+                        &mut ipc_control_socket,
+                    )
+                    .expect("Unable to start IPC proxy");
+                })?;
         }
 
-        clients.bind(&rpc_endpoint)?;
-        workers.bind("inproc://rpc-workers")?;
+        // Set up TCP ROUTER/DEALER with CURVE if we have TCP endpoints
+        if has_tcp {
+            let mut tcp_clients = self.zmq_context.socket(zmq::ROUTER)?;
+            let mut tcp_workers = self.zmq_context.socket(zmq::DEALER)?;
 
-        // Start N RPC servers in a background thread. We match the # of IO threads, minus 1
-        // which we use for the proxy.
-        for i in 0..num_io_threads - 1 {
+            // Configure CURVE encryption on TCP
+            if let Some(ref secret_key) = self.curve_secret_key {
+                tcp_clients
+                    .set_zap_domain("moor")
+                    .context("Failed to set ZAP domain on TCP ROUTER socket")?;
+                tcp_clients
+                    .set_curve_server(true)
+                    .context("Failed to enable CURVE server on TCP ROUTER socket")?;
+                let secret_key_bytes =
+                    zmq::z85_decode(secret_key).context("Failed to decode Z85 secret key")?;
+                tcp_clients
+                    .set_curve_secretkey(&secret_key_bytes)
+                    .context("Failed to set CURVE secret key on TCP ROUTER socket")?;
+                info!("CURVE encryption enabled on TCP RPC server with ZAP authentication");
+            }
+
+            // Bind all TCP endpoints to the same socket
+            for endpoint in &self.tcp_rpc_endpoints {
+                tcp_clients.bind(endpoint)?;
+                info!("TCP RPC endpoint bound at {}", endpoint);
+            }
+            tcp_workers.bind("inproc://rpc-workers-tcp")?;
+
+            // Start TCP proxy
+            let mut tcp_control_socket = self.zmq_context.socket(zmq::REP)?;
+            tcp_control_socket.bind("inproc://rpc-proxy-tcp-steer")?;
+            std::thread::Builder::new()
+                .name("moor-rpc-proxy-tcp".to_string())
+                .spawn(move || {
+                    zmq::proxy_steerable(
+                        &mut tcp_clients,
+                        &mut tcp_workers,
+                        &mut tcp_control_socket,
+                    )
+                    .expect("Unable to start TCP proxy");
+                })?;
+        }
+
+        // Calculate number of workers (reserve threads for proxies)
+        let num_proxies = (has_ipc as i32) + (has_tcp as i32);
+        let num_workers = (num_io_threads - num_proxies).max(1);
+
+        for i in 0..num_workers {
             let handler = message_handler.clone();
             let sched_client = scheduler_client.clone();
             let kill_switch = self.kill_switch.clone();
             let zmq_context = self.zmq_context.clone();
+            let connect_ipc = has_ipc;
+            let connect_tcp = has_tcp;
 
             std::thread::Builder::new()
                 .name(format!("moor-rpc-srv{i}"))
                 .spawn(move || {
-                    if let Err(e) =
-                        Self::rpc_process_loop(zmq_context, kill_switch, sched_client, handler)
-                    {
+                    if let Err(e) = Self::rpc_process_loop(
+                        zmq_context,
+                        kill_switch,
+                        sched_client,
+                        handler,
+                        connect_ipc,
+                        connect_tcp,
+                    ) {
                         error!(error = ?e, "RPC process loop failed");
                     }
                 })?;
         }
 
-        // Start the proxy in a background thread, which will route messages between
-        // clients and workers.
-        let mut control_socket = self.zmq_context.socket(zmq::REP)?;
-        control_socket.bind("inproc://rpc-proxy-steer")?;
-        std::thread::Builder::new()
-            .name("moor-rpc-proxy".to_string())
-            .spawn(move || {
-                zmq::proxy_steerable(&mut clients, &mut workers, &mut control_socket)
-                    .expect("Unable to start proxy");
-            })?;
+        // Set up control sockets for graceful shutdown
+        let ipc_control = if has_ipc {
+            let sock = self.zmq_context.socket(zmq::REQ)?;
+            sock.connect("inproc://rpc-proxy-ipc-steer")?;
+            Some(sock)
+        } else {
+            None
+        };
 
-        // Control the proxy
-        let control_socket = self.zmq_context.socket(zmq::REQ)?;
-        control_socket.connect("inproc://rpc-proxy-steer")?;
+        let tcp_control = if has_tcp {
+            let sock = self.zmq_context.socket(zmq::REQ)?;
+            sock.connect("inproc://rpc-proxy-tcp-steer")?;
+            Some(sock)
+        } else {
+            None
+        };
+
         loop {
             if self.kill_switch.load(Ordering::Relaxed) {
                 info!("Kill switch activated, exiting");
-                control_socket.send("TERMINATE", 0)?;
+                if let Some(ref sock) = ipc_control {
+                    sock.send("TERMINATE", 0)?;
+                }
+                if let Some(ref sock) = tcp_control {
+                    sock.send("TERMINATE", 0)?;
+                }
                 return Ok(());
             }
 
@@ -550,7 +686,10 @@ impl Transport for RpcTransport {
         events: &[(Obj, Box<NarrativeEvent>)],
         connections: &dyn crate::connections::ConnectionRegistry,
     ) -> Result<(), eyre::Error> {
-        let publish = self.events_publish.lock().unwrap();
+        // Lock sockets if available
+        let publish_ipc = self.events_publish_ipc.as_ref().map(|p| p.lock().unwrap());
+        let publish_tcp = self.events_publish_tcp.as_ref().map(|p| p.lock().unwrap());
+
         for (player, event) in events {
             let client_ids = connections.client_ids_for(*player)?;
 
@@ -600,10 +739,20 @@ impl Transport for RpcTransport {
 
             for client_id in &client_ids {
                 let payload = vec![client_id.as_bytes().to_vec(), event_bytes.clone()];
-                publish.send_multipart(payload, 0).map_err(|e| {
-                    error!(error = ?e, "Unable to send event");
-                    eyre::eyre!("Delivery error")
-                })?;
+                // Send to IPC socket if available
+                if let Some(ref ipc_pub) = publish_ipc {
+                    ipc_pub.send_multipart(payload.clone(), 0).map_err(|e| {
+                        error!(error = ?e, "Unable to send event to IPC");
+                        eyre::eyre!("Delivery error (IPC)")
+                    })?;
+                }
+                // Send to TCP socket if available
+                if let Some(ref tcp_pub) = publish_tcp {
+                    tcp_pub.send_multipart(payload, 0).map_err(|e| {
+                        error!(error = ?e, "Unable to send event to TCP");
+                        eyre::eyre!("Delivery error (TCP)")
+                    })?;
+                }
             }
         }
         Ok(())
@@ -614,11 +763,23 @@ impl Transport for RpcTransport {
         let event_bytes = builder.finish(&event, None).to_vec();
         let payload = vec![HOST_BROADCAST_TOPIC.to_vec(), event_bytes];
 
-        let publish = self.events_publish.lock().unwrap();
-        publish.send_multipart(payload, 0).map_err(|e| {
-            error!(error = ?e, "Unable to send host broadcast event");
-            eyre::eyre!("Delivery error")
-        })?;
+        // Send to IPC socket if available
+        if let Some(ref ipc_pub) = self.events_publish_ipc {
+            let ipc_pub = ipc_pub.lock().unwrap();
+            ipc_pub.send_multipart(payload.clone(), 0).map_err(|e| {
+                error!(error = ?e, "Unable to send host broadcast event to IPC");
+                eyre::eyre!("Delivery error (IPC)")
+            })?;
+        }
+
+        // Send to TCP socket if available
+        if let Some(ref tcp_pub) = self.events_publish_tcp {
+            let tcp_pub = tcp_pub.lock().unwrap();
+            tcp_pub.send_multipart(payload, 0).map_err(|e| {
+                error!(error = ?e, "Unable to send host broadcast event to TCP");
+                eyre::eyre!("Delivery error (TCP)")
+            })?;
+        }
 
         Ok(())
     }
@@ -632,11 +793,23 @@ impl Transport for RpcTransport {
         let event_bytes = builder.finish(&event, None).to_vec();
         let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
 
-        let publish = self.events_publish.lock().unwrap();
-        publish.send_multipart(payload, 0).map_err(|e| {
-            error!(error = ?e, "Unable to send client event");
-            eyre::eyre!("Delivery error")
-        })?;
+        // Send to IPC socket if available
+        if let Some(ref ipc_pub) = self.events_publish_ipc {
+            let ipc_pub = ipc_pub.lock().unwrap();
+            ipc_pub.send_multipart(payload.clone(), 0).map_err(|e| {
+                error!(error = ?e, "Unable to send client event to IPC");
+                eyre::eyre!("Delivery error (IPC)")
+            })?;
+        }
+
+        // Send to TCP socket if available
+        if let Some(ref tcp_pub) = self.events_publish_tcp {
+            let tcp_pub = tcp_pub.lock().unwrap();
+            tcp_pub.send_multipart(payload, 0).map_err(|e| {
+                error!(error = ?e, "Unable to send client event to TCP");
+                eyre::eyre!("Delivery error (TCP)")
+            })?;
+        }
 
         Ok(())
     }
@@ -649,11 +822,23 @@ impl Transport for RpcTransport {
         let event_bytes = builder.finish(&event, None).to_vec();
         let payload = vec![CLIENT_BROADCAST_TOPIC.to_vec(), event_bytes];
 
-        let publish = self.events_publish.lock().unwrap();
-        publish.send_multipart(payload, 0).map_err(|e| {
-            error!(error = ?e, "Unable to send client broadcast event");
-            eyre::eyre!("Delivery error")
-        })?;
+        // Send to IPC socket if available
+        if let Some(ref ipc_pub) = self.events_publish_ipc {
+            let ipc_pub = ipc_pub.lock().unwrap();
+            ipc_pub.send_multipart(payload.clone(), 0).map_err(|e| {
+                error!(error = ?e, "Unable to send client broadcast event to IPC");
+                eyre::eyre!("Delivery error (IPC)")
+            })?;
+        }
+
+        // Send to TCP socket if available
+        if let Some(ref tcp_pub) = self.events_publish_tcp {
+            let tcp_pub = tcp_pub.lock().unwrap();
+            tcp_pub.send_multipart(payload, 0).map_err(|e| {
+                error!(error = ?e, "Unable to send client broadcast event to TCP");
+                eyre::eyre!("Delivery error (TCP)")
+            })?;
+        }
 
         Ok(())
     }

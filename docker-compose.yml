@@ -71,8 +71,8 @@ services:
       ./moor-daemon
         /db/moor-data
         --db=development.db
-        --rpc-listen=ipc:///var/run/moor/rpc.sock
-        --events-listen=ipc:///var/run/moor/events.sock
+        --rpc-listen=ipc:///var/run/moor/rpc.sock,tcp://0.0.0.0:7899
+        --events-listen=ipc:///var/run/moor/events.sock,tcp://0.0.0.0:7898
         --workers-response-listen=ipc:///var/run/moor/workers-response.sock
         --workers-request-listen=ipc:///var/run/moor/workers-request.sock
         --generate-keypair
