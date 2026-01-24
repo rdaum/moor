@@ -486,10 +486,13 @@ mod tests {
     fn test_symbol_linkage() {
         // Verify we can reference the C symbols (don't call them yet)
         use crate::ffi::*;
-        let _db_init: unsafe extern "C" fn(*mut i32, *mut *mut *mut i8) -> i32 = db_initialize;
-        let _notify: unsafe extern "C" fn(i32, *const i8) = notify;
+        use std::os::raw::{c_char, c_int};
+        let _db_init: unsafe extern "C" fn(*mut c_int, *mut *mut *mut c_char) -> c_int =
+            db_initialize;
+        let _notify: unsafe extern "C" fn(c_int, *const c_char) = notify;
         let _harness_init: unsafe extern "C" fn() = harness_init;
-        let _harness_get_output: unsafe extern "C" fn(*mut usize) -> *const i8 = harness_get_output;
+        let _harness_get_output: unsafe extern "C" fn(*mut usize) -> *const c_char =
+            harness_get_output;
 
         // If this compiles and links, the symbols are available
     }
