@@ -22,11 +22,11 @@ mod tests {
         util::BitEnum,
     };
     use moor_var::{
-        Associative, NOTHING, OP_HINT_FLYWEIGHT_ADD_SLOT, OP_HINT_FLYWEIGHT_APPEND_CONTENTS, Obj,
-        SYSTEM_OBJECT, Sequence, Symbol, Var, program::ProgramType, v_empty_list, v_empty_map,
-        v_flyweight, v_int, v_str,
+        Associative, List, NOTHING, OP_HINT_FLYWEIGHT_ADD_SLOT, OP_HINT_FLYWEIGHT_APPEND_CONTENTS,
+        OP_HINT_NONE, Obj, SYSTEM_OBJECT, Sequence, Symbol, Var, program::ProgramType,
+        v_empty_list, v_empty_map, v_flyweight, v_int, v_str,
     };
-    use shuttle::{check_random, sync::Arc, thread};
+    use shuttle::{check_random, sync::Arc, sync::Barrier, thread};
     use std::{
         collections::HashMap,
         sync::{
@@ -710,7 +710,14 @@ mod tests {
                                     // Simulate some work
                                     thread::yield_now();
 
-                                    // Start another transaction in parallel to check consistency
+                                    // Start another transaction in parallel to check consistency.
+                                    // Note: We do NOT check that concurrent_value >= initial_value.
+                                    // Under SI (Snapshot Isolation), we guarantee that each transaction
+                                    // sees a consistent snapshot, but NOT that transactions see each
+                                    // other's uncommitted or even recently committed changes in real-time
+                                    // order (linearizability). A concurrent transaction may see an older
+                                    // snapshot than our initial read. This is expected behavior for SI
+                                    // and does not indicate a bug.
                                     let tx2 = db.start_transaction();
                                     let ws2 = DbWorldState { tx: tx2 };
 
@@ -1290,6 +1297,266 @@ mod tests {
                 assert!(s.contains("+Suffix0"));
                 assert!(s.contains("+Suffix1"));
                 assert_eq!(s.len(), "Base+Suffix0+Suffix1".len());
+            },
+            10,
+        );
+    }
+
+    #[test]
+    fn test_concurrent_map_insert_same_key_conflicts() {
+        // Test that two concurrent inserts of the SAME key with DIFFERENT values
+        // correctly results in a conflict (only one succeeds).
+        // We use a barrier to ensure both threads read the initial empty state
+        // before either commits, guaranteeing an actual conflict.
+        check_random(
+            || {
+                let db = setup_test_db();
+                let obj = Obj::mk_id(1);
+                let prop_name = Symbol::mk("map_same_key_test");
+
+                // Initialize property with empty map
+                {
+                    let tx = db.start_transaction();
+                    let mut ws = DbWorldState { tx };
+                    ws.define_property(
+                        &SYSTEM_OBJECT,
+                        &obj,
+                        &obj,
+                        prop_name,
+                        &SYSTEM_OBJECT,
+                        BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
+                        Some(v_empty_map()),
+                    )
+                    .unwrap();
+                    Box::new(ws).commit().unwrap();
+                }
+
+                let success_count = Arc::new(AtomicUsize::new(0));
+                // Barrier ensures both threads read before either commits
+                let barrier = Arc::new(Barrier::new(2));
+
+                let handles: Vec<_> = (0..2)
+                    .map(|thread_id| {
+                        let db = db.clone();
+                        let success_count = success_count.clone();
+                        let barrier = barrier.clone();
+
+                        thread::spawn(move || {
+                            let tx = db.start_transaction();
+                            let mut ws = DbWorldState { tx };
+
+                            // Read map (base for merge)
+                            let current_map = ws
+                                .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
+                                .unwrap();
+
+                            // Insert SAME key with DIFFERENT values
+                            let key = v_str("shared_key");
+                            let val = v_int(thread_id as i64); // Different values!
+
+                            let new_map = current_map
+                                .set(&key, &val, moor_var::IndexMode::ZeroBased)
+                                .unwrap();
+
+                            ws.update_property(&SYSTEM_OBJECT, &obj, prop_name, &new_map)
+                                .unwrap();
+
+                            // Wait for both threads to have read and prepared their writes
+                            barrier.wait();
+
+                            if let Ok(CommitResult::Success { .. }) = Box::new(ws).commit() {
+                                success_count.fetch_add(1, Ordering::Relaxed);
+                            }
+                        })
+                    })
+                    .collect();
+
+                for handle in handles {
+                    handle.join().unwrap();
+                }
+
+                // Only ONE should succeed - inserting same key with different values is a conflict
+                assert_eq!(success_count.load(Ordering::Relaxed), 1);
+
+                // Verify final state has exactly one entry
+                let tx = db.start_transaction();
+                let ws = DbWorldState { tx };
+                let final_map = ws
+                    .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
+                    .unwrap();
+
+                let map = final_map.as_map().unwrap();
+                assert_eq!(map.len(), 1);
+                assert!(map.contains_key(&v_str("shared_key"), false).unwrap());
+            },
+            10,
+        );
+    }
+
+    #[test]
+    fn test_mismatched_hints_cause_conflict() {
+        // Test that operations with mismatched hints don't merge.
+        // Thread 0: appends to list (LIST_APPEND hint)
+        // Thread 1: replaces list entirely (no hint / different operation)
+        // We use a barrier to ensure both threads read the initial state
+        // before either commits, guaranteeing an actual conflict.
+        check_random(
+            || {
+                let db = setup_test_db();
+                let obj = Obj::mk_id(1);
+                let prop_name = Symbol::mk("mismatched_hint_test");
+
+                // Initialize property with a list containing one element
+                {
+                    let tx = db.start_transaction();
+                    let mut ws = DbWorldState { tx };
+                    let initial_list = v_empty_list().push(&v_int(0)).unwrap();
+                    ws.define_property(
+                        &SYSTEM_OBJECT,
+                        &obj,
+                        &obj,
+                        prop_name,
+                        &SYSTEM_OBJECT,
+                        BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
+                        Some(initial_list),
+                    )
+                    .unwrap();
+                    Box::new(ws).commit().unwrap();
+                }
+
+                let success_count = Arc::new(AtomicUsize::new(0));
+                // Barrier ensures both threads read before either commits
+                let barrier = Arc::new(Barrier::new(2));
+
+                // Thread 0: appends (has LIST_APPEND hint)
+                // Thread 1: replaces entirely (no hint - uses from_list directly)
+                let handles: Vec<_> = (0..2)
+                    .map(|thread_id| {
+                        let db = db.clone();
+                        let success_count = success_count.clone();
+                        let barrier = barrier.clone();
+
+                        thread::spawn(move || {
+                            let tx = db.start_transaction();
+                            let mut ws = DbWorldState { tx };
+
+                            let current_list = ws
+                                .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
+                                .unwrap();
+
+                            let new_list = if thread_id == 0 {
+                                // Append - gets LIST_APPEND hint
+                                current_list.push(&v_int(100)).unwrap()
+                            } else {
+                                // Replace entirely - no hint (simulates a different operation)
+                                // Create a completely new list without using push
+                                List::build(&[v_int(999)])
+                            };
+
+                            ws.update_property(&SYSTEM_OBJECT, &obj, prop_name, &new_list)
+                                .unwrap();
+
+                            // Wait for both threads to have read and prepared their writes
+                            barrier.wait();
+
+                            if let Ok(CommitResult::Success { .. }) = Box::new(ws).commit() {
+                                success_count.fetch_add(1, Ordering::Relaxed);
+                            }
+                        })
+                    })
+                    .collect();
+
+                for handle in handles {
+                    handle.join().unwrap();
+                }
+
+                // Only ONE should succeed - mismatched hints prevent merging
+                assert_eq!(success_count.load(Ordering::Relaxed), 1);
+            },
+            10,
+        );
+    }
+
+    #[test]
+    fn test_merged_values_have_no_hint() {
+        // Test that after a successful merge, the committed value has its hint cleared.
+        // This prevents stale hints from affecting future operations.
+        check_random(
+            || {
+                let db = setup_test_db();
+                let obj = Obj::mk_id(1);
+                let prop_name = Symbol::mk("hint_clearing_test");
+
+                // Initialize property with empty list
+                {
+                    let tx = db.start_transaction();
+                    let mut ws = DbWorldState { tx };
+                    ws.define_property(
+                        &SYSTEM_OBJECT,
+                        &obj,
+                        &obj,
+                        prop_name,
+                        &SYSTEM_OBJECT,
+                        BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
+                        Some(v_empty_list()),
+                    )
+                    .unwrap();
+                    Box::new(ws).commit().unwrap();
+                }
+
+                let success_count = Arc::new(AtomicUsize::new(0));
+
+                let handles: Vec<_> = (0..2)
+                    .map(|thread_id| {
+                        let db = db.clone();
+                        let success_count = success_count.clone();
+
+                        thread::spawn(move || {
+                            let tx = db.start_transaction();
+                            let mut ws = DbWorldState { tx };
+
+                            let current_list = ws
+                                .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
+                                .unwrap();
+
+                            // Append value - this sets OP_HINT_LIST_APPEND
+                            let val = v_int(thread_id as i64);
+                            let new_list = current_list.push(&val).unwrap();
+
+                            ws.update_property(&SYSTEM_OBJECT, &obj, prop_name, &new_list)
+                                .unwrap();
+
+                            if let Ok(CommitResult::Success { .. }) = Box::new(ws).commit() {
+                                success_count.fetch_add(1, Ordering::Relaxed);
+                            }
+                        })
+                    })
+                    .collect();
+
+                for handle in handles {
+                    handle.join().unwrap();
+                }
+
+                // Both should succeed due to smart merging
+                assert_eq!(success_count.load(Ordering::Relaxed), 2);
+
+                // Verify final value has NO hint (hint was cleared after merge)
+                let tx = db.start_transaction();
+                let ws = DbWorldState { tx };
+                let final_list = ws
+                    .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
+                    .unwrap();
+
+                // The merged value should have OP_HINT_NONE
+                assert_eq!(
+                    final_list.op_hint(),
+                    OP_HINT_NONE,
+                    "Merged value should have hint cleared"
+                );
+
+                // Verify the list still has the right content
+                let list = final_list.as_list().unwrap();
+                assert_eq!(list.len(), 2);
             },
             10,
         );

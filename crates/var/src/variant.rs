@@ -99,6 +99,16 @@ impl Var {
         self.meta[6]
     }
 
+    /// Return a copy of this Var with the operation hint cleared to OP_HINT_NONE.
+    /// This should be called on merged values before committing to storage,
+    /// as hints are only meaningful for the operation that created the value,
+    /// not for the final committed state.
+    #[inline(always)]
+    pub fn with_cleared_hint(mut self) -> Self {
+        self.meta[6] = OP_HINT_NONE;
+        self
+    }
+
     /// Create meta bytes with cached length.
     #[inline(always)]
     fn meta_with_len(len: usize) -> [u8; 7] {

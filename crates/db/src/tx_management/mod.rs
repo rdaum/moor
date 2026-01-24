@@ -114,8 +114,9 @@ impl RelationCodomain for Var {
                     };
                 }
 
-                // Return result wrapped in Var, preserving the hint (it's still an append result!)
-                Some(Var::from_list_with_hint(result, OP_HINT_LIST_APPEND))
+                // Return result wrapped in Var, WITHOUT hint - merged values shouldn't carry hints
+                // as hints are only meaningful for the operation that created the value
+                Some(Var::from_list(result))
             }
             OP_HINT_MAP_INSERT => {
                 // Map insert merge: Two concurrent inserts of DIFFERENT keys.
@@ -148,7 +149,8 @@ impl RelationCodomain for Var {
                 }
 
                 // Merge: Take Theirs, insert My Key/Value
-                their_map.set(&k_mine, &v_mine).ok()
+                // Clear hint - merged values shouldn't carry hints
+                their_map.set(&k_mine, &v_mine).ok().map(|v| v.with_cleared_hint())
             }
             OP_HINT_FLYWEIGHT_ADD_SLOT => {
                 // Flyweight slot insert merge
@@ -190,10 +192,8 @@ impl RelationCodomain for Var {
                 }
 
                 // Merge: Take Theirs, add My slot
-                Some(Var::from_flyweight_with_hint(
-                    their_fw.add_slot(k_mine, v_mine),
-                    OP_HINT_FLYWEIGHT_ADD_SLOT,
-                ))
+                // No hint - merged values shouldn't carry hints
+                Some(Var::from_flyweight(their_fw.add_slot(k_mine, v_mine)))
             }
             OP_HINT_FLYWEIGHT_APPEND_CONTENTS => {
                 // Flyweight contents append merge
@@ -222,10 +222,8 @@ impl RelationCodomain for Var {
                     mine_contents_hinted.try_merge(&base_contents, &their_contents_hinted)?;
                 let merged_contents = merged_contents_var.as_list()?.clone();
 
-                Some(Var::from_flyweight_with_hint(
-                    their_fw.with_contents(merged_contents),
-                    OP_HINT_FLYWEIGHT_APPEND_CONTENTS,
-                ))
+                // No hint - merged values shouldn't carry hints
+                Some(Var::from_flyweight(their_fw.with_contents(merged_contents)))
             }
             OP_HINT_STR_APPEND => {
                 // String append merge
@@ -247,10 +245,8 @@ impl RelationCodomain for Var {
                 let mut result = their_str.to_string();
                 result.push_str(&mine_str[base_str.len()..]);
 
-                Some(Var::from_str_type_with_hint(
-                    moor_var::Str::mk_string(result),
-                    OP_HINT_STR_APPEND,
-                ))
+                // No hint - merged values shouldn't carry hints
+                Some(Var::from_str_type(moor_var::Str::mk_string(result)))
             }
             _ => None,
         }
