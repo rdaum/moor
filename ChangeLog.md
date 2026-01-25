@@ -40,6 +40,18 @@ Databases from beta7 and earlier cannot be loaded directly.
 - `complex_matches()` now supports `"all "` and `"*."` prefixes to return matches from all tiers
   (exact, prefix, substring, fuzzy) in priority order instead of just the best tier
 
+`daemon`:
+
+- Support for both IPC and TCP 0mq binding on same daemon
+
+`db`:
+
+- Propagate more information on transaction conflict causes to logs
+
+`testing`:
+
+- Basic benchmarking "core" and simple bench tool for now just an example tick loop
+
 `tools/moorc`:
 
 - `--test-files` (alias `--test-directory`) supports recursive directories and glob patterns for
@@ -63,7 +75,7 @@ Databases from beta7 and earlier cannot be loaded directly.
 `list_sets`:
 
 - `complex_match()` now defaults to no fuzzy matching (threshold `0.0`)
-- `complex_match` crdinals count across match tiers and `N.subject` tokens are supported
+- `complex_match` ordinals count across match tiers and `N.subject` tokens are supported
 
 `kernel`:
 
@@ -78,10 +90,24 @@ Databases from beta7 and earlier cannot be loaded directly.
 `daemon`:
 
 - Improved server/client heartbeat for better detection of lost connections
+- Add SIGUSR1 handler for graceful shutdown which also exports an objdef dump
+- Trigger said SIGUSR1 when low-level (fjall) DB write failures occur
 
 `telnet-host`:
 
 - Default content output changed to plain ASCII
+
+`db`:
+
+- Shutdown on DB write failures instead of continuing in an inconsistent state
+
+`deployment`:
+
+- Added easier start scripts for running mooR locally.
+
+`core`:
+
+- Default tick limit for `lambda-core` increased
 
 ### Fixed
 
@@ -89,8 +115,12 @@ Databases from beta7 and earlier cannot be loaded directly.
 
 - Allow task owners (not just wizards) to kill their suspended tasks
 - `suspend()` no longer hangs indefinitely for very short (sub-millisecond) delays
+- Set default return value for `suspend()` calls that might retry
 - Property definition now correctly fails if a child already has a property with the same name
 - `queued_tasks()` and `active_tasks()` now filter by `task_perms` correctly
+- Fixed potential data race in `valid_task()`
+- Reset task clock on commit failures
+- Added missing `E_PERM` mapping for `!r` verbs
 
 `list_sets`:
 
@@ -108,9 +138,15 @@ Databases from beta7 and earlier cannot be loaded directly.
 
 - Decompilation for optional lambda arguments now handled correctly
 
+`db`:
+
+- Cleaned up transaction conflict UUID holder output in logs
+
 `daemon`:
 
 - Connection handling improvements for soft/hard detach behavior; ping timeout fixes
+- IPC worker processes no longer assume CURVE encryption is required
+- Reduced log spam for dangling connections and `bf_respond_to`
 
 `mcp-host`:
 
@@ -124,8 +160,18 @@ Databases from beta7 and earlier cannot be loaded directly.
 
 - Duplicate completions in verb editor fixed
 - Anonymous objects no longer shown in object browser
+- Fixed missing image and source files in build
+- Throttled inbound narrative DOM additions to improve performance
+- Fixed TTS (text-to-speech) issues with skipped batch events and DOM restructuring
+- Added warning for unsaved changes in verb editor and fixed interruptions during compilation
+- Avoid missing events while tab is backgrounded/idle
+- Screenreaders now skip reading thumbnails in descriptions
 - Various accessibility improvements (verb editor discoverability, eval panel ARIA, room
   descriptions)
+
+`infra`:
+
+- Fixed missing license headers in several source files
 
 ## [1.0.0-beta7] - 2026-01-01
 
