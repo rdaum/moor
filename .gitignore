@@ -57,6 +57,9 @@ certs/
 # macOS
 .DS_Store
 
+# Cowbell core (managed by cores/fetch-cowbell.sh)
+cores/cowbell/
+
 # Proptest failure snapshots (regenerated on failure)
 proptest-failures/
 .mcp.json

@@ -1,3 +1,0 @@
-[submodule "cores/cowbell"]
-	path = cores/cowbell
-	url = https://codeberg.org/timbran/cowbell.git
