@@ -23,6 +23,7 @@ export interface VerbSuggestion {
     iobj: string;
     objects: string[];
     hint: string | null;
+    placeholderText: string | null;
 }
 
 export interface UseVerbSuggestionsResult {
@@ -31,6 +32,7 @@ export interface UseVerbSuggestionsResult {
     error: string | null;
     refresh: () => Promise<void>;
     available: boolean;
+    placeholderText: string | null;
 }
 
 export const useVerbSuggestions = (
@@ -41,6 +43,7 @@ export const useVerbSuggestions = (
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [available, setAvailable] = useState(false);
+    const [placeholderText, setPlaceholderText] = useState<string | null>(null);
 
     const fetchSuggestions = useCallback(async () => {
         if (!authToken || !playerOid) {
@@ -79,7 +82,12 @@ export const useVerbSuggestions = (
                     ? item.objects.map((o: unknown) => String(o))
                     : [],
                 hint: typeof item.hint === "string" ? item.hint : null,
+                placeholderText: typeof item.placeholder_text === "string" ? item.placeholder_text : null,
             })).filter((s: VerbSuggestion) => s.verb !== "");
+
+            // Extract placeholder_text from any entry that has it
+            const placeholder = parsed.find(s => s.placeholderText)?.placeholderText ?? null;
+            setPlaceholderText(placeholder);
 
             setSuggestions(parsed);
             setAvailable(true);
@@ -104,5 +112,6 @@ export const useVerbSuggestions = (
         error,
         refresh: fetchSuggestions,
         available,
+        placeholderText,
     };
 };

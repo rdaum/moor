@@ -89,7 +89,12 @@ export const InputArea: React.FC<InputAreaProps> = ({
     const playerOid = authState.player?.oid ?? null;
 
     // Fetch verb suggestions from server
-    const { suggestions: serverSuggestions, available: serverAvailable } = useVerbSuggestions(authToken, playerOid);
+    const {
+        suggestions: serverSuggestions,
+        available: serverAvailable,
+        placeholderText: serverPlaceholder,
+        refresh: refreshSuggestions,
+    } = useVerbSuggestions(authToken, playerOid);
 
     // Compute matching verbs for completion using proper verbcasecmp matching
     const completionMatches = useMemo(() => {
@@ -277,7 +282,10 @@ export const InputArea: React.FC<InputAreaProps> = ({
         if (!prefersReducedMotion.current) {
             setPlaceholderIndex(Math.floor(Math.random() * ENCOURAGING_PLACEHOLDERS.length));
         }
-    }, [input, onSendMessage, onAddToHistory, sayModeEnabled, sayPillActive, verbPill]);
+
+        // Refresh verb suggestions (may have changed due to movement, inventory, etc.)
+        refreshSuggestions();
+    }, [input, onSendMessage, onAddToHistory, sayModeEnabled, sayPillActive, verbPill, refreshSuggestions]);
 
     // Announce to screen readers
     const announce = useCallback((message: string) => {
@@ -502,7 +510,8 @@ export const InputArea: React.FC<InputAreaProps> = ({
             const staticPlaceholder = getVerbPlaceholder(verbPill);
             if (staticPlaceholder) return staticPlaceholder;
         }
-        return ENCOURAGING_PLACEHOLDERS[placeholderIndex];
+        // Use server-provided placeholder if available, otherwise static fallback
+        return serverPlaceholder || ENCOURAGING_PLACEHOLDERS[placeholderIndex];
     };
 
     // Default text input
