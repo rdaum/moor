@@ -1,6 +1,6 @@
 [package]
 name = "moor-kernel"
-version = "1.0.0-beta7"
+version = "1.0.0-rc1"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true
