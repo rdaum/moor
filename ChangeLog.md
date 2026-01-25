@@ -52,6 +52,16 @@ Databases from beta7 and earlier cannot be loaded directly.
 
 - Basic benchmarking "core" and simple bench tool for now just an example tick loop
 
+`db`:
+
+- **Smart Merging / Optimistic Concurrency Improvements aka "CDRT-lite" **:
+    - New "smart merging" for `List`, `Map`, `String`, and `Flyweight` types using operation hints to resolve
+      conflicts automatically when changes are commutative (e.g., concurrent appends or unique key inserts)
+    - Extensible `ConflictResolver` trait allowing for custom conflict resolution strategies
+    - Support for idempotent writes (accepting identical values on conflict)
+    - Improved trait bounds for database relations (`RelationDomain` and `RelationCodomain`)
+    - Enhanced concurrency testing with expanded `shuttle` proptests
+
 `tools/moorc`:
 
 - `--test-files` (alias `--test-directory`) supports recursive directories and glob patterns for
@@ -383,11 +393,11 @@ testing:
 `daemon`:
 
 - **Major performance improvements** to the core `Var` type and VM execution:
-  - Restructured core value type from Rust enum to tagged union for faster cloning
-  - Optimized type dispatch logic throughout the VM
-  - Switched string storage to use `arcstr` for more efficient string handling
-  - Refactored VM environment and activation construction for reduced overhead
-  - Reduced copies in FlatBuffers serialization for RPC layer
+    - Restructured core value type from Rust enum to tagged union for faster cloning
+    - Optimized type dispatch logic throughout the VM
+    - Switched string storage to use `arcstr` for more efficient string handling
+    - Refactored VM environment and activation construction for reduced overhead
+    - Reduced copies in FlatBuffers serialization for RPC layer
 - Sequence updates moved off the main thread for improved concurrency
 
 ### Fixed
@@ -413,12 +423,12 @@ packaging / release:
 
 - **New Model Context Protocol (MCP) server** - enables AI assistants like Claude to interact with
   MOO worlds
-  - Connect as wizard or player with configurable permissions
-  - Automatic reconnection support for long-running sessions
-  - Rich prompts and function help for AI interaction
-  - Object definition dump/diff capabilities
-  - Included in Docker images
-  - Debian package support for distribution through Debian repository
+    - Connect as wizard or player with configurable permissions
+    - Automatic reconnection support for long-running sessions
+    - Rich prompts and function help for AI interaction
+    - Object definition dump/diff capabilities
+    - Included in Docker images
+    - Debian package support for distribution through Debian repository
 
 `daemon`:
 
@@ -428,8 +438,8 @@ packaging / release:
 packaging / release:
 
 - GPG signing support for all Debian packages built by cargo-deb and dpkg-deb
-  - Workflow now imports GPG key from secrets and signs packages automatically
-  - Users can verify package authenticity with `dpkg-sig --verify`
+    - Workflow now imports GPG key from secrets and signs packages automatically
+    - Users can verify package authenticity with `dpkg-sig --verify`
 
 ### Changed
 
@@ -536,13 +546,13 @@ performance optimization leading up to the 1.0 stable release.
 ### Added
 
 - Official pre-built Docker images available on Codeberg Container Registry
-  - `codeberg.org/timbran/moor:latest-x86_64` and `latest-aarch64` for backend services
-  - `codeberg.org/timbran/moor-frontend:latest-x86_64` and `latest-aarch64` for frontend
+    - `codeberg.org/timbran/moor:latest-x86_64` and `latest-aarch64` for backend services
+    - `codeberg.org/timbran/moor-frontend:latest-x86_64` and `latest-aarch64` for frontend
 - Debian packages published to Codeberg Debian package repository
 - Production deployment configurations in `deploy/` directory:
-  - `telnet-only/` - Minimal telnet-only setup
-  - `web-basic/` - Web-enabled HTTP deployment
-  - `web-ssl/` - Production HTTPS with Let's Encrypt
+    - `telnet-only/` - Minimal telnet-only setup
+    - `web-basic/` - Web-enabled HTTP deployment
+    - `web-ssl/` - Production HTTPS with Let's Encrypt
 - Comprehensive deployment documentation in README files
 - Formal ChangeLog documenting release history and stability commitments
 
@@ -550,10 +560,10 @@ performance optimization leading up to the 1.0 stable release.
 
 - **Database format is now stable**: Database format version `release-1.0.0` is locked for the beta
   period
-  - Pre-beta version 3.0.0 databases are automatically migrated to `release-1.0.0` on first startup
-  - Migration is a simple version marker update (no data format changes)
-  - No breaking format changes expected before stable 1.0 release
-  - LambdaMOO 1.8.x textdump databases continue to be fully supported
+    - Pre-beta version 3.0.0 databases are automatically migrated to `release-1.0.0` on first startup
+    - Migration is a simple version marker update (no data format changes)
+    - No breaking format changes expected before stable 1.0 release
+    - LambdaMOO 1.8.x textdump databases continue to be fully supported
 - Simplified database migration: Older pre-beta formats (1.0.0, 2.0.0) no longer supported for
   direct migration
 - Docker Compose examples now default to pre-built images from Codeberg
