@@ -491,14 +491,8 @@ export const InputArea: React.FC<InputAreaProps> = ({
     const showSayPill = !verbPill && sayModeEnabled && sayPillActive;
     const activePill = verbPill || (showSayPill ? "say" : null);
 
-    // Get context-sensitive placeholder
-    // Screen reader users get minimal placeholders since aria-label provides context
+    // Get context-sensitive placeholder (visual only, hidden from screen readers via aria-hidden)
     const getPlaceholder = (): string => {
-        // For screen reader users (proxied by prefers-reduced-motion), use minimal placeholders
-        // to avoid redundant announcements since aria-label already describes the input
-        if (prefersReducedMotion.current) {
-            return "";
-        }
         if (activePill === "say") {
             return "What would you like to say?";
         }
@@ -551,6 +545,12 @@ export const InputArea: React.FC<InputAreaProps> = ({
                         </span>
                     )}
                 <div className="input_area_wrapper">
+                    {/* Visual placeholder - hidden from screen readers */}
+                    {!input && (
+                        <span className="input_area_placeholder" aria-hidden="true">
+                            {getPlaceholder()}
+                        </span>
+                    )}
                     <textarea
                         ref={textareaRef}
                         id="input_area"
@@ -565,21 +565,9 @@ export const InputArea: React.FC<InputAreaProps> = ({
                         autoComplete="off"
                         spellCheck={false}
                         aria-label={activePill ? `${activePill} command` : "Command input"}
-                        aria-describedby="input-help"
                         aria-multiline="true"
-                        placeholder={getPlaceholder()}
                     />
                 </div>
-            </div>
-
-            {
-                /* Help text - kept static to avoid re-announcements while typing.
-                Completion details are announced via the live region when user interacts (Tab, etc). */
-            }
-            <div id="input-help" className="sr-only">
-                {activePill
-                    ? `${activePill} command active. Press Backspace to remove. Use Shift+Enter for new lines.`
-                    : "Press Tab for completions, Right Arrow to accept. Use Shift+Enter for new lines. Arrow keys navigate history."}
             </div>
 
             {/* Live region for screen reader announcements */}

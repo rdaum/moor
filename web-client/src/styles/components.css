@@ -2934,9 +2934,17 @@ button:disabled {
   outline: none;
 }
 
-.input_area_inner::placeholder {
+/* Visual placeholder - hidden from screen readers via aria-hidden */
+.input_area_placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
   color: var(--color-text-placeholder);
   font-family: var(--font-sans);
+  font-size: 1em;
+  line-height: 1.4;
+  pointer-events: none;
+  user-select: none;
 }
 
 /* Wrapper for textarea */
