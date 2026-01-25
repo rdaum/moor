@@ -7,6 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Fixed
+
+## [1.0.0-rc1] - 2026-01-25
+
 ### BREAKING: Database Migration Required
 
 **This release breaks binary database compatibility** for the world DB, tasks DB, and connections
