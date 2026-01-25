@@ -42,13 +42,15 @@ ARG CARGO_BUILD_JOBS=6
 # sharing=locked prevents race conditions when docker-compose builds multiple services in parallel
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/moor-build/target,sharing=locked \
-    if [ "$BUILD_PROFILE" = "release" ]; then \
+    if [ "$BUILD_PROFILE" = "release" ] || [ "$BUILD_PROFILE" = "release-fast" ]; then \
+        PROFILE_FLAG="--profile $BUILD_PROFILE"; \
+        if [ "$BUILD_PROFILE" = "release" ]; then PROFILE_FLAG="--release"; fi; \
         if [ "$TRACE_EVENTS" = "true" ]; then \
-            CARGO_PROFILE_RELEASE_DEBUG=true cargo build --release --features trace_events -j $CARGO_BUILD_JOBS $CARGO_BUILD_FLAGS && \
-            cp -r target/release /moor-build/target-final; \
+            cargo build $PROFILE_FLAG --features trace_events -j $CARGO_BUILD_JOBS $CARGO_BUILD_FLAGS && \
+            cp -r target/$BUILD_PROFILE /moor-build/target-final; \
         else \
-            CARGO_PROFILE_RELEASE_DEBUG=true cargo build --release -j $CARGO_BUILD_JOBS $CARGO_BUILD_FLAGS && \
-            cp -r target/release /moor-build/target-final; \
+            cargo build $PROFILE_FLAG -j $CARGO_BUILD_JOBS $CARGO_BUILD_FLAGS && \
+            cp -r target/$BUILD_PROFILE /moor-build/target-final; \
         fi \
     else \
         if [ "$TRACE_EVENTS" = "true" ]; then \

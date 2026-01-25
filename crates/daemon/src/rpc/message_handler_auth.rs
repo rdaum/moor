@@ -29,7 +29,7 @@ use rusty_paseto::core::{
 };
 use serde_json::json;
 use std::{collections::HashMap, sync::Arc, time::Instant};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 impl RpcMessageHandler {
@@ -55,13 +55,13 @@ impl RpcMessageHandler {
             None,
         )
         .map_err(|e| {
-            warn!(error = ?e, "Unable to parse/validate token");
+            debug!(error = ?e, "Unable to parse/validate token");
             RpcMessageError::PermissionDenied
         })?;
 
         let verified_token = serde_json::from_str::<serde_json::Value>(verified_token.as_str())
             .map_err(|e| {
-                warn!(error = ?e, "Unable to parse/validate token");
+                debug!(error = ?e, "Unable to parse/validate token JSON");
                 RpcMessageError::PermissionDenied
             })
             .unwrap();
@@ -296,13 +296,13 @@ impl RpcMessageHandler {
             None,
         )
         .map_err(|e| {
-            warn!(error = ?e, "Unable to parse/validate token");
+            debug!(error = ?e, "Unable to parse/validate client token");
             RpcMessageError::PermissionDenied
         })?;
 
         let verified_token = serde_json::from_str::<serde_json::Value>(verified_token.as_str())
             .map_err(|e| {
-                warn!(error = ?e, "Unable to parse/validate token");
+                debug!(error = ?e, "Unable to parse/validate client token JSON");
                 RpcMessageError::PermissionDenied
             })?;
 

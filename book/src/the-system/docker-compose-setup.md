@@ -120,32 +120,39 @@ Services communicate via Unix domain sockets (IPC) and run as your user to avoid
 
 ## Development Quick Start
 
-For development and testing, you can use the root `docker-compose.yml`:
+For development, testing, and quick evaluation, mooR provides two pre-configured start scripts in the repository root. These scripts automatically handle Docker permissions, core-specific feature flags, and resource isolation.
 
+### 1. Choose a Core
+
+**Cowbell** (Modern core with web-native features):
 ```bash
-cd /path/to/moor
-export USER_ID=$(id -u) GROUP_ID=$(id -g)
-docker compose up
+./scripts/start-moor-cowbell.sh
 ```
 
-This will:
-1. Build images from source (debug builds by default)
-2. Start all services
-3. Display logs in your terminal
-
-Access via:
-- **Web**: http://localhost:8080
-- **Telnet**: `telnet localhost 8888`
-
-For background operation, add `-d`:
+**LambdaCore** (Classic LambdaMOO core, 1.8.x compatible):
 ```bash
-docker compose up -d
+./scripts/start-moor-lambdacore.sh
 ```
 
-For release builds (better performance):
+### 2. Isolated Environments
+
+Each script uses its own isolated runtime directory:
+- `run-cowbell/`
+- `run-lambda-moor/`
+
+This ensures that you can switch between cores without database or keypair "pollution". Each environment maintains its own persistent database, configuration, and host keys.
+
+### 3. Build Profiles
+
+By default, these scripts use a high-performance **release** build (`release-fast`). For a faster initial compile during development, you can use the `--debug` flag:
+
 ```bash
-BUILD_PROFILE=release docker compose up -d
+./scripts/start-moor-cowbell.sh --debug
 ```
+
+Access the system via:
+- **Web Client**: http://localhost:8080
+- **Telnet Interface**: `telnet localhost 8888`
 
 ## Common Operations
 
@@ -189,13 +196,15 @@ docker compose up -d
 
 ## Data Persistence
 
-All Docker Compose configurations store data in local directories:
+All Docker Compose configurations store data in local directories. For the development scripts, these are consolidated under core-specific runtime directories:
 
-- `./moor-data/` - Main database directory
-- `./moor-*-host-data/` - Host-specific state
-- `./moor-ipc/` - Unix domain sockets for inter-service communication
+- `./run-cowbell/` or `./run-lambda-moor/`
+  - `moor-data/` - Main database directory
+  - `*-host-data/` - Host-specific state and keys
+  - `config/` - Server cryptographic keypairs
+  - `ipc/` - Unix domain sockets for inter-service communication
 
-**Important**: These directories are created with your user permissions. Always backup `moor-data/` regularly.
+**Important**: These directories are created with your user permissions. Always backup your data regularly.
 
 ### Automatic Database Exports
 

@@ -1,116 +1,81 @@
 # Development and Quick-Start Docker Compose Configuration for mooR
 #
-# This configuration is designed for:
-#   - Development and testing
-#   - Quick demos and evaluation
-#   - Learning and experimentation
-#   - Single-machine deployments
-#
-# ⚠️  NOT RECOMMENDED FOR PRODUCTION USE ⚠️
-#
-# For production deployments, see the deploy/ directory:
-#   - deploy/telnet-only/     - Minimal telnet-only setup
-#   - deploy/web-basic/       - Web-enabled (HTTP only)
-#   - deploy/web-ssl/         - Web-enabled with HTTPS (recommended for production)
-#   - deploy/debian-packages/ - Native Debian/Ubuntu packages with systemd
-#
-# Communication: Uses IPC (Unix domain sockets) for inter-service communication since all
-# services run on the same host. For multi-machine deployments, see docker-compose.cluster.yml
-#
-# User Permissions: Services run as the calling user (USER_ID/GROUP_ID environment variables)
-# to avoid permission issues with data directories. Export these before running:
-#   export USER_ID=$(id -u) GROUP_ID=$(id -g)
-#   docker compose up
-#
-# Build Configuration: Uses debug builds by default for faster compilation during development.
-# Production deployments should use release builds for better performance.
-
-# The first time the system starts, it will import cores/lambda-moor from the cores directory.
-# This is a fork of LambdaCore, reconstituted in mooR's `objdef` format, with some modifications.
-#
-# To import an existing LambdaMOO 1.8.x textdump database instead:
-#   1. Change the --import argument to point to your textdump file
-#      Example: --import=/db/cores/JHCore-DEV-2.db
-#   2. Change --import-format to textdump (it defaults to objdef)
-#      Example: --import-format=textdump
-#   3. Remove or comment out the --export line (optional)
-#
-# After import, `moor-data` will contain the resulting database.
-# To re-import simply delete this directory and restart the container.
-
-# After this is running, a MUD client / telnet client can connect to port 8888 on localhost to interact with the
-# system. (e.g. telnet localhost 8888). Or a websocket client can connect to port 8080 on localhost.
+# Consolidates all ephemeral/persistent data under a configurable RUN_DIR.
 
 networks:
-  # An internal network for the mooR system, to allow the different components to communicate with each other.
   moor_net:
 
-# Named volumes for persistent application data
-volumes:
-  moor-config:
-
 services:
-  # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
+  # The core Moor daemon
   moor-daemon:
     build:
       context: .
       target: backend
       network: host
       args:
-        BUILD_PROFILE: ${BUILD_PROFILE:-debug}
+        BUILD_PROFILE: ${BUILD_PROFILE:-release-fast}
     container_name: "moor-daemon"
     user: "${USER_ID}:${GROUP_ID}"
+    working_dir: /db
     environment:
       - RUST_BACKTRACE=1
-    working_dir: /moor
+      - HOME=/db
+      - XDG_CONFIG_HOME=/db/${RUN_DIR}/config
+      - XDG_DATA_HOME=/db/${RUN_DIR}/local-share
     volumes:
       - ./:/db
-      - ./moor-ipc:/var/run/moor
-      - moor-config:/root/.config/moor
+      - ./${RUN_DIR}/ipc:/var/run/moor
     command: >
-      ./moor-daemon
-        /db/moor-data
+      /moor/moor-daemon
+        /db/${RUN_DIR}/moor-data
         --db=development.db
         --rpc-listen=ipc:///var/run/moor/rpc.sock,tcp://0.0.0.0:7899
         --events-listen=ipc:///var/run/moor/events.sock,tcp://0.0.0.0:7898
         --workers-response-listen=ipc:///var/run/moor/workers-response.sock
         --workers-request-listen=ipc:///var/run/moor/workers-request.sock
         --generate-keypair
-        --import=/db/cores/lambda-moor/src --import-format=objdef
-        --export=/db/export
+        --public-key=/db/${RUN_DIR}/config/moor.key.pub
+        --private-key=/db/${RUN_DIR}/config/moor.key.pem
+        --import=${IMPORT_PATH:-/db/cores/lambda-moor/src} --import-format=objdef
+        --use-boolean-returns=${USE_BOOLEAN_RETURNS:-false}
+        --custom-errors=${CUSTOM_ERRORS:-false}
+        --use-uuobjids=${USE_UUOBJIDS:-false}
+        --anonymous-objects=${ANONYMOUS_OBJECTS:-false}
+        --enable-eventlog=${ENABLE_EVENTLOG:-true}
+        --export=/db/${RUN_DIR}/export
     ports:
-      # TCP RPC with CURVE (for external/remote access)
       - "7899:7899"
-      # TCP Events with CURVE (for external/remote access)
       - "7898:7898"
     networks:
       - moor_net
 
-  # A host process that runs the telnet server, and handles incoming connections and forwards events to the daemon.
+  # Telnet host process
   moor-telnet-host:
     build:
       context: .
       target: backend
       network: host
       args:
-        BUILD_PROFILE: ${BUILD_PROFILE:-debug}
+        BUILD_PROFILE: ${BUILD_PROFILE:-release-fast}
     container_name: "moor-telnet-host"
     user: "${USER_ID}:${GROUP_ID}"
+    working_dir: /db
     environment:
       - RUST_BACKTRACE=1
-    working_dir: /moor
+      - HOME=/db
+      - XDG_CONFIG_HOME=/db/${RUN_DIR}/config
+      - XDG_DATA_HOME=/db/${RUN_DIR}/local-share
     volumes:
-      - ./moor-telnet-host-data:/moor/.moor-host-data
-      - ./moor-ipc:/var/run/moor
-      - moor-config:/root/.config/moor:ro
+      - ./:/db
+      - ./${RUN_DIR}/ipc:/var/run/moor
     command:
-      - ./moor-telnet-host
+      - /moor/moor-telnet-host
       - --telnet-address=0.0.0.0
       - --telnet-port=8888
       - --rpc-address=ipc:///var/run/moor/rpc.sock
       - --events-address=ipc:///var/run/moor/events.sock
+      - --data-dir=/db/${RUN_DIR}/telnet-host-data
     ports:
-      # Telnet listener
       - "8888:8888"
     networks:
       - moor_net
@@ -118,7 +83,7 @@ services:
       moor-daemon:
         condition: service_started
 
-  # Frontend web server that serves static files and proxies API calls
+  # Frontend web server
   moor-frontend:
     build:
       context: .
@@ -128,36 +93,36 @@ services:
     depends_on:
       - moor-web-host
     ports:
-      # Main web interface
       - "8080:80"
     networks:
       - moor_net
 
-  # API server that handles websocket connections and REST endpoints
+  # API / Web host server
   moor-web-host:
     build:
       context: .
       target: backend
       network: host
       args:
-        BUILD_PROFILE: ${BUILD_PROFILE:-debug}
+        BUILD_PROFILE: ${BUILD_PROFILE:-release-fast}
     container_name: "moor-web-host"
     user: "${USER_ID}:${GROUP_ID}"
+    working_dir: /db
     environment:
       - RUST_BACKTRACE=1
-    working_dir: /moor
+      - HOME=/db
+      - XDG_CONFIG_HOME=/db/${RUN_DIR}/config
+      - XDG_DATA_HOME=/db/${RUN_DIR}/local-share
     volumes:
-      - ./moor-web-host-data:/moor/.moor-host-data
-      - ./moor-ipc:/var/run/moor
-      - moor-config:/root/.config/moor:ro
+      - ./:/db
+      - ./${RUN_DIR}/ipc:/var/run/moor
     command:
-      - ./moor-web-host
+      - /moor/moor-web-host
       - --listen-address=0.0.0.0:8081
       - --rpc-address=ipc:///var/run/moor/rpc.sock
       - --events-address=ipc:///var/run/moor/events.sock
-
+      - --data-dir=/db/${RUN_DIR}/web-host-data
     ports:
-      # API listener (internal)
       - "8081:8081"
     networks:
       - moor_net
@@ -165,31 +130,32 @@ services:
       moor-daemon:
         condition: service_started
 
-  # A worker process that handles requests from the daemon for outbound HTTP requests and returns the results back
-  # to the daemon.
+  # Curl worker process
   moor-curl-worker:
     build:
       context: .
       target: backend
       network: host
       args:
-        BUILD_PROFILE: ${BUILD_PROFILE:-debug}
+        BUILD_PROFILE: ${BUILD_PROFILE:-release-fast}
     container_name: "moor-curl-worker"
     user: "${USER_ID}:${GROUP_ID}"
+    working_dir: /db
     environment:
       - RUST_BACKTRACE=1
-    working_dir: /moor
+      - HOME=/db
+      - XDG_CONFIG_HOME=/db/${RUN_DIR}/config
+      - XDG_DATA_HOME=/db/${RUN_DIR}/local-share
     volumes:
-      - ./moor-curl-worker-data:/moor/.moor-host-data
-      - ./moor-ipc:/var/run/moor
-      - moor-config:/root/.config/moor:ro
+      - ./:/db
+      - ./${RUN_DIR}/ipc:/var/run/moor
     command:
-      - ./moor-curl-worker
+      - /moor/moor-curl-worker
       - --rpc-address=ipc:///var/run/moor/rpc.sock
       - --events-address=ipc:///var/run/moor/events.sock
       - --workers-request-address=ipc:///var/run/moor/workers-request.sock
       - --workers-response-address=ipc:///var/run/moor/workers-response.sock
-
+      - --data-dir=/db/${RUN_DIR}/curl-worker-data
     networks:
       - moor_net
     depends_on:

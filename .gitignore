@@ -27,10 +27,9 @@ CLAUDE.sessions.md
 sessions/
 /.claude/
 
-moor-data/
-moor-web-host-data/
-moor-telnet-host-data/
-moor-curl-worker-data/
+# Runtime data and IPC (managed by start scripts)
+run-cowbell/
+run-lambda-moor/
 
 # OAuth2 config files with secrets
 *-oauth2.yaml

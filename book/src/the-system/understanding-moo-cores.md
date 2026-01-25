@@ -49,7 +49,7 @@ Key characteristics of JaysHouseCore include:
 - **Technical focus**: Features designed for power users and MOO programmers
 - **Proven stability**: [Waterpoint MOO](https://www.waterpoint.org/) is built overtop of JHCore
 
-A copy of JHCore is included -- for testing purposes -- in the `mooR` github repository, and is the default core used by the included `docker compose` configuration.
+A copy of LambdaCore (modified for mooR) is included in the `cores/lambda-moor` directory of the mooR workspace. It can be started immediately using the provided quick-start scripts.
 
 ## Toast Cores and Compatibility
 
@@ -63,7 +63,8 @@ While mooR implements many Toast-compatible features, it's not a drop-in replace
 
 ## mooR's Future: The Cowbell Core
 
-The mooR project is developing its own core called ["cowbell"](https://github.com/rdaum/cowbell/) (named with a nod to the famous "more cowbell" meme). Cowbell aims to:
+The mooR project is developing its own core called ["cowbell"](https://codeberg.org/timbran/cowbell/)
+ (named with a nod to the famous "more cowbell" meme). Cowbell aims to:
 
 - **Showcase mooR features**: Take advantage of mooR's unique capabilities and extensions
 - **Web native UI**: Cowbell will be built with the web client in mind, and offer a rich media interface.
@@ -71,16 +72,11 @@ The mooR project is developing its own core called ["cowbell"](https://github.co
 - **Clean foundation**: Start fresh rather than carrying forward historical baggage
 - **Documentation**: Be well-documented and easy to understand for new programmers
 
-**Current Status**: Cowbell is still in early development. The basics exist, but it needs significant work to be a fully-featured core suitable for production MOOs. See
+**Current Status**: Cowbell is the primary recommended core for new mooR users. It is developed alongside the server to showcase its unique capabilities.
 
-**Contributions Welcome**: If you're interested in MOO development, contributing to cowbell is a great way to get involved. The project needs:
-- Core object implementations
-- Command verb programming
-- Documentation and examples
-- Testing and feedback
-- User interface improvements
+**How to run**: Cowbell is easily started using the `./scripts/start-moor-cowbell.sh` script in the mooR repository root. This script will automatically fetch the Cowbell source code if it's not already present.
 
-See: https://github.com/rdaum/cowbell/
+See: https://codeberg.org/timbran/cowbell/
 
 ## Choosing Your Path
 

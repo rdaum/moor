@@ -6,11 +6,12 @@ running.
 
 ## Quick Start Guide
 
-The fastest way to get mooR running is with Docker Compose, which handles all the complexity automatically. If you just
-want to get started quickly:
+The fastest way to get mooR running is with the provided quick-start scripts, which handle Docker setup and environment isolation automatically.
 
 1. Clone the mooR repository
-2. Run `docker compose up` in the repository root
+2. Run one of the start scripts in the repository root:
+   - For the modern Cowbell core: `./scripts/start-moor-cowbell.sh`
+   - For classic LambdaCore: `./scripts/start-moor-lambdacore.sh`
 3. Connect to your MOO via http://localhost:8080/ -- or `telnet` (or your favourite MUD client) to port 8888
 
 For detailed instructions and other installation options, see the sections below.

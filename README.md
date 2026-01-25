@@ -26,7 +26,12 @@ enhancements.
 > GitHub to [Codeberg](https://codeberg.org/timbran/moor). If you're viewing this on GitHub, please
 > consider switching to Codeberg for the latest updates, issue tracking, and contributions.
 
-## What Makes MOOs Special
+## What is a MOO? And Why?
+
+A MOO (Multi-User Object-Oriented) is a network-accessible, multi-user, programmable system for
+building online social environments, games, and collaborative spaces. Think of it as a virtual world
+where participants can not only interact with each other, but also program and modify the
+environment itself.
 
 MOOs offer a unique digital experience through:
 
@@ -37,35 +42,19 @@ MOOs offer a unique digital experience through:
   interfaces
 - **Complete customizability** - everything from objects to commands can be programmed
 
-mooR builds on the foundation of MUDs (Multi-User Dungeons) and similar multiplayer online
-environments that have fostered creative communities for decades. Like modern sandbox games,
-MMORPGs, and social platforms, MOOs provide persistent worlds where players can build, create, and
-collaborate. What sets MOOs apart is their emphasis on live programming and community-driven content
+What _mainly_ sets MOOs apart is their emphasis on live programming and community-driven content
 creation - imagine if Minecraft's creative mode, Discord's community features, and a code editor all
-lived in the same space.
+lived in the same space. (Or for the more nerdy, imagine if a system like Smalltalk or similar could
+be connected to by multiple people in real time, each contributing to a shared codebase.)
 
-In a world of throwaway apps and walled gardens, mooR is cheerfully dragging the future into the
-past - taking the best ideas from decades of online community building and rebuilding them with
-modern technology.
+mooR is a modern, from-scratch rewrite of all of the above. It will happily import an existing
+LambdaMOO (or some ToastStunt) database, but offers significant enhancements and modern conveniences
+and is intended on bringing the whole experience into the future.
 
-## Status
+To see a live running instance, visit our demonstrator community at
+["Timbran Hotel"](https://moo.timbran.org).
 
-mooR is in the **1.0-beta** series, focusing on stability, bug fixes, and documentation. The core
-runtime and database formats are considered "stable" but churn may still happen. It successfully
-runs databases imported from LambdaMOO with real-world workloads and has passed extensive stress and
-performance testing.
-
-**Beta series policy**:
-
-- `main` branch: pre-release/next-version development (new features land here first)
-- `1.0` branch: stable release line (bug fixes, stability improvements, documentation)
-- Bug fixes land on `main` first, then are cherry-picked to `1.0` when safe
-- Beta tags are cut from the `1.0` branch; releases and images publish from there
-- Database formats and APIs are now stable
-- Ready for testing and feedback from users
-
-**Repository**: The primary mooR repository is hosted on
-[Codeberg](https://codeberg.org/timbran/moor) with a mirror on GitHub.
+<p align="center"><img src="./doc/timbran-lobby.png" alt="The Timbran Hotel Lobby" width="600"/></p>
 
 ## Key Features & Enhancements
 
@@ -95,25 +84,66 @@ performance testing.
 - Support for multiple client protocols (web, telnet)
 - Easy deployment via Docker
 
+## Status
+
+mooR is in the **1.0-beta** series, focusing on stability, bug fixes, and documentation. The core
+runtime and database formats are considered "stable" but churn may still happen. It successfully
+runs databases imported from LambdaMOO with real-world workloads and has passed extensive stress and
+performance testing.
+
+**Beta series policy**:
+
+- `main` branch: pre-release/next-version development (new features land here first)
+- `1.0` branch: stable release line (bug fixes, stability improvements, documentation)
+- Bug fixes land on `main` first, then are cherry-picked to `1.0` when safe
+- Beta tags are cut from the `1.0` branch; releases and images publish from there
+- Database formats and APIs are now stable
+- Ready for testing and feedback from users
+
+**Repository**: The primary mooR repository is hosted on
+[Codeberg](https://codeberg.org/timbran/moor) with a mirror on GitHub. All issues filed and pull
+requests submitted need to come through Codeberg, and not GitHub.
+
 ## Quick Start
 
-The easiest way to get started is with Docker Compose:
+The easiest way to get started and see what we've made is by using our quick-start scripts. These
+scripts automatically handle Docker setup, resource isolation, and feature flag configuration.
+
+### Try out mooR with a Core
+
+Choose one of the pre-configured cores to explore (the scripts will automatically fetch any missing
+dependencies):
+
+- **Cowbell** (Modern core with web-native features):
+  ```bash
+  ./scripts/start-moor-cowbell.sh
+  ```
+- **LambdaCore** (Classic LambdaMOO core, with slight modifications for a better experience in
+  mooR):
+  ```bash
+  ./scripts/start-moor-lambdacore.sh
+  ```
+
+By default, these scripts use a higher performance **release** build. For a faster initial compile
+during mooR development (but slower runtime performance), you can use the `--debug` flag:
 
 ```bash
-export USER_ID=$(id -u) GROUP_ID=$(id -g)
-docker compose up
+./scripts/start-moor-cowbell.sh --debug
 ```
 
-For faster builds during development, the default configuration uses debug builds. For production
-deployment with optimized performance, use:
+### Accessing the System
 
-```bash
-export USER_ID=$(id -u) GROUP_ID=$(id -g)
-BUILD_PROFILE=release docker compose up
-```
+Once started, the services are available at:
 
-**Note**: Debug builds compile significantly faster (especially on resource-constrained systems like
-Docker Desktop on macOS) while still providing good performance for development and testing.
+- **Web Client**: [http://localhost:8080](http://localhost:8080)
+- **Telnet Interface**: `telnet localhost 8888`
+
+The system isolates runtime data for each core in its own directory (`run-cowbell/` or
+`run-lambda-moor/`), ensuring you can switch between them without database pollution.
+
+---
+
+## What the services are
 
 This starts four services:
 
@@ -157,15 +187,19 @@ mooR provides multiple deployment configurations to suit different use cases:
 The root `docker-compose.yml` is designed for development and single-machine deployments. All
 services run on the same host and communicate via **IPC (Unix domain sockets)**.
 
-Services run as your user (via `USER_ID` and `GROUP_ID` environment variables), avoiding permission
-issues with data directories.
+The recommended way to start this setup is via the core-specific scripts, which handle all
+environment isolation and permissions for you.
 
-To start:
+To start in the background:
 
 ```bash
-export USER_ID=$(id -u) GROUP_ID=$(id -g)
-docker compose up -d
+./scripts/start-moor-cowbell.sh -d
 ```
+
+(Any additional flags like `-d` are passed directly to `docker compose up`).
+
+Data for these deployments is consolidated under core-specific directories (e.g., `./run-cowbell/`),
+keeping your project root clean.
 
 ### Testing Clustered Configuration
 
@@ -185,7 +219,7 @@ Debian packages on separate servers.
 
 ### Production Deployment Configurations
 
-The `deploy/` directory contains production-ready configurations:
+The `deploy/` directory contains a series of production-ready configuration examples:
 
 - **`telnet-only/`**: Minimal telnet-only setup for traditional MUD usage
 - **`web-basic/`**: Web-enabled deployment with HTTP (for use behind reverse proxies)
@@ -193,9 +227,12 @@ The `deploy/` directory contains production-ready configurations:
 - **`debian-packages/`**: Native Debian/Ubuntu packages with systemd (no Docker)
 
 All production configurations use IPC for single-machine deployments and include automated testing
-scripts. See each deployment's README for specific setup instructions.
+scripts. See each deployment's README for specific setup instructions. If you run into problems with
+these scripts, please file an issue on our
+[Codeberg issue tracker](https://codeberg.org/timbran/moor/issues) as they may fall out of date with
+the latest changes.
 
-For deployment testing:
+For testing the current state of these deployment scenarios:
 
 ```bash
 cd deploy
@@ -231,6 +268,7 @@ mooR offers several opportunities for contribution. For detailed contribution gu
 - **Issues**: Check our [Codeberg Issues](https://codeberg.org/timbran/moor/issues) for current
   needs
 - **Discussion**: Join our [Discord](https://discord.gg/Ec94y5983z) community
+- **Experience**: Visit the [Timbran Hotel](https://moo.timbran.org) and explore and code
 - **Development**: See the [mooR Book](https://timbran.org/book/html/) for architecture details
 - **Support**: Consider [sponsoring the project](https://github.com/sponsors/rdaum) to help with
   ongoing development
