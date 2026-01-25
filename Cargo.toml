@@ -217,8 +217,8 @@ rand = "0.9"
 semver = "1.0"
 strum = { version = "0.27", features = ["derive"] }
 uuid = { version = "1.16", features = ["v4", "v7", "serde"] }
-vergen = { version = "9", default-features = false, features = ["cargo"] }
-vergen-gitcl = { version = "1", default-features = false }
+vergen = { version = "9.1", default-features = false, features = ["cargo"] }
+vergen-gitcl = { version = "9.1", default-features = false }
 zerocopy = { version = "0.8", features = ["derive"] }
 
 # Testing & Development
