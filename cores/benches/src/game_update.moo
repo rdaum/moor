@@ -11,6 +11,9 @@ object GAME_UPDATE
   property task_id (owner: ARCH_WIZARD, flags: "r") = 0;
   property update_hertz (owner: ARCH_WIZARD, flags: "r") = 20.0;
   property interrupts (owner: ARCH_WIZARD, flags: "r") = {};
+  property tick_count (owner: ARCH_WIZARD, flags: "r") = 0;
+  property last_stats_time (owner: ARCH_WIZARD, flags: "r") = 0.0;
+  property stats_interval (owner: ARCH_WIZARD, flags: "r") = 10.0;
 
   override import_export_hierarchy = {};
 
@@ -28,6 +31,8 @@ object GAME_UPDATE
     update_delays = [];
     update_state = [];
     interrupts = {};
+    this.tick_count = 0;
+    this.last_stats_time = ftime(true);
     while (this.running)
       try
         if (task_id() != this.task_id)
@@ -70,6 +75,25 @@ object GAME_UPDATE
         runtime = ftime(true) - start_time;
         update_time = 1.0 / this.update_hertz;
         this.latency = {runtime, @this.latency}[1..min(5, $)];
+        this.tick_count = this.tick_count + 1;
+        "Periodic stats logging";
+        now = ftime(true);
+        if (now - this.last_stats_time >= this.stats_interval)
+          elapsed = now - this.last_stats_time;
+          ticks = this.tick_count;
+          actual_hz = ticks / elapsed;
+          sub_count = length(this.subscribers);
+          mean_lat = 0.0;
+          if (length(this.latency) > 0)
+            for lat in (this.latency)
+              mean_lat = mean_lat + lat;
+            endfor
+            mean_lat = mean_lat / length(this.latency);
+          endif
+          server_log("TICK_STATS ticks=" + tostr(ticks) + " elapsed=" + tostr(elapsed) + " actual_hz=" + tostr(actual_hz) + " target_hz=" + tostr(this.update_hertz) + " subscribers=" + tostr(sub_count) + " mean_latency_ms=" + tostr(mean_lat * 1000.0));
+          this.tick_count = 0;
+          this.last_stats_time = now;
+        endif
         suspend(max(0.0, update_time - runtime));
         this:prune_interrupts();
         commit();

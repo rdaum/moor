@@ -137,4 +137,55 @@ object BENCH_CONTROLLER
     this:run();
     $game_update:stop();
   endverb
+
+  verb test_write_stress (this none this) owner: ARCH_WIZARD flags: "rxd"
+    "Stress test for write throughput. Creates many subscribers at high Hz.";
+    "Optional args: duration, subscribers, work_per_tick, append_mode (defaults: 30, 256, 20, 0)";
+    server_log("=== WRITE STRESS TEST STARTING ===");
+
+    "Configure for aggressive write stress testing";
+    run_duration = length(args) > 0 ? tofloat(args[1]) | 30.0;
+    target_subscribers = length(args) > 1 ? toint(args[2]) | 256;
+    work_per_tick = length(args) > 2 ? toint(args[3]) | 20;
+    append_mode = length(args) > 3 ? toint(args[4]) | 0;
+    update_hz = 50.0;
+
+    "Set up the game update loop with high Hz";
+    $game_update.update_hertz = update_hz;
+    $game_update.stats_interval = 5.0;
+    server_log("Update Hz: " + tostr(update_hz));
+
+    "Create subscribers";
+    server_log("Creating " + tostr(target_subscribers) + " subscribers (append_mode=" + tostr(append_mode) + ")...");
+    for i in [1..target_subscribers]
+      sub = create($bench_subscriber, $arch_wizard);
+      sub.work_iterations = work_per_tick;
+      sub.append_mode = append_mode;
+      $game_update:register(sub);
+      if (i % 50 == 0)
+        server_log("Created " + tostr(i) + " subscribers...");
+        commit();
+      endif
+    endfor
+    commit();
+
+    "Start the loop";
+    $game_update:start();
+
+    writes_per_second = target_subscribers * work_per_tick * update_hz;
+    server_log("=== WRITE STRESS TEST RUNNING ===");
+    server_log("Subscribers: " + tostr(target_subscribers));
+    server_log("Work per tick: " + tostr(work_per_tick));
+    server_log("Target Hz: " + tostr(update_hz));
+    server_log("Estimated writes/sec: " + tostr(writes_per_second));
+    server_log("Running for " + tostr(run_duration) + " seconds...");
+
+    "Let it run";
+    suspend(run_duration);
+
+    "Stop and cleanup";
+    $game_update:stop();
+    this:cleanup();
+    server_log("=== WRITE STRESS TEST COMPLETE ===");
+  endverb
 endobject

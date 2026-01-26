@@ -35,7 +35,7 @@ use moor_kernel::{
 use moor_moot::MootOptions;
 use moor_objdef::{ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions};
 use moor_textdump::{TextdumpImportOptions, textdump_load};
-use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
+use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, v_float, v_int};
 use once_cell::sync::Lazy;
 use std::{
     fs,
@@ -140,6 +140,19 @@ pub struct Args {
                 The code will be migrated to the new TYPE_* format on output."
     )]
     legacy_type_constants: Option<bool>,
+
+    #[clap(
+        long,
+        default_value = "4",
+        help = "Timeout in seconds for individual test verbs (default: 4)"
+    )]
+    test_timeout: u64,
+
+    #[clap(
+        long,
+        help = "Arguments to pass to test verbs, as a MOO literal (e.g., '{300}' or '300' for a single value)"
+    )]
+    test_args: Option<String>,
 }
 
 fn emit_objdef_compile_error(
@@ -540,6 +553,39 @@ fn main() -> Result<(), eyre::Report> {
         .spawn(move || scheduler.run(session_factory.clone()))
         .expect("Failed to spawn scheduler");
 
+    // Parse test args if provided
+    let test_args_list = if let Some(ref args_str) = args.test_args {
+        // Try parsing as a float first, then int, then as a MOO list literal
+        if let Ok(f) = args_str.parse::<f64>() {
+            List::mk_list(&[v_float(f)])
+        } else if let Ok(i) = args_str.parse::<i64>() {
+            List::mk_list(&[v_int(i)])
+        } else if args_str.starts_with('{') && args_str.ends_with('}') {
+            // Simple list of numbers: {300} or {1, 2, 3}
+            let inner = &args_str[1..args_str.len() - 1];
+            let vals: Vec<Var> = inner
+                .split(',')
+                .filter_map(|s| {
+                    let s = s.trim();
+                    if let Ok(f) = s.parse::<f64>() {
+                        Some(v_float(f))
+                    } else if let Ok(i) = s.parse::<i64>() {
+                        Some(v_int(i))
+                    } else {
+                        warn!("Could not parse test arg: {}", s);
+                        None
+                    }
+                })
+                .collect();
+            List::mk_list(&vals)
+        } else {
+            warn!("Could not parse test-args: {}", args_str);
+            List::mk_list(&[])
+        }
+    } else {
+        List::mk_list(&[])
+    };
+
     // Run unit tests
     if args.run_tests == Some(true) && !unit_tests.is_empty() {
         'outer: for (o, verb) in unit_tests {
@@ -553,7 +599,7 @@ fn main() -> Result<(), eyre::Report> {
                     &wizard,
                     &ObjectRef::Id(o),
                     verb,
-                    List::mk_list(&[]),
+                    test_args_list.clone(),
                     "".to_string(),
                     &wizard,
                     session,
@@ -562,8 +608,8 @@ fn main() -> Result<(), eyre::Report> {
             let result_value = loop {
                 let result = handle
                     .receiver()
-                    .recv_timeout(Duration::from_secs(4))
-                    .expect("Test timed out");
+                    .recv_timeout(Duration::from_secs(args.test_timeout))
+                    .expect("Test timed out: Timeout");
                 match result {
                     (_, Ok(TaskNotification::Result(rv))) => break rv,
                     (_, Ok(TaskNotification::Suspended)) => continue,
