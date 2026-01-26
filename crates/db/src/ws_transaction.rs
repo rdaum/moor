@@ -31,12 +31,12 @@ use moor_var::{
     ByteSized, NOTHING, Obj, Symbol, Var, program::ProgramType, v_empty_map, v_map, v_none,
 };
 use std::collections::HashSet;
+use std::fmt::Display;
 use std::{
     collections::VecDeque,
     hash::Hash,
     time::{Duration, Instant},
 };
-use std::fmt::Display;
 use tracing::warn;
 use uuid::Uuid;
 
@@ -1336,9 +1336,30 @@ impl WorldStateTransaction {
         drop(_t);
         let _t = PerfTimerGuard::new(&counters.tx_commit_send_working_set_phase);
         let (send, reply) = oneshot::channel();
-        commit_channel
-            .send(CommitSet::CommitWrites(ws, send))
-            .expect("Could not send commit request -- channel closed?");
+        let commit_msg = CommitSet::CommitWrites(ws, send);
+
+        // Try non-blocking first to avoid backpressure overhead in the common case
+        match commit_channel.try_send(commit_msg) {
+            Ok(()) => {}
+            Err(flume::TrySendError::Full(msg)) => {
+                // Queue full - backpressure from slow I/O. Warn and block.
+                tracing::warn!(
+                    "Commit queue backpressure: queue full, blocking ({} tuples)",
+                    tuple_count
+                );
+                let bp_start = Instant::now();
+                commit_channel
+                    .send(msg)
+                    .expect("Could not send commit request -- channel closed?");
+                let elapsed = bp_start.elapsed();
+                if elapsed > Duration::from_secs(1) {
+                    tracing::warn!("Commit queue backpressure: blocked for {:?}", elapsed);
+                }
+            }
+            Err(flume::TrySendError::Disconnected(_)) => {
+                panic!("Could not send commit request -- channel closed?");
+            }
+        }
 
         // Wait for the reply.
         drop(_t);

@@ -35,14 +35,16 @@
 //!
 //! - **UTF-8 types** (`StringHolder`): Direct UTF-8 byte encoding without additional framing.
 //!
-//! ## Background Writing
+//! ## Batched Writing
 //!
-//! Writes are performed asynchronously on a background thread to avoid blocking the main
-//! transaction path. The provider maintains pending operation tracking to ensure read-after-write
-//! consistency: reads check pending writes before hitting the backing store.
+//! All providers share a single BatchCollector. During a commit's apply phase, each provider
+//! adds its operations to the shared batch. After apply completes, MoorDB sends the entire
+//! batch to a single BatchWriter thread for atomic persistence via fjall's WriteBatch API.
+//! This reduces I/O contention and enables atomic multi-relation commits.
 
 use crate::{
     db_counters,
+    provider::batch_writer::BatchCollector,
     tx_management::{EncodeFor, Error, RelationCodomain, RelationDomain, Timestamp},
 };
 use byteview::ByteView;
@@ -54,10 +56,7 @@ use moor_common::util::signal_fatal_db_error;
 use planus::{ReadAsRoot, WriteAsOffset};
 use std::{
     collections::{HashMap, HashSet},
-    sync::{
-        Arc, Mutex, RwLock,
-        atomic::{AtomicBool, AtomicU64},
-    },
+    sync::{Arc, Mutex, RwLock, atomic::AtomicBool},
     thread::JoinHandle,
     time::Duration,
 };
@@ -69,16 +68,17 @@ fn handle_fjall_error(e: &fjall::Error, operation: &str) -> bool {
     if matches!(e, fjall::Error::Poisoned) {
         // Use the common fatal error handler - it will log once and signal shutdown
         signal_fatal_db_error(operation, "database poisoned (fsync failure)");
-        // Don't log subsequent Poisoned errors - they'd just flood the log
         true
     } else {
-        // Non-poisoned errors get logged normally
         error!("Database error during {operation}: {e}");
         false
     }
 }
 
-/// Tracks operations that have been submitted to the background thread but not yet completed
+/// Tracks pending operations during a commit for read-your-writes consistency.
+///
+/// Even though writes go to the shared BatchCollector, we still track them here
+/// so reads during the commit window see uncommitted changes.
 struct PendingOperations<Domain, Codomain>
 where
     Domain: RelationDomain,
@@ -103,20 +103,12 @@ where
     }
 }
 
-// Background thread operations work with pre-encoded bytes
-enum WriteOp<Domain>
-where
-    Domain: RelationDomain,
-{
-    /// Insert with pre-encoded key and value bytes
-    Insert(Vec<u8>, Vec<u8>, Domain), // key_bytes, value_bytes, domain (for pending ops tracking)
-    /// Delete with pre-encoded key bytes
-    Delete(Vec<u8>, Domain), // key_bytes, domain (for pending ops tracking)
-    /// Barrier marker for snapshot consistency - reply when all writes up to this timestamp are complete
-    Barrier(Timestamp, oneshot::Sender<()>),
-}
-
-/// A backing persistence provider that fills the DB cache from a Fjall keyspace.
+/// A backing persistence provider that uses a shared BatchCollector for writes.
+///
+/// All providers share a single BatchCollector. During a commit's apply phase,
+/// each provider adds its operations to the shared batch. After apply completes,
+/// MoorDB sends the entire batch to a single BatchWriter thread for atomic
+/// persistence via fjall's WriteBatch API.
 #[derive(Clone)]
 pub(crate) struct FjallProvider<Domain, Codomain>
 where
@@ -124,16 +116,13 @@ where
     Codomain: RelationCodomain,
 {
     fjall_keyspace: fjall::Keyspace,
-    ops: Sender<WriteOp<Domain>>,
-    kill_switch: Arc<AtomicBool>,
-    /// Shared state tracking operations in-flight to background thread
+    /// Shared batch collector - all providers add to this during commit
+    batch_collector: Arc<BatchCollector>,
+    /// Shared state tracking operations in-flight for read-your-writes consistency
     pending_ops: Arc<RwLock<PendingOperations<Domain, Codomain>>>,
     /// Set of domains that have been checked and found to not exist (tombstones/misses)
     /// This is shared across all transactions to avoid redundant database lookups
     tombstones: Arc<RwLock<HashSet<Domain>>>,
-    /// Atomic tracking of the highest completed barrier timestamp
-    completed_barrier: Arc<AtomicU64>,
-    jh: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 fn decode_codomain_with_ts<P, Codomain>(
@@ -170,165 +159,25 @@ where
     Domain: RelationDomain,
     Codomain: RelationCodomain,
 {
-    pub fn new(relation_name: &str, fjall_keyspace: fjall::Keyspace) -> Self
-    where
-        Self: EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
-    {
-        let kill_switch = Arc::new(AtomicBool::new(false));
-        let (ops_tx, ops_rx) = flume::unbounded::<WriteOp<Domain>>();
-        let pending_ops = Arc::new(RwLock::new(PendingOperations::default()));
-        let tombstones = Arc::new(RwLock::new(HashSet::new()));
-        let completed_barrier = Arc::new(AtomicU64::new(0));
-
-        let fj = fjall_keyspace.clone();
-        let ks = kill_switch.clone();
-        let pending_ops_bg = pending_ops.clone();
-        let completed_barrier_bg = completed_barrier.clone();
-        let thread_name = format!("moor-w-{relation_name}");
-        let tb = std::thread::Builder::new().name(thread_name);
-        let jh = tb
-            .spawn(move || {
-                gdt_cpus::set_thread_priority(ThreadPriority::Background).ok();
-                loop {
-                    // Check kill_switch at top of loop
-                    if ks.load(std::sync::atomic::Ordering::SeqCst) {
-                        // Drain any remaining operations before exiting
-                        while let Ok(op) = ops_rx.try_recv() {
-                            match op {
-                                WriteOp::Insert(key_bytes, value, _domain) => {
-                                    let _ = fj.insert(key_bytes, value);
-                                }
-                                WriteOp::Delete(key_bytes, _domain) => {
-                                    let _ = fj.remove(key_bytes);
-                                }
-                                WriteOp::Barrier(timestamp, reply) => {
-                                    completed_barrier_bg
-                                        .store(timestamp.0, std::sync::atomic::Ordering::SeqCst);
-                                    reply.send(()).ok();
-                                }
-                            }
-                        }
-                        break;
-                    }
-
-                    // Use timeout so we can periodically check kill_switch
-                    let op = match ops_rx.recv_timeout(Duration::from_millis(100)) {
-                        Ok(op) => op,
-                        Err(flume::RecvTimeoutError::Timeout) => continue,
-                        Err(flume::RecvTimeoutError::Disconnected) => break,
-                    };
-
-                    match op {
-                        WriteOp::Insert(key_bytes, value, domain) => {
-                            // Bytes are already encoded by the per-type EncodeFor impl!
-                            // Perform the actual write
-                            let write_result = fj.insert(key_bytes, value);
-
-                            // Remove from pending operations after completion (success or failure)
-                            if let Ok(mut pending) = pending_ops_bg.write() {
-                                pending.pending_writes.remove(&domain);
-                            }
-
-                            if let Err(e) = write_result {
-                                handle_fjall_error(&e, "insert");
-                            }
-                        }
-                        WriteOp::Delete(key_bytes, domain) => {
-                            // Bytes are already encoded by the per-type EncodeFor impl!
-                            // Perform the actual delete
-                            let delete_result = fj.remove(key_bytes);
-
-                            // Remove from pending operations after completion (success or failure)
-                            if let Ok(mut pending) = pending_ops_bg.write() {
-                                pending.pending_deletes.remove(&domain);
-                            }
-
-                            if let Err(e) = delete_result {
-                                handle_fjall_error(&e, "delete");
-                            }
-                        }
-                        WriteOp::Barrier(timestamp, reply) => {
-                            // Mark this barrier as completed and reply
-                            completed_barrier_bg
-                                .store(timestamp.0, std::sync::atomic::Ordering::SeqCst);
-                            // Reply to indicate barrier is processed
-                            reply.send(()).ok();
-                        }
-                    }
-                }
-            })
-            .expect("failed to spawn fjall-write");
+    /// Create a new provider that uses the shared BatchCollector for writes.
+    ///
+    /// Unlike the old design, this does NOT spawn a background thread. All writes
+    /// are collected into the shared batch and written by the central BatchWriter.
+    pub fn new(
+        _relation_name: &str,
+        fjall_keyspace: fjall::Keyspace,
+        batch_collector: Arc<BatchCollector>,
+    ) -> Self {
         Self {
             fjall_keyspace,
-            ops: ops_tx,
-            kill_switch,
-            pending_ops,
-            tombstones,
-            completed_barrier,
-            jh: Arc::new(Mutex::new(Some(jh))),
+            batch_collector,
+            pending_ops: Arc::new(RwLock::new(PendingOperations::default())),
+            tombstones: Arc::new(RwLock::new(HashSet::new())),
         }
     }
 
     pub fn partition(&self) -> &fjall::Keyspace {
         &self.fjall_keyspace
-    }
-
-    /// Send a barrier message to track transaction timestamp without waiting.
-    /// This is used after write transactions commit to track their completion.
-    pub fn send_barrier(&self, barrier_timestamp: Timestamp) -> Result<(), Error> {
-        // Check if we've already processed this barrier or a later one
-        let completed = self
-            .completed_barrier
-            .load(std::sync::atomic::Ordering::Acquire);
-        if completed >= barrier_timestamp.0 {
-            return Ok(());
-        }
-
-        let (send, _recv) = oneshot::channel();
-
-        // Send barrier message to background thread but don't wait for response
-        if let Err(e) = self.ops.send(WriteOp::Barrier(barrier_timestamp, send)) {
-            return Err(Error::StorageFailure(format!(
-                "failed to send barrier message: {e}"
-            )));
-        }
-
-        Ok(())
-    }
-
-    /// Wait for all writes up to the specified barrier timestamp to be completed.
-    /// This ensures that all pending writes submitted before this barrier are flushed
-    /// to the backing store, providing a consistent point for snapshots.
-    /// Note: This only waits, it doesn't send the barrier - barriers must be sent separately.
-    pub fn wait_for_write_barrier(
-        &self,
-        barrier_timestamp: Timestamp,
-        timeout: Duration,
-    ) -> Result<(), Error> {
-        // Check if we've already processed this barrier or a later one
-        let completed = self
-            .completed_barrier
-            .load(std::sync::atomic::Ordering::Acquire);
-        if completed >= barrier_timestamp.0 {
-            return Ok(());
-        }
-
-        // Wait by polling the completed barrier timestamp
-        let start = std::time::Instant::now();
-        while start.elapsed() < timeout {
-            let completed = self
-                .completed_barrier
-                .load(std::sync::atomic::Ordering::Acquire);
-            if completed >= barrier_timestamp.0 {
-                return Ok(());
-            }
-            std::thread::sleep(Duration::from_millis(1));
-        }
-
-        Err(Error::StorageFailure(format!(
-            "Timeout waiting for write barrier {}",
-            barrier_timestamp.0
-        )))
     }
 }
 
@@ -412,23 +261,13 @@ where
             tombstones.remove(domain);
         }
 
-        // Encode using per-type EncodeFor impl before sending to background thread
+        // Encode and add to shared batch collector
         let key_bytes = <Self as EncodeFor<Domain>>::encode(self, domain)?;
         let value = encode_codomain_with_ts::<Self, Codomain>(self, timestamp, codomain)?;
 
-        // Send pre-encoded bytes to async operation
-        if let Err(e) = self
-            .ops
-            .send(WriteOp::Insert(key_bytes.to_vec(), value, domain.clone()))
-        {
-            // If sending fails, remove from pending operations
-            if let Ok(mut pending) = self.pending_ops.write() {
-                pending.pending_writes.remove(domain);
-            }
-            return Err(Error::StorageFailure(format!(
-                "failed to insert into database: {e}"
-            )));
-        }
+        self.batch_collector
+            .insert(self.fjall_keyspace.clone(), key_bytes.to_vec(), value);
+
         Ok(())
     }
 
@@ -443,22 +282,12 @@ where
             pending.pending_writes.remove(domain);
         }
 
-        // Encode using per-type EncodeFor impl before sending to background thread
+        // Encode and add to shared batch collector
         let key_bytes = <Self as EncodeFor<Domain>>::encode(self, domain)?;
 
-        // Send pre-encoded bytes to async operation
-        if let Err(e) = self
-            .ops
-            .send(WriteOp::Delete(key_bytes.to_vec(), domain.clone()))
-        {
-            // If sending fails, remove from pending operations
-            if let Ok(mut pending) = self.pending_ops.write() {
-                pending.pending_deletes.remove(domain);
-            }
-            return Err(Error::StorageFailure(format!(
-                "failed to delete from database: {e}"
-            )));
-        };
+        self.batch_collector
+            .delete(self.fjall_keyspace.clone(), key_bytes.to_vec());
+
         Ok(())
     }
 
@@ -502,41 +331,9 @@ where
     }
 
     fn stop(&self) -> Result<(), Error> {
-        self.stop_internal()
-    }
-}
-
-// Non-trait impl for stop - doesn't require EncodeFor constraints
-impl<Domain, Codomain> FjallProvider<Domain, Codomain>
-where
-    Domain: RelationDomain,
-    Codomain: RelationCodomain,
-{
-    fn stop_internal(&self) -> Result<(), Error> {
-        self.kill_switch
-            .store(true, std::sync::atomic::Ordering::SeqCst);
-
-        // Join the background thread - it will wake up from recv_timeout and see kill_switch
-        let mut jh = self.jh.lock().unwrap();
-        if let Some(jh) = jh.take() {
-            jh.join().unwrap();
-        }
-
+        // No-op: providers no longer have their own background threads.
+        // The BatchWriter is stopped at the MoorDB level.
         Ok(())
-    }
-}
-
-impl<Domain, Codomain> Drop for FjallProvider<Domain, Codomain>
-where
-    Domain: RelationDomain,
-    Codomain: RelationCodomain,
-{
-    fn drop(&mut self) {
-        self.stop_internal().unwrap();
-        let mut jh = self.jh.lock().unwrap();
-        if let Some(jh) = jh.take() {
-            jh.join().unwrap();
-        }
     }
 }
 

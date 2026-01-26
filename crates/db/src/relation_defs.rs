@@ -205,10 +205,15 @@ macro_rules! define_relations {
                 /// # Parameters
                 /// - `keyspace`: The fjall database to create keyspaces in
                 /// - `config`: Database configuration containing keyspace options
+                /// - `batch_collector`: Shared batch collector for all providers
                 ///
                 /// # Panics
                 /// Panics if any keyspace creation or relation seeding fails.
-                fn init(keyspace: &fjall::Database, config: &DatabaseConfig) -> Self {
+                fn init(
+                    keyspace: &fjall::Database,
+                    config: &DatabaseConfig,
+                    batch_collector: std::sync::Arc<crate::provider::batch_writer::BatchCollector>,
+                ) -> Self {
                     $(
                         // Create keyspace using field name as keyspace name
                         let [<$field _partition>] = keyspace
@@ -222,8 +227,12 @@ macro_rules! define_relations {
                             )
                             .unwrap();
 
-                        // Create provider with field name as identifier
-                        let [<$field _provider>] = FjallProvider::new(stringify!($field), [<$field _partition>]);
+                        // Create provider with shared batch collector
+                        let [<$field _provider>] = FjallProvider::new(
+                            stringify!($field),
+                            [<$field _partition>],
+                            batch_collector.clone(),
+                        );
 
                         // Create relation with symbolized field name
                         let [<$field _relation>] = define_relations!(@create_relation $arrow, $field, [<$field _provider>]);
@@ -297,25 +306,6 @@ macro_rules! define_relations {
                     }
                 }
 
-
-                /// Send barrier messages to all providers to track transaction timestamp.
-                ///
-                /// This ensures transaction ordering consistency by recording the transaction
-                /// timestamp in all provider logs after write transactions commit.
-                pub fn send_barrier(&self, barrier_timestamp: Timestamp) -> Result<(), crate::tx_management::Error> {
-                    $( self.$field.source().send_barrier(barrier_timestamp)?; )*
-                    Ok(())
-                }
-
-                /// Wait for all writes up to the specified barrier timestamp to be completed in all providers.
-                ///
-                /// This ensures that all relation providers have fully processed writes up to
-                /// the barrier before returning. Critical for ensuring snapshots capture a
-                /// consistent view of the database at a specific point in time.
-                pub fn wait_for_write_barrier(&self, barrier_timestamp: Timestamp, timeout: std::time::Duration) -> Result<(), crate::tx_management::Error> {
-                    $( self.$field.source().wait_for_write_barrier(barrier_timestamp, timeout)?; )*
-                    Ok(())
-                }
 
                 /// Mark all relations as fully loaded from their backing providers.
                 /// After calling this, scans will skip provider I/O and use only cached data.

@@ -24,6 +24,7 @@ use crate::{
 use crate::{
     provider::{
         Migrator,
+        batch_writer::{BatchCollector, BatchWriter},
         fjall_migration::{self, FjallMigrator},
         fjall_provider::FjallProvider,
         fjall_snapshot_loader::FjallSnapshotLoader,
@@ -31,7 +32,7 @@ use crate::{
     relation_defs::define_relations,
 };
 use arc_swap::ArcSwap;
-use fjall::{Database, KeyspaceCreateOptions, PersistMode};
+use fjall::{Database, KeyspaceCreateOptions};
 use flume::Sender;
 use gdt_cpus::{ThreadPriority, set_thread_priority};
 use minstant::Instant;
@@ -108,6 +109,10 @@ pub struct MoorDB {
     sequences: [Arc<CachePadded<AtomicI64>>; 16],
     /// Background writer for sequence persistence
     sequence_writer: crate::provider::fjall_provider::SequenceWriter,
+    /// Shared batch collector for all providers
+    batch_collector: Arc<BatchCollector>,
+    /// Single background writer for all fjall operations
+    batch_writer: BatchWriter,
     kill_switch: Arc<AtomicBool>,
     commit_channel: Sender<CommitSet>,
     usage_send: Sender<oneshot::Sender<usize>>,
@@ -131,8 +136,8 @@ impl MoorDB {
         );
         if last_write_timestamp.0 > 0
             && let Err(e) = self
-                .relations
-                .wait_for_write_barrier(last_write_timestamp, std::time::Duration::from_secs(10))
+                .batch_writer
+                .wait_for_barrier(last_write_timestamp, std::time::Duration::from_secs(10))
         {
             warn!(
                 "Timeout waiting for write barrier {} before snapshot: {}",
@@ -241,35 +246,35 @@ impl MoorDB {
             jh.join().unwrap();
         }
 
-        // Wait for all pending write transactions to flush before stopping
+        // Get the last write timestamp before stopping the writer
         let last_write_timestamp = Timestamp(
             self.last_write_commit
                 .load(std::sync::atomic::Ordering::Acquire),
         );
-        if last_write_timestamp.0 > 0 {
-            info!(
-                "Waiting for write barrier {} before shutdown",
-                last_write_timestamp.0
+
+        // Stop batch writer - this drains the queue and waits for completion
+        info!(
+            "Stopping batch writer (last write timestamp: {})",
+            last_write_timestamp.0
+        );
+        self.batch_writer.stop();
+
+        // Verify all writes completed
+        let final_completed = self.batch_writer.completed_timestamp();
+        if last_write_timestamp.0 > 0 && final_completed < last_write_timestamp.0 {
+            error!(
+                "Batch writer stopped before completing all writes: expected {}, got {}",
+                last_write_timestamp.0, final_completed
             );
-            if let Err(e) = self
-                .relations
-                .wait_for_write_barrier(last_write_timestamp, std::time::Duration::from_secs(30))
-            {
-                error!(
-                    "Timeout waiting for write barrier {} during shutdown: {}",
-                    last_write_timestamp.0, e
-                );
-            } else {
-                info!("Write barrier {} completed", last_write_timestamp.0);
-            }
+        } else if last_write_timestamp.0 > 0 {
+            info!(
+                "All writes completed up to timestamp {}",
+                final_completed
+            );
         }
 
-        // Stop sequence writer first to ensure all sequences are flushed
         self.sequence_writer.stop();
         self.relations.stop_all();
-        if let Err(e) = self.keyspace.persist(PersistMode::SyncAll) {
-            error!("Failed to persist keyspace: {}", e);
-        }
     }
 
     pub fn open(path: Option<&Path>, config: DatabaseConfig) -> (Arc<Self>, bool) {
@@ -322,9 +327,15 @@ impl MoorDB {
             }
         }
 
-        let relations = Relations::init(&keyspace, &config);
+        // Create shared batch collector and writer for all providers
+        let batch_collector = Arc::new(BatchCollector::new());
+        let batch_writer = BatchWriter::new(keyspace.clone());
 
-        let (commit_channel, commit_receiver) = flume::unbounded();
+        let relations = Relations::init(&keyspace, &config, batch_collector.clone());
+
+        // Bounded channel provides backpressure when commits can't keep up.
+        // 1000 items gives breathing room before blocking callers.
+        let (commit_channel, commit_receiver) = flume::bounded(1000);
         let (usage_send, usage_recv) = flume::unbounded();
         let kill_switch = Arc::new(AtomicBool::new(false));
         let caches = ArcSwap::new(Arc::new(Caches::new()));
@@ -339,6 +350,8 @@ impl MoorDB {
             relations,
             sequences,
             sequence_writer,
+            batch_collector,
+            batch_writer,
             commit_channel,
             usage_send,
             kill_switch: kill_switch.clone(),
@@ -408,6 +421,12 @@ impl MoorDB {
                     let Some(this) = this_weak.upgrade() else {
                         break;
                     };
+
+                    // Monitor commit queue depth
+                    let commit_queue_len = receiver.len();
+                    if commit_queue_len > 100 {
+                        warn!("Commit queue depth: {} pending commits", commit_queue_len);
+                    }
 
                     let (ws, reply) = match message {
                         DbMessage::Usage(reply) => {
@@ -487,8 +506,7 @@ impl MoorDB {
                             continue;
                         }
 
-                        // Warn if the duration of the check phase took a really long time...
-                        let apply_start = Instant::now();
+                        // Warn if the check phase took a really long time
                         if start_time.elapsed() > Duration::from_secs(5) {
                             warn!(
                                 "Long running commit; check phase took {}s for {num_tuples} tuples",
@@ -498,9 +516,14 @@ impl MoorDB {
 
                         let _t = PerfTimerGuard::new(&counters.commit_apply_phase);
 
+                        // Start collecting operations for this commit's batch
+                        this.batch_collector.start_commit(tx_timestamp);
+
                         let checkers = match checkers.apply_all(relation_ws) {
                             Ok(checkers) => checkers,
                             Err(()) => {
+                                // Discard the batch on failure
+                                this.batch_collector.abort_commit();
                                 warn!("Transaction conflict during apply phase (no detailed info available)");
                                 reply
                                     .send(CommitResult::ConflictRetry { conflict_info: None })
@@ -509,9 +532,16 @@ impl MoorDB {
                             }
                         };
 
+                        // Take the completed batch and send to background writer
+                        let batch = this.batch_collector.finish_commit();
+                        let batch_op_count = batch.operations.len();
+                        let batch_write_start = Instant::now();
+                        if !batch.is_empty() {
+                            this.batch_writer.write(batch);
+                        }
+                        let batch_write_elapsed = batch_write_start.elapsed();
+
                         // Use seqlock coordination to atomically swap relation indexes AND update caches.
-                        // Caches must be updated INSIDE seqlock protection to prevent transactions from
-                        // seeing stable seqlock with stale caches (which would cause old verb code to execute).
                         checkers.commit_all(
                             &this.relations,
                             &this.commit_version,
@@ -521,25 +551,20 @@ impl MoorDB {
                             ancestry_cache,
                         );
 
-                        // Track the last write transaction timestamp for snapshot consistency
+                        // Track the last write timestamp and send barrier
                         this.last_write_commit.store(tx_timestamp.0, std::sync::atomic::Ordering::Release);
+                        this.batch_writer.send_barrier(tx_timestamp);
 
-                        // Send barrier message to providers to track this write transaction completion
-                        if let Err(e) = this.relations.send_barrier(tx_timestamp) {
-                            warn!("Failed to send barrier for write transaction: {}", e);
-                        }
-
-                        // No need to block the caller while we're doing the final write to disk.
                         reply.send(CommitResult::Success {
                             mutations_made: has_mutations,
                             timestamp: tx_timestamp.0,
                         }).ok();
 
-                        // And if the commit took a long time, warn before the write to disk is begun.
-                        if start_time.elapsed() > Duration::from_secs(5) {
+                        // Warn if batch_write blocked (backpressure)
+                        if batch_write_elapsed > Duration::from_secs(1) {
                             warn!(
-                                "Long running commit, apply phase took {}s for {num_tuples} tuples",
-                                apply_start.elapsed().as_secs_f32()
+                                "Slow batch_write: {} ops blocked for {:.2}s (ts {})",
+                                batch_op_count, batch_write_elapsed.as_secs_f32(), tx_timestamp.0
                             );
                         }
 

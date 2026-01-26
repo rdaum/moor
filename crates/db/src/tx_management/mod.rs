@@ -150,7 +150,10 @@ impl RelationCodomain for Var {
 
                 // Merge: Take Theirs, insert My Key/Value
                 // Clear hint - merged values shouldn't carry hints
-                their_map.set(&k_mine, &v_mine).ok().map(|v| v.with_cleared_hint())
+                their_map
+                    .set(&k_mine, &v_mine)
+                    .ok()
+                    .map(|v| v.with_cleared_hint())
             }
             OP_HINT_FLYWEIGHT_ADD_SLOT => {
                 // Flyweight slot insert merge
