@@ -267,10 +267,7 @@ impl MoorDB {
                 last_write_timestamp.0, final_completed
             );
         } else if last_write_timestamp.0 > 0 {
-            info!(
-                "All writes completed up to timestamp {}",
-                final_completed
-            );
+            info!("All writes completed up to timestamp {}", final_completed);
         }
 
         self.sequence_writer.stop();
