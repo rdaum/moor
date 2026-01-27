@@ -363,6 +363,9 @@ export const TextEditor: React.FC<TextEditorProps> = ({
                             comments: false,
                             strings: false,
                         },
+                        // Accessibility options for screen readers
+                        accessibilitySupport: "on",
+                        ariaLabel: `Text editor for ${title}`,
                     }}
                 />
             </div>

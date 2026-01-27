@@ -553,6 +553,9 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
                             wordWrap: "on",
                             automaticLayout: true,
                             tabSize: 4,
+                            // Accessibility options for screen readers
+                            accessibilitySupport: "on",
+                            ariaLabel: "MOO code evaluation editor. Press Ctrl+Enter or Cmd+Enter to evaluate.",
                         }}
                         theme={document.documentElement.classList.contains("dark") ? "vs-dark" : "vs"}
                     />

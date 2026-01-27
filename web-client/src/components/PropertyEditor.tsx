@@ -403,6 +403,9 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
                             comments: false,
                             strings: contentType === "text/html",
                         },
+                        // Accessibility options for screen readers
+                        accessibilitySupport: "on",
+                        ariaLabel: `Property editor for ${propertyName} on ${objectCurie}`,
                     }}
                 />
             </div>
