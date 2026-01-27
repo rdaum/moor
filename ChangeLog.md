@@ -5,15 +5,7 @@ All notable changes to mooR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0-rc1] - 2026-01-25
-
-### Added
-
-### Changed
-
-### Fixed
-
-## [1.0.0-rc1] - 2026-01-25
+## Unreleased
 
 ### BREAKING: Database Migration Required
 
@@ -62,6 +54,8 @@ Databases from beta7 and earlier cannot be loaded directly.
 
 `db`:
 
+- Write optimization - handle all writes in one thread and batch together; when queue backs up,
+  coalesce writes for the same tuple.
 - **Smart Merging / Optimistic Concurrency Improvements aka "CDRT-lite" **:
   - New "smart merging" for `List`, `Map`, `String`, and `Flyweight` types using operation hints to
     resolve conflicts automatically when changes are commutative (e.g., concurrent appends or unique
