@@ -2613,9 +2613,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                 <CreateChildDialog
                     key={selectedObject?.obj || "new"}
                     defaultParent={selectedObject ? `#${selectedObject.obj}` : "#-1"}
-                    defaultOwner={selectedObject
-                        ? (normalizeObjectInput(selectedObject.owner ? `#${selectedObject.owner}` : "") || "player")
-                        : "player"}
+                    defaultOwner="player"
                     objectTypeOptions={objectTypeOptions}
                     onCancel={() => setShowCreateDialog(false)}
                     onSubmit={handleCreateSubmit}
@@ -2637,8 +2635,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                 <AddPropertyDialog
                     key={`add-property-${selectedObject.obj}`}
                     objectLabel={describeObject(selectedObject)}
-                    defaultOwner={normalizeObjectInput(selectedObject.owner ? `#${selectedObject.owner}` : "")
-                        || "player"}
+                    defaultOwner="player"
                     onCancel={() => setShowAddPropertyDialog(false)}
                     onSubmit={handleAddPropertySubmit}
                     isSubmitting={isSubmittingAddProperty}
@@ -2663,8 +2660,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                 <AddVerbDialog
                     key={`add-verb-${selectedObject.obj}`}
                     objectLabel={describeObject(selectedObject)}
-                    defaultOwner={normalizeObjectInput(selectedObject.owner ? `#${selectedObject.owner}` : "")
-                        || "player"}
+                    defaultOwner="player"
                     onCancel={() => setShowAddVerbDialog(false)}
                     onSubmit={handleAddVerbSubmit}
                     isSubmitting={isSubmittingAddVerb}
