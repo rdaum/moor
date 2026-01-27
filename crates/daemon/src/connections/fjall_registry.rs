@@ -30,7 +30,7 @@ use fjall::{Database, Keyspace, KeyspaceCreateOptions};
 use moor_common::tasks::SessionError;
 use moor_var::{Obj, Symbol, Var};
 use rpc_common::RpcMessageError;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 use zerocopy::IntoBytes;
 
@@ -792,7 +792,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
             .insert(client_id.as_u128().to_le_bytes(), connection_id.as_bytes())
             .map_err(|e| RpcMessageError::InternalError(e.to_string()))?;
 
-        info!(
+        debug!(
             client_id = ?client_id,
             connection_id = ?connection_id,
             "new_connection: created connection"
@@ -1199,7 +1199,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
     }
 
     fn remove_client_connection(&self, client_id: Uuid) -> Result<(), Error> {
-        info!(client_id = ?client_id, "remove_client_connection: removing");
+        debug!(client_id = ?client_id, "remove_client_connection: removing");
         let inner = self.inner.lock().unwrap();
 
         // Get timestamps from cache before removal

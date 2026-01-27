@@ -589,7 +589,9 @@ impl MessageHandler for RpcMessageHandler {
                 let connection_send_result = match self.connection_name_for(connection) {
                     Ok(c) => reply.send(Ok(c)),
                     Err(e) => {
-                        error!(error = ?e, "Unable to get connection name");
+                        if !matches!(e, SessionError::NoConnectionForPlayer(_)) {
+                            error!(error = ?e, "Unable to get connection name");
+                        }
                         reply.send(Err(e))
                     }
                 };
@@ -618,7 +620,9 @@ impl MessageHandler for RpcMessageHandler {
                 let connected_seconds_send_result = match self.connected_seconds_for(connection) {
                     Ok(c) => reply.send(Ok(c)),
                     Err(e) => {
-                        error!(error = ?e, "Unable to get connected seconds");
+                        if !matches!(e, SessionError::NoConnectionForPlayer(_)) {
+                            error!(error = ?e, "Unable to get connected seconds");
+                        }
                         reply.send(Err(e))
                     }
                 };
@@ -630,7 +634,9 @@ impl MessageHandler for RpcMessageHandler {
                 let idle_seconds_send_result = match self.idle_seconds_for(connection) {
                     Ok(c) => reply.send(Ok(c)),
                     Err(e) => {
-                        error!(error = ?e, "Unable to get idle seconds");
+                        if !matches!(e, SessionError::NoConnectionForPlayer(_)) {
+                            error!(error = ?e, "Unable to get idle seconds");
+                        }
                         reply.send(Err(e))
                     }
                 };
@@ -642,7 +648,9 @@ impl MessageHandler for RpcMessageHandler {
                 let connections_send_result = match self.connections_for(client_id, player) {
                     Ok(c) => reply.send(Ok(c)),
                     Err(e) => {
-                        error!(error = ?e, "Unable to get connections");
+                        if !matches!(e, SessionError::NoConnectionForPlayer(_)) {
+                            error!(error = ?e, "Unable to get connections");
+                        }
                         reply.send(Err(e))
                     }
                 };
@@ -655,7 +663,9 @@ impl MessageHandler for RpcMessageHandler {
                     match self.connection_details_for(client_id, player) {
                         Ok(details) => reply.send(Ok(details)),
                         Err(e) => {
-                            error!(error = ?e, "Unable to get connection details");
+                            if !matches!(e, SessionError::NoConnectionForPlayer(_)) {
+                                error!(error = ?e, "Unable to get connection details");
+                            }
                             reply.send(Err(e))
                         }
                     };
