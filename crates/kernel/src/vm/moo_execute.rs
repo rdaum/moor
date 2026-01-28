@@ -146,9 +146,14 @@ pub fn moo_frame_execute(
     f: &mut MooStackFrame,
     features_config: &FeaturesConfig,
 ) -> ExecutionResult {
-    // Special case for empty opcodes set, just return immediately.
+    // Unprogrammed verbs have empty opcodes - return 0/false to caller (LambdaMOO compat).
     if f.opcodes().is_empty() {
-        return ExecutionResult::Complete(v_bool(false));
+        let ret_val = if features_config.use_boolean_returns {
+            v_bool(false)
+        } else {
+            v_int(0)
+        };
+        return ExecutionResult::Return(ret_val);
     }
 
     // The per-execution slice count. This is used to limit the amount of work we do in a single
