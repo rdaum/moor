@@ -1,0 +1,42 @@
+name: Publish Schema - Build and publish @moor/schema NPM package
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'crates/schema/schema/*.fbs'
+  workflow_dispatch:
+
+jobs:
+  publish_schema:
+    runs-on: linux-x86
+    container: node:20-bookworm
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+
+      - name: Install flatc
+        run: |
+          apt-get update && apt-get install -y wget unzip
+          wget https://github.com/google/flatbuffers/releases/download/v23.5.26/Linux.flatc.binary.g++.zip
+          unzip Linux.flatc.binary.g++.zip -d /usr/local/bin
+          flatc --version
+
+      - name: Generate TypeScript bindings
+        working-directory: crates/schema/schema
+        run: npm run generate
+
+      - name: Publish to Codeberg Package Registry
+        working-directory: crates/schema/schema
+        run: |
+          echo "@moor:registry=https://codeberg.org/api/packages/timbran/npm/" > .npmrc
+          echo "//codeberg.org/api/packages/timbran/npm/:_authToken=${{ secrets.CODEBERG_TOKEN }}" >> .npmrc
+          
+          # Get base version from package.json
+          BASE_VERSION=$(node -p "require('./package.json').version")
+          # Use a development version based on date and run number
+          DEV_VERSION="${BASE_VERSION}-dev.$(date +'%Y%m%d').${{ github.run_number }}"
+          echo "Publishing version $DEV_VERSION"
+          npm version "$DEV_VERSION" --no-git-tag-version
+          
+          npm publish
