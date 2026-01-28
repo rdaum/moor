@@ -250,7 +250,12 @@ impl BatchWriter {
                 while let Ok(msg) = receiver.try_recv() {
                     match msg {
                         WriterMsg::Write(batch) => {
-                            Self::merge_batch(&mut buffers, batch, &mut newest_timestamp, &mut total_pending);
+                            Self::merge_batch(
+                                &mut buffers,
+                                batch,
+                                &mut newest_timestamp,
+                                &mut total_pending,
+                            );
                         }
                         WriterMsg::Barrier(ts, reply) => {
                             if ts > newest_timestamp {
@@ -262,7 +267,10 @@ impl BatchWriter {
                 }
                 // One final flush for all pending data
                 if total_pending > 0 {
-                    info!("BatchWriter shutdown: flushing {} pending ops", total_pending);
+                    info!(
+                        "BatchWriter shutdown: flushing {} pending ops",
+                        total_pending
+                    );
                     Self::flush_all(&db, &mut buffers, &mut total_pending);
                 }
                 completed_timestamp.store(newest_timestamp.0, Ordering::Release);
@@ -286,7 +294,12 @@ impl BatchWriter {
             // Receive with short timeout
             match receiver.recv_timeout(Duration::from_millis(10)) {
                 Ok(WriterMsg::Write(batch)) => {
-                    Self::merge_batch(&mut buffers, batch, &mut newest_timestamp, &mut total_pending);
+                    Self::merge_batch(
+                        &mut buffers,
+                        batch,
+                        &mut newest_timestamp,
+                        &mut total_pending,
+                    );
 
                     // Decide: flush immediately or coalesce?
                     // Coalesce only when under pressure (slow flushes or high pending count)
@@ -295,7 +308,8 @@ impl BatchWriter {
 
                     if !under_pressure && total_pending > 0 {
                         // Normal operation: flush immediately for durability
-                        last_flush_duration = Self::flush_all(&db, &mut buffers, &mut total_pending);
+                        last_flush_duration =
+                            Self::flush_all(&db, &mut buffers, &mut total_pending);
                         completed_timestamp.store(newest_timestamp.0, Ordering::Release);
                         last_flush = Instant::now();
                     }
@@ -410,7 +424,10 @@ impl BatchWriter {
                 }
                 let elapsed = start.elapsed();
                 if elapsed > Duration::from_secs(1) {
-                    warn!("BatchWriter backpressure: blocked {} for {:?}", ts.0, elapsed);
+                    warn!(
+                        "BatchWriter backpressure: blocked {} for {:?}",
+                        ts.0, elapsed
+                    );
                 }
             }
             Err(flume::TrySendError::Disconnected(_)) => {

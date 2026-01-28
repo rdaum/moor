@@ -251,7 +251,7 @@ pub async fn invoke_verb_handler(
     Path((object_path, verb_name)): Path<(String, String)>,
     body: Bytes,
 ) -> Response {
-    tracing::info!(
+    tracing::debug!(
         "Invoke verb handler: object={}, verb={}, body_len={}",
         object_path,
         verb_name,
@@ -272,7 +272,7 @@ pub async fn invoke_verb_handler(
     let args_var = match moor_var_schema::VarRef::read_as_root(&body) {
         Ok(var_ref) => match var_from_flatbuffer_ref(var_ref) {
             Ok(v) => {
-                tracing::info!("Successfully parsed args var: {:?}", v);
+                tracing::debug!("Successfully parsed args var: {:?}", v);
                 v
             }
             Err(e) => {
