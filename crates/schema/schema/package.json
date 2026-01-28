@@ -1,0 +1,25 @@
+{
+  "name": "@moor/schema",
+  "version": "1.0.0-rc1",
+  "description": "FlatBuffer schemas and TypeScript bindings for mooR",
+  "main": "./generated/all_schemas_generated.ts",
+  "types": "./generated/all_schemas_generated.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://codeberg.org/timbran/moor.git",
+    "directory": "crates/schema/schema"
+  },
+  "publishConfig": {
+    "@moor:registry": "https://codeberg.org/api/packages/timbran/npm/"
+  },
+  "files": [
+    "generated",
+    "*.fbs"
+  ],
+  "scripts": {
+    "generate": "rm -rf generated && mkdir -p generated && flatc --ts --gen-all -o generated all_schemas.fbs"
+  },
+  "dependencies": {
+    "flatbuffers": "^25.9.23"
+  }
+}
