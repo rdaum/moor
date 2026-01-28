@@ -86,11 +86,26 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
     // Check if a URL is an external link (http/https)
     const isExternalLink = (url: string) => url.startsWith("http://") || url.startsWith("https://");
 
-    // Unified click handler for moo-link spans (all moo-link-* variants) and uuobjids
+    // Unified click handler for moo-link spans (all moo-link-* variants) and objids
     const handleClick = useCallback((e: React.MouseEvent) => {
         const target = e.target as HTMLElement;
 
-        // Handle UuObjId copy
+        // Handle ObjId copy (regular MOO objids like #123)
+        const objid = target.getAttribute("data-objid");
+        if (objid) {
+            e.preventDefault();
+            e.stopPropagation();
+            navigator.clipboard.writeText(objid).then(() => {
+                target.classList.add("copied");
+                showToast("Copied to clipboard");
+                setTimeout(() => target.classList.remove("copied"), 1000);
+            }).catch(err => {
+                console.error("Failed to copy object ID:", err);
+            });
+            return;
+        }
+
+        // Handle UuObjId copy (UUID-style objids like #000A54-9B1A1A9B2E)
         const uuobjid = target.getAttribute("data-uuobjid");
         if (uuobjid) {
             e.preventDefault();
@@ -127,7 +142,20 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
 
         const target = e.target as HTMLElement;
 
-        // Handle UuObjId copy
+        // Handle ObjId copy (regular MOO objids like #123)
+        const objid = target.getAttribute("data-objid");
+        if (objid) {
+            e.preventDefault();
+            e.stopPropagation();
+            navigator.clipboard.writeText(objid).then(() => {
+                target.classList.add("copied");
+                showToast("Copied to clipboard");
+                setTimeout(() => target.classList.remove("copied"), 1000);
+            });
+            return;
+        }
+
+        // Handle UuObjId copy (UUID-style objids like #000A54-9B1A1A9B2E)
         const uuobjid = target.getAttribute("data-uuobjid");
         if (uuobjid) {
             e.preventDefault();

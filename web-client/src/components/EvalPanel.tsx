@@ -16,6 +16,7 @@
 import Editor, { Monaco } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { usePersistentState } from "../hooks/usePersistentState";
 import { useTouchDevice } from "../hooks/useTouchDevice";
@@ -218,8 +219,12 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
         setResult(null);
         setEvalAnnouncement(""); // Clear previous announcement
 
+        // Get content directly from editor instance to ensure we have the latest value
+        // This is critical for screen reader users where Monaco's onChange may not fire reliably
+        const codeToEvaluate = editorRef.current?.getValue() ?? content;
+
         try {
-            const moorVar = await performEvalMoorVar(authToken, content);
+            const moorVar = await performEvalMoorVar(authToken, codeToEvaluate);
 
             // Use MOO literal representation for display
             const literal = moorVar.toLiteral();
@@ -247,7 +252,7 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
         } finally {
             setIsEvaluating(false);
         }
-    }, [authToken, content]);
+    }, [authToken, content]); // content is fallback only; primary source is editorRef
 
     // Handle keyboard shortcuts
     const handleEditorMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monacoInstance: Monaco) => {
@@ -296,6 +301,18 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
 
         // Focus the editor
         editor.focus();
+
+        // Announce initial content for screen reader users after a brief delay
+        // This helps them know there's pre-populated example code
+        setTimeout(() => {
+            const currentContent = editor.getValue();
+            if (currentContent) {
+                const preview = currentContent.length > 150
+                    ? currentContent.substring(0, 150) + "..."
+                    : currentContent;
+                setEvalAnnouncement(`Editor contains example code: ${preview}`);
+            }
+        }, 300);
     }, [authToken, handleEvaluate, monacoTheme]);
 
     // Dragging and resizing handlers
@@ -577,15 +594,22 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
                     }}
                 />
 
-                {/* Single announcement region for screenreaders - only updated on completion */}
-                <div
-                    role="status"
-                    aria-live="polite"
-                    aria-atomic="true"
-                    className="sr-only"
-                >
-                    {evalAnnouncement}
-                </div>
+                {
+                    /* Announcement region rendered via portal to document.body to ensure
+                    screen readers announce it (live regions inside aria-modal dialogs
+                    are often ignored by screen readers like Orca) */
+                }
+                {createPortal(
+                    <div
+                        role="status"
+                        aria-live="assertive"
+                        aria-atomic="true"
+                        className="sr-only"
+                    >
+                        {evalAnnouncement}
+                    </div>,
+                    document.body,
+                )}
 
                 {/* Results pane - visual only, announcements handled by dedicated region above */}
                 <div

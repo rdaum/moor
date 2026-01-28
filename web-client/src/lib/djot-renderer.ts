@@ -105,6 +105,7 @@ export const CONTENT_ALLOWED_ATTR = [
     "data-url",
     "tabindex",
     "role",
+    "data-objid",
     "data-uuobjid",
     "aria-label",
 ];
@@ -176,6 +177,13 @@ const PLAIN_TEXT_URL_REGEX = /https?:\/\/[^\s<>"')\]\u201C\u201D\u2018\u2019]+/g
 const UUOBJID_REGEX = /#?[\da-fA-F]{6}-[\da-fA-F]{10}/g;
 
 /**
+ * Regex for detecting regular MOO object IDs (e.g., #123)
+ * Matches # prefix followed by one or more digits, but NOT followed by
+ * hex digits + hyphen (to avoid matching partial UUID-style objids).
+ */
+const OBJID_REGEX = /#\d+(?![0-9a-fA-F]*-[0-9a-fA-F])/g;
+
+/**
  * Cleans up a detected URL by removing trailing punctuation that's likely
  * sentence-ending rather than part of the URL.
  */
@@ -194,6 +202,7 @@ function convertPlainTextUrls(html: string): string {
 
     processTextNodesForUrls(tempDiv);
     processTextNodesForUuObjIds(tempDiv);
+    processTextNodesForObjIds(tempDiv);
 
     return tempDiv.innerHTML;
 }
@@ -332,6 +341,67 @@ function processTextNodesForUuObjIds(node: Node): void {
             return;
         }
         Array.from(node.childNodes).forEach(child => processTextNodesForUuObjIds(child));
+    }
+}
+
+/**
+ * Recursively processes text nodes to detect and wrap regular ObjIds.
+ */
+function processTextNodesForObjIds(node: Node): void {
+    if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent || "";
+        OBJID_REGEX.lastIndex = 0;
+
+        if (OBJID_REGEX.test(text)) {
+            OBJID_REGEX.lastIndex = 0;
+
+            const fragment = document.createDocumentFragment();
+            let lastIndex = 0;
+            let match;
+
+            while ((match = OBJID_REGEX.exec(text)) !== null) {
+                // Add text before the ObjId
+                if (match.index > lastIndex) {
+                    fragment.appendChild(
+                        document.createTextNode(text.slice(lastIndex, match.index)),
+                    );
+                }
+
+                const objId = match[0];
+
+                // Create clickable span
+                const span = document.createElement("span");
+                span.className = "objid-ref";
+                span.setAttribute("data-objid", objId);
+                span.setAttribute("tabindex", "0");
+                span.setAttribute("role", "button");
+                span.setAttribute("aria-label", `Copy Object ID ${objId}`);
+                span.title = "Click to copy Object ID";
+                span.textContent = objId;
+                fragment.appendChild(span);
+
+                lastIndex = match.index + objId.length;
+            }
+
+            // Add remaining text
+            if (lastIndex < text.length) {
+                fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+            }
+
+            node.parentNode?.replaceChild(fragment, node);
+        }
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = node as Element;
+        // Skip elements that are already links or objids
+        if (
+            element.hasAttribute("data-url")
+            || element.hasAttribute("data-objid")
+            || element.hasAttribute("data-uuobjid")
+            || element.tagName === "A"
+        ) {
+            return;
+        }
+        Array.from(node.childNodes).forEach(child => processTextNodesForObjIds(child));
     }
 }
 
@@ -536,6 +606,9 @@ export function processHtmlContent(html: string, enableEmoji: boolean = false): 
     // Detect UuObjIds in text nodes and convert to clickable spans
     processTextNodesForUuObjIds(tempDiv);
 
+    // Detect regular ObjIds in text nodes and convert to clickable spans
+    processTextNodesForObjIds(tempDiv);
+
     return tempDiv.innerHTML;
 }
 
@@ -564,6 +637,9 @@ export function renderHtmlContent(html: string, enableEmoji: boolean = false): s
     // Detect UuObjIds in text nodes and convert to clickable spans
     processTextNodesForUuObjIds(tempDiv);
 
+    // Detect regular ObjIds in text nodes and convert to clickable spans
+    processTextNodesForObjIds(tempDiv);
+
     // Process ANSI and syntax highlighting
     const ansi_up = new AnsiUp();
     processCodeBlocks(tempDiv, ansi_up);
@@ -591,7 +667,17 @@ export function renderPlainText(text: string, enableEmoji: boolean = false): str
     // Include attributes needed for clickable URL spans
     const sanitizedHtml = DOMPurify.sanitize(withUrls, {
         ALLOWED_TAGS: ["span", "div", "br"],
-        ALLOWED_ATTR: ["style", "class", "data-url", "data-uuobjid", "tabindex", "title", "role", "aria-label"],
+        ALLOWED_ATTR: [
+            "style",
+            "class",
+            "data-url",
+            "data-objid",
+            "data-uuobjid",
+            "tabindex",
+            "title",
+            "role",
+            "aria-label",
+        ],
     });
 
     return sanitizedHtml;

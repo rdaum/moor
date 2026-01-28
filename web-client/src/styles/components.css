@@ -1738,7 +1738,45 @@
 
 /* ====== MOO LINK STYLES ====== */
 
-/* UUObjId Reference styles (copyable pills) */
+/* ObjId Reference styles (copyable pills for regular MOO objids like #123) */
+.objid-ref {
+  font-family: var(--font-mono);
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-medium);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin: 0 2px;
+  cursor: pointer;
+  display: inline-block;
+  font-size: 0.9em;
+  transition: all 0.15s ease;
+  user-select: all;
+  vertical-align: baseline;
+}
+
+.objid-ref:hover {
+  background-color: var(--color-bg-hover);
+  border-color: var(--color-text-accent);
+  color: var(--color-text-primary);
+}
+
+.objid-ref:active {
+  transform: translateY(1px);
+}
+
+.objid-ref:focus {
+  outline: 2px solid var(--color-text-accent);
+  outline-offset: 1px;
+}
+
+.objid-ref.copied {
+  background-color: var(--color-text-success);
+  color: var(--color-bg-primary);
+  border-color: var(--color-text-success);
+}
+
+/* UUObjId Reference styles (copyable pills for UUID-style objids) */
 .uuobjid-ref {
   font-family: var(--font-mono);
   background-color: var(--color-bg-tertiary);
