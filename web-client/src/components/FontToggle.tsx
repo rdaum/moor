@@ -45,6 +45,7 @@ export const FontToggle: React.FC = () => {
         <div className="settings-item">
             <span>Font</span>
             <button
+                type="button"
                 className="settings-value-button settings-cycle-button"
                 onClick={toggleFont}
                 aria-label={`Switch font style (current: ${fontStyle})`}

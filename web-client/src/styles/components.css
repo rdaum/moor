@@ -1738,6 +1738,44 @@
 
 /* ====== MOO LINK STYLES ====== */
 
+/* UUObjId Reference styles (copyable pills) */
+.uuobjid-ref {
+  font-family: var(--font-mono);
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-medium);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin: 0 2px;
+  cursor: pointer;
+  display: inline-block;
+  font-size: 0.9em;
+  transition: all 0.15s ease;
+  user-select: all;
+  vertical-align: baseline;
+}
+
+.uuobjid-ref:hover {
+  background-color: var(--color-bg-hover);
+  border-color: var(--color-text-accent);
+  color: var(--color-text-primary);
+}
+
+.uuobjid-ref:active {
+  transform: translateY(1px);
+}
+
+.uuobjid-ref:focus {
+  outline: 2px solid var(--color-text-accent);
+  outline-offset: 1px;
+}
+
+.uuobjid-ref.copied {
+  background-color: var(--color-text-success);
+  color: var(--color-bg-primary);
+  border-color: var(--color-text-success);
+}
+
 /* Base link style (fallback) */
 .moo-link {
   color: var(--color-link);
@@ -2285,7 +2323,8 @@ input[type="text"]:focus {
   font-size: 0.85em;
   font-family: var(--font-mono);
   cursor: pointer;
-  padding: 2px 8px;
+  padding: 4px 10px;
+  min-height: 32px;
   transition: all 0.15s ease;
 }
 
@@ -3211,6 +3250,43 @@ button:disabled {
 
 .external-link-trust-label strong {
   color: var(--color-text-primary);
+}
+
+/* ====== TOAST NOTIFICATIONS ====== */
+.toast-container {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 11000;
+  pointer-events: none;
+  animation: toast-fade-in 0.2s ease-out;
+}
+
+.toast-message {
+  background-color: var(--color-bg-input);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-medium);
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 4px 12px var(--color-shadow);
+  font-family: var(--font-ui);
+  font-size: 0.9em;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@keyframes toast-fade-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 /* Detected link indicator - subtle styling for auto-detected URLs */

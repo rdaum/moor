@@ -20,6 +20,7 @@ import { FontSizeControl } from "./FontSizeControl";
 import { FontToggle } from "./FontToggle";
 import { SayModeToggle } from "./SayModeToggle";
 import { ThemeToggle } from "./ThemeToggle";
+import { useToast } from "./Toast";
 import { VerbPaletteToggle } from "./VerbPaletteToggle";
 
 interface SettingsPanelProps {
@@ -41,6 +42,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     const panelRef = useRef<HTMLDivElement>(null);
     const previousActiveElementRef = useRef<HTMLElement | null>(null);
     const [copyAnnouncement, setCopyAnnouncement] = useState("");
+    const { showToast } = useToast();
 
     // Store the previously focused element and focus the close button when opened
     useEffect(() => {
@@ -103,11 +105,38 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         return () => document.removeEventListener("keydown", handleKeyDown);
     }, [isOpen]);
 
-    const handleCopyVersion = () => {
-        navigator.clipboard.writeText(__GIT_HASH__);
-        setCopyAnnouncement("Version hash copied to clipboard");
-        // Clear announcement after it's been read
-        setTimeout(() => setCopyAnnouncement(""), 2000);
+    const handleCopyVersion = async () => {
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(__GIT_HASH__);
+                setCopyAnnouncement("Version hash copied to clipboard");
+                showToast("Copied to clipboard");
+            } else {
+                // Fallback for non-secure contexts or missing clipboard API
+                const textArea = document.createElement("textarea");
+                textArea.value = __GIT_HASH__;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-9999px";
+                textArea.style.top = "0";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                const successful = document.execCommand("copy");
+                document.body.removeChild(textArea);
+                if (successful) {
+                    setCopyAnnouncement("Version hash copied to clipboard");
+                    showToast("Copied to clipboard");
+                } else {
+                    setCopyAnnouncement("Failed to copy version hash");
+                }
+            }
+        } catch (err) {
+            console.error("Failed to copy:", err);
+            setCopyAnnouncement("Failed to copy version hash");
+        } finally {
+            // Clear announcement after it's been read
+            setTimeout(() => setCopyAnnouncement(""), 2000);
+        }
     };
 
     if (!isOpen) return null;
@@ -133,6 +162,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     <h2 id="settings-dialog-title">Settings</h2>
                     <button
                         ref={closeButtonRef}
+                        type="button"
                         className="settings-close"
                         onClick={onClose}
                         aria-label="Close settings"
@@ -169,8 +199,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         <div className="settings-item">
                             <span>Version</span>
                             <button
+                                type="button"
                                 className="version-copy-button"
                                 onClick={handleCopyVersion}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                        e.preventDefault();
+                                        handleCopyVersion();
+                                    }
+                                }}
                                 aria-label={`Version ${__GIT_HASH__}. Click to copy to clipboard`}
                             >
                                 {__GIT_HASH__}

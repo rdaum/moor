@@ -49,6 +49,7 @@ export const ThemeToggle: React.FC = () => {
         <div className="settings-item">
             <span>Theme</span>
             <button
+                type="button"
                 className="settings-value-button"
                 onClick={cycleTheme}
                 aria-label={`Switch theme (current: ${theme})`}

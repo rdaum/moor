@@ -47,6 +47,7 @@ export const VerbPaletteToggle: React.FC = () => {
         <div className="settings-item">
             <span>Verb Palette</span>
             <button
+                type="button"
                 className="settings-value-button"
                 onClick={toggle}
                 role="switch"

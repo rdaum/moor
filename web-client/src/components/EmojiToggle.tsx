@@ -47,6 +47,7 @@ export const EmojiToggle: React.FC = () => {
         <div className="settings-item">
             <span>Emoji</span>
             <button
+                type="button"
                 className="settings-value-button"
                 onClick={toggle}
                 role="switch"

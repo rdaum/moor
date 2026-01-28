@@ -53,6 +53,7 @@ export const CommandEchoToggle: React.FC = () => {
         <div className="settings-item">
             <span>Echo Commands</span>
             <button
+                type="button"
                 className="settings-value-button"
                 onClick={toggleEcho}
                 role="switch"

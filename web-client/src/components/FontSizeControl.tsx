@@ -33,6 +33,7 @@ export const FontSizeControl: React.FC<FontSizeControlProps> = ({
     return (
         <div className="font-size-control">
             <button
+                type="button"
                 onClick={onDecrease}
                 className="font-size-button"
                 disabled={fontSize <= minSize}
@@ -44,6 +45,7 @@ export const FontSizeControl: React.FC<FontSizeControlProps> = ({
                 {fontSize}px
             </span>
             <button
+                type="button"
                 onClick={onIncrease}
                 className="font-size-button"
                 disabled={fontSize >= maxSize}

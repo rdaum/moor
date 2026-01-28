@@ -33,6 +33,7 @@ import { PropertyValueEditorWindow } from "./components/PropertyValueEditorWindo
 import { SettingsPanel } from "./components/SettingsPanel";
 import { TextEditor } from "./components/TextEditor";
 import { ThemeProvider } from "./components/ThemeProvider";
+import { ToastProvider } from "./components/Toast";
 import { TopNavBar } from "./components/TopNavBar";
 import { VerbEditor } from "./components/VerbEditor";
 import { AuthProvider, useAuthContext } from "./context/AuthContext";
@@ -2106,11 +2107,13 @@ function App() {
 
     return (
         <ThemeProvider>
-            <AuthProvider showMessage={showMessage}>
-                <PresentationProvider>
-                    <EncryptionWrapper />
-                </PresentationProvider>
-            </AuthProvider>
+            <ToastProvider>
+                <AuthProvider showMessage={showMessage}>
+                    <PresentationProvider>
+                        <EncryptionWrapper />
+                    </PresentationProvider>
+                </AuthProvider>
+            </ToastProvider>
         </ThemeProvider>
     );
 }

@@ -47,6 +47,7 @@ export const SayModeToggle: React.FC = () => {
         <div className="settings-item">
             <span>Say Mode</span>
             <button
+                type="button"
                 className="settings-value-button"
                 onClick={toggle}
                 role="switch"

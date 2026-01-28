@@ -13,6 +13,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { renderDjot, renderHtmlContent, renderPlainText } from "../lib/djot-renderer";
+import { useToast } from "./Toast";
 
 /** Metadata about the event that produced this content */
 export interface EventMetadata {
@@ -51,6 +52,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
     enableEmoji = false,
     eventMetadata,
 }) => {
+    const { showToast } = useToast();
     // Touch state tracking for tap vs hold detection
     const touchStateRef = useRef<
         {
@@ -84,9 +86,25 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
     // Check if a URL is an external link (http/https)
     const isExternalLink = (url: string) => url.startsWith("http://") || url.startsWith("https://");
 
-    // Unified click handler for moo-link spans (all moo-link-* variants)
-    const handleLinkClick = useCallback((e: React.MouseEvent) => {
+    // Unified click handler for moo-link spans (all moo-link-* variants) and uuobjids
+    const handleClick = useCallback((e: React.MouseEvent) => {
         const target = e.target as HTMLElement;
+
+        // Handle UuObjId copy
+        const uuobjid = target.getAttribute("data-uuobjid");
+        if (uuobjid) {
+            e.preventDefault();
+            e.stopPropagation();
+            navigator.clipboard.writeText(uuobjid).then(() => {
+                target.classList.add("copied");
+                showToast("Copied to clipboard");
+                setTimeout(() => target.classList.remove("copied"), 1000);
+            }).catch(err => {
+                console.error("Failed to copy object ID:", err);
+            });
+            return;
+        }
+
         // Check for data-url attribute which all our link spans have
         const url = target.getAttribute("data-url");
         if (!url || !onLinkClick) return;
@@ -108,6 +126,20 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
         if (e.key !== "Enter" && e.key !== " ") return;
 
         const target = e.target as HTMLElement;
+
+        // Handle UuObjId copy
+        const uuobjid = target.getAttribute("data-uuobjid");
+        if (uuobjid) {
+            e.preventDefault();
+            e.stopPropagation();
+            navigator.clipboard.writeText(uuobjid).then(() => {
+                target.classList.add("copied");
+                showToast("Copied to clipboard");
+                setTimeout(() => target.classList.remove("copied"), 1000);
+            });
+            return;
+        }
+
         const url = target.getAttribute("data-url");
         if (!url || !onLinkClick) return;
 
@@ -226,7 +258,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 return wrapWithLinkHint(
                     <span
                         dangerouslySetInnerHTML={{ __html: processedHtml }}
-                        onClick={handleLinkClick}
+                        onClick={handleClick}
                         onKeyDown={handleKeyDown}
                         onTouchStart={handleTouchStart}
                         onTouchEnd={handleTouchEnd}
@@ -254,7 +286,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                         <span
                             className={`text_djot content-html${staleClass}`}
                             dangerouslySetInnerHTML={{ __html: processedDjotHtml }}
-                            onClick={handleLinkClick}
+                            onClick={handleClick}
                             onKeyDown={handleKeyDown}
                             onTouchStart={handleTouchStart}
                             onTouchEnd={handleTouchEnd}
@@ -302,7 +334,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 return wrapWithLinkHint(
                     <span
                         dangerouslySetInnerHTML={{ __html: renderedHtml }}
-                        onClick={handleLinkClick}
+                        onClick={handleClick}
                         onKeyDown={handleKeyDown}
                         className={`content-text${staleClass}`}
                     />,
@@ -313,7 +345,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
     }, [
         contentType,
         getContentString,
-        handleLinkClick,
+        handleClick,
         handleKeyDown,
         handleTouchStart,
         handleTouchEnd,
