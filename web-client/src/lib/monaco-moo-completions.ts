@@ -96,7 +96,10 @@ class MooCompletionManager {
 
     private createProvider(monaco: Monaco): monaco.IDisposable {
         return monaco.languages.registerCompletionItemProvider("moo", {
-            provideCompletionItems: async (model, position) => {
+            provideCompletionItems: async (
+                model: monaco.editor.ITextModel,
+                position: monaco.Position,
+            ) => {
                 const modelUri = model.uri.toString();
                 const context = this.editorContexts.get(modelUri);
 
