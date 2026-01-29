@@ -90,39 +90,12 @@ echo "======================================"
 cargo deb -p moor-emh --profile release-fast --no-build
 echo ""
 
-# Build web client package (if Node.js is available)
-if command -v npm &> /dev/null; then
-    echo "======================================"
-    echo "Building web client"
-    echo "======================================"
-
-    # Build web client if dist doesn't exist or is older than source
-    if [ ! -d "dist" ] || [ "dist" -ot "web-client" ]; then
-        echo "Building web client with npm..."
-        npm install
-        npm run build
-    else
-        echo "Using existing dist/ directory"
-    fi
-    echo ""
-
-    echo "======================================"
-    echo "Building moor-web-client package"
-    echo "======================================"
-    ./deploy/debian-packages/build-web-client-deb.sh
-    echo ""
-else
-    echo "======================================"
-    echo "Skipping web client (npm not found)"
-    echo "======================================"
-    echo "Install Node.js to build web client package"
-    echo ""
-fi
-
 # Summary
 echo "======================================"
 echo "Build complete!"
 echo "======================================"
+echo ""
+echo "Note: The Meadow web client is now built from its own repository."
 echo ""
 echo "Generated packages:"
 ls -lh *.deb 2>/dev/null || echo "No .deb files found"
@@ -134,7 +107,6 @@ echo "  sudo dpkg -i moor-web-host_*.deb"
 echo "  sudo dpkg -i moor-curl-worker_*.deb"
 echo "  sudo dpkg -i moorc_*.deb"
 echo "  sudo dpkg -i moor-emh_*.deb"
-echo "  sudo dpkg -i moor-web-client_*.deb  # if built"
 echo ""
 echo "Fix missing dependencies with:"
 echo "  sudo apt-get install -f"

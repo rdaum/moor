@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: moor-frontend:latest
+          image: codeberg.org/timbran/meadow:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

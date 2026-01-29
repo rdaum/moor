@@ -10,7 +10,7 @@ mooR can be packaged into several Debian packages:
 - **moor-daemon**: Core MOO server with systemd service
 - **moor-telnet-host**: Telnet server with systemd service
 - **moor-web-host**: Web API server with systemd service
-- **moor-web-client**: Static web client files (architecture-independent)
+- **meadow**: Web client static files (architecture-independent, managed in Meadow repository)
 
 ## Use Case
 
@@ -98,13 +98,13 @@ The `--no-build` flag uses the existing release binaries. Omit it to rebuild fro
 
 #### Web Client Package
 
-```bash
-# Build the web client first
-npm install
-npm run build
+Meadow is managed in a [separate repository](https://codeberg.org/timbran/meadow). To build its
+Debian package:
 
-# Build the web client package
-./build-web-client-deb.sh
+```bash
+cd ../meadow
+npm install
+npm run build:deb
 ```
 
 ## Installing Packages
@@ -124,7 +124,7 @@ echo "deb [signed-by=/etc/apt/keyrings/timbran-moor.asc] https://codeberg.org/ap
 
 # Update and install
 sudo apt update
-sudo apt install moor-daemon moor-telnet-host moor-web-host moor-web-client
+sudo apt install moor-daemon moor-telnet-host moor-web-host meadow
 ```
 
 This handles dependencies automatically and makes future upgrades simple with `apt upgrade`.
@@ -143,7 +143,7 @@ sudo dpkg -i moor-telnet-host_*.deb
 sudo dpkg -i moor-web-host_*.deb
 
 # 3. Install web client (optional, needs nginx or similar)
-sudo dpkg -i moor-web-client_*.deb
+sudo dpkg -i meadow_*.deb
 
 # Fix any missing dependencies
 sudo apt-get install -f
@@ -437,7 +437,7 @@ To completely remove mooR:
 sudo systemctl stop moor-telnet-host moor-web-host moor-daemon
 
 # Remove packages (--purge removes config files too)
-sudo apt-get remove --purge moor-web-client moor-web-host moor-telnet-host moor-daemon
+sudo apt-get remove --purge meadow moor-web-host moor-telnet-host moor-daemon
 
 # Manually remove data if desired
 sudo rm -rf /var/spool/moor-daemon/
@@ -631,7 +631,7 @@ See the main [deploy/README.md](../README.md) for Docker-based testing alternati
 
 1. Verify package is installed:
    ```bash
-   dpkg -l | grep moor-web-client
+   dpkg -l | grep meadow
    ```
 
 2. Check files exist:

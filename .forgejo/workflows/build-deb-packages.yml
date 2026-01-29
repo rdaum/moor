@@ -39,14 +39,6 @@ jobs:
       - name: Build moor-emh deb package
         run: cargo deb -p moor-emh --profile release-fast --no-build
 
-      - name: Build web client
-        run: |
-          npm ci
-          npm run build
-
-      - name: Build moor-web-client deb package
-        run: ./deploy/debian-packages/build-web-client-deb.sh
-
       - name: List built packages
         run: |
           echo "Built .deb packages:"

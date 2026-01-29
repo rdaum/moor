@@ -74,15 +74,26 @@ When you modify any `.fbs` schema file, regenerate using:
 planus rust -o ./crates/schema/src/schemas_generated.rs ./crates/schema/schema/all_schemas.fbs
 ```
 
-For TypeScript bindings (used by the web client), regenerate using:
+#### TypeScript bindings
+
+For the web client, we publish the schemas and TypeScript bindings as an NPM package `@moor/schema`
+to the Codeberg package registry.
+
+When schemas are updated and pushed to `main`, a Forgejo Action automatically regenerates the
+TypeScript bindings and publishes a new development version of the package.
+
+To manually generate bindings for local development:
 
 ```shell
-flatc --ts --gen-all -o web-client/src/generated crates/schema/schema/all_schemas.fbs
+cd crates/schema/schema
+npm run generate
 ```
+
+The resulting bindings will be in `crates/schema/schema/generated`.
 
 **Note for CallSystemVerb implementation:** When adding new RPC messages like `CallSystemVerb`, make
 sure to:
 
 1. Regenerate both Rust bindings with `planus rust`
-2. Regenerate TypeScript bindings with `flatc --ts --gen-all`
+2. Push changes to `main` to trigger the automatic NPM package publication for TypeScript
 3. Update both Rust and TypeScript code to handle the new message types
