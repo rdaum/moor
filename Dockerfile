@@ -1,16 +1,3 @@
-# Multi-stage build: Frontend build stage
-FROM node:20-bookworm AS frontend-build
-WORKDIR /moor-frontend
-# Install git for git hash lookup during build
-RUN apt update && apt -y install git
-COPY package.json package-lock.json* ./
-RUN npm ci
-COPY web-client/ ./web-client/
-COPY tsconfig.json vite.config.ts ./
-# Copy .git directory so vite can get the git hash during build
-COPY ./.git ./.git
-RUN npm run build
-
 # Backend build stage
 FROM rust:1.92-bookworm AS backend-build
 
@@ -33,13 +20,7 @@ ARG CARGO_BUILD_FLAGS=""
 ARG TRACE_EVENTS=false
 ARG CARGO_BUILD_JOBS=6
 
-# Build flags here if you want optimal performance for your *particular* CPU,
-# at the expense of portability.
-# ENV RUSTFLAGS="-C target-cpu=native"
-
 # Build either debug (fast) or release (optimized) based on BUILD_PROFILE
-# Note: Cache mounts are ephemeral, so we copy binaries out to persist them in the image layer
-# sharing=locked prevents race conditions when docker-compose builds multiple services in parallel
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/moor-build/target,sharing=locked \
     if [ "$BUILD_PROFILE" = "release" ] || [ "$BUILD_PROFILE" = "release-fast" ]; then \
@@ -81,21 +62,12 @@ COPY --from=backend-build /moor-build/target-final/moor-web-host /moor/moor-web-
 COPY --from=backend-build /moor-build/target-final/moor-telnet-host /moor/moor-telnet-host
 COPY --from=backend-build /moor-build/target-final/moor-curl-worker /moor/moor-curl-worker
 
-# The built web client static files from the frontend build
-COPY --from=frontend-build /moor-frontend/dist /moor/web-client
-
 # Utility binaries
 COPY --from=backend-build /moor-build/target-final/moorc /moor/moorc
 COPY --from=backend-build /moor-build/target-final/moor-emh /moor/moor-emh
 COPY --from=backend-build /moor-build/target-final/moor-mcp-host /moor/moor-mcp-host
 
 EXPOSE 8080
-
-# nginx-based frontend image
-FROM nginx:alpine AS frontend
-COPY --from=frontend-build /moor-frontend/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/nginx.conf
-EXPOSE 80
 
 # Default stage - backend services with moor binaries
 FROM backend AS default

@@ -53,18 +53,6 @@ jobs:
             cargo deb -p "$pkg" --profile release --no-build
           done
 
-      - name: Build web client (if npm available)
-        run: |
-          if command -v npm &> /dev/null; then
-            echo "Building web client..."
-            npm ci
-            npm run build
-            echo "Building moor-web-client package..."
-            ./deploy/debian-packages/build-web-client-deb.sh
-          else
-            echo "npm not found, skipping web client"
-          fi
-
       - name: List built Debian packages
         id: list-packages
         run: |
@@ -107,23 +95,10 @@ jobs:
             -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-${{ matrix.arch }} \
             .
 
-      - name: Build frontend Docker image (${{ matrix.arch }})
-        run: |
-          docker build \
-            --file ${{ matrix.dockerfile }} \
-            --target frontend \
-            --build-arg BUILD_PROFILE=release \
-            --build-arg CARGO_BUILD_JOBS=2 \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:${{ inputs.ref }}-${{ matrix.arch }} \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:latest-${{ matrix.arch }} \
-            .
-
       - name: Push Docker images (${{ matrix.arch }})
         run: |
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.ref }}-${{ matrix.arch }}
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-${{ matrix.arch }}
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:${{ inputs.ref }}-${{ matrix.arch }}
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:latest-${{ matrix.arch }}
 
       - name: Log out from Codeberg Container Registry
         run: docker logout ${{ env.REGISTRY }}
@@ -162,7 +137,7 @@ jobs:
                 "tag_name": "${{ inputs.ref }}",
                 "target_commitish": "${{ inputs.ref }}",
                 "name": "Release ${{ inputs.ref }}",
-                "body": "## mooR Release ${{ inputs.ref }}\n\n### Downloads\n\n**Debian Packages:**\n- Available in the release artifacts below\n\n**Docker Images:**\n- Backend: `codeberg.org/timbran/moor:${{ inputs.ref }}-x86_64` and `:${{ inputs.ref }}-aarch64`\n- Frontend: `codeberg.org/timbran/moor-frontend:${{ inputs.ref }}-x86_64` and `:${{ inputs.ref }}-aarch64`\n- Latest tags: `:latest-x86_64` and `:latest-aarch64`",
+                "body": "## mooR Release ${{ inputs.ref }}\n\n### Downloads\n\n**Debian Packages:**\n- Available in the release artifacts below\n\n**Docker Images:**\n- Backend: `codeberg.org/timbran/moor:${{ inputs.ref }}-x86_64` and `:${{ inputs.ref }}-aarch64`\n- Latest tags: `:latest-x86_64` and `:latest-aarch64` \n\n**Frontend:**\n- The [Meadow](https://codeberg.org/timbran/meadow) web client is now released separately.",\n- Latest tags: `:latest-x86_64` and `:latest-aarch64`",
                 "draft": false,
                 "prerelease": false
               }' \

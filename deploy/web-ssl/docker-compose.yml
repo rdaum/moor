@@ -133,10 +133,10 @@ services:
   # Frontend web server with SSL/TLS support
   moor-frontend:
     # Use pre-built image from Codeberg registry
-    image: codeberg.org/timbran/moor-frontend:latest-x86_64
+    image: codeberg.org/timbran/meadow:latest-x86_64
     # To use locally-built images instead, replace the 'image:' line above with the 'build:' section below:
     # build:
-    #   context: ../..
+    #   context: ${MEADOW_PATH:-../../meadow}
     #   target: frontend
     #   network: host
     # For aarch64 systems, change 'latest-x86_64' to 'latest-aarch64'

@@ -175,8 +175,7 @@ npm run full:dev
 This starts the moor-daemon and web development server, accessible at
 [http://localhost:3000](http://localhost:3000). This setup excludes telnet and provides
 hot-reloading for frontend development, but it requires installing some dependencies. See
-[the web client's readme](https://codeberg.org/timbran/moor/src/branch/main/web-client#readme) for
-details.
+[the Meadow repository](https://codeberg.org/timbran/meadow) for details.
 
 ## Deployment Options
 
