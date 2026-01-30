@@ -59,6 +59,9 @@ certs/
 # Cowbell core (managed by cores/fetch-cowbell.sh)
 cores/cowbell/
 
+# Meadow web client (managed by clients/fetch-meadow.sh)
+clients/meadow/
+
 # Proptest failure snapshots (regenerated on failure)
 proptest-failures/
 .mcp.json

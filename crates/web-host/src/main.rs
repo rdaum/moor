@@ -292,6 +292,7 @@ fn mk_routes(
         .route("/fb/eval", post(host::eval_handler))
         .route("/fb/features", get(host::features_handler))
         .route("/health", get(host::health_handler))
+        .route("/version", get(host::version_handler))
         .route(
             "/fb/invoke_welcome_message",
             get(host::invoke_welcome_message_handler),

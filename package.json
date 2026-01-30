@@ -4,6 +4,7 @@
   "description": "mooR - a 21st century LambdaMOO implementation",
   "type": "module",
   "scripts": {
+    "postinstall": "./clients/fetch-meadow.sh && npm install --prefix ${MEADOW_PATH:-./clients/meadow}",
     "daemon:dev": "RUST_BACKTRACE=1 cargo run -p moor-daemon -- ./moor-data --db development.db --import-format objdef --import ${MOOR_CORE:-cores/cowbell/src} --export development-export --export-format objdef --use-boolean-returns true --custom-errors true --use-uuobjids true --enable-eventlog true --generate-keypair --anonymous-objects true",
     "daemon:traced": "RUST_BACKTRACE=1 cargo run --features trace_events -p moor-daemon -- ./moor-data --db development.db --import-format objdef --import ${MOOR_CORE:-cores/cowbell/src} --export development-export --export-format objdef --use-boolean-returns true --custom-errors true --use-uuobjids true --enable-eventlog true --trace-output moor-trace.json  --anonymous-objects true",
     "web-host:dev": "cargo run --bin moor-web-host -- --enable-webhooks",
@@ -11,11 +12,11 @@
     "web-host:build": "cargo build --release --bin moor-web-host",
     "web-host:run": "cargo run --release --bin moor-web-host -- --enable-webhooks",
     "web-host:run:oauth2": "cargo run --release --bin moor-web-host -- --config-file ${MOOR_OAUTH2_CONFIG:-web-host-oauth2.yaml} --enable-webhooks",
-    "full:dev": "concurrently \"npm run dev --prefix ${MEADOW_PATH:-../meadow}\" \"npm run daemon:dev\" \"npm run web-host:dev\"",
-    "full:dev:no-daemon": "concurrently \"npm run dev --prefix ${MEADOW_PATH:-../meadow}\" \"npm run web-host:dev\"",
-    "full:dev:oauth2": "concurrently \"npm run dev --prefix ${MEADOW_PATH:-../meadow}\" \"npm run daemon:dev\" \"npm run web-host:dev:oauth2\"",
-    "full:dev-traced": "concurrently \"npm run dev --prefix ${MEADOW_PATH:-../meadow}\" \"npm run daemon:traced\" \"npm run web-host:dev\"",
-    "full:build": "cd ${MEADOW_PATH:-../meadow} && npm run build && cd - && npm run web-host:build"
+    "full:dev": "concurrently \"npm run dev --prefix ${MEADOW_PATH:-./clients/meadow}\" \"npm run daemon:dev\" \"npm run web-host:dev\"",
+    "full:dev:no-daemon": "concurrently \"npm run dev --prefix ${MEADOW_PATH:-./clients/meadow}\" \"npm run web-host:dev\"",
+    "full:dev:oauth2": "concurrently \"npm run dev --prefix ${MEADOW_PATH:-./clients/meadow}\" \"npm run daemon:dev\" \"npm run web-host:dev:oauth2\"",
+    "full:dev-traced": "concurrently \"npm run dev --prefix ${MEADOW_PATH:-./clients/meadow}\" \"npm run daemon:traced\" \"npm run web-host:dev\"",
+    "full:build": "cd ${MEADOW_PATH:-./clients/meadow} && npm run build && cd - && npm run web-host:build"
   },
   "author": "Ryan Daum <ryan.daum@gmail.com>",
   "license": "GPL-3.0",

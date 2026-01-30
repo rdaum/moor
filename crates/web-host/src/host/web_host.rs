@@ -15,6 +15,7 @@
 
 use crate::host::{auth, ws_connection::WebSocketConnection};
 use axum::{
+    Json,
     body::{Body, Bytes},
     extract::{ConnectInfo, Path, State, WebSocketUpgrade},
     http::{HeaderMap, StatusCode, header},
@@ -1302,4 +1303,19 @@ pub async fn health_handler(State(host): State<WebHost>) -> Response {
     } else {
         StatusCode::SERVICE_UNAVAILABLE.into_response()
     }
+}
+
+/// Server version information
+#[derive(serde::Serialize)]
+pub struct VersionInfo {
+    pub version: &'static str,
+    pub commit: &'static str,
+}
+
+/// Version endpoint - returns server version and git commit
+pub async fn version_handler() -> Json<VersionInfo> {
+    Json(VersionInfo {
+        version: moor_common::build::PKG_VERSION,
+        commit: moor_common::build::short_commit(),
+    })
 }

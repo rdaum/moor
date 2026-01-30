@@ -86,7 +86,7 @@ services:
   # Frontend web server
   moor-frontend:
     build:
-      context: ${MEADOW_PATH:-../meadow}
+      context: ${MEADOW_PATH:-./clients/meadow}
       target: frontend
       network: host
     container_name: "moor-frontend"
