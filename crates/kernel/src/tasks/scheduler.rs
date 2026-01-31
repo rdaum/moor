@@ -1042,7 +1042,7 @@ impl Scheduler {
 
                 // If the number of retries has been exceeded, abort immediately
                 if task.retries >= self.server_options.max_task_retries {
-                    info!(
+                    error!(
                         "Maximum number of retries exceeded for task {}.  Aborting.",
                         task.task_id
                     );
@@ -1055,10 +1055,13 @@ impl Scheduler {
                 }
                 task.retries += 1;
 
-                // Calculate backoff time: 10-50ms base, multiplied by retry count
+                // Calculate backoff time: 10-50ms base, exponentially backed off
                 let mut rng = rand::rng();
                 let base_delay_ms = rng.random_range(10u64..=50u64);
-                let delay_ms = base_delay_ms * task.retries as u64;
+                // Exponential backoff: base * 2^(retries-1)
+                // Cap shift at 10 to prevent excessive delays (max multiplier 1024x)
+                let shift = (task.retries as u32).saturating_sub(1).min(10);
+                let delay_ms = base_delay_ms << shift;
                 let wake_time = Instant::now() + Duration::from_millis(delay_ms);
 
                 debug!(
@@ -2451,6 +2454,7 @@ impl TaskQ {
         result: Result<Var, SchedulerError>,
     ) {
         let Some(result_sender) = result_sender else {
+            warn!(task_id, "Task not found for (direct) notification, ignoring");
             return;
         };
         let result = result.map(|v| TaskNotification::Result(v.clone()));
