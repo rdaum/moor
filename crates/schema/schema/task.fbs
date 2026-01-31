@@ -44,7 +44,8 @@ union WakeConditionUnion {
     WakeImmediate,
     WakeTask,
     WakeWorker,
-    WakeGCComplete
+    WakeGCComplete,
+    WakeTaskMessage
 }
 
 table WakeNever {}
@@ -66,6 +67,10 @@ table WakeWorker {
 }
 
 table WakeGCComplete {}
+
+table WakeTaskMessage {
+    deadline_nanos: uint64;
+}
 
 table WakeCondition {
     condition: WakeConditionUnion (required);
@@ -417,6 +422,8 @@ table Task {
     pending_exception: MoorCommon.Exception;  // Optional - empty if None
     waiting_for_exception_handler_task: uint64;  // Use 0 for None
     has_waiting_for_exception_handler_task: bool;
+    // Inter-task message queue - optional for backward compatibility with older DBs
+    message_queue: [MoorVar.Var];
 }
 
 // ============================================================================

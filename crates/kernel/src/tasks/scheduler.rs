@@ -73,7 +73,7 @@ use moor_common::{
 use moor_objdef::{collect_object, collect_object_definitions, dump_object, extract_index_names};
 use moor_var::{
     E_EXEC, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, List, NOTHING, Obj, SYSTEM_OBJECT,
-    Symbol, Var, Variant, v_bool_int, v_empty_str, v_err, v_int, v_obj, v_str, v_string,
+    Symbol, Var, Variant, v_bool_int, v_empty_str, v_err, v_error, v_int, v_obj, v_str, v_string,
 };
 use std::collections::HashMap;
 
@@ -150,6 +150,10 @@ pub struct Scheduler {
 
     /// Time of last tasks DB compaction (independent of GC)
     last_compact_time: std::time::Instant,
+
+    /// Buffered inter-task messages awaiting commit. Keyed by sending task_id.
+    /// Delivered to target queues when the sending task commits; discarded on abort/conflict.
+    pending_task_sends: HashMap<TaskId, Vec<(TaskId, Var)>>,
 }
 
 fn load_int_sysprop(server_options_obj: &Obj, name: Symbol, tx: &dyn WorldState) -> Option<u64> {
@@ -220,6 +224,7 @@ impl Scheduler {
             last_mutation_timestamp: None,
             checkpoint_in_progress: Arc::new(AtomicBool::new(false)),
             last_compact_time: std::time::Instant::now(),
+            pending_task_sends: HashMap::new(),
         };
         s.reload_server_options();
         s
@@ -396,6 +401,9 @@ impl Scheduler {
                             }
                             WakeCondition::Never => ("Never", "Manual wake"),
                             WakeCondition::Retry(_) => ("Retry", "Transaction retry backoff"),
+                            WakeCondition::TaskMessage(_) => {
+                                ("TaskMessage", "Message received or timeout")
+                            }
                         };
 
                         trace_task_resume!(
@@ -419,17 +427,31 @@ impl Scheduler {
                             self.builtin_registry.clone(),
                             self.config.clone(),
                         );
-                    } else if let Err(e) = self.task_q.wake_task_thread(
-                        sr.task,
-                        ResumeAction::Return(v_int(0)),
-                        sr.session,
-                        sr.result_sender,
-                        &self.task_control_sender,
-                        self.database.as_ref(),
-                        self.builtin_registry.clone(),
-                        self.config.clone(),
-                    ) {
-                        error!(?task_id, ?e, "Error resuming task");
+                    } else {
+                        // Determine resume value based on wake condition
+                        let resume_value = match &sr.wake_condition {
+                            WakeCondition::TaskMessage(_) => {
+                                // Drain message queue and return as list
+                                let messages = self.task_q.drain_messages(task_id);
+                                List::from_iter(messages).into()
+                            }
+                            WakeCondition::Immediate(val) => {
+                                val.clone().unwrap_or_else(|| v_int(0))
+                            }
+                            _ => v_int(0),
+                        };
+                        if let Err(e) = self.task_q.wake_task_thread(
+                            sr.task,
+                            ResumeAction::Return(resume_value),
+                            sr.session,
+                            sr.result_sender,
+                            &self.task_control_sender,
+                            self.database.as_ref(),
+                            self.builtin_registry.clone(),
+                            self.config.clone(),
+                        ) {
+                            error!(?task_id, ?e, "Error resuming task");
+                        }
                     }
                 }
             }
@@ -1020,13 +1042,18 @@ impl Scheduler {
                 };
                 let Ok(()) = task.session.commit() else {
                     warn!("Could not commit session; aborting task");
+                    self.discard_pending_sends(task_id);
                     return self.task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
+                self.flush_pending_sends(task_id);
+                self.task_q.remove_message_queue(task_id);
                 self.task_q.send_task_result(task_id, Ok(value))
             }
             TaskControlMsg::TaskConflictRetry(mut task) => {
                 let perfc = sched_counters();
                 let _t = PerfTimerGuard::new(&perfc.task_conflict_retry);
+
+                self.discard_pending_sends(task_id);
 
                 // Make sure the old thread is dead.
                 task.kill_switch.store(true, Ordering::SeqCst);
@@ -1094,6 +1121,9 @@ impl Scheduler {
                 let perfc = sched_counters();
                 let _t = PerfTimerGuard::new(&perfc.task_abort_cancelled);
 
+                self.discard_pending_sends(task_id);
+                self.task_q.remove_message_queue(task_id);
+
                 warn!(?task_id, "Task cancelled");
 
                 // Rollback the session.
@@ -1118,6 +1148,9 @@ impl Scheduler {
             TaskControlMsg::TaskAbortPanicked(panic_msg, _backtrace) => {
                 warn!(?task_id, ?panic_msg, "Task thread panicked");
 
+                self.discard_pending_sends(task_id);
+                self.task_q.remove_message_queue(task_id);
+
                 // Task already dead, can't access session. Just send error result directly.
                 self.task_q.send_task_result(task_id, Err(TaskAbortedError));
             }
@@ -1128,6 +1161,9 @@ impl Scheduler {
                 line_number,
                 handler_info,
             ) => {
+                self.discard_pending_sends(task_id);
+                self.task_q.remove_message_queue(task_id);
+
                 let perfc = sched_counters();
                 let _t = PerfTimerGuard::new(&perfc.task_abort_limits);
 
@@ -1234,6 +1270,8 @@ impl Scheduler {
                 }
 
                 let _ = task.session.commit();
+                self.flush_pending_sends(task_id);
+                self.task_q.remove_message_queue(task_id);
 
                 self.task_q.send_task_result(
                     task_id,
@@ -1271,8 +1309,10 @@ impl Scheduler {
                 // Commit the session.
                 let Ok(()) = tc.session.commit() else {
                     warn!("Could not commit session; aborting task");
+                    self.discard_pending_sends(task_id);
                     return self.task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
+                self.flush_pending_sends(task_id);
 
                 // And insert into the suspended list.
                 let wake_condition = match wake_condition {
@@ -1304,6 +1344,23 @@ impl Scheduler {
 
                         WakeCondition::Worker(worker_request_id)
                     }
+                    TaskSuspend::RecvMessages(Some(duration)) => {
+                        // Check if there are already messages in the queue after commit
+                        let messages = self.task_q.drain_messages(task_id);
+                        if !messages.is_empty() {
+                            // Messages available — wake immediately with them
+                            WakeCondition::Immediate(Some(List::from_iter(messages).into()))
+                        } else {
+                            // No messages — suspend with deadline, wake on message
+                            // arrival or timeout
+                            WakeCondition::TaskMessage(Instant::now() + duration)
+                        }
+                    }
+                    TaskSuspend::RecvMessages(None) => {
+                        // Immediate fast path — drain queue and wake immediately
+                        let messages = self.task_q.drain_messages(task_id);
+                        WakeCondition::Immediate(Some(List::from_iter(messages).into()))
+                    }
                 };
 
                 if !matches!(wake_condition, WakeCondition::Immediate(_))
@@ -1330,8 +1387,10 @@ impl Scheduler {
                 // flushed up to the prompt point.
                 let Ok(()) = tc.session.commit() else {
                     warn!("Could not commit session; aborting task");
+                    self.discard_pending_sends(task_id);
                     return self.task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
+                self.flush_pending_sends(task_id);
 
                 let Ok(()) = tc
                     .session
@@ -1550,6 +1609,7 @@ impl Scheduler {
                 }
             }
             TaskControlMsg::RequestNewTransaction(reply) => {
+                self.flush_pending_sends(task_id);
                 let result = self
                     .database
                     .new_world_state()
@@ -1609,7 +1669,62 @@ impl Scheduler {
                     self.gc_force_collect = true;
                 }
             }
+            TaskControlMsg::TaskSend {
+                target_task_id,
+                value,
+                sender_permissions,
+                result_sender,
+            } => {
+                let Some(owner) = self.task_q.task_owner(target_task_id) else {
+                    let _ =
+                        result_sender.send(v_error(E_INVARG.with_msg(|| {
+                            format!("Task ({target_task_id}) not found for task_send")
+                        })));
+                    return;
+                };
+
+                let is_wizard = sender_permissions
+                    .check_is_wizard()
+                    .expect("Could not check wizard status for task_send");
+                if !is_wizard && sender_permissions.who != owner {
+                    let _ = result_sender.send(v_error(E_PERM.with_msg(|| {
+                        format!("Permission denied for task_send to task ({target_task_id})")
+                    })));
+                    return;
+                }
+
+                // Buffer the message for delivery at commit time
+                self.pending_task_sends
+                    .entry(task_id)
+                    .or_default()
+                    .push((target_task_id, value));
+
+                let _ = result_sender.send(v_int(0));
+            }
+            TaskControlMsg::TaskRecv { result_sender } => {
+                // Drain all messages from the calling task's queue
+                let messages = self.task_q.drain_messages(task_id);
+                if let Err(e) = result_sender.send(messages) {
+                    error!(?e, "Could not send task_recv result to requester");
+                }
+            }
         }
+    }
+
+    /// Deliver all buffered messages from the given task to their target queues.
+    /// Called when a task commits (success, suspend, input request, exception, new transaction).
+    fn flush_pending_sends(&mut self, task_id: TaskId) {
+        if let Some(sends) = self.pending_task_sends.remove(&task_id) {
+            for (target_task_id, value) in sends {
+                self.task_q.deliver_message(target_task_id, value);
+            }
+        }
+    }
+
+    /// Discard all buffered messages from the given task without delivering.
+    /// Called when a task aborts (conflict retry, cancelled, panicked, limits reached).
+    fn discard_pending_sends(&mut self, task_id: TaskId) {
+        self.pending_task_sends.remove(&task_id);
     }
 
     fn handle_switch_player(&mut self, task_id: TaskId, new_player: Obj) -> Result<(), Error> {
@@ -1793,6 +1908,11 @@ impl Scheduler {
         let return_value = match sr.wake_condition {
             WakeCondition::Immediate(val) => val.unwrap_or_else(|| v_int(0)),
             WakeCondition::Time(_) => v_int(0), // Expired timer - return 0 as suspend() normally does
+            WakeCondition::TaskMessage(_) => {
+                // Task was waiting for messages — drain the queue and return as list
+                let messages = self.task_q.drain_messages(task_id);
+                List::from_iter(messages).into()
+            }
             _ => {
                 error!(
                     ?task_id,
@@ -2454,7 +2574,10 @@ impl TaskQ {
         result: Result<Var, SchedulerError>,
     ) {
         let Some(result_sender) = result_sender else {
-            warn!(task_id, "Task not found for (direct) notification, ignoring");
+            warn!(
+                task_id,
+                "Task not found for (direct) notification, ignoring"
+            );
             return;
         };
         let result = result.map(|v| TaskNotification::Result(v.clone()));

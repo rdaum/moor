@@ -655,6 +655,76 @@ fn bf_valid_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(bf_args.v_bool(exists)))
 }
 
+/// Usage: `none task_send(int task_id, any value)`
+/// Buffers a message for delivery to the target task's incoming queue.
+/// Messages are delivered when the sending task commits its transaction.
+/// Caller must be owner of the target task or a wizard.
+fn bf_task_send(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 2 {
+        return Err(ErrValue(E_ARGS.msg("task_send() requires 2 arguments")));
+    }
+
+    let Some(target_task_id) = bf_args.args[0].as_integer() else {
+        return Err(ErrValue(
+            E_TYPE.msg("task_send() requires an integer as the first argument"),
+        ));
+    };
+
+    let target_task_id = target_task_id as TaskId;
+    let value = bf_args.args[1].clone();
+
+    let result = current_task_scheduler_client().task_send(
+        target_task_id,
+        value,
+        bf_args.task_perms().map_err(world_state_bf_err)?,
+    );
+    if let Some(err) = result.as_error() {
+        return Err(ErrValue(err.clone()));
+    }
+    Ok(Ret(result))
+}
+
+/// Usage: `list task_recv([num wait_time])`
+/// Drains all queued messages from this task's incoming queue.
+/// Always commits the current transaction (like `read()` / `commit()`).
+/// With no args: commit and immediately return messages (fast path).
+/// With wait_time: if no messages after commit, suspend up to wait_time seconds
+/// for messages to arrive. Returns list of messages (empty list on timeout).
+fn bf_task_recv(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() > 1 {
+        return Err(ErrValue(
+            E_ARGS.msg("task_recv() requires 0 or 1 arguments"),
+        ));
+    }
+
+    let duration = if bf_args.args.is_empty() {
+        None
+    } else {
+        let seconds = match bf_args.args[0].variant() {
+            Variant::Float(seconds) => seconds,
+            Variant::Int(seconds) => seconds as f64,
+            _ => {
+                return Err(ErrValue(
+                    E_TYPE.msg("task_recv() requires a number as the first argument"),
+                ));
+            }
+        };
+        if seconds < 0.0 {
+            return Err(ErrValue(
+                E_INVARG.msg("task_recv() requires a non-negative number"),
+            ));
+        }
+        Some(Duration::from_secs_f64(seconds))
+    };
+
+    // Set default return value for task retry scenarios (empty list)
+    bf_args.exec_state.set_return_value(v_list(&[]));
+
+    Ok(VmInstr(ExecutionResult::TaskSuspend(
+        TaskSuspend::RecvMessages(duration),
+    )))
+}
+
 pub(crate) fn register_bf_task(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("suspend")] = bf_suspend;
     builtins[offset_for_builtin("suspend_if_needed")] = bf_suspend_if_needed;
@@ -672,4 +742,6 @@ pub(crate) fn register_bf_task(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("callers")] = bf_callers;
     builtins[offset_for_builtin("task_id")] = bf_task_id;
     builtins[offset_for_builtin("valid_task")] = bf_valid_task;
+    builtins[offset_for_builtin("task_send")] = bf_task_send;
+    builtins[offset_for_builtin("task_recv")] = bf_task_recv;
 }

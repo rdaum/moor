@@ -649,12 +649,60 @@ pub enum TaskControlMsg {
         drop_pubkey: bool,
         reply: oneshot::Sender<Result<EventLogPurgeResult, Error>>,
     },
+    /// Buffer a task message for delivery at commit time.
+    /// Validated eagerly (target exists, permissions) but only delivered on commit.
+    TaskSend {
+        target_task_id: TaskId,
+        value: Var,
+        sender_permissions: Perms,
+        result_sender: oneshot::Sender<Var>,
+    },
+    /// Drain all messages from the calling task's message queue.
+    TaskRecv {
+        result_sender: oneshot::Sender<Vec<Var>>,
+    },
 }
 
 impl TaskSchedulerClient {
     /// Get the control sender for testing purposes
     pub fn control_sender(&self) -> &Sender<(TaskId, TaskControlMsg)> {
         &self.scheduler_sender
+    }
+
+    /// Buffer a message for delivery to another task at commit time.
+    /// Validates target existence and permissions eagerly.
+    pub fn task_send(&self, target_task_id: TaskId, value: Var, sender_permissions: Perms) -> Var {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((
+                self.task_id,
+                TaskControlMsg::TaskSend {
+                    target_task_id,
+                    value,
+                    sender_permissions,
+                    result_sender: reply,
+                },
+            ))
+            .expect("Could not deliver client message -- scheduler shut down?");
+        receive
+            .recv()
+            .expect("Could not receive task send result -- scheduler shut down?")
+    }
+
+    /// Drain all messages from this task's message queue.
+    pub fn task_recv(&self) -> Vec<Var> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((
+                self.task_id,
+                TaskControlMsg::TaskRecv {
+                    result_sender: reply,
+                },
+            ))
+            .expect("Could not deliver client message -- scheduler shut down?");
+        receive
+            .recv()
+            .expect("Could not receive task recv result -- scheduler shut down?")
     }
 }
 

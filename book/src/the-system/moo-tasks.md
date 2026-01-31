@@ -134,3 +134,54 @@ For explicit transaction management, the following functions are available:
   returning `true`. If the tick budget is still sufficient, it returns `false` without suspending. This is useful
   for long-running tasks that need to periodically commit their work to avoid hitting the tick limit, while
   minimizing unnecessary commits when plenty of ticks remain.
+
+### Inter-task messaging
+
+Tasks can communicate with each other using FIFO message queues via `task_send()` and `task_recv()`. This provides a
+simple, transactionally-safe mechanism for coordination between concurrent tasks.
+
+**Sending messages:** `task_send(task_id, value)` buffers a message to the target task's queue. Messages are not
+delivered immediately — they are held until the sending task's transaction commits (via `suspend`, `commit`, `read`,
+`task_recv`, or normal task completion). If the transaction is aborted or retried due to a conflict, all buffered
+messages are discarded. This ensures that only committed work produces visible side effects.
+
+**Receiving messages:** `task_recv([wait_time])` commits the current transaction (just like `commit()` and `read()`)
+and then drains all queued messages, returning them as a list. Without arguments, it returns immediately (with an empty
+list if no messages are queued). With a `wait_time` argument, it will wait up to that many seconds for messages to
+arrive before returning.
+
+A task can send messages to itself — the messages will be delivered on the next commit and available to a subsequent
+`task_recv()`.
+
+**Permissions:** The caller must be the owner of the target task or a wizard to send messages (same model as
+`kill_task` and `resume`).
+
+**Example: Worker pattern**
+```moo
+// Parent task: fork a worker and wait for its result
+task_id = task_id();
+fork worker (0)
+  // ... do some work ...
+  result = expensive_computation();
+  task_send(task_id, result);
+endfork
+messages = task_recv(30);  // wait up to 30 seconds
+if (length(messages) > 0)
+  result = messages[1];
+  // ... use result ...
+else
+  // timed out, no messages received
+endif
+```
+
+**Example: Polling for messages**
+```moo
+// Non-blocking check for messages (commits and returns immediately)
+messages = task_recv();
+for msg in (messages)
+  // process each message
+endfor
+```
+
+Because `task_recv` commits the current transaction, the same considerations apply as with `commit()` and `suspend()`:
+other tasks' committed changes become visible after the call, and the receiving task continues in a new transaction.

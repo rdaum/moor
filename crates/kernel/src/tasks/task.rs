@@ -312,6 +312,35 @@ impl Task {
                 }
             }
             VMHostResponse::Suspend(delay) => {
+                // Fast path for RecvMessages(None): commit, drain messages, resume immediately
+                if matches!(delay.as_ref(), TaskSuspend::RecvMessages(None)) {
+                    match with_new_transaction(|| {
+                        let new_world_state =
+                            task_scheduler_client.begin_new_transaction().map_err(|e| {
+                                WorldStateError::DatabaseError(format!("Scheduler error: {e:?}"))
+                            })?;
+                        Ok((new_world_state, ()))
+                    }) {
+                        Ok((CommitResult::Success { .. }, _)) => {
+                            let messages = task_scheduler_client.task_recv();
+                            let resume_value = List::from_iter(messages).into();
+                            self.vm_host.resume_execution(resume_value);
+                            self.retry_state = self.vm_host.snapshot_state();
+                            return Some(self);
+                        }
+                        Ok((CommitResult::ConflictRetry { .. }, _)) => {
+                            warn!("Conflict during task_recv immediate resume");
+                            session.rollback().unwrap();
+                            task_scheduler_client.conflict_retry(self);
+                            return None;
+                        }
+                        Err(e) => {
+                            error!("Failed to begin new transaction for task_recv: {:?}", e);
+                            // Fall back to normal suspend path
+                        }
+                    }
+                }
+
                 // Check for immediate wake conditions to avoid scheduler round-trip
                 let (is_immediate, resume_value) = match delay.as_ref() {
                     TaskSuspend::Commit(val) => (true, val.clone()),

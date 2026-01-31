@@ -280,6 +280,8 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin("valid_task", Q(1), Q(1), vec![Typed(TYPE_INT)], true),
         mk_builtin("pass", Q(0), U, vec![], true),
         mk_builtin("task_stack", Q(1), Q(2), vec![Typed(TYPE_INT), Any], false),
+        mk_builtin("task_send", Q(2), Q(2), vec![Typed(TYPE_INT), Any], true),
+        mk_builtin("task_recv", Q(0), Q(1), vec![AnyNum], true),
     ]);
     pad_group(&mut builtins, start, "task/scheduler");
 

@@ -227,6 +227,28 @@ pub(crate) fn wake_condition_to_flatbuffer(
             }))
         }
         KernelWakeCondition::GCComplete => WakeGcComplete(Box::new(fb::WakeGcComplete {})),
+        KernelWakeCondition::TaskMessage(t) => {
+            // Convert Instant to absolute epoch time for storage (same pattern as Time)
+            let now_system = SystemTime::now();
+            let now_instant = Instant::now();
+
+            let epoch_time = if *t >= now_instant {
+                let time_diff = t.duration_since(now_instant);
+                now_system + time_diff
+            } else {
+                let time_diff = now_instant.duration_since(*t);
+                now_system.checked_sub(time_diff).unwrap_or(UNIX_EPOCH)
+            };
+
+            let time_since_epoch = epoch_time
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or(Duration::ZERO);
+            let nanos = time_since_epoch.as_nanos() as u64;
+
+            WakeTaskMessage(Box::new(fb::WakeTaskMessage {
+                deadline_nanos: nanos,
+            }))
+        }
         KernelWakeCondition::Retry(_) => {
             // Retry tasks are transient and should never be persisted
             return Err(TaskConversionError::EncodingError(
@@ -319,6 +341,30 @@ pub(crate) fn wake_condition_from_ref(
             Ok(KernelWakeCondition::Worker(uuid))
         }
         WakeConditionUnionRef::WakeGcComplete(_) => Ok(KernelWakeCondition::GCComplete),
+        WakeConditionUnionRef::WakeTaskMessage(wtm) => {
+            let nanos = wtm
+                .deadline_nanos()
+                .map_err(|e| TaskConversionError::DecodingError(format!("deadline_nanos: {e}")))?;
+            let epoch_duration = Duration::from_nanos(nanos);
+            let epoch_time = UNIX_EPOCH + epoch_duration;
+
+            let now_system = SystemTime::now();
+            let now_instant = Instant::now();
+
+            let wake_instant = if epoch_time >= now_system {
+                let time_diff = epoch_time
+                    .duration_since(now_system)
+                    .unwrap_or(Duration::ZERO);
+                now_instant + time_diff
+            } else {
+                let time_diff = now_system
+                    .duration_since(epoch_time)
+                    .unwrap_or(Duration::ZERO);
+                now_instant.checked_sub(time_diff).unwrap_or(now_instant)
+            };
+
+            Ok(KernelWakeCondition::TaskMessage(wake_instant))
+        }
     }
 }
 
@@ -1740,6 +1786,9 @@ pub(crate) fn task_to_flatbuffer(task: &KernelTask) -> Result<fb::Task, TaskConv
         // Note: waiting_for_exception_handler_task removed - exception handlers no longer suspend
         waiting_for_exception_handler_task: 0,
         has_waiting_for_exception_handler_task: false,
+        // Message queue is stored externally in TaskQ; not serialized with task for now.
+        // On restart, message queues for suspended tasks will be empty.
+        message_queue: None,
     })
 }
 

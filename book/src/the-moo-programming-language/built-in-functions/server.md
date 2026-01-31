@@ -898,6 +898,52 @@ always matches the running program.
 - : The ID of the task to wait for `task_id`
 - `timeout`: Optional timeout in seconds
 
+### `task_send`
+
+**Description:** Sends a message to another task's message queue. The message is buffered and only delivered when the
+sending task's current transaction commits (on `suspend`, `commit`, `read`, task completion, etc.). If the transaction
+is aborted or retried due to a conflict, buffered messages are discarded.
+
+**Syntax:** `task_send(int task_id, any value)`
+
+**Arguments:**
+
+- `task_id`: The ID of the target task (must be an active or queued task)
+- `value`: Any MOO value to send as the message
+
+**Returns:** `0` on success
+
+**Permission Requirements:**
+
+- Caller must be the owner of the target task, or a wizard (same permission model as `kill_task` / `resume`)
+
+**Errors:**
+
+- `E_INVARG`: Target task does not exist
+- `E_PERM`: Caller is not the owner of the target task and is not a wizard
+
+### `task_recv`
+
+**Description:** Commits the current transaction and returns all queued messages as a list, draining the queue. Like
+`commit()` and `read()`, this function always commits the current transaction and resumes in a new one, respecting
+snapshot isolation.
+
+**Syntax:** `list task_recv([num wait_time])`
+
+**Arguments:**
+
+- `wait_time`: Optional maximum number of seconds to wait for messages. Supports fractional seconds (e.g. `0.5`).
+
+**Returns:** A list of all messages that were in the queue (possibly empty).
+
+**Behavior:**
+
+- **No arguments:** Commits the current transaction and immediately returns all queued messages. If no messages are
+  queued, returns an empty list `{}`. This is the fast path, similar to `commit()`.
+- **With `wait_time`:** Commits the current transaction. If messages are already queued, returns them immediately.
+  If the queue is empty, suspends the task for up to `wait_time` seconds. The task wakes when a message arrives or the
+  timeout expires, and returns all accumulated messages (empty list if none arrived).
+
 ## Performance Monitoring
 
 ### `bf_counters`

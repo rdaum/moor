@@ -20,7 +20,7 @@ use hierarchical_hash_wheel_timer::wheels::{
 use minstant::Instant;
 use rayon::ThreadPool;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     hash::BuildHasherDefault,
     sync::{Arc, atomic::AtomicBool},
     time::{Duration, SystemTime},
@@ -60,6 +60,8 @@ pub struct TaskQ {
     pub(crate) suspended: SuspensionQ,
     /// Thread pool for task execution
     pub(crate) thread_pool: ThreadPool,
+    /// Inter-task message queues. Keyed by receiving task_id, shared across active and suspended.
+    pub(crate) task_message_queues: HashMap<TaskId, VecDeque<Var>, BuildHasherDefault<AHasher>>,
 }
 
 /// Scheduler-side per-task record. Lives in the scheduler thread and owned by the scheduler and
@@ -95,6 +97,7 @@ impl TaskQ {
             active: Default::default(),
             suspended,
             thread_pool,
+            task_message_queues: HashMap::default(),
         }
     }
 
@@ -176,6 +179,37 @@ impl TaskQ {
         refs
     }
 
+    /// Deliver a message to a task's incoming queue. If the target task is suspended
+    /// waiting for messages (WakeCondition::TaskMessage), trigger an immediate wake.
+    pub(crate) fn deliver_message(&mut self, target_task_id: TaskId, value: Var) {
+        self.task_message_queues
+            .entry(target_task_id)
+            .or_default()
+            .push_back(value);
+
+        // If the target is suspended and waiting for messages, wake it immediately
+        if self
+            .suspended
+            .message_waiting_tasks
+            .contains(&target_task_id)
+        {
+            let _ = self.suspended.immediate_wake_sender.send(target_task_id);
+        }
+    }
+
+    /// Drain all messages from a task's queue, returning them.
+    pub(crate) fn drain_messages(&mut self, task_id: TaskId) -> Vec<Var> {
+        self.task_message_queues
+            .remove(&task_id)
+            .map(|q| q.into_iter().collect())
+            .unwrap_or_default()
+    }
+
+    /// Remove a task's message queue (e.g., when task is killed/completed).
+    pub(crate) fn remove_message_queue(&mut self, task_id: TaskId) {
+        self.task_message_queues.remove(&task_id);
+    }
+
     /// Trigger database compaction to reclaim space and reduce journal size.
     pub fn compact(&self) {
         self.suspended.compact();
@@ -211,6 +245,8 @@ pub enum WakeCondition {
     GCComplete,
     /// Wake for retry after transaction conflict - includes backoff time
     Retry(Instant),
+    /// Wake when a task message is delivered, or at deadline (whichever first)
+    TaskMessage(Instant),
 }
 
 #[repr(u8)]
@@ -223,6 +259,7 @@ pub enum WakeConditionType {
     Worker = 5,
     GCComplete = 6,
     Retry = 7,
+    TaskMessage = 8,
 }
 
 impl WakeCondition {
@@ -236,6 +273,7 @@ impl WakeCondition {
             WakeCondition::Worker(_) => WakeConditionType::Worker,
             WakeCondition::GCComplete => WakeConditionType::GCComplete,
             WakeCondition::Retry(_) => WakeConditionType::Retry,
+            WakeCondition::TaskMessage(_) => WakeConditionType::TaskMessage,
         }
     }
 }
@@ -271,6 +309,9 @@ pub struct SuspensionQ {
     /// Tasks waiting for retry after transaction conflict
     retry_tasks: Vec<TaskId>,
 
+    /// Tasks waiting for inter-task messages (via task_recv with timeout)
+    message_waiting_tasks: Vec<TaskId>,
+
     tasks_database: Box<dyn TasksDb>,
 }
 
@@ -289,6 +330,7 @@ impl SuspensionQ {
             worker_requests: HashMap::default(),
             gc_waiting_tasks: Vec::new(),
             retry_tasks: Vec::new(),
+            message_waiting_tasks: Vec::new(),
             tasks_database,
         }
     }
@@ -421,6 +463,20 @@ impl SuspensionQ {
                         let _ = self.immediate_wake_sender.send(task_id);
                     }
                 }
+                WakeCondition::TaskMessage(wake_time) => {
+                    self.message_waiting_tasks.push(task_id);
+                    let now = Instant::now();
+                    let inserted = *wake_time > now && {
+                        let delay = wake_time.duration_since(now);
+                        let timer_entry = TimerEntry { task_id, delay };
+                        self.timer_wheel
+                            .insert_with_delay(timer_entry, delay)
+                            .is_ok()
+                    };
+                    if !inserted {
+                        let _ = self.immediate_wake_sender.send(task_id);
+                    }
+                }
             }
 
             self.tasks.insert(task_id, task);
@@ -503,6 +559,21 @@ impl SuspensionQ {
                 }
                 false // Don't persist retry tasks - they're transient
             }
+            WakeCondition::TaskMessage(wake_time) => {
+                self.message_waiting_tasks.push(task_id);
+                let inserted = *wake_time > now && {
+                    let delay = wake_time.duration_since(now);
+                    let timer_entry = TimerEntry { task_id, delay };
+                    self.timer_wheel
+                        .insert_with_delay(timer_entry, delay)
+                        .is_ok()
+                };
+                if !inserted {
+                    // Past deadline - wake immediately
+                    let _ = self.immediate_wake_sender.send(task_id);
+                }
+                true // Persist - message queue state should survive restarts
+            }
         };
 
         let sr = SuspendedTask {
@@ -556,6 +627,9 @@ impl SuspensionQ {
                 }
                 WakeCondition::Retry(_) => {
                     self.retry_tasks.retain(|&id| id != task_id);
+                }
+                WakeCondition::TaskMessage(_) => {
+                    self.message_waiting_tasks.retain(|&id| id != task_id);
                 }
             }
 

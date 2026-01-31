@@ -99,6 +99,9 @@ pub enum TaskSuspend {
     /// Ask the scheduler to ask a worker to do some work, suspend us, and then resume us when
     /// the work is done.
     WorkerRequest(Symbol, Vec<Var>, Option<Duration>),
+    /// Commit and receive inter-task messages. None = immediate (fast path),
+    /// Some(duration) = wait up to duration for messages if queue is empty.
+    RecvMessages(Option<Duration>),
 }
 
 /// Extract anonymous object references from a variable
