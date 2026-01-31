@@ -46,6 +46,7 @@ pub const DEFAULT_BG_SECONDS: u64 = 3;
 pub const DEFAULT_MAX_STACK_DEPTH: usize = 50;
 pub const DEFAULT_GC_INTERVAL_SECONDS: u64 = 30;
 pub const DEFAULT_MAX_TASK_RETRIES: u8 = 10;
+pub const DEFAULT_MAX_TASK_MAILBOX: usize = 1000;
 /// Interval for tasks DB compaction (independent of GC)
 pub const DEFAULT_COMPACT_INTERVAL_SECONDS: u64 = 300;
 
@@ -139,6 +140,8 @@ pub struct ServerOptions {
     pub gc_interval: Option<u64>,
     /// Maximum number of times a task can be retried on transaction conflict before aborting.
     pub max_task_retries: u8,
+    /// Maximum number of messages allowed in a task's mailbox (for task_send/task_recv).
+    pub max_task_mailbox: usize,
 }
 
 impl ServerOptions {

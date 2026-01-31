@@ -39,7 +39,8 @@ use crate::{
     tasks::{
         DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_COMPACT_INTERVAL_SECONDS, DEFAULT_FG_SECONDS,
         DEFAULT_FG_TICKS, DEFAULT_GC_INTERVAL_SECONDS, DEFAULT_MAX_STACK_DEPTH,
-        DEFAULT_MAX_TASK_RETRIES, ServerOptions, TaskHandle, TaskNotification, TaskStart,
+        DEFAULT_MAX_TASK_MAILBOX, DEFAULT_MAX_TASK_RETRIES, ServerOptions, TaskHandle,
+        TaskNotification, TaskStart,
         gc_thread::spawn_gc_mark_phase,
         sched_counters,
         scheduler_client::{SchedulerClient, SchedulerClientMsg},
@@ -96,6 +97,7 @@ lazy_static! {
     static ref DUMP_INTERVAL: Symbol = Symbol::mk("dump_interval");
     static ref GC_INTERVAL: Symbol = Symbol::mk("gc_interval");
     static ref MAX_TASK_RETRIES: Symbol = Symbol::mk("max_task_retries");
+    static ref MAX_TASK_MAILBOX: Symbol = Symbol::mk("max_task_mailbox");
     static ref DO_OUT_OF_BAND_COMMAND: Symbol = Symbol::mk("do_out_of_band_command");
 }
 /// Responsible for the dispatching, control, and accounting of tasks in the system.
@@ -196,6 +198,7 @@ impl Scheduler {
             dump_interval: None,
             gc_interval: None,
             max_task_retries: DEFAULT_MAX_TASK_RETRIES,
+            max_task_mailbox: DEFAULT_MAX_TASK_MAILBOX,
         };
         let builtin_registry = BuiltinRegistry::new();
 
@@ -507,6 +510,11 @@ impl Scheduler {
             load_int_sysprop(&server_options_obj, *MAX_TASK_RETRIES, tx.as_ref())
         {
             so.max_task_retries = max_task_retries as u8;
+        }
+        if let Some(max_task_mailbox) =
+            load_int_sysprop(&server_options_obj, *MAX_TASK_MAILBOX, tx.as_ref())
+        {
+            so.max_task_mailbox = max_task_mailbox as usize;
         }
         if let Some(dump_interval) = load_int_sysprop(&SYSTEM_OBJECT, *DUMP_INTERVAL, tx.as_ref()) {
             info!(
@@ -1689,6 +1697,25 @@ impl Scheduler {
                 if !is_wizard && sender_permissions.who != owner {
                     let _ = result_sender.send(v_error(E_PERM.with_msg(|| {
                         format!("Permission denied for task_send to task ({target_task_id})")
+                    })));
+                    return;
+                }
+
+                // Check mailbox size limit (committed queue + pending sends
+                // from this task to same target)
+                let committed_len = self.task_q.mailbox_len(target_task_id);
+                let pending_len = self.pending_task_sends.get(&task_id).map_or(0, |sends| {
+                    sends
+                        .iter()
+                        .filter(|(tid, _)| *tid == target_task_id)
+                        .count()
+                });
+                if committed_len + pending_len >= self.server_options.max_task_mailbox {
+                    let _ = result_sender.send(v_error(E_QUOTA.with_msg(|| {
+                        format!(
+                            "Task mailbox full ({} messages) for task ({target_task_id})",
+                            committed_len + pending_len
+                        )
                     })));
                     return;
                 }

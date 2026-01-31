@@ -921,6 +921,7 @@ is aborted or retried due to a conflict, buffered messages are discarded.
 
 - `E_INVARG`: Target task does not exist
 - `E_PERM`: Caller is not the owner of the target task and is not a wizard
+- `E_QUOTA`: Target task's mailbox is full (exceeds `$server_options.max_task_mailbox`, default 1000)
 
 ### `task_recv`
 

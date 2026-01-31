@@ -205,6 +205,13 @@ impl TaskQ {
             .unwrap_or_default()
     }
 
+    /// Return the current number of messages in a task's mailbox.
+    pub(crate) fn mailbox_len(&self, task_id: TaskId) -> usize {
+        self.task_message_queues
+            .get(&task_id)
+            .map_or(0, |q| q.len())
+    }
+
     /// Remove a task's message queue (e.g., when task is killed/completed).
     pub(crate) fn remove_message_queue(&mut self, task_id: TaskId) {
         self.task_message_queues.remove(&task_id);

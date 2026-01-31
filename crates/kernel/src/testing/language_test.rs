@@ -27,8 +27,8 @@ mod tests {
     use moor_var::program::ProgramType;
     use moor_var::{
         E_ARGS, E_DIV, E_PERM, E_QUOTA, E_RANGE, E_TYPE, Error, IndexMode, List, NOTHING, Obj,
-        SYSTEM_OBJECT, Symbol, Var, v_bool_int, v_empty_list, v_err, v_float, v_flyweight,
-        v_int, v_list, v_map, v_obj, v_objid, v_str, v_sym,
+        SYSTEM_OBJECT, Symbol, Var, v_bool_int, v_empty_list, v_err, v_float, v_flyweight, v_int,
+        v_list, v_map, v_obj, v_objid, v_str, v_sym,
     };
     use test_case::test_case;
 

@@ -168,7 +168,7 @@ impl TasksDb for FjallTasksDB {
 mod tests {
     use crate::tasks::tasks_db_fjall::FjallTasksDB;
     use moor_common::tasks::NoopClientSession;
-    use moor_kernel::tasks::DEFAULT_MAX_TASK_RETRIES;
+    use moor_kernel::tasks::{DEFAULT_MAX_TASK_MAILBOX, DEFAULT_MAX_TASK_RETRIES};
     use moor_kernel::{
         SuspendedTask, Task, WakeCondition,
         tasks::{ServerOptions, TaskStart, TasksDb},
@@ -212,6 +212,7 @@ mod tests {
             dump_interval: None,
             gc_interval: None,
             max_task_retries: DEFAULT_MAX_TASK_RETRIES,
+            max_task_mailbox: DEFAULT_MAX_TASK_MAILBOX,
         };
 
         /*
@@ -274,6 +275,7 @@ mod tests {
                 dump_interval: None,
                 gc_interval: None,
                 max_task_retries: DEFAULT_MAX_TASK_RETRIES,
+                max_task_mailbox: DEFAULT_MAX_TASK_MAILBOX,
             };
 
             let task = Task::new(
@@ -335,6 +337,7 @@ mod tests {
                 dump_interval: None,
                 gc_interval: None,
                 max_task_retries: DEFAULT_MAX_TASK_RETRIES,
+                max_task_mailbox: DEFAULT_MAX_TASK_MAILBOX,
             };
 
             let task = Task::new(
@@ -409,6 +412,7 @@ mod tests {
             dump_interval: None,
             gc_interval: None,
             max_task_retries: DEFAULT_MAX_TASK_RETRIES,
+            max_task_mailbox: DEFAULT_MAX_TASK_MAILBOX,
         };
 
         // Create tasks with various time-based wake conditions
@@ -520,6 +524,7 @@ mod tests {
             dump_interval: None,
             gc_interval: None,
             max_task_retries: DEFAULT_MAX_TASK_RETRIES,
+            max_task_mailbox: DEFAULT_MAX_TASK_MAILBOX,
         };
 
         let now = minstant::Instant::now();
@@ -593,6 +598,7 @@ mod tests {
             dump_interval: None,
             gc_interval: None,
             max_task_retries: DEFAULT_MAX_TASK_RETRIES,
+            max_task_mailbox: DEFAULT_MAX_TASK_MAILBOX,
         };
 
         // Create a task with a future wake time
