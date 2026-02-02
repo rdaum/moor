@@ -1131,14 +1131,16 @@ impl RpcMessageHandler {
         )?;
 
         let handler_object = extract_obj_rpc(&oob, "handler_object", |o| o.handler_object())?;
-        let command = extract_string_rpc(&oob, "command", |o| o.command())?;
+        let args = extract_var_rpc(&oob, "args", |o| o.args())?;
+        let argstr = extract_var_rpc(&oob, "argstr", |o| o.argstr())?;
 
         self.submit_out_of_bound_task(
             scheduler_client,
             &handler_object,
             client_id,
             &player,
-            command,
+            args,
+            argstr,
         )
     }
 

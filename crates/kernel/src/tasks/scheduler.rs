@@ -52,8 +52,7 @@ use crate::{
         world_state_action::{WorldStateAction, WorldStateResponse},
         world_state_executor::{WorldStateActionExecutor, match_object_ref},
     },
-    trace_task_create_command, trace_task_create_eval, trace_task_create_oob,
-    trace_task_create_verb,
+    trace_task_create_command, trace_task_create_eval, trace_task_create_verb,
     vm::{Fork, TaskSuspend, builtins::BuiltinRegistry},
 };
 
@@ -74,7 +73,7 @@ use moor_common::{
 use moor_objdef::{collect_object, collect_object_definitions, dump_object, extract_index_names};
 use moor_var::{
     E_EXEC, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, List, NOTHING, Obj, SYSTEM_OBJECT,
-    Symbol, Var, Variant, v_bool_int, v_empty_str, v_err, v_error, v_int, v_obj, v_str, v_string,
+    Symbol, Var, Variant, v_bool_int, v_empty_str, v_err, v_error, v_int, v_obj, v_str,
 };
 use std::collections::HashMap;
 
@@ -776,16 +775,12 @@ impl Scheduler {
                 let task_id = self.next_task_id;
                 self.next_task_id += 1;
 
-                trace_task_create_oob!(task_id, &player, &command);
-
-                let args = command.into_iter().map(v_string);
-                let args = List::from_iter(args);
                 let task_start = TaskStart::StartVerb {
                     player,
                     vloc: v_obj(handler_object),
                     verb: *DO_OUT_OF_BAND_COMMAND,
-                    args,
-                    argstr: v_string(argstr),
+                    args: command,
+                    argstr,
                 };
 
                 let result = self.submit_task(task_id, &player, &player, task_start, None, session);

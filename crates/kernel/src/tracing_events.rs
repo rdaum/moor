@@ -1637,6 +1637,7 @@ macro_rules! trace_task_suspend_with_delay {
                     args.len(),
                     timeout
                 ),
+                TaskSuspend::RecvMessages(timeout) => format!("RecvMessages({:?})", timeout),
             };
             emit_trace_event(TraceEventType::TaskSuspend {
                 task_id: $task_id,

@@ -13,6 +13,11 @@
 
 //! Custom codec for telnet connections supporting both text and binary modes
 //! with explicit flush control, similar to LambdaMOO's networking capabilities.
+//!
+//! Telnet protocol commands (IAC sequences) are parsed using a state machine
+//! modeled after ToastStunt's `process_telnet_byte` in network.cc. Commands
+//! are emitted as [`ConnectionItem::TelnetCommand`] for out-of-band processing
+//! rather than being silently discarded.
 
 use bytes::{Buf, Bytes, BytesMut};
 use std::{fmt, io};
@@ -27,13 +32,31 @@ pub enum ConnectionMode {
     Binary,
 }
 
+/// Telnet protocol parsing state, modeled after ToastStunt's TelnetState enum.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum TelnetState {
+    /// Processing normal text input
+    Normal,
+    /// Just saw IAC byte (0xFF)
+    Iac,
+    /// Reading option byte after WILL/WONT/DO/DONT
+    WillWontDoDont,
+    /// Inside subnegotiation (after IAC SB)
+    Subneg,
+    /// Saw IAC while inside subnegotiation
+    SubnegIac,
+}
+
 /// Items emitted by the decoder based on connection mode
 #[derive(Debug)]
 pub enum ConnectionItem {
     /// A complete line (text mode only)
     Line(String),
-    /// Raw bytes (binary mode, or partial data in text mode)
+    /// Raw bytes (binary mode)
     Bytes(Bytes),
+    /// A complete telnet command sequence (IAC + command bytes).
+    /// Emitted as out-of-band data for the connection to handle.
+    TelnetCommand(Bytes),
 }
 
 /// Frames that can be encoded and sent
@@ -79,14 +102,19 @@ impl From<io::Error> for ConnectionCodecError {
     }
 }
 
-/// Custom codec supporting both text and binary modes with explicit flush control
+/// Custom codec supporting both text and binary modes with telnet protocol
+/// handling and explicit flush control, similar to LambdaMOO/ToastStunt.
 pub struct ConnectionCodec {
     mode: ConnectionMode,
-    // Text mode parsing state (similar to LinesCodec)
-    next_index: usize,
+    /// Telnet protocol parsing state (text mode only)
+    telnet_state: TelnetState,
+    /// Accumulates text bytes for the current line being parsed
+    line_buf: Vec<u8>,
+    /// Accumulates bytes for the current telnet command sequence
+    command_buf: Vec<u8>,
+    /// Maximum allowed line length (None for unlimited)
     max_length: Option<usize>,
-    is_discarding: bool,
-    // Track CR state for proper CRLF handling like LambdaMOO
+    /// Track CR state for proper CRLF handling like LambdaMOO
     last_input_was_cr: bool,
 }
 
@@ -95,9 +123,10 @@ impl ConnectionCodec {
     pub fn new() -> Self {
         Self {
             mode: ConnectionMode::Text,
-            next_index: 0,
+            telnet_state: TelnetState::Normal,
+            line_buf: Vec::new(),
+            command_buf: Vec::new(),
             max_length: None,
-            is_discarding: false,
             last_input_was_cr: false,
         }
     }
@@ -106,11 +135,8 @@ impl ConnectionCodec {
     #[cfg(test)]
     pub fn new_with_max_length(max_length: usize) -> Self {
         Self {
-            mode: ConnectionMode::Text,
-            next_index: 0,
             max_length: Some(max_length),
-            is_discarding: false,
-            last_input_was_cr: false,
+            ..Self::new()
         }
     }
 
@@ -119,10 +145,7 @@ impl ConnectionCodec {
     pub fn new_binary() -> Self {
         Self {
             mode: ConnectionMode::Binary,
-            next_index: 0,
-            max_length: None,
-            is_discarding: false,
-            last_input_was_cr: false,
+            ..Self::new()
         }
     }
 
@@ -136,132 +159,121 @@ impl ConnectionCodec {
     pub fn set_mode(&mut self, mode: ConnectionMode) {
         self.mode = mode;
         if mode == ConnectionMode::Binary {
-            self.next_index = 0;
-            self.is_discarding = false;
+            self.telnet_state = TelnetState::Normal;
+            self.command_buf.clear();
             // Preserve last_input_was_cr across mode switches to handle pending LF from CRLF
         }
     }
 
-    /// Decode a line from buffer
-    fn decode_line(&mut self, buf: &mut BytesMut) -> Result<Option<String>, ConnectionCodecError> {
-        // Handle special case: LF immediately following CR from previous buffer
-        if !buf.is_empty() && buf[0] == b'\n' && self.last_input_was_cr && self.next_index == 0 {
-            self.last_input_was_cr = false;
-            buf.advance(1);
-            // Reset next_index since we're at beginning of buffer
-            self.next_index = 0;
-        }
-
-        let read_to = buf.len();
-
-        // Look for line ending from where we left off
-        while self.next_index < read_to {
-            let byte = buf[self.next_index];
-            let is_cr = byte == b'\r';
-            let is_lf = byte == b'\n';
-
-            // LambdaMOO logic: c == '\r' || (c == '\n' && !h->last_input_was_CR)
-            let should_complete_line = is_cr || (is_lf && !self.last_input_was_cr);
-
-            if should_complete_line {
-                // Check line length limit before extracting
-                if let Some(max_length) = self.max_length
-                    && self.next_index > max_length
-                {
-                    return Err(ConnectionCodecError::MaxLineLengthExceeded);
-                }
-
-                // Extract line content (without the line ending character)
-                let line_bytes = buf.split_to(self.next_index);
-                // Consume the line ending character
-                buf.advance(1);
-
-                // Reset state
-                self.next_index = 0;
-                self.is_discarding = false;
-                self.last_input_was_cr = is_cr;
-
-                // Filter control characters and telnet protocol bytes
-                // Only filter ASCII control chars (0x00-0x1F except tab, and 0x7F DEL)
-                // and telnet IAC (0xFF). Preserve all UTF-8 bytes (0x80-0xFE).
-                let line_bytes_filtered: Vec<u8> = line_bytes
-                    .iter()
-                    .copied()
-                    .filter(|&b| {
-                        if b == 0x09 {
-                            return true; // tab is allowed
-                        }
-                        if b == 0xFF {
-                            return false; // telnet IAC byte
-                        }
-                        if b < 0x20 || b == 0x7F {
-                            return false; // ASCII control chars and DEL
-                        }
-                        true
-                    })
-                    .collect();
-
-                // Convert to string using lossy conversion to handle non-UTF8 bytes
-                // Invalid sequences become � (U+FFFD REPLACEMENT CHARACTER)
-                let line_str = String::from_utf8_lossy(&line_bytes_filtered).into_owned();
-                return Ok(Some(line_str));
-            }
-
-            // Update state and continue
-            self.last_input_was_cr = is_cr;
-            self.next_index += 1;
-        }
-
-        // No line ending found, check length limits
-        self.handle_no_newline_found(buf, buf.len())
-    }
-
-    /// Handle the case where no newline was found
-    fn handle_no_newline_found(
+    /// Decode text mode input using a byte-by-byte telnet state machine.
+    ///
+    /// This mirrors ToastStunt's `process_telnet_byte()` function: each byte is
+    /// routed through the state machine. Text bytes accumulate in `line_buf`;
+    /// telnet command bytes accumulate in `command_buf`. The function returns as
+    /// soon as a complete item (line or telnet command) is available.
+    fn decode_text(
         &mut self,
         buf: &mut BytesMut,
-        read_to: usize,
-    ) -> Result<Option<String>, ConnectionCodecError> {
-        let Some(max_length) = self.max_length else {
-            // No length limit, just wait for more data
-            self.next_index = read_to;
-            return Ok(None);
-        };
+    ) -> Result<Option<ConnectionItem>, ConnectionCodecError> {
+        while !buf.is_empty() {
+            let c = buf[0];
+            buf.advance(1);
 
-        if read_to <= max_length {
-            // Under limit, wait for more data
-            self.next_index = read_to;
-            return Ok(None);
-        }
-
-        // Over limit - handle discarding logic
-        if self.is_discarding {
-            // Already discarding, continue until we find a line ending
-            for (offset, &byte) in buf.iter().enumerate() {
-                let is_cr = byte == b'\r';
-                let is_lf = byte == b'\n';
-                let should_complete_line = is_cr || (is_lf && !self.last_input_was_cr);
-
-                if should_complete_line {
-                    // Found line ending, discard up to it and reset
-                    buf.advance(offset + 1);
-                    self.is_discarding = false;
-                    self.next_index = 0;
-                    self.last_input_was_cr = is_cr;
-                    return Ok(None);
+            match self.telnet_state {
+                TelnetState::Normal => {
+                    if c == 0xFF {
+                        // IAC — begin telnet command sequence
+                        self.telnet_state = TelnetState::Iac;
+                        self.command_buf.clear();
+                        self.command_buf.push(c);
+                    } else if c == b'\r' || (c == b'\n' && !self.last_input_was_cr) {
+                        // Line ending (LambdaMOO semantics)
+                        self.last_input_was_cr = c == b'\r';
+                        let line = String::from_utf8_lossy(&self.line_buf).into_owned();
+                        self.line_buf.clear();
+                        return Ok(Some(ConnectionItem::Line(line)));
+                    } else if c == b'\n' && self.last_input_was_cr {
+                        // LF immediately following CR — part of CRLF, ignore
+                        self.last_input_was_cr = false;
+                    } else {
+                        self.last_input_was_cr = false;
+                        // Keep printable characters and tab, filter control chars
+                        // Matches ToastStunt: isgraph(c) || c == ' ' || c == '\t'
+                        if c == 0x09 || (c >= 0x20 && c != 0x7F) {
+                            self.line_buf.push(c);
+                            // Check max line length
+                            if let Some(max) = self.max_length
+                                && self.line_buf.len() > max
+                            {
+                                self.line_buf.clear();
+                                return Err(ConnectionCodecError::MaxLineLengthExceeded);
+                            }
+                        }
+                    }
                 }
-
-                self.last_input_was_cr = is_cr;
+                TelnetState::Iac => {
+                    self.command_buf.push(c);
+                    match c {
+                        0xFF => {
+                            // IAC IAC — escaped literal 0xFF
+                            // Not valid in UTF-8 text, so just discard
+                            self.telnet_state = TelnetState::Normal;
+                        }
+                        0xFA => {
+                            // SB — subnegotiation begin
+                            self.telnet_state = TelnetState::Subneg;
+                        }
+                        0xFB..=0xFE => {
+                            // WILL (0xFB), WONT (0xFC), DO (0xFD), DONT (0xFE)
+                            // Need one more byte (the option code)
+                            self.telnet_state = TelnetState::WillWontDoDont;
+                        }
+                        _ => {
+                            // Two-byte command: NOP(0xF1), DM(0xF2), BRK(0xF3),
+                            // IP(0xF4), AO(0xF5), AYT(0xF6), EC(0xF7), EL(0xF8),
+                            // GA(0xF9), SE(0xF0), or unknown
+                            self.telnet_state = TelnetState::Normal;
+                            let cmd = Bytes::from(std::mem::take(&mut self.command_buf));
+                            return Ok(Some(ConnectionItem::TelnetCommand(cmd)));
+                        }
+                    }
+                }
+                TelnetState::WillWontDoDont => {
+                    // Option byte after WILL/WONT/DO/DONT
+                    self.command_buf.push(c);
+                    self.telnet_state = TelnetState::Normal;
+                    let cmd = Bytes::from(std::mem::take(&mut self.command_buf));
+                    return Ok(Some(ConnectionItem::TelnetCommand(cmd)));
+                }
+                TelnetState::Subneg => {
+                    self.command_buf.push(c);
+                    if c == 0xFF {
+                        self.telnet_state = TelnetState::SubnegIac;
+                    }
+                }
+                TelnetState::SubnegIac => {
+                    self.command_buf.push(c);
+                    match c {
+                        0xF0 => {
+                            // SE — end of subnegotiation
+                            self.telnet_state = TelnetState::Normal;
+                            let cmd = Bytes::from(std::mem::take(&mut self.command_buf));
+                            return Ok(Some(ConnectionItem::TelnetCommand(cmd)));
+                        }
+                        0xFF => {
+                            // IAC IAC within subneg — escaped 0xFF data byte
+                            self.telnet_state = TelnetState::Subneg;
+                        }
+                        _ => {
+                            // Unexpected byte after IAC in subneg — continue
+                            self.telnet_state = TelnetState::Subneg;
+                        }
+                    }
+                }
             }
-
-            // No line ending yet, discard all and wait
-            buf.advance(read_to);
-            return Ok(None);
         }
 
-        // First time hitting limit, start discarding
-        self.is_discarding = true;
-        Err(ConnectionCodecError::MaxLineLengthExceeded)
+        Ok(None)
     }
 }
 
@@ -281,13 +293,7 @@ impl Decoder for ConnectionCodec {
         }
 
         match self.mode {
-            ConnectionMode::Text => {
-                // Parse lines using LinesCodec-style logic
-                let Some(line) = self.decode_line(buf)? else {
-                    return Ok(None);
-                };
-                Ok(Some(ConnectionItem::Line(line)))
-            }
+            ConnectionMode::Text => self.decode_text(buf),
             ConnectionMode::Binary => {
                 // In binary mode, pass through all available bytes
                 let bytes = buf.split().freeze();
@@ -333,24 +339,56 @@ mod tests {
     use super::*;
     use bytes::BytesMut;
 
+    /// Helper: collect all items from a single decode pass until None
+    fn decode_all(codec: &mut ConnectionCodec, buf: &mut BytesMut) -> Vec<ConnectionItem> {
+        let mut items = Vec::new();
+        loop {
+            match codec.decode(buf).unwrap() {
+                Some(item) => items.push(item),
+                None => break,
+            }
+        }
+        items
+    }
+
+    /// Helper: extract line text, panicking if not a Line item
+    fn expect_line(item: ConnectionItem) -> String {
+        match item {
+            ConnectionItem::Line(line) => line,
+            other => panic!("Expected Line, got {:?}", other),
+        }
+    }
+
+    /// Helper: extract telnet command bytes, panicking if not a TelnetCommand item
+    fn expect_telnet_cmd(item: ConnectionItem) -> Bytes {
+        match item {
+            ConnectionItem::TelnetCommand(cmd) => cmd,
+            other => panic!("Expected TelnetCommand, got {:?}", other),
+        }
+    }
+
     #[test]
     fn test_text_mode_line_parsing() {
         let mut codec = ConnectionCodec::new();
         let mut buf = BytesMut::from("hello\nworld\r\n");
 
+        let items = decode_all(&mut codec, &mut buf);
+        assert_eq!(items.len(), 2);
+        assert_eq!(expect_line(items.into_iter().nth(0).unwrap()), "hello");
+    }
+
+    #[test]
+    fn test_text_mode_line_parsing_both() {
+        let mut codec = ConnectionCodec::new();
+        let mut buf = BytesMut::from("hello\nworld\r\n");
+
         // First line (LF ending)
         let item = codec.decode(&mut buf).unwrap().unwrap();
-        match item {
-            ConnectionItem::Line(line) => assert_eq!(line, "hello"),
-            _ => panic!("Expected line"),
-        }
+        assert_eq!(expect_line(item), "hello");
 
-        // Second line (CRLF ending - CR should trigger completion, LF should be ignored)
+        // Second line (CRLF ending - CR triggers completion, LF ignored)
         let item = codec.decode(&mut buf).unwrap().unwrap();
-        match item {
-            ConnectionItem::Line(line) => assert_eq!(line, "world"),
-            _ => panic!("Expected line"),
-        }
+        assert_eq!(expect_line(item), "world");
 
         // No more data
         assert!(codec.decode(&mut buf).unwrap().is_none());
@@ -363,43 +401,28 @@ mod tests {
         // Test standalone CR
         let mut buf = BytesMut::from("line1\r");
         let item = codec.decode(&mut buf).unwrap().unwrap();
-        match item {
-            ConnectionItem::Line(line) => assert_eq!(line, "line1"),
-            _ => panic!("Expected line"),
-        }
+        assert_eq!(expect_line(item), "line1");
 
         // Test LF after CR should be ignored, then parse next line
         let mut buf = BytesMut::from("\nline2\n");
         let item = codec.decode(&mut buf).unwrap().unwrap();
-        match item {
-            ConnectionItem::Line(line) => assert_eq!(line, "line2"),
-            _ => panic!("Expected line"),
-        }
+        assert_eq!(expect_line(item), "line2");
 
         // Test standalone LF (not after CR)
         let mut buf = BytesMut::from("line3\n");
         let item = codec.decode(&mut buf).unwrap().unwrap();
-        match item {
-            ConnectionItem::Line(line) => assert_eq!(line, "line3"),
-            _ => panic!("Expected line"),
-        }
+        assert_eq!(expect_line(item), "line3");
 
         // Test CRLF sequence
         let mut buf = BytesMut::from("line4\r\nline5\n");
 
         // CR should trigger line completion
         let item = codec.decode(&mut buf).unwrap().unwrap();
-        match item {
-            ConnectionItem::Line(line) => assert_eq!(line, "line4"),
-            _ => panic!("Expected line"),
-        }
+        assert_eq!(expect_line(item), "line4");
 
         // LF after CR should be ignored, then next line should work normally
         let item = codec.decode(&mut buf).unwrap().unwrap();
-        match item {
-            ConnectionItem::Line(line) => assert_eq!(line, "line5"),
-            _ => panic!("Expected line"),
-        }
+        assert_eq!(expect_line(item), "line5");
     }
 
     #[test]
@@ -544,27 +567,238 @@ mod tests {
         let mut buf = BytesMut::from(format!("{}\n", test_str).as_bytes());
 
         let item = codec.decode(&mut buf).unwrap().unwrap();
-        match item {
-            ConnectionItem::Line(line) => {
-                assert_eq!(line, test_str);
-            }
-            _ => panic!("Expected line"),
-        }
+        assert_eq!(expect_line(item), test_str);
+    }
+
+    // --- Telnet protocol tests ---
+
+    #[test]
+    fn test_telnet_nop_emitted_as_command() {
+        let mut codec = ConnectionCodec::new();
+
+        // IAC NOP (0xFF 0xF1) should be emitted as a TelnetCommand
+        let mut buf = BytesMut::from(&b"\xFF\xF1hello\n"[..]);
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        let cmd = expect_telnet_cmd(item);
+        assert_eq!(cmd.as_ref(), &[0xFF, 0xF1]);
+
+        // Text after the NOP should be a normal line
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(expect_line(item), "hello");
     }
 
     #[test]
-    fn test_telnet_iac_filtered() {
+    fn test_telnet_nop_standalone() {
         let mut codec = ConnectionCodec::new();
 
-        // Telnet IAC (0xFF) should be filtered out
-        let mut buf = BytesMut::from(&b"hello\xFFworld\n"[..]);
+        // IAC NOP with no text — should emit command, buffer empty after
+        let mut buf = BytesMut::from(&b"\xFF\xF1"[..]);
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        let cmd = expect_telnet_cmd(item);
+        assert_eq!(cmd.as_ref(), &[0xFF, 0xF1]);
+        assert!(buf.is_empty());
+
+        // Subsequent text should arrive clean
+        let mut buf = BytesMut::from(&b"hello\n"[..]);
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(expect_line(item), "hello");
+    }
+
+    #[test]
+    fn test_telnet_nop_between_lines() {
+        let mut codec = ConnectionCodec::new();
+
+        // NOP arriving between two lines of text
+        let mut buf = BytesMut::from(&b"line1\r\n\xFF\xF1line2\r\n"[..]);
+
+        let items = decode_all(&mut codec, &mut buf);
+        assert_eq!(items.len(), 3); // line1, NOP command, line2
+
+        assert_eq!(expect_line(items.into_iter().nth(0).unwrap()), "line1");
+    }
+
+    #[test]
+    fn test_telnet_nop_mid_line() {
+        let mut codec = ConnectionCodec::new();
+
+        // NOP in the middle of text — text on both sides should join into one line
+        let mut buf = BytesMut::from(&b"hel\xFF\xF1lo\n"[..]);
+
+        // First item: the NOP command (emitted when the state machine completes it)
+        // But text before/after NOP accumulates in line_buf across the command
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        let cmd = expect_telnet_cmd(item);
+        assert_eq!(cmd.as_ref(), &[0xFF, 0xF1]);
+
+        // Second item: the complete line with text from both sides of NOP
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(expect_line(item), "hello");
+    }
+
+    #[test]
+    fn test_telnet_will_echo() {
+        let mut codec = ConnectionCodec::new();
+
+        // IAC WILL ECHO (3-byte sequence)
+        let mut buf = BytesMut::from(&b"\xFF\xFB\x01hello\n"[..]);
 
         let item = codec.decode(&mut buf).unwrap().unwrap();
-        match item {
-            ConnectionItem::Line(line) => {
-                assert_eq!(line, "helloworld");
-            }
-            _ => panic!("Expected line"),
-        }
+        let cmd = expect_telnet_cmd(item);
+        assert_eq!(cmd.as_ref(), &[0xFF, 0xFB, 0x01]); // IAC WILL ECHO
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(expect_line(item), "hello");
+    }
+
+    #[test]
+    fn test_telnet_do_dont() {
+        let mut codec = ConnectionCodec::new();
+
+        // IAC DO NAWS (0xFF 0xFD 0x1F) followed by IAC DONT ECHO (0xFF 0xFE 0x01)
+        let mut buf = BytesMut::from(&b"\xFF\xFD\x1F\xFF\xFE\x01ok\n"[..]);
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(expect_telnet_cmd(item).as_ref(), &[0xFF, 0xFD, 0x1F]);
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(expect_telnet_cmd(item).as_ref(), &[0xFF, 0xFE, 0x01]);
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(expect_line(item), "ok");
+    }
+
+    #[test]
+    fn test_telnet_subnegotiation() {
+        let mut codec = ConnectionCodec::new();
+
+        // IAC SB NAWS <width_hi> <width_lo> <height_hi> <height_lo> IAC SE
+        let mut buf = BytesMut::from(&b"\xFF\xFA\x1F\x00\x50\x00\x18\xFF\xF0hello\n"[..]);
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        let cmd = expect_telnet_cmd(item);
+        assert_eq!(
+            cmd.as_ref(),
+            &[0xFF, 0xFA, 0x1F, 0x00, 0x50, 0x00, 0x18, 0xFF, 0xF0]
+        );
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(expect_line(item), "hello");
+    }
+
+    #[test]
+    fn test_telnet_iac_iac_escape() {
+        let mut codec = ConnectionCodec::new();
+
+        // IAC IAC = escaped literal 0xFF — discarded since 0xFF isn't valid text
+        let mut buf = BytesMut::from(&b"hello\xFF\xFFworld\n"[..]);
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        // IAC IAC doesn't emit a command, text on both sides joins
+        assert_eq!(expect_line(item), "helloworld");
+    }
+
+    #[test]
+    fn test_telnet_multiple_nops() {
+        let mut codec = ConnectionCodec::new();
+
+        // Multiple IAC NOP sequences then text
+        let mut buf = BytesMut::from(&b"\xFF\xF1\xFF\xF1say hello\n"[..]);
+
+        let items = decode_all(&mut codec, &mut buf);
+        assert_eq!(items.len(), 3); // NOP, NOP, line
+
+        assert_eq!(
+            expect_telnet_cmd(items.into_iter().nth(0).unwrap()).as_ref(),
+            &[0xFF, 0xF1]
+        );
+    }
+
+    #[test]
+    fn test_telnet_incomplete_iac_at_end() {
+        let mut codec = ConnectionCodec::new();
+
+        // Lone IAC at end of buffer — state preserved for next decode
+        let mut buf = BytesMut::from(&b"hello\xFF"[..]);
+        let result = codec.decode(&mut buf).unwrap();
+        // No complete item yet (line_buf has "hello", telnet_state is Iac)
+        assert!(result.is_none());
+
+        // Complete the NOP in the next buffer
+        let mut buf = BytesMut::from(&b"\xF1\n"[..]);
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        let cmd = expect_telnet_cmd(item);
+        assert_eq!(cmd.as_ref(), &[0xFF, 0xF1]);
+
+        // Then the line
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(expect_line(item), "hello");
+    }
+
+    #[test]
+    fn test_telnet_incomplete_will_at_end() {
+        let mut codec = ConnectionCodec::new();
+
+        // IAC WILL at end of buffer — need one more byte
+        let mut buf = BytesMut::from(&b"\xFF\xFB"[..]);
+        let result = codec.decode(&mut buf).unwrap();
+        assert!(result.is_none());
+
+        // Complete with the option byte
+        let mut buf = BytesMut::from(&b"\x01ok\n"[..]);
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(expect_telnet_cmd(item).as_ref(), &[0xFF, 0xFB, 0x01]);
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(expect_line(item), "ok");
+    }
+
+    #[test]
+    fn test_telnet_incomplete_subneg_at_end() {
+        let mut codec = ConnectionCodec::new();
+
+        // Incomplete subnegotiation — no IAC SE yet
+        let mut buf = BytesMut::from(&b"\xFF\xFA\x1F\x00\x50"[..]);
+        let result = codec.decode(&mut buf).unwrap();
+        assert!(result.is_none());
+
+        // Complete the subnegotiation
+        let mut buf = BytesMut::from(&b"\x00\x18\xFF\xF0done\n"[..]);
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        let cmd = expect_telnet_cmd(item);
+        assert_eq!(
+            cmd.as_ref(),
+            &[0xFF, 0xFA, 0x1F, 0x00, 0x50, 0x00, 0x18, 0xFF, 0xF0]
+        );
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(expect_line(item), "done");
+    }
+
+    #[test]
+    fn test_telnet_preserves_utf8() {
+        let mut codec = ConnectionCodec::new();
+
+        // IAC NOP followed by UTF-8 CJK text — must not corrupt the multi-byte chars
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(b"\xFF\xF1");
+        buf.extend_from_slice("读写汉字\n".as_bytes());
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        expect_telnet_cmd(item); // NOP
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(expect_line(item), "读写汉字");
+    }
+
+    #[test]
+    fn test_control_chars_filtered() {
+        let mut codec = ConnectionCodec::new();
+
+        // Control characters (except tab) should be filtered from text
+        let mut buf = BytesMut::from(&b"he\x01ll\x7Fo\tworld\n"[..]);
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(expect_line(item), "hello\tworld");
     }
 }

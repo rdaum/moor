@@ -62,22 +62,26 @@ pub fn mk_command_msg(
     }
 }
 
-/// Build an OutOfBand message
+/// Build an OutOfBand message.
+/// `args` is the pre-parsed argument list (List of words for string OOB, single-element List
+/// wrapping binary for telnet commands). `argstr` is the original command value.
 #[inline]
 pub fn mk_out_of_band_msg(
     client_token: &ClientToken,
     auth_token: &AuthToken,
     handler_object: &Obj,
-    command: String,
-) -> rpc::HostClientToDaemonMessage {
-    rpc::HostClientToDaemonMessage {
+    args: &Var,
+    argstr: &Var,
+) -> Option<rpc::HostClientToDaemonMessage> {
+    Some(rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::OutOfBand(Box::new(rpc::OutOfBand {
             client_token: client_token_fb(client_token),
             auth_token: auth_token_fb(auth_token),
             handler_object: obj_fb(handler_object),
-            command,
+            args: var_fb(args)?,
+            argstr: var_fb(argstr)?,
         })),
-    }
+    })
 }
 
 /// Build a ClientPong message

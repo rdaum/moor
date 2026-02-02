@@ -140,8 +140,8 @@ impl SchedulerClient {
         &self,
         handler_object: &Obj,
         player: &Obj,
-        command: Vec<String>,
-        argstr: String,
+        command: List,
+        argstr: Var,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
         let _timer = PerfTimerGuard::new(&sched_counters().submit_oob_task_latency);
@@ -674,8 +674,8 @@ pub enum SchedulerClientMsg {
     SubmitOobTask {
         handler_object: Obj,
         player: Obj,
-        command: Vec<String>,
-        argstr: String,
+        command: List,
+        argstr: Var,
         session: Arc<dyn Session>,
         reply: oneshot::Sender<Result<TaskHandle, SchedulerError>>,
     },

@@ -34,7 +34,7 @@ use moor_schema::{
     convert::{compilation_error_from_ref, narrative_event_from_ref, obj_from_ref},
     rpc as moor_rpc,
 };
-use moor_var::{Obj, Symbol, Var, Variant, v_str};
+use moor_var::{List, Obj, Symbol, Var, Variant, v_str, v_string};
 use rpc_async_client::{
     pubsub_client::{broadcast_recv, events_recv},
     rpc_client::RpcClient,
@@ -327,6 +327,7 @@ pub struct PendingTask {
 pub enum ReadEvent {
     Command(String),
     InputReply(Var),
+    TelnetCommand(Var),
     ConnectionClose,
     PendingEvent,
 }
@@ -952,7 +953,7 @@ impl TelnetConnection {
                     };
                     let line = match item {
                         ConnectionItem::Line(line) => line,
-                        ConnectionItem::Bytes(_) => continue,
+                        ConnectionItem::Bytes(_) | ConnectionItem::TelnetCommand(_) => continue,
                     };
                     let words = parse_into_words(&line);
                     let login_msg = mk_login_command_msg(&self.client_token, &self.handler_object, words, true, None, None);
@@ -1042,6 +1043,11 @@ impl TelnetConnection {
                             ReadEvent::PendingEvent
                         }
                     }
+                    ConnectionItem::TelnetCommand(cmd) => {
+                        // Telnet protocol commands (NOP, WILL/WONT/DO/DONT, etc.)
+                        // are emitted as binary OOB data for the server to handle.
+                        ReadEvent::TelnetCommand(Var::mk_binary(cmd.to_vec()))
+                    }
                 }
             };
 
@@ -1063,6 +1069,9 @@ impl TelnetConnection {
                             self.process_requested_input_line(input_data, &mut expecting_input).await.expect("Unable to process input reply");
                             // Update collecting_input flag after processing input
                             self.collecting_input = !expecting_input.is_empty() || matches!(line_mode, LineMode::CollectingTextArea(_));
+                        }
+                        ReadEvent::TelnetCommand(cmd) => {
+                            self.process_telnet_command(cmd).await.expect("Unable to process telnet command");
                         }
                         ReadEvent::ConnectionClose => {
                             info!("Connection closed");
@@ -1731,6 +1740,32 @@ impl TelnetConnection {
         }
     }
 
+    /// Send a telnet protocol command (IAC sequence) to the server as binary OOB data.
+    async fn process_telnet_command(&mut self, cmd: Var) -> Result<(), eyre::Error> {
+        let Some(auth_token) = self.auth_token.clone() else {
+            // No auth yet — silently ignore telnet commands during login
+            return Ok(());
+        };
+
+        let args = Var::from(List::from_iter(std::iter::once(cmd.clone())));
+        let Some(oob_msg) = mk_out_of_band_msg(
+            &self.client_token,
+            &auth_token,
+            &self.handler_object,
+            &args,
+            &cmd,
+        ) else {
+            trace!("Failed to build OOB message for telnet command");
+            return Ok(());
+        };
+        // Fire and forget — we don't wait for OOB task results
+        let _ = self
+            .rpc_client
+            .make_client_rpc_call(self.client_id, oob_msg)
+            .await;
+        Ok(())
+    }
+
     async fn process_command_line(&mut self, line: String) -> Result<(), eyre::Error> {
         let Some(auth_token) = self.auth_token.clone() else {
             bail!("Received command before auth token was set");
@@ -1740,12 +1775,19 @@ impl TelnetConnection {
         self.send_output_prefix().await?;
 
         let result = if line.starts_with(OUT_OF_BAND_PREFIX) && !self.disable_oob {
-            let oob_msg = mk_out_of_band_msg(
+            let argstr = v_str(&line);
+            let words = parse_into_words(&line);
+            let args = Var::from(List::from_iter(words.into_iter().map(v_string)));
+            let Some(oob_msg) = mk_out_of_band_msg(
                 &self.client_token,
                 &auth_token,
                 &self.handler_object,
-                line.clone(),
-            );
+                &args,
+                &argstr,
+            ) else {
+                warn!("Failed to build OOB message for: {}", line);
+                return Ok(());
+            };
             self.rpc_client
                 .make_client_rpc_call(self.client_id, oob_msg)
                 .await?

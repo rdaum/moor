@@ -19,10 +19,10 @@ use crate::rpc::{
     session::RpcSession,
 };
 use eyre::{Context, Error};
-use moor_common::{model::ObjectRef, util::parse_into_words};
+use moor_common::model::ObjectRef;
 use moor_kernel::{SchedulerClient, tasks::TaskNotification};
 use moor_schema::{convert::var_to_flatbuffer, rpc as moor_rpc};
-use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, v_obj};
+use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, Variant, v_obj};
 use rpc_common::{RpcMessageError, scheduler_error_to_flatbuffer_struct};
 use std::sync::Arc;
 use tracing::{debug, error, warn};
@@ -196,7 +196,8 @@ impl RpcMessageHandler {
         handler_object: &Obj,
         client_id: Uuid,
         player: &Obj,
-        command: String,
+        args: Var,
+        argstr: Var,
     ) -> Result<moor_rpc::DaemonToClientReply, RpcMessageError> {
         // Get the connection object for session management
         let connection = self
@@ -213,12 +214,18 @@ impl RpcMessageHandler {
             self.mailbox_sender.clone(),
         ));
 
-        let command_components = parse_into_words(command.as_str());
+        // args and argstr are pre-parsed by the producing host (telnet, websocket, etc.)
+        // and passed through as-is to the scheduler.
+        let args = match args.variant() {
+            Variant::List(l) => l.clone(),
+            _ => List::from_iter(std::iter::once(args)),
+        };
+
         let task_handle = match scheduler_client.submit_out_of_band_task(
             handler_object,
             player,
-            command_components,
-            command,
+            args,
+            argstr,
             session,
         ) {
             Ok(t) => t,

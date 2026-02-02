@@ -623,7 +623,8 @@ table OutOfBand {
     client_token: ClientToken (required);
     auth_token: AuthToken (required);
     handler_object: MoorCommon.Obj (required);
-    command: string (required);
+    args: MoorVar.Var (required);
+    argstr: MoorVar.Var (required);
 }
 
 table Eval {
