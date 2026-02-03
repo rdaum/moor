@@ -27,6 +27,11 @@ Databases from beta7 and earlier cannot be loaded directly.
 
 `kernel`:
 
+- New `task_send()` and `task_recv()` builtins for inter-task messaging; allows wizard or task owner
+  to send transient messages to a task, with `task_recv()` supporting both blocking and non-blocking
+  modes. Delivery is deferred until the sending task commits; reception is a transaction boundary
+  similar to `read()`
+- New `server_options.max_task_mailbox` to configure a cap on task mailbox size
 - New `hotp()`, `totp()`, `random_bytes()`, `encode_base32()`, and `decode_base32()` builtins for
   two-factor authentication support (TOTP defaults to SHA256; use `'sha1` for Google Authenticator
   compatibility)
@@ -78,6 +83,8 @@ Databases from beta7 and earlier cannot be loaded directly.
 - Auto-emoji conversion (e.g., `:-)` to unicode emoji) - enabled by default, configurable; requires
   core support (event must explicitly mark that emojis are present)
 - Improved verb editor pop-out behavior (better positioning, deselects verb in object browser)
+- Interactive UUID-based object IDs with click-to-copy support and toast notification feedback
+- Object ID highlighting now works for plain object IDs, not just UUID-based ones
 
 `docs`:
 
@@ -122,6 +129,15 @@ Databases from beta7 and earlier cannot be loaded directly.
 
 - Default tick limit for `lambda-core` increased
 
+`web-client`:
+
+- Web-client split into its own repository [`meadow`](https://codeberg.org/timbran/meadow) to
+  decouple release cadences and separate issue tracking
+
+`infra`:
+
+- FlatBuffer schema now published to npm registry
+
 ### Fixed
 
 `kernel`:
@@ -134,6 +150,8 @@ Databases from beta7 and earlier cannot be loaded directly.
 - Fixed potential data race in `valid_task()`
 - Reset task clock on commit failures
 - Added missing `E_PERM` mapping for `!r` verbs
+- Return `false`/`0` for unprogrammed verbs for LambdaMOO compatibility (#621)
+- Use proper exponential backoff for transaction abort-retry
 
 `list_sets`:
 
@@ -159,7 +177,8 @@ Databases from beta7 and earlier cannot be loaded directly.
 
 - Connection handling improvements for soft/hard detach behavior; ping timeout fixes
 - IPC worker processes no longer assume CURVE encryption is required
-- Reduced log spam for dangling connections and `bf_respond_to`
+- Reduced log spam for dangling connections, `bf_respond_to`, remote verb invocations, and
+  connection handling
 
 `mcp-host`:
 
@@ -168,6 +187,8 @@ Databases from beta7 and earlier cannot be loaded directly.
 `telnet-host`:
 
 - UTF-8 multibyte character input sequences now handled correctly
+- Handle multibyte IAC telnet sequences, passing them to `$do_out_of_band_command` as Binary
+  payloads
 
 `web-client`:
 
@@ -181,6 +202,11 @@ Databases from beta7 and earlier cannot be loaded directly.
 - Screenreaders now skip reading thumbnails in descriptions
 - Various accessibility improvements (verb editor discoverability, eval panel ARIA, room
   descriptions)
+- Accessibility support enabled for all editors (property editor, eval panel, general text editor),
+  not just verb editor (#620)
+- Fixed prepopulated owner field for new objects/verbs/properties defaulting to selected item's
+  owner instead of player
+- Fixed build errors after Monaco editor upgrade
 
 `infra`:
 
