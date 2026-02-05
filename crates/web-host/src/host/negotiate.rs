@@ -141,27 +141,34 @@ pub fn verb_call_response_to_json(
 pub const BOTH_FORMATS: &[ResponseFormat] =
     &[ResponseFormat::FlatBuffers, ResponseFormat::Json];
 
-/// FlatBuffers only.
-#[allow(dead_code)]
-pub const FB_ONLY: &[ResponseFormat] = &[ResponseFormat::FlatBuffers];
+pub const TEXT_PLAIN_CONTENT_TYPE: &str = "text/plain";
 
-/// Standard JSON error envelope: `{"error": "short_code", "message": "..."}`
-#[allow(dead_code)]
-pub fn json_error_response(status: StatusCode, error_code: &str, message: &str) -> Response {
-    let body = serde_json::json!({
-        "error": error_code,
-        "message": message,
-    });
-    match Response::builder()
-        .status(status)
-        .header("Content-Type", JSON_CONTENT_TYPE)
-        .body(Body::from(serde_json::to_vec(&body).unwrap_or_default()))
+/// Validate that the request Content-Type matches one of the expected types.
+/// Returns `Ok(())` if the header is present and matches, or `Err(415)` otherwise.
+/// An absent Content-Type is accepted when `allow_missing` is true (for
+/// backwards compatibility with clients that omit it on plain-text bodies).
+pub fn require_content_type(
+    content_type: Option<&HeaderValue>,
+    expected: &[&str],
+    allow_missing: bool,
+) -> Result<(), StatusCode> {
+    let ct = match content_type {
+        None if allow_missing => return Ok(()),
+        None => return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE),
+        Some(val) => match val.to_str() {
+            Ok(s) => s,
+            Err(_) => return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE),
+        },
+    };
+    // Strip parameters (e.g. "; charset=utf-8")
+    let media_type = ct.split(';').next().unwrap_or(ct).trim();
+    if expected
+        .iter()
+        .any(|e| media_type.eq_ignore_ascii_case(e))
     {
-        Ok(response) => response,
-        Err(e) => {
-            error!("Failed to build JSON error response: {}", e);
-            status.into_response()
-        }
+        Ok(())
+    } else {
+        Err(StatusCode::UNSUPPORTED_MEDIA_TYPE)
     }
 }
 
@@ -217,8 +224,9 @@ mod tests {
     #[test]
     fn json_not_supported_returns_406() {
         let accept = hv("application/json");
+        let fb_only = &[ResponseFormat::FlatBuffers];
         let result =
-            negotiate_response_format(Some(&accept), FB_ONLY, ResponseFormat::FlatBuffers);
+            negotiate_response_format(Some(&accept), fb_only, ResponseFormat::FlatBuffers);
         assert_eq!(result, Err(StatusCode::NOT_ACCEPTABLE));
     }
 
@@ -252,6 +260,40 @@ mod tests {
         let result =
             negotiate_response_format(Some(&accept), BOTH_FORMATS, ResponseFormat::FlatBuffers);
         assert_eq!(result, Ok(ResponseFormat::Json));
+    }
+
+    #[test]
+    fn require_ct_match() {
+        let ct = hv("application/x-flatbuffers");
+        assert!(require_content_type(Some(&ct), &[FLATBUFFERS_CONTENT_TYPE], false).is_ok());
+    }
+
+    #[test]
+    fn require_ct_with_charset() {
+        let ct = hv("text/plain; charset=utf-8");
+        assert!(require_content_type(Some(&ct), &[TEXT_PLAIN_CONTENT_TYPE], false).is_ok());
+    }
+
+    #[test]
+    fn require_ct_mismatch_returns_415() {
+        let ct = hv("text/html");
+        assert_eq!(
+            require_content_type(Some(&ct), &[FLATBUFFERS_CONTENT_TYPE], false),
+            Err(StatusCode::UNSUPPORTED_MEDIA_TYPE)
+        );
+    }
+
+    #[test]
+    fn require_ct_missing_allowed() {
+        assert!(require_content_type(None, &[FLATBUFFERS_CONTENT_TYPE], true).is_ok());
+    }
+
+    #[test]
+    fn require_ct_missing_rejected() {
+        assert_eq!(
+            require_content_type(None, &[FLATBUFFERS_CONTENT_TYPE], false),
+            Err(StatusCode::UNSUPPORTED_MEDIA_TYPE)
+        );
     }
 
     #[test]

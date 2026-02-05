@@ -15,7 +15,10 @@
 
 use crate::host::{
     WebHost, auth, flatbuffer_response,
-    negotiate::{BOTH_FORMATS, ResponseFormat, negotiate_response_format, reply_result_to_json},
+    negotiate::{
+        BOTH_FORMATS, ResponseFormat, TEXT_PLAIN_CONTENT_TYPE, negotiate_response_format,
+        reply_result_to_json, require_content_type,
+    },
     web_host,
 };
 use axum::{
@@ -73,6 +76,13 @@ pub async fn update_property_handler(
     Path((object, prop_name)): Path<(String, String)>,
     body: Bytes,
 ) -> Response {
+    if let Err(status) = require_content_type(
+        header_map.get(header::CONTENT_TYPE),
+        &[TEXT_PLAIN_CONTENT_TYPE],
+        true, // allow missing for backwards compat
+    ) {
+        return status.into_response();
+    }
     let format = match negotiate_response_format(
         header_map.get(header::ACCEPT),
         BOTH_FORMATS,

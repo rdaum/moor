@@ -23,36 +23,12 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use moor_schema::rpc as moor_rpc;
-#[allow(unused_imports)]
 use rpc_async_client::rpc_client::RpcClient;
 use rpc_common::{AuthToken, ClientToken, mk_detach_msg, mk_login_command_msg, read_reply_result};
 use serde_derive::Deserialize;
 use std::net::SocketAddr;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
-
-/// Ephemeral RPC connection handle. Callers must call `detach()` when done.
-/// Centralizes the detach pattern for ephemeral HTTP connections.
-#[allow(dead_code)]
-pub struct RpcGuard {
-    pub client_id: Uuid,
-    pub client_token: ClientToken,
-    pub rpc_client: RpcClient,
-}
-
-#[allow(dead_code)]
-impl RpcGuard {
-    /// Hard-detach this ephemeral connection. Should be called before the
-    /// response is returned so the daemon cleans up promptly.
-    pub async fn detach(self) {
-        let detach_msg = mk_detach_msg(&self.client_token, true);
-        let _ = self
-            .rpc_client
-            .make_client_rpc_call(self.client_id, detach_msg)
-            .await
-            .map_err(|e| warn!("Unable to send detach to RPC server: {}", e));
-    }
-}
 
 pub fn extract_auth_token_header(header_map: &HeaderMap) -> Result<AuthToken, StatusCode> {
     header_map
