@@ -11,10 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::host::{WebHost, auth, flatbuffer_response, web_host};
+use crate::host::{
+    WebHost, auth, flatbuffer_response,
+    negotiate::{BOTH_FORMATS, ResponseFormat, negotiate_response_format, reply_result_to_json},
+    web_host,
+};
 use axum::{
     extract::{ConnectInfo, Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use moor_common::model::ObjectRef;
@@ -29,7 +33,6 @@ pub struct PropertiesQuery {
     inherited: Option<bool>,
 }
 
-/// FlatBuffer version: GET /fb/properties/{object} - list properties
 pub async fn properties_handler(
     State(host): State<WebHost>,
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
@@ -37,6 +40,15 @@ pub async fn properties_handler(
     Path(object): Path<String>,
     Query(query): Query<PropertiesQuery>,
 ) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
+
     let auth_token = match auth::extract_auth_token_header(&header_map) {
         Ok(token) => token,
         Err(status) => return status.into_response(),
@@ -56,16 +68,30 @@ pub async fn properties_handler(
         Err(status) => return status.into_response(),
     };
 
-    flatbuffer_response(reply_bytes)
+    match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
+        ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
+            Ok(resp) => resp,
+            Err(status) => status.into_response(),
+        },
+    }
 }
 
-/// FlatBuffer version: GET /fb/properties/{object}/{name} - retrieve property value
 pub async fn property_retrieval_handler(
     State(host): State<WebHost>,
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
     Path((object, prop_name)): Path<(String, String)>,
 ) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
+
     let auth_token = match auth::extract_auth_token_header(&header_map) {
         Ok(token) => token,
         Err(status) => return status.into_response(),
@@ -90,5 +116,11 @@ pub async fn property_retrieval_handler(
         Err(status) => return status.into_response(),
     };
 
-    flatbuffer_response(reply_bytes)
+    match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
+        ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
+            Ok(resp) => resp,
+            Err(status) => status.into_response(),
+        },
+    }
 }

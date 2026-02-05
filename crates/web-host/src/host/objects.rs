@@ -13,11 +13,15 @@
 
 //! Object browser endpoints
 
-use crate::host::{WebHost, auth, flatbuffer_response, web_host};
+use crate::host::{
+    WebHost, auth, flatbuffer_response,
+    negotiate::{BOTH_FORMATS, ResponseFormat, negotiate_response_format, reply_result_to_json},
+    web_host,
+};
 use axum::{
     body::Bytes,
     extract::{ConnectInfo, Path, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use moor_common::model::ObjectRef;
@@ -26,12 +30,20 @@ use rpc_common::{mk_list_objects_msg, mk_update_property_msg};
 use std::net::SocketAddr;
 use tracing::error;
 
-/// FlatBuffer version: GET /fb/objects - list all accessible objects
 pub async fn list_objects_handler(
     State(host): State<WebHost>,
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
 ) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
+
     let auth_token = match auth::extract_auth_token_header(&header_map) {
         Ok(token) => token,
         Err(status) => return status.into_response(),
@@ -45,10 +57,15 @@ pub async fn list_objects_handler(
         Err(status) => return status.into_response(),
     };
 
-    flatbuffer_response(reply_bytes)
+    match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
+        ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
+            Ok(resp) => resp,
+            Err(status) => status.into_response(),
+        },
+    }
 }
 
-/// FlatBuffer version: POST /fb/properties/{object}/{name} - update property value
 pub async fn update_property_handler(
     State(host): State<WebHost>,
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
@@ -56,6 +73,15 @@ pub async fn update_property_handler(
     Path((object, prop_name)): Path<(String, String)>,
     body: Bytes,
 ) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
+
     let auth_token = match auth::extract_auth_token_header(&header_map) {
         Ok(token) => token,
         Err(status) => return status.into_response(),
@@ -68,7 +94,6 @@ pub async fn update_property_handler(
 
     let prop_symbol = Symbol::mk(&prop_name);
 
-    // Parse body as MOO literal string
     let literal_str = match String::from_utf8(body.to_vec()) {
         Ok(s) => s,
         Err(e) => {
@@ -77,7 +102,6 @@ pub async fn update_property_handler(
         }
     };
 
-    // Parse the MOO literal into a Var
     let value = match moor_compiler::parse_literal_value(&literal_str) {
         Ok(v) => v,
         Err(e) => {
@@ -97,5 +121,11 @@ pub async fn update_property_handler(
         Err(status) => return status.into_response(),
     };
 
-    flatbuffer_response(reply_bytes)
+    match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
+        ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
+            Ok(resp) => resp,
+            Err(status) => status.into_response(),
+        },
+    }
 }

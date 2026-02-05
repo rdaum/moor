@@ -11,11 +11,18 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::host::{WebHost, auth, flatbuffer_response, web_host};
+use crate::host::{
+    WebHost, auth, flatbuffer_response,
+    negotiate::{
+        BOTH_FORMATS, ResponseFormat, negotiate_response_format, reply_result_to_json,
+        verb_call_response_to_json,
+    },
+    web_host,
+};
 use axum::{
     body::Bytes,
     extract::{ConnectInfo, Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use moor_common::model::ObjectRef;
@@ -46,13 +53,21 @@ pub struct VerbsQuery {
     inherited: Option<bool>,
 }
 
-/// FlatBuffer version: GET /fb/verbs/{object}/{name} - retrieve verb code
 pub async fn verb_retrieval_handler(
     State(host): State<WebHost>,
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
     Path((object, name)): Path<(String, String)>,
 ) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
+
     let auth_token = match auth::extract_auth_token_header(&header_map) {
         Ok(token) => token,
         Err(status) => return status.into_response(),
@@ -72,10 +87,15 @@ pub async fn verb_retrieval_handler(
         Err(status) => return status.into_response(),
     };
 
-    flatbuffer_response(reply_bytes)
+    match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
+        ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
+            Ok(resp) => resp,
+            Err(status) => status.into_response(),
+        },
+    }
 }
 
-/// FlatBuffer version: GET /fb/verbs/{object} - list verbs
 pub async fn verbs_handler(
     State(host): State<WebHost>,
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
@@ -83,6 +103,15 @@ pub async fn verbs_handler(
     Path(object): Path<String>,
     Query(query): Query<VerbsQuery>,
 ) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
+
     let auth_token = match auth::extract_auth_token_header(&header_map) {
         Ok(token) => token,
         Err(status) => return status.into_response(),
@@ -102,7 +131,13 @@ pub async fn verbs_handler(
         Err(status) => return status.into_response(),
     };
 
-    flatbuffer_response(reply_bytes)
+    match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
+        ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
+            Ok(resp) => resp,
+            Err(status) => status.into_response(),
+        },
+    }
 }
 
 /// Extract task_id from a TaskSubmitted response
@@ -235,7 +270,6 @@ async fn wait_for_task_completion(
     }
 }
 
-/// FlatBuffer version: POST /fb/verbs/{object}/{name}/invoke - invoke a verb
 pub async fn invoke_verb_handler(
     State(host): State<WebHost>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -243,6 +277,14 @@ pub async fn invoke_verb_handler(
     Path((object_path, verb_name)): Path<(String, String)>,
     body: Bytes,
 ) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
     tracing::debug!(
         "Invoke verb handler: object={}, verb={}, body_len={}",
         object_path,
@@ -415,14 +457,19 @@ pub async fn invoke_verb_handler(
         }
     };
 
-    // Serialize the response to FlatBuffer bytes
-    let mut builder = planus::Builder::new();
-    let response_bytes = builder.finish(&response, None).to_vec();
-
-    flatbuffer_response(response_bytes)
+    match format {
+        ResponseFormat::FlatBuffers => {
+            let mut builder = planus::Builder::new();
+            let response_bytes = builder.finish(&response, None).to_vec();
+            flatbuffer_response(response_bytes)
+        }
+        ResponseFormat::Json => match verb_call_response_to_json(&response) {
+            Ok(resp) => resp,
+            Err(status) => status.into_response(),
+        },
+    }
 }
 
-/// FlatBuffer version: POST /fb/verbs/{object}/{name} - compile/program a verb
 pub async fn verb_program_handler(
     State(host): State<WebHost>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -430,6 +477,15 @@ pub async fn verb_program_handler(
     Path((object, name)): Path<(String, String)>,
     expression: Bytes,
 ) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
+
     let (auth_token, client_id, client_token, mut rpc_client) =
         match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
             Ok(connection_details) => connection_details,
@@ -456,7 +512,13 @@ pub async fn verb_program_handler(
         Err(status) => return status.into_response(),
     };
 
-    let response = flatbuffer_response(reply_bytes);
+    let response = match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
+        ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
+            Ok(resp) => resp,
+            Err(status) => return status.into_response(),
+        },
+    };
 
     // Hard detach for ephemeral HTTP connections - immediate cleanup
     let detach_msg = moor_rpc::HostClientToDaemonMessage {

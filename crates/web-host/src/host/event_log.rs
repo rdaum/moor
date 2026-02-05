@@ -13,11 +13,16 @@
 
 //! Event log encryption and history endpoints
 
-use crate::host::{auth, flatbuffer_response, web_host::WebHost, web_host::rpc_call};
+use crate::host::{
+    auth, flatbuffer_response,
+    negotiate::{BOTH_FORMATS, ResponseFormat, negotiate_response_format, reply_result_to_json},
+    web_host::WebHost,
+    web_host::rpc_call,
+};
 use axum::{
     Json,
     extract::{ConnectInfo, Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use moor_schema::rpc as moor_rpc;
@@ -75,14 +80,21 @@ pub struct HistoryQuery {
     limit: Option<usize>,
 }
 
-/// REST endpoint to retrieve player event history as encrypted FlatBuffer blobs
-/// Client-side decryption: returns encrypted events, no key needed in header
 pub async fn history_handler(
     State(host): State<WebHost>,
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
     Query(query): Query<HistoryQuery>,
 ) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
+
     let (auth_token, client_id, mut rpc_client) =
         match auth::stateless_rpc_client(&host, &header_map) {
             Ok(ctx) => ctx,
@@ -154,9 +166,13 @@ pub async fn history_handler(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    // Return the entire HistoryResponse as FlatBuffer bytes
-    // Client will parse the FlatBuffer and decrypt the encrypted_blob field of each event
-    flatbuffer_response(reply_bytes)
+    match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
+        ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
+            Ok(resp) => resp,
+            Err(status) => status.into_response(),
+        },
+    }
 }
 
 /// REST endpoint to get player's event log public key
@@ -341,12 +357,20 @@ pub async fn dismiss_presentation_handler(
     response.into_response()
 }
 
-/// FlatBuffer version: GET /fb/api/presentations - return raw flatbuffer bytes
 pub async fn presentations_handler(
     State(host): State<WebHost>,
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
 ) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
+
     let (auth_token, client_id, mut rpc_client) =
         match auth::stateless_rpc_client(&host, &header_map) {
             Ok(ctx) => ctx,
@@ -360,6 +384,11 @@ pub async fn presentations_handler(
         Err(status) => return status.into_response(),
     };
 
-    // Return raw FlatBuffer bytes
-    flatbuffer_response(reply_bytes)
+    match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
+        ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
+            Ok(resp) => resp,
+            Err(status) => status.into_response(),
+        },
+    }
 }

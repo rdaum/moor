@@ -23,12 +23,36 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use moor_schema::rpc as moor_rpc;
+#[allow(unused_imports)]
 use rpc_async_client::rpc_client::RpcClient;
 use rpc_common::{AuthToken, ClientToken, mk_detach_msg, mk_login_command_msg, read_reply_result};
 use serde_derive::Deserialize;
 use std::net::SocketAddr;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
+
+/// Ephemeral RPC connection handle. Callers must call `detach()` when done.
+/// Centralizes the detach pattern for ephemeral HTTP connections.
+#[allow(dead_code)]
+pub struct RpcGuard {
+    pub client_id: Uuid,
+    pub client_token: ClientToken,
+    pub rpc_client: RpcClient,
+}
+
+#[allow(dead_code)]
+impl RpcGuard {
+    /// Hard-detach this ephemeral connection. Should be called before the
+    /// response is returned so the daemon cleans up promptly.
+    pub async fn detach(self) {
+        let detach_msg = mk_detach_msg(&self.client_token, true);
+        let _ = self
+            .rpc_client
+            .make_client_rpc_call(self.client_id, detach_msg)
+            .await
+            .map_err(|e| warn!("Unable to send detach to RPC server: {}", e));
+    }
+}
 
 pub fn extract_auth_token_header(header_map: &HeaderMap) -> Result<AuthToken, StatusCode> {
     header_map
@@ -216,7 +240,7 @@ async fn auth_handler(
     // from :do_login_command. This is the user's "real" connection.
     match Response::builder()
         .status(StatusCode::OK)
-        .header("Content-Type", "application/x-flatbuffer")
+        .header("Content-Type", "application/x-flatbuffers")
         .header("X-Moor-Auth-Token", auth_token.0)
         .header("X-Moor-Client-Token", client_token.0.clone())
         .header("X-Moor-Client-Id", client_id.to_string())
@@ -266,30 +290,54 @@ pub fn stateless_rpc_client(
     Ok((auth_token, client_id, rpc_client))
 }
 
-/// Validate an auth token without establishing a full session.
-/// This just checks that the auth token is present and syntactically valid.
-/// The actual cryptographic validation happens when the websocket connects.
-/// We don't require an existing connection - connections are cleaned up on soft detach,
-/// but the auth token remains valid for reconnection.
+/// Validate an auth token by round-tripping to the daemon.
+/// Creates a stateless RPC client and attempts to attach with the token.
+/// Returns:
+///   200 — token is valid
+///   401 — token is invalid or expired
+///   503 — daemon is unreachable
 pub async fn validate_auth_handler(
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
-    State(_host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(host): State<WebHost>,
     header_map: HeaderMap,
 ) -> impl IntoResponse {
-    // Just check that auth token is present and non-empty
     let auth_token = match extract_auth_token_header(&header_map) {
         Ok(token) => token,
         Err(status) => return status.into_response(),
     };
 
-    // Basic syntactic check - PASETO tokens start with "v4.public."
+    // Basic syntactic check first to avoid unnecessary RPC calls
     if !auth_token.0.starts_with("v4.public.") {
         debug!("Auth token has invalid format");
         return StatusCode::UNAUTHORIZED.into_response();
     }
 
-    debug!("Auth token validated (syntactic check passed)");
-    StatusCode::OK.into_response()
+    // Round-trip to the daemon: attempt a NoConnect attach which validates
+    // the token cryptographically without creating a real session.
+    match host
+        .attach_authenticated(
+            auth_token,
+            Some(moor_rpc::ConnectType::NoConnect),
+            addr,
+        )
+        .await
+    {
+        Ok((_player, client_id, client_token, rpc_client)) => {
+            debug!("Auth token validated via daemon");
+            // Clean up the ephemeral connection
+            let detach_msg = mk_detach_msg(&client_token, true);
+            let _ = rpc_client.make_client_rpc_call(client_id, detach_msg).await;
+            StatusCode::OK.into_response()
+        }
+        Err(WsHostError::AuthenticationFailed) => {
+            debug!("Auth token rejected by daemon");
+            StatusCode::UNAUTHORIZED.into_response()
+        }
+        Err(e) => {
+            error!("Daemon unreachable during token validation: {}", e);
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+    }
 }
 
 /// Explicit logout endpoint that notifies daemon that player is disconnecting

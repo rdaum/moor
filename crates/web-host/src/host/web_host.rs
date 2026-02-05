@@ -13,10 +13,14 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use crate::host::{auth, flatbuffer_response, ws_connection::WebSocketConnection};
+use crate::host::{
+    auth, flatbuffer_response,
+    negotiate::{BOTH_FORMATS, ResponseFormat, negotiate_response_format, reply_result_to_json},
+    ws_connection::WebSocketConnection,
+};
 use axum::{
     Json,
-    body::{Body, Bytes},
+    body::Bytes,
     extract::{ConnectInfo, Path, State, WebSocketUpgrade},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
@@ -33,6 +37,7 @@ use rpc_common::{
     mk_get_server_features_msg, mk_reattach_msg, mk_register_host_msg, mk_request_sys_prop_msg,
     mk_resolve_msg, read_reply_result,
 };
+use ipnet::IpNet;
 use std::{
     net::{IpAddr, SocketAddr},
     sync::{
@@ -46,14 +51,35 @@ use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-/// Extract the real client IP address from proxy headers or ConnectInfo
-/// Checks X-Real-IP and X-Forwarded-For headers first (for nginx/proxy setups),
-/// then falls back to the direct connection address
-fn get_client_addr(headers: &HeaderMap, connect_addr: SocketAddr) -> SocketAddr {
+/// Extract the real client IP address from proxy headers or ConnectInfo.
+/// Only honours X-Real-IP / X-Forwarded-For if the direct peer is within
+/// a trusted proxy CIDR. Otherwise returns the direct connection address.
+fn get_client_addr(
+    headers: &HeaderMap,
+    connect_addr: SocketAddr,
+    trusted_cidrs: &[IpNet],
+) -> SocketAddr {
     debug!(
         "Extracting client address. Direct connect_addr: {}",
         connect_addr
     );
+
+    // Only trust proxy headers when the direct peer is in a trusted CIDR
+    let peer_trusted = !trusted_cidrs.is_empty()
+        && trusted_cidrs
+            .iter()
+            .any(|cidr| cidr.contains(&connect_addr.ip()));
+
+    if !peer_trusted {
+        if !trusted_cidrs.is_empty() {
+            debug!(
+                "Peer {} not in trusted proxy CIDRs, ignoring proxy headers",
+                connect_addr.ip()
+            );
+        }
+        return connect_addr;
+    }
+
     debug!(
         "  X-Real-IP header: {:?}",
         headers.get("X-Real-IP").and_then(|h| h.to_str().ok())
@@ -331,6 +357,9 @@ pub struct WebHost {
     curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
     pub(crate) host_id: Uuid,
     last_daemon_ping: Arc<AtomicU64>,
+    pub(crate) trusted_proxy_cidrs: Arc<Vec<IpNet>>,
+    /// Cached server features response (features don't change at runtime).
+    features_cache: Arc<tokio::sync::OnceCell<Vec<u8>>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -350,6 +379,7 @@ impl WebHost {
         curve_keys: Option<(String, String, String)>,
         host_id: Uuid,
         last_daemon_ping: Arc<AtomicU64>,
+        trusted_proxy_cidrs: Arc<Vec<IpNet>>,
     ) -> Self {
         let tmq_context = tmq::Context::new();
         Self {
@@ -361,6 +391,8 @@ impl WebHost {
             curve_keys,
             host_id,
             last_daemon_ping,
+            trusted_proxy_cidrs,
+            features_cache: Arc::new(tokio::sync::OnceCell::new()),
         }
     }
 }
@@ -1012,18 +1044,35 @@ pub(crate) async fn rpc_call(
     }
 }
 
-/// FlatBuffer version: Returns raw FlatBuffer bytes instead of JSON
-pub async fn features_handler(State(host): State<WebHost>) -> Response {
-    match host.fetch_server_features().await {
-        Ok(bytes) => Response::builder()
-            .status(StatusCode::OK)
-            .header("Content-Type", "application/x-flatbuffer")
-            .body(Body::from(bytes))
-            .unwrap_or_else(|e| {
-                error!("Failed to build features response: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }),
-        Err(status) => status.into_response(),
+pub async fn features_handler(
+    State(host): State<WebHost>,
+    header_map: HeaderMap,
+) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
+
+    // Features don't change at runtime — cache the result of the first fetch.
+    let bytes = match host
+        .features_cache
+        .get_or_try_init(|| host.fetch_server_features())
+        .await
+    {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(bytes.clone()),
+        ResponseFormat::Json => match reply_result_to_json(bytes) {
+            Ok(resp) => resp,
+            Err(status) => status.into_response(),
+        },
     }
 }
 
@@ -1033,16 +1082,23 @@ pub async fn system_property_handler(
     header_map: HeaderMap,
     Path(path): Path<String>,
 ) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
+
     let auth_token = auth::extract_auth_token_header(&header_map).ok();
     let mut rpc_client = host.create_rpc_client();
     let client_id = Uuid::new_v4();
 
-    // Parse the path into object reference and property name
     let path_parts: Vec<&str> = path.split('/').collect();
     let (obj_path, property_name) = if path_parts.len() < 2 {
         return StatusCode::BAD_REQUEST.into_response();
     } else {
-        // Multiple parts: last is property, rest is object path
         let obj_parts = &path_parts[..path_parts.len() - 1];
         let prop = path_parts[path_parts.len() - 1];
         (obj_parts.iter().map(|&s| Symbol::mk(s)).collect(), prop)
@@ -1059,10 +1115,13 @@ pub async fn system_property_handler(
         Err(status) => return status.into_response(),
     };
 
-    // Just return the raw FlatBuffer bytes!
-    // No parsing, no JSON conversion - the client will handle it
-
-    flatbuffer_response(reply_bytes)
+    match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
+        ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
+            Ok(resp) => resp,
+            Err(status) => status.into_response(),
+        },
+    }
 }
 
 /// Attach a websocket connection to an existing player.
@@ -1185,7 +1244,7 @@ pub async fn ws_connect_attach_handler(
         "ws_connect_attach_handler called, ConnectInfo addr: {}",
         addr
     );
-    let client_addr = get_client_addr(&headers, addr);
+    let client_addr = get_client_addr(&headers, addr, &ws_host.trusted_proxy_cidrs);
     info!("WebSocket connection from {}", client_addr);
 
     let attach_info = match extract_ws_attach_info(&headers) {
@@ -1217,7 +1276,7 @@ pub async fn ws_create_attach_handler(
         "ws_create_attach_handler called, ConnectInfo addr: {}",
         addr
     );
-    let client_addr = get_client_addr(&headers, addr);
+    let client_addr = get_client_addr(&headers, addr, &ws_host.trusted_proxy_cidrs);
     info!("WebSocket connection from {}", client_addr);
 
     let attach_info = match extract_ws_attach_info(&headers) {
@@ -1238,13 +1297,21 @@ pub async fn ws_create_attach_handler(
     .await
 }
 
-/// FlatBuffer version: GET /fb/objects/{object} - resolve object reference
 pub async fn resolve_objref_handler(
     State(host): State<WebHost>,
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
     Path(object): Path<String>,
 ) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
+
     let auth_token = match auth::extract_auth_token_header(&header_map) {
         Ok(token) => token,
         Err(status) => return status.into_response(),
@@ -1266,16 +1333,30 @@ pub async fn resolve_objref_handler(
         Err(status) => return status.into_response(),
     };
 
-    flatbuffer_response(reply_bytes)
+    match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
+        ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
+            Ok(resp) => resp,
+            Err(status) => status.into_response(),
+        },
+    }
 }
 
-/// FlatBuffer version: POST /fb/eval - evaluate expression
 pub async fn eval_handler(
     State(host): State<WebHost>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
     expression: Bytes,
 ) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
+
     let (auth_token, client_id, client_token, mut rpc_client) =
         match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
             Ok(connection_details) => connection_details,
@@ -1290,7 +1371,13 @@ pub async fn eval_handler(
         Err(status) => return status.into_response(),
     };
 
-    let response = flatbuffer_response(reply_bytes);
+    let response = match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
+        ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
+            Ok(resp) => resp,
+            Err(status) => return status.into_response(),
+        },
+    };
 
     // Hard detach for ephemeral HTTP connections - immediate cleanup
     let detach_msg = moor_rpc::HostClientToDaemonMessage {
@@ -1304,17 +1391,25 @@ pub async fn eval_handler(
     response
 }
 
-/// FlatBuffer version: GET /fb/invoke_welcome_message - invoke #0:do_login_command
 pub async fn invoke_welcome_message_handler(
     State(host): State<WebHost>,
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
 ) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
+
     let mut rpc_client = host.create_rpc_client();
     let client_id = Uuid::new_v4();
 
-    // Create the system verb call for #0:do_login_command
     let verb = Symbol::mk("do_login_command");
-    let args: Vec<&moor_var::Var> = vec![]; // No arguments for do_login_command
+    let args: Vec<&moor_var::Var> = vec![];
 
     let call_system_verb_msg = match mk_call_system_verb_msg(None, &verb, args) {
         Some(msg) => msg,
@@ -1329,7 +1424,13 @@ pub async fn invoke_welcome_message_handler(
         Err(status) => return status.into_response(),
     };
 
-    flatbuffer_response(reply_bytes)
+    match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
+        ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
+            Ok(resp) => resp,
+            Err(status) => status.into_response(),
+        },
+    }
 }
 
 /// Health check endpoint - verifies host is healthy and can communicate with daemon
