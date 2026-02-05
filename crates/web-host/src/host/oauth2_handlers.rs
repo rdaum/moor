@@ -13,12 +13,15 @@
 
 //! HTTP handlers for OAuth2 authentication endpoints
 
-use crate::host::{WebHost, oauth2::OAuth2Manager};
+use crate::host::{
+    WebHost,
+    oauth2::{OAuth2Manager, PendingOAuth2Code, PendingOAuth2Store},
+};
 use axum::{
     Json,
     extract::{ConnectInfo, Path, Query, State},
-    http::StatusCode,
-    response::{IntoResponse, Redirect},
+    http::{HeaderMap, StatusCode, header},
+    response::{IntoResponse, Redirect, Response},
 };
 use moor_common::model::ObjectRef;
 use moor_schema::rpc as moor_rpc;
@@ -27,11 +30,48 @@ use serde_derive::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tracing::{debug, error, info, warn};
 
+const OAUTH2_NONCE_COOKIE: &str = "moor_oauth_nonce";
+const OAUTH2_NONCE_COOKIE_MAX_AGE: u64 = 600;
+
+fn extract_cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
+    let cookie_header = headers.get(header::COOKIE)?.to_str().ok()?;
+    for part in cookie_header.split(';') {
+        let trimmed = part.trim();
+        if let Some((cookie_name, value)) = trimmed.split_once('=')
+            && cookie_name == name
+        {
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
+fn make_nonce_cookie_value(nonce: &str, max_age_seconds: u64, secure: bool) -> String {
+    let mut value = format!(
+        "{}={}; Max-Age={}; Path=/; HttpOnly; SameSite=Lax",
+        OAUTH2_NONCE_COOKIE, nonce, max_age_seconds
+    );
+    if secure {
+        value.push_str("; Secure");
+    }
+    value
+}
+
+fn attach_set_cookie(mut response: Response, cookie: &str) -> Response {
+    if let Ok(cookie_value) = cookie.parse() {
+        response
+            .headers_mut()
+            .append(header::SET_COOKIE, cookie_value);
+    }
+    response
+}
+
 /// Shared state for OAuth2 handlers
 #[derive(Clone)]
 pub struct OAuth2State {
     pub manager: Arc<OAuth2Manager>,
     pub web_host: WebHost,
+    pub pending: Arc<PendingOAuth2Store>,
 }
 
 /// Response for authorization URL request
@@ -67,15 +107,18 @@ pub struct OAuth2LoginResponse {
     pub error: Option<String>,
 }
 
-/// Request body for account choice submission
+/// Request body for code exchange (both existing-user auth and new-user identity)
+#[derive(Deserialize)]
+pub struct CodeExchangeRequest {
+    pub code: String,
+}
+
+/// Request body for account choice submission.
+/// The `oauth2_code` is a one-time server-side code that resolves to the verified identity.
 #[derive(Deserialize)]
 pub struct AccountChoiceRequest {
-    pub mode: String, // "oauth2_create" or "oauth2_connect"
-    pub provider: String,
-    pub external_id: String,
-    pub email: Option<String>,
-    pub name: Option<String>,
-    pub username: Option<String>,
+    pub mode: String,       // "oauth2_create" or "oauth2_connect"
+    pub oauth2_code: String, // One-time code from callback redirect
     pub player_name: Option<String>,       // For oauth2_create
     pub existing_email: Option<String>,    // For oauth2_connect
     pub existing_password: Option<String>, // For oauth2_connect
@@ -100,12 +143,21 @@ pub async fn oauth2_authorize_handler(
 
     match oauth2_state.manager.get_authorization_url(&provider) {
         Ok((auth_url, csrf_token)) => {
+            let state = csrf_token.secret().clone();
+            let browser_nonce = uuid::Uuid::new_v4().to_string();
+            oauth2_state
+                .pending
+                .store_csrf_token(&provider, &state, browser_nonce.clone());
             info!("Generated OAuth2 authorization URL for {}", provider);
-            Json(AuthUrlResponse {
-                auth_url,
-                state: csrf_token.secret().clone(),
-            })
-            .into_response()
+            let response = Json(AuthUrlResponse { auth_url, state }).into_response();
+            attach_set_cookie(
+                response,
+                &make_nonce_cookie_value(
+                    &browser_nonce,
+                    OAUTH2_NONCE_COOKIE_MAX_AGE,
+                    oauth2_state.manager.oauth_cookie_secure(),
+                ),
+            )
         }
         Err(e) => {
             error!("Failed to generate authorization URL: {}", e);
@@ -125,12 +177,27 @@ pub async fn oauth2_callback_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Path(provider): Path<String>,
     Query(query): Query<OAuth2CallbackQuery>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
     debug!("OAuth2 callback from provider: {} with code", provider);
 
     if !oauth2_state.manager.is_enabled() {
         warn!("OAuth2 is not enabled");
         return Redirect::to("/?error=oauth2_disabled").into_response();
+    }
+
+    let Some(browser_nonce) = extract_cookie_value(&headers, OAUTH2_NONCE_COOKIE) else {
+        warn!("Missing OAuth2 browser nonce cookie in callback");
+        return Redirect::to("/?error=invalid_state").into_response();
+    };
+
+    // Validate CSRF state token (bound to provider)
+    if !oauth2_state
+        .pending
+        .validate_csrf_token(&provider, &query.state, &browser_nonce)
+    {
+        warn!("Invalid or expired CSRF state token in OAuth2 callback");
+        return Redirect::to("/?error=invalid_state").into_response();
     }
 
     // Complete OAuth2 flow: exchange code and get user info
@@ -152,7 +219,6 @@ pub async fn oauth2_callback_handler(
     );
 
     // Check if this OAuth2 identity already exists in the system
-    // We do this by calling the daemon with oauth2_check mode
     let (client_id, rpc_client, client_token) = match oauth2_state
         .web_host
         .establish_client_connection(addr)
@@ -196,7 +262,6 @@ pub async fn oauth2_callback_handler(
         }
     };
 
-    // Check if user exists
     let Ok(result) = reply.result() else {
         error!("Missing result in reply");
         return Redirect::to("/?error=internal_error").into_response();
@@ -228,7 +293,7 @@ pub async fn oauth2_callback_handler(
     };
 
     if success {
-        // Existing user - extract auth token and player OID, then redirect
+        // Existing user — store auth session server-side, redirect with one-time code
         let Ok(Some(token_ref)) = login_result.auth_token() else {
             error!("Missing auth_token in login result");
             return Redirect::to("/?error=internal_error").into_response();
@@ -249,7 +314,6 @@ pub async fn oauth2_callback_handler(
             return Redirect::to("/?error=internal_error").into_response();
         };
 
-        // Extract player flags
         let Ok(player_flags) = login_result.player_flags() else {
             error!("Missing player_flags in login result");
             return Redirect::to("/?error=internal_error").into_response();
@@ -259,36 +323,121 @@ pub async fn oauth2_callback_handler(
             "Existing OAuth2 user logged in: {} (flags: {})",
             player_obj, player_flags
         );
-        // Return CURIE format (oid:N or uuid:xxx) and include client credentials for reconnection
+
         let player_curie = ObjectRef::Id(player_obj).to_curie();
+        let pending = PendingOAuth2Code::AuthSession {
+            auth_token: rpc_common::AuthToken(auth_token.to_string()),
+            player_curie,
+            player_flags,
+            client_token,
+            client_id,
+        };
+        let Some(code) = oauth2_state
+            .pending
+            .store_pending_code(pending, browser_nonce.clone())
+        else {
+            error!("Failed to store pending auth code");
+            return Redirect::to("/?error=internal_error").into_response();
+        };
+        Redirect::to(&format!("/#auth_code={}", code)).into_response()
+    } else {
+        // New user — store verified identity server-side, redirect with one-time code + display hints
+        let display_info = serde_json::json!({
+            "email": user_info.email,
+            "name": user_info.name,
+            "username": user_info.username,
+            "provider": user_info.provider,
+        });
+        let pending = PendingOAuth2Code::Identity(user_info);
+        let Some(code) = oauth2_state
+            .pending
+            .store_pending_code(pending, browser_nonce)
+        else {
+            error!("Failed to store pending identity code");
+            return Redirect::to("/?error=internal_error").into_response();
+        };
+        let display_str = display_info.to_string();
         let redirect_url = format!(
-            "/?auth_token={}&player={}&flags={}&client_token={}&client_id={}",
-            auth_token, player_curie, player_flags, client_token.0, client_id
+            "/#oauth2_code={}&oauth2_display={}",
+            code,
+            urlencoding::encode(&display_str),
         );
         Redirect::to(&redirect_url).into_response()
-    } else {
-        // New user - redirect to account choice page with user info
-        let user_info_json = serde_json::to_string(&user_info).unwrap_or_default();
-        let encoded_info = urlencoding::encode(&user_info_json);
-        Redirect::to(&format!(
-            "/?oauth2_user_info={}&state={}",
-            encoded_info, query.state
-        ))
-        .into_response()
+    }
+}
+
+/// POST /auth/oauth2/exchange
+/// Exchange a one-time code for auth tokens (existing user) or identity info (new user).
+/// Both code types are stored server-side and consumed on use.
+pub async fn oauth2_exchange_handler(
+    State(oauth2_state): State<OAuth2State>,
+    headers: HeaderMap,
+    Json(request): Json<CodeExchangeRequest>,
+) -> impl IntoResponse {
+    let Some(browser_nonce) = extract_cookie_value(&headers, OAUTH2_NONCE_COOKIE) else {
+        warn!("Missing OAuth2 browser nonce cookie in exchange request");
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "Missing OAuth2 browser nonce"})),
+        )
+            .into_response();
+    };
+
+    let payload = match oauth2_state
+        .pending
+        .redeem_pending_code(&request.code, &browser_nonce)
+    {
+        Some(payload) => payload,
+        None => {
+            warn!("Invalid or expired code in exchange request");
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Invalid or expired code"})),
+            )
+                .into_response();
+        }
+    };
+
+    match payload {
+        PendingOAuth2Code::AuthSession {
+            auth_token,
+            player_curie,
+            player_flags,
+            client_token,
+            client_id,
+        } => Json(serde_json::json!({
+            "type": "auth_session",
+            "auth_token": auth_token.0,
+            "player": player_curie,
+            "player_flags": player_flags,
+            "client_token": client_token.0,
+            "client_id": client_id.to_string(),
+        }))
+        .into_response(),
+
+        PendingOAuth2Code::Identity(user_info) => Json(serde_json::json!({
+            "type": "identity",
+            "provider": user_info.provider,
+            "email": user_info.email,
+            "name": user_info.name,
+            "username": user_info.username,
+        }))
+        .into_response(),
     }
 }
 
 /// POST /auth/oauth2/account
-/// Handle account choice submission (create new or link existing)
+/// Handle account choice submission (create new or link existing).
+/// The `oauth2_code` in the request is a one-time server-side code that resolves
+/// to the verified provider identity. This prevents client-side tampering with
+/// external_id or other identity fields.
 pub async fn oauth2_account_choice_handler(
     State(oauth2_state): State<OAuth2State>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(choice): Json<AccountChoiceRequest>,
 ) -> impl IntoResponse {
-    debug!(
-        "OAuth2 account choice: mode={}, provider={}",
-        choice.mode, choice.provider
-    );
+    debug!("OAuth2 account choice: mode={}", choice.mode);
 
     if !oauth2_state.manager.is_enabled() {
         warn!("OAuth2 is not enabled");
@@ -307,26 +456,64 @@ pub async fn oauth2_account_choice_handler(
         ).into_response();
     }
 
-    // Build arguments for LoginCommand based on mode
+    let Some(browser_nonce) = extract_cookie_value(&headers, OAUTH2_NONCE_COOKIE) else {
+        warn!("Missing OAuth2 browser nonce cookie in account choice");
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "Missing OAuth2 browser nonce"})),
+        )
+            .into_response();
+    };
+
+    // Redeem the one-time code — must resolve to an Identity variant
+    let user_info = match oauth2_state
+        .pending
+        .redeem_pending_code(&choice.oauth2_code, &browser_nonce)
+    {
+        Some(PendingOAuth2Code::Identity(info)) => info,
+        Some(_) => {
+            warn!("Code resolved to wrong type (expected identity)");
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid code type for account choice"})),
+            )
+                .into_response();
+        }
+        None => {
+            warn!("Invalid or expired OAuth2 code in account choice");
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Invalid or expired OAuth2 code"})),
+            )
+                .into_response();
+        }
+    };
+
+    info!(
+        "Verified OAuth2 identity: provider={}, external_id={}",
+        user_info.provider, user_info.external_id
+    );
+
+    // Build arguments for LoginCommand based on mode, using server-verified identity fields
     let final_args = if choice.mode == "oauth2_create" {
         vec![
             choice.mode.clone(),
-            choice.provider.clone(),
-            choice.external_id.clone(),
-            choice.email.clone().unwrap_or_default(),
-            choice.name.clone().unwrap_or_default(),
-            choice.username.clone().unwrap_or_default(),
+            user_info.provider,
+            user_info.external_id,
+            user_info.email.unwrap_or_default(),
+            user_info.name.unwrap_or_default(),
+            user_info.username.unwrap_or_default(),
             choice.player_name.clone().unwrap_or_default(),
         ]
     } else {
         // oauth2_connect
         vec![
             choice.mode.clone(),
-            choice.provider.clone(),
-            choice.external_id.clone(),
-            choice.email.clone().unwrap_or_default(),
-            choice.name.clone().unwrap_or_default(),
-            choice.username.clone().unwrap_or_default(),
+            user_info.provider,
+            user_info.external_id,
+            user_info.email.unwrap_or_default(),
+            user_info.name.unwrap_or_default(),
+            user_info.username.unwrap_or_default(),
             choice.existing_email.clone().unwrap_or_default(),
             choice.existing_password.clone().unwrap_or_default(),
         ]
@@ -349,7 +536,6 @@ pub async fn oauth2_account_choice_handler(
         }
     };
 
-    // Call daemon with complete user info
     let login_msg = mk_login_command_msg(
         &client_token,
         &oauth2_state.web_host.handler_object,
@@ -383,7 +569,6 @@ pub async fn oauth2_account_choice_handler(
         }
     };
 
-    // Return login result
     let Ok(result) = reply.result() else {
         error!("Missing result in reply");
         return (
@@ -483,7 +668,6 @@ pub async fn oauth2_account_choice_handler(
                 .into_response();
         };
 
-        // Extract player flags
         let Ok(player_flags) = login_result.player_flags() else {
             error!("Missing player_flags in login result");
             return (
@@ -498,7 +682,6 @@ pub async fn oauth2_account_choice_handler(
             choice.mode, player_obj, player_flags
         );
 
-        // Return JSON with auth token, player CURIE, flags, and client credentials for reconnection
         Json(OAuth2LoginResponse {
             success: true,
             auth_token: Some(auth_token.to_string()),
@@ -510,7 +693,6 @@ pub async fn oauth2_account_choice_handler(
         })
         .into_response()
     } else {
-        // Login failed
         warn!("OAuth2 account {} failed", choice.mode);
         (
             StatusCode::UNAUTHORIZED,

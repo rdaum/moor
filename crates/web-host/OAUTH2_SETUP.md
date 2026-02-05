@@ -61,6 +61,8 @@ cp crates/web-host/web-host-oauth2-example.yaml my-oauth2.yaml
 oauth2:
   enabled: true
   base_url: "http://localhost:8080"
+  # Optional: when omitted, inferred from base_url scheme (https => true)
+  cookie_secure: false
   providers:
     github:
       client_id: "Iv1.abc123def456"  # Your GitHub Client ID
@@ -118,6 +120,8 @@ private_key: "moor-data/moor_host.pem"
 oauth2:
   enabled: true
   base_url: "http://localhost:8080"  # Must match your deployment
+  # Optional: when omitted, inferred from base_url scheme (https => true)
+  cookie_secure: false
   providers:
     # Add providers here
 ```

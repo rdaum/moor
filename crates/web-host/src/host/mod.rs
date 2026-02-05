@@ -27,10 +27,10 @@ pub use event_log::{
     delete_history_handler, dismiss_presentation_handler, get_pubkey_handler, history_handler,
     presentations_handler, set_pubkey_handler,
 };
-pub use oauth2::{OAuth2Config, OAuth2Manager};
+pub use oauth2::{OAuth2Config, OAuth2Manager, PendingOAuth2Store};
 pub use oauth2_handlers::{
     OAuth2State, oauth2_account_choice_handler, oauth2_authorize_handler, oauth2_callback_handler,
-    oauth2_config_handler,
+    oauth2_config_handler, oauth2_exchange_handler,
 };
 pub use objects::{list_objects_handler, update_property_handler};
 pub use props::{properties_handler, property_retrieval_handler};

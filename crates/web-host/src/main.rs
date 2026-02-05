@@ -13,12 +13,13 @@
 
 mod host;
 
-use crate::host::{OAuth2Config, OAuth2Manager, OAuth2State, WebHost};
+use crate::host::{OAuth2Config, OAuth2Manager, OAuth2State, PendingOAuth2Store, WebHost};
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::{
     Router,
+    extract::DefaultBodyLimit,
     routing::{get, post, put},
 };
 use clap::Parser;
@@ -183,9 +184,23 @@ impl Listeners {
                     );
 
                     // Create OAuth2State if OAuth2 is enabled
-                    let oauth2_state = self.oauth2_manager.as_ref().map(|manager| OAuth2State {
-                        manager: Arc::clone(manager),
-                        web_host: ws_host.clone(),
+                    let oauth2_state = self.oauth2_manager.as_ref().map(|manager| {
+                        let pending = Arc::new(PendingOAuth2Store::new());
+                        // Spawn a background task to reap expired CSRF tokens and auth codes
+                        let reap_pending = Arc::clone(&pending);
+                        tokio::spawn(async move {
+                            let mut interval =
+                                tokio::time::interval(std::time::Duration::from_secs(60));
+                            loop {
+                                interval.tick().await;
+                                reap_pending.reap_expired();
+                            }
+                        });
+                        OAuth2State {
+                            manager: Arc::clone(manager),
+                            web_host: ws_host.clone(),
+                            pending,
+                        }
                     });
 
                     let main_router = match mk_routes(ws_host, oauth2_state, self.enable_webhooks) {
@@ -353,6 +368,10 @@ fn mk_routes(
                 "/auth/oauth2/account",
                 post(host::oauth2_account_choice_handler),
             )
+            .route(
+                "/auth/oauth2/exchange",
+                post(host::oauth2_exchange_handler),
+            )
             .with_state(oauth2_state);
 
         webhost_router = webhost_router.merge(oauth2_router);
@@ -368,6 +387,9 @@ fn mk_routes(
             .with_state(web_host.clone());
         webhost_router = webhost_router.merge(webhook_router);
     }
+
+    // 1 MB default body size limit to prevent memory exhaustion
+    let webhost_router = webhost_router.layer(DefaultBodyLimit::max(1024 * 1024));
 
     Ok(webhost_router)
 }

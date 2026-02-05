@@ -10,6 +10,9 @@ private_key: "path/to/private_key.pem"
 oauth2:
   enabled: true
   base_url: "http://localhost:8080"
+  # Optional: force Secure on OAuth nonce cookie.
+  # If omitted, moor-web-host enables Secure automatically when base_url starts with https://
+  cookie_secure: false
   providers:
     github:
       client_id: "YOUR_GITHUB_CLIENT_ID"

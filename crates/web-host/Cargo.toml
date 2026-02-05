@@ -48,7 +48,7 @@ serde.workspace = true
 serde_derive.workspace = true
 serde_json.workspace = true
 
-# Authentication
+# Authentication & Security
 oauth2.workspace = true
 
 # Networking & Communication

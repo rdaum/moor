@@ -35,7 +35,7 @@ pub fn extract_auth_token_header(header_map: &HeaderMap) -> Result<AuthToken, St
         .get("X-Moor-Auth-Token")
         .and_then(|value| value.to_str().ok())
         .map(|token| AuthToken(token.to_string()))
-        .ok_or(StatusCode::FORBIDDEN)
+        .ok_or(StatusCode::UNAUTHORIZED)
 }
 
 pub fn extract_client_credentials(header_map: &HeaderMap) -> Option<(Uuid, ClientToken)> {

@@ -14,6 +14,9 @@ oauth2:
   enabled: true
   # Base URL must match your deployment (used for redirect URIs)
   base_url: "http://localhost:8080"
+  # Optional: force Secure on OAuth nonce cookie.
+  # If omitted, moor-web-host enables Secure automatically when base_url starts with https://
+  cookie_secure: false
 
   providers:
     # Google OAuth2

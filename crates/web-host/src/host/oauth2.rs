@@ -17,9 +17,13 @@ use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope,
     TokenResponse, TokenUrl, basic::BasicClient,
 };
+use rpc_common::{AuthToken, ClientToken};
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::RwLock;
+use std::time::{Duration, Instant};
 use tracing::{debug, info};
+use uuid::Uuid;
 
 /// Configuration for a single OAuth2 provider
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +41,8 @@ pub struct OAuth2ProviderConfig {
 pub struct OAuth2Config {
     pub enabled: bool,
     pub base_url: String,
+    #[serde(default)]
+    pub cookie_secure: Option<bool>,
     pub providers: HashMap<String, OAuth2ProviderConfig>,
 }
 
@@ -48,6 +54,150 @@ pub struct ExternalUserInfo {
     pub email: Option<String>,
     pub name: Option<String>,
     pub username: Option<String>,
+}
+
+const CSRF_TOKEN_TTL: Duration = Duration::from_secs(600); // 10 minutes
+const PENDING_CODE_TTL: Duration = Duration::from_secs(120); // 2 minutes
+
+#[derive(Clone)]
+struct PendingCsrfEntry {
+    browser_nonce: String,
+    created: Instant,
+}
+
+/// What a pending OAuth2 code resolves to when redeemed.
+#[derive(Clone)]
+pub enum PendingOAuth2Code {
+    /// Existing user — contains a ready-to-use auth session.
+    AuthSession {
+        auth_token: AuthToken,
+        player_curie: String,
+        player_flags: u16,
+        client_token: ClientToken,
+        client_id: Uuid,
+    },
+    /// New user — contains the verified identity from the provider.
+    Identity(ExternalUserInfo),
+}
+
+/// Entry in the pending-codes map.
+#[derive(Clone)]
+struct PendingEntry {
+    payload: PendingOAuth2Code,
+    browser_nonce: String,
+    created: Instant,
+}
+
+/// Server-side store for OAuth2 pending state: CSRF tokens and one-time codes.
+///
+/// CSRF tokens are keyed as `"provider:token_value"` to bind them to the provider
+/// that initiated the flow, preventing cross-provider mix-up attacks.
+///
+/// One-time codes are used for both the existing-user auth-session handoff and the
+/// new-user identity handoff, so that neither auth tokens nor identity proof tokens
+/// ever appear in redirect URL query parameters.
+pub struct PendingOAuth2Store {
+    /// CSRF tokens: "provider:token_value" -> browser-bound entry
+    csrf_tokens: RwLock<HashMap<String, PendingCsrfEntry>>,
+    /// One-time codes: code -> pending entry (auth session or identity)
+    pending_codes: RwLock<HashMap<String, PendingEntry>>,
+}
+
+impl PendingOAuth2Store {
+    pub fn new() -> Self {
+        Self {
+            csrf_tokens: RwLock::new(HashMap::new()),
+            pending_codes: RwLock::new(HashMap::new()),
+        }
+    }
+
+    /// Store a CSRF token bound to a provider.
+    pub fn store_csrf_token(&self, provider: &str, token: &str, browser_nonce: String) {
+        let key = format!("{}:{}", provider, token);
+        if let Ok(mut tokens) = self.csrf_tokens.write() {
+            tokens.insert(
+                key,
+                PendingCsrfEntry {
+                    browser_nonce,
+                    created: Instant::now(),
+                },
+            );
+        }
+    }
+
+    /// Validate and consume a CSRF token. Returns true if valid and bound to the given provider.
+    pub fn validate_csrf_token(&self, provider: &str, token: &str, browser_nonce: &str) -> bool {
+        let key = format!("{}:{}", provider, token);
+        let Ok(mut tokens) = self.csrf_tokens.write() else {
+            return false;
+        };
+        match tokens.remove(&key) {
+            Some(entry)
+                if entry.created.elapsed() < CSRF_TOKEN_TTL
+                    && entry.browser_nonce == browser_nonce =>
+            {
+                true
+            }
+            None => false,
+            _ => false,
+        }
+    }
+
+    /// Store a pending entry (auth session or identity) and return the one-time code.
+    pub fn store_pending_code(
+        &self,
+        payload: PendingOAuth2Code,
+        browser_nonce: String,
+    ) -> Option<String> {
+        let code = Uuid::new_v4().to_string();
+        let entry = PendingEntry {
+            payload,
+            browser_nonce,
+            created: Instant::now(),
+        };
+        let Ok(mut codes) = self.pending_codes.write() else {
+            return None;
+        };
+        codes.insert(code.clone(), entry);
+        Some(code)
+    }
+
+    /// Redeem a one-time code, consuming it. Returns the payload if valid and not expired.
+    pub fn redeem_pending_code(&self, code: &str, browser_nonce: &str) -> Option<PendingOAuth2Code> {
+        let Ok(mut codes) = self.pending_codes.write() else {
+            return None;
+        };
+        match codes.remove(code) {
+            Some(entry)
+                if entry.created.elapsed() < PENDING_CODE_TTL
+                    && entry.browser_nonce == browser_nonce =>
+            {
+                Some(entry.payload)
+            }
+            _ => None,
+        }
+    }
+
+    /// Reap expired entries from all stores.
+    pub fn reap_expired(&self) {
+        if let Ok(mut csrf) = self.csrf_tokens.write() {
+            let before = csrf.len();
+            csrf.retain(|_, entry| entry.created.elapsed() < CSRF_TOKEN_TTL);
+            let reaped = before - csrf.len();
+            if reaped > 0 {
+                debug!("Reaped {} expired CSRF tokens", reaped);
+            }
+        }
+
+        if let Ok(mut codes) = self.pending_codes.write() {
+            let before = codes.len();
+            codes.retain(|_, entry| entry.created.elapsed() < PENDING_CODE_TTL);
+            let reaped = before - codes.len();
+            if reaped > 0 {
+                debug!("Reaped {} expired pending codes", reaped);
+            }
+        }
+    }
 }
 
 // Type alias for a fully-configured OAuth2 client with auth and token URLs set
@@ -137,6 +287,16 @@ impl OAuth2Manager {
     /// Get list of available provider names
     pub fn available_providers(&self) -> Vec<String> {
         self.clients.keys().cloned().collect()
+    }
+
+    /// Whether OAuth2 nonce cookies should include the `Secure` attribute.
+    ///
+    /// If `cookie_secure` is configured explicitly, use that value.
+    /// Otherwise infer from `base_url` and enable only for `https://`.
+    pub fn oauth_cookie_secure(&self) -> bool {
+        self.config
+            .cookie_secure
+            .unwrap_or_else(|| self.config.base_url.starts_with("https://"))
     }
 
     /// Generate an authorization URL for a provider
