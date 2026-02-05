@@ -561,51 +561,51 @@ fn mk_routes(
         .route("/auth/validate", get(host::validate_auth_handler))
         .route("/auth/logout", post(host::logout_handler))
         .route(
-            "/api/system_property/{*path}",
+            "/v1/system_property/{*path}",
             get(host::system_property_handler),
         )
-        .route("/api/eval", post(host::eval_handler))
-        .route("/api/features", get(host::features_handler))
+        .route("/v1/eval", post(host::eval_handler))
+        .route("/v1/features", get(host::features_handler))
         .route("/health", get(host::health_handler))
         .route("/version", get(host::version_handler))
         .route(
-            "/api/invoke_welcome_message",
+            "/v1/invoke_welcome_message",
             get(host::invoke_welcome_message_handler),
         )
         .route(
-            "/api/verbs/{object}/{name}",
+            "/v1/verbs/{object}/{name}",
             post(host::verb_program_handler),
         )
-        .route("/api/verbs/{object}", get(host::verbs_handler))
+        .route("/v1/verbs/{object}", get(host::verbs_handler))
         .route(
-            "/api/verbs/{object}/{name}",
+            "/v1/verbs/{object}/{name}",
             get(host::verb_retrieval_handler),
         )
         .route(
-            "/api/verbs/{object}/{name}/invoke",
+            "/v1/verbs/{object}/{name}/invoke",
             post(host::invoke_verb_handler),
         )
-        .route("/api/properties/{object}", get(host::properties_handler))
+        .route("/v1/properties/{object}", get(host::properties_handler))
         .route(
-            "/api/properties/{object}/{name}",
+            "/v1/properties/{object}/{name}",
             get(host::property_retrieval_handler),
         )
         .route(
-            "/api/properties/{object}/{name}",
+            "/v1/properties/{object}/{name}",
             post(host::update_property_handler),
         )
-        .route("/api/objects", get(host::list_objects_handler))
-        .route("/api/objects/{object}", get(host::resolve_objref_handler))
-        .route("/api/history", get(host::history_handler))
-        .route("/api/presentations", get(host::presentations_handler))
+        .route("/v1/objects", get(host::list_objects_handler))
+        .route("/v1/objects/{object}", get(host::resolve_objref_handler))
+        .route("/v1/history", get(host::history_handler))
+        .route("/v1/presentations", get(host::presentations_handler))
         .route(
-            "/api/presentations/{presentation_id}",
+            "/v1/presentations/{presentation_id}",
             axum::routing::delete(host::dismiss_presentation_handler),
         )
-        .route("/api/event-log/pubkey", get(host::get_pubkey_handler))
-        .route("/api/event-log/pubkey", put(host::set_pubkey_handler))
+        .route("/v1/event-log/pubkey", get(host::get_pubkey_handler))
+        .route("/v1/event-log/pubkey", put(host::set_pubkey_handler))
         .route(
-            "/api/event-log/history",
+            "/v1/event-log/history",
             axum::routing::delete(host::delete_history_handler),
         )
         .with_state(web_host.clone());
@@ -616,7 +616,7 @@ fn mk_routes(
     // Add OAuth2 routes if OAuth2 is enabled
     if let Some(oauth2_state) = oauth2_state {
         let oauth2_router = Router::new()
-            .route("/api/oauth2/config", get(host::oauth2_config_handler))
+            .route("/v1/oauth2/config", get(host::oauth2_config_handler))
             .route(
                 "/auth/oauth2/{provider}/authorize",
                 get(host::oauth2_authorize_handler),

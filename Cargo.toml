@@ -125,14 +125,14 @@ fs2 = "0.4"
 axum = { version = "0.8", features = ["ws"] }
 hickory-resolver = "0.25"
 ipnet = "2.11"
-tower = "0.5"
-tower-http = { version = "0.6", features = ["cors"] }
-tower_governor = "0.6"
 reqwest = { version = "0.12", default-features = false }
 rustls-pemfile = "2.2"
 socket2 = { version = "0.6", features = ["all"] }
 tmq = "0.5"
 tokio-rustls = "0.26"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors"] }
+tower_governor = "0.6"
 zmq = "0.10"
 
 # Async Runtime & Concurrency

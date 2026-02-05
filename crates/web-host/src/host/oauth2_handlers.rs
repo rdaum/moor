@@ -710,7 +710,7 @@ pub async fn oauth2_account_choice_handler(
     }
 }
 
-/// GET /api/oauth2/config
+/// GET /v1/oauth2/config
 /// Return OAuth2 configuration including enabled status and available providers
 pub async fn oauth2_config_handler(State(oauth2_state): State<OAuth2State>) -> impl IntoResponse {
     debug!("OAuth2 config request");
