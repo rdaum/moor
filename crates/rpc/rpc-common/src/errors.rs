@@ -19,8 +19,9 @@ use moor_schema::convert::{symbol_from_ref, var_from_ref};
 use moor_schema::{
     common,
     convert::{
-        compilation_error_to_flatbuffer_struct, error_to_flatbuffer_struct, exception_from_ref,
-        uuid_from_ref, var_to_flatbuffer,
+        compilation_error_from_ref, compilation_error_to_flatbuffer_struct,
+        error_to_flatbuffer_struct, exception_from_ref, uuid_from_ref, var_to_flatbuffer,
+        world_state_error_from_ref,
     },
     fb_read, rpc,
 };
@@ -282,10 +283,9 @@ pub fn scheduler_error_from_ref(
             Ok(SchedulerError::InputRequestNotFound(request_id.as_u128()))
         }
         rpc::SchedulerErrorUnionRef::CouldNotStartTask(_) => Ok(SchedulerError::CouldNotStartTask),
-        rpc::SchedulerErrorUnionRef::CompilationError(_compile_error) => {
-            // CompileError is too complex to fully deserialize from bytes here
-            // Return a placeholder for now
-            Err("CompilationError deserialization not yet fully implemented".to_string())
+        rpc::SchedulerErrorUnionRef::CompilationError(compile_error) => {
+            let error = compilation_error_from_ref(fb_read!(compile_error, error))?;
+            Ok(SchedulerError::CompilationError(error))
         }
         rpc::SchedulerErrorUnionRef::CommandExecutionError(cmd_error) => {
             let command_error = command_error_from_ref(fb_read!(cmd_error, error))?;
@@ -325,17 +325,17 @@ pub fn scheduler_error_from_ref(
             let verb_error = verb_program_error_from_ref(fb_read!(verb_failed, error))?;
             Ok(SchedulerError::VerbProgramFailed(verb_error))
         }
-        rpc::SchedulerErrorUnionRef::PropertyRetrievalFailed(_prop_failed) => {
-            // WorldStateError is too complex to fully deserialize from bytes
-            Err("PropertyRetrievalFailed deserialization not yet fully implemented".to_string())
+        rpc::SchedulerErrorUnionRef::PropertyRetrievalFailed(prop_failed) => {
+            let ws_error = world_state_error_from_ref(fb_read!(prop_failed, error))?;
+            Ok(SchedulerError::PropertyRetrievalFailed(ws_error))
         }
-        rpc::SchedulerErrorUnionRef::VerbRetrievalFailed(_verb_failed) => {
-            // WorldStateError is too complex to fully deserialize from bytes
-            Err("VerbRetrievalFailed deserialization not yet fully implemented".to_string())
+        rpc::SchedulerErrorUnionRef::VerbRetrievalFailed(verb_failed) => {
+            let ws_error = world_state_error_from_ref(fb_read!(verb_failed, error))?;
+            Ok(SchedulerError::VerbRetrievalFailed(ws_error))
         }
-        rpc::SchedulerErrorUnionRef::ObjectResolutionFailed(_obj_failed) => {
-            // WorldStateError is too complex to fully deserialize from bytes
-            Err("ObjectResolutionFailed deserialization not yet fully implemented".to_string())
+        rpc::SchedulerErrorUnionRef::ObjectResolutionFailed(obj_failed) => {
+            let ws_error = world_state_error_from_ref(fb_read!(obj_failed, error))?;
+            Ok(SchedulerError::ObjectResolutionFailed(ws_error))
         }
         rpc::SchedulerErrorUnionRef::GarbageCollectionFailed(gc_failed) => {
             let message = fb_read!(gc_failed, message).to_string();

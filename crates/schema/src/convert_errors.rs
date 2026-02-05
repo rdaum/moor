@@ -19,11 +19,13 @@
 use crate::convert_var::var_from_flatbuffer_ref;
 use crate::{
     StrErr, common,
-    common::CompileErrorUnionRef,
-    convert_common::{symbol_from_ref, symbol_to_flatbuffer_struct},
+    common::{CompileErrorUnionRef, WorldStateErrorUnionRef},
+    convert_common::{
+        obj_from_ref, objectref_from_ref, symbol_from_ref, symbol_to_flatbuffer_struct,
+    },
     convert_var::var_to_flatbuffer,
 };
-use moor_common::model::{CompileContext, CompileError, ParseErrorDetails};
+use moor_common::model::{CompileContext, CompileError, ParseErrorDetails, Vid, WorldStateError};
 use moor_var::Var;
 // ============================================================================
 // Helper functions for reducing boilerplate
@@ -429,4 +431,96 @@ pub fn compilation_error_to_flatbuffer_struct(
     };
 
     Ok(common::CompileError { error: error_union })
+}
+
+/// Convert from FlatBuffer WorldStateErrorRef to moor_common::model::WorldStateError
+pub fn world_state_error_from_ref(
+    error_ref: common::WorldStateErrorRef<'_>,
+) -> Result<WorldStateError, String> {
+    match fb_read!(error_ref, error) {
+        WorldStateErrorUnionRef::ObjectNotFound(e) => {
+            let objref = objectref_from_ref(fb_read!(e, object_ref))?;
+            Ok(WorldStateError::ObjectNotFound(objref))
+        }
+        WorldStateErrorUnionRef::ObjectAlreadyExists(e) => {
+            let obj = obj_from_ref(fb_read!(e, obj))?;
+            Ok(WorldStateError::ObjectAlreadyExists(obj))
+        }
+        WorldStateErrorUnionRef::RecursiveMove(e) => {
+            let from_obj = obj_from_ref(fb_read!(e, from_obj))?;
+            let to_obj = obj_from_ref(fb_read!(e, to_obj))?;
+            Ok(WorldStateError::RecursiveMove(from_obj, to_obj))
+        }
+        WorldStateErrorUnionRef::ObjectPermissionDenied(_) => {
+            Ok(WorldStateError::ObjectPermissionDenied)
+        }
+        WorldStateErrorUnionRef::PropertyNotFound(e) => {
+            let obj = obj_from_ref(fb_read!(e, obj))?;
+            let property = fb_read!(e, property).to_string();
+            Ok(WorldStateError::PropertyNotFound(obj, property))
+        }
+        WorldStateErrorUnionRef::PropertyPermissionDenied(_) => {
+            Ok(WorldStateError::PropertyPermissionDenied)
+        }
+        WorldStateErrorUnionRef::PropertyDefinitionNotFound(e) => {
+            let obj = obj_from_ref(fb_read!(e, obj))?;
+            let property = fb_read!(e, property).to_string();
+            Ok(WorldStateError::PropertyDefinitionNotFound(obj, property))
+        }
+        WorldStateErrorUnionRef::DuplicatePropertyDefinition(e) => {
+            let obj = obj_from_ref(fb_read!(e, obj))?;
+            let property = fb_read!(e, property).to_string();
+            Ok(WorldStateError::DuplicatePropertyDefinition(obj, property))
+        }
+        WorldStateErrorUnionRef::ChparentPropertyNameConflict(e) => {
+            let descendant = obj_from_ref(fb_read!(e, descendant))?;
+            let ancestor = obj_from_ref(fb_read!(e, ancestor))?;
+            let property = fb_read!(e, property).to_string();
+            Ok(WorldStateError::ChparentPropertyNameConflict(
+                descendant, ancestor, property,
+            ))
+        }
+        WorldStateErrorUnionRef::PropertyTypeMismatch(_) => {
+            Ok(WorldStateError::PropertyTypeMismatch)
+        }
+        WorldStateErrorUnionRef::VerbNotFound(e) => {
+            let obj = obj_from_ref(fb_read!(e, obj))?;
+            let verb = fb_read!(e, verb).to_string();
+            Ok(WorldStateError::VerbNotFound(obj, verb))
+        }
+        WorldStateErrorUnionRef::InvalidVerb(e) => {
+            let vid = fb_read!(e, vid);
+            Ok(WorldStateError::InvalidVerb(Vid(vid)))
+        }
+        WorldStateErrorUnionRef::VerbDecodeError(e) => {
+            let obj = obj_from_ref(fb_read!(e, obj))?;
+            let verb = symbol_from_ref(fb_read!(e, verb))?;
+            Ok(WorldStateError::VerbDecodeError(obj, verb))
+        }
+        WorldStateErrorUnionRef::VerbPermissionDenied(_) => {
+            Ok(WorldStateError::VerbPermissionDenied)
+        }
+        WorldStateErrorUnionRef::DuplicateVerb(e) => {
+            let obj = obj_from_ref(fb_read!(e, obj))?;
+            let verb = symbol_from_ref(fb_read!(e, verb))?;
+            Ok(WorldStateError::DuplicateVerb(obj, verb))
+        }
+        WorldStateErrorUnionRef::FailedMatch(e) => {
+            let match_string = fb_read!(e, match_string).to_string();
+            Ok(WorldStateError::FailedMatch(match_string))
+        }
+        WorldStateErrorUnionRef::AmbiguousMatch(e) => {
+            let match_string = fb_read!(e, match_string).to_string();
+            Ok(WorldStateError::AmbiguousMatch(match_string))
+        }
+        WorldStateErrorUnionRef::InvalidRenumber(e) => {
+            let message = fb_read!(e, message).to_string();
+            Ok(WorldStateError::InvalidRenumber(message))
+        }
+        WorldStateErrorUnionRef::WorldStateDatabaseError(e) => {
+            let message = fb_read!(e, message).to_string();
+            Ok(WorldStateError::DatabaseError(message))
+        }
+        WorldStateErrorUnionRef::RollbackRetry(_) => Ok(WorldStateError::RollbackRetry),
+    }
 }
