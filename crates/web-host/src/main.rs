@@ -568,6 +568,7 @@ fn mk_routes(
         .route("/v1/features", get(host::features_handler))
         .route("/health", get(host::health_handler))
         .route("/version", get(host::version_handler))
+        .route("/openapi.yaml", get(host::openapi_handler))
         .route(
             "/v1/invoke_welcome_message",
             get(host::invoke_welcome_message_handler),

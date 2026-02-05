@@ -1,0 +1,1309 @@
+# Copyright (C) 2026 Ryan Daum <ryan.daum@gmail.com> This program is free
+# software: you can redistribute it and/or modify it under the terms of the GNU
+# General Public License as published by the Free Software Foundation, version
+# 3.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program. If not, see <https://www.gnu.org/licenses/>.
+
+openapi: 3.1.0
+info:
+  title: mooR Web Host API
+  version: "1.0"
+  description: |
+    HTTP/WebSocket API for the mooR virtual-world server.
+
+    **Content negotiation** — Most `/v1/*` endpoints support two response
+    formats selected via the `Accept` header:
+
+    | Accept value                    | Response format   |
+    |---------------------------------|-------------------|
+    | `application/x-flatbuffers`     | FlatBuffers binary (default) |
+    | `application/json`              | JSON              |
+
+    If neither is acceptable, the server returns `406 Not Acceptable`.
+
+    **Authentication** — Authenticated endpoints require an
+    `X-Moor-Auth-Token` header containing a PASETO v4.public token obtained
+    from `/auth/connect` or `/auth/create`.  Some endpoints also require
+    `X-Moor-Client-Token` and `X-Moor-Client-Id` headers for session
+    continuity.
+
+    **FlatBuffers note** — FlatBuffer request/response bodies are opaque
+    binary blobs whose schemas are defined in the `moor-schema` crate.
+    This spec documents their logical content in prose; the wire format is
+    governed by the `.fbs` files, not JSON Schema.
+
+  license:
+    name: GPL-3.0-only
+    url: https://www.gnu.org/licenses/gpl-3.0.html
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Auth
+    description: Password-based authentication (login / validate / logout)
+  - name: OAuth2
+    description: |
+      OAuth2 federated authentication.  These routes are only registered
+      when OAuth2 is enabled in the server configuration; otherwise they
+      return 404.
+  - name: WebSocket
+    description: WebSocket connections for real-time interaction
+  - name: Eval
+    description: Server-side MOO expression evaluation
+  - name: Verbs
+    description: Verb listing, retrieval, programming, and invocation
+  - name: Properties
+    description: Property listing, retrieval, and update
+  - name: Objects
+    description: Object listing and resolution
+  - name: EventLog
+    description: Encrypted event-log history and presentation management
+  - name: System
+    description: Health, version, features, and system properties
+  - name: Webhooks
+    description: External webhook receiver (forwarded to MOO)
+
+security: []
+
+paths:
+  # ── Auth ──────────────────────────────────────────────────────────────
+
+  /auth/connect:
+    post:
+      operationId: authConnect
+      tags: [Auth]
+      summary: Authenticate an existing player
+      description: |
+        Runs the `connect` login command against the daemon.  On success the
+        response body is a FlatBuffer `LoginResult` and the three session
+        headers are set.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/AuthRequest"
+      responses:
+        "200":
+          description: Login successful
+          headers:
+            X-Moor-Auth-Token:
+              schema: { type: string }
+              description: PASETO auth token for subsequent requests
+            X-Moor-Client-Token:
+              schema: { type: string }
+              description: Session token for this connection
+            X-Moor-Client-Id:
+              schema: { type: string, format: uuid }
+              description: Unique ID for this client session
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+              # Logical content: LoginResult { success, auth_token, player, player_flags }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Login rejected by daemon
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          description: Malformed response from daemon
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /auth/create:
+    post:
+      operationId: authCreate
+      tags: [Auth]
+      summary: Create a new player account
+      description: |
+        Runs the `create` login command against the daemon.  Identical to
+        `/auth/connect` except the daemon verb is `:do_login_command("create", …)`.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/AuthRequest"
+      responses:
+        "200":
+          description: Account created and logged in
+          headers:
+            X-Moor-Auth-Token:
+              schema: { type: string }
+            X-Moor-Client-Token:
+              schema: { type: string }
+            X-Moor-Client-Id:
+              schema: { type: string, format: uuid }
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Account creation rejected by daemon
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          description: Malformed response from daemon
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /auth/validate:
+    get:
+      operationId: authValidate
+      tags: [Auth]
+      summary: Validate an auth token
+      description: |
+        Round-trips to the daemon to verify the token is still valid.
+        An ephemeral attach/detach is performed; the connection is cleaned
+        up automatically.
+      security:
+        - MoorAuthToken: []
+      responses:
+        "200":
+          description: Token is valid (empty body)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /auth/logout:
+    post:
+      operationId: authLogout
+      tags: [Auth]
+      summary: Explicitly log out a player session
+      description: |
+        Sends a detach message to the daemon with `disconnected=true`,
+        triggering `user_disconnected`.  Requires both the auth token and
+        client credentials.
+      security:
+        - MoorAuthToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientToken"
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200":
+          description: Logout successful (empty body)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── OAuth2 ────────────────────────────────────────────────────────────
+
+  /v1/oauth2/config:
+    get:
+      operationId: oauth2Config
+      tags: [OAuth2]
+      summary: Get OAuth2 configuration
+      description: |
+        Returns whether OAuth2 is enabled and the list of configured
+        providers.  Route is only present when OAuth2 is enabled.
+      responses:
+        "200":
+          description: OAuth2 configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2ConfigResponse"
+        "404":
+          description: OAuth2 not enabled (route absent)
+
+  /auth/oauth2/{provider}/authorize:
+    get:
+      operationId: oauth2Authorize
+      tags: [OAuth2]
+      summary: Start an OAuth2 authorization flow
+      description: |
+        Generates a provider authorization URL and a CSRF state token.
+        Sets a `moor_oauth_nonce` cookie for browser-binding.
+      parameters:
+        - $ref: "#/components/parameters/OAuthProvider"
+      responses:
+        "200":
+          description: Authorization URL generated
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+              description: "`moor_oauth_nonce` HttpOnly cookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUrlResponse"
+        "400":
+          description: Unknown provider
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: OAuth2 not enabled
+
+  /auth/oauth2/{provider}/callback:
+    get:
+      operationId: oauth2Callback
+      tags: [OAuth2]
+      summary: OAuth2 provider callback
+      description: |
+        Called by the OAuth2 provider after user consent.  Validates the
+        CSRF state, exchanges the authorization code for user info, and
+        redirects the browser:
+
+        - **Existing user** → `/#auth_code={code}`
+        - **New user** → `/#oauth2_code={code}&oauth2_display={json}`
+
+        The code is a server-side one-time token redeemable via
+        `/auth/oauth2/exchange`.
+      parameters:
+        - $ref: "#/components/parameters/OAuthProvider"
+        - name: code
+          in: query
+          required: true
+          schema: { type: string }
+          description: Authorization code from the OAuth2 provider
+        - name: state
+          in: query
+          required: true
+          schema: { type: string }
+          description: CSRF state token
+      responses:
+        "302":
+          description: Redirect to client with one-time code in fragment
+        "404":
+          description: OAuth2 not enabled (route absent)
+
+  /auth/oauth2/exchange:
+    post:
+      operationId: oauth2Exchange
+      tags: [OAuth2]
+      summary: Exchange a one-time code for tokens or identity
+      description: |
+        Redeems a server-side one-time code produced by the callback.
+        Returns either an `auth_session` (existing user) or an `identity`
+        (new user needing account choice).  Requires the `moor_oauth_nonce`
+        cookie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CodeExchangeRequest"
+      responses:
+        "200":
+          description: Code exchanged
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/OAuth2AuthSessionResponse"
+                  - $ref: "#/components/schemas/OAuth2IdentityResponse"
+                discriminator:
+                  propertyName: type
+        "401":
+          description: Invalid/expired code or missing nonce cookie
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: OAuth2 not enabled (route absent)
+
+  /auth/oauth2/account:
+    post:
+      operationId: oauth2AccountChoice
+      tags: [OAuth2]
+      summary: Create or link an account after OAuth2
+      description: |
+        Submits the user's account-choice decision (create new player or
+        link to existing player).  The `oauth2_code` must resolve to a
+        verified `Identity` on the server side.  Requires `moor_oauth_nonce`
+        cookie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountChoiceRequest"
+      responses:
+        "200":
+          description: Account created/linked, session established
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2LoginResponse"
+        "400":
+          description: Invalid mode or code type mismatch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication failed or invalid code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2LoginResponse"
+        "404":
+          description: OAuth2 not enabled
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── WebSocket ─────────────────────────────────────────────────────────
+
+  /ws/attach/connect:
+    get:
+      operationId: wsAttachConnect
+      tags: [WebSocket]
+      summary: WebSocket upgrade — attach with existing player
+      description: |
+        Upgrades to a WebSocket connection for an already-authenticated
+        player (the `connect` login path).
+
+        Auth credentials can be passed as HTTP headers or via
+        `Sec-WebSocket-Protocol` subprotocols:
+
+        | Subprotocol prefix | Equivalent header       |
+        |--------------------|-------------------------|
+        | `paseto.{token}`   | `X-Moor-Auth-Token`    |
+        | `client_id.{uuid}` | `X-Moor-Client-Id`     |
+        | `client_token.{t}` | `X-Moor-Client-Token`  |
+        | `initial_attach.{bool}` | (session hint)    |
+
+        The server selects `moor` as the WebSocket subprotocol.
+
+        **Note:** Full WebSocket message framing is FlatBuffer-based and
+        is outside the scope of this HTTP spec.
+      security:
+        - MoorAuthToken: []
+      responses:
+        "101":
+          description: WebSocket upgrade successful
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /ws/attach/create:
+    get:
+      operationId: wsAttachCreate
+      tags: [WebSocket]
+      summary: WebSocket upgrade — attach with new player
+      description: |
+        Same as `/ws/attach/connect` but used when the player was created
+        via `/auth/create`.  See that endpoint for auth details.
+      security:
+        - MoorAuthToken: []
+      responses:
+        "101":
+          description: WebSocket upgrade successful
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── Eval ──────────────────────────────────────────────────────────────
+
+  /v1/eval:
+    post:
+      operationId: eval
+      tags: [Eval]
+      summary: Evaluate a MOO expression
+      description: |
+        Evaluates a MOO expression server-side on behalf of the
+        authenticated player.  Uses an ephemeral daemon connection that is
+        automatically cleaned up.
+      security:
+        - MoorAuthToken: []
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema: { type: string }
+            example: "player:name()"
+      responses:
+        "200":
+          description: Evaluation result
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+              # Logical: EvalResult { success, result_var, error_message }
+            application/json:
+              schema:
+                type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  # ── Verbs ─────────────────────────────────────────────────────────────
+
+  /v1/verbs/{object}:
+    get:
+      operationId: listVerbs
+      tags: [Verbs]
+      summary: List verbs on an object
+      security:
+        - MoorAuthToken: []
+      parameters:
+        - $ref: "#/components/parameters/ObjectCurie"
+        - name: inherited
+          in: query
+          schema: { type: boolean, default: false }
+          description: Include inherited verbs
+      responses:
+        "200":
+          description: Verb listing
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid object CURIE
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/verbs/{object}/{name}:
+    get:
+      operationId: getVerb
+      tags: [Verbs]
+      summary: Retrieve a single verb
+      security:
+        - MoorAuthToken: []
+      parameters:
+        - $ref: "#/components/parameters/ObjectCurie"
+        - $ref: "#/components/parameters/VerbName"
+      responses:
+        "200":
+          description: Verb details
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid object CURIE
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: programVerb
+      tags: [Verbs]
+      summary: Set a verb's program code
+      description: |
+        Uploads MOO source code for a verb.  Uses an ephemeral daemon
+        connection (attach + detach).
+      security:
+        - MoorAuthToken: []
+      parameters:
+        - $ref: "#/components/parameters/ObjectCurie"
+        - $ref: "#/components/parameters/VerbName"
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema: { type: string }
+            example: |
+              return "Hello, " + argstr + "!";
+      responses:
+        "200":
+          description: Programming result
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid object CURIE
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/verbs/{object}/{name}/invoke:
+    post:
+      operationId: invokeVerb
+      tags: [Verbs]
+      summary: Invoke a verb and return the result
+      description: |
+        Calls a verb on the given object with FlatBuffer-encoded arguments.
+        Returns a `VerbCallResponse` containing either a success result
+        (with output narrative events) or an error.  Times out after 60 s.
+      security:
+        - MoorAuthToken: []
+      parameters:
+        - $ref: "#/components/parameters/ObjectCurie"
+        - $ref: "#/components/parameters/VerbName"
+      requestBody:
+        required: true
+        content:
+          application/x-flatbuffers:
+            schema: { type: string, format: binary }
+            # Logical: Var — a list of verb arguments
+      responses:
+        "200":
+          description: Verb call result
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+              # Logical: VerbCallResponse { VerbCallSuccess | VerbCallError }
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid object CURIE or bad request body
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "504":
+          description: Verb execution timed out (60 s)
+
+  # ── Properties ────────────────────────────────────────────────────────
+
+  /v1/properties/{object}:
+    get:
+      operationId: listProperties
+      tags: [Properties]
+      summary: List properties on an object
+      security:
+        - MoorAuthToken: []
+      parameters:
+        - $ref: "#/components/parameters/ObjectCurie"
+        - name: inherited
+          in: query
+          schema: { type: boolean, default: false }
+          description: Include inherited properties
+      responses:
+        "200":
+          description: Property listing
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid object CURIE
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/properties/{object}/{name}:
+    get:
+      operationId: getProperty
+      tags: [Properties]
+      summary: Retrieve a single property value
+      security:
+        - MoorAuthToken: []
+      parameters:
+        - $ref: "#/components/parameters/ObjectCurie"
+        - $ref: "#/components/parameters/PropertyName"
+      responses:
+        "200":
+          description: Property value
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid object CURIE
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: updateProperty
+      tags: [Properties]
+      summary: Update a property value
+      description: |
+        Sets a property to a new value specified as a MOO literal in the
+        request body (e.g. `"hello"`, `42`, `{1, 2, 3}`).
+      security:
+        - MoorAuthToken: []
+      parameters:
+        - $ref: "#/components/parameters/ObjectCurie"
+        - $ref: "#/components/parameters/PropertyName"
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema: { type: string }
+            example: '"new value"'
+      responses:
+        "200":
+          description: Update result
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid object CURIE or unparseable literal
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── Objects ───────────────────────────────────────────────────────────
+
+  /v1/objects:
+    get:
+      operationId: listObjects
+      tags: [Objects]
+      summary: List all objects visible to the player
+      security:
+        - MoorAuthToken: []
+      responses:
+        "200":
+          description: Object listing
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/objects/{object}:
+    get:
+      operationId: resolveObject
+      tags: [Objects]
+      summary: Resolve an object reference
+      description: |
+        Resolves a CURIE (e.g. `moor:1`, `moor:system`) and returns object
+        details.
+      security:
+        - MoorAuthToken: []
+      parameters:
+        - $ref: "#/components/parameters/ObjectCurie"
+      responses:
+        "200":
+          description: Object details
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid object CURIE
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── Event Log ─────────────────────────────────────────────────────────
+
+  /v1/history:
+    get:
+      operationId: getHistory
+      tags: [EventLog]
+      summary: Retrieve narrative history
+      description: |
+        Returns narrative events for the authenticated player.  Exactly one
+        of `since_seconds`, `since_event`, or `until_event` must be
+        provided.
+      security:
+        - MoorAuthToken: []
+      parameters:
+        - name: since_seconds
+          in: query
+          schema: { type: integer, format: uint64 }
+          description: Return events from this many seconds ago
+        - name: since_event
+          in: query
+          schema: { type: string, format: uuid }
+          description: Return events after this event ID
+        - name: until_event
+          in: query
+          schema: { type: string, format: uuid }
+          description: Return events up to this event ID
+        - name: limit
+          in: query
+          schema: { type: integer }
+          description: Maximum number of events to return
+      responses:
+        "200":
+          description: History events
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid UUID or missing query parameter
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/presentations:
+    get:
+      operationId: listPresentations
+      tags: [EventLog]
+      summary: List active presentations
+      security:
+        - MoorAuthToken: []
+      responses:
+        "200":
+          description: Current presentations
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/presentations/{presentation_id}:
+    delete:
+      operationId: dismissPresentation
+      tags: [EventLog]
+      summary: Dismiss a presentation
+      security:
+        - MoorAuthToken: []
+      parameters:
+        - name: presentation_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Presentation dismissed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dismissed: { type: boolean }
+                  presentation_id: { type: string }
+                required: [dismissed, presentation_id]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/event-log/pubkey:
+    get:
+      operationId: getEventLogPubkey
+      tags: [EventLog]
+      summary: Get event-log encryption public key
+      security:
+        - MoorAuthToken: []
+      responses:
+        "200":
+          description: Current public key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  public_key: { type: string }
+                required: [public_key]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      operationId: setEventLogPubkey
+      tags: [EventLog]
+      summary: Set event-log encryption public key
+      security:
+        - MoorAuthToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                public_key:
+                  type: string
+                  description: age public key
+              required: [public_key]
+      responses:
+        "200":
+          description: Key set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  public_key: { type: string }
+                  status: { type: string, enum: ["set"] }
+                required: [public_key, status]
+        "400":
+          description: Missing public_key field
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/event-log/history:
+    delete:
+      operationId: deleteEventLogHistory
+      tags: [EventLog]
+      summary: Delete event-log history for the player
+      security:
+        - MoorAuthToken: []
+      responses:
+        "200":
+          description: History deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                required: [success]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── System ────────────────────────────────────────────────────────────
+
+  /v1/system_property/{path}:
+    get:
+      operationId: getSystemProperty
+      tags: [System]
+      summary: Read a system property by dotted path
+      description: |
+        Retrieves a property from `$system` by path (e.g. `server_version`).
+        Auth token is optional — unauthenticated requests are allowed.
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema: { type: string }
+          description: Dotted property path (catch-all)
+          example: server_version
+      responses:
+        "200":
+          description: Property value
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid property path
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/features:
+    get:
+      operationId: getFeatures
+      tags: [System]
+      summary: Get server feature flags
+      description: |
+        Returns the set of features the server supports.  Response is
+        cached.
+      responses:
+        "200":
+          description: Feature flags
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/invoke_welcome_message:
+    get:
+      operationId: invokeWelcomeMessage
+      tags: [System]
+      summary: Get the server welcome message
+      description: |
+        Invokes `:do_login_command` on the system object to produce the
+        welcome/MOTD text shown before login.
+      responses:
+        "200":
+          description: Welcome message
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /health:
+    get:
+      operationId: healthCheck
+      tags: [System]
+      summary: Health check
+      description: |
+        Returns 200 if the web host is running and has received a daemon
+        ping recently; 503 otherwise.
+      responses:
+        "200":
+          description: Healthy (empty body)
+        "503":
+          description: No recent daemon ping
+
+  /version:
+    get:
+      operationId: getVersion
+      tags: [System]
+      summary: Get server version
+      responses:
+        "200":
+          description: Version info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionResponse"
+
+  /openapi.yaml:
+    get:
+      operationId: getOpenApiSpec
+      tags: [System]
+      summary: OpenAPI specification
+      description: Returns this spec (embedded at compile time).
+      responses:
+        "200":
+          description: OpenAPI 3.1.0 YAML document
+          content:
+            text/yaml:
+              schema: { type: string }
+
+  # ── Webhooks ──────────────────────────────────────────────────────────
+
+  /webhooks/{path}:
+    get: &webhook_op
+      operationId: webhookGet
+      tags: [Webhooks]
+      summary: Receive an external webhook (GET)
+      description: |
+        Forwards the request to the MOO `:handle_webhook` verb on
+        `$system`.  The MOO verb determines the response status code,
+        body, and content type.
+
+        **No authentication required** — the request runs as the system
+        user.  Body limit is 2 MB.
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema: { type: string }
+          description: Catch-all webhook path
+      responses:
+        "200":
+          description: Webhook handled (status, body, and content type determined by MOO verb)
+          content:
+            "*/*":
+              schema: { type: string }
+        "404":
+          description: No webhook handler found
+        "408":
+          description: Webhook handler timed out (30 s)
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    post:
+      <<: *webhook_op
+      operationId: webhookPost
+      summary: Receive an external webhook (POST)
+      requestBody:
+        content:
+          "*/*":
+            schema: { type: string, format: binary }
+    put:
+      <<: *webhook_op
+      operationId: webhookPut
+      summary: Receive an external webhook (PUT)
+      requestBody:
+        content:
+          "*/*":
+            schema: { type: string, format: binary }
+    delete:
+      <<: *webhook_op
+      operationId: webhookDelete
+      summary: Receive an external webhook (DELETE)
+    patch:
+      <<: *webhook_op
+      operationId: webhookPatch
+      summary: Receive an external webhook (PATCH)
+      requestBody:
+        content:
+          "*/*":
+            schema: { type: string, format: binary }
+
+# ═══════════════════════════════════════════════════════════════════════
+# Components
+# ═══════════════════════════════════════════════════════════════════════
+
+components:
+  securitySchemes:
+    MoorAuthToken:
+      type: apiKey
+      in: header
+      name: X-Moor-Auth-Token
+      description: PASETO v4.public token from `/auth/connect` or `/auth/create`
+
+  parameters:
+    ObjectCurie:
+      name: object
+      in: path
+      required: true
+      schema: { type: string }
+      description: "Object reference in CURIE form (e.g. `moor:1` or `moor:system`)"
+      example: "moor:1"
+
+    VerbName:
+      name: name
+      in: path
+      required: true
+      schema: { type: string }
+      description: Verb name
+      example: "look"
+
+    PropertyName:
+      name: name
+      in: path
+      required: true
+      schema: { type: string }
+      description: Property name
+      example: "description"
+
+    OAuthProvider:
+      name: provider
+      in: path
+      required: true
+      schema: { type: string }
+      description: OAuth2 provider identifier
+      example: google
+
+    ClientToken:
+      name: X-Moor-Client-Token
+      in: header
+      required: true
+      schema: { type: string }
+      description: Client session token from login response
+
+    ClientId:
+      name: X-Moor-Client-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+      description: Client session UUID from login response
+
+  schemas:
+    AuthRequest:
+      type: object
+      properties:
+        player:
+          type: string
+          description: Player name
+        password:
+          type: string
+          description: Player password
+        event_log_pubkey:
+          type: string
+          description: Optional age public key for event-log encryption
+      required: [player, password]
+
+    VersionResponse:
+      type: object
+      properties:
+        version:
+          type: string
+          example: "0.4.0"
+        commit:
+          type: string
+          example: "9ced5d30"
+      required: [version, commit]
+
+    OAuth2ConfigResponse:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        providers:
+          type: array
+          items: { type: string }
+      required: [enabled, providers]
+
+    AuthUrlResponse:
+      type: object
+      properties:
+        auth_url:
+          type: string
+          format: uri
+          description: OAuth2 provider authorization URL
+        state:
+          type: string
+          description: CSRF state token
+      required: [auth_url, state]
+
+    CodeExchangeRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          description: One-time server-side code from callback redirect
+      required: [code]
+
+    OAuth2AuthSessionResponse:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [auth_session]
+        auth_token:
+          type: string
+        player:
+          type: string
+          description: Player CURIE
+        player_flags:
+          type: integer
+        client_token:
+          type: string
+        client_id:
+          type: string
+          format: uuid
+      required: [type, auth_token, player, player_flags, client_token, client_id]
+
+    OAuth2IdentityResponse:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [identity]
+        provider:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        username:
+          type: string
+      required: [type, provider]
+
+    AccountChoiceRequest:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [oauth2_create, oauth2_connect]
+        oauth2_code:
+          type: string
+          description: One-time code from callback redirect
+        player_name:
+          type: string
+          description: Desired player name (for oauth2_create)
+        existing_email:
+          type: string
+          description: Email of existing account to link (for oauth2_connect)
+        existing_password:
+          type: string
+          description: Password of existing account (for oauth2_connect)
+      required: [mode, oauth2_code]
+
+    OAuth2LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        auth_token:
+          type: string
+        player:
+          type: string
+          description: Player CURIE
+        player_flags:
+          type: integer
+        client_token:
+          type: string
+        client_id:
+          type: string
+        error:
+          type: string
+      required: [success]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid auth token
+    NotAcceptable:
+      description: >-
+        Accept header does not include `application/x-flatbuffers` or
+        `application/json`
+    UnsupportedMediaType:
+      description: Unsupported Content-Type
+    InternalError:
+      description: Internal server error
+    ServiceUnavailable:
+      description: Daemon is unreachable

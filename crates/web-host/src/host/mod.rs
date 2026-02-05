@@ -38,8 +38,8 @@ pub use props::{properties_handler, property_retrieval_handler};
 pub use verbs::{invoke_verb_handler, verb_program_handler, verb_retrieval_handler, verbs_handler};
 pub use web_host::{
     WebHost, eval_handler, features_handler, health_handler, invoke_welcome_message_handler,
-    resolve_objref_handler, system_property_handler, version_handler, ws_connect_attach_handler,
-    ws_create_attach_handler,
+    openapi_handler, resolve_objref_handler, system_property_handler, version_handler,
+    ws_connect_attach_handler, ws_create_attach_handler,
 };
 
 pub use webhooks::web_hook_handler;

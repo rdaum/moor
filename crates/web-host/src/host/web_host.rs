@@ -1463,3 +1463,9 @@ pub async fn version_handler() -> Json<VersionInfo> {
         commit: moor_common::build::short_commit(),
     })
 }
+
+const OPENAPI_SPEC: &str = include_str!("../../openapi.yaml");
+
+pub async fn openapi_handler() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "text/yaml")], OPENAPI_SPEC)
+}
