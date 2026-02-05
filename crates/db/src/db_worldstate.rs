@@ -939,7 +939,7 @@ impl WorldState for DbWorldState {
         &mut self,
         perms: &Obj,
         obj: &Obj,
-        target: Option<&Obj>,
+        target: Option<ObjectKind>,
     ) -> Result<Obj, WorldStateError> {
         use moor_common::model::ObjectRef;
 

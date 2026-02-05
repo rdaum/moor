@@ -265,11 +265,10 @@ millions of objects over time.
 UUID objects avoid this problem entirely. Each UUID is unique by design, so there's no sequential numbering to exhaust
 or manage.
 
-> **Converting UUID Objects to Numbered Objects**: If you have UUID objects that you want to convert to numbered objects
-> (perhaps for easier reference or integration with existing code), you can use the `renumber()` function. For example,
-> `renumber(#048D05-1234567890)` will convert the UUID object to an available numbered object like `#241`. The system
-> will automatically find the best available numbered slot, or you can specify an exact target with
-> `renumber(#048D05-1234567890, #500)`. This is useful when promoting temporary objects to permanent world fixtures.
+> **Converting between numbered and UUID objects**: The `renumber()` function can convert objects in either direction.
+> To convert a UUID to a numbered object: `renumber(#048D05-1234567890)` finds an available numbered slot, or
+> `renumber(#048D05-1234567890, #500)` targets a specific number. To convert a numbered object to a UUID:
+> `renumber(#123, 2)` generates a new UUID for the object. See [`renumber()`](../the-moo-programming-language/built-in-functions/objects.md#renumber) for full details.
 
 ## How Objects Actually Work
 

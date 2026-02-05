@@ -73,7 +73,7 @@ TYPE_OBJ
 
 // test_that_creating_an_object_increments_max_object
 ; $tmp1 = max_object();
-; create($object);
+; create($object, $nothing, 0);
 ; return max_object() == $tmp1;
 0
 

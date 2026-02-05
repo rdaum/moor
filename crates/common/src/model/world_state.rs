@@ -424,23 +424,26 @@ pub trait WorldState: Send {
     /// Increment the given sequence, return the new value.
     fn increment_sequence(&self, seq: usize) -> i64;
 
-    /// Renumber an object to a new object number.
+    /// Renumber an object to a new object ID. Supports numbered and UUID objects
+    /// as both source and target; anonymous objects are not supported.
     ///
     /// If target is None:
-    /// - For traditional Objid objects: finds lowest available object number below current
-    /// - For UuObjid objects: returns error (must specify explicit target)
+    /// - For numbered objects: finds lowest available object number below current
+    /// - For UUID objects: finds lowest available numbered object ID
     ///
-    /// If target is Some(new_obj), moves to that specific number (must be valid/available).
-    /// Supports cross-type conversions (Objid ↔ UuObjid).
+    /// If target is Some(kind):
+    /// - ObjectKind::Objid(num): renumber to a specific numeric object ID
+    /// - ObjectKind::NextObjid: renumber to next available numeric ID (max + 1)
+    /// - ObjectKind::UuObjId: renumber to a newly generated UUID
     ///
     /// Updates structural database relationships (parent/child, location/contents, ownership)
     /// but does not rewrite object references in verb code or property values.
-    /// Returns the new object number.
+    /// Returns the new object ID.
     fn renumber_object(
         &mut self,
         perms: &Obj,
         obj: &Obj,
-        target: Option<&Obj>,
+        target: Option<ObjectKind>,
     ) -> Result<Obj, WorldStateError>;
 
     /// Flush all internal caches (verb resolution, property resolution, ancestry).

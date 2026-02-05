@@ -154,7 +154,7 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 | Name                                                         | Complete | Notes                                                                    |
 |--------------------------------------------------------------|----------|--------------------------------------------------------------------------|
 | [`server_version`](server.md#server_version)                 | &check;  | Crate version + short commit hash, for now                               |
-| [`renumber`](objects.md#renumber)                            | &check;  | Supports UUID to numbered conversion with auto-selection                 |
+| [`renumber`](objects.md#renumber)                            | &check;  | Supports numbered/UUID conversion in both directions                     |
 | [`reset_max_object`](server.md#reset_max_object)             |          |                                                                          |
 | [`memory_usage`](server.md#memory_usage)                     | &check;  |                                                                          |
 | [`shutdown`](server.md#shutdown)                             | &check;  |                                                                          |

@@ -1238,9 +1238,14 @@ fn bf_owned_objects(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&owned_objects)))
 }
 
-/// Usage: `obj renumber(obj object [, obj target])`
-/// Renumbers an object to a new object number. If target is provided, uses that number;
+/// Usage: `obj renumber(obj object [, obj|int target])`
+/// Renumbers an object to a new object ID. If target is provided, uses that;
 /// otherwise assigns the lowest available number. Wizard-only.
+///
+/// The second argument can be:
+/// - An object ID (obj): renumber to that specific numbered ID
+/// - 0: renumber to next available numbered ID
+/// - 2: renumber to a new UUID
 fn bf_renumber(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 1 || bf_args.args.len() > 2 {
         return Err(BfErr::ErrValue(
@@ -1255,12 +1260,32 @@ fn bf_renumber(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     let target = if bf_args.args.len() == 2 {
-        let Some(target_obj) = bf_args.args[1].as_object() else {
-            return Err(BfErr::ErrValue(
-                E_TYPE.msg("renumber() second argument must be an object"),
-            ));
-        };
-        Some(target_obj)
+        let arg = &bf_args.args[1];
+
+        match arg.variant() {
+            Variant::Int(i) => match i {
+                0 => Some(ObjectKind::NextObjid),
+                2 => Some(ObjectKind::UuObjId),
+                _ => {
+                    return Err(BfErr::ErrValue(E_INVARG.msg(
+                        "renumber() target must be 0 (numbered), 2 (UUID), or an object ID",
+                    )));
+                }
+            },
+            Variant::Obj(obj_id) => {
+                if obj_id.is_uuobjid() {
+                    return Err(BfErr::ErrValue(E_TYPE.msg(
+                        "renumber() cannot target a specific UUID; use 2 to generate a new UUID",
+                    )));
+                }
+                Some(ObjectKind::Objid(obj_id))
+            }
+            _ => {
+                return Err(BfErr::ErrValue(
+                    E_TYPE.msg("renumber() second argument must be an integer or object"),
+                ));
+            }
+        }
     } else {
         None
     };
@@ -1273,11 +1298,6 @@ fn bf_renumber(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     }
 
-    // Check target object if provided - for validation we just check it's a valid object reference
-    if let Some(_target) = &target {
-        // We don't validate if target exists - that's handled by the renumber implementation
-    }
-
     let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
 
     // Only wizards can renumber objects
@@ -1285,7 +1305,7 @@ fn bf_renumber(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Call the world state renumber_object method
     let new_obj = with_current_transaction_mut(|world_state| {
-        world_state.renumber_object(&task_perms.who, &obj, target.as_ref())
+        world_state.renumber_object(&task_perms.who, &obj, target)
     })
     .map_err(world_state_bf_err)?;
 

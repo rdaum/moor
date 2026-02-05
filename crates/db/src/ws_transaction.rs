@@ -1485,7 +1485,7 @@ impl WorldStateTransaction {
     pub fn renumber_object(
         &mut self,
         old_obj: &Obj,
-        target: Option<&Obj>,
+        target: Option<ObjectKind>,
     ) -> Result<Obj, WorldStateError> {
         // Verify old object exists
         if !self.object_valid(old_obj)? {
@@ -1494,13 +1494,33 @@ impl WorldStateTransaction {
 
         // Determine new object ID
         let new_obj = if let Some(target) = target {
-            // Explicit target - ensure it's not already in use
-            if self.object_valid(target)? {
+            // Convert ObjectKind to actual object ID
+            let target_obj = match target {
+                ObjectKind::Objid(obj) => obj,
+                ObjectKind::NextObjid => {
+                    // For NextObjid, we need to find the next available number
+                    // This is the same logic as auto-selection for numbered objects
+                    let max_obj = self.get_max_object()?;
+                    let mut candidate_id = max_obj.id().0 + 1;
+                    while self.object_valid(&Obj::mk_id(candidate_id))? {
+                        candidate_id += 1;
+                    }
+                    Obj::mk_id(candidate_id)
+                }
+                ObjectKind::UuObjId => Obj::mk_uuobjid_generated(),
+                ObjectKind::Anonymous => {
+                    return Err(WorldStateError::InvalidRenumber(
+                        "Cannot renumber to anonymous object".to_string(),
+                    ));
+                }
+            };
+            // Ensure target object is not already in use
+            if self.object_valid(&target_obj)? {
                 return Err(WorldStateError::InvalidRenumber(format!(
-                    "Target object {target} already exists"
+                    "Target object {target_obj} already exists"
                 )));
             }
-            *target
+            target_obj
         } else {
             // Auto-selection logic
             if old_obj.is_uuobjid() {
@@ -1541,27 +1561,8 @@ impl WorldStateTransaction {
             return Ok(new_obj);
         }
 
-        // Validate cross-type renumbering restrictions
-        match (old_obj.is_uuobjid(), new_obj.is_uuobjid()) {
-            (true, true) => {
-                // renumber(uuid, uuid) - FAIL
-                return Err(WorldStateError::InvalidRenumber(
-                    "Cannot renumber UUID object to another UUID".to_string(),
-                ));
-            }
-            (false, true) => {
-                // renumber(obj, uuid) - FAIL
-                return Err(WorldStateError::InvalidRenumber(
-                    "Cannot renumber numbered object to UUID".to_string(),
-                ));
-            }
-            (true, false) => {
-                // renumber(uuid) or renumber(uuid, obj) - SUCCEED (UUID → Objid allowed)
-            }
-            (false, false) => {
-                // renumber(obj) or renumber(obj, obj) - SUCCEED (Objid → Objid allowed)
-            }
-        }
+        // All cross-type renumbering combinations are allowed:
+        // numbered→numbered, numbered→uuid, uuid→numbered, uuid→uuid
 
         // Step 1: Update all relations where old_obj appears as a codomain (target)
 

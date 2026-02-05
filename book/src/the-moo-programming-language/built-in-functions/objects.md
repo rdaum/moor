@@ -343,22 +343,25 @@ using the `$recycler` to create objects.
 ### `renumber`
 
 ```
-obj renumber(obj old_obj [, obj target])
+obj renumber(obj old_obj [, obj|int target])
 ```
 
 Renumbers an object to a new object ID. This moves the object itself and everything defined on it, but does not update
-references to the object stored elsewhere.
+references to the object stored elsewhere. Both numbered and UUID objects are supported as source and target.
 
-If `target` is provided, the object `old_obj` is renumbered to have the ID `target`. The target object ID must not
-already exist, or `E_INVARG` is raised.
+The `target` argument can be:
 
-If `target` is not provided (auto-selection), the server chooses an appropriate new object ID:
+- An **object ID** (e.g. `#500`): renumber to that specific numbered ID. The target must not already exist, or
+  `E_INVARG` is raised.
+- **`0`**: renumber to the next available numbered ID (`max_object() + 1`).
+- **`2`**: renumber to a newly generated UUID.
+
+If `target` is not provided (auto-selection), the server chooses an appropriate new numbered ID:
 
 - For numbered objects: Scans from `#0` to `old_obj - 1` to find the first available slot (following LambdaMOO
   semantics)
 - For UUID objects: Scans backwards from `max_object()` to `#0` to find the first available numbered slot; if none
-  found,
-  uses `max_object() + 1`
+  found, uses `max_object() + 1`
 
 **What renumber updates automatically:**
 
@@ -377,15 +380,6 @@ If `target` is not provided (auto-selection), the server chooses an appropriate 
 After renumbering, the old object ID becomes invalid and the object is only accessible by its new ID. Any remaining
 references to the old ID will need to be manually updated by the programmer.
 
-Cross-type renumbering restrictions:
-
-- `renumber(uuid, uuid)` - Not allowed, raises `E_INVARG`
-- `renumber(obj, uuid)` - Not allowed, raises `E_INVARG`
-- `renumber(uuid)` - Allowed, converts UUID to numbered object with auto-selection
-- `renumber(uuid, obj)` - Allowed, converts UUID to specific numbered object
-- `renumber(obj)` - Allowed, finds new numbered slot for numbered object
-- `renumber(obj, obj)` - Allowed, moves numbered object to specific numbered slot
-
 The programmer must own the object being renumbered or be a wizard, otherwise `E_PERM` is raised. If `old_obj` is not
 valid, `E_INVARG` is raised.
 
@@ -395,8 +389,10 @@ objects only).
 ```
 renumber(#123)                    =>   #45 (found first available slot)
 renumber(#048D05-1234567890)      =>   #241 (UUID converted to numbered)
-renumber(#123, #500)              =>   #500 (explicit target)
-renumber(#048D05-1234567890, #99) =>   #99 (UUID converted to specific numbered)
+renumber(#123, #500)              =>   #500 (explicit numbered target)
+renumber(#048D05-1234567890, #99) =>   #99 (UUID to specific numbered)
+renumber(#123, 0)                 =>   #501 (next available numbered)
+renumber(#123, 2)                 =>   #048D05-abcdef1234 (numbered to new UUID)
 ```
 
 ## Object Movement

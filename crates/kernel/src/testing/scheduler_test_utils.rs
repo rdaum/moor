@@ -75,7 +75,23 @@ pub fn call_eval(
     player: &Obj,
     code: String,
 ) -> Result<Var, SchedulerError> {
-    call_eval_with_env(scheduler, session, player, code, None)
+    call_eval_with_features(
+        scheduler,
+        session,
+        player,
+        code,
+        Arc::new(FeaturesConfig::default()),
+    )
+}
+
+pub fn call_eval_with_features(
+    scheduler: SchedulerClient,
+    session: Arc<dyn Session>,
+    player: &Obj,
+    code: String,
+    features: Arc<FeaturesConfig>,
+) -> Result<Var, SchedulerError> {
+    call_eval_with_env_and_features(scheduler, session, player, code, None, features)
 }
 
 pub fn call_eval_with_env(
@@ -85,14 +101,23 @@ pub fn call_eval_with_env(
     code: String,
     initial_env: Option<Vec<(Symbol, Var)>>,
 ) -> Result<Var, SchedulerError> {
-    execute(|| {
-        scheduler.submit_eval_task(
-            player,
-            player,
-            code,
-            initial_env,
-            session,
-            Arc::new(FeaturesConfig::default()),
-        )
-    })
+    call_eval_with_env_and_features(
+        scheduler,
+        session,
+        player,
+        code,
+        initial_env,
+        Arc::new(FeaturesConfig::default()),
+    )
+}
+
+pub fn call_eval_with_env_and_features(
+    scheduler: SchedulerClient,
+    session: Arc<dyn Session>,
+    player: &Obj,
+    code: String,
+    initial_env: Option<Vec<(Symbol, Var)>>,
+    features: Arc<FeaturesConfig>,
+) -> Result<Var, SchedulerError> {
+    execute(|| scheduler.submit_eval_task(player, player, code, initial_env, session, features))
 }

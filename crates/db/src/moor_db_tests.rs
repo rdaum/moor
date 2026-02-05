@@ -3586,7 +3586,9 @@ mod tests {
             assert_eq!(obj, Obj::mk_id(0));
 
             // Renumber to explicit target #5
-            let new_obj = tx.renumber_object(&obj, Some(&Obj::mk_id(5))).unwrap();
+            let new_obj = tx
+                .renumber_object(&obj, Some(ObjectKind::Objid(Obj::mk_id(5))))
+                .unwrap();
             assert_eq!(new_obj, Obj::mk_id(5));
 
             // Verify old object is gone and new object exists
@@ -3683,7 +3685,9 @@ mod tests {
             assert_eq!(value, v_str("test_value"));
 
             // Renumber the object
-            let new_obj = tx.renumber_object(&old_obj, Some(&Obj::mk_id(10))).unwrap();
+            let new_obj = tx
+                .renumber_object(&old_obj, Some(ObjectKind::Objid(Obj::mk_id(10))))
+                .unwrap();
             assert_eq!(new_obj, Obj::mk_id(10));
 
             // Verify all relationships updated
@@ -3783,12 +3787,12 @@ mod tests {
                 .unwrap();
 
             // Try to renumber to existing object - should fail
-            let result = tx.renumber_object(&obj1, Some(&obj2));
+            let result = tx.renumber_object(&obj1, Some(ObjectKind::Objid(obj2)));
             assert!(matches!(result, Err(WorldStateError::InvalidRenumber(_))));
 
             // Try to renumber non-existent object - should fail
             let nonexistent = Obj::mk_id(999);
-            let result = tx.renumber_object(&nonexistent, Some(&Obj::mk_id(888)));
+            let result = tx.renumber_object(&nonexistent, Some(ObjectKind::Objid(Obj::mk_id(888))));
             assert!(matches!(result, Err(WorldStateError::ObjectNotFound(_))));
 
             assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
@@ -3807,7 +3811,7 @@ mod tests {
 
             // Renumber UUID object to numbered object (allowed)
             let new_obj = tx
-                .renumber_object(&uuid_obj, Some(&Obj::mk_id(500)))
+                .renumber_object(&uuid_obj, Some(ObjectKind::Objid(Obj::mk_id(500))))
                 .unwrap();
             assert_eq!(new_obj, Obj::mk_id(500));
             assert!(!new_obj.is_uuobjid());
@@ -3940,7 +3944,9 @@ mod tests {
             assert!(child_descendants.contains(grandchild));
 
             // Now renumber the parent object
-            let new_parent = tx.renumber_object(&parent, Some(&Obj::mk_id(100))).unwrap();
+            let new_parent = tx
+                .renumber_object(&parent, Some(ObjectKind::Objid(Obj::mk_id(100))))
+                .unwrap();
             assert_eq!(new_parent, Obj::mk_id(100));
 
             // Verify that child/grandchild relationships updated to point to new parent
@@ -4006,7 +4012,9 @@ mod tests {
             assert!(child_descendants.contains(grandchild));
 
             // Now renumber the child object too
-            let new_child = tx.renumber_object(&child, Some(&Obj::mk_id(200))).unwrap();
+            let new_child = tx
+                .renumber_object(&child, Some(ObjectKind::Objid(Obj::mk_id(200))))
+                .unwrap();
             assert_eq!(new_child, Obj::mk_id(200));
 
             // Verify that grandchild relationship updated to point to new child
@@ -4118,8 +4126,7 @@ mod tests {
         let uuid_obj = tx
             .create_object(ObjectKind::UuObjId, ObjAttrs::default())
             .unwrap();
-        let recycled_uuid = uuid_obj;
-        tx.recycle_object(&uuid_obj).unwrap(); // Make a recycled UUID available
+        tx.recycle_object(&uuid_obj).unwrap();
         let another_uuid = tx
             .create_object(ObjectKind::UuObjId, ObjAttrs::default())
             .unwrap();
@@ -4134,31 +4141,29 @@ mod tests {
         let test2_uuid = tx
             .create_object(ObjectKind::UuObjId, ObjAttrs::default())
             .unwrap();
-        let result = tx.renumber_object(&test2_uuid, Some(&Obj::mk_id(100)));
+        let result = tx.renumber_object(&test2_uuid, Some(ObjectKind::Objid(Obj::mk_id(100))));
         assert!(result.is_ok());
         let new_numbered = result.unwrap();
         assert_eq!(new_numbered, Obj::mk_id(100));
         assert!(!new_numbered.is_uuobjid());
 
-        // Test 3: renumber(uuid, uuid) - UUID to UUID should fail
+        // Test 3: renumber(uuid, uuid) - UUID to UUID should succeed
         let another_uuid2 = tx
             .create_object(ObjectKind::UuObjId, ObjAttrs::default())
             .unwrap();
-        let result = tx.renumber_object(&another_uuid2, Some(&recycled_uuid));
-        assert!(matches!(result, Err(WorldStateError::InvalidRenumber(_))));
-        if let Err(WorldStateError::InvalidRenumber(msg)) = result {
-            assert!(msg.contains("Cannot renumber UUID object to another UUID"));
-        }
+        let result = tx.renumber_object(&another_uuid2, Some(ObjectKind::UuObjId));
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_uuobjid());
 
-        // Test 4: renumber(obj, uuid) - numbered to UUID should fail
-        let result = tx.renumber_object(&numbered_obj, Some(&recycled_uuid));
-        assert!(matches!(result, Err(WorldStateError::InvalidRenumber(_))));
-        if let Err(WorldStateError::InvalidRenumber(msg)) = result {
-            assert!(msg.contains("Cannot renumber numbered object to UUID"));
-        }
+        // Test 4: renumber(obj, uuid) - numbered to UUID should succeed
+        let result = tx.renumber_object(&numbered_obj, Some(ObjectKind::UuObjId));
+        assert!(result.is_ok());
+        let new_uuid = result.unwrap();
+        assert!(new_uuid.is_uuobjid());
 
         // Test 5: renumber(obj, obj) - numbered to numbered should succeed (already tested in other tests)
-        let result = tx.renumber_object(&numbered_obj, Some(&Obj::mk_id(200)));
+        // (numbered_obj was just renumbered to UUID above, so use new_uuid)
+        let result = tx.renumber_object(&new_uuid, Some(ObjectKind::Objid(Obj::mk_id(200))));
         assert!(result.is_ok());
 
         assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
@@ -4180,7 +4185,9 @@ mod tests {
 
         // Renumber UUID to a high numbered object
         let high_numbered = Obj::mk_id(500);
-        let result = tx.renumber_object(&uuid_obj, Some(&high_numbered)).unwrap();
+        let result = tx
+            .renumber_object(&uuid_obj, Some(ObjectKind::Objid(high_numbered)))
+            .unwrap();
         assert_eq!(result, high_numbered);
 
         // max_object should now be updated to 500
@@ -4205,7 +4212,8 @@ mod tests {
             let uuid_obj = tx
                 .create_object(ObjectKind::UuObjId, ObjAttrs::default())
                 .unwrap();
-            tx.renumber_object(&uuid_obj, Some(&Obj::mk_id(i))).unwrap();
+            tx.renumber_object(&uuid_obj, Some(ObjectKind::Objid(Obj::mk_id(i))))
+                .unwrap();
         }
 
         // Now auto-renumber should use max_object + 1 = 501
@@ -4286,7 +4294,9 @@ mod tests {
         assert_eq!(direct_value, Some(v_str("child_overridden_value")));
 
         // Now renumber the child object
-        let new_child = tx.renumber_object(&child, Some(&Obj::mk_id(999))).unwrap();
+        let new_child = tx
+            .renumber_object(&child, Some(ObjectKind::Objid(Obj::mk_id(999))))
+            .unwrap();
         assert_eq!(new_child, Obj::mk_id(999));
 
         // The bug: after renumbering, the child's property value gets wiped out

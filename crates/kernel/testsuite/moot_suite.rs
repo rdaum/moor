@@ -42,13 +42,19 @@ struct SchedulerMootRunner {
     scheduler: SchedulerClient,
     session: Arc<dyn Session>,
     eval_result: Option<Var>,
+    features: Arc<moor_kernel::config::FeaturesConfig>,
 }
 impl SchedulerMootRunner {
-    fn new(scheduler: SchedulerClient, session: Arc<dyn Session>) -> Self {
+    fn new(
+        scheduler: SchedulerClient,
+        session: Arc<dyn Session>,
+        features: Arc<moor_kernel::config::FeaturesConfig>,
+    ) -> Self {
         Self {
             scheduler,
             session,
             eval_result: None,
+            features,
         }
     }
 }
@@ -67,11 +73,12 @@ impl MootRunner for SchedulerMootRunner {
             MOOT_STYLESHEET.request
         );
         self.eval_result = Some(
-            scheduler_test_utils::call_eval(
+            scheduler_test_utils::call_eval_with_features(
                 self.scheduler.clone(),
                 self.session.clone(),
                 player,
                 command.clone(),
+                self.features.clone(),
             )
             .wrap_err(format!("SchedulerMootRunner::eval({player}, {command:?})"))?,
         );
@@ -152,11 +159,18 @@ fn test(db: Box<dyn Database>, path: &Path) {
     }
     let tasks_db = Box::new(NoopTasksDb {});
     let moot_version = semver::Version::new(0, 1, 0);
+    let mut features = moor_kernel::config::FeaturesConfig::default();
+    features.use_uuobjids = true;
+    features.anonymous_objects = true;
+    let features = Arc::new(features);
     let scheduler = Scheduler::new(
         moot_version,
         db,
         tasks_db,
-        Arc::new(Config::default()),
+        Arc::new(Config {
+            features: features.clone(),
+            ..Config::default()
+        }),
         Arc::new(NoopSystemControl::default()),
         None,
         None,
@@ -170,7 +184,11 @@ fn test(db: Box<dyn Database>, path: &Path) {
 
     let options = MootOptions::default();
     execute_moot_test(
-        SchedulerMootRunner::new(scheduler_client.clone(), Arc::new(NoopClientSession::new())),
+        SchedulerMootRunner::new(
+            scheduler_client.clone(),
+            Arc::new(NoopClientSession::new()),
+            features,
+        ),
         &options,
         path,
         || Ok(()),

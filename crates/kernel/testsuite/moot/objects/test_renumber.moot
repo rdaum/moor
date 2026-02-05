@@ -1,85 +1,47 @@
-// Adapted from https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb
-//   def test_renumber
+@wizard
+; add_property($system, "r1", create($nothing, $nothing, 0), {#3, "rwc"});
+; add_property($system, "r2", create($nothing, $nothing, 0), {#3, "rwc"});
 
-// TODO: test currently disabled as `renumber()` is not implemented in mooR.
-//       The commented-out test code passes cleanly against LMoo.
+// Store the IDs we got
+; add_property($system, "id1", $r1, {#3, "rwc"});
+; add_property($system, "id2", $r2, {#3, "rwc"});
 
-//   @wizard
-//   // create a hole
-//   ; recycle(create($nothing));
-//   
-//   ; add_property($system, "l", eval("for o in [#0..max_object()]; if (!valid(o)); return o; endif; endfor; return $nothing;")[2], {player, "wrc"});
-//   
-//   ; add_property($system, "a", create($nothing), {player, "wrc"});
-//   ; add_property($system, "b", create($a), {player, "wrc"});
-//   ; add_property($system, "c", create($b), {player, "wrc"});
-//   
-//   ; move($b, $a);
-//   ; move($c, $b);
-//   
-//   ; return parent($a);
-//   $nothing
-//   ; return parent($b);
-//   $a
-//   ; return parent($c);
-//   $b
-//   
-//   ; return children($a);
-//   {$b}
-//   ; return children($b);
-//   {$c}
-//   ; return children($c);
-//   {}
-//   
-//   ; return $a.location;
-//   $nothing
-//   ; return $b.location;
-//   $a
-//   ; return $c.location;
-//   $b
-//   
-//   ; return $a.contents;
-//   {$b}
-//   ; return $b.contents;
-//   {$c}
-//   ; return $c.contents;
-//   {}
-//   
-//   ; return renumber($b);
-//   $l
-//   
-//   ; return parent($a);
-//   $nothing
-//   ; return parent($b);
-//   E_INVARG
-//   ; return parent($l);
-//   $a
-//   ; return parent($c);
-//   $l
-//   
-//   ; return children($a);
-//   {$l}
-//   ; return children($b);
-//   E_INVARG
-//   ; return children($l);
-//   {$c}
-//   ; return children($c);
-//   {}
-//   
-//   ; return $a.location;
-//   $nothing
-//   ; return $b.location;
-//   E_INVIND
-//   ; return $l.location;
-//   $a
-//   ; return $c.location;
-//   $l
-//   
-//   ; return $a.contents;
-//   {$l}
-//   ; return $b.contents;
-//   E_INVIND
-//   ; return $l.contents;
-//   {$c}
-//   ; return $c.contents;
-//   {}
+// Test 1: Renumber to a hole
+; recycle($r1);
+; return $system.r2 = renumber($r2);
+$id1
+
+// Test 2: Renumber again (should stay same if no hole)
+; return $system.r2 = renumber($r2);
+$id1
+
+// Test 3: Renumber to specific ID
+// First create a hole at $id2 by creating something there and recycling it
+; recycle(create_at($id2, $nothing));
+; return $system.r2 = renumber($r2, $id2);
+$id2
+
+// Test 4: Renumber to next available (max + 1)
+; add_property($system, "max_obj", max_object(), {#3, "rwc"});
+; add_property($system, "r3", renumber($r2, 0), {#3, "rwc"});
+; return tonum($r3) > tonum($max_obj);
+1
+
+// Test 5: UUID creation and renumbering back to numeric
+; add_property($system, "ruuid", create($nothing, $nothing, 2), {#3, "rwc"});
+; return typeof($ruuid) == TYPE_OBJ;
+1
+; return tonum(renumber($ruuid, 0)) >= 0;
+1
+
+// Test 6: Numeric to UUID
+; add_property($system, "num_obj", create($nothing, $nothing, 0), {#3, "rwc"});
+; add_property($system, "ruuid_from_num", renumber($num_obj, 2), {#3, "rwc"});
+; return typeof($ruuid_from_num) == TYPE_OBJ;
+1
+
+// Test 7: UUID to UUID
+; add_property($system, "ruuid2", create($nothing, $nothing, 2), {#3, "rwc"});
+; add_property($system, "ruuid3", renumber($ruuid2, 2), {#3, "rwc"});
+; return typeof($ruuid3) == TYPE_OBJ;
+1
