@@ -41,8 +41,12 @@ impl WorkerSocketGuard {
     }
 
     /// Take the socket for use in an RPC call
-    fn take_socket(&mut self) -> RequestSender {
-        self.socket.take().expect("Socket should be present")
+    fn take_socket(&mut self) -> Result<RequestSender, RpcError> {
+        self.socket.take().ok_or_else(|| {
+            RpcError::CouldNotInitiateSession(
+                "Worker socket guard invariant violated: missing socket".to_string(),
+            )
+        })
     }
 
     /// Return the socket after successful completion
@@ -87,7 +91,7 @@ impl WorkerRpcSendClient {
         // Acquire socket and create guard for cancellation safety
         let socket = self.acquire_socket().await?;
         let mut socket_guard = WorkerSocketGuard::new(self.socket.clone(), socket);
-        let socket = socket_guard.take_socket();
+        let socket = socket_guard.take_socket()?;
 
         let fb_message = mk_worker_pong_msg(worker_id, &worker_type);
 
@@ -121,7 +125,7 @@ impl WorkerRpcSendClient {
         // Acquire socket and create guard for cancellation safety
         let socket = self.acquire_socket().await?;
         let mut socket_guard = WorkerSocketGuard::new(self.socket.clone(), socket);
-        let socket = socket_guard.take_socket();
+        let socket = socket_guard.take_socket()?;
 
         let result_fb = var_to_flatbuffer(&result)
             .map_err(|e| RpcError::CouldNotSend(format!("Failed to serialize result: {e}")))?;
@@ -157,7 +161,7 @@ impl WorkerRpcSendClient {
         // Acquire socket and create guard for cancellation safety
         let socket = self.acquire_socket().await?;
         let mut socket_guard = WorkerSocketGuard::new(self.socket.clone(), socket);
-        let socket = socket_guard.take_socket();
+        let socket = socket_guard.take_socket()?;
 
         let fb_message = mk_attach_worker_msg(worker_id, &worker_type);
 
@@ -287,7 +291,7 @@ impl WorkerRpcSendClient {
         // Acquire socket and create guard for cancellation safety
         let socket = self.acquire_socket().await?;
         let mut socket_guard = WorkerSocketGuard::new(self.socket.clone(), socket);
-        let socket = socket_guard.take_socket();
+        let socket = socket_guard.take_socket()?;
 
         let fb_error = match error {
             WorkerError::PermissionDenied(msg) => {

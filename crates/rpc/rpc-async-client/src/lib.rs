@@ -53,7 +53,10 @@ mod worker_rpc_client;
 ///     "client_secret_z85",
 ///     "client_public_z85",
 ///     "server_public_z85"
-/// ).unwrap().connect("tcp://localhost:7899").unwrap();
+/// );
+/// if let Ok(builder) = secure_socket {
+///     let _ = builder.connect("tcp://localhost:7899");
+/// }
 /// ```
 pub fn configure_curve_client(
     socket_builder: tmq::SocketBuilder<tmq::request_reply::RequestSender>,

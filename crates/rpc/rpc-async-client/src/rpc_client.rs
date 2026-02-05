@@ -88,8 +88,12 @@ impl<'a> SocketGuard<'a> {
     }
 
     /// Take the socket for use in an RPC call
-    fn take_socket(&mut self) -> RequestSender {
-        self.socket.take().expect("Socket should be present")
+    fn take_socket(&mut self) -> Result<RequestSender, RpcError> {
+        self.socket.take().ok_or_else(|| {
+            RpcError::CouldNotInitiateSession(
+                "RPC socket guard invariant violated: missing socket".to_string(),
+            )
+        })
     }
 
     /// Return the socket to the pool
@@ -146,7 +150,7 @@ impl RpcClient {
     ) -> Result<Vec<u8>, RpcError> {
         // Use a guard pattern to ensure socket cleanup regardless of cancellation
         let mut socket_guard = SocketGuard::new(self).await?;
-        let socket = socket_guard.take_socket();
+        let socket = socket_guard.take_socket()?;
 
         // Perform the RPC call - socket cleanup is guaranteed by the guard
         match Self::perform_rpc_call(socket, client_id, rpc_msg).await {
@@ -173,7 +177,7 @@ impl RpcClient {
     ) -> Result<Vec<u8>, RpcError> {
         // Use a guard pattern to ensure socket cleanup regardless of cancellation
         let mut socket_guard = SocketGuard::new(self).await?;
-        let socket = socket_guard.take_socket();
+        let socket = socket_guard.take_socket()?;
 
         // Perform the RPC call - socket cleanup is guaranteed by the guard
         match Self::perform_host_rpc_call(socket, host_id, rpc_message).await {

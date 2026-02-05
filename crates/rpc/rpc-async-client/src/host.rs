@@ -242,8 +242,10 @@ pub async fn process_hosts_events(
 
     let events_sub = socket_builder
         .connect(&events_zmq_address)
-        .expect("Unable to connect host events subscriber ");
-    let mut events_sub = events_sub.subscribe(HOST_BROADCAST_TOPIC).unwrap();
+        .map_err(|e| RpcError::CouldNotInitiateSession(format!("Unable to connect host events subscriber: {}", e)))?;
+    let mut events_sub = events_sub
+        .subscribe(HOST_BROADCAST_TOPIC)
+        .map_err(|e| RpcError::CouldNotInitiateSession(format!("Unable to subscribe to host events: {}", e)))?;
 
     loop {
         if kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
@@ -389,7 +391,13 @@ pub async fn process_hosts_events(
                 }
 
                 let listen_addr = format!("{listen_address}:{port}");
-                let sockaddr = listen_addr.parse::<SocketAddr>().unwrap();
+                let sockaddr = match listen_addr.parse::<SocketAddr>() {
+                    Ok(sockaddr) => sockaddr,
+                    Err(e) => {
+                        warn!("Unable to parse listen address {}: {}", listen_addr, e);
+                        continue;
+                    }
+                };
                 let tls_label = if use_tls { " (TLS)" } else { "" };
                 info!(
                     "Starting listener for {} on {}{}",
@@ -399,9 +407,13 @@ pub async fn process_hosts_events(
                 );
                 let listeners = listeners.clone();
                 tokio::spawn(async move {
-                    let sockaddr = listen_addr
-                        .parse::<SocketAddr>()
-                        .unwrap_or_else(|_| panic!("Unable to parse address: {listen_addr}"));
+                    let sockaddr = match listen_addr.parse::<SocketAddr>() {
+                        Ok(sockaddr) => sockaddr,
+                        Err(e) => {
+                            error!("Unable to parse address {}: {}", listen_addr, e);
+                            return;
+                        }
+                    };
                     let result = if use_tls {
                         listeners.add_tls_listener(&handler_object, sockaddr).await
                     } else {
@@ -428,16 +440,21 @@ pub async fn process_hosts_events(
                 if host_type == our_host_type {
                     // Stop listening on the given port, on `listen_address`.
                     let listen_addr = format!("{listen_address}:{port}");
-                    let sockaddr = listen_addr.parse::<SocketAddr>().unwrap();
+                    let sockaddr = match listen_addr.parse::<SocketAddr>() {
+                        Ok(sockaddr) => sockaddr,
+                        Err(e) => {
+                            warn!("Unable to parse unlisten address {}: {}", listen_addr, e);
+                            continue;
+                        }
+                    };
                     info!(
                         "Stopping listener for {} on {}",
                         host_type.id_str(),
                         sockaddr
                     );
-                    listeners
-                        .remove_listener(sockaddr)
-                        .await
-                        .expect("Unable to stop listener");
+                    if let Err(e) = listeners.remove_listener(sockaddr).await {
+                        error!("Unable to stop listener {}: {}", sockaddr, e);
+                    }
                 }
             }
         }

@@ -70,7 +70,7 @@ where
         curve_keys.clone(),
     )
     .await
-    .expect("Unable to attach to daemon");
+    .map_err(WorkerRpcError::RpcError)?;
 
     // Now make the pub-sub client to the daemon and listen.
     let mut socket_builder = tmq::subscribe(&zmq_ctx);
@@ -193,7 +193,14 @@ async fn process_fb<ProcessFunc, Fut>(
 
     let rpc_request_sock = socket_builder
         .connect(&rpc_address)
-        .expect("Unable to bind RPC server for connection");
+        .map_err(|e| {
+            error!("Unable to connect RPC server for worker task: {}", e);
+            e
+        });
+    let rpc_request_sock = match rpc_request_sock {
+        Ok(sock) => sock,
+        Err(_) => return,
+    };
     let rpc_client = WorkerRpcSendClient::new(rpc_request_sock);
 
     // Work directly with flatbuffer references to avoid copying
@@ -219,7 +226,8 @@ async fn process_fb<ProcessFunc, Fut>(
             rpc_client
                 .make_worker_rpc_call_fb_pong(my_id, worker_type)
                 .await
-                .expect("Unable to send pong to daemon");
+                .map_err(|e| error!("Unable to send pong to daemon: {}", e))
+                .ok();
         }
         moor_rpc::DaemonToWorkerMessageUnionRef::WorkerRequest(req) => {
             // Extract data directly from flatbuffer references - only copying the minimal data we need
@@ -318,14 +326,16 @@ async fn process_fb<ProcessFunc, Fut>(
                     rpc_client
                         .make_worker_rpc_call_fb_result(my_id, request_id, r)
                         .await
-                        .expect("Unable to send response to daemon");
+                        .map_err(|e| error!("Unable to send response to daemon: {}", e))
+                        .ok();
                 }
                 Err(e) => {
                     info!("Error performing request: {}", e);
                     rpc_client
                         .make_worker_rpc_call_fb_error(my_id, request_id, e)
                         .await
-                        .expect("Unable to send error response to daemon");
+                        .map_err(|e| error!("Unable to send error response to daemon: {}", e))
+                        .ok();
                 }
             }
         }

@@ -215,7 +215,9 @@ pub fn ensure_enrolled(
         }
     }
 
-    unreachable!()
+    Err(eyre!(
+        "Enrollment retry loop exhausted unexpectedly without returning a result"
+    ))
 }
 
 /// Setup CURVE encryption by enrolling with the daemon and loading keys

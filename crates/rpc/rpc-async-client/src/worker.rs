@@ -59,7 +59,17 @@ pub async fn attach_worker(
 
         let rpc_request_sock = socket_builder
             .connect(rpc_address)
-            .expect("Unable to bind RPC server for connection");
+            .map_err(|e| {
+                warn!("Unable to connect RPC server for worker attachment: {}", e);
+                e
+            });
+        let rpc_request_sock = match rpc_request_sock {
+            Ok(sock) => sock,
+            Err(_) => {
+                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                continue;
+            }
+        };
 
         // And let the RPC server know we're here, and it should start sending events on the
         // narrative subscription.
