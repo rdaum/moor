@@ -81,7 +81,10 @@ impl tower_governor::key_extractor::KeyExtractor for TrustedProxyKeyExtractor {
 
         // Only trust forwarding headers when the direct peer is a known proxy.
         if !self.trusted_cidrs.is_empty()
-            && self.trusted_cidrs.iter().any(|cidr| cidr.contains(&peer_ip))
+            && self
+                .trusted_cidrs
+                .iter()
+                .any(|cidr| cidr.contains(&peer_ip))
         {
             if let Some(ip) = req
                 .headers()
@@ -626,10 +629,7 @@ fn mk_routes(
                 "/auth/oauth2/account",
                 post(host::oauth2_account_choice_handler),
             )
-            .route(
-                "/auth/oauth2/exchange",
-                post(host::oauth2_exchange_handler),
-            )
+            .route("/auth/oauth2/exchange", post(host::oauth2_exchange_handler))
             .layer(DefaultBodyLimit::max(64 * 1024)) // 64 KB — small form/JSON bodies
             .with_state(oauth2_state);
 

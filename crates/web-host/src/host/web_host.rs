@@ -30,17 +30,17 @@ use axum::{
 };
 use eyre::eyre;
 use hickory_resolver::TokioResolver;
+use ipnet::IpNet;
 use moor_common::model::ObjectRef;
 use moor_schema::{convert::obj_from_ref, rpc as moor_rpc};
 use moor_var::{Obj, Symbol};
 use rpc_async_client::{rpc_client::RpcClient, zmq};
 use rpc_common::{
     AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, mk_attach_msg, mk_call_system_verb_msg,
-    mk_connection_establish_msg, mk_detach_host_msg, mk_detach_msg, mk_eval_msg,
-    mk_get_server_features_msg, mk_reattach_msg, mk_register_host_msg, mk_request_sys_prop_msg,
-    mk_resolve_msg, read_reply_result,
+    mk_connection_establish_msg, mk_detach_host_msg, mk_eval_msg, mk_get_server_features_msg,
+    mk_reattach_msg, mk_register_host_msg, mk_request_sys_prop_msg, mk_resolve_msg,
+    read_reply_result,
 };
-use ipnet::IpNet;
 use std::{
     net::{IpAddr, SocketAddr},
     sync::{
@@ -1035,7 +1035,7 @@ impl WebHost {
 
 pub(crate) async fn rpc_call(
     client_id: Uuid,
-    rpc_client: &mut RpcClient,
+    rpc_client: &RpcClient,
     request: moor_rpc::HostClientToDaemonMessage,
 ) -> Result<Vec<u8>, StatusCode> {
     match rpc_client.make_client_rpc_call(client_id, request).await {
@@ -1047,10 +1047,7 @@ pub(crate) async fn rpc_call(
     }
 }
 
-pub async fn features_handler(
-    State(host): State<WebHost>,
-    header_map: HeaderMap,
-) -> Response {
+pub async fn features_handler(State(host): State<WebHost>, header_map: HeaderMap) -> Response {
     let format = match negotiate_response_format(
         header_map.get(header::ACCEPT),
         BOTH_FORMATS,
@@ -1095,7 +1092,7 @@ pub async fn system_property_handler(
     };
 
     let auth_token = auth::extract_auth_token_header(&header_map).ok();
-    let mut rpc_client = host.create_rpc_client();
+    let rpc_client = host.create_rpc_client();
     let client_id = Uuid::new_v4();
 
     let path_parts: Vec<&str> = path.split('/').collect();
@@ -1113,7 +1110,7 @@ pub async fn system_property_handler(
         &Symbol::mk(property_name),
     );
 
-    let reply_bytes = match rpc_call(client_id, &mut rpc_client, sysprop_msg).await {
+    let reply_bytes = match rpc_call(client_id, &rpc_client, sysprop_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
@@ -1301,8 +1298,11 @@ pub async fn ws_create_attach_handler(
 }
 
 pub async fn resolve_objref_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
+    auth::StatelessAuth {
+        auth_token,
+        client_id,
+        rpc_client,
+    }: auth::StatelessAuth,
     header_map: HeaderMap,
     Path(object): Path<String>,
 ) -> Response {
@@ -1315,13 +1315,6 @@ pub async fn resolve_objref_handler(
         Err(status) => return status.into_response(),
     };
 
-    let auth_token = match auth::extract_auth_token_header(&header_map) {
-        Ok(token) => token,
-        Err(status) => return status.into_response(),
-    };
-    let mut rpc_client = host.create_rpc_client();
-    let client_id = Uuid::new_v4();
-
     let objref = match ObjectRef::parse_curie(&object) {
         None => {
             return StatusCode::BAD_REQUEST.into_response();
@@ -1331,7 +1324,7 @@ pub async fn resolve_objref_handler(
 
     let resolve_msg = mk_resolve_msg(&auth_token, &objref);
 
-    let reply_bytes = match rpc_call(client_id, &mut rpc_client, resolve_msg).await {
+    let reply_bytes = match rpc_call(client_id, &rpc_client, resolve_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
@@ -1346,8 +1339,13 @@ pub async fn resolve_objref_handler(
 }
 
 pub async fn eval_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    auth::EphemeralAuth {
+        auth_token,
+        client_id,
+        client_token,
+        rpc_client,
+        ..
+    }: auth::EphemeralAuth,
     header_map: HeaderMap,
     expression: Bytes,
 ) -> Response {
@@ -1367,38 +1365,24 @@ pub async fn eval_handler(
         Err(status) => return status.into_response(),
     };
 
-    let (auth_token, client_id, client_token, mut rpc_client) =
-        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
-            Ok(connection_details) => connection_details,
-            Err(status) => return status.into_response(),
-        };
     let expression = String::from_utf8_lossy(&expression).to_string();
 
     let eval_msg = mk_eval_msg(&client_token, &auth_token, expression);
 
-    let reply_bytes = match rpc_call(client_id, &mut rpc_client, eval_msg).await {
+    let reply_bytes = match rpc_call(client_id, &rpc_client, eval_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
 
-    let response = match format {
+    // DetachGuard in EphemeralAuth handles cleanup automatically
+
+    match format {
         ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
         ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
             Ok(resp) => resp,
-            Err(status) => return status.into_response(),
+            Err(status) => status.into_response(),
         },
-    };
-
-    // Hard detach for ephemeral HTTP connections - immediate cleanup
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, true).message,
-    };
-    let _ = rpc_client
-        .make_client_rpc_call(client_id, detach_msg)
-        .await
-        .map_err(|e| warn!("Unable to send detach to RPC server: {}", e));
-
-    response
+    }
 }
 
 pub async fn invoke_welcome_message_handler(
@@ -1415,7 +1399,7 @@ pub async fn invoke_welcome_message_handler(
         Err(status) => return status.into_response(),
     };
 
-    let mut rpc_client = host.create_rpc_client();
+    let rpc_client = host.create_rpc_client();
     let client_id = Uuid::new_v4();
 
     let verb = Symbol::mk("do_login_command");
@@ -1429,7 +1413,7 @@ pub async fn invoke_welcome_message_handler(
         }
     };
 
-    let reply_bytes = match rpc_call(client_id, &mut rpc_client, call_system_verb_msg).await {
+    let reply_bytes = match rpc_call(client_id, &rpc_client, call_system_verb_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };

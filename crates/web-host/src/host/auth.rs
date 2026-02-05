@@ -18,8 +18,8 @@ use crate::host::{
 use axum::{
     Form,
     body::Body,
-    extract::{ConnectInfo, State},
-    http::{HeaderMap, StatusCode},
+    extract::{ConnectInfo, FromRequestParts, State},
+    http::{HeaderMap, StatusCode, request::Parts},
     response::{IntoResponse, Response},
 };
 use moor_schema::rpc as moor_rpc;
@@ -48,6 +48,109 @@ pub fn extract_client_credentials(header_map: &HeaderMap) -> Option<(Uuid, Clien
         .and_then(|value| value.to_str().ok())
         .and_then(|s| Uuid::parse_str(s).ok())?;
     Some((client_id, client_token))
+}
+
+/// Auth extractor for stateless (fire-and-forget) RPC calls.
+/// No daemon-side connection state — just a token, a throwaway client_id, and an RPC client.
+pub struct StatelessAuth {
+    pub auth_token: AuthToken,
+    pub client_id: Uuid,
+    pub rpc_client: RpcClient,
+}
+
+impl FromRequestParts<WebHost> for StatelessAuth {
+    type Rejection = StatusCode;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &WebHost,
+    ) -> Result<Self, Self::Rejection> {
+        let auth_token = extract_auth_token_header(&parts.headers)?;
+        let (client_id, rpc_client) = state.new_stateless_client();
+        Ok(StatelessAuth {
+            auth_token,
+            client_id,
+            rpc_client,
+        })
+    }
+}
+
+/// RAII guard that detaches an ephemeral connection when dropped.
+struct DetachGuard {
+    client_id: Uuid,
+    client_token: ClientToken,
+    host: WebHost,
+}
+
+impl Drop for DetachGuard {
+    fn drop(&mut self) {
+        let rpc_client = self.host.create_rpc_client();
+        let client_id = self.client_id;
+        let client_token = self.client_token.clone();
+        tokio::spawn(async move {
+            let detach = mk_detach_msg(&client_token, true);
+            let _ = rpc_client.make_client_rpc_call(client_id, detach).await;
+        });
+    }
+}
+
+/// Auth extractor for ephemeral (attach + detach) RPC calls.
+/// Creates a real daemon connection that is automatically cleaned up when
+/// the `EphemeralAuth` value is dropped (on handler return or early error).
+pub struct EphemeralAuth {
+    pub auth_token: AuthToken,
+    pub client_id: Uuid,
+    pub client_token: ClientToken,
+    pub rpc_client: RpcClient,
+    _guard: DetachGuard,
+}
+
+impl FromRequestParts<WebHost> for EphemeralAuth {
+    type Rejection = StatusCode;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &WebHost,
+    ) -> Result<Self, Self::Rejection> {
+        let auth_token = extract_auth_token_header(&parts.headers)?;
+
+        // Extract peer address from ConnectInfo stored in extensions.
+        // Missing ConnectInfo means the router is misconfigured (no .into_make_service_with_connect_info).
+        let addr = parts
+            .extensions
+            .get::<ConnectInfo<SocketAddr>>()
+            .map(|ci| ci.0)
+            .ok_or_else(|| {
+                error!("ConnectInfo<SocketAddr> missing from request extensions");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+        let (_player, client_id, client_token, rpc_client) = state
+            .attach_authenticated(
+                auth_token.clone(),
+                Some(moor_rpc::ConnectType::NoConnect),
+                addr,
+            )
+            .await
+            .map_err(|e| match e {
+                WsHostError::AuthenticationFailed => StatusCode::UNAUTHORIZED,
+                WsHostError::RpcError(_) => StatusCode::SERVICE_UNAVAILABLE,
+            })?;
+
+        let guard = DetachGuard {
+            client_id,
+            client_token: client_token.clone(),
+            host: state.clone(),
+        };
+
+        Ok(EphemeralAuth {
+            auth_token,
+            client_id,
+            client_token,
+            rpc_client,
+            _guard: guard,
+        })
+    }
 }
 
 #[derive(Deserialize)]
@@ -230,90 +333,16 @@ async fn auth_handler(
     }
 }
 
-/// Authenticate an HTTP request and create an ephemeral connection.
-/// Unlike WebSocket, HTTP calls don't need to reattach - they create fresh
-/// ephemeral connections that are cleaned up after the request completes.
-pub async fn auth_auth(
-    host: WebHost,
-    addr: SocketAddr,
-    header_map: HeaderMap,
-) -> Result<(AuthToken, Uuid, ClientToken, RpcClient), StatusCode> {
-    let auth_token = extract_auth_token_header(&header_map)?;
-
-    // HTTP calls always create fresh ephemeral connections.
-    // Only WebSocket needs reattach to preserve connection ID from login.
-    host.attach_authenticated(
-        auth_token.clone(),
-        Some(moor_rpc::ConnectType::NoConnect),
-        addr,
-    )
-    .await
-    .map(|(_player, client_id, client_token, rpc_client)| {
-        (auth_token, client_id, client_token, rpc_client)
-    })
-    .map_err(|e| match e {
-        WsHostError::AuthenticationFailed => StatusCode::UNAUTHORIZED,
-        _ => StatusCode::INTERNAL_SERVER_ERROR,
-    })
-}
-
-pub fn stateless_rpc_client(
-    host: &WebHost,
-    header_map: &HeaderMap,
-) -> Result<(AuthToken, Uuid, RpcClient), StatusCode> {
-    let auth_token = extract_auth_token_header(header_map)?;
-    let (client_id, rpc_client) = host.new_stateless_client();
-    Ok((auth_token, client_id, rpc_client))
-}
-
 /// Validate an auth token by round-tripping to the daemon.
-/// Creates a stateless RPC client and attempts to attach with the token.
+/// If `EphemeralAuth` extraction succeeds, the token is valid — return 200.
+/// The `DetachGuard` handles cleanup automatically.
 /// Returns:
 ///   200 — token is valid
 ///   401 — token is invalid or expired
 ///   503 — daemon is unreachable
-pub async fn validate_auth_handler(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    State(host): State<WebHost>,
-    header_map: HeaderMap,
-) -> impl IntoResponse {
-    let auth_token = match extract_auth_token_header(&header_map) {
-        Ok(token) => token,
-        Err(status) => return status.into_response(),
-    };
-
-    // Basic syntactic check first to avoid unnecessary RPC calls
-    if !auth_token.0.starts_with("v4.public.") {
-        debug!("Auth token has invalid format");
-        return StatusCode::UNAUTHORIZED.into_response();
-    }
-
-    // Round-trip to the daemon: attempt a NoConnect attach which validates
-    // the token cryptographically without creating a real session.
-    match host
-        .attach_authenticated(
-            auth_token,
-            Some(moor_rpc::ConnectType::NoConnect),
-            addr,
-        )
-        .await
-    {
-        Ok((_player, client_id, client_token, rpc_client)) => {
-            debug!("Auth token validated via daemon");
-            // Clean up the ephemeral connection
-            let detach_msg = mk_detach_msg(&client_token, true);
-            let _ = rpc_client.make_client_rpc_call(client_id, detach_msg).await;
-            StatusCode::OK.into_response()
-        }
-        Err(WsHostError::AuthenticationFailed) => {
-            debug!("Auth token rejected by daemon");
-            StatusCode::UNAUTHORIZED.into_response()
-        }
-        Err(e) => {
-            error!("Daemon unreachable during token validation: {}", e);
-            StatusCode::SERVICE_UNAVAILABLE.into_response()
-        }
-    }
+pub async fn validate_auth_handler(_auth: EphemeralAuth) -> impl IntoResponse {
+    debug!("Auth token validated via daemon");
+    StatusCode::OK
 }
 
 /// Explicit logout endpoint that notifies daemon that player is disconnecting

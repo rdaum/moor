@@ -172,15 +172,14 @@ pub async fn web_hook_handler(
     let args = webhook_request.to_moo_args();
 
     // Establish temporary connection for web hook
-    let (client_id, mut rpc_client, client_token) =
-        match host.establish_client_connection(addr).await {
-            Ok(connection) => connection,
-            Err(e) => {
-                return internal_server_error(&format!(
-                    "Failed to establish connection for web hook: {e}"
-                ));
-            }
-        };
+    let (client_id, rpc_client, client_token) = match host.establish_client_connection(addr).await {
+        Ok(connection) => connection,
+        Err(e) => {
+            return internal_server_error(&format!(
+                "Failed to establish connection for web hook: {e}"
+            ));
+        }
+    };
 
     // Prepare system handler invocation
     let args_refs: Vec<&Var> = args.iter().collect();
@@ -211,7 +210,7 @@ pub async fn web_hook_handler(
     );
     let invoke_result = tokio::time::timeout(
         timeout_duration,
-        crate::host::web_host::rpc_call(client_id, &mut rpc_client, invoke_msg),
+        crate::host::web_host::rpc_call(client_id, &rpc_client, invoke_msg),
     )
     .await;
 

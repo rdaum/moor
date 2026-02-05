@@ -55,11 +55,7 @@ pub fn negotiate_response_format(
     for media_type in accept_str.split(',') {
         let media_type = media_type.trim();
         // Strip any q-factor parameters (e.g., ";q=0.9")
-        let media_type = media_type
-            .split(';')
-            .next()
-            .unwrap_or(media_type)
-            .trim();
+        let media_type = media_type.split(';').next().unwrap_or(media_type).trim();
 
         if media_type == "*/*" || media_type.eq_ignore_ascii_case("application/*") {
             return Ok(default);
@@ -138,8 +134,7 @@ pub fn verb_call_response_to_json(
 }
 
 /// Both formats supported, defaulting to FlatBuffers.
-pub const BOTH_FORMATS: &[ResponseFormat] =
-    &[ResponseFormat::FlatBuffers, ResponseFormat::Json];
+pub const BOTH_FORMATS: &[ResponseFormat] = &[ResponseFormat::FlatBuffers, ResponseFormat::Json];
 
 pub const TEXT_PLAIN_CONTENT_TYPE: &str = "text/plain";
 
@@ -162,10 +157,7 @@ pub fn require_content_type(
     };
     // Strip parameters (e.g. "; charset=utf-8")
     let media_type = ct.split(';').next().unwrap_or(ct).trim();
-    if expected
-        .iter()
-        .any(|e| media_type.eq_ignore_ascii_case(e))
-    {
+    if expected.iter().any(|e| media_type.eq_ignore_ascii_case(e)) {
         Ok(())
     } else {
         Err(StatusCode::UNSUPPORTED_MEDIA_TYPE)
@@ -200,8 +192,7 @@ mod tests {
     #[test]
     fn explicit_flatbuffers() {
         let accept = hv("application/x-flatbuffers");
-        let result =
-            negotiate_response_format(Some(&accept), BOTH_FORMATS, ResponseFormat::Json);
+        let result = negotiate_response_format(Some(&accept), BOTH_FORMATS, ResponseFormat::Json);
         assert_eq!(result, Ok(ResponseFormat::FlatBuffers));
     }
 
@@ -225,8 +216,7 @@ mod tests {
     fn json_not_supported_returns_406() {
         let accept = hv("application/json");
         let fb_only = &[ResponseFormat::FlatBuffers];
-        let result =
-            negotiate_response_format(Some(&accept), fb_only, ResponseFormat::FlatBuffers);
+        let result = negotiate_response_format(Some(&accept), fb_only, ResponseFormat::FlatBuffers);
         assert_eq!(result, Err(StatusCode::NOT_ACCEPTABLE));
     }
 
@@ -303,8 +293,7 @@ mod tests {
             negotiate_response_format(Some(&accept), BOTH_FORMATS, ResponseFormat::FlatBuffers);
         assert_eq!(result, Ok(ResponseFormat::FlatBuffers));
 
-        let result =
-            negotiate_response_format(Some(&accept), BOTH_FORMATS, ResponseFormat::Json);
+        let result = negotiate_response_format(Some(&accept), BOTH_FORMATS, ResponseFormat::Json);
         assert_eq!(result, Ok(ResponseFormat::Json));
     }
 }

@@ -14,7 +14,8 @@
 //! Object browser endpoints
 
 use crate::host::{
-    WebHost, auth, flatbuffer_response,
+    auth::StatelessAuth,
+    flatbuffer_response,
     negotiate::{
         BOTH_FORMATS, ResponseFormat, TEXT_PLAIN_CONTENT_TYPE, negotiate_response_format,
         reply_result_to_json, require_content_type,
@@ -23,19 +24,21 @@ use crate::host::{
 };
 use axum::{
     body::Bytes,
-    extract::{ConnectInfo, Path, State},
+    extract::Path,
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use moor_common::model::ObjectRef;
 use moor_var::Symbol;
 use rpc_common::{mk_list_objects_msg, mk_update_property_msg};
-use std::net::SocketAddr;
 use tracing::error;
 
 pub async fn list_objects_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
+    StatelessAuth {
+        auth_token,
+        client_id,
+        rpc_client,
+    }: StatelessAuth,
     header_map: HeaderMap,
 ) -> Response {
     let format = match negotiate_response_format(
@@ -47,15 +50,9 @@ pub async fn list_objects_handler(
         Err(status) => return status.into_response(),
     };
 
-    let auth_token = match auth::extract_auth_token_header(&header_map) {
-        Ok(token) => token,
-        Err(status) => return status.into_response(),
-    };
-    let (client_id, mut rpc_client) = host.new_stateless_client();
-
     let list_msg = mk_list_objects_msg(&auth_token);
 
-    let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, list_msg).await {
+    let reply_bytes = match web_host::rpc_call(client_id, &rpc_client, list_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
@@ -70,8 +67,11 @@ pub async fn list_objects_handler(
 }
 
 pub async fn update_property_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
+    StatelessAuth {
+        auth_token,
+        client_id,
+        rpc_client,
+    }: StatelessAuth,
     header_map: HeaderMap,
     Path((object, prop_name)): Path<(String, String)>,
     body: Bytes,
@@ -91,12 +91,6 @@ pub async fn update_property_handler(
         Ok(f) => f,
         Err(status) => return status.into_response(),
     };
-
-    let auth_token = match auth::extract_auth_token_header(&header_map) {
-        Ok(token) => token,
-        Err(status) => return status.into_response(),
-    };
-    let (client_id, mut rpc_client) = host.new_stateless_client();
 
     let Some(object_ref) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
@@ -126,7 +120,7 @@ pub async fn update_property_handler(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, update_msg).await {
+    let reply_bytes = match web_host::rpc_call(client_id, &rpc_client, update_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };

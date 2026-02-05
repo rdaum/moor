@@ -12,12 +12,13 @@
 //
 
 use crate::host::{
-    WebHost, auth, flatbuffer_response,
+    auth::StatelessAuth,
+    flatbuffer_response,
     negotiate::{BOTH_FORMATS, ResponseFormat, negotiate_response_format, reply_result_to_json},
     web_host,
 };
 use axum::{
-    extract::{ConnectInfo, Path, Query, State},
+    extract::{Path, Query},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -26,7 +27,6 @@ use moor_schema::rpc as moor_rpc;
 use moor_var::Symbol;
 use rpc_common::{mk_properties_msg, mk_retrieve_msg};
 use serde::Deserialize;
-use std::net::SocketAddr;
 
 #[derive(Deserialize)]
 pub struct PropertiesQuery {
@@ -34,8 +34,11 @@ pub struct PropertiesQuery {
 }
 
 pub async fn properties_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
+    StatelessAuth {
+        auth_token,
+        client_id,
+        rpc_client,
+    }: StatelessAuth,
     header_map: HeaderMap,
     Path(object): Path<String>,
     Query(query): Query<PropertiesQuery>,
@@ -49,12 +52,6 @@ pub async fn properties_handler(
         Err(status) => return status.into_response(),
     };
 
-    let auth_token = match auth::extract_auth_token_header(&header_map) {
-        Ok(token) => token,
-        Err(status) => return status.into_response(),
-    };
-    let (client_id, mut rpc_client) = host.new_stateless_client();
-
     let Some(object_ref) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
@@ -63,7 +60,7 @@ pub async fn properties_handler(
 
     let props_msg = mk_properties_msg(&auth_token, &object_ref, inherited);
 
-    let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, props_msg).await {
+    let reply_bytes = match web_host::rpc_call(client_id, &rpc_client, props_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
@@ -78,8 +75,11 @@ pub async fn properties_handler(
 }
 
 pub async fn property_retrieval_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
+    StatelessAuth {
+        auth_token,
+        client_id,
+        rpc_client,
+    }: StatelessAuth,
     header_map: HeaderMap,
     Path((object, prop_name)): Path<(String, String)>,
 ) -> Response {
@@ -91,12 +91,6 @@ pub async fn property_retrieval_handler(
         Ok(f) => f,
         Err(status) => return status.into_response(),
     };
-
-    let auth_token = match auth::extract_auth_token_header(&header_map) {
-        Ok(token) => token,
-        Err(status) => return status.into_response(),
-    };
-    let (client_id, mut rpc_client) = host.new_stateless_client();
 
     let Some(object_ref) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
@@ -111,7 +105,7 @@ pub async fn property_retrieval_handler(
         &prop_name,
     );
 
-    let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, retrieve_msg).await {
+    let reply_bytes = match web_host::rpc_call(client_id, &rpc_client, retrieve_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };

@@ -163,7 +163,11 @@ impl PendingOAuth2Store {
     }
 
     /// Redeem a one-time code, consuming it. Returns the payload if valid and not expired.
-    pub fn redeem_pending_code(&self, code: &str, browser_nonce: &str) -> Option<PendingOAuth2Code> {
+    pub fn redeem_pending_code(
+        &self,
+        code: &str,
+        browser_nonce: &str,
+    ) -> Option<PendingOAuth2Code> {
         let Ok(mut codes) = self.pending_codes.write() else {
             return None;
         };

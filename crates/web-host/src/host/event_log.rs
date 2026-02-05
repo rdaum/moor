@@ -14,14 +14,14 @@
 //! Event log encryption and history endpoints
 
 use crate::host::{
-    auth, flatbuffer_response,
+    auth::StatelessAuth,
+    flatbuffer_response,
     negotiate::{BOTH_FORMATS, ResponseFormat, negotiate_response_format, reply_result_to_json},
-    web_host::WebHost,
     web_host::rpc_call,
 };
 use axum::{
     Json,
-    extract::{ConnectInfo, Path, Query, State},
+    extract::{Path, Query},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -32,7 +32,6 @@ use rpc_common::{
 };
 use serde_derive::Deserialize;
 use serde_json::json;
-use std::net::SocketAddr;
 use tracing::error;
 use uuid::Uuid;
 
@@ -81,8 +80,11 @@ pub struct HistoryQuery {
 }
 
 pub async fn history_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
+    StatelessAuth {
+        auth_token,
+        client_id,
+        rpc_client,
+    }: StatelessAuth,
     header_map: HeaderMap,
     Query(query): Query<HistoryQuery>,
 ) -> Response {
@@ -94,12 +96,6 @@ pub async fn history_handler(
         Ok(f) => f,
         Err(status) => return status.into_response(),
     };
-
-    let (auth_token, client_id, mut rpc_client) =
-        match auth::stateless_rpc_client(&host, &header_map) {
-            Ok(ctx) => ctx,
-            Err(status) => return status.into_response(),
-        };
 
     let history_recall_union = if let Some(since_seconds) = query.since_seconds {
         moor_rpc::HistoryRecallUnion::HistoryRecallSinceSeconds(Box::new(
@@ -145,7 +141,7 @@ pub async fn history_handler(
         }),
     );
 
-    let reply_bytes = match rpc_call(client_id, &mut rpc_client, history_msg).await {
+    let reply_bytes = match rpc_call(client_id, &rpc_client, history_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
@@ -177,19 +173,15 @@ pub async fn history_handler(
 
 /// REST endpoint to get player's event log public key
 pub async fn get_pubkey_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
-    header_map: HeaderMap,
+    StatelessAuth {
+        auth_token,
+        client_id,
+        rpc_client,
+    }: StatelessAuth,
 ) -> Response {
-    let (auth_token, client_id, mut rpc_client) =
-        match auth::stateless_rpc_client(&host, &header_map) {
-            Ok(ctx) => ctx,
-            Err(status) => return status.into_response(),
-        };
-
     let get_pubkey_msg = rpc_common::mk_get_event_log_pubkey_msg(&auth_token);
 
-    let reply_bytes = match rpc_call(client_id, &mut rpc_client, get_pubkey_msg).await {
+    let reply_bytes = match rpc_call(client_id, &rpc_client, get_pubkey_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
@@ -220,19 +212,15 @@ pub async fn get_pubkey_handler(
 
 /// REST endpoint to delete all event history for the authenticated player
 pub async fn delete_history_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
-    header_map: HeaderMap,
+    StatelessAuth {
+        auth_token,
+        client_id,
+        rpc_client,
+    }: StatelessAuth,
 ) -> Response {
-    let (auth_token, client_id, mut rpc_client) =
-        match auth::stateless_rpc_client(&host, &header_map) {
-            Ok(ctx) => ctx,
-            Err(status) => return status.into_response(),
-        };
-
     let delete_msg = rpc_common::mk_delete_event_log_history_msg(&auth_token);
 
-    let reply_bytes = match rpc_call(client_id, &mut rpc_client, delete_msg).await {
+    let reply_bytes = match rpc_call(client_id, &rpc_client, delete_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
@@ -260,17 +248,13 @@ pub async fn delete_history_handler(
 /// REST endpoint to set player's event log public key
 /// Expects JSON body with `public_key` field containing age public key string (age1...)
 pub async fn set_pubkey_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
-    header_map: HeaderMap,
+    StatelessAuth {
+        auth_token,
+        client_id,
+        rpc_client,
+    }: StatelessAuth,
     Json(payload): Json<serde_json::Value>,
 ) -> Response {
-    let (auth_token, client_id, mut rpc_client) =
-        match auth::stateless_rpc_client(&host, &header_map) {
-            Ok(ctx) => ctx,
-            Err(status) => return status.into_response(),
-        };
-
     // Extract public key from request
     let public_key = match payload.get("public_key").and_then(|v| v.as_str()) {
         Some(key) => key.to_string(),
@@ -281,7 +265,7 @@ pub async fn set_pubkey_handler(
 
     let set_pubkey_msg = rpc_common::mk_set_event_log_pubkey_msg(&auth_token, public_key);
 
-    let reply_bytes = match rpc_call(client_id, &mut rpc_client, set_pubkey_msg).await {
+    let reply_bytes = match rpc_call(client_id, &rpc_client, set_pubkey_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
@@ -321,20 +305,16 @@ pub async fn set_pubkey_handler(
 
 /// REST endpoint to dismiss a specific presentation for the authenticated player
 pub async fn dismiss_presentation_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
-    header_map: HeaderMap,
+    StatelessAuth {
+        auth_token,
+        client_id,
+        rpc_client,
+    }: StatelessAuth,
     Path(presentation_id): Path<String>,
 ) -> Response {
-    let (auth_token, client_id, mut rpc_client) =
-        match auth::stateless_rpc_client(&host, &header_map) {
-            Ok(ctx) => ctx,
-            Err(status) => return status.into_response(),
-        };
-
     let dismiss_msg = mk_dismiss_presentation_msg(&auth_token, presentation_id.clone());
 
-    let reply_bytes = match rpc_call(client_id, &mut rpc_client, dismiss_msg).await {
+    let reply_bytes = match rpc_call(client_id, &rpc_client, dismiss_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
@@ -358,8 +338,11 @@ pub async fn dismiss_presentation_handler(
 }
 
 pub async fn presentations_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
+    StatelessAuth {
+        auth_token,
+        client_id,
+        rpc_client,
+    }: StatelessAuth,
     header_map: HeaderMap,
 ) -> Response {
     let format = match negotiate_response_format(
@@ -371,15 +354,9 @@ pub async fn presentations_handler(
         Err(status) => return status.into_response(),
     };
 
-    let (auth_token, client_id, mut rpc_client) =
-        match auth::stateless_rpc_client(&host, &header_map) {
-            Ok(ctx) => ctx,
-            Err(status) => return status.into_response(),
-        };
-
     let presentations_msg = mk_request_current_presentations_msg(&auth_token);
 
-    let reply_bytes = match rpc_call(client_id, &mut rpc_client, presentations_msg).await {
+    let reply_bytes = match rpc_call(client_id, &rpc_client, presentations_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };

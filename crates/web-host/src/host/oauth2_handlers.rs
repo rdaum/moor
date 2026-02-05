@@ -117,8 +117,8 @@ pub struct CodeExchangeRequest {
 /// The `oauth2_code` is a one-time server-side code that resolves to the verified identity.
 #[derive(Deserialize)]
 pub struct AccountChoiceRequest {
-    pub mode: String,       // "oauth2_create" or "oauth2_connect"
-    pub oauth2_code: String, // One-time code from callback redirect
+    pub mode: String,                      // "oauth2_create" or "oauth2_connect"
+    pub oauth2_code: String,               // One-time code from callback redirect
     pub player_name: Option<String>,       // For oauth2_create
     pub existing_email: Option<String>,    // For oauth2_connect
     pub existing_password: Option<String>, // For oauth2_connect

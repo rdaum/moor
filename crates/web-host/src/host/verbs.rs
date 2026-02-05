@@ -12,7 +12,9 @@
 //
 
 use crate::host::{
-    WebHost, auth, flatbuffer_response,
+    WebHost,
+    auth::{EphemeralAuth, StatelessAuth},
+    flatbuffer_response,
     negotiate::{
         BOTH_FORMATS, FLATBUFFERS_CONTENT_TYPE, ResponseFormat, TEXT_PLAIN_CONTENT_TYPE,
         negotiate_response_format, reply_result_to_json, require_content_type,
@@ -22,7 +24,7 @@ use crate::host::{
 };
 use axum::{
     body::Bytes,
-    extract::{ConnectInfo, Path, Query, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -40,14 +42,13 @@ use moor_var::Symbol;
 use planus::ReadAsRoot;
 use rpc_async_client::pubsub_client::events_recv;
 use rpc_common::{
-    mk_detach_msg, mk_invoke_verb_msg, mk_program_msg, mk_retrieve_msg, mk_verbs_msg,
-    read_reply_result, scheduler_error_from_ref, scheduler_error_to_flatbuffer_struct,
+    mk_invoke_verb_msg, mk_program_msg, mk_retrieve_msg, mk_verbs_msg, read_reply_result,
+    scheduler_error_from_ref, scheduler_error_to_flatbuffer_struct,
 };
 use serde::Deserialize;
-use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::time::timeout;
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 
 #[derive(Deserialize)]
 pub struct VerbsQuery {
@@ -55,8 +56,11 @@ pub struct VerbsQuery {
 }
 
 pub async fn verb_retrieval_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
+    StatelessAuth {
+        auth_token,
+        client_id,
+        rpc_client,
+    }: StatelessAuth,
     header_map: HeaderMap,
     Path((object, name)): Path<(String, String)>,
 ) -> Response {
@@ -69,12 +73,6 @@ pub async fn verb_retrieval_handler(
         Err(status) => return status.into_response(),
     };
 
-    let auth_token = match auth::extract_auth_token_header(&header_map) {
-        Ok(token) => token,
-        Err(status) => return status.into_response(),
-    };
-    let (client_id, mut rpc_client) = host.new_stateless_client();
-
     let Some(object_ref) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
@@ -83,7 +81,7 @@ pub async fn verb_retrieval_handler(
 
     let retrieve_msg = mk_retrieve_msg(&auth_token, &object_ref, moor_rpc::EntityType::Verb, &name);
 
-    let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, retrieve_msg).await {
+    let reply_bytes = match web_host::rpc_call(client_id, &rpc_client, retrieve_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
@@ -98,8 +96,11 @@ pub async fn verb_retrieval_handler(
 }
 
 pub async fn verbs_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
+    StatelessAuth {
+        auth_token,
+        client_id,
+        rpc_client,
+    }: StatelessAuth,
     header_map: HeaderMap,
     Path(object): Path<String>,
     Query(query): Query<VerbsQuery>,
@@ -113,12 +114,6 @@ pub async fn verbs_handler(
         Err(status) => return status.into_response(),
     };
 
-    let auth_token = match auth::extract_auth_token_header(&header_map) {
-        Ok(token) => token,
-        Err(status) => return status.into_response(),
-    };
-    let (client_id, mut rpc_client) = host.new_stateless_client();
-
     let Some(object_ref) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
@@ -127,7 +122,7 @@ pub async fn verbs_handler(
 
     let verbs_msg = mk_verbs_msg(&auth_token, &object_ref, inherited);
 
-    let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, verbs_msg).await {
+    let reply_bytes = match web_host::rpc_call(client_id, &rpc_client, verbs_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
@@ -273,7 +268,13 @@ async fn wait_for_task_completion(
 
 pub async fn invoke_verb_handler(
     State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    EphemeralAuth {
+        auth_token,
+        client_id,
+        client_token,
+        rpc_client,
+        ..
+    }: EphemeralAuth,
     header_map: HeaderMap,
     Path((object_path, verb_name)): Path<(String, String)>,
     body: Bytes,
@@ -340,12 +341,6 @@ pub async fn invoke_verb_handler(
         }
     };
 
-    let (auth_token, client_id, client_token, mut rpc_client) =
-        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
-            Ok(connection_details) => connection_details,
-            Err(status) => return status.into_response(),
-        };
-
     // Subscribe to events BEFORE submitting the task to avoid race condition
     let narrative_sub = match host.events_sub(client_id).await {
         Ok(sub) => sub,
@@ -370,7 +365,7 @@ pub async fn invoke_verb_handler(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, invoke_msg).await {
+    let reply_bytes = match web_host::rpc_call(client_id, &rpc_client, invoke_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
@@ -402,11 +397,7 @@ pub async fn invoke_verb_handler(
         }
     };
 
-    // Hard detach for ephemeral HTTP connections - immediate cleanup
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, true).message,
-    };
-    let _ = rpc_client.make_client_rpc_call(client_id, detach_msg).await;
+    // DetachGuard in EphemeralAuth handles cleanup automatically
 
     // Build VerbCallResponse based on the completion result
     let response = match completion_result {
@@ -479,8 +470,13 @@ pub async fn invoke_verb_handler(
 }
 
 pub async fn verb_program_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    EphemeralAuth {
+        auth_token,
+        client_id,
+        client_token,
+        rpc_client,
+        ..
+    }: EphemeralAuth,
     header_map: HeaderMap,
     Path((object, name)): Path<(String, String)>,
     expression: Bytes,
@@ -501,12 +497,6 @@ pub async fn verb_program_handler(
         Err(status) => return status.into_response(),
     };
 
-    let (auth_token, client_id, client_token, mut rpc_client) =
-        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
-            Ok(connection_details) => connection_details,
-            Err(status) => return status.into_response(),
-        };
-
     let Some(object_ref) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
@@ -522,27 +512,18 @@ pub async fn verb_program_handler(
 
     let program_msg = mk_program_msg(&client_token, &auth_token, &object_ref, &name, code);
 
-    let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, program_msg).await {
+    let reply_bytes = match web_host::rpc_call(client_id, &rpc_client, program_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
 
-    let response = match format {
+    // DetachGuard in EphemeralAuth handles cleanup automatically
+
+    match format {
         ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
         ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
             Ok(resp) => resp,
-            Err(status) => return status.into_response(),
+            Err(status) => status.into_response(),
         },
-    };
-
-    // Hard detach for ephemeral HTTP connections - immediate cleanup
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, true).message,
-    };
-    let _ = rpc_client
-        .make_client_rpc_call(client_id, detach_msg)
-        .await
-        .map_err(|e| warn!("Unable to send detach to RPC server: {}", e));
-
-    response
+    }
 }

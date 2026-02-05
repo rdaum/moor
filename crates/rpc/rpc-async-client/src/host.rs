@@ -240,12 +240,15 @@ pub async fn process_hosts_events(
         info!("CURVE encryption enabled for host events connection");
     }
 
-    let events_sub = socket_builder
-        .connect(&events_zmq_address)
-        .map_err(|e| RpcError::CouldNotInitiateSession(format!("Unable to connect host events subscriber: {}", e)))?;
-    let mut events_sub = events_sub
-        .subscribe(HOST_BROADCAST_TOPIC)
-        .map_err(|e| RpcError::CouldNotInitiateSession(format!("Unable to subscribe to host events: {}", e)))?;
+    let events_sub = socket_builder.connect(&events_zmq_address).map_err(|e| {
+        RpcError::CouldNotInitiateSession(format!(
+            "Unable to connect host events subscriber: {}",
+            e
+        ))
+    })?;
+    let mut events_sub = events_sub.subscribe(HOST_BROADCAST_TOPIC).map_err(|e| {
+        RpcError::CouldNotInitiateSession(format!("Unable to subscribe to host events: {}", e))
+    })?;
 
     loop {
         if kill_switch.load(std::sync::atomic::Ordering::Relaxed) {

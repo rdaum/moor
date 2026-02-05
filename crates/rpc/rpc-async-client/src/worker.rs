@@ -57,12 +57,10 @@ pub async fn attach_worker(
             info!("CURVE encryption enabled for worker connection");
         }
 
-        let rpc_request_sock = socket_builder
-            .connect(rpc_address)
-            .map_err(|e| {
-                warn!("Unable to connect RPC server for worker attachment: {}", e);
-                e
-            });
+        let rpc_request_sock = socket_builder.connect(rpc_address).map_err(|e| {
+            warn!("Unable to connect RPC server for worker attachment: {}", e);
+            e
+        });
         let rpc_request_sock = match rpc_request_sock {
             Ok(sock) => sock,
             Err(_) => {

@@ -191,12 +191,10 @@ async fn process_fb<ProcessFunc, Fut>(
             .set_curve_serverkey(&server_public_bytes);
     }
 
-    let rpc_request_sock = socket_builder
-        .connect(&rpc_address)
-        .map_err(|e| {
-            error!("Unable to connect RPC server for worker task: {}", e);
-            e
-        });
+    let rpc_request_sock = socket_builder.connect(&rpc_address).map_err(|e| {
+        error!("Unable to connect RPC server for worker task: {}", e);
+        e
+    });
     let rpc_request_sock = match rpc_request_sock {
         Ok(sock) => sock,
         Err(_) => return,
