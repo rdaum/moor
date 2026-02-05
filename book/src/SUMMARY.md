@@ -66,6 +66,7 @@
     - [Client Output and Presentations](web-client/client-output-and-presentations.md)
     - [Accessibility](web-client/accessibility.md)
     - [Presentations](web-client/presentations.md)
+    - [HTTP API Reference](web-client/http-api-reference.md)
 - [mooR architecture overview](moor-architecture.md)
 - [MOO Resources](./moo-resources.md)
 
