@@ -13,7 +13,7 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use crate::host::{auth, ws_connection::WebSocketConnection};
+use crate::host::{auth, flatbuffer_response, ws_connection::WebSocketConnection};
 use axum::{
     Json,
     body::{Body, Bytes},
@@ -196,15 +196,73 @@ fn failure_message(failure: moor_rpc::FailureRef<'_>) -> String {
         .unwrap_or_else(|| "unknown error".to_string())
 }
 
+fn decode_attach_result(
+    attach_result: moor_rpc::AttachResultRef<'_>,
+) -> Result<(ClientToken, Obj), WsHostError> {
+    let success = attach_result
+        .success()
+        .map_err(|e| WsHostError::RpcError(eyre!("AttachResult missing success flag: {}", e)))?;
+    if !success {
+        return Err(WsHostError::AuthenticationFailed);
+    }
+
+    let client_token_ref = attach_result
+        .client_token()
+        .ok()
+        .flatten()
+        .ok_or_else(|| WsHostError::RpcError(eyre!("AttachResult missing client_token")))?;
+    let client_token_value = client_token_ref.token().map_err(|e| {
+        WsHostError::RpcError(eyre!(
+            "AttachResult client token missing token string: {}",
+            e
+        ))
+    })?;
+
+    let player_ref = attach_result
+        .player()
+        .ok()
+        .flatten()
+        .ok_or_else(|| WsHostError::RpcError(eyre!("AttachResult missing player")))?;
+    let player = obj_from_ref(player_ref)
+        .map_err(|e| WsHostError::RpcError(eyre!("Failed to decode player: {}", e)))?;
+
+    Ok((ClientToken(client_token_value.to_string()), player))
+}
+
+fn decode_new_connection_token(
+    new_conn: moor_rpc::NewConnectionRef<'_>,
+) -> Result<ClientToken, WsHostError> {
+    let client_token_ref = new_conn
+        .client_token()
+        .ok()
+        .ok_or_else(|| WsHostError::RpcError(eyre!("NewConnection missing client_token")))?;
+    let client_token_value = client_token_ref.token().map_err(|e| {
+        WsHostError::RpcError(eyre!(
+            "NewConnection client token missing token string: {}",
+            e
+        ))
+    })?;
+
+    let objid_ref = new_conn
+        .connection_obj()
+        .ok()
+        .ok_or_else(|| WsHostError::RpcError(eyre!("NewConnection missing connection_obj")))?;
+    let objid = obj_from_ref(objid_ref)
+        .map_err(|e| WsHostError::RpcError(eyre!("Failed to decode connection_obj: {}", e)))?;
+    info!("Connection established, connection ID: {}", objid);
+
+    Ok(ClientToken(client_token_value.to_string()))
+}
+
 /// Cached DNS resolver to avoid recreating on every connection
 /// Initialized lazily on first use
-static DNS_RESOLVER: LazyLock<TokioResolver> = LazyLock::new(|| {
+static DNS_RESOLVER: LazyLock<Result<TokioResolver, String>> = LazyLock::new(|| {
     debug!("DNS resolver initialization STARTING");
-    let builder = TokioResolver::builder_tokio().expect("Failed to create DNS resolver builder");
+    let builder = TokioResolver::builder_tokio().map_err(|e| e.to_string())?;
     debug!("DNS resolver builder created, calling build()");
     let resolver = builder.build();
     debug!("DNS resolver initialization COMPLETE");
-    resolver
+    Ok(resolver)
 });
 
 /// Perform async reverse DNS lookup for an IP address with timeout
@@ -215,7 +273,9 @@ async fn resolve_hostname(ip: IpAddr) -> Result<String, eyre::Error> {
     );
 
     // Get the cached resolver (created once, reused for all connections)
-    let resolver = &*DNS_RESOLVER;
+    let resolver = DNS_RESOLVER
+        .as_ref()
+        .map_err(|e| eyre::eyre!("DNS resolver initialization failed: {}", e))?;
 
     debug!("resolve_hostname: DNS resolver acquired, creating lookup future");
 
@@ -400,29 +460,28 @@ impl WebHost {
         let reply = read_reply_result(&reply_bytes)
             .map_err(|e| WsHostError::RpcError(eyre!("Failed to parse reply: {}", e)))?;
 
-        let (client_token, player) = match reply.result().expect("Missing result") {
-            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
-                let daemon_reply = client_success.reply().expect("Missing reply");
-                match daemon_reply.reply().expect("Missing reply union") {
+        let (client_token, player) = match reply.result() {
+            Ok(moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success)) => {
+                let daemon_reply = client_success.reply().ok().ok_or_else(|| {
+                    WsHostError::RpcError(eyre!("Attach response missing daemon reply"))
+                })?;
+                match daemon_reply.reply().map_err(|e| {
+                    WsHostError::RpcError(eyre!(
+                        "Attach response missing daemon reply union: {}",
+                        e
+                    ))
+                })? {
                     moor_rpc::DaemonToClientReplyUnionRef::AttachResult(attach_result) => {
-                        if attach_result.success().expect("Missing success") {
-                            let client_token_ref = attach_result
-                                .client_token()
-                                .expect("Missing client_token")
-                                .expect("Client token is None");
-                            let client_token = ClientToken(
-                                client_token_ref.token().expect("Missing token").to_string(),
-                            );
-                            let player_ref = attach_result
-                                .player()
-                                .expect("Missing player")
-                                .expect("Player is None");
-                            let player = obj_from_ref(player_ref).expect("Failed to decode player");
-                            debug!("Connection authenticated, player: {}", player);
-                            (client_token, player)
-                        } else {
-                            warn!("Connection authentication failed from {}", peer_addr);
-                            return Err(WsHostError::AuthenticationFailed);
+                        match decode_attach_result(attach_result) {
+                            Ok((client_token, player)) => {
+                                debug!("Connection authenticated, player: {}", player);
+                                (client_token, player)
+                            }
+                            Err(WsHostError::AuthenticationFailed) => {
+                                warn!("Connection authentication failed from {}", peer_addr);
+                                return Err(WsHostError::AuthenticationFailed);
+                            }
+                            Err(e) => return Err(e),
                         }
                     }
                     _ => {
@@ -433,14 +492,20 @@ impl WebHost {
                     }
                 }
             }
-            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+            Ok(moor_rpc::ReplyResultUnionRef::Failure(failure)) => {
                 let msg = failure_message(failure);
                 debug!("Attach rejected: {}", msg);
                 return Err(WsHostError::AuthenticationFailed);
             }
-            moor_rpc::ReplyResultUnionRef::HostSuccess(_) => {
+            Ok(moor_rpc::ReplyResultUnionRef::HostSuccess(_)) => {
                 error!("Unexpected host success response");
                 return Err(WsHostError::RpcError(eyre!("Unexpected host success")));
+            }
+            Err(e) => {
+                return Err(WsHostError::RpcError(eyre!(
+                    "Attach response missing top-level result: {}",
+                    e
+                )));
             }
         };
 
@@ -516,28 +581,27 @@ impl WebHost {
         let reply = read_reply_result(&reply_bytes)
             .map_err(|e| WsHostError::RpcError(eyre!("Failed to parse reply: {}", e)))?;
 
-        let (client_token, player) = match reply.result().expect("Missing result") {
-            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
-                let daemon_reply = client_success.reply().expect("Missing reply");
-                match daemon_reply.reply().expect("Missing reply union") {
+        let (client_token, player) = match reply.result() {
+            Ok(moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success)) => {
+                let daemon_reply = client_success.reply().ok().ok_or_else(|| {
+                    WsHostError::RpcError(eyre!("Reattach response missing daemon reply"))
+                })?;
+                match daemon_reply.reply().map_err(|e| {
+                    WsHostError::RpcError(eyre!(
+                        "Reattach response missing daemon reply union: {}",
+                        e
+                    ))
+                })? {
                     moor_rpc::DaemonToClientReplyUnionRef::AttachResult(attach_result) => {
-                        if attach_result.success().expect("Missing success") {
-                            let client_token_ref = attach_result
-                                .client_token()
-                                .expect("Missing client_token")
-                                .expect("Client token is None");
-                            let confirmed_client_token = ClientToken(
-                                client_token_ref.token().expect("Missing token").to_string(),
-                            );
-                            let player_ref = attach_result
-                                .player()
-                                .expect("Missing player")
-                                .expect("Player is None");
-                            let player = obj_from_ref(player_ref).expect("Failed to decode player");
-                            (confirmed_client_token, player)
-                        } else {
-                            warn!("Connection reattach failed from {}", peer_addr);
-                            return Err(WsHostError::AuthenticationFailed);
+                        match decode_attach_result(attach_result) {
+                            Ok((confirmed_client_token, player)) => {
+                                (confirmed_client_token, player)
+                            }
+                            Err(WsHostError::AuthenticationFailed) => {
+                                warn!("Connection reattach failed from {}", peer_addr);
+                                return Err(WsHostError::AuthenticationFailed);
+                            }
+                            Err(e) => return Err(e),
                         }
                     }
                     _ => {
@@ -548,14 +612,20 @@ impl WebHost {
                     }
                 }
             }
-            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+            Ok(moor_rpc::ReplyResultUnionRef::Failure(failure)) => {
                 let msg = failure_message(failure);
                 debug!("Reattach rejected: {}", msg);
                 return Err(WsHostError::AuthenticationFailed);
             }
-            moor_rpc::ReplyResultUnionRef::HostSuccess(_) => {
+            Ok(moor_rpc::ReplyResultUnionRef::HostSuccess(_)) => {
                 error!("Unexpected host success response");
                 return Err(WsHostError::RpcError(eyre!("Unexpected host success")));
+            }
+            Err(e) => {
+                return Err(WsHostError::RpcError(eyre!(
+                    "Reattach response missing top-level result: {}",
+                    e
+                )));
             }
         };
 
@@ -596,10 +666,10 @@ impl WebHost {
 
         let narrative_sub = narrative_socket_builder
             .connect(self.pubsub_addr.as_str())
-            .expect("Unable to connect narrative subscriber ");
+            .map_err(|e| eyre::eyre!("Unable to connect narrative subscriber: {}", e))?;
         let narrative_sub = narrative_sub
             .subscribe(&client_id.as_bytes()[..])
-            .expect("Unable to subscribe to narrative messages for client connection");
+            .map_err(|e| eyre::eyre!("Unable to subscribe to narrative messages: {}", e))?;
 
         let mut broadcast_socket_builder = subscribe(&zmq_ctx);
 
@@ -621,10 +691,10 @@ impl WebHost {
 
         let broadcast_sub = broadcast_socket_builder
             .connect(self.pubsub_addr.as_str())
-            .expect("Unable to connect broadcast subscriber ");
+            .map_err(|e| eyre::eyre!("Unable to connect broadcast subscriber: {}", e))?;
         let broadcast_sub = broadcast_sub
             .subscribe(CLIENT_BROADCAST_TOPIC)
-            .expect("Unable to subscribe to broadcast messages for client connection");
+            .map_err(|e| eyre::eyre!("Unable to subscribe to broadcast messages: {}", e))?;
 
         info!(
             "Subscribed on pubsub socket for {:?}, socket addr {}",
@@ -737,21 +807,19 @@ impl WebHost {
         let reply = read_reply_result(&reply_bytes)
             .map_err(|e| WsHostError::RpcError(eyre!("Failed to parse reply: {}", e)))?;
 
-        let client_token = match reply.result().expect("Missing result") {
-            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
-                let daemon_reply = client_success.reply().expect("Missing reply");
-                match daemon_reply.reply().expect("Missing reply union") {
+        let client_token = match reply.result() {
+            Ok(moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success)) => {
+                let daemon_reply = client_success.reply().ok().ok_or_else(|| {
+                    WsHostError::RpcError(eyre!("Connection establishment missing daemon reply"))
+                })?;
+                match daemon_reply.reply().map_err(|e| {
+                    WsHostError::RpcError(eyre!(
+                        "Connection establishment missing daemon reply union: {}",
+                        e
+                    ))
+                })? {
                     moor_rpc::DaemonToClientReplyUnionRef::NewConnection(new_conn) => {
-                        let client_token_ref =
-                            new_conn.client_token().expect("Missing client_token");
-                        let client_token = ClientToken(
-                            client_token_ref.token().expect("Missing token").to_string(),
-                        );
-                        let objid_ref = new_conn.connection_obj().expect("Missing connection_obj");
-                        let objid =
-                            obj_from_ref(objid_ref).expect("Failed to decode connection_obj");
-                        info!("Connection established, connection ID: {}", objid);
-                        client_token
+                        decode_new_connection_token(new_conn)?
                     }
                     _ => {
                         error!("Unexpected response from RPC server");
@@ -761,13 +829,19 @@ impl WebHost {
                     }
                 }
             }
-            moor_rpc::ReplyResultUnionRef::Failure(_) => {
+            Ok(moor_rpc::ReplyResultUnionRef::Failure(_)) => {
                 error!("RPC failure in connection establishment");
                 return Err(WsHostError::RpcError(eyre!("RPC failure")));
             }
-            moor_rpc::ReplyResultUnionRef::HostSuccess(_) => {
+            Ok(moor_rpc::ReplyResultUnionRef::HostSuccess(_)) => {
                 error!("Unexpected host success response");
                 return Err(WsHostError::RpcError(eyre!("Unexpected host success")));
+            }
+            Err(e) => {
+                return Err(WsHostError::RpcError(eyre!(
+                    "Connection establishment missing top-level result: {}",
+                    e
+                )));
             }
         };
 
@@ -988,11 +1062,7 @@ pub async fn system_property_handler(
     // Just return the raw FlatBuffer bytes!
     // No parsing, no JSON conversion - the client will handle it
 
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/x-flatbuffer")
-        .body(Body::from(reply_bytes))
-        .unwrap()
+    flatbuffer_response(reply_bytes)
 }
 
 /// Attach a websocket connection to an existing player.
@@ -1035,10 +1105,7 @@ async fn attach(
             }
             Err(e) => {
                 error!("Reattach attempt failed: {}", e);
-                return Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Body::empty())
-                    .unwrap();
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         }
     } else {
@@ -1077,17 +1144,11 @@ async fn attach(
         {
             Ok(details) => (ct, details),
             Err(WsHostError::AuthenticationFailed) => {
-                return Response::builder()
-                    .status(StatusCode::UNAUTHORIZED)
-                    .body(Body::empty())
-                    .unwrap();
+                return StatusCode::UNAUTHORIZED.into_response();
             }
             Err(e) => {
                 error!("Unable to validate auth token: {}", e);
-                return Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Body::empty())
-                    .unwrap();
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         }
     };
@@ -1105,10 +1166,7 @@ async fn attach(
         )
         .await
     else {
-        return Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .body(Body::empty())
-            .unwrap();
+        return StatusCode::UNAUTHORIZED.into_response();
     };
 
     ws.on_upgrade(
@@ -1208,11 +1266,7 @@ pub async fn resolve_objref_handler(
         Err(status) => return status.into_response(),
     };
 
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/x-flatbuffer")
-        .body(Body::from(reply_bytes))
-        .unwrap()
+    flatbuffer_response(reply_bytes)
 }
 
 /// FlatBuffer version: POST /fb/eval - evaluate expression
@@ -1236,11 +1290,7 @@ pub async fn eval_handler(
         Err(status) => return status.into_response(),
     };
 
-    let response = Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/x-flatbuffer")
-        .body(Body::from(reply_bytes))
-        .unwrap();
+    let response = flatbuffer_response(reply_bytes);
 
     // Hard detach for ephemeral HTTP connections - immediate cleanup
     let detach_msg = moor_rpc::HostClientToDaemonMessage {
@@ -1249,7 +1299,7 @@ pub async fn eval_handler(
     let _ = rpc_client
         .make_client_rpc_call(client_id, detach_msg)
         .await
-        .expect("Unable to send detach to RPC server");
+        .map_err(|e| warn!("Unable to send detach to RPC server: {}", e));
 
     response
 }
@@ -1279,11 +1329,7 @@ pub async fn invoke_welcome_message_handler(
         Err(status) => return status.into_response(),
     };
 
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/x-flatbuffer")
-        .body(Body::from(reply_bytes))
-        .unwrap()
+    flatbuffer_response(reply_bytes)
 }
 
 /// Health check endpoint - verifies host is healthy and can communicate with daemon
@@ -1291,10 +1337,13 @@ pub async fn invoke_welcome_message_handler(
 /// Does NOT invoke any MOO code - just checks infrastructure connectivity
 pub async fn health_handler(State(host): State<WebHost>) -> Response {
     let last_ping = host.last_daemon_ping.load(Ordering::Relaxed);
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let now = match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(duration) => duration.as_secs(),
+        Err(e) => {
+            error!("Invalid system time in health check: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
 
     // Report healthy if: no ping yet (last_ping == 0, still starting up) OR ping within last 30s
     // This proves: daemon is alive, CURVE auth working, host is registered

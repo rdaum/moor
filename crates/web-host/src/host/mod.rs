@@ -43,6 +43,20 @@ pub use web_host::{
 
 pub use webhooks::web_hook_handler;
 
+pub(crate) fn flatbuffer_response(reply_bytes: Vec<u8>) -> Response {
+    match Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "application/x-flatbuffer")
+        .body(Body::from(reply_bytes))
+    {
+        Ok(response) => response,
+        Err(e) => {
+            error!("Failed to build FlatBuffer response: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 // Not used yet
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -54,3 +68,9 @@ pub enum JsonParseError {
     #[error("Invalid representation")]
     InvalidRepresentation,
 }
+use axum::{
+    body::Body,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
+use tracing::error;

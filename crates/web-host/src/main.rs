@@ -136,9 +136,10 @@ impl Listeners {
         &mut self,
         mut listeners_channel: tokio::sync::mpsc::Receiver<ListenersMessage>,
     ) {
-        self.zmq_ctx
-            .set_io_threads(8)
-            .expect("Unable to set ZMQ IO threads");
+        if let Err(e) = self.zmq_ctx.set_io_threads(8) {
+            error!("Unable to set ZMQ IO threads: {}", e);
+            return;
+        }
 
         loop {
             if self.kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
@@ -218,10 +219,9 @@ impl Listeners {
                     let listener = self.listeners.remove(&addr);
                     info!(?addr, "Removing listener");
                     if let Some(listener) = listener {
-                        listener
-                            .terminate
-                            .send(true)
-                            .expect("Unable to send terminate message");
+                        if let Err(e) = listener.terminate.send(true) {
+                            error!("Unable to send terminate message: {}", e);
+                        }
                         let _ = reply.send(Ok(()));
                     } else {
                         let _ = reply.send(Err(ListenersError::RemoveListenerFailed(addr)));
@@ -237,7 +237,9 @@ impl Listeners {
                             is_tls: false,
                         })
                         .collect();
-                    tx.send(listeners).expect("Unable to send listeners list");
+                    if let Err(e) = tx.send(listeners) {
+                        error!("Unable to send listeners list: {:?}", e);
+                    }
                 }
                 None => {
                     warn!("Listeners channel closed, stopping...");
@@ -379,7 +381,13 @@ async fn main() -> Result<(), eyre::Error> {
     if let Some(config_file) = config_file {
         args_figment = args_figment.merge(Yaml::file(config_file));
     }
-    let args = args_figment.extract::<Args>().unwrap();
+    let args = match args_figment.extract::<Args>() {
+        Ok(args) => args,
+        Err(e) => {
+            eprintln!("Unable to parse arguments/configuration: {e}");
+            std::process::exit(1);
+        }
+    };
 
     moor_common::tracing::init_tracing(args.debug).unwrap_or_else(|e| {
         eprintln!("Unable to configure logging: {e}");

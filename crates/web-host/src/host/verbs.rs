@@ -11,9 +11,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::host::{WebHost, auth, web_host};
+use crate::host::{WebHost, auth, flatbuffer_response, web_host};
 use axum::{
-    body::{Body, Bytes},
+    body::Bytes,
     extract::{ConnectInfo, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -39,7 +39,7 @@ use serde::Deserialize;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::time::timeout;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 #[derive(Deserialize)]
 pub struct VerbsQuery {
@@ -72,11 +72,7 @@ pub async fn verb_retrieval_handler(
         Err(status) => return status.into_response(),
     };
 
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/x-flatbuffer")
-        .body(Body::from(reply_bytes))
-        .unwrap()
+    flatbuffer_response(reply_bytes)
 }
 
 /// FlatBuffer version: GET /fb/verbs/{object} - list verbs
@@ -106,11 +102,7 @@ pub async fn verbs_handler(
         Err(status) => return status.into_response(),
     };
 
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/x-flatbuffer")
-        .body(Body::from(reply_bytes))
-        .unwrap()
+    flatbuffer_response(reply_bytes)
 }
 
 /// Extract task_id from a TaskSubmitted response
@@ -427,11 +419,7 @@ pub async fn invoke_verb_handler(
     let mut builder = planus::Builder::new();
     let response_bytes = builder.finish(&response, None).to_vec();
 
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/x-flatbuffer")
-        .body(Body::from(response_bytes))
-        .unwrap()
+    flatbuffer_response(response_bytes)
 }
 
 /// FlatBuffer version: POST /fb/verbs/{object}/{name} - compile/program a verb
@@ -468,11 +456,7 @@ pub async fn verb_program_handler(
         Err(status) => return status.into_response(),
     };
 
-    let response = Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/x-flatbuffer")
-        .body(Body::from(reply_bytes))
-        .unwrap();
+    let response = flatbuffer_response(reply_bytes);
 
     // Hard detach for ephemeral HTTP connections - immediate cleanup
     let detach_msg = moor_rpc::HostClientToDaemonMessage {
@@ -481,7 +465,7 @@ pub async fn verb_program_handler(
     let _ = rpc_client
         .make_client_rpc_call(client_id, detach_msg)
         .await
-        .expect("Unable to send detach to RPC server");
+        .map_err(|e| warn!("Unable to send detach to RPC server: {}", e));
 
     response
 }

@@ -113,17 +113,11 @@ async fn auth_handler(
         Ok((client_id, rpc_client, client_token)) => (client_id, rpc_client, client_token),
         Err(WsHostError::AuthenticationFailed) => {
             warn!("Authentication failed for {}", player);
-            return Response::builder()
-                .status(StatusCode::FORBIDDEN)
-                .body(Body::empty())
-                .unwrap();
+            return StatusCode::FORBIDDEN.into_response();
         }
         Err(e) => {
             error!("Unable to establish connection: {}", e);
-            return Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(Body::empty())
-                .unwrap();
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 
@@ -142,61 +136,98 @@ async fn auth_handler(
         None,
     );
 
-    let reply_bytes = rpc_client
-        .make_client_rpc_call(client_id, login_msg)
-        .await
-        .expect("Unable to send login request to RPC server");
+    let reply_bytes = rpc_client.make_client_rpc_call(client_id, login_msg).await;
+    let reply_bytes = match reply_bytes {
+        Ok(reply_bytes) => reply_bytes,
+        Err(e) => {
+            error!("Unable to send login request to RPC server: {}", e);
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        }
+    };
 
-    let reply = read_reply_result(&reply_bytes).expect("Failed to parse reply");
+    let reply = match read_reply_result(&reply_bytes) {
+        Ok(reply) => reply,
+        Err(e) => {
+            error!("Failed to parse login reply: {}", e);
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
+    };
 
     // Check if login was successful and extract auth_token
-    let auth_token = match reply.result().expect("Missing result") {
-        moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
-            let daemon_reply = client_success.reply().expect("Missing reply");
-            match daemon_reply.reply().expect("Missing reply union") {
-                moor_rpc::DaemonToClientReplyUnionRef::LoginResult(login_result) => {
-                    if login_result.success().expect("Missing success") {
-                        let auth_token_ref = login_result
-                            .auth_token()
-                            .expect("Missing auth_token")
-                            .expect("Missing auth token");
-                        AuthToken(auth_token_ref.token().expect("Missing token").to_string())
+    let auth_token = match reply.result() {
+        Ok(moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success)) => {
+            let daemon_reply = match client_success.reply().ok() {
+                Some(reply) => reply,
+                None => {
+                    error!("Login response missing daemon reply");
+                    return StatusCode::BAD_GATEWAY.into_response();
+                }
+            };
+            match daemon_reply.reply() {
+                Ok(moor_rpc::DaemonToClientReplyUnionRef::LoginResult(login_result)) => {
+                    let success = match login_result.success() {
+                        Ok(success) => success,
+                        Err(e) => {
+                            error!("LoginResult missing success flag: {}", e);
+                            return StatusCode::BAD_GATEWAY.into_response();
+                        }
+                    };
+                    if success {
+                        let auth_token_ref = match login_result.auth_token().ok().flatten() {
+                            Some(auth_token_ref) => auth_token_ref,
+                            None => {
+                                error!("LoginResult missing auth token");
+                                return StatusCode::BAD_GATEWAY.into_response();
+                            }
+                        };
+                        match auth_token_ref.token() {
+                            Ok(token) => AuthToken(token.to_string()),
+                            Err(e) => {
+                                error!("LoginResult auth token missing token string: {}", e);
+                                return StatusCode::BAD_GATEWAY.into_response();
+                            }
+                        }
                     } else {
                         error!("Login failed");
-                        return Response::builder()
-                            .status(StatusCode::UNAUTHORIZED)
-                            .body(Body::empty())
-                            .unwrap();
+                        return StatusCode::UNAUTHORIZED.into_response();
                     }
                 }
-                _ => {
+                Ok(_) => {
                     error!("Unexpected reply type");
-                    return Response::builder()
-                        .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .body(Body::empty())
-                        .unwrap();
+                    return StatusCode::BAD_GATEWAY.into_response();
+                }
+                Err(e) => {
+                    error!("Login response missing daemon reply union: {}", e);
+                    return StatusCode::BAD_GATEWAY.into_response();
                 }
             }
         }
-        _ => {
+        Ok(_) => {
             error!("Login failed");
-            return Response::builder()
-                .status(StatusCode::UNAUTHORIZED)
-                .body(Body::empty())
-                .unwrap();
+            return StatusCode::UNAUTHORIZED.into_response();
+        }
+        Err(e) => {
+            error!("Login response missing top-level result: {}", e);
+            return StatusCode::BAD_GATEWAY.into_response();
         }
     };
 
     // Keep the connection alive - WebSocket will reattach to it, preserving the connection ID
     // from :do_login_command. This is the user's "real" connection.
-    Response::builder()
+    match Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/x-flatbuffer")
         .header("X-Moor-Auth-Token", auth_token.0)
         .header("X-Moor-Client-Token", client_token.0.clone())
         .header("X-Moor-Client-Id", client_id.to_string())
         .body(Body::from(reply_bytes))
-        .unwrap()
+    {
+        Ok(response) => response,
+        Err(e) => {
+            error!("Failed to build auth response: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 /// Authenticate an HTTP request and create an ephemeral connection.
@@ -254,17 +285,11 @@ pub async fn validate_auth_handler(
     // Basic syntactic check - PASETO tokens start with "v4.public."
     if !auth_token.0.starts_with("v4.public.") {
         debug!("Auth token has invalid format");
-        return Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .body(Body::empty())
-            .unwrap();
+        return StatusCode::UNAUTHORIZED.into_response();
     }
 
     debug!("Auth token validated (syntactic check passed)");
-    Response::builder()
-        .status(StatusCode::OK)
-        .body(Body::empty())
-        .unwrap()
+    StatusCode::OK.into_response()
 }
 
 /// Explicit logout endpoint that notifies daemon that player is disconnecting
@@ -283,11 +308,7 @@ pub async fn logout_handler(
         Some(creds) => creds,
         None => {
             debug!("No client credentials provided for logout");
-            return Response::builder()
-                .status(StatusCode::UNAUTHORIZED)
-                .body(Body::empty())
-                .unwrap()
-                .into_response();
+            return StatusCode::UNAUTHORIZED.into_response();
         }
     };
 
@@ -300,19 +321,11 @@ pub async fn logout_handler(
     match rpc_client.make_client_rpc_call(client_id, detach_msg).await {
         Ok(_) => {
             debug!("Logout detach sent successfully");
-            Response::builder()
-                .status(StatusCode::OK)
-                .body(Body::empty())
-                .unwrap()
-                .into_response()
+            StatusCode::OK.into_response()
         }
         Err(e) => {
             error!("Failed to send logout detach: {}", e);
-            Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(Body::empty())
-                .unwrap()
-                .into_response()
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
 }

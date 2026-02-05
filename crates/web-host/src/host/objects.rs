@@ -13,9 +13,9 @@
 
 //! Object browser endpoints
 
-use crate::host::{WebHost, auth, web_host};
+use crate::host::{WebHost, auth, flatbuffer_response, web_host};
 use axum::{
-    body::{Body, Bytes},
+    body::Bytes,
     extract::{ConnectInfo, Path, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -45,11 +45,7 @@ pub async fn list_objects_handler(
         Err(status) => return status.into_response(),
     };
 
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/x-flatbuffer")
-        .body(Body::from(reply_bytes))
-        .unwrap()
+    flatbuffer_response(reply_bytes)
 }
 
 /// FlatBuffer version: POST /fb/properties/{object}/{name} - update property value
@@ -101,9 +97,5 @@ pub async fn update_property_handler(
         Err(status) => return status.into_response(),
     };
 
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/x-flatbuffer")
-        .body(Body::from(reply_bytes))
-        .unwrap()
+    flatbuffer_response(reply_bytes)
 }

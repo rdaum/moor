@@ -49,10 +49,13 @@ const HEARTBEAT_REQUEST: u8 = 0x02;
 const HEARTBEAT_RESPONSE: u8 = 0x01;
 
 fn log_rpc_failure(failure: moor_rpc::FailureRef<'_>) {
-    let error_ref = failure.error().expect("Missing error");
-    let error_code = error_ref.error_code().expect("Missing error code");
-    // Task errors are now handled client-side via FlatBuffer events
-    warn!("RPC error: {:?}", error_code);
+    match failure.error() {
+        Ok(error_ref) => match error_ref.error_code() {
+            Ok(error_code) => warn!("RPC error: {:?}", error_code),
+            Err(e) => warn!("RPC failure missing error code: {}", e),
+        },
+        Err(e) => warn!("RPC failure missing error payload: {}", e),
+    }
 }
 
 pub struct WebSocketConnection {
@@ -136,7 +139,8 @@ impl WebSocketConnection {
                 debug!("Player {} created", self.player);
             }
             moor_rpc::ConnectType::NoConnect => {
-                unreachable!("NoConnect should not reach WebSocket handler")
+                error!("NoConnect reached WebSocket handler unexpectedly");
+                return;
             }
         };
 
@@ -289,14 +293,23 @@ impl WebSocketConnection {
                     }
                 }
                 Ok(event_msg) = broadcast_recv(&mut self.broadcast_sub) => {
-                    let event = event_msg.event().expect("Failed to parse broadcast event");
+                    let event = match event_msg.event() {
+                        Ok(event) => event,
+                        Err(e) => {
+                            warn!("Failed to parse broadcast event: {}", e);
+                            continue;
+                        }
+                    };
                     trace!("broadcast_event");
-                    match event.event().expect("Missing event union") {
-                        moor_rpc::ClientsBroadcastEventUnionRef::ClientsBroadcastPingPong(_server_time) => {
-                            let timestamp = SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap()
-                                .as_nanos() as u64;
+                    match event.event() {
+                        Ok(moor_rpc::ClientsBroadcastEventUnionRef::ClientsBroadcastPingPong(_server_time)) => {
+                            let timestamp = match SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                                Ok(duration) => duration.as_nanos() as u64,
+                                Err(e) => {
+                                    warn!("System time before unix epoch during ping/pong handling: {}", e);
+                                    0
+                                }
+                            };
                             let pong_msg = mk_client_pong_msg(
                                 &self.client_token,
                                 timestamp,
@@ -304,19 +317,50 @@ impl WebSocketConnection {
                                 moor_rpc::HostType::WebSocket,
                                 self.peer_addr.to_string(),
                             );
-                            let _ = self.rpc_client.make_client_rpc_call(self.client_id, pong_msg).await.expect("Unable to send pong to RPC server");
+                            if let Err(e) = self.rpc_client.make_client_rpc_call(self.client_id, pong_msg).await {
+                                warn!("Unable to send pong to RPC server: {}", e);
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Broadcast event missing event union: {}", e);
+                            continue;
                         }
                     }
                 }
                 Ok(event_msg) = events_recv(self.client_id, &mut self.narrative_sub) => {
                     // Parse to check for input requests and task completions
-                    let event = event_msg.event().expect("Failed to parse client event");
-                    let event_ref = event.event().expect("Missing event union");
+                    let event = match event_msg.event() {
+                        Ok(event) => event,
+                        Err(e) => {
+                            warn!("Failed to parse client event: {}", e);
+                            continue;
+                        }
+                    };
+                    let event_ref = match event.event() {
+                        Ok(event_ref) => event_ref,
+                        Err(e) => {
+                            warn!("Client event missing event union: {}", e);
+                            continue;
+                        }
+                    };
 
                     match event_ref {
                         moor_rpc::ClientEventUnionRef::RequestInputEvent(input_request) => {
-                            let request_id_ref = input_request.request_id().expect("Missing request_id");
-                            let request_id = uuid_from_ref(request_id_ref).expect("Failed to convert UUID");
+                            let request_id_ref = match input_request.request_id() {
+                                Ok(request_id_ref) => request_id_ref,
+                                Err(e) => {
+                                    warn!("RequestInputEvent missing request_id: {}", e);
+                                    continue;
+                                }
+                            };
+                            let request_id = match uuid_from_ref(request_id_ref) {
+                                Ok(request_id) => request_id,
+                                Err(e) => {
+                                    warn!("Failed to convert request_id UUID: {}", e);
+                                    continue;
+                                }
+                            };
                             expecting_input.push_back(request_id);
                         }
                         moor_rpc::ClientEventUnionRef::TaskSuccessEvent(_) |
@@ -350,11 +394,18 @@ impl WebSocketConnection {
         self.rpc_client
             .make_client_rpc_call(self.client_id, detach_msg)
             .await
-            .expect("Unable to send detach event to RPC server");
+            .map_err(|e| warn!("Unable to send detach event to RPC server: {}", e))
+            .ok();
     }
 
     async fn process_command_line(&mut self, line: Message) {
-        let line = line.into_text().unwrap();
+        let line = match line.into_text() {
+            Ok(line) => line,
+            Err(e) => {
+                warn!("Received non-text command message: {}", e);
+                return;
+            }
+        };
         let cmd = line.trim().to_string();
 
         let command_msg = mk_command_msg(
@@ -367,34 +418,64 @@ impl WebSocketConnection {
         let reply_bytes = self
             .rpc_client
             .make_client_rpc_call(self.client_id, command_msg)
-            .await
-            .expect("Unable to send command to RPC server");
+            .await;
+        let reply_bytes = match reply_bytes {
+            Ok(reply_bytes) => reply_bytes,
+            Err(e) => {
+                warn!("Unable to send command to RPC server: {}", e);
+                return;
+            }
+        };
 
-        let reply = read_reply_result(&reply_bytes).expect("Failed to parse reply");
-        match reply.result().expect("Missing result") {
-            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
-                let daemon_reply = client_success.reply().expect("Missing reply");
-                match daemon_reply.reply().expect("Missing reply union") {
-                    moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(task_submitted) => {
-                        let ti = task_submitted.task_id().expect("Missing task_id") as usize;
+        let reply = match read_reply_result(&reply_bytes) {
+            Ok(reply) => reply,
+            Err(e) => {
+                warn!("Failed to parse command reply: {}", e);
+                return;
+            }
+        };
+        match reply.result() {
+            Ok(moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success)) => {
+                let daemon_reply = match client_success.reply().ok() {
+                    Some(daemon_reply) => daemon_reply,
+                    None => {
+                        warn!("Command reply missing daemon reply");
+                        return;
+                    }
+                };
+                match daemon_reply.reply() {
+                    Ok(moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(task_submitted)) => {
+                        let ti = match task_submitted.task_id() {
+                            Ok(task_id) => task_id as usize,
+                            Err(e) => {
+                                warn!("TaskSubmitted missing task_id: {}", e);
+                                return;
+                            }
+                        };
                         self.pending_task = Some(PendingTask {
                             task_id: ti,
                             start_time: Instant::now(),
                         });
                     }
-                    moor_rpc::DaemonToClientReplyUnionRef::InputThanks(_) => {
+                    Ok(moor_rpc::DaemonToClientReplyUnionRef::InputThanks(_)) => {
                         warn!("Received input thanks unprovoked, out of order")
                     }
-                    _ => {
+                    Ok(_) => {
                         error!("Unexpected daemon to client reply");
+                    }
+                    Err(e) => {
+                        warn!("Command reply missing daemon reply union: {}", e);
                     }
                 }
             }
-            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+            Ok(moor_rpc::ReplyResultUnionRef::Failure(failure)) => {
                 log_rpc_failure(failure);
             }
-            moor_rpc::ReplyResultUnionRef::HostSuccess(_) => {
+            Ok(moor_rpc::ReplyResultUnionRef::HostSuccess(_)) => {
                 error!("Unexpected host success");
+            }
+            Err(e) => {
+                warn!("Command reply missing top-level result: {}", e);
             }
         }
     }
@@ -447,35 +528,65 @@ impl WebSocketConnection {
         let reply_bytes = self
             .rpc_client
             .make_client_rpc_call(self.client_id, input_msg)
-            .await
-            .expect("Unable to send input to RPC server");
+            .await;
+        let reply_bytes = match reply_bytes {
+            Ok(reply_bytes) => reply_bytes,
+            Err(e) => {
+                warn!("Unable to send input to RPC server: {}", e);
+                return;
+            }
+        };
 
-        let reply = read_reply_result(&reply_bytes).expect("Failed to parse reply");
-        match reply.result().expect("Missing result") {
-            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
-                let daemon_reply = client_success.reply().expect("Missing reply");
-                match daemon_reply.reply().expect("Missing reply union") {
-                    moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(task_submitted) => {
-                        let task_id = task_submitted.task_id().expect("Missing task_id") as usize;
+        let reply = match read_reply_result(&reply_bytes) {
+            Ok(reply) => reply,
+            Err(e) => {
+                warn!("Failed to parse input reply: {}", e);
+                return;
+            }
+        };
+        match reply.result() {
+            Ok(moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success)) => {
+                let daemon_reply = match client_success.reply().ok() {
+                    Some(daemon_reply) => daemon_reply,
+                    None => {
+                        warn!("Input reply missing daemon reply");
+                        return;
+                    }
+                };
+                match daemon_reply.reply() {
+                    Ok(moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(task_submitted)) => {
+                        let task_id = match task_submitted.task_id() {
+                            Ok(task_id) => task_id as usize,
+                            Err(e) => {
+                                warn!("TaskSubmitted missing task_id: {}", e);
+                                return;
+                            }
+                        };
                         self.pending_task = Some(PendingTask {
                             task_id,
                             start_time: Instant::now(),
                         });
                         warn!("Got TaskSubmitted when expecting input-thanks")
                     }
-                    moor_rpc::DaemonToClientReplyUnionRef::InputThanks(_) => {
+                    Ok(moor_rpc::DaemonToClientReplyUnionRef::InputThanks(_)) => {
                         expecting_input.pop_front();
                     }
-                    _ => {
+                    Ok(_) => {
                         error!("Unexpected daemon to client reply");
+                    }
+                    Err(e) => {
+                        warn!("Input reply missing daemon reply union: {}", e);
                     }
                 }
             }
-            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+            Ok(moor_rpc::ReplyResultUnionRef::Failure(failure)) => {
                 log_rpc_failure(failure);
             }
-            moor_rpc::ReplyResultUnionRef::HostSuccess(_) => {
+            Ok(moor_rpc::ReplyResultUnionRef::HostSuccess(_)) => {
                 error!("Unexpected host success");
+            }
+            Err(e) => {
+                warn!("Input reply missing top-level result: {}", e);
             }
         }
     }

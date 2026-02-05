@@ -13,10 +13,9 @@
 
 //! Event log encryption and history endpoints
 
-use crate::host::{auth, web_host::WebHost, web_host::rpc_call};
+use crate::host::{auth, flatbuffer_response, web_host::WebHost, web_host::rpc_call};
 use axum::{
     Json,
-    body::Body,
     extract::{ConnectInfo, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -157,11 +156,7 @@ pub async fn history_handler(
 
     // Return the entire HistoryResponse as FlatBuffer bytes
     // Client will parse the FlatBuffer and decrypt the encrypted_blob field of each event
-    axum::response::Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/x-flatbuffer")
-        .body(Body::from(reply_bytes))
-        .unwrap()
+    flatbuffer_response(reply_bytes)
 }
 
 /// REST endpoint to get player's event log public key
@@ -366,9 +361,5 @@ pub async fn presentations_handler(
     };
 
     // Return raw FlatBuffer bytes
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/x-flatbuffer")
-        .body(Body::from(reply_bytes))
-        .unwrap()
+    flatbuffer_response(reply_bytes)
 }

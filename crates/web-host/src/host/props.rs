@@ -11,9 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::host::{WebHost, auth, web_host};
+use crate::host::{WebHost, auth, flatbuffer_response, web_host};
 use axum::{
-    body::Body,
     extract::{ConnectInfo, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -57,11 +56,7 @@ pub async fn properties_handler(
         Err(status) => return status.into_response(),
     };
 
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/x-flatbuffer")
-        .body(Body::from(reply_bytes))
-        .unwrap()
+    flatbuffer_response(reply_bytes)
 }
 
 /// FlatBuffer version: GET /fb/properties/{object}/{name} - retrieve property value
@@ -95,9 +90,5 @@ pub async fn property_retrieval_handler(
         Err(status) => return status.into_response(),
     };
 
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/x-flatbuffer")
-        .body(Body::from(reply_bytes))
-        .unwrap()
+    flatbuffer_response(reply_bytes)
 }
