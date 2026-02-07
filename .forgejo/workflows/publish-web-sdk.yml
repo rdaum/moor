@@ -15,6 +15,12 @@ jobs:
     steps:
       - uses: https://code.forgejo.org/actions/checkout@v4
 
+      - name: Configure NPM registry
+        working-directory: clients/web-sdk
+        run: |
+          echo "@moor:registry=https://codeberg.org/api/packages/timbran/npm/" > .npmrc
+          echo "//codeberg.org/api/packages/timbran/npm/:_authToken=${{ secrets.CODEBERG_TOKEN }}" >> .npmrc
+
       - name: Install dependencies
         working-directory: clients/web-sdk
         run: npm install
@@ -26,12 +32,9 @@ jobs:
       - name: Publish to Codeberg Package Registry
         working-directory: clients/web-sdk
         run: |
-          echo "@moor:registry=https://codeberg.org/api/packages/timbran/npm/" > .npmrc
-          echo "//codeberg.org/api/packages/timbran/npm/:_authToken=${{ secrets.CODEBERG_TOKEN }}" >> .npmrc
-
           BASE_VERSION=$(node -p "require('./package.json').version")
-          DEV_VERSION="${BASE_VERSION}-dev.$(date +'%Y%m%d').${{ github.run_number }}"
+          DEV_VERSION="${BASE_VERSION}-dev.${{ github.run_id }}.${{ github.run_attempt }}"
           echo "Publishing version $DEV_VERSION"
           npm version "$DEV_VERSION" --no-git-tag-version
 
-          npm publish
+          npm publish --tag dev

@@ -29,12 +29,10 @@ jobs:
         run: |
           echo "@moor:registry=https://codeberg.org/api/packages/timbran/npm/" > .npmrc
           echo "//codeberg.org/api/packages/timbran/npm/:_authToken=${{ secrets.CODEBERG_TOKEN }}" >> .npmrc
-          
-          # Get base version from package.json
+
           BASE_VERSION=$(node -p "require('./package.json').version")
-          # Use a development version based on date and run number
-          DEV_VERSION="${BASE_VERSION}-dev.$(date +'%Y%m%d').${{ github.run_number }}"
+          DEV_VERSION="${BASE_VERSION}-dev.${{ github.run_id }}.${{ github.run_attempt }}"
           echo "Publishing version $DEV_VERSION"
           npm version "$DEV_VERSION" --no-git-tag-version
-          
-          npm publish
+
+          npm publish --tag dev
