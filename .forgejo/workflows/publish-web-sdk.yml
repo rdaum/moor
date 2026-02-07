@@ -1,0 +1,37 @@
+name: Publish Web SDK - Build and publish @moor/web-sdk NPM package
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'clients/web-sdk/**'
+  workflow_dispatch:
+
+jobs:
+  publish_web_sdk:
+    runs-on: linux-x86
+    container: node:20-bookworm
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+
+      - name: Install dependencies
+        working-directory: clients/web-sdk
+        run: npm install
+
+      - name: Typecheck
+        working-directory: clients/web-sdk
+        run: npm run typecheck
+
+      - name: Publish to Codeberg Package Registry
+        working-directory: clients/web-sdk
+        run: |
+          echo "@moor:registry=https://codeberg.org/api/packages/timbran/npm/" > .npmrc
+          echo "//codeberg.org/api/packages/timbran/npm/:_authToken=${{ secrets.CODEBERG_TOKEN }}" >> .npmrc
+
+          BASE_VERSION=$(node -p "require('./package.json').version")
+          DEV_VERSION="${BASE_VERSION}-dev.$(date +'%Y%m%d').${{ github.run_number }}"
+          echo "Publishing version $DEV_VERSION"
+          npm version "$DEV_VERSION" --no-git-tag-version
+
+          npm publish
