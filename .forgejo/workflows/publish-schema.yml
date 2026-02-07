@@ -10,7 +10,7 @@ on:
 
 jobs:
   publish_schema:
-    runs-on: linux-x86
+    runs-on: ubuntu-latest
     container: node:20-bookworm
     steps:
       - uses: https://code.forgejo.org/actions/checkout@v4
