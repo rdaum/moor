@@ -64,7 +64,7 @@ use moor_schema::convert::{
     narrative_event_to_flatbuffer_struct, obj_from_ref, presentation_to_flatbuffer_struct,
     var_from_ref, var_to_flatbuffer,
 };
-use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, v_sym};
+use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, VarType::TYPE_NONE, v_sym};
 use rpc_common::{
     AuthToken, ClientToken, HostType, RpcErr, RpcMessageError, auth_token_from_ref,
     client_token_from_ref, extract_field_rpc, extract_host_type, extract_obj_rpc,
@@ -2046,6 +2046,11 @@ impl RpcMessageHandler {
         let object = extract_object_ref_rpc(&req, "object", |r| r.object())?;
         let property = extract_symbol_rpc(&req, "property", |r| r.property())?;
         let value = extract_var_rpc(&req, "value", |r| r.value())?;
+        if value.type_code() == TYPE_NONE {
+            return Err(RpcMessageError::InvalidRequest(
+                "Property values cannot be TYPE_NONE".to_string(),
+            ));
+        }
 
         // Update the property
         scheduler_client

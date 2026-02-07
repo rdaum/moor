@@ -70,6 +70,8 @@ pub enum WorldStateError {
     ChparentPropertyNameConflict(Obj, Obj, String),
     #[error("Property type mismatch")]
     PropertyTypeMismatch,
+    #[error("Cannot clear property on defining object: {0}.{1}")]
+    CannotClearPropertyOnDefiner(Obj, String),
 
     #[error("Verb not found: {0}:{1}")]
     VerbNotFound(Obj, String),
@@ -119,6 +121,7 @@ impl WorldStateError {
             Self::PropertyNotFound(obj, prop) => E_PROPNF.with_msg(|| format!("Property not found: {obj}.{prop}")),
             Self::PropertyDefinitionNotFound(obj, prop) => E_PROPNF.with_msg(|| format!("Property definition not found: {obj}.{prop}")),
             Self::PropertyTypeMismatch => E_TYPE.with_msg(|| "Property type mismatch".to_string()),
+            Self::CannotClearPropertyOnDefiner(obj, prop) => E_INVARG.with_msg(|| format!("Cannot clear property on defining object: {obj}.{prop}")),
             Self::FailedMatch(msg) => E_INVARG.with_msg(|| format!("Failed object match: {msg}")),
             Self::AmbiguousMatch(msg) => E_INVARG.with_msg(|| format!("Ambiguous object match: {msg}")),
             Self::InvalidRenumber(msg) => E_INVARG.with_msg(|| msg.clone()),

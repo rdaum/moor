@@ -546,6 +546,10 @@ impl WorldState for DbWorldState {
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Write)?;
 
+        if value.is_none() {
+            return Err(WorldStateError::PropertyTypeMismatch);
+        }
+
         self.get_tx_mut()
             .set_property(obj, pdef.uuid(), value.clone())?;
         Ok(())
@@ -575,6 +579,12 @@ impl WorldState for DbWorldState {
         let (pdef, _, propperms, _) = self.get_tx().resolve_property(obj, pname)?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Write)?;
+        if pdef.location() == *obj {
+            return Err(WorldStateError::CannotClearPropertyOnDefiner(
+                *obj,
+                pname.to_string(),
+            ));
+        }
         self.get_tx_mut().clear_property(obj, pdef.uuid())?;
         Ok(())
     }
@@ -613,6 +623,10 @@ impl WorldState for DbWorldState {
         self.perms(perms)?
             .check_object_allows(&objowner, flags, ObjFlag::Write.into())?;
         self.perms(perms)?.check_obj_owner_perms(propowner)?;
+
+        if initial_value.as_ref().is_some_and(Var::is_none) {
+            return Err(WorldStateError::PropertyTypeMismatch);
+        }
 
         self.get_tx_mut().define_property(
             definer,

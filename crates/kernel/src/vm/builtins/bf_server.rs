@@ -55,8 +55,8 @@ use moor_db::{
 };
 use moor_var::{
     Associative, E_ARGS, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Sequence, Var,
-    VarType::TYPE_NONE, v_arc_str, v_float, v_int, v_list, v_list_iter, v_map, v_none, v_obj,
-    v_str, v_string, v_sym,
+    VarType::TYPE_NONE, v_arc_str, v_float, v_int, v_list, v_list_iter, v_map, v_obj, v_str,
+    v_string, v_sym,
 };
 
 /// Placeholder function for unimplemented builtins.
@@ -967,7 +967,7 @@ fn bf_player_event_log_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfE
             .map_err(|_| ErrValue(E_INVARG.msg("earliest timestamp predates UNIX epoch")))?;
         v_int(secs.as_secs() as i64)
     } else {
-        v_none()
+        v_int(0)
     };
     let latest_var = if let Some(time) = stats.latest {
         let secs = time
@@ -975,7 +975,7 @@ fn bf_player_event_log_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfE
             .map_err(|_| ErrValue(E_INVARG.msg("latest timestamp predates UNIX epoch")))?;
         v_int(secs.as_secs() as i64)
     } else {
-        v_none()
+        v_int(0)
     };
 
     Ok(Ret(v_list(&[

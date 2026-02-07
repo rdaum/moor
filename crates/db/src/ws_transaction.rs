@@ -897,6 +897,10 @@ impl WorldStateTransaction {
         uuid: Uuid,
         value: Var,
     ) -> Result<(), WorldStateError> {
+        if value.is_none() {
+            return Err(WorldStateError::PropertyTypeMismatch);
+        }
+
         // Set the property value
         upsert(
             &mut self.object_propvalues,

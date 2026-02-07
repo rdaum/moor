@@ -27,7 +27,7 @@ mod tests {
     use moor_var::{
         Associative, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant,
         program::{ProgramType, program::Program},
-        v_int, v_str,
+        v_int, v_none, v_str,
     };
     use std::sync::Arc;
 
@@ -487,6 +487,43 @@ mod tests {
     }
 
     #[test]
+    pub fn test_worldstate_clear_property_on_definer_returns_e_invarg() {
+        use crate::db_worldstate::DbWorldState;
+        use moor_common::model::WorldState;
+
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        let obj = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            )
+            .unwrap();
+
+        let mut ws = DbWorldState { tx };
+        ws.define_property(
+            &SYSTEM_OBJECT,
+            &obj,
+            &obj,
+            Symbol::mk("test_prop"),
+            &SYSTEM_OBJECT,
+            BitEnum::all(),
+            Some(v_int(0)),
+        )
+        .unwrap();
+
+        let result = ws.clear_property(&SYSTEM_OBJECT, &obj, Symbol::mk("test_prop"));
+        assert_eq!(
+            result,
+            Err(WorldStateError::CannotClearPropertyOnDefiner(
+                obj,
+                "test_prop".to_string()
+            ))
+        );
+    }
+
+    #[test]
     pub fn test_simple_property() {
         let db = test_db();
         let mut tx = db.start_transaction();
@@ -513,6 +550,57 @@ mod tests {
         assert_eq!(perms.owner(), NOTHING);
         assert!(!is_clear);
         assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+    }
+
+    #[test]
+    pub fn test_define_property_rejects_type_none_initial_value() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        let oid = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            )
+            .unwrap();
+
+        let result = tx.define_property(
+            &oid,
+            &oid,
+            Symbol::mk("test"),
+            &NOTHING,
+            BitEnum::new(),
+            Some(v_none()),
+        );
+
+        assert_eq!(result, Err(WorldStateError::PropertyTypeMismatch));
+    }
+
+    #[test]
+    pub fn test_set_property_rejects_type_none() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        let oid = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            )
+            .unwrap();
+
+        let prop_uuid = tx
+            .define_property(
+                &oid,
+                &oid,
+                Symbol::mk("test"),
+                &NOTHING,
+                BitEnum::new(),
+                Some(v_int(0)),
+            )
+            .unwrap();
+
+        let result = tx.set_property(&oid, prop_uuid, v_none());
+        assert_eq!(result, Err(WorldStateError::PropertyTypeMismatch));
     }
 
     /// Regression test for updating-verbs failing.

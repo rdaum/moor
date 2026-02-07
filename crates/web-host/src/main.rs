@@ -129,8 +129,6 @@ pub struct CorsConfig {
     pub allowed_headers: Vec<String>,
 }
 
-
-
 /// Rate limiting configuration for auth endpoints.
 /// Uses a token-bucket algorithm keyed by client IP.
 /// Single-instance scope — not shared across multiple web-host processes.

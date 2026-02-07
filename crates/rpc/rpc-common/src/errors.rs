@@ -193,6 +193,11 @@ pub fn world_state_error_to_flatbuffer_struct(
                 common::PropertyTypeMismatch {},
             ))
         }
+        WorldStateError::CannotClearPropertyOnDefiner(obj, property) => {
+            common::WorldStateErrorUnion::InvalidRenumber(Box::new(common::InvalidRenumber {
+                message: format!("Cannot clear property on defining object: {obj}.{property}"),
+            }))
+        }
         WorldStateError::VerbNotFound(obj, verb) => {
             common::WorldStateErrorUnion::VerbNotFound(Box::new(common::VerbNotFound {
                 obj: obj_fb(obj),

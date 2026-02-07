@@ -900,7 +900,7 @@ fn var_to_json(var: &Var) -> Result<JsonValue, BfErr> {
 /// JSON objects without __type_* keys are NOT converted to MOO maps.
 fn json_to_var(json: &JsonValue) -> Result<Var, BfErr> {
     match json {
-        JsonValue::Null => Ok(Var::mk_none()),
+        JsonValue::Null => Ok(v_str("null")),
         JsonValue::Bool(b) => Ok(v_int(*b as i64)),
         JsonValue::Number(n) => {
             if let Some(i) = n.as_i64() {
