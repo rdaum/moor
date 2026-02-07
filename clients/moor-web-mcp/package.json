@@ -1,0 +1,30 @@
+{
+    "name": "@moor/web-mcp",
+    "version": "1.0.0-rc1",
+    "description": "Web-host backed MCP stdio server for mooR",
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
+    "scripts": {
+        "start": "node --import tsx src/index.ts",
+        "build": "tsc -p tsconfig.json",
+        "typecheck": "tsc --noEmit -p tsconfig.json"
+    },
+    "dependencies": {
+        "@moor/schema": "file:../../crates/schema/schema",
+        "@moor/web-sdk": "file:../web-sdk",
+        "tsx": "^4.20.5",
+        "ws": "^8.18.0"
+    },
+    "devDependencies": {
+        "@types/node": "^24.3.0",
+        "@types/ws": "^8.18.1",
+        "typescript": "^5.9.2"
+    },
+    "license": "GPL-3.0"
+}

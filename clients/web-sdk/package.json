@@ -3,11 +3,19 @@
   "version": "1.0.0-rc1",
   "description": "Shared Web/API SDK for mooR clients",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/clients/web-sdk/src/index.js",
+  "types": "./dist/clients/web-sdk/src/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./*": "./src/*.ts"
+    ".": {
+      "types": "./dist/clients/web-sdk/src/index.d.ts",
+      "import": "./dist/clients/web-sdk/src/index.js",
+      "default": "./dist/clients/web-sdk/src/index.js"
+    },
+    "./*": {
+      "types": "./dist/clients/web-sdk/src/*.d.ts",
+      "import": "./dist/clients/web-sdk/src/*.js",
+      "default": "./dist/clients/web-sdk/src/*.js"
+    }
   },
   "repository": {
     "type": "git",
@@ -18,7 +26,7 @@
     "@moor:registry": "https://codeberg.org/api/packages/timbran/npm/"
   },
   "files": [
-    "src",
+    "dist",
     "README.md",
     "LICENSE"
   ],

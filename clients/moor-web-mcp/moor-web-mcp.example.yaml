@@ -1,0 +1,13 @@
+baseUrl: http://localhost:8080
+defaultCharacter: programmer
+characters:
+  - id: programmer
+    username: programmer
+    password: secret
+    isProgrammer: true
+    notes: Main coding identity.
+  - id: wizard
+    username: wizard
+    password: wizard-secret
+    isWizard: true
+    notes: Use when tools need elevated privileges.

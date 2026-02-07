@@ -61,6 +61,8 @@ cores/cowbell/
 
 # Meadow web client (managed by clients/fetch-meadow.sh)
 clients/meadow/
+clients/moor-web-mcp/*.local.yaml
+clients/moor-web-mcp/*.local.json
 
 # Proptest failure snapshots (regenerated on failure)
 proptest-failures/

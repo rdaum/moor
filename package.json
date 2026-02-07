@@ -3,12 +3,14 @@
   "version": "1.0.0-rc1",
   "description": "mooR - a 21st century LambdaMOO implementation",
   "type": "module",
-  "scripts": {
+    "scripts": {
     "postinstall": "./clients/fetch-meadow.sh && npm install --prefix ${MEADOW_PATH:-./clients/meadow} && npm run meadow:install-local-packages",
     "meadow:use-local-packages": "npm run meadow:install-local-packages",
     "meadow:pack-local-packages": "npm run --prefix ./crates/schema/schema generate && rm -rf ./.npm-local && mkdir -p ./.npm-local ./.npm-cache && npm_config_cache=${PWD}/.npm-cache npm pack ./crates/schema/schema --silent --pack-destination ./.npm-local && npm_config_cache=${PWD}/.npm-cache npm pack ./clients/web-sdk --silent --pack-destination ./.npm-local",
     "meadow:install-local-packages": "npm run meadow:pack-local-packages && npm_config_cache=${PWD}/.npm-cache npm install --prefix ${MEADOW_PATH:-./clients/meadow} --no-save ./.npm-local/moor-schema-*.tgz ./.npm-local/moor-web-sdk-*.tgz",
     "web-sdk:build": "npm run build --prefix ./clients/web-sdk",
+    "web-mcp:build": "npm run build --prefix ./clients/moor-web-mcp",
+    "web-mcp:typecheck": "npm run typecheck --prefix ./clients/moor-web-mcp",
     "daemon:dev": "RUST_BACKTRACE=1 cargo run -p moor-daemon -- ./moor-data --db development.db --import-format objdef --import ${MOOR_CORE:-cores/cowbell/src} --export development-export --export-format objdef --use-boolean-returns true --custom-errors true --use-uuobjids true --enable-eventlog true --generate-keypair --anonymous-objects true",
     "daemon:traced": "RUST_BACKTRACE=1 cargo run --features trace_events -p moor-daemon -- ./moor-data --db development.db --import-format objdef --import ${MOOR_CORE:-cores/cowbell/src} --export development-export --export-format objdef --use-boolean-returns true --custom-errors true --use-uuobjids true --enable-eventlog true --trace-output moor-trace.json  --anonymous-objects true",
     "web-host:dev": "cargo run --bin moor-web-host -- --enable-webhooks",
