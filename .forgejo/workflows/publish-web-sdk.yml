@@ -25,6 +25,10 @@ jobs:
         working-directory: clients/web-sdk
         run: npm install
 
+      - name: Use dev schema dependency
+        working-directory: clients/web-sdk
+        run: npm install --no-save @moor/schema@dev
+
       - name: Typecheck
         working-directory: clients/web-sdk
         run: npm run typecheck
@@ -32,9 +36,29 @@ jobs:
       - name: Publish to Codeberg Package Registry
         working-directory: clients/web-sdk
         run: |
+          set -eu
+          REGISTRY="https://codeberg.org/api/packages/timbran/npm/"
           BASE_VERSION=$(node -p "require('./package.json').version")
-          DEV_VERSION="${BASE_VERSION}-dev.${{ github.run_id }}.${{ github.run_attempt }}"
+          SHORT_SHA="$(echo '${{ github.sha }}' | cut -c1-8)"
+          DEV_VERSION="${BASE_VERSION}-dev.$(date -u +%Y%m%d%H%M%S%N).${{ github.run_id }}.${SHORT_SHA}"
           echo "Publishing version $DEV_VERSION"
+
+          npm pkg set dependencies.@moor/schema=dev
           npm version "$DEV_VERSION" --no-git-tag-version
 
-          npm publish --tag dev
+          PUBLISH_LOG="$(mktemp)"
+          if npm publish --tag dev >"$PUBLISH_LOG" 2>&1; then
+            cat "$PUBLISH_LOG"
+            rm -f "$PUBLISH_LOG"
+            exit 0
+          fi
+
+          cat "$PUBLISH_LOG"
+          if grep -q "E409" "$PUBLISH_LOG" && npm view "@moor/web-sdk@$DEV_VERSION" version --registry="$REGISTRY" >/dev/null 2>&1; then
+            echo "Publish returned 409 but version exists in registry; treating as success"
+            rm -f "$PUBLISH_LOG"
+            exit 0
+          fi
+
+          rm -f "$PUBLISH_LOG"
+          exit 1

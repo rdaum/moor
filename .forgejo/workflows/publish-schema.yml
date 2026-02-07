@@ -27,12 +27,31 @@ jobs:
       - name: Publish to Codeberg Package Registry
         working-directory: crates/schema/schema
         run: |
+          set -eu
+          REGISTRY="https://codeberg.org/api/packages/timbran/npm/"
           echo "@moor:registry=https://codeberg.org/api/packages/timbran/npm/" > .npmrc
           echo "//codeberg.org/api/packages/timbran/npm/:_authToken=${{ secrets.CODEBERG_TOKEN }}" >> .npmrc
 
           BASE_VERSION=$(node -p "require('./package.json').version")
-          DEV_VERSION="${BASE_VERSION}-dev.${{ github.run_id }}.${{ github.run_attempt }}"
+          SHORT_SHA="$(echo '${{ github.sha }}' | cut -c1-8)"
+          DEV_VERSION="${BASE_VERSION}-dev.$(date -u +%Y%m%d%H%M%S%N).${{ github.run_id }}.${SHORT_SHA}"
           echo "Publishing version $DEV_VERSION"
+
           npm version "$DEV_VERSION" --no-git-tag-version
 
-          npm publish --tag dev
+          PUBLISH_LOG="$(mktemp)"
+          if npm publish --tag dev >"$PUBLISH_LOG" 2>&1; then
+            cat "$PUBLISH_LOG"
+            rm -f "$PUBLISH_LOG"
+            exit 0
+          fi
+
+          cat "$PUBLISH_LOG"
+          if grep -q "E409" "$PUBLISH_LOG" && npm view "@moor/schema@$DEV_VERSION" version --registry="$REGISTRY" >/dev/null 2>&1; then
+            echo "Publish returned 409 but version exists in registry; treating as success"
+            rm -f "$PUBLISH_LOG"
+            exit 0
+          fi
+
+          rm -f "$PUBLISH_LOG"
+          exit 1
