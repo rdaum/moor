@@ -111,7 +111,7 @@ impl tower_governor::key_extractor::KeyExtractor for TrustedProxyKeyExtractor {
 
 /// CORS middleware configuration.
 /// Disabled by default; when enabled, explicit origins must be provided.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CorsConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -129,17 +129,7 @@ pub struct CorsConfig {
     pub allowed_headers: Vec<String>,
 }
 
-impl Default for CorsConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            allowed_origins: Vec::new(),
-            allow_credentials: false,
-            allowed_methods: Vec::new(),
-            allowed_headers: Vec::new(),
-        }
-    }
-}
+
 
 /// Rate limiting configuration for auth endpoints.
 /// Uses a token-bucket algorithm keyed by client IP.
