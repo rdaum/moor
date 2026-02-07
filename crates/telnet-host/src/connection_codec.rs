@@ -342,11 +342,8 @@ mod tests {
     /// Helper: collect all items from a single decode pass until None
     fn decode_all(codec: &mut ConnectionCodec, buf: &mut BytesMut) -> Vec<ConnectionItem> {
         let mut items = Vec::new();
-        loop {
-            match codec.decode(buf).unwrap() {
-                Some(item) => items.push(item),
-                None => break,
-            }
+        while let Some(item) = codec.decode(buf).unwrap() {
+            items.push(item);
         }
         items
     }
@@ -374,7 +371,7 @@ mod tests {
 
         let items = decode_all(&mut codec, &mut buf);
         assert_eq!(items.len(), 2);
-        assert_eq!(expect_line(items.into_iter().nth(0).unwrap()), "hello");
+        assert_eq!(expect_line(items.into_iter().next().unwrap()), "hello");
     }
 
     #[test]
@@ -615,7 +612,7 @@ mod tests {
         let items = decode_all(&mut codec, &mut buf);
         assert_eq!(items.len(), 3); // line1, NOP command, line2
 
-        assert_eq!(expect_line(items.into_iter().nth(0).unwrap()), "line1");
+        assert_eq!(expect_line(items.into_iter().next().unwrap()), "line1");
     }
 
     #[test]
@@ -709,7 +706,7 @@ mod tests {
         assert_eq!(items.len(), 3); // NOP, NOP, line
 
         assert_eq!(
-            expect_telnet_cmd(items.into_iter().nth(0).unwrap()).as_ref(),
+            expect_telnet_cmd(items.into_iter().next().unwrap()).as_ref(),
             &[0xFF, 0xF1]
         );
     }
