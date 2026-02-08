@@ -159,9 +159,11 @@ fn test(db: Box<dyn Database>, path: &Path) {
     }
     let tasks_db = Box::new(NoopTasksDb {});
     let moot_version = semver::Version::new(0, 1, 0);
-    let mut features = moor_kernel::config::FeaturesConfig::default();
-    features.use_uuobjids = true;
-    features.anonymous_objects = true;
+    let features = moor_kernel::config::FeaturesConfig {
+        use_uuobjids: true,
+        anonymous_objects: true,
+        ..moor_kernel::config::FeaturesConfig::default()
+    };
     let features = Arc::new(features);
     let scheduler = Scheduler::new(
         moot_version,
