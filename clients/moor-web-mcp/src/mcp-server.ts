@@ -50,7 +50,12 @@ function simpleToCurie(value: string): string | null {
         return value;
     }
     if (value.startsWith("#")) {
-        return `oid:${value.slice(1)}`;
+        const raw = value.slice(1);
+        const upper = raw.toUpperCase();
+        if (/^[0-9A-F]{6}-[0-9A-F]{10}$/.test(upper)) {
+            return `uuid:${upper}`;
+        }
+        return `oid:${raw}`;
     }
     if (/^[0-9A-Fa-f]{6}-[0-9A-Fa-f]{10}$/.test(value)) {
         return `uuid:${value.toUpperCase()}`;
@@ -63,9 +68,6 @@ function toCurieFromMooString(value: unknown): string | null {
         return null;
     }
     const trimmed = value.trim();
-    if (trimmed.startsWith("#")) {
-        return `oid:${trimmed.slice(1)}`;
-    }
     return simpleToCurie(trimmed);
 }
 
@@ -81,6 +83,10 @@ function jsObjToCurie(value: unknown): string | null {
         return `uuid:${obj.uuid.toUpperCase()}`;
     }
     return null;
+}
+
+function isSystemObjectRef(value: string): boolean {
+    return /^\$[A-Za-z_][A-Za-z0-9_]*$/.test(value);
 }
 
 export class McpServer {
@@ -579,6 +585,14 @@ export class McpServer {
         const quick = simpleToCurie(objectRef);
         if (quick) {
             return quick;
+        }
+
+        if (isSystemObjectRef(objectRef)) {
+            const systemObj = await this.moor.evalExpression(character, `tostr(${objectRef})`);
+            const systemCurie = toCurieFromMooString(systemObj.js);
+            if (systemCurie) {
+                return systemCurie;
+            }
         }
 
         if (objectRef === "me" || objectRef === "player") {
