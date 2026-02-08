@@ -8,24 +8,24 @@ Create a JSON config file:
 
 ```json
 {
-    "baseUrl": "http://localhost:8080",
-    "defaultCharacter": "programmer",
-    "characters": [
-        {
-            "id": "programmer",
-            "username": "programmer",
-            "password": "secret",
-            "isProgrammer": true,
-            "notes": "Default coding character."
-        },
-        {
-            "id": "wizard",
-            "username": "wizard",
-            "password": "wizard-secret",
-            "isWizard": true,
-            "notes": "Elevated operations only."
-        }
-    ]
+  "baseUrl": "http://localhost:8080",
+  "defaultCharacter": "programmer",
+  "characters": [
+    {
+      "id": "programmer",
+      "username": "programmer",
+      "password": "secret",
+      "isProgrammer": true,
+      "notes": "Default coding character."
+    },
+    {
+      "id": "wizard",
+      "username": "wizard",
+      "password": "wizard-secret",
+      "isWizard": true,
+      "notes": "Elevated operations only."
+    }
+  ]
 }
 ```
 

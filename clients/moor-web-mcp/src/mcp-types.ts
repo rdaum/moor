@@ -53,4 +53,3 @@ export interface ResourceDefinition {
     description?: string;
     mimeType?: string;
 }
-

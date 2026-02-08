@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 
 import type { CharacterConfig } from "./config.js";
-import type { DynamicTool, MoorWebClient } from "./moor-service.js";
 import type {
     JsonRpcError,
     JsonRpcNotification,
@@ -21,6 +20,7 @@ import type {
     ToolCallResult,
     ToolDefinition,
 } from "./mcp-types.js";
+import type { DynamicTool, MoorWebClient } from "./moor-service.js";
 
 const JSONRPC_VERSION = "2.0";
 
@@ -383,52 +383,71 @@ export class McpServer {
         }
 
         if (name === "moo_resolve") {
-            const object = encodeURIComponent(await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)));
+            const object = encodeURIComponent(
+                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)),
+            );
             const result = await this.moor.requestJson(character, `/v1/objects/${object}`);
             return makeTextResult(JSON.stringify(result, null, 2));
         }
 
         if (name === "moo_list_verbs") {
-            const object = encodeURIComponent(await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)));
+            const object = encodeURIComponent(
+                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)),
+            );
             const inherited = argumentsObj.inherited === true ? "?inherited=true" : "";
             const result = await this.moor.requestJson(character, `/v1/verbs/${object}${inherited}`);
             return makeTextResult(JSON.stringify(result, null, 2));
         }
 
         if (name === "moo_get_verb") {
-            const object = encodeURIComponent(await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)));
+            const object = encodeURIComponent(
+                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)),
+            );
             const verbName = argumentsObj.name;
             if (typeof verbName !== "string") {
                 return makeErrorResult("name is required");
             }
-            const result = await this.moor.requestJson(character, `/v1/verbs/${object}/${encodeURIComponent(verbName)}`);
+            const result = await this.moor.requestJson(
+                character,
+                `/v1/verbs/${object}/${encodeURIComponent(verbName)}`,
+            );
             return makeTextResult(JSON.stringify(result, null, 2));
         }
 
         if (name === "moo_program_verb") {
-            const object = encodeURIComponent(await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)));
+            const object = encodeURIComponent(
+                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)),
+            );
             const verbName = argumentsObj.name;
             const code = argumentsObj.code;
             if (typeof verbName !== "string" || typeof code !== "string") {
                 return makeErrorResult("name and code are required");
             }
-            const result = await this.moor.requestJson(character, `/v1/verbs/${object}/${encodeURIComponent(verbName)}`, {
-                method: "POST",
-                headers: { "Content-Type": "text/plain" },
-                body: code,
-            });
+            const result = await this.moor.requestJson(
+                character,
+                `/v1/verbs/${object}/${encodeURIComponent(verbName)}`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "text/plain" },
+                    body: code,
+                },
+            );
             return makeTextResult(JSON.stringify(result, null, 2));
         }
 
         if (name === "moo_list_properties") {
-            const object = encodeURIComponent(await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)));
+            const object = encodeURIComponent(
+                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)),
+            );
             const inherited = argumentsObj.inherited === true ? "?inherited=true" : "";
             const result = await this.moor.requestJson(character, `/v1/properties/${object}${inherited}`);
             return makeTextResult(JSON.stringify(result, null, 2));
         }
 
         if (name === "moo_get_property") {
-            const object = encodeURIComponent(await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)));
+            const object = encodeURIComponent(
+                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)),
+            );
             const propertyName = argumentsObj.name;
             if (typeof propertyName !== "string") {
                 return makeErrorResult("name is required");
@@ -441,7 +460,9 @@ export class McpServer {
         }
 
         if (name === "moo_set_property") {
-            const object = encodeURIComponent(await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)));
+            const object = encodeURIComponent(
+                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)),
+            );
             const propertyName = argumentsObj.name;
             const valueLiteral = argumentsObj.valueLiteral;
             if (typeof propertyName !== "string" || typeof valueLiteral !== "string") {

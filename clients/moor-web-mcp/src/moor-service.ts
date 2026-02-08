@@ -35,6 +35,7 @@ interface CharacterSessionState {
     clientToken: string | null;
     clientId: string | null;
     ws: WebSocket | null;
+    wsConnectPromise: Promise<void> | null;
     recentEvents: string[];
     commandChain: Promise<void>;
 }
@@ -97,7 +98,7 @@ function jsonToMooLiteral(value: unknown): string {
 }
 
 function escapeMooString(value: string): string {
-    return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    return value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
 }
 
 function ensureOk(response: Response, context: string): Promise<Response> {
@@ -163,15 +164,18 @@ export class MoorWebClient {
         const session = await this.ensureSession(characterId);
         const trimmed = expression.trim();
         const maybeWrapped = /(^return\b|;\s*$)/.test(trimmed) ? expression : `return ${trimmed};`;
-        const response = await ensureOk(await fetch(`${trimTrailingSlash(this.config.baseUrl)}/v1/eval`, {
-            method: "POST",
-            headers: {
-                Accept: "application/x-flatbuffers",
-                "Content-Type": "text/plain",
-                "X-Moor-Auth-Token": session.authToken,
-            },
-            body: maybeWrapped,
-        }), "eval");
+        const response = await ensureOk(
+            await fetch(`${trimTrailingSlash(this.config.baseUrl)}/v1/eval`, {
+                method: "POST",
+                headers: {
+                    Accept: "application/x-flatbuffers",
+                    "Content-Type": "text/plain",
+                    "X-Moor-Auth-Token": session.authToken,
+                },
+                body: maybeWrapped,
+            }),
+            "eval",
+        );
 
         const bytes = new Uint8Array(await response.arrayBuffer());
         const resultVar = parseEvalResultVar(bytes);
@@ -284,14 +288,17 @@ export class MoorWebClient {
 
     async requestJson(characterId: string, path: string, init?: RequestInit): Promise<unknown> {
         const session = await this.ensureSession(characterId);
-        const response = await ensureOk(await fetch(`${trimTrailingSlash(this.config.baseUrl)}${path}`, {
-            ...(init ?? {}),
-            headers: {
-                Accept: "application/json",
-                "X-Moor-Auth-Token": session.authToken,
-                ...(init?.headers ?? {}),
-            },
-        }), path);
+        const response = await ensureOk(
+            await fetch(`${trimTrailingSlash(this.config.baseUrl)}${path}`, {
+                ...(init ?? {}),
+                headers: {
+                    Accept: "application/json",
+                    "X-Moor-Auth-Token": session.authToken,
+                    ...(init?.headers ?? {}),
+                },
+            }),
+            path,
+        );
         return response.json();
     }
 
@@ -331,13 +338,22 @@ export class MoorWebClient {
         return results;
     }
 
-    async executeDynamicTool(characterId: string, tool: DynamicTool, args: unknown): Promise<{ js: unknown; literal: string }> {
+    async executeDynamicTool(
+        characterId: string,
+        tool: DynamicTool,
+        args: unknown,
+    ): Promise<{ js: unknown; literal: string }> {
         const mooArgs = jsonToMooLiteral(args ?? {});
         const expression = `return ${tool.targetObj}:${tool.targetVerb}(${mooArgs}, player);`;
         return this.evalExpression(characterId, expression);
     }
 
-    async invokeVerbViaEval(characterId: string, objectRef: string, verb: string, args: unknown[]): Promise<{ js: unknown; literal: string }> {
+    async invokeVerbViaEval(
+        characterId: string,
+        objectRef: string,
+        verb: string,
+        args: unknown[],
+    ): Promise<{ js: unknown; literal: string }> {
         const argLiteral = jsonToMooLiteral(args);
         return this.evalExpression(characterId, `return ${objectRef}:${verb}(@${argLiteral});`);
     }
@@ -349,10 +365,11 @@ export class MoorWebClient {
 
     async close(): Promise<void> {
         for (const session of this.sessions.values()) {
-            if (session.ws && session.ws.readyState === WebSocket.OPEN) {
+            if (session.ws) {
                 session.ws.close();
             }
             session.ws = null;
+            session.wsConnectPromise = null;
         }
     }
 
@@ -368,13 +385,16 @@ export class MoorWebClient {
             password: character.password,
         }).toString();
 
-        const response = await ensureOk(await fetch(`${trimTrailingSlash(this.config.baseUrl)}/auth/connect`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body: formBody,
-        }), "auth/connect");
+        const response = await ensureOk(
+            await fetch(`${trimTrailingSlash(this.config.baseUrl)}/auth/connect`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body: formBody,
+            }),
+            "auth/connect",
+        );
 
         const authToken = response.headers.get("X-Moor-Auth-Token");
         if (!authToken) {
@@ -386,6 +406,7 @@ export class MoorWebClient {
             clientToken: response.headers.get("X-Moor-Client-Token"),
             clientId: response.headers.get("X-Moor-Client-Id"),
             ws: null,
+            wsConnectPromise: null,
             recentEvents: [],
             commandChain: Promise.resolve(),
         };
@@ -396,6 +417,10 @@ export class MoorWebClient {
 
     private async ensureWs(characterId: string, session: CharacterSessionState): Promise<void> {
         if (session.ws && session.ws.readyState === WebSocket.OPEN) {
+            return;
+        }
+        if (session.wsConnectPromise) {
+            await session.wsConnectPromise;
             return;
         }
 
@@ -411,6 +436,28 @@ export class MoorWebClient {
 
         const ws = new WebSocket(wsUrl, protocols);
         session.ws = ws;
+        const wsConnectPromise = new Promise<void>((resolve, reject) => {
+            const onOpen = () => {
+                ws.off("error", onError);
+                resolve();
+            };
+            const onError = (error: Error) => {
+                ws.off("open", onOpen);
+                reject(error);
+            };
+            ws.once("open", onOpen);
+            ws.once("error", onError);
+        });
+        session.wsConnectPromise = wsConnectPromise;
+
+        const clearIfCurrent = () => {
+            if (session.ws === ws) {
+                session.ws = null;
+            }
+            if (session.wsConnectPromise === wsConnectPromise) {
+                session.wsConnectPromise = null;
+            }
+        };
 
         ws.on("message", (rawData: unknown) => {
             try {
@@ -436,18 +483,18 @@ export class MoorWebClient {
                 // Ignore non-client-event frames while keeping connection alive.
             }
         });
+        ws.on("close", clearIfCurrent);
+        ws.on("error", clearIfCurrent);
 
-        await new Promise<void>((resolve, reject) => {
-            const onOpen = () => {
-                ws.off("error", onError);
-                resolve();
-            };
-            const onError = (error: Error) => {
-                ws.off("open", onOpen);
-                reject(error);
-            };
-            ws.once("open", onOpen);
-            ws.once("error", onError);
-        });
+        try {
+            await wsConnectPromise;
+        } catch (error) {
+            clearIfCurrent();
+            throw error;
+        } finally {
+            if (session.wsConnectPromise === wsConnectPromise) {
+                session.wsConnectPromise = null;
+            }
+        }
     }
 }

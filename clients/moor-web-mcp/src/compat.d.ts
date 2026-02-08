@@ -45,11 +45,13 @@ declare module "ws" {
         constructor(url: string, protocols?: string[]);
         on(event: "message", cb: (data: any) => void): this;
         on(event: "error", cb: (error: Error) => void): this;
+        on(event: "close", cb: () => void): this;
         once(event: "open", cb: () => void): this;
         once(event: "error", cb: (error: Error) => void): this;
         off(event: "message", cb: (data: any) => void): this;
         off(event: "open", cb: () => void): this;
         off(event: "error", cb: (error: Error) => void): this;
+        off(event: "close", cb: () => void): this;
         send(data: string | Uint8Array | ArrayBuffer): void;
         close(): void;
     }

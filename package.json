@@ -3,7 +3,7 @@
   "version": "1.0.0-rc1",
   "description": "mooR - a 21st century LambdaMOO implementation",
   "type": "module",
-    "scripts": {
+  "scripts": {
     "postinstall": "./clients/fetch-meadow.sh && npm install --prefix ${MEADOW_PATH:-./clients/meadow} && npm run meadow:install-local-packages",
     "meadow:use-local-packages": "npm run meadow:install-local-packages",
     "meadow:pack-local-packages": "npm run --prefix ./crates/schema/schema generate && rm -rf ./.npm-local && mkdir -p ./.npm-local ./.npm-cache && npm_config_cache=${PWD}/.npm-cache npm pack ./crates/schema/schema --silent --pack-destination ./.npm-local && npm_config_cache=${PWD}/.npm-cache npm pack ./clients/web-sdk --silent --pack-destination ./.npm-local",
