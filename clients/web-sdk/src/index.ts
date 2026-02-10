@@ -27,6 +27,8 @@ export * from "./object-ref";
 export * from "./reply";
 export * from "./response-decoders";
 export * from "./task-errors";
+export * from "./testing/mock-http-host";
+export * from "./testing/mock-web-host";
 export * from "./types";
 export * from "./var-builders";
 export * from "./verb";
