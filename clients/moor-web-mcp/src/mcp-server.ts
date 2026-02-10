@@ -23,7 +23,7 @@
 // You should have received a copy of the GNU General Public License along with
 // this program. If not, see <https://www.gnu.org/licenses/>.
 
-import type { CharacterConfig } from "./config.js";
+import type { CharacterRef, MooConfig } from "./config.js";
 import type {
     JsonRpcError,
     JsonRpcNotification,
@@ -38,6 +38,7 @@ import type { DynamicTool, MoorWebClient } from "./moor-service.js";
 const JSONRPC_VERSION = "2.0";
 
 interface ToolArgs extends Record<string, unknown> {
+    moo?: string;
     character?: string;
     wizard?: boolean;
     include_metadata?: boolean;
@@ -104,15 +105,15 @@ function isSystemObjectRef(value: string): boolean {
 
 export class McpServer {
     private readonly moor: MoorWebClient;
-    private readonly characters: CharacterConfig[];
-    private readonly defaultCharacterId: string;
+    private readonly moos: MooConfig[];
+    private readonly defaultCharacter: CharacterRef;
     private dynamicTools: DynamicTool[] = [];
     private dynamicLoaded = false;
 
-    constructor(moor: MoorWebClient, characters: CharacterConfig[], defaultCharacterId: string) {
+    constructor(moor: MoorWebClient, moos: MooConfig[], defaultCharacter: CharacterRef) {
         this.moor = moor;
-        this.characters = characters;
-        this.defaultCharacterId = defaultCharacterId;
+        this.moos = moos;
+        this.defaultCharacter = defaultCharacter;
     }
 
     async handleLine(line: string, write: (line: string) => void): Promise<void> {
@@ -514,19 +515,22 @@ export class McpServer {
     }
 
     private listResources(): ResourceDefinition[] {
-        return [
-            {
-                uri: "moor://characters",
-                name: "Characters",
-                description: "Configured characters and LLM guidance metadata.",
-                mimeType: "application/json",
-            },
-            ...this.characters.map((c) => ({
-                uri: `moor://events/${c.id}`,
-                name: `Recent events for ${c.id}`,
+        const eventResources = this.moos.flatMap((moo) => {
+            return moo.players.map((player) => ({
+                uri: `moor://events/${moo.id}/${player.id}`,
+                name: `Recent events for ${moo.id}/${player.id}`,
                 description: "Recent websocket narrative events captured by the MCP process.",
                 mimeType: "application/json",
-            })),
+            }));
+        });
+        return [
+            {
+                uri: "moor://moos",
+                name: "MOOs",
+                description: "Configured MOOs with descriptions and player metadata.",
+                mimeType: "application/json",
+            },
+            ...eventResources,
         ];
     }
 
@@ -535,27 +539,39 @@ export class McpServer {
         if (typeof uri !== "string") {
             throw new Error("resources/read params.uri must be string");
         }
-        if (uri === "moor://characters") {
+        if (uri === "moor://moos") {
             return {
                 contents: [{
                     uri,
                     mimeType: "application/json",
-                    text: JSON.stringify(this.characters, null, 2),
+                    text: JSON.stringify(this.moos, null, 2),
                 }],
             };
         }
 
-        const match = /^moor:\/\/events\/([^/]+)$/.exec(uri);
+        const match = /^moor:\/\/events\/([^/]+)\/([^/]+)$/.exec(uri);
         if (!match) {
             throw new Error(`Unknown resource URI: ${uri}`);
         }
-        const characterId = match[1];
-        const events = this.moor.getRecentEvents(characterId);
+        const character: CharacterRef = {
+            mooId: match[1],
+            playerId: match[2],
+        };
+        this.moor.findCharacter(character);
+        const events = this.moor.getRecentEvents(character);
         return {
             contents: [{
                 uri,
                 mimeType: "application/json",
-                text: JSON.stringify({ characterId, events }, null, 2),
+                text: JSON.stringify(
+                    {
+                        mooId: character.mooId,
+                        playerId: character.playerId,
+                        events,
+                    },
+                    null,
+                    2,
+                ),
             }],
         };
     }
@@ -566,13 +582,17 @@ export class McpServer {
             required?: string[];
         };
         const properties = { ...(source.properties ?? {}) };
+        properties.moo = {
+            type: "string",
+            description: "Configured moo id. Defaults to config.defaultMoo.",
+        };
         properties.character = {
             type: "string",
-            description: "Configured character id. Defaults to config.defaultCharacter.",
+            description: "Configured player id inside the selected moo.",
         };
         properties.wizard = {
             type: "boolean",
-            description: "Use a character marked isWizard=true.",
+            description: "Use a player marked isWizard=true in the selected moo.",
             default: false,
         };
         return {
@@ -581,20 +601,75 @@ export class McpServer {
         };
     }
 
-    private resolveCharacter(args: ToolArgs): string {
+    private resolveCharacter(args: ToolArgs): CharacterRef {
+        const moo = this.resolveMoo(args);
+
         if (typeof args.character === "string") {
-            return args.character;
+            const byId = moo.players.find((player) => player.id === args.character);
+            if (!byId) {
+                throw new Error(`Unknown player id ${args.character} in moo ${moo.id}`);
+            }
+            return {
+                mooId: moo.id,
+                playerId: byId.id,
+            };
         }
         if (args.wizard) {
-            const wizard = this.characters.find((c) => c.isWizard);
+            const wizard = moo.players.find((player) => player.isWizard);
             if (wizard) {
-                return wizard.id;
+                return {
+                    mooId: moo.id,
+                    playerId: wizard.id,
+                };
             }
         }
-        return this.defaultCharacterId;
+
+        if (moo.id === this.defaultCharacter.mooId) {
+            return this.defaultCharacter;
+        }
+        return this.defaultCharacterForMoo(moo);
     }
 
-    private async normalizeObjectRef(character: string, objectRef: string): Promise<string> {
+    private resolveMoo(args: ToolArgs): MooConfig {
+        if (typeof args.moo === "string") {
+            const byId = this.moos.find((moo) => moo.id === args.moo);
+            if (!byId) {
+                throw new Error(`Unknown moo id: ${args.moo}`);
+            }
+            return byId;
+        }
+
+        const byDefault = this.moos.find((moo) => moo.id === this.defaultCharacter.mooId);
+        if (!byDefault) {
+            throw new Error(`Unknown default moo id: ${this.defaultCharacter.mooId}`);
+        }
+        return byDefault;
+    }
+
+    private defaultCharacterForMoo(moo: MooConfig): CharacterRef {
+        if (moo.defaultPlayer) {
+            const byId = moo.players.find((player) => player.id === moo.defaultPlayer);
+            if (byId) {
+                return {
+                    mooId: moo.id,
+                    playerId: byId.id,
+                };
+            }
+        }
+        const programmer = moo.players.find((player) => player.isProgrammer);
+        if (programmer) {
+            return {
+                mooId: moo.id,
+                playerId: programmer.id,
+            };
+        }
+        return {
+            mooId: moo.id,
+            playerId: moo.players[0].id,
+        };
+    }
+
+    private async normalizeObjectRef(character: CharacterRef, objectRef: string): Promise<string> {
         const quick = simpleToCurie(objectRef);
         if (quick) {
             return quick;
@@ -637,8 +712,8 @@ export class McpServer {
         return objectRef;
     }
 
-    private async refreshDynamicTools(characterId?: string): Promise<number> {
-        const sourceCharacter = characterId ?? this.defaultCharacterId;
+    private async refreshDynamicTools(characterId?: CharacterRef): Promise<number> {
+        const sourceCharacter = characterId ?? this.defaultCharacter;
         this.dynamicTools = await this.moor.refreshDynamicTools(sourceCharacter);
         this.dynamicLoaded = true;
         return this.dynamicTools.length;

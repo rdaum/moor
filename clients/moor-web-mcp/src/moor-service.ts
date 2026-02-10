@@ -33,7 +33,7 @@ import {
 } from "@moor/web-sdk";
 import WebSocket from "ws";
 
-import type { CharacterConfig, MoorWebMcpConfig } from "./config.js";
+import type { CharacterRef, MooConfig, MoorWebMcpConfig, PlayerConfig } from "./config.js";
 
 export interface DynamicTool {
     name: string;
@@ -157,28 +157,33 @@ export class MoorWebClient {
         this.config = config;
     }
 
-    listCharacters(): CharacterConfig[] {
-        return this.config.characters;
+    listMoos(): MooConfig[] {
+        return this.config.moos;
     }
 
-    getRecentEvents(characterId: string): string[] {
-        return [...(this.sessions.get(characterId)?.recentEvents ?? [])];
+    getRecentEvents(character: CharacterRef): string[] {
+        return [...(this.sessions.get(this.sessionKey(character))?.recentEvents ?? [])];
     }
 
-    findCharacter(id: string): CharacterConfig {
-        const character = this.config.characters.find((c) => c.id === id);
-        if (!character) {
-            throw new Error(`Unknown character id: ${id}`);
+    findCharacter(character: CharacterRef): { moo: MooConfig; player: PlayerConfig } {
+        const moo = this.config.moos.find((candidate) => candidate.id === character.mooId);
+        if (!moo) {
+            throw new Error(`Unknown moo id: ${character.mooId}`);
         }
-        return character;
+        const player = moo.players.find((candidate) => candidate.id === character.playerId);
+        if (!player) {
+            throw new Error(`Unknown player id ${character.playerId} in moo ${moo.id}`);
+        }
+        return { moo, player };
     }
 
-    async evalExpression(characterId: string, expression: string): Promise<{ js: unknown; literal: string }> {
-        const session = await this.ensureSession(characterId);
+    async evalExpression(character: CharacterRef, expression: string): Promise<{ js: unknown; literal: string }> {
+        const session = await this.ensureSession(character);
+        const { moo } = this.findCharacter(character);
         const trimmed = expression.trim();
         const maybeWrapped = /(^return\b|;\s*$)/.test(trimmed) ? expression : `return ${trimmed};`;
         const response = await ensureOk(
-            await fetch(`${trimTrailingSlash(this.config.baseUrl)}/v1/eval`, {
+            await fetch(`${trimTrailingSlash(moo.connectAddress)}/v1/eval`, {
                 method: "POST",
                 headers: {
                     Accept: "application/x-flatbuffers",
@@ -196,9 +201,9 @@ export class MoorWebClient {
         return { js: decoded.toJS(), literal: decoded.toLiteral() };
     }
 
-    async command(characterId: string, command: string): Promise<CommandResult> {
-        const session = await this.ensureSession(characterId);
-        await this.ensureWs(characterId, session);
+    async command(character: CharacterRef, command: string): Promise<CommandResult> {
+        const session = await this.ensureSession(character);
+        await this.ensureWs(character, session);
 
         let resolveResult!: (result: CommandResult) => void;
         let resolved = false;
@@ -299,10 +304,11 @@ export class MoorWebClient {
         return resultPromise;
     }
 
-    async requestJson(characterId: string, path: string, init?: RequestInit): Promise<unknown> {
-        const session = await this.ensureSession(characterId);
+    async requestJson(character: CharacterRef, path: string, init?: RequestInit): Promise<unknown> {
+        const session = await this.ensureSession(character);
+        const { moo } = this.findCharacter(character);
         const response = await ensureOk(
-            await fetch(`${trimTrailingSlash(this.config.baseUrl)}${path}`, {
+            await fetch(`${trimTrailingSlash(moo.connectAddress)}${path}`, {
                 ...(init ?? {}),
                 headers: {
                     Accept: "application/json",
@@ -315,8 +321,8 @@ export class MoorWebClient {
         return response.json();
     }
 
-    async refreshDynamicTools(characterId: string): Promise<DynamicTool[]> {
-        const { js } = await this.evalExpression(characterId, "return #0:external_agent_tools();");
+    async refreshDynamicTools(character: CharacterRef): Promise<DynamicTool[]> {
+        const { js } = await this.evalExpression(character, "return #0:external_agent_tools();");
         if (!Array.isArray(js)) {
             return [];
         }
@@ -352,28 +358,28 @@ export class MoorWebClient {
     }
 
     async executeDynamicTool(
-        characterId: string,
+        character: CharacterRef,
         tool: DynamicTool,
         args: unknown,
     ): Promise<{ js: unknown; literal: string }> {
         const mooArgs = jsonToMooLiteral(args ?? {});
         const expression = `return ${tool.targetObj}:${tool.targetVerb}(${mooArgs}, player);`;
-        return this.evalExpression(characterId, expression);
+        return this.evalExpression(character, expression);
     }
 
     async invokeVerbViaEval(
-        characterId: string,
+        character: CharacterRef,
         objectRef: string,
         verb: string,
         args: unknown[],
     ): Promise<{ js: unknown; literal: string }> {
         const argLiteral = jsonToMooLiteral(args);
-        return this.evalExpression(characterId, `return ${objectRef}:${verb}(@${argLiteral});`);
+        return this.evalExpression(character, `return ${objectRef}:${verb}(@${argLiteral});`);
     }
 
-    async functionHelp(characterId: string, functionName: string): Promise<{ js: unknown; literal: string }> {
+    async functionHelp(character: CharacterRef, functionName: string): Promise<{ js: unknown; literal: string }> {
         const escaped = escapeMooString(functionName);
-        return this.evalExpression(characterId, `return function_help("${escaped}");`);
+        return this.evalExpression(character, `return function_help("${escaped}");`);
     }
 
     async close(): Promise<void> {
@@ -386,20 +392,25 @@ export class MoorWebClient {
         }
     }
 
-    private async ensureSession(characterId: string): Promise<CharacterSessionState> {
-        const existing = this.sessions.get(characterId);
+    private sessionKey(character: CharacterRef): string {
+        return `${character.mooId}/${character.playerId}`;
+    }
+
+    private async ensureSession(character: CharacterRef): Promise<CharacterSessionState> {
+        const key = this.sessionKey(character);
+        const existing = this.sessions.get(key);
         if (existing) {
             return existing;
         }
 
-        const character = this.findCharacter(characterId);
+        const selected = this.findCharacter(character);
         const formBody = new URLSearchParams({
-            player: character.username,
-            password: character.password,
+            player: selected.player.username,
+            password: selected.player.password,
         }).toString();
 
         const response = await ensureOk(
-            await fetch(`${trimTrailingSlash(this.config.baseUrl)}/auth/connect`, {
+            await fetch(`${trimTrailingSlash(selected.moo.connectAddress)}/auth/connect`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded",
@@ -411,7 +422,9 @@ export class MoorWebClient {
 
         const authToken = response.headers.get("X-Moor-Auth-Token");
         if (!authToken) {
-            throw new Error(`auth/connect missing X-Moor-Auth-Token for character ${character.id}`);
+            throw new Error(
+                `auth/connect missing X-Moor-Auth-Token for ${selected.moo.id}/${selected.player.id}`,
+            );
         }
 
         const session: CharacterSessionState = {
@@ -424,11 +437,11 @@ export class MoorWebClient {
             commandChain: Promise.resolve(),
         };
 
-        this.sessions.set(characterId, session);
+        this.sessions.set(key, session);
         return session;
     }
 
-    private async ensureWs(characterId: string, session: CharacterSessionState): Promise<void> {
+    private async ensureWs(character: CharacterRef, session: CharacterSessionState): Promise<void> {
         if (session.ws && session.ws.readyState === WebSocket.OPEN) {
             return;
         }
@@ -437,7 +450,8 @@ export class MoorWebClient {
             return;
         }
 
-        const baseWsUrl = this.config.wsBaseUrl ?? inferWsBaseUrl(this.config.baseUrl);
+        const { moo } = this.findCharacter(character);
+        const baseWsUrl = moo.wsConnectAddress ?? inferWsBaseUrl(moo.connectAddress);
         const { wsUrl, protocols } = buildWsAttach(baseWsUrl, {
             mode: "connect",
             credentials: {

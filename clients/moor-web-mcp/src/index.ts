@@ -38,7 +38,7 @@ function parseArgs(argv: string[]): { configPath: string } {
         }
     }
     if (!configPath) {
-        throw new Error("Usage: moor-web-mcp --config <config.json|config.yaml>");
+        throw new Error("Usage: moor-web-mcp --config <config.json>");
     }
     return { configPath };
 }
@@ -46,9 +46,9 @@ function parseArgs(argv: string[]): { configPath: string } {
 async function main(): Promise<void> {
     const args = parseArgs(process.argv.slice(2));
     const config = loadConfig(args.configPath);
-    const defaultCharacterId = resolveDefaultCharacter(config);
+    const defaultCharacter = resolveDefaultCharacter(config);
     const moor = new MoorWebClient(config);
-    const server = new McpServer(moor, config.characters, defaultCharacterId);
+    const server = new McpServer(moor, config.moos, defaultCharacter);
 
     const rl = readline.createInterface({
         input: process.stdin,

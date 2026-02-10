@@ -26,7 +26,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-export interface CharacterConfig {
+export interface PlayerConfig {
     id: string;
     username: string;
     password: string;
@@ -35,11 +35,24 @@ export interface CharacterConfig {
     notes?: string;
 }
 
+export interface MooConfig {
+    id: string;
+    description: string;
+    connectAddress: string;
+    wsConnectAddress?: string;
+    defaultPlayer?: string;
+    players: PlayerConfig[];
+}
+
+export interface CharacterRef {
+    mooId: string;
+    playerId: string;
+}
+
 export interface MoorWebMcpConfig {
-    baseUrl: string;
-    wsBaseUrl?: string;
+    defaultMoo?: string;
     defaultCharacter?: string;
-    characters: CharacterConfig[];
+    moos: MooConfig[];
 }
 
 function assertConfig(config: unknown, path: string): asserts config is MoorWebMcpConfig {
@@ -48,38 +61,96 @@ function assertConfig(config: unknown, path: string): asserts config is MoorWebM
     }
 
     const candidate = config as Partial<MoorWebMcpConfig>;
-    if (!candidate.baseUrl || typeof candidate.baseUrl !== "string") {
-        throw new Error(`Invalid config in ${path}: missing baseUrl`);
-    }
-    if (!Array.isArray(candidate.characters) || candidate.characters.length === 0) {
-        throw new Error(`Invalid config in ${path}: characters must be a non-empty array`);
+    if (!Array.isArray(candidate.moos) || candidate.moos.length === 0) {
+        throw new Error(`Invalid config in ${path}: moos must be a non-empty array`);
     }
 
-    const ids = new Set<string>();
-    for (const character of candidate.characters) {
-        if (!character || typeof character !== "object") {
-            throw new Error(`Invalid config in ${path}: character must be object`);
+    const mooIds = new Set<string>();
+    for (const moo of candidate.moos) {
+        if (!moo || typeof moo !== "object") {
+            throw new Error(`Invalid config in ${path}: each moo must be object`);
         }
-        const ch = character as Partial<CharacterConfig>;
-        if (!ch.id || !ch.username || !ch.password) {
-            throw new Error(`Invalid config in ${path}: each character needs id, username, password`);
+        const asMoo = moo as Partial<MooConfig>;
+        if (!asMoo.id || typeof asMoo.id !== "string") {
+            throw new Error(`Invalid config in ${path}: each moo needs id`);
         }
-        if (ids.has(ch.id)) {
-            throw new Error(`Invalid config in ${path}: duplicate character id ${ch.id}`);
+        if (mooIds.has(asMoo.id)) {
+            throw new Error(`Invalid config in ${path}: duplicate moo id ${asMoo.id}`);
         }
-        ids.add(ch.id);
+        mooIds.add(asMoo.id);
+
+        if (!asMoo.description || typeof asMoo.description !== "string") {
+            throw new Error(`Invalid config in ${path}: moo ${asMoo.id} needs description`);
+        }
+        if (!asMoo.connectAddress || typeof asMoo.connectAddress !== "string") {
+            throw new Error(`Invalid config in ${path}: moo ${asMoo.id} needs connectAddress`);
+        }
+        if (!Array.isArray(asMoo.players) || asMoo.players.length === 0) {
+            throw new Error(`Invalid config in ${path}: moo ${asMoo.id} players must be a non-empty array`);
+        }
+
+        const playerIds = new Set<string>();
+        for (const player of asMoo.players) {
+            if (!player || typeof player !== "object") {
+                throw new Error(`Invalid config in ${path}: moo ${asMoo.id} player must be object`);
+            }
+            const asPlayer = player as Partial<PlayerConfig>;
+            if (!asPlayer.id || !asPlayer.username || !asPlayer.password) {
+                throw new Error(`Invalid config in ${path}: moo ${asMoo.id} each player needs id, username, password`);
+            }
+            if (playerIds.has(asPlayer.id)) {
+                throw new Error(`Invalid config in ${path}: moo ${asMoo.id} duplicate player id ${asPlayer.id}`);
+            }
+            playerIds.add(asPlayer.id);
+        }
     }
 }
 
-export function resolveDefaultCharacter(config: MoorWebMcpConfig): string {
+function resolveDefaultMoo(config: MoorWebMcpConfig): MooConfig {
+    if (config.defaultMoo) {
+        const byId = config.moos.find((moo) => moo.id === config.defaultMoo);
+        if (!byId) {
+            throw new Error(`Invalid config: defaultMoo ${config.defaultMoo} not found`);
+        }
+        return byId;
+    }
+    return config.moos[0];
+}
+
+export function resolveDefaultCharacter(config: MoorWebMcpConfig): CharacterRef {
+    const moo = resolveDefaultMoo(config);
     if (config.defaultCharacter) {
-        return config.defaultCharacter;
+        const byId = moo.players.find((player) => player.id === config.defaultCharacter);
+        if (!byId) {
+            throw new Error(`Invalid config: defaultCharacter ${config.defaultCharacter} not found in moo ${moo.id}`);
+        }
+        return {
+            mooId: moo.id,
+            playerId: byId.id,
+        };
     }
-    const programmer = config.characters.find((c) => c.isProgrammer);
+    if (moo.defaultPlayer) {
+        const byId = moo.players.find((player) => player.id === moo.defaultPlayer);
+        if (!byId) {
+            throw new Error(`Invalid config: moo ${moo.id} defaultPlayer ${moo.defaultPlayer} not found`);
+        }
+        return {
+            mooId: moo.id,
+            playerId: byId.id,
+        };
+    }
+
+    const programmer = moo.players.find((c) => c.isProgrammer);
     if (programmer) {
-        return programmer.id;
+        return {
+            mooId: moo.id,
+            playerId: programmer.id,
+        };
     }
-    return config.characters[0].id;
+    return {
+        mooId: moo.id,
+        playerId: moo.players[0].id,
+    };
 }
 
 export function loadConfig(configPath: string): MoorWebMcpConfig {
