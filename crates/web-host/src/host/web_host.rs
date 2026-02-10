@@ -1171,6 +1171,7 @@ async fn attach(
         debug!("WebSocket attach: no credentials, will create new connection");
         None
     };
+    let reattach_succeeded = reattach_details.is_some();
 
     // Determine effective connect type:
     // - If reattach succeeded, it's implicitly a reconnect (no user_connected needed)
@@ -1211,6 +1212,20 @@ async fn attach(
             }
         }
     };
+    debug!(
+        "WebSocket attach decision: is_initial_attach={}, had_client_hint={}, reattach_succeeded={}, effective_connect_type={:?}",
+        is_initial_attach,
+        client_hint.is_some(),
+        reattach_succeeded,
+        effective_connect_type
+    );
+    if client_hint.is_some() && !reattach_succeeded {
+        warn!(
+            "WebSocket attach fallback: client_hint_present_but_reattach_failed; is_initial_attach={}, effective_connect_type={:?}",
+            is_initial_attach,
+            effective_connect_type
+        );
+    }
     let (player, client_id, client_token, rpc_client) = connection_details;
 
     let Ok(mut connection) = host

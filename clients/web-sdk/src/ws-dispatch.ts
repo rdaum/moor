@@ -12,6 +12,7 @@
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import { ClientEventUnion } from "@moor/schema/generated/moor-rpc/client-event-union";
+import { CredentialsUpdatedEvent } from "@moor/schema/generated/moor-rpc/credentials-updated-event";
 import { NarrativeEventMessage } from "@moor/schema/generated/moor-rpc/narrative-event-message";
 import { RequestInputEvent } from "@moor/schema/generated/moor-rpc/request-input-event";
 import { SystemMessageEvent } from "@moor/schema/generated/moor-rpc/system-message-event";
@@ -26,6 +27,7 @@ export interface WsDispatchHandlers {
     onRequestInputEvent?: (requestInput: RequestInputEvent) => void;
     onTaskErrorEvent?: (taskError: TaskErrorEvent) => void;
     onTaskSuccessEvent?: (taskSuccess: TaskSuccessEvent) => void;
+    onCredentialsUpdatedEvent?: (credentials: CredentialsUpdatedEvent) => void;
     onIgnoredEvent?: (eventType: ClientEventUnion) => void;
     onUnknownEvent?: (eventType: ClientEventUnion) => void;
     onMalformedEvent?: (eventType: ClientEventUnion, expected: string) => void;
@@ -73,6 +75,14 @@ export function dispatchClientEvent(bytes: Uint8Array, handlers: WsDispatchHandl
                 return;
             }
             handlers.onTaskSuccessEvent?.(eventUnion);
+            return;
+        }
+        case ClientEventUnion.CredentialsUpdatedEvent: {
+            if (!(eventUnion instanceof CredentialsUpdatedEvent)) {
+                handlers.onMalformedEvent?.(eventType, "CredentialsUpdatedEvent");
+                return;
+            }
+            handlers.onCredentialsUpdatedEvent?.(eventUnion);
             return;
         }
         case ClientEventUnion.PlayerSwitchedEvent:
