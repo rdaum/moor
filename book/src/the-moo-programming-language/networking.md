@@ -465,6 +465,34 @@ set_connection_option(player, "flush-command", ".clear");
 set_connection_option(player, "flush-command", "");
 ```
 
+#### `"utf8"`
+
+Controls whether telnet rich output prefers UTF-8 characters (quotes, bullets, box drawing, etc.) when available.
+
+- `value = true` (1): Prefer UTF-8 rendering
+- `value = false` (0): Use ASCII-safe fallbacks
+
+```moo
+// Enable UTF-8 rich output for this connection
+set_connection_option(player, "utf8", 1);
+```
+
+The telnet client-side `.UTF8` built-in command toggles this same per-connection option.
+
+#### `"screen-reader"`
+
+Controls whether telnet rich output is rendered in a screen-reader-friendly form.
+
+- `value = true` (1): Prefer TTS-friendly rendering (linearized tables/definition lists, reduced decoration)
+- `value = false` (0): Use normal rich terminal rendering
+
+```moo
+// Enable screen-reader mode for this connection
+set_connection_option(player, "screen-reader", 1);
+```
+
+The telnet client-side `.SCREENREADER` (or `.A11Y`) built-in command toggles this same per-connection option.
+
 #### `"disable-oob"`
 
 If `value` is true, out-of-band command processing is disabled for this connection. Lines beginning with the out-of-band
@@ -524,6 +552,8 @@ endfor
 // "client-echo" = 1
 // "binary" = 0
 // "flush-command" = ".flush"
+// "utf8" = 0
+// "screen-reader" = 0
 // "disable-oob" = 0
 ```
 

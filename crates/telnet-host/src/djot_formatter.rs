@@ -26,9 +26,28 @@ use tabled::{
 /// Render djot markup to ANSI-colored terminal output.
 /// If `utf8` is true, use Unicode characters for bullets, quotes, tables, etc.
 /// If false, use ASCII-safe alternatives.
+#[cfg(test)]
 pub fn djot_to_terminal(input: &str, utf8: bool) -> String {
+    djot_to_terminal_with_options(
+        input,
+        RenderOptions {
+            utf8,
+            screen_reader_mode: false,
+        },
+    )
+}
+
+/// Output options for telnet Djot rendering.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct RenderOptions {
+    pub(crate) utf8: bool,
+    pub(crate) screen_reader_mode: bool,
+}
+
+/// Render djot markup to terminal output using explicit render options.
+pub(crate) fn djot_to_terminal_with_options(input: &str, options: RenderOptions) -> String {
     let parser = Parser::new(input);
-    let mut renderer = TerminalRenderer::new(utf8);
+    let mut renderer = TerminalRenderer::new(options);
     renderer.render(parser);
     renderer.output
 }
@@ -71,6 +90,8 @@ struct TerminalRenderer {
     output: String,
     /// Whether the client supports UTF-8 (for fancy characters)
     utf8: bool,
+    /// Whether output should be optimized for screen readers / TTS.
+    screen_reader_mode: bool,
     /// Style stack for nested inline styles
     style_stack: Vec<StyleModifier>,
     /// List nesting stack
@@ -103,10 +124,11 @@ enum StyleModifier {
 }
 
 impl TerminalRenderer {
-    fn new(utf8: bool) -> Self {
+    fn new(options: RenderOptions) -> Self {
         Self {
             output: String::new(),
-            utf8,
+            utf8: options.utf8,
+            screen_reader_mode: options.screen_reader_mode,
             style_stack: Vec::new(),
             list_stack: Vec::new(),
             indent_level: 0,
@@ -171,12 +193,16 @@ impl TerminalRenderer {
                 }
             }
             Event::ThematicBreak(_) => {
-                self.flush_pending_newlines();
-                self.emit_indent();
-                let rule_char = if self.utf8 { "\u{2500}" } else { "-" };
-                let rule = rule_char.repeat(40);
-                self.output.push_str(&rule.dimmed().to_string());
-                self.pending_newlines = 2;
+                if self.screen_reader_mode {
+                    self.pending_newlines = self.pending_newlines.max(2);
+                } else {
+                    self.flush_pending_newlines();
+                    self.emit_indent();
+                    let rule_char = if self.utf8 { "\u{2500}" } else { "-" };
+                    let rule = rule_char.repeat(40);
+                    self.output.push_str(&rule.dimmed().to_string());
+                    self.pending_newlines = 2;
+                }
             }
             Event::Escape | Event::Attributes(_) => {}
         }
@@ -516,6 +542,10 @@ impl TerminalRenderer {
         if state.rows.is_empty() {
             return;
         }
+        if self.screen_reader_mode {
+            self.render_table_screen_reader(state);
+            return;
+        }
 
         let mut builder = TableBuilder::default();
 
@@ -554,8 +584,52 @@ impl TerminalRenderer {
         self.at_line_start = false;
     }
 
+    fn render_table_screen_reader(&mut self, state: TableState) {
+        let has_headers = state.rows.len() > 1 && state.rows[0].iter().any(|cell| !cell.trim().is_empty());
+        let headers = has_headers.then(|| state.rows[0].clone());
+        let data_rows = if has_headers {
+            &state.rows[1..]
+        } else {
+            &state.rows[..]
+        };
+
+        for (row_index, row) in data_rows.iter().enumerate() {
+            if row_index > 0 {
+                self.emit_newline();
+            }
+            self.emit_indent();
+            let parts: Vec<String> = row
+                .iter()
+                .enumerate()
+                .map(|(col_index, value)| {
+                    let label = headers
+                        .as_ref()
+                        .and_then(|h| h.get(col_index))
+                        .filter(|h| !h.trim().is_empty())
+                        .cloned()
+                        .unwrap_or_else(|| format!("Column {}", col_index + 1));
+                    format!("{label}: {value}")
+                })
+                .collect();
+            self.output
+                .push_str(&format!("Row {}: {}", row_index + 1, parts.join("; ")));
+            self.at_line_start = false;
+        }
+    }
+
     fn render_deflist(&mut self, state: DefListState) {
         if state.rows.is_empty() {
+            return;
+        }
+        if self.screen_reader_mode {
+            for (i, (term, details)) in state.rows.iter().enumerate() {
+                if i > 0 {
+                    self.emit_newline();
+                }
+                self.emit_indent();
+                self.output.push_str(&format!("{term}: {details}"));
+                self.at_line_start = false;
+            }
             return;
         }
 
@@ -685,10 +759,14 @@ impl TerminalRenderer {
                 .any(|s| matches!(s, StyleModifier::Dimmed))
                 && !self.in_code_block
             {
-                let quote_marker = if self.utf8 { "\u{2502} " } else { "| " };
-                self.output.push_str(&quote_marker.dimmed().to_string());
-                if self.indent_level > 1 {
-                    self.output.push_str(&"  ".repeat(self.indent_level - 1));
+                if self.screen_reader_mode {
+                    self.output.push_str(&indent);
+                } else {
+                    let quote_marker = if self.utf8 { "\u{2502} " } else { "| " };
+                    self.output.push_str(&quote_marker.dimmed().to_string());
+                    if self.indent_level > 1 {
+                        self.output.push_str(&"  ".repeat(self.indent_level - 1));
+                    }
                 }
             } else {
                 self.output.push_str(&indent);
@@ -709,6 +787,9 @@ impl TerminalRenderer {
     }
 
     fn apply_styles(&self, text: &str) -> String {
+        if self.screen_reader_mode {
+            return text.to_string();
+        }
         if self.style_stack.is_empty() {
             return text.to_string();
         }
@@ -994,5 +1075,41 @@ return $look:mk(this, @this.contents);
             !output.contains("[moo]"),
             "MOO code block should not show language label"
         );
+    }
+
+    #[test]
+    fn test_screen_reader_table_format() {
+        let djot = r#"
+| Name | Age |
+|------|-----|
+| Alice | 30 |
+| Bob | 25 |
+"#;
+        let output = djot_to_terminal_with_options(
+            djot,
+            RenderOptions {
+                utf8: true,
+                screen_reader_mode: true,
+            },
+        );
+        assert!(output.contains("Row 1: Name: Alice; Age: 30"));
+        assert!(output.contains("Row 2: Name: Bob; Age: 25"));
+        assert!(!output.contains("│"));
+        assert!(!output.contains("┌"));
+        assert!(!output.contains("─"));
+    }
+
+    #[test]
+    fn test_screen_reader_disables_ansi_styles() {
+        colored::control::set_override(true);
+        let output = djot_to_terminal_with_options(
+            "# Heading",
+            RenderOptions {
+                utf8: true,
+                screen_reader_mode: true,
+            },
+        );
+        assert!(!output.contains("\x1b["));
+        assert!(output.contains("Heading"));
     }
 }

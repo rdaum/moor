@@ -63,7 +63,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> AsyncStream for T {}
 /// Type alias for a boxed async stream that can be either TcpStream or TlsStream.
 pub(crate) type BoxedAsyncIo = Pin<Box<dyn AsyncStream>>;
 
-use crate::djot_formatter::djot_to_terminal;
+use crate::djot_formatter::{RenderOptions, djot_to_terminal_with_options};
 
 /// Out of band messages are prefixed with this string, e.g. for MCP clients.
 const OUT_OF_BAND_PREFIX: &str = "#$#";
@@ -128,6 +128,8 @@ pub(crate) struct TelnetConnection {
     pub(crate) socket_fd: RawFd,
     /// Whether the client supports UTF-8 (for fancy characters in output)
     pub(crate) supports_utf8: bool,
+    /// Whether output should avoid decorative formatting for screen readers / TTS.
+    pub(crate) screen_reader_mode: bool,
 }
 
 /// The input modes the telnet session can be in.
@@ -346,7 +348,13 @@ impl InputMetadata {
                 .and_then(|v| v.as_integer())
                 .and_then(|w| if w > 0 { Some(w as usize) } else { None });
 
-            let formatted = djot_to_terminal(prompt, conn.supports_utf8);
+            let formatted = djot_to_terminal_with_options(
+                prompt,
+                RenderOptions {
+                    utf8: conn.supports_utf8,
+                    screen_reader_mode: conn.screen_reader_mode,
+                },
+            );
             conn.send_line(&formatted).await?;
         }
 
@@ -575,6 +583,11 @@ impl TelnetConnection {
                 let utf8 = value.as_ref().map(|v| v.is_true()).unwrap_or(false);
                 debug!("Setting UTF-8 support to {}", utf8);
                 self.supports_utf8 = utf8;
+            }
+            "screen-reader" => {
+                let screen_reader_mode = value.as_ref().map(|v| v.is_true()).unwrap_or(false);
+                debug!("Setting screen-reader mode to {}", screen_reader_mode);
+                self.screen_reader_mode = screen_reader_mode;
             }
             _ => {
                 warn!("Unsupported connection option: {}", option_str);
@@ -809,8 +822,13 @@ impl TelnetConnection {
                     .and_then(|v| v.as_integer())
                     .and_then(|w| if w > 0 { Some(w as usize) } else { None });
 
-                let Ok(formatted) = output_format(&value, content_type, width, self.supports_utf8)
-                else {
+                let Ok(formatted) = output_format(
+                    &value,
+                    content_type,
+                    width,
+                    self.supports_utf8,
+                    self.screen_reader_mode,
+                ) else {
                     warn!("Failed to format message: {:?}", value);
                     return Ok(());
                 };
@@ -1482,6 +1500,18 @@ impl TelnetConnection {
                     .await?;
                 Ok(true)
             }
+            ".SCREENREADER" | ".A11Y" => {
+                self.screen_reader_mode = !self.screen_reader_mode;
+                self.update_connection_attribute(
+                    Symbol::mk("screen-reader"),
+                    Some(Var::mk_bool(self.screen_reader_mode)),
+                )
+                .await;
+                let status = if self.screen_reader_mode { "on" } else { "off" };
+                self.send_line(&format!("Screen reader mode is now {}", status))
+                    .await?;
+                Ok(true)
+            }
             _ => Ok(false),
         }
     }
@@ -1527,8 +1557,13 @@ impl TelnetConnection {
                             .and_then(|v| v.as_integer())
                             .and_then(|w| if w > 0 { Some(w as usize) } else { None });
 
-                        let formatted =
-                            output_format(msg, *content_type, width, self.supports_utf8)?;
+                        let formatted = output_format(
+                            msg,
+                            *content_type,
+                            width,
+                            self.supports_utf8,
+                            self.screen_reader_mode,
+                        )?;
                         match formatted {
                             FormattedOutput::Plain(text) => self.send_line(&text).await,
                             FormattedOutput::Rich(text) => {
@@ -2083,10 +2118,19 @@ fn output_format(
     content_type: Option<Symbol>,
     width: Option<usize>,
     utf8: bool,
+    screen_reader_mode: bool,
 ) -> Result<FormattedOutput, eyre::Error> {
     match content.variant() {
-        Variant::Str(s) => output_str_format(s.as_str(), content_type, width, utf8),
-        Variant::Sym(s) => output_str_format(&s.as_arc_str(), content_type, width, utf8),
+        Variant::Str(s) => {
+            output_str_format(s.as_str(), content_type, width, utf8, screen_reader_mode)
+        }
+        Variant::Sym(s) => output_str_format(
+            &s.as_arc_str(),
+            content_type,
+            width,
+            utf8,
+            screen_reader_mode,
+        ),
         Variant::List(l) => {
             // If the content is a list, it must be a list of strings.
             let mut output = String::new();
@@ -2099,7 +2143,7 @@ fn output_format(
                 }
                 output.push_str(item_str);
             }
-            output_str_format(&output, content_type, width, utf8)
+            output_str_format(&output, content_type, width, utf8, screen_reader_mode)
         }
         _ => bail!("Unsupported content type: {:?}", content.variant()),
     }
@@ -2110,6 +2154,7 @@ fn output_str_format(
     content_type: Option<Symbol>,
     _width: Option<usize>,
     utf8: bool,
+    screen_reader_mode: bool,
 ) -> Result<FormattedOutput, eyre::Error> {
     let Some(content_type) = content_type else {
         debug!("output_str_format: no content_type, using plain");
@@ -2120,10 +2165,22 @@ fn output_str_format(
     Ok(match content_type_str.as_str() {
         CONTENT_TYPE_MARKDOWN | CONTENT_TYPE_MARKDOWN_SLASH => {
             // Use djot formatter for markdown too - djot handles most markdown syntax
-            FormattedOutput::Rich(djot_to_terminal(content, utf8))
+            FormattedOutput::Rich(djot_to_terminal_with_options(
+                content,
+                RenderOptions {
+                    utf8,
+                    screen_reader_mode,
+                },
+            ))
         }
         CONTENT_TYPE_DJOT | CONTENT_TYPE_DJOT_SLASH => {
-            FormattedOutput::Rich(djot_to_terminal(content, utf8))
+            FormattedOutput::Rich(djot_to_terminal_with_options(
+                content,
+                RenderOptions {
+                    utf8,
+                    screen_reader_mode,
+                },
+            ))
         }
         // text/plain, None, or unknown
         _ => FormattedOutput::Plain(content.to_string()),

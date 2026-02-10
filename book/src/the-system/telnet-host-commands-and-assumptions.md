@@ -124,6 +124,24 @@ mooR also provides a `connection_options()` builtin function that returns all cl
 Each connection has its own output prefix and suffix values, which are not shared between connections, so users running
 multiple connections to the same MOO will have connection-specific delimiter settings.
 
+### Display and Accessibility Toggles
+
+The telnet host provides per-connection display toggles for rich output formatting:
+
+- `.UTF8`: Toggle UTF-8 rendering on or off for this session.
+- `.SCREENREADER` or `.A11Y`: Toggle screen reader mode on or off for this session.
+
+These are connection-local settings. If a player has multiple connections open, each connection can have different
+values.
+
+The same settings are also exposed as connection options / attributes:
+
+- `utf8`: Enables or disables UTF-8 output features.
+- `screen-reader`: Enables or disables screen-reader-friendly rendering.
+
+When `screen-reader` is enabled, rich output is rendered in a TTS-friendly form. In particular, table/definition-list
+box drawing is replaced with linear text and decorative ANSI styling is suppressed.
+
 ## The .program Command
 
 The `.program` command is a common way for programmers to associate a particular MOO-code program with a particular
