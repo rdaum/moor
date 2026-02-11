@@ -11,9 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use ArgCount::{Q, U};
-use ArgType::{Any, AnyNum, Typed};
-use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
 use lazy_static::lazy_static;
 use moor_var::{
     Symbol, VarType,
@@ -21,6 +18,9 @@ use moor_var::{
 };
 /// Global registry of built-in function names.
 use std::collections::HashMap;
+use ArgCount::{Q, U};
+use ArgType::{Any, AnyNum, Typed};
+use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
 
 lazy_static! {
     /// The global builtins table which describes the set of builtins available to the mooR runtime.
@@ -815,6 +815,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             vec![Typed(TYPE_FLYWEIGHT), Typed(TYPE_SYMBOL)],
             true,
         ),
+        mk_builtin(
+            "flycontentsset",
+            Q(2),
+            Q(2),
+            vec![Typed(TYPE_FLYWEIGHT), Typed(TYPE_LIST)],
+            true,
+        ),
     ]);
     pad_group(&mut builtins, start, "flyweights");
 
@@ -1131,7 +1138,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{BuiltinId, builtin_signature_for_ids};
+    use super::{builtin_signature_for_ids, BuiltinId};
 
     #[test]
     fn builtin_signature_is_order_independent() {

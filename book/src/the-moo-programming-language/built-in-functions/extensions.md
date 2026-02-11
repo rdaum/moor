@@ -20,6 +20,7 @@ The following functions are unique to mooR and not found in original LambdaMOO:
 - `toflyweight` - Build a flyweight from a delegate, slots map, and optional contents list
 - `flyslots` - Returns the slots on a given flyweight as a map
 - `flycontents` - Returns the contents list from a flyweight
+- `flycontentsset` - Returns a copy of the flyweight with replaced contents
 - `flyslotset` - Returns a copy of the flyweight with a slot added or updated
 - `flyslotremove` - Returns a copy of the flyweight with the given slot removed, if present
 - `tosym` - Turns the given value into a Symbol

@@ -169,6 +169,18 @@ let f = < $thing, { 1, 2, 3 } >;
 flycontents(f); // Returns {1, 2, 3}
 ```
 
+#### `flycontentsset(flyweight f, list contents)`
+
+Returns a **new** flyweight with the contents list replaced.
+
+```moo
+let f1 = < $thing, .a = 1, { 1, 2, 3 } >;
+let f2 = flycontentsset(f1, { "x", "y" });
+
+// f1 is unchanged: < $thing, .a = 1, { 1, 2, 3 } >
+// f2 is: < $thing, .a = 1, { "x", "y" } >
+```
+
 ### Modification (Copy-on-Write)
 
 #### `flyslotset(flyweight f, symbol key, any value)`

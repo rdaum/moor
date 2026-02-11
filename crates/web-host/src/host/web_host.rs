@@ -1200,8 +1200,11 @@ async fn attach(
         debug!("Reattach succeeded, using Reconnected");
         (moor_rpc::ConnectType::Reconnected, details)
     } else {
-        let ct =
-            effective_connect_type_for_fresh_attach(connect_type, is_initial_attach, has_client_hint);
+        let ct = effective_connect_type_for_fresh_attach(
+            connect_type,
+            is_initial_attach,
+            has_client_hint,
+        );
         debug!("Fresh attach effective connect_type={:?}", ct);
         match host
             .attach_authenticated(auth_token.clone(), Some(ct), addr)
@@ -1228,8 +1231,7 @@ async fn attach(
     if has_client_hint && !reattach_succeeded {
         warn!(
             "WebSocket attach fallback: client_hint_present_but_reattach_failed; is_initial_attach={}, effective_connect_type={:?}",
-            is_initial_attach,
-            effective_connect_type
+            is_initial_attach, effective_connect_type
         );
     }
     let (player, client_id, client_token, rpc_client) = connection_details;
@@ -1493,8 +1495,8 @@ pub async fn openapi_handler() -> impl IntoResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::{effective_connect_type_for_fresh_attach, should_attempt_reattach};
     use super::moor_rpc::ConnectType;
+    use super::{effective_connect_type_for_fresh_attach, should_attempt_reattach};
 
     #[test]
     fn attach_decision_matrix_for_reattach_attempt() {
@@ -1507,35 +1509,19 @@ mod tests {
     #[test]
     fn attach_decision_matrix_for_fresh_connect_type() {
         assert_eq!(
-            effective_connect_type_for_fresh_attach(
-                ConnectType::Connected,
-                true,
-                true
-            ),
+            effective_connect_type_for_fresh_attach(ConnectType::Connected, true, true),
             ConnectType::Connected
         );
         assert_eq!(
-            effective_connect_type_for_fresh_attach(
-                ConnectType::Connected,
-                false,
-                true
-            ),
+            effective_connect_type_for_fresh_attach(ConnectType::Connected, false, true),
             ConnectType::Reconnected
         );
         assert_eq!(
-            effective_connect_type_for_fresh_attach(
-                ConnectType::Connected,
-                false,
-                false
-            ),
+            effective_connect_type_for_fresh_attach(ConnectType::Connected, false, false),
             ConnectType::Connected
         );
         assert_eq!(
-            effective_connect_type_for_fresh_attach(
-                ConnectType::Created,
-                false,
-                false
-            ),
+            effective_connect_type_for_fresh_attach(ConnectType::Created, false, false),
             ConnectType::Created
         );
     }

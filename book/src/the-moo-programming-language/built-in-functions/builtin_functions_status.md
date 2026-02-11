@@ -269,6 +269,7 @@ Functions not part of the original LambdaMOO, but added in moor
 | `toflyweight`   | Build a flyweight from a delegate, slots map, and optional contents list | Available only if the flyweights feature is turned on |
 | `flyslots`      | Returns the slots on a given flyweight as a map                          | Available only if the flyweights feature is turned on |
 | `flycontents`   | Returns the contents list from a flyweight                               | Available only if the flyweights feature is turned on |
+| `flycontentsset`| Returns a copy of the flyweight with replaced contents                   | Available only if the flyweights feature is turned on |
 | `flyslotset`    | Returns a copy of the flyweight with a slot added or updated             | Available only if the flyweights feature is turned on |
 | `flyslotremove` | Returns a copy of the flyweight with the given slot removed, if present  | Available only if the flyweights feature is turned on |
 | `tosym`         | Turns the given value into a Symbol                                      | Available only if the symbols feature is turned on    |

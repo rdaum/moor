@@ -735,6 +735,24 @@ mod tests {
     }
 
     #[test]
+    fn test_flyweight_contents_set() {
+        assert_eq!(
+            run_moo(
+                r#"
+                let a = <#1, .slot = "123", {1, 2, 3}>;
+                let b = flycontentsset(a, {"x", "y"});
+                return {flycontents(a), flycontents(b)};
+                "#
+            )
+            .unwrap(),
+            v_list(&[
+                v_list(&[v_int(1), v_int(2), v_int(3)]),
+                v_list(&[v_str("x"), v_str("y")]),
+            ])
+        );
+    }
+
+    #[test]
     fn test_range_in_map_oddities() {
         // Bug where stack offsets were wrong in maps, causing problems with the $ range operation
         assert_eq!(

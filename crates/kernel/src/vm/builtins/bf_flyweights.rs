@@ -125,6 +125,28 @@ fn bf_flycontents(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(Var::from_list(f.contents().clone())))
 }
 
+/// Usage: `flyweight flycontentsset(flyweight f, list contents)`
+/// Returns a new flyweight with the contents list replaced.
+fn bf_flycontentsset(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    ensure_enabled(bf_args)?;
+
+    if bf_args.args.len() != 2 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("flycontentsset() takes 2 arguments"),
+        ));
+    }
+
+    let Some(f) = bf_args.args[0].as_flyweight() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("flycontentsset() expects flyweight as first argument"),
+        ));
+    };
+
+    let new_contents = contents_list_from_var(&bf_args.args[1])?;
+    let new_f = f.with_contents(new_contents);
+    Ok(Ret(flyweight_to_var(new_f)))
+}
+
 /// Usage: `flyweight flyslotset(flyweight f, symbol key, any value)`
 /// Returns a new flyweight with the slot key set to value. Flyweights are immutable,
 /// so this creates a copy with the modified slot.
@@ -181,6 +203,7 @@ pub(crate) fn register_bf_flyweights(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("toflyweight")] = bf_mk_flyweight;
     builtins[offset_for_builtin("flyslots")] = bf_flyslots;
     builtins[offset_for_builtin("flycontents")] = bf_flycontents;
+    builtins[offset_for_builtin("flycontentsset")] = bf_flycontentsset;
     builtins[offset_for_builtin("flyslotset")] = bf_flyslotset;
     builtins[offset_for_builtin("flyslotremove")] = bf_flyslotremove;
 }

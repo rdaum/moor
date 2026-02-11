@@ -369,7 +369,8 @@ impl Listener {
             );
             // Default telnet echo state: client echoes input (client-echo = true)
             connection_attributes.insert(Symbol::mk("client-echo"), moor_var::Var::mk_bool(true));
-            connection_attributes.insert(Symbol::mk("screen-reader"), moor_var::Var::mk_bool(false));
+            connection_attributes
+                .insert(Symbol::mk("screen-reader"), moor_var::Var::mk_bool(false));
 
             // Perform reverse DNS lookup for hostname
             let hostname = {

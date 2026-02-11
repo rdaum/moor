@@ -585,7 +585,8 @@ impl TerminalRenderer {
     }
 
     fn render_table_screen_reader(&mut self, state: TableState) {
-        let has_headers = state.rows.len() > 1 && state.rows[0].iter().any(|cell| !cell.trim().is_empty());
+        let has_headers =
+            state.rows.len() > 1 && state.rows[0].iter().any(|cell| !cell.trim().is_empty());
         let headers = has_headers.then(|| state.rows[0].clone());
         let data_rows = if has_headers {
             &state.rows[1..]
