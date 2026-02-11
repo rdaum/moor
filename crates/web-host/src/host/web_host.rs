@@ -1124,6 +1124,21 @@ pub async fn system_property_handler(
     }
 }
 
+fn should_attempt_reattach(is_initial_attach: bool, has_client_hint: bool) -> bool {
+    has_client_hint && !is_initial_attach
+}
+
+fn effective_connect_type_for_fresh_attach(
+    connect_type: moor_rpc::ConnectType,
+    is_initial_attach: bool,
+    has_client_hint: bool,
+) -> moor_rpc::ConnectType {
+    if has_client_hint && !is_initial_attach {
+        return moor_rpc::ConnectType::Reconnected;
+    }
+    connect_type
+}
+
 /// Attach a websocket connection to an existing player.
 async fn attach(
     ws: WebSocketUpgrade,
@@ -1143,9 +1158,14 @@ async fn attach(
 
     let auth_token = AuthToken(auth_token);
 
-    // Always try reattach if we have credentials - this preserves the connection ID
-    // from :do_login_command. The is_initial_attach flag only affects client-side behavior.
-    let reattach_details = if let Some((hint_id, hint_token)) = client_hint.clone() {
+    let has_client_hint = client_hint.is_some();
+    let attempt_reattach = should_attempt_reattach(is_initial_attach, has_client_hint);
+
+    let reattach_details = if attempt_reattach {
+        let Some((hint_id, hint_token)) = client_hint.clone() else {
+            error!("attach decision bug: attempt_reattach=true without client_hint");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        };
         debug!(
             client_id = ?hint_id,
             "WebSocket attach: attempting reattach with existing credentials"
@@ -1168,36 +1188,21 @@ async fn attach(
             }
         }
     } else {
-        debug!("WebSocket attach: no credentials, will create new connection");
+        debug!(
+            "WebSocket attach: skipping reattach (is_initial_attach={}, has_client_hint={})",
+            is_initial_attach, has_client_hint
+        );
         None
     };
     let reattach_succeeded = reattach_details.is_some();
 
-    // Determine effective connect type:
-    // - If reattach succeeded, it's implicitly a reconnect (no user_connected needed)
-    // - If we had stored credentials, this is a reconnection attempt (regardless of is_initial_attach)
-    //   The is_initial_attach flag from client controls history display, not whether user_connected fires
-    // - Only use the original connect_type for true initial connections (no stored credentials)
     let (effective_connect_type, connection_details) = if let Some(details) = reattach_details {
         debug!("Reattach succeeded, using Reconnected");
         (moor_rpc::ConnectType::Reconnected, details)
     } else {
-        // If we have client_hint (stored credentials), this is always a reconnection
-        // The client is coming back with previously issued tokens, so use Reconnected
-        // to avoid re-triggering :user_connected
-        let ct = if client_hint.is_some() {
-            debug!(
-                "Have stored credentials, using Reconnected (is_initial_attach={} ignored)",
-                is_initial_attach
-            );
-            moor_rpc::ConnectType::Reconnected
-        } else {
-            debug!(
-                "Fresh connection (no stored credentials), using {:?}",
-                connect_type
-            );
-            connect_type
-        };
+        let ct =
+            effective_connect_type_for_fresh_attach(connect_type, is_initial_attach, has_client_hint);
+        debug!("Fresh attach effective connect_type={:?}", ct);
         match host
             .attach_authenticated(auth_token.clone(), Some(ct), addr)
             .await
@@ -1213,13 +1218,14 @@ async fn attach(
         }
     };
     debug!(
-        "WebSocket attach decision: is_initial_attach={}, had_client_hint={}, reattach_succeeded={}, effective_connect_type={:?}",
+        "WebSocket attach decision: is_initial_attach={}, had_client_hint={}, attempt_reattach={}, reattach_succeeded={}, effective_connect_type={:?}",
         is_initial_attach,
-        client_hint.is_some(),
+        has_client_hint,
+        attempt_reattach,
         reattach_succeeded,
         effective_connect_type
     );
-    if client_hint.is_some() && !reattach_succeeded {
+    if has_client_hint && !reattach_succeeded {
         warn!(
             "WebSocket attach fallback: client_hint_present_but_reattach_failed; is_initial_attach={}, effective_connect_type={:?}",
             is_initial_attach,
@@ -1483,4 +1489,54 @@ const OPENAPI_SPEC: &str = include_str!("../../openapi.yaml");
 
 pub async fn openapi_handler() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "text/yaml")], OPENAPI_SPEC)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{effective_connect_type_for_fresh_attach, should_attempt_reattach};
+    use super::moor_rpc::ConnectType;
+
+    #[test]
+    fn attach_decision_matrix_for_reattach_attempt() {
+        assert!(should_attempt_reattach(false, true));
+        assert!(!should_attempt_reattach(true, true));
+        assert!(!should_attempt_reattach(false, false));
+        assert!(!should_attempt_reattach(true, false));
+    }
+
+    #[test]
+    fn attach_decision_matrix_for_fresh_connect_type() {
+        assert_eq!(
+            effective_connect_type_for_fresh_attach(
+                ConnectType::Connected,
+                true,
+                true
+            ),
+            ConnectType::Connected
+        );
+        assert_eq!(
+            effective_connect_type_for_fresh_attach(
+                ConnectType::Connected,
+                false,
+                true
+            ),
+            ConnectType::Reconnected
+        );
+        assert_eq!(
+            effective_connect_type_for_fresh_attach(
+                ConnectType::Connected,
+                false,
+                false
+            ),
+            ConnectType::Connected
+        );
+        assert_eq!(
+            effective_connect_type_for_fresh_attach(
+                ConnectType::Created,
+                false,
+                false
+            ),
+            ConnectType::Created
+        );
+    }
 }
