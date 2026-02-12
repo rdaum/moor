@@ -23,7 +23,6 @@ use moor_schema::{
 use moor_var::Obj;
 use rpc_common::StrErr;
 use std::time::SystemTime;
-use uuid::Uuid;
 
 /// Presentation action extracted from an event (for updating presentation state)
 pub enum PresentationAction {
@@ -51,8 +50,8 @@ pub fn logged_narrative_event_to_flatbuffer(
     let player_fb = obj_to_flatbuffer_struct(&player);
     let event_fb = narrative_event_to_flatbuffer_struct(&event)?;
 
-    // Generate event ID and timestamp
-    let event_id = Uuid::now_v7();
+    // Preserve the original narrative event ID so live stream and history use the same ID.
+    let event_id = event.event_id;
     let event_id_fb = uuid_to_flatbuffer_struct(&event_id);
     let timestamp = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
