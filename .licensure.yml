@@ -101,9 +101,14 @@ excludes:
   - \.git/.*
   - \.idea/.*
   - \.cargo/.*
+  - \.npm-cache/.*
+  - .*\.npmrc
+  - \.moor-host-data/.*
   - target/*
   - README.*
   - LICENSE.*
+  - lambdamoo/*
+  - toaststunt/*
   - Dockerfile
   - core
   - cores/*
