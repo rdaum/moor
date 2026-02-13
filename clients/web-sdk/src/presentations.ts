@@ -12,7 +12,6 @@
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import { Presentation as PresentationFB } from "@moor/schema/generated/moor-common/presentation";
-import { PresentationSnapshot } from "@moor/schema/generated/moor-rpc/presentation-snapshot";
 import * as flatbuffers from "flatbuffers";
 
 export type PresentationContentType = "text/plain" | "text/djot" | "text/html";
@@ -40,9 +39,20 @@ export interface PresentationParseFallback {
     contentType?: string | null;
 }
 
+export interface PresentationParseOptions {
+    fallback?: PresentationParseFallback;
+    expectedId?: string;
+    requireId?: boolean;
+}
+
 export interface ParsedPresentationSnapshot {
     id: string;
     encryptedBlob: Uint8Array;
+}
+
+export interface PresentationSnapshotLike {
+    id(): string | null;
+    encryptedBlobArray(): Uint8Array | null;
 }
 
 export function normalizePresentationContentType(value: string | null | undefined): PresentationContentType {
@@ -56,7 +66,7 @@ export function normalizePresentationContentType(value: string | null | undefine
 }
 
 export function parsePresentationSnapshot(
-    snapshot: PresentationSnapshot | null,
+    snapshot: PresentationSnapshotLike | null,
 ): ParsedPresentationSnapshot | null {
     if (!snapshot) {
         return null;
@@ -65,19 +75,25 @@ export function parsePresentationSnapshot(
     if (!encryptedBlob || encryptedBlob.length === 0) {
         return null;
     }
+    const id = snapshot.id();
+    if (!id) {
+        return null;
+    }
     return {
-        id: snapshot.id() || "",
+        id,
         encryptedBlob,
     };
 }
 
 export function parsePresentationValue(
     presentation: PresentationFB | null,
-    fallback: PresentationParseFallback = {},
+    options: PresentationParseOptions = {},
 ): ParsedPresentation | null {
     if (!presentation) {
         return null;
     }
+    const fallback = options.fallback ?? {};
+    const requireId = options.requireId ?? true;
 
     const attributes: Array<[string, string]> = [];
     const attrsLength = presentation.attributesLength();
@@ -91,8 +107,18 @@ export function parsePresentationValue(
         attributes.push([key, value]);
     }
 
+    const resolvedId = presentation.id() || fallback.id || "";
+    if (requireId && !resolvedId) {
+        return null;
+    }
+    if (options.expectedId && resolvedId && resolvedId !== options.expectedId) {
+        throw new Error(
+            `Presentation ID mismatch: expected=${options.expectedId} actual=${resolvedId}`,
+        );
+    }
+
     return {
-        id: presentation.id() || fallback.id || "",
+        id: resolvedId,
         target: presentation.target() || fallback.target || "window",
         content: presentation.content() || fallback.content || "",
         contentType: normalizePresentationContentType(
@@ -104,7 +130,7 @@ export function parsePresentationValue(
 
 export function parsePresentationBytes(
     presentationBytes: Uint8Array,
-    fallback: PresentationParseFallback = {},
+    options: PresentationParseOptions = {},
 ): ParsedPresentation | null {
     if (presentationBytes.length === 0) {
         return null;
@@ -113,7 +139,7 @@ export function parsePresentationBytes(
     const decodedPresentation = PresentationFB.getRootAsPresentation(
         new flatbuffers.ByteBuffer(presentationBytes),
     );
-    return parsePresentationValue(decodedPresentation, fallback);
+    return parsePresentationValue(decodedPresentation, options);
 }
 
 export function toPresentationData(presentation: ParsedPresentation): PresentationData {

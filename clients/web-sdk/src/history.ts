@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Lesser General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-import { EventUnion } from "@moor/schema/generated/moor-common/event-union";
+import { EventUnion, unionToEventUnion } from "@moor/schema/generated/moor-common/event-union";
 import { NarrativeEvent } from "@moor/schema/generated/moor-common/narrative-event";
 import { NotifyEvent } from "@moor/schema/generated/moor-common/notify-event";
 import { PresentEvent } from "@moor/schema/generated/moor-common/present-event";
@@ -124,19 +124,20 @@ export function parseHistoricalNarrativeEvent(
     narrativeEvent: NarrativeEvent,
     decodeVarToJs: (value: unknown) => unknown,
     decodeVarToString: (value: unknown) => string | null,
-    presentFallback: { id?: string; target?: string } = {},
 ): ParsedHistoricalNarrativeEvent | null {
     const eventData = narrativeEvent.event();
     if (!eventData) {
         return null;
     }
+    const eventType = eventData.eventType();
+    const eventUnion = unionToEventUnion(eventType, (obj) => eventData.event(obj));
+    if (!eventUnion) {
+        return null;
+    }
 
-    switch (eventData.eventType()) {
+    switch (eventType) {
         case EventUnion.NotifyEvent: {
-            const notify = eventData.event(new NotifyEvent()) as NotifyEvent | null;
-            if (!notify) {
-                return null;
-            }
+            const notify = eventUnion as NotifyEvent;
             const value = notify.value();
             if (!value) {
                 return null;
@@ -187,10 +188,7 @@ export function parseHistoricalNarrativeEvent(
             };
         }
         case EventUnion.TracebackEvent: {
-            const traceback = eventData.event(new TracebackEvent()) as TracebackEvent | null;
-            if (!traceback) {
-                return null;
-            }
+            const traceback = eventUnion as TracebackEvent;
             const exception = traceback.exception();
             if (!exception) {
                 return null;
@@ -212,10 +210,10 @@ export function parseHistoricalNarrativeEvent(
             };
         }
         case EventUnion.PresentEvent: {
-            const present = eventData.event(new PresentEvent()) as PresentEvent | null;
+            const present = eventUnion as PresentEvent;
             const parsedPresentation = parsePresentationValue(
                 present?.presentation() ?? null,
-                presentFallback,
+                { requireId: true },
             );
             if (!parsedPresentation) {
                 return null;
@@ -226,7 +224,7 @@ export function parseHistoricalNarrativeEvent(
             };
         }
         case EventUnion.UnpresentEvent: {
-            const unpresent = eventData.event(new UnpresentEvent()) as UnpresentEvent | null;
+            const unpresent = eventUnion as UnpresentEvent;
             const presentationId = unpresent?.presentationId();
             if (!presentationId) {
                 return null;
