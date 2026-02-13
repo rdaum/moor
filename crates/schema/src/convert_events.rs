@@ -95,6 +95,17 @@ pub fn event_from_ref(event_ref: common::EventRef<'_>) -> Result<Event, String> 
             let exception = exception_from_ref(fb_read!(traceback, exception))?;
             Ok(Event::Traceback(exception))
         }
+        EventUnionRef::DataEvent(data) => {
+            let namespace = symbol_from_ref(fb_read!(data, domain))?;
+            let kind = symbol_from_ref(fb_read!(data, kind))?;
+            let payload_ref = fb_read!(data, payload);
+            let payload = var_from_flatbuffer_ref(payload_ref).str_err()?;
+            Ok(Event::Data {
+                namespace,
+                kind,
+                payload,
+            })
+        }
     }
 }
 
@@ -240,6 +251,26 @@ pub fn event_to_flatbuffer_struct(event: &Event) -> Result<common::Event, moor_v
                     stack: stack_fb?,
                     backtrace: backtrace_fb?,
                 }),
+            }))
+        }
+        Event::Data {
+            namespace,
+            kind,
+            payload,
+        } => {
+            let payload_fb = var_to_flatbuffer(payload).map_err(|e| {
+                moor_var::EncodingError::CouldNotEncode(format!(
+                    "Failed to encode data payload: {e}"
+                ))
+            })?;
+            common::EventUnion::DataEvent(Box::new(common::DataEvent {
+                domain: Box::new(common::Symbol {
+                    value: namespace.as_string(),
+                }),
+                kind: Box::new(common::Symbol {
+                    value: kind.as_string(),
+                }),
+                payload: Box::new(payload_fb),
             }))
         }
         Event::SetConnectionOption { .. } => {

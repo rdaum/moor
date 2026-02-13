@@ -1588,6 +1588,10 @@ impl TelnetConnection {
                         // Telnet clients don't support these, so just ignore
                         trace!("Ignoring Present event in telnet client");
                     }
+                    Event::Data { .. } => {
+                        // Data events are non-visual client state channels.
+                        trace!("Ignoring Data event in telnet client");
+                    }
                     _ => {
                         // We don't handle these events in the telnet client.
                         warn!("Unhandled event in telnet client: {:?}", msg);

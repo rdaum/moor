@@ -61,8 +61,7 @@ use moor_kernel::{
 };
 
 use moor_schema::convert::{
-    narrative_event_to_flatbuffer_struct, obj_from_ref,
-    var_from_ref, var_to_flatbuffer,
+    narrative_event_to_flatbuffer_struct, obj_from_ref, var_from_ref, var_to_flatbuffer,
 };
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, VarType::TYPE_NONE, v_sym};
 use rpc_common::{

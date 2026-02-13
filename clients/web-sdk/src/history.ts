@@ -11,6 +11,7 @@
 // You should have received a copy of the GNU Lesser General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
+import { DataEvent } from "@moor/schema/generated/moor-common/data-event";
 import { EventUnion, unionToEventUnion } from "@moor/schema/generated/moor-common/event-union";
 import { NarrativeEvent } from "@moor/schema/generated/moor-common/narrative-event";
 import { NotifyEvent } from "@moor/schema/generated/moor-common/notify-event";
@@ -96,11 +97,19 @@ export interface ParsedHistoricalUnpresentEvent {
     presentationId: string;
 }
 
+export interface ParsedHistoricalDataEvent {
+    kind: "data";
+    namespace: string;
+    eventKind: string;
+    payload: unknown;
+}
+
 export type ParsedHistoricalNarrativeEvent =
     | ParsedHistoricalNotifyEvent
     | ParsedHistoricalTracebackEvent
     | ParsedHistoricalPresentEvent
-    | ParsedHistoricalUnpresentEvent;
+    | ParsedHistoricalUnpresentEvent
+    | ParsedHistoricalDataEvent;
 
 function normalizeContentType(contentType: string | null): "text/plain" | "text/djot" | "text/html" {
     if (contentType === "text_djot" || contentType === "text/djot") {
@@ -232,6 +241,21 @@ export function parseHistoricalNarrativeEvent(
             return {
                 kind: "unpresent",
                 presentationId,
+            };
+        }
+        case EventUnion.DataEvent: {
+            const data = eventUnion as DataEvent;
+            const namespace = data.domain()?.value();
+            const eventKind = data.kind()?.value();
+            const payloadRef = data.payload();
+            if (!namespace || !eventKind || !payloadRef) {
+                return null;
+            }
+            return {
+                kind: "data",
+                namespace,
+                eventKind,
+                payload: decodeVarToJs(payloadRef),
             };
         }
         default:

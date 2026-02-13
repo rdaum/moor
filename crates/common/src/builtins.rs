@@ -11,6 +11,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use ArgCount::{Q, U};
+use ArgType::{Any, AnyNum, Typed};
+use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
 use lazy_static::lazy_static;
 use moor_var::{
     Symbol, VarType,
@@ -18,9 +21,6 @@ use moor_var::{
 };
 /// Global registry of built-in function names.
 use std::collections::HashMap;
-use ArgCount::{Q, U};
-use ArgType::{Any, AnyNum, Typed};
-use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
 
 lazy_static! {
     /// The global builtins table which describes the set of builtins available to the mooR runtime.
@@ -102,7 +102,11 @@ fn pad_group(builtins: &mut Vec<Builtin>, start_len: usize, label: &str) {
 
 // Builtins are grouped by vm/builtins module with fixed-size padding to keep IDs stable within a group.
 // Reserved entries are hidden from lookups and listings but still occupy their IDs.
-// To add a builtin safely: append it within the right group and keep the group size <= 256.
+//
+// IMPORTANT FOR LLMS AND DEVELOPERS:
+// To add a builtin safely, you MUST APPEND it to the end of the appropriate group block
+// BEFORE the pad_group call. NEVER insert in the middle of a group or reorder existing
+// entries, as this will break binary compatibility with compiled programs and databases.
 fn mk_builtin_table() -> Vec<Builtin> {
     let mut builtins = Vec::new();
 
@@ -155,6 +159,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
         ),
         mk_builtin("reset_max_object", Q(0), Q(0), vec![], false),
     ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "server/system");
 
     // Connection/network builtins (crates/kernel/src/vm/builtins/bf_connection.rs).
@@ -256,7 +261,15 @@ fn mk_builtin_table() -> Vec<Builtin> {
             false,
         ),
         mk_builtin("flush_input", Q(1), Q(2), vec![Typed(TYPE_OBJ), Any], false),
+        mk_builtin(
+            "emit_data",
+            Q(4),
+            Q(4),
+            vec![Typed(TYPE_OBJ), Typed(TYPE_SYMBOL), Typed(TYPE_SYMBOL), Any],
+            true,
+        ),
     ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "connection/network");
 
     // Task/scheduler builtins (crates/kernel/src/vm/builtins/bf_task.rs).
@@ -283,6 +296,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin("task_send", Q(2), Q(2), vec![Typed(TYPE_INT), Any], true),
         mk_builtin("task_recv", Q(0), Q(1), vec![AnyNum], true),
     ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "task/scheduler");
 
     // Numeric/math builtins (crates/kernel/src/vm/builtins/bf_num.rs).
@@ -344,6 +358,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin("hypot", Q(2), Q(2), vec![AnyNum, AnyNum], true),
         mk_builtin("copysign", Q(2), Q(2), vec![AnyNum, AnyNum], true),
     ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "numeric/math");
 
     // Value conversion/introspection builtins (crates/kernel/src/vm/builtins/bf_values.rs).
@@ -373,6 +388,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
         ),
         mk_builtin("tobool", Q(1), Q(1), vec![Any], true),
     ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "value conversion/introspection");
 
     // String/binary/encoding builtins (crates/kernel/src/vm/builtins/bf_strings.rs).
@@ -437,6 +453,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
         ),
         mk_builtin("encode_binary", Q(0), U, vec![], false),
     ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "string/binary/encoding");
 
     // List/set/regex builtins (crates/kernel/src/vm/builtins/bf_list_sets.rs).
@@ -545,6 +562,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
         ),
         mk_builtin("reverse", Q(1), Q(1), vec![Any], true),
     ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "list/set/regex");
 
     // Map builtins (crates/kernel/src/vm/builtins/bf_maps.rs).
@@ -555,6 +573,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin("mapvalues", Q(1), U, vec![Typed(TYPE_MAP)], true),
         mk_builtin("maphaskey", Q(2), Q(2), vec![Typed(TYPE_MAP), Any], true),
     ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "map");
 
     // Object/command builtins (crates/kernel/src/vm/builtins/bf_objects.rs).
@@ -657,6 +676,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
     ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "object/command");
 
     // Object load/dump builtins (crates/kernel/src/vm/builtins/bf_obj_load.rs).
@@ -685,6 +705,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
         ),
         mk_builtin("parse_objdef_constants", Q(1), Q(1), vec![Any], true),
     ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "object load/dump");
 
     // Verb builtins (crates/kernel/src/vm/builtins/bf_verbs.rs).
@@ -739,6 +760,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin("respond_to", Q(2), Q(2), vec![Typed(TYPE_OBJ), Any], true),
         mk_builtin("prepositions", Q(0), Q(0), vec![], true),
     ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "verbs");
 
     // Property builtins (crates/kernel/src/vm/builtins/bf_properties.rs).
@@ -787,6 +809,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
     ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "properties");
 
     // Flyweight builtins (crates/kernel/src/vm/builtins/bf_flyweights.rs).
@@ -823,6 +846,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
     ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "flyweights");
 
     // Document/format builtins (crates/kernel/src/vm/builtins/bf_documents.rs).
@@ -846,6 +870,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
     ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "documents/formats");
 
     // Cryptography builtins (crates/kernel/src/vm/builtins/bf_cryptography.rs).
@@ -973,11 +998,11 @@ fn mk_builtin_table() -> Vec<Builtin> {
         // Random bytes generation
         mk_builtin("random_bytes", Q(1), Q(1), vec![Typed(TYPE_INT)], true),
     ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "cryptography");
 
     builtins
 }
-
 // BuiltinId is now defined in moor_var::program::opcode and re-exported
 pub use moor_var::program::opcode::BuiltinId;
 
@@ -1138,7 +1163,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{builtin_signature_for_ids, BuiltinId};
+    use super::{BuiltinId, builtin_signature_for_ids};
 
     #[test]
     fn builtin_signature_is_order_independent() {

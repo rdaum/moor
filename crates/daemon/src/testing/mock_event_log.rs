@@ -20,12 +20,14 @@ use std::{
 };
 use uuid::Uuid;
 
+use moor_common::tasks::{EventLogPurgeResult, EventLogStats};
 use moor_schema::{
     common::ObjUnion,
-    convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct, presentation_to_flatbuffer_struct},
+    convert::{
+        obj_from_flatbuffer_struct, obj_to_flatbuffer_struct, presentation_to_flatbuffer_struct,
+    },
     event_log::{LoggedNarrativeEvent, StoredPresentation},
 };
-use moor_common::tasks::{EventLogPurgeResult, EventLogStats};
 use moor_var::Obj;
 
 use crate::event_log::{EventLogOps, PresentationAction};

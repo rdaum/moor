@@ -51,6 +51,13 @@ pub enum Event {
     Unpresent(String),
     /// Present a backtrace to the user.
     Traceback(Exception),
+    /// Non-visual structured data event for client-side state channels.
+    /// Namespace + kind route the payload without forcing rendering semantics.
+    Data {
+        namespace: Symbol,
+        kind: Symbol,
+        payload: Var,
+    },
     /// Set a connection option. This goes through the event stream to ensure proper ordering
     /// with other events (e.g., set binary mode before notify, then unset after).
     /// Connection object, option name, option value.
@@ -118,6 +125,20 @@ impl NarrativeEvent {
                 connection,
                 option,
                 value,
+            },
+        }
+    }
+
+    #[must_use]
+    pub fn data(author: Var, namespace: Symbol, kind: Symbol, payload: Var) -> Self {
+        Self {
+            event_id: Uuid::now_v7(),
+            timestamp: SystemTime::now(),
+            author,
+            event: Event::Data {
+                namespace,
+                kind,
+                payload,
             },
         }
     }

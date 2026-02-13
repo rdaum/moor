@@ -250,7 +250,10 @@ impl Session for ConsoleSession {
                         eprintln!("  {}", to_literal(line));
                     }
                 }
-                Event::Present(_) | Event::Unpresent(_) | Event::SetConnectionOption { .. } => {
+                Event::Present(_)
+                | Event::Unpresent(_)
+                | Event::Data { .. }
+                | Event::SetConnectionOption { .. } => {
                     // Ignore presentation and connection option events in console mode
                 }
             }

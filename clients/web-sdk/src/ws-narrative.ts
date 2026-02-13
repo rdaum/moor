@@ -11,6 +11,7 @@
 // You should have received a copy of the GNU Lesser General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
+import { DataEvent } from "@moor/schema/generated/moor-common/data-event";
 import { EventUnion } from "@moor/schema/generated/moor-common/event-union";
 import { NotifyEvent } from "@moor/schema/generated/moor-common/notify-event";
 import { PresentEvent } from "@moor/schema/generated/moor-common/present-event";
@@ -86,7 +87,19 @@ export interface WsTracebackEvent {
     tracebackText: string;
 }
 
-export type ParsedWsNarrativeEvent = WsNotifyEvent | WsPresentEvent | WsUnpresentEvent | WsTracebackEvent;
+export interface WsDataEvent {
+    kind: "data";
+    namespace: string;
+    eventKind: string;
+    payload: unknown;
+}
+
+export type ParsedWsNarrativeEvent =
+    | WsNotifyEvent
+    | WsPresentEvent
+    | WsUnpresentEvent
+    | WsTracebackEvent
+    | WsDataEvent;
 
 function normalizeContentType(contentType: string | null): string {
     if (contentType === "text_djot" || contentType === "text/djot") {
@@ -301,6 +314,24 @@ export function parseWsNarrativeEventMessage(
             return {
                 kind: "traceback",
                 tracebackText: tracebackLines.join("\n"),
+            };
+        }
+        case EventUnion.DataEvent: {
+            const data = eventData.event(new DataEvent()) as DataEvent | null;
+            if (!data) {
+                return null;
+            }
+            const namespace = data.domain()?.value();
+            const eventKind = data.kind()?.value();
+            const payloadRef = data.payload();
+            if (!namespace || !eventKind || !payloadRef) {
+                return null;
+            }
+            return {
+                kind: "data",
+                namespace,
+                eventKind,
+                payload: decodeVarToJs(payloadRef),
             };
         }
         default:

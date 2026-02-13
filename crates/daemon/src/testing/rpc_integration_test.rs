@@ -898,10 +898,11 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         assert_eq!(presentations.len(), 1, "Should have one presentation");
         let test_widget = presentations.iter().find(|p| p.id == "test_widget");
         assert!(test_widget.is_some(), "Should contain test widget");
-        let presentation_ref = <moor_schema::common::PresentationRef as ::planus::ReadAsRoot>::read_as_root(
-            &test_widget.unwrap().encrypted_content,
-        )
-        .unwrap();
+        let presentation_ref =
+            <moor_schema::common::PresentationRef as ::planus::ReadAsRoot>::read_as_root(
+                &test_widget.unwrap().encrypted_content,
+            )
+            .unwrap();
         assert_eq!(presentation_ref.content().unwrap(), "Hello World");
 
         // Test presentation dismissal

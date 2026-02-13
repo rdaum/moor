@@ -1501,7 +1501,10 @@ fn extract_narrative_text(event: &Event) -> Option<String> {
             // Format exception as text
             Some(format!("** {} **", exception.error))
         }
-        Event::Present(_) | Event::Unpresent(_) | Event::SetConnectionOption { .. } => {
+        Event::Present(_)
+        | Event::Unpresent(_)
+        | Event::Data { .. }
+        | Event::SetConnectionOption { .. } => {
             // These are UI-related or control events, not text output
             None
         }

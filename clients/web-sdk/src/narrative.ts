@@ -50,6 +50,14 @@ export type ParsedNarrativeEvent =
             } | null;
             backtrace: string[];
         };
+    }
+    | {
+        eventType: "DataEvent";
+        event: {
+            namespace: string | null;
+            kind: string | null;
+            payload: unknown;
+        };
     };
 
 function normalizeContentType(contentType: string | null): NarrativeNotifyContentType {
@@ -160,6 +168,18 @@ export function parseNarrativeEvent(
                 event: {
                     error: errorInfo,
                     backtrace,
+                },
+            };
+        }
+        case EventUnion.DataEvent: {
+            const dataEvent = eventUnion as any;
+            const payload = dataEvent.payload();
+            return {
+                eventType: "DataEvent",
+                event: {
+                    namespace: dataEvent.domain()?.value() ?? null,
+                    kind: dataEvent.kind()?.value() ?? null,
+                    payload: payload ? decodeVarToJs(payload) : null,
                 },
             };
         }

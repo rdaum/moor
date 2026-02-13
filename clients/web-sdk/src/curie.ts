@@ -131,3 +131,94 @@ export function stringToCurie(objStr: string): string {
     }
     return `oid:${stripped}`;
 }
+
+/**
+ * Convert a JS object-ref shape (typically decoded from MoorVar) into a CURIE.
+ * Accepted forms:
+ * - number/integer oid
+ * - "#123", "oid:123"
+ * - { oid: 123 }
+ * - canonical uuid strings with or without "uuid:" prefix
+ * - packed uuobjid bigint/decimal string in { uuid: ... }
+ */
+export function jsObjectRefToCurie(value: unknown): string | null {
+    if (value === null || value === undefined) {
+        return null;
+    }
+
+    if (typeof value === "number" && Number.isInteger(value)) {
+        return `oid:${value}`;
+    }
+
+    if (typeof value === "string") {
+        const raw = value.trim();
+        if (!raw) {
+            return null;
+        }
+        if (raw.startsWith("oid:")) {
+            return parseObjectCurie(raw).kind === "oid" ? raw : null;
+        }
+        if (raw.startsWith("uuid:")) {
+            try {
+                const parsed = parseObjectCurie(raw);
+                return parsed.kind === "uuid" ? `uuid:${parsed.uuid}` : null;
+            } catch {
+                return null;
+            }
+        }
+        if (/^#\d+$/.test(raw)) {
+            return `oid:${raw.slice(1)}`;
+        }
+        if (/^\d+$/.test(raw)) {
+            return `oid:${raw}`;
+        }
+        if (UUID_RE.test(raw)) {
+            return `uuid:${raw.toUpperCase()}`;
+        }
+        return null;
+    }
+
+    if (typeof value !== "object" || Array.isArray(value)) {
+        return null;
+    }
+
+    const candidate = value as { oid?: unknown; uuid?: unknown };
+    if (candidate.oid !== undefined && candidate.oid !== null) {
+        return jsObjectRefToCurie(candidate.oid);
+    }
+    if (candidate.uuid !== undefined && candidate.uuid !== null) {
+        const uuid = candidate.uuid;
+        if (typeof uuid === "bigint") {
+            return `uuid:${uuObjIdToString(uuid)}`;
+        }
+        if (typeof uuid === "number" && Number.isFinite(uuid) && uuid >= 0) {
+            return `uuid:${uuObjIdToString(BigInt(Math.trunc(uuid)))}`;
+        }
+        if (typeof uuid === "string") {
+            const rawUuid = uuid.trim();
+            if (!rawUuid) {
+                return null;
+            }
+            if (/^\d+$/.test(rawUuid)) {
+                try {
+                    return `uuid:${uuObjIdToString(BigInt(rawUuid))}`;
+                } catch {
+                    return null;
+                }
+            }
+            if (rawUuid.startsWith("uuid:")) {
+                try {
+                    const parsed = parseObjectCurie(rawUuid);
+                    return parsed.kind === "uuid" ? `uuid:${parsed.uuid}` : null;
+                } catch {
+                    return null;
+                }
+            }
+            if (UUID_RE.test(rawUuid)) {
+                return `uuid:${rawUuid.toUpperCase()}`;
+            }
+        }
+    }
+
+    return null;
+}

@@ -750,6 +750,38 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(1)))
 }
 
+/// Usage: `int emit_data(obj player, symbol namespace, symbol kind, any payload)`
+/// Emits a non-visual structured data event to a player connection stream.
+/// Clients may use this for UI state channels without rendering narrative text.
+fn bf_emit_data(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 4 {
+        return Err(ErrValue(
+            E_ARGS.msg("emit_data() requires exactly 4 arguments"),
+        ));
+    }
+
+    let Some(player) = bf_args.args[0].as_object() else {
+        return Err(ErrValue(
+            E_TYPE.msg("emit_data() requires an object as the first argument"),
+        ));
+    };
+
+    let namespace = bf_args.args[1].as_symbol().map_err(ErrValue)?;
+    let kind = bf_args.args[2].as_symbol().map_err(ErrValue)?;
+    let payload = bf_args.args[3].clone();
+
+    // If player is not the calling task perms, and caller is not a wizard, raise E_PERM.
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    task_perms
+        .check_obj_owner_perms(&player)
+        .map_err(world_state_bf_err)?;
+
+    let event = NarrativeEvent::data(bf_args.exec_state.this(), namespace, kind, payload);
+    current_task_scheduler_client().notify(player, Box::new(event));
+
+    Ok(Ret(v_int(1)))
+}
+
 /// Usage: `int event_log(obj player, str|any message [, symbol content_type [, map metadata]])`
 /// Logs an event to the player's persistent event log without broadcasting to connections.
 /// This allows sending formatted output to connections separately while still logging a
@@ -1333,6 +1365,7 @@ fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
 pub(crate) fn register_bf_connection(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("notify")] = bf_notify;
+    builtins[offset_for_builtin("emit_data")] = bf_emit_data;
     builtins[offset_for_builtin("connected_players")] = bf_connected_players;
     builtins[offset_for_builtin("force_input")] = bf_force_input;
     builtins[offset_for_builtin("present")] = bf_present;

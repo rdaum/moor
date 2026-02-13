@@ -116,7 +116,8 @@ union EventUnion {
     NotifyEvent,
     PresentEvent,
     UnpresentEvent,
-    TracebackEvent
+    TracebackEvent,
+    DataEvent
 }
 
 table EventMetadata {
@@ -142,6 +143,12 @@ table UnpresentEvent {
 
 table TracebackEvent {
     exception: Exception (required);
+}
+
+table DataEvent {
+    domain: Symbol (required);
+    kind: Symbol (required);
+    payload: MoorVar.Var (required);
 }
 
 table Event {
