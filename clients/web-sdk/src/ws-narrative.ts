@@ -19,6 +19,7 @@ import { UnpresentEvent } from "@moor/schema/generated/moor-common/unpresent-eve
 import { NarrativeEventMessage } from "@moor/schema/generated/moor-rpc/narrative-event-message";
 
 import { uuObjIdToString } from "./curie";
+import { parsePresentationValue } from "./presentations";
 
 export interface WsEventMetadata {
     verb?: string;
@@ -252,30 +253,18 @@ export function parseWsNarrativeEventMessage(
             if (!present) {
                 return null;
             }
-            const presentation = present.presentation();
-            if (!presentation) {
+            const parsedPresentation = parsePresentationValue(present.presentation());
+            if (!parsedPresentation) {
                 return null;
-            }
-            const attributes: Array<[string, string]> = [];
-            for (let i = 0; i < presentation.attributesLength(); i++) {
-                const attr = presentation.attributes(i);
-                if (!attr) {
-                    continue;
-                }
-                const key = attr.key();
-                const value = attr.value();
-                if (key && value) {
-                    attributes.push([key, value]);
-                }
             }
             return {
                 kind: "present",
                 presentData: {
-                    id: presentation.id(),
-                    content: presentation.content(),
-                    content_type: normalizeContentType(presentation.contentType() || "text/plain"),
-                    target: presentation.target(),
-                    attributes,
+                    id: parsedPresentation.id,
+                    content: parsedPresentation.content,
+                    content_type: parsedPresentation.contentType,
+                    target: parsedPresentation.target,
+                    attributes: parsedPresentation.attributes,
                 },
             };
         }

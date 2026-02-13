@@ -814,8 +814,13 @@ table HistoryResponseReply {
     response: HistoryResponse (required);
 }
 
+table PresentationSnapshot {
+    id: string (required);
+    encrypted_blob: [ubyte] (required);
+}
+
 table CurrentPresentations {
-    presentations: [MoorCommon.Presentation] (required);
+    presentations: [PresentationSnapshot] (required);
 }
 
 table PresentationDismissed {

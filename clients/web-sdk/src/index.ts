@@ -24,6 +24,7 @@ export * from "./moor-var";
 export * from "./narrative";
 export * from "./narrative-callbacks";
 export * from "./object-ref";
+export * from "./presentations";
 export * from "./reply";
 export * from "./response-decoders";
 export * from "./task-errors";

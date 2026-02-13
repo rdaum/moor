@@ -19,16 +19,16 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::event_log::{PresentationAction, presentation_from_flatbuffer};
+use crate::event_log::PresentationAction;
 use fjall::config::CompressionPolicy;
 use fjall::{CompressionType, Database, Keyspace, KeyspaceCreateOptions};
 use flume::{Receiver, Sender};
-use moor_common::tasks::{EventLogPurgeResult, EventLogStats, Presentation};
+use moor_common::tasks::{EventLogPurgeResult, EventLogStats};
 use moor_schema::convert::presentation_to_flatbuffer_struct;
 use moor_schema::{
     common::{ObjUnion, ObjUnionRef},
     convert::obj_to_flatbuffer_struct,
-    event_log::{LoggedNarrativeEvent, PlayerPresentations},
+    event_log::{LoggedNarrativeEvent, PlayerPresentations, StoredPresentation},
 };
 use moor_var::Obj;
 use rpc_common::StrErr;
@@ -44,9 +44,8 @@ pub trait EventLogOps: Send + Sync {
         presentation_action: Option<PresentationAction>,
     ) -> Uuid;
 
-    /// Get current presentation IDs for a player
-    /// Returns presentation objects with only IDs populated (content is in encrypted history)
-    fn current_presentations(&self, player: Obj) -> Vec<Presentation>;
+    /// Get current encrypted presentation state for a player.
+    fn current_presentations(&self, player: Obj) -> Vec<StoredPresentation>;
 
     /// Dismiss a presentation by ID
     fn dismiss_presentation(&self, player: Obj, presentation_id: String);
@@ -946,35 +945,11 @@ impl EventLogOps for EventLog {
         self.append(event, presentation_action)
     }
 
-    fn current_presentations(&self, player: Obj) -> Vec<Presentation> {
+    fn current_presentations(&self, player: Obj) -> Vec<StoredPresentation> {
         self.load_presentation_state_from_disk(player)
             .ok()
             .flatten()
-            .map(|state| {
-                // When encrypted, daemon can't decrypt (no secret key)
-                // Return stub presentations with IDs only
-                // Web-host will decrypt from event history using client's secret key
-                state
-                    .presentations
-                    .iter()
-                    .filter_map(|stored_pres| {
-                        // Try to deserialize - works for plaintext (no encryption)
-                        // For encrypted data, just return stub with ID
-                        if let Ok(pres_ref) = <moor_schema::common::PresentationRef as ::planus::ReadAsRoot>::read_as_root(&stored_pres.encrypted_content) {
-                            presentation_from_flatbuffer(&pres_ref).ok()
-                        } else {
-                            // Encrypted - return stub with ID only
-                            Some(Presentation {
-                                id: stored_pres.id.clone(),
-                                content_type: String::new(),
-                                content: String::new(),
-                                target: String::new(),
-                                attributes: vec![],
-                            })
-                        }
-                    })
-                    .collect()
-            })
+            .map(|state| state.presentations)
             .unwrap_or_default()
     }
 
@@ -1154,7 +1129,7 @@ impl EventLogOps for NoOpEventLog {
         }
     }
 
-    fn current_presentations(&self, _player: Obj) -> Vec<Presentation> {
+    fn current_presentations(&self, _player: Obj) -> Vec<StoredPresentation> {
         Vec::new()
     }
 

@@ -11,10 +11,16 @@
 // You should have received a copy of the GNU Lesser General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
+import { EventUnion } from "@moor/schema/generated/moor-common/event-union";
 import { NarrativeEvent } from "@moor/schema/generated/moor-common/narrative-event";
+import { NotifyEvent } from "@moor/schema/generated/moor-common/notify-event";
+import { PresentEvent } from "@moor/schema/generated/moor-common/present-event";
+import { TracebackEvent } from "@moor/schema/generated/moor-common/traceback-event";
+import { UnpresentEvent } from "@moor/schema/generated/moor-common/unpresent-event";
 import { HistoryResponseReply } from "@moor/schema/generated/moor-rpc/history-response-reply";
 import * as flatbuffers from "flatbuffers";
 
+import { ParsedPresentation, parsePresentationValue } from "./presentations";
 import { parseClientReplyUnion } from "./reply";
 
 function replyTypeName(value: unknown): string {
@@ -60,6 +66,179 @@ export interface ParsedNarrativeEventEnvelope {
     timestampNanos: number;
     event: unknown;
     narrativeEvent: NarrativeEvent;
+}
+
+export interface ParsedHistoricalNotifyEvent {
+    kind: "notify";
+    content: unknown;
+    contentType: "text/plain" | "text/djot" | "text/html";
+    presentationHint?: string;
+    groupId?: string;
+    deliveryId?: string;
+    thumbnail?: {
+        contentType: string;
+        data: string;
+    };
+}
+
+export interface ParsedHistoricalTracebackEvent {
+    kind: "traceback";
+    tracebackText: string;
+}
+
+export interface ParsedHistoricalPresentEvent {
+    kind: "present";
+    presentation: ParsedPresentation;
+}
+
+export interface ParsedHistoricalUnpresentEvent {
+    kind: "unpresent";
+    presentationId: string;
+}
+
+export type ParsedHistoricalNarrativeEvent =
+    | ParsedHistoricalNotifyEvent
+    | ParsedHistoricalTracebackEvent
+    | ParsedHistoricalPresentEvent
+    | ParsedHistoricalUnpresentEvent;
+
+function normalizeContentType(contentType: string | null): "text/plain" | "text/djot" | "text/html" {
+    if (contentType === "text_djot" || contentType === "text/djot") {
+        return "text/djot";
+    }
+    if (contentType === "text_html" || contentType === "text/html") {
+        return "text/html";
+    }
+    return "text/plain";
+}
+
+function bytesToDataUrl(contentType: string, bytes: Uint8Array): string {
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return `data:${contentType};base64,${btoa(binary)}`;
+}
+
+export function parseHistoricalNarrativeEvent(
+    narrativeEvent: NarrativeEvent,
+    decodeVarToJs: (value: unknown) => unknown,
+    decodeVarToString: (value: unknown) => string | null,
+    presentFallback: { id?: string; target?: string } = {},
+): ParsedHistoricalNarrativeEvent | null {
+    const eventData = narrativeEvent.event();
+    if (!eventData) {
+        return null;
+    }
+
+    switch (eventData.eventType()) {
+        case EventUnion.NotifyEvent: {
+            const notify = eventData.event(new NotifyEvent()) as NotifyEvent | null;
+            if (!notify) {
+                return null;
+            }
+            const value = notify.value();
+            if (!value) {
+                return null;
+            }
+
+            let presentationHint: string | undefined;
+            let groupId: string | undefined;
+            let deliveryId: string | undefined;
+            let thumbnail: { contentType: string; data: string } | undefined;
+
+            const metadataLength = notify.metadataLength();
+            for (let i = 0; i < metadataLength; i++) {
+                const metadata = notify.metadata(i);
+                if (!metadata) {
+                    continue;
+                }
+                const key = metadata.key();
+                const keyValue = key ? key.value() : null;
+                const metadataValue = metadata.value();
+                const decoded = metadataValue ? decodeVarToJs(metadataValue) : null;
+
+                if (keyValue === "presentation_hint" && typeof decoded === "string") {
+                    presentationHint = decoded;
+                } else if (keyValue === "group_id" && typeof decoded === "string") {
+                    groupId = decoded;
+                } else if (keyValue === "delivery_id" && typeof decoded === "string") {
+                    deliveryId = decoded;
+                } else if (keyValue === "thumbnail" && Array.isArray(decoded) && decoded.length === 2) {
+                    const thumbContentType = decoded[0];
+                    const binaryData = decoded[1];
+                    if (typeof thumbContentType === "string" && binaryData instanceof Uint8Array) {
+                        thumbnail = {
+                            contentType: thumbContentType,
+                            data: bytesToDataUrl(thumbContentType, binaryData),
+                        };
+                    }
+                }
+            }
+
+            return {
+                kind: "notify",
+                content: decodeVarToJs(value),
+                contentType: normalizeContentType(notify.contentType()?.value() || null),
+                presentationHint,
+                groupId,
+                deliveryId,
+                thumbnail,
+            };
+        }
+        case EventUnion.TracebackEvent: {
+            const traceback = eventData.event(new TracebackEvent()) as TracebackEvent | null;
+            if (!traceback) {
+                return null;
+            }
+            const exception = traceback.exception();
+            if (!exception) {
+                return null;
+            }
+            const tracebackLines: string[] = [];
+            for (let i = 0; i < exception.backtraceLength(); i++) {
+                const backtraceVar = exception.backtrace(i);
+                if (!backtraceVar) {
+                    continue;
+                }
+                const line = decodeVarToString(backtraceVar);
+                if (line) {
+                    tracebackLines.push(line);
+                }
+            }
+            return {
+                kind: "traceback",
+                tracebackText: tracebackLines.join("\n"),
+            };
+        }
+        case EventUnion.PresentEvent: {
+            const present = eventData.event(new PresentEvent()) as PresentEvent | null;
+            const parsedPresentation = parsePresentationValue(
+                present?.presentation() ?? null,
+                presentFallback,
+            );
+            if (!parsedPresentation) {
+                return null;
+            }
+            return {
+                kind: "present",
+                presentation: parsedPresentation,
+            };
+        }
+        case EventUnion.UnpresentEvent: {
+            const unpresent = eventData.event(new UnpresentEvent()) as UnpresentEvent | null;
+            const presentationId = unpresent?.presentationId();
+            if (!presentationId) {
+                return null;
+            }
+            return {
+                kind: "unpresent",
+                presentationId,
+            };
+        }
+        default:
+            return null;
+    }
 }
 
 export function parseNarrativeEventEnvelope(bytes: Uint8Array): ParsedNarrativeEventEnvelope | null {

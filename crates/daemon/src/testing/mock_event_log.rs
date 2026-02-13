@@ -20,12 +20,12 @@ use std::{
 };
 use uuid::Uuid;
 
-use moor_common::tasks::{EventLogPurgeResult, EventLogStats, Presentation};
 use moor_schema::{
     common::ObjUnion,
-    convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct},
-    event_log::LoggedNarrativeEvent,
+    convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct, presentation_to_flatbuffer_struct},
+    event_log::{LoggedNarrativeEvent, StoredPresentation},
 };
+use moor_common::tasks::{EventLogPurgeResult, EventLogStats};
 use moor_var::Obj;
 
 use crate::event_log::{EventLogOps, PresentationAction};
@@ -34,8 +34,8 @@ use crate::event_log::{EventLogOps, PresentationAction};
 pub struct MockEventLog {
     /// Stored narrative events by event ID
     narrative_events: Arc<Mutex<HashMap<Uuid, LoggedNarrativeEvent>>>,
-    /// Current presentations by player (Vec instead of HashMap to match new API)
-    presentations: Arc<Mutex<HashMap<Obj, Vec<Presentation>>>>,
+    /// Current encrypted presentations by player
+    presentations: Arc<Mutex<HashMap<Obj, Vec<StoredPresentation>>>>,
     /// Stored public keys per player
     pubkeys: Arc<Mutex<HashMap<Obj, String>>>,
 }
@@ -88,7 +88,7 @@ impl MockEventLog {
 
     /// Get all presentations for all players (for testing)
     #[allow(dead_code)]
-    pub fn get_all_presentations(&self) -> HashMap<Obj, Vec<Presentation>> {
+    pub fn get_all_presentations(&self) -> HashMap<Obj, Vec<StoredPresentation>> {
         self.presentations.lock().unwrap().clone()
     }
 
@@ -199,11 +199,18 @@ impl EventLogOps for MockEventLog {
 
             match action {
                 PresentationAction::Add(presentation) => {
+                    let presentation_fb = presentation_to_flatbuffer_struct(&presentation)
+                        .expect("Failed to convert presentation to flatbuffer");
+                    let mut builder = ::planus::Builder::new();
+                    let presentation_bytes = builder.finish(&presentation_fb, None);
                     let mut presentations = self.presentations.lock().unwrap();
                     presentations
                         .entry(player_obj)
                         .or_default()
-                        .push(presentation);
+                        .push(StoredPresentation {
+                            id: presentation.id,
+                            encrypted_content: presentation_bytes.to_vec(),
+                        });
                 }
                 PresentationAction::Remove(presentation_id) => {
                     let mut presentations = self.presentations.lock().unwrap();
@@ -223,7 +230,7 @@ impl EventLogOps for MockEventLog {
         event_id
     }
 
-    fn current_presentations(&self, player: Obj) -> Vec<Presentation> {
+    fn current_presentations(&self, player: Obj) -> Vec<StoredPresentation> {
         let presentations = self.presentations.lock().unwrap();
         presentations.get(&player).cloned().unwrap_or_default()
     }

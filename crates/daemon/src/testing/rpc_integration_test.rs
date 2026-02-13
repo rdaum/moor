@@ -893,12 +893,16 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             logged_narrative_event_to_flatbuffer(player, present_event, pubkey).unwrap();
         event_log.append(logged_event, presentation_action);
 
-        // Check current presentations - now returns Vec<Presentation> instead of HashMap
+        // Check current presentations - stored content is encrypted/serialized bytes.
         let presentations = event_log.current_presentations(player);
         assert_eq!(presentations.len(), 1, "Should have one presentation");
         let test_widget = presentations.iter().find(|p| p.id == "test_widget");
         assert!(test_widget.is_some(), "Should contain test widget");
-        assert_eq!(test_widget.unwrap().content, "Hello World");
+        let presentation_ref = <moor_schema::common::PresentationRef as ::planus::ReadAsRoot>::read_as_root(
+            &test_widget.unwrap().encrypted_content,
+        )
+        .unwrap();
+        assert_eq!(presentation_ref.content().unwrap(), "Hello World");
 
         // Test presentation dismissal
         event_log.dismiss_presentation(player, "test_widget".to_string());

@@ -21,7 +21,6 @@ use moor_schema::{
     event_log::LoggedNarrativeEvent,
 };
 use moor_var::Obj;
-use rpc_common::StrErr;
 use std::time::SystemTime;
 
 /// Presentation action extracted from an event (for updating presentation state)
@@ -75,26 +74,4 @@ pub fn logged_narrative_event_to_flatbuffer(
         },
         presentation_action,
     ))
-}
-
-/// Convert from FlatBuffer PresentationRef to domain Presentation
-pub fn presentation_from_flatbuffer(
-    pres: &moor_schema::common::PresentationRef,
-) -> Result<Presentation, String> {
-    Ok(Presentation {
-        id: pres.id().str_err()?.to_string(),
-        content_type: pres.content_type().str_err()?.to_string(),
-        content: pres.content().str_err()?.to_string(),
-        target: pres.target().str_err()?.to_string(),
-        attributes: pres
-            .attributes()
-            .str_err()?
-            .iter()
-            .filter_map(|attr_result| {
-                attr_result.ok().and_then(|attr| {
-                    Some((attr.key().ok()?.to_string(), attr.value().ok()?.to_string()))
-                })
-            })
-            .collect(),
-    })
 }

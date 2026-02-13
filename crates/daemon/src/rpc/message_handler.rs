@@ -61,7 +61,7 @@ use moor_kernel::{
 };
 
 use moor_schema::convert::{
-    narrative_event_to_flatbuffer_struct, obj_from_ref, presentation_to_flatbuffer_struct,
+    narrative_event_to_flatbuffer_struct, obj_from_ref,
     var_from_ref, var_to_flatbuffer,
 };
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, VarType::TYPE_NONE, v_sym};
@@ -1421,19 +1421,18 @@ impl RpcMessageHandler {
         let player = self.extract_auth_token(&req, |r| r.auth_token())?;
 
         let presentations = self.event_log.current_presentations(player);
-        let presentation_list: Result<Vec<_>, _> = presentations
-            .iter()
-            .map(presentation_to_flatbuffer_struct)
+        let presentation_snapshots = presentations
+            .into_iter()
+            .map(|presentation| moor_rpc::PresentationSnapshot {
+                id: presentation.id,
+                encrypted_blob: presentation.encrypted_content,
+            })
             .collect();
 
         Ok(DaemonToClientReply {
             reply: DaemonToClientReplyUnion::CurrentPresentations(Box::new(
                 moor_rpc::CurrentPresentations {
-                    presentations: presentation_list.map_err(|e| {
-                        RpcMessageError::InternalError(format!(
-                            "Failed to convert presentation: {e}"
-                        ))
-                    })?,
+                    presentations: presentation_snapshots,
                 },
             )),
         })
