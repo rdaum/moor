@@ -104,7 +104,6 @@ pub trait EventLogOps: Send + Sync {
 #[derive(Debug)]
 enum PersistenceMessage {
     WriteNarrativeEvent(Uuid, LoggedNarrativeEvent),
-    WritePresentationState(PlayerPresentations),
     Shutdown,
 }
 
@@ -770,15 +769,6 @@ impl EventLog {
                         error!("Failed to flush narrative event write: {}", e);
                     }
                 }
-                Ok(PersistenceMessage::WritePresentationState(state)) => {
-                    let mut guard = persistence.lock().unwrap();
-                    if let Err(e) = guard.write_presentation_state(&state) {
-                        error!("Failed to write presentation state to disk: {}", e);
-                    }
-                    if let Err(e) = guard.flush() {
-                        error!("Failed to flush presentation state write: {}", e);
-                    }
-                }
                 Ok(PersistenceMessage::Shutdown) => {
                     info!("Event log persistence thread shutting down");
                     return;
@@ -810,6 +800,8 @@ impl EventLog {
             return Uuid::nil();
         };
 
+        let is_presentation_event = presentation_action.is_some();
+
         // Handle presentation state updates
         if let Some(action) = presentation_action {
             // Get player's pubkey for presentation encryption (REQUIRED)
@@ -830,6 +822,10 @@ impl EventLog {
                     self.remove_presentation(&event.player, &presentation_id);
                 }
             }
+        }
+
+        if is_presentation_event {
+            return event_id;
         }
 
         // Send to background persistence thread
@@ -954,12 +950,20 @@ impl EventLogOps for EventLog {
     }
 
     fn dismiss_presentation(&self, player: Obj, presentation_id: String) {
-        // Load current state, remove presentation, save back
-        if let Ok(Some(mut state)) = self.load_presentation_state_from_disk(player) {
-            state.presentations.retain(|p| p.id != presentation_id);
-            if let Some(ref sender) = self.persistence_sender {
-                let _ = sender.send(PersistenceMessage::WritePresentationState(state));
-            }
+        // Remove by the authenticated player's key.
+        //
+        // Do not rely on the embedded `PlayerPresentations.player` field in the stored record: if
+        // it is wrong (older/corrupt data), rewriting state using it can write under a different
+        // key and make "dismiss" appear to do nothing.
+        let player_fb = obj_to_flatbuffer_struct(&player);
+
+        let mut guard = self.persistence.lock().unwrap();
+        if let Err(e) = guard.remove_presentation(&player_fb, &presentation_id) {
+            error!("Failed to dismiss presentation {presentation_id}: {e}");
+            return;
+        }
+        if let Err(e) = guard.flush() {
+            error!("Failed to flush presentation dismissal {presentation_id}: {e}");
         }
     }
 
@@ -1449,6 +1453,38 @@ mod tests {
         } else {
             panic!("Expected Present event");
         }
+    }
+
+    #[test]
+    fn test_dismiss_presentation_does_not_require_persistence_thread() {
+        // Construct an EventLog with no background writer to make the regression deterministic.
+        // Dismissal must still take effect immediately, since clients reload by reading the
+        // current presentation state from storage.
+        let persistence = Arc::new(Mutex::new(EventPersistence::open(None).unwrap()));
+        let log = EventLog {
+            persistence: persistence.clone(),
+            persistence_sender: None,
+        };
+
+        let player = Obj::mk_id(42);
+        let player_fb = obj_to_flatbuffer_struct(&player);
+
+        {
+            let mut guard = persistence.lock().unwrap();
+            guard
+                .write_presentation_state(&PlayerPresentations {
+                    player: Box::new(player_fb),
+                    presentations: vec![StoredPresentation {
+                        id: "p1".to_string(),
+                        encrypted_content: vec![1, 2, 3],
+                    }],
+                })
+                .unwrap();
+        }
+
+        assert_eq!(log.current_presentations(player).len(), 1);
+        log.dismiss_presentation(player, "p1".to_string());
+        assert!(log.current_presentations(player).is_empty());
     }
 
     #[test]
