@@ -1518,6 +1518,57 @@ mod tests {
     }
 
     #[test]
+    fn test_reparent_between_distinct_propdefs_preserves_local_value() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        let root = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
+        let parent_a = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
+        let parent_b = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
+        let child = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
+
+        tx.set_object_parent(&parent_a, &root).unwrap();
+        tx.set_object_parent(&parent_b, &root).unwrap();
+        tx.set_object_parent(&child, &parent_a).unwrap();
+
+        tx.define_property(
+            &parent_a,
+            &parent_a,
+            Symbol::mk("foo"),
+            &parent_a,
+            BitEnum::new(),
+            Some(v_str("parent_a_default")),
+        )
+        .unwrap();
+        tx.define_property(
+            &parent_b,
+            &parent_b,
+            Symbol::mk("foo"),
+            &parent_b,
+            BitEnum::new(),
+            Some(v_str("parent_b_default")),
+        )
+        .unwrap();
+
+        let (old_propdef, _, _, _) = tx.resolve_property(&child, Symbol::mk("foo")).unwrap();
+        tx.set_property(&child, old_propdef.uuid(), v_str("bar")).unwrap();
+
+        tx.set_object_parent(&child, &parent_b).unwrap();
+
+        let (_, value, _, is_clear) = tx.resolve_property(&child, Symbol::mk("foo")).unwrap();
+        assert_eq!(value, v_str("bar"));
+        assert!(!is_clear);
+    }
+
+    #[test]
     fn test_regression_recycle_parent_lose_prop() {
         let db = test_db();
         let mut tx = db.start_transaction();

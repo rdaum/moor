@@ -30,7 +30,7 @@ use moor_common::{
 use moor_var::{
     ByteSized, NOTHING, Obj, Symbol, Var, program::ProgramType, v_empty_map, v_map, v_none,
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::{
     collections::VecDeque,
@@ -471,6 +471,8 @@ impl WorldStateTransaction {
             return Ok(());
         };
 
+        self.remap_reparented_property_overrides(o, new_parent)?;
+
         // Update the parent relationship and invalidate caches for the affected subtree.
         // Property and verb resolution will rebuild lazily against the new ancestry.
 
@@ -482,6 +484,115 @@ impl WorldStateTransaction {
         self.invalidate_all_caches_for_branch(o)?;
 
         Ok(())
+    }
+
+    fn remap_reparented_property_overrides(
+        &mut self,
+        obj: &Obj,
+        new_parent: &Obj,
+    ) -> Result<(), WorldStateError> {
+        let new_parent_propdefs_by_name = self.visible_propdefs_from_ancestor(new_parent)?;
+
+        let local_value_entries = self
+            .object_propvalues
+            .scan(&|holder, _value| holder.obj() == *obj)
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error scanning local property values: {e:?}"))
+            })?;
+        let local_flag_entries = self
+            .object_propflags
+            .scan(&|holder, _flags| holder.obj() == *obj)
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error scanning local property flags: {e:?}"))
+            })?;
+
+        let mut local_uuids = HashSet::new();
+        for (holder, _) in &local_value_entries {
+            local_uuids.insert(holder.uuid());
+        }
+        for (holder, _) in &local_flag_entries {
+            local_uuids.insert(holder.uuid());
+        }
+
+        let mut uuid_remaps = Vec::new();
+        for old_uuid in local_uuids {
+            let Ok(old_propdef) = self.find_property_by_uuid(obj, old_uuid) else {
+                continue;
+            };
+            if old_propdef.location() == *obj {
+                continue;
+            }
+
+            let Some(new_propdef) = new_parent_propdefs_by_name.get(&old_propdef.name()) else {
+                continue;
+            };
+            let new_uuid = new_propdef.uuid();
+            if new_uuid != old_uuid {
+                uuid_remaps.push((old_uuid, new_uuid));
+            }
+        }
+
+        for (old_uuid, new_uuid) in uuid_remaps {
+            if let Some(value) = self
+                .object_propvalues
+                .delete(&ObjAndUUIDHolder::new(obj, old_uuid))
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!(
+                        "Error deleting old local property value during reparent: {e:?}"
+                    ))
+                })?
+            {
+                upsert(
+                    &mut self.object_propvalues,
+                    ObjAndUUIDHolder::new(obj, new_uuid),
+                    value,
+                )
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!(
+                        "Error writing remapped local property value during reparent: {e:?}"
+                    ))
+                })?;
+            }
+
+            if let Some(perms) = self
+                .object_propflags
+                .delete(&ObjAndUUIDHolder::new(obj, old_uuid))
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!(
+                        "Error deleting old local property flags during reparent: {e:?}"
+                    ))
+                })?
+            {
+                upsert(
+                    &mut self.object_propflags,
+                    ObjAndUUIDHolder::new(obj, new_uuid),
+                    perms,
+                )
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!(
+                        "Error writing remapped local property flags during reparent: {e:?}"
+                    ))
+                })?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn visible_propdefs_from_ancestor(
+        &self,
+        ancestor: &Obj,
+    ) -> Result<HashMap<Symbol, PropDef>, WorldStateError> {
+        let mut by_name = HashMap::new();
+        let mut search_obj = *ancestor;
+        while !search_obj.is_nothing() {
+            let props = self.get_properties(&search_obj)?;
+            for prop in props.iter() {
+                by_name.entry(prop.name()).or_insert_with(|| prop.clone());
+            }
+            search_obj = self.get_object_parent(&search_obj)?;
+        }
+        Ok(by_name)
     }
 
     /// Optimized version of set_object_parent for new object creation.
