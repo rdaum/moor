@@ -49,7 +49,9 @@ serde_derive.workspace = true
 serde_json.workspace = true
 
 # Authentication & Security
+base64.workspace = true
 oauth2.workspace = true
+sha2.workspace = true
 
 # Networking & Communication
 axum.workspace = true
@@ -74,6 +76,6 @@ tracing.workspace = true
 # Utilities & Helpers
 once_cell.workspace = true
 planus.workspace = true
-url = "2.5"
-urlencoding = "2.1"
+url.workspace = true
+urlencoding.workspace = true
 uuid.workspace = true

@@ -222,10 +222,10 @@ paths:
     get:
       operationId: oauth2Authorize
       tags: [OAuth2]
-      summary: Start an OAuth2 authorization flow
+      summary: Start a cookie-bound OAuth2 authorization flow
       description: |
         Generates a provider authorization URL and a CSRF state token.
-        Sets a `moor_oauth_nonce` cookie for browser-binding.
+        Sets a `moor_oauth_nonce` cookie for cookie-bound redemption.
       parameters:
         - $ref: "#/components/parameters/OAuthProvider"
       responses:
@@ -248,6 +248,40 @@ paths:
         "404":
           description: OAuth2 not enabled
 
+  /auth/oauth2/{provider}/app/start:
+    post:
+      operationId: oauth2AppStart
+      tags: [OAuth2]
+      summary: Start a proof-bound OAuth2 authorization flow
+      description: |
+        Starts OAuth2 for clients that do not rely on browser cookies.
+        Stores redirect target + PKCE challenge server-side and returns an
+        authorization URL. Callback redirects to the app redirect URI with a
+        one-time `handoff_code`.
+      parameters:
+        - $ref: "#/components/parameters/OAuthProvider"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppStartRequest"
+      responses:
+        "200":
+          description: Authorization URL generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppAuthUrlResponse"
+        "400":
+          description: Invalid provider, redirect URI, or PKCE input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: OAuth2 not enabled
+
   /auth/oauth2/{provider}/callback:
     get:
       operationId: oauth2Callback
@@ -256,13 +290,14 @@ paths:
       description: |
         Called by the OAuth2 provider after user consent.  Validates the
         CSRF state, exchanges the authorization code for user info, and
-        redirects the browser:
+        redirects according to flow binding:
 
-        - **Existing user** → `/#auth_code={code}`
-        - **New user** → `/#oauth2_code={code}&oauth2_display={json}`
+        - **Cookie-bound existing user** → `/#auth_code={code}`
+        - **Cookie-bound new user** → `/#oauth2_code={code}&oauth2_display={json}`
+        - **Proof-bound** → `{redirect_uri}?handoff_code={code}`
 
         The code is a server-side one-time token redeemable via
-        `/auth/oauth2/exchange`.
+        `/auth/oauth2/exchange` (cookie) or `/auth/oauth2/app/exchange` (proof).
       parameters:
         - $ref: "#/components/parameters/OAuthProvider"
         - name: code
@@ -285,7 +320,7 @@ paths:
     post:
       operationId: oauth2Exchange
       tags: [OAuth2]
-      summary: Exchange a one-time code for tokens or identity
+      summary: Exchange a cookie-bound one-time code for tokens or identity
       description: |
         Redeems a server-side one-time code produced by the callback.
         Returns either an `auth_session` (existing user) or an `identity`
@@ -317,6 +352,41 @@ paths:
         "404":
           description: OAuth2 not enabled (route absent)
 
+  /auth/oauth2/app/exchange:
+    post:
+      operationId: oauth2AppExchange
+      tags: [OAuth2]
+      summary: Exchange a proof-bound handoff code
+      description: |
+        Redeems a one-time proof-bound handoff code using a PKCE verifier.
+        Returns an auth session for existing users, or identity details plus
+        an `identity_code` for account-choice submission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppExchangeRequest"
+      responses:
+        "200":
+          description: Code exchanged
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/OAuth2AuthSessionResponse"
+                  - $ref: "#/components/schemas/OAuth2AppIdentityResponse"
+                discriminator:
+                  propertyName: type
+        "401":
+          description: Invalid/expired code or invalid verifier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: OAuth2 not enabled (route absent)
+
   /auth/oauth2/account:
     post:
       operationId: oauth2AccountChoice
@@ -333,6 +403,44 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/AccountChoiceRequest"
+      responses:
+        "200":
+          description: Account created/linked, session established
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2LoginResponse"
+        "400":
+          description: Invalid mode or code type mismatch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication failed or invalid code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2LoginResponse"
+        "404":
+          description: OAuth2 not enabled
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/oauth2/app/account:
+    post:
+      operationId: oauth2AppAccountChoice
+      tags: [OAuth2]
+      summary: Create or link account using proof-bound identity code
+      description: |
+        Submits account-choice for proof-bound OAuth2 flows.
+        Requires `identity_code` and PKCE `code_verifier`; no nonce cookie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppAccountChoiceRequest"
       responses:
         "200":
           description: Account created/linked, session established
@@ -1203,6 +1311,15 @@ components:
           description: CSRF state token
       required: [auth_url, state]
 
+    AppAuthUrlResponse:
+      type: object
+      properties:
+        auth_url:
+          type: string
+          format: uri
+          description: OAuth2 provider authorization URL
+      required: [auth_url]
+
     CodeExchangeRequest:
       type: object
       properties:
@@ -1210,6 +1327,34 @@ components:
           type: string
           description: One-time server-side code from callback redirect
       required: [code]
+
+    AppStartRequest:
+      type: object
+      properties:
+        redirect_uri:
+          type: string
+          description: Redirect target for proof-bound callback handoff
+        intent:
+          type: string
+          description: Optional client-defined intent/context
+        code_challenge:
+          type: string
+          description: PKCE code challenge (S256)
+        code_challenge_method:
+          type: string
+          enum: [S256]
+      required: [redirect_uri, code_challenge, code_challenge_method]
+
+    AppExchangeRequest:
+      type: object
+      properties:
+        handoff_code:
+          type: string
+          description: One-time handoff code from callback redirect
+        code_verifier:
+          type: string
+          description: PKCE verifier matching the start request challenge
+      required: [handoff_code, code_verifier]
 
     OAuth2AuthSessionResponse:
       type: object
@@ -1247,6 +1392,25 @@ components:
           type: string
       required: [type, provider]
 
+    OAuth2AppIdentityResponse:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [identity]
+        identity_code:
+          type: string
+          description: One-time code for `/auth/oauth2/app/account`
+        provider:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        username:
+          type: string
+      required: [type, identity_code, provider]
+
     AccountChoiceRequest:
       type: object
       properties:
@@ -1266,6 +1430,29 @@ components:
           type: string
           description: Password of existing account (for oauth2_connect)
       required: [mode, oauth2_code]
+
+    AppAccountChoiceRequest:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [oauth2_create, oauth2_connect]
+        identity_code:
+          type: string
+          description: One-time identity code from `/auth/oauth2/app/exchange`
+        code_verifier:
+          type: string
+          description: PKCE verifier used to bind account-choice redemption
+        player_name:
+          type: string
+          description: Desired player name (for oauth2_create)
+        existing_email:
+          type: string
+          description: Email of existing account to link (for oauth2_connect)
+        existing_password:
+          type: string
+          description: Password of existing account (for oauth2_connect)
+      required: [mode, identity_code, code_verifier]
 
     OAuth2LoginResponse:
       type: object

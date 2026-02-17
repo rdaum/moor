@@ -13,6 +13,9 @@ oauth2:
   # Optional: force Secure on OAuth nonce cookie.
   # If omitted, moor-web-host enables Secure automatically when base_url starts with https://
   cookie_secure: false
+  # Required for proof-bound OAuth2 flows (/auth/oauth2/{provider}/app/start).
+  allowed_app_redirect_uri_prefixes:
+    - "moor://oauth/callback"
   providers:
     github:
       client_id: "YOUR_GITHUB_CLIENT_ID"

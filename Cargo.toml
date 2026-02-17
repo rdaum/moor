@@ -220,6 +220,8 @@ perf_event = { package = "perf-event2", version = "0.7" }
 rand = "0.9"
 semver = "1.0"
 strum = { version = "0.27", features = ["derive"] }
+url = "2.5"
+urlencoding = "2.1"
 uuid = { version = "1.16", features = ["v4", "v7", "serde"] }
 vergen = { version = "9.1", default-features = false, features = ["cargo"] }
 vergen-gitcl = { version = "9.1", default-features = false }

@@ -13,12 +13,14 @@
 
 //! OAuth2 authentication support for web-host
 
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope,
     TokenResponse, TokenUrl, basic::BasicClient,
 };
 use rpc_common::{AuthToken, ClientToken};
 use serde_derive::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
@@ -43,6 +45,8 @@ pub struct OAuth2Config {
     pub base_url: String,
     #[serde(default)]
     pub cookie_secure: Option<bool>,
+    #[serde(default)]
+    pub allowed_app_redirect_uri_prefixes: Vec<String>,
     pub providers: HashMap<String, OAuth2ProviderConfig>,
 }
 
@@ -60,8 +64,21 @@ const CSRF_TOKEN_TTL: Duration = Duration::from_secs(600); // 10 minutes
 const PENDING_CODE_TTL: Duration = Duration::from_secs(120); // 2 minutes
 
 #[derive(Clone)]
+pub enum FlowBinding {
+    Cookie {
+        browser_nonce: String,
+    },
+    Proof {
+        redirect_uri: String,
+        code_challenge: String,
+        code_challenge_method: String,
+        intent: Option<String>,
+    },
+}
+
+#[derive(Clone)]
 struct PendingCsrfEntry {
-    browser_nonce: String,
+    binding: FlowBinding,
     created: Instant,
 }
 
@@ -84,7 +101,7 @@ pub enum PendingOAuth2Code {
 #[derive(Clone)]
 struct PendingEntry {
     payload: PendingOAuth2Code,
-    browser_nonce: String,
+    binding: FlowBinding,
     created: Instant,
 }
 
@@ -112,34 +129,48 @@ impl PendingOAuth2Store {
     }
 
     /// Store a CSRF token bound to a provider.
-    pub fn store_csrf_token(&self, provider: &str, token: &str, browser_nonce: String) {
+    pub fn store_csrf_token(&self, provider: &str, token: &str, binding: FlowBinding) {
         let key = format!("{}:{}", provider, token);
         if let Ok(mut tokens) = self.csrf_tokens.write() {
             tokens.insert(
                 key,
                 PendingCsrfEntry {
-                    browser_nonce,
+                    binding,
                     created: Instant::now(),
                 },
             );
         }
     }
 
-    /// Validate and consume a CSRF token. Returns true if valid and bound to the given provider.
-    pub fn validate_csrf_token(&self, provider: &str, token: &str, browser_nonce: &str) -> bool {
+    /// Validate and consume a CSRF token. Returns the binding details if valid.
+    pub fn consume_csrf_token(
+        &self,
+        provider: &str,
+        token: &str,
+        browser_nonce: Option<&str>,
+    ) -> Option<FlowBinding> {
         let key = format!("{}:{}", provider, token);
         let Ok(mut tokens) = self.csrf_tokens.write() else {
-            return false;
+            return None;
         };
-        match tokens.remove(&key) {
-            Some(entry)
-                if entry.created.elapsed() < CSRF_TOKEN_TTL
-                    && entry.browser_nonce == browser_nonce =>
-            {
-                true
+        let Some(entry) = tokens.remove(&key) else {
+            return None;
+        };
+        if entry.created.elapsed() >= CSRF_TOKEN_TTL {
+            return None;
+        }
+        match &entry.binding {
+            FlowBinding::Cookie {
+                browser_nonce: expected_nonce,
+            } => {
+                let provided_nonce = browser_nonce?;
+                if expected_nonce == provided_nonce {
+                    Some(entry.binding)
+                } else {
+                    None
+                }
             }
-            None => false,
-            _ => false,
+            FlowBinding::Proof { .. } => Some(entry.binding),
         }
     }
 
@@ -147,12 +178,12 @@ impl PendingOAuth2Store {
     pub fn store_pending_code(
         &self,
         payload: PendingOAuth2Code,
-        browser_nonce: String,
+        binding: FlowBinding,
     ) -> Option<String> {
         let code = Uuid::new_v4().to_string();
         let entry = PendingEntry {
             payload,
-            browser_nonce,
+            binding,
             created: Instant::now(),
         };
         let Ok(mut codes) = self.pending_codes.write() else {
@@ -163,7 +194,7 @@ impl PendingOAuth2Store {
     }
 
     /// Redeem a one-time code, consuming it. Returns the payload if valid and not expired.
-    pub fn redeem_pending_code(
+    pub fn redeem_pending_code_cookie(
         &self,
         code: &str,
         browser_nonce: &str,
@@ -171,14 +202,59 @@ impl PendingOAuth2Store {
         let Ok(mut codes) = self.pending_codes.write() else {
             return None;
         };
-        match codes.remove(code) {
-            Some(entry)
-                if entry.created.elapsed() < PENDING_CODE_TTL
-                    && entry.browser_nonce == browser_nonce =>
-            {
-                Some(entry.payload)
-            }
+        let Some(entry) = codes.remove(code) else {
+            return None;
+        };
+        if entry.created.elapsed() >= PENDING_CODE_TTL {
+            return None;
+        }
+        match entry.binding {
+            FlowBinding::Cookie {
+                browser_nonce: expected_nonce,
+            } if expected_nonce == browser_nonce => Some(entry.payload),
             _ => None,
+        }
+    }
+
+    pub fn redeem_pending_code_proof(
+        &self,
+        code: &str,
+        code_verifier: &str,
+    ) -> Option<PendingOAuth2Code> {
+        self.redeem_pending_code_proof_with_binding(code, code_verifier)
+            .map(|(payload, _)| payload)
+    }
+
+    pub fn redeem_pending_code_proof_with_binding(
+        &self,
+        code: &str,
+        code_verifier: &str,
+    ) -> Option<(PendingOAuth2Code, FlowBinding)> {
+        let Ok(mut codes) = self.pending_codes.write() else {
+            return None;
+        };
+        let Some(entry) = codes.remove(code) else {
+            return None;
+        };
+        if entry.created.elapsed() >= PENDING_CODE_TTL {
+            return None;
+        }
+        match entry.binding {
+            FlowBinding::Proof {
+                code_challenge,
+                code_challenge_method,
+                redirect_uri,
+                intent,
+            } => verify_pkce(code_verifier, &code_challenge, &code_challenge_method).then_some((
+                entry.payload,
+                FlowBinding::Proof {
+                    redirect_uri,
+                    code_challenge,
+                    code_challenge_method,
+                    intent,
+                },
+            )),
+            FlowBinding::Cookie { .. } => None,
         }
     }
 
@@ -301,6 +377,15 @@ impl OAuth2Manager {
         self.config
             .cookie_secure
             .unwrap_or_else(|| self.config.base_url.starts_with("https://"))
+    }
+
+    pub fn app_redirect_allowed(&self, redirect_uri: &str) -> bool {
+        !self.config.allowed_app_redirect_uri_prefixes.is_empty()
+            && self
+                .config
+                .allowed_app_redirect_uri_prefixes
+                .iter()
+                .any(|prefix| redirect_uri.starts_with(prefix))
     }
 
     /// Generate an authorization URL for a provider
@@ -485,4 +570,14 @@ impl OAuth2Manager {
             username: data["username"].as_str().map(String::from),
         })
     }
+}
+
+fn verify_pkce(code_verifier: &str, expected_challenge: &str, method: &str) -> bool {
+    if method != "S256" {
+        return false;
+    }
+
+    let digest = Sha256::digest(code_verifier.as_bytes());
+    let calculated = URL_SAFE_NO_PAD.encode(digest);
+    calculated == expected_challenge
 }

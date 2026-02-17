@@ -17,6 +17,12 @@ oauth2:
   # Optional: force Secure on OAuth nonce cookie.
   # If omitted, moor-web-host enables Secure automatically when base_url starts with https://
   cookie_secure: false
+  # Required for proof-bound OAuth2 flows (/auth/oauth2/{provider}/app/start).
+  # Each entry is a prefix match against the provided redirect_uri.
+  # Examples include custom URI schemes and HTTPS universal links.
+  allowed_app_redirect_uri_prefixes:
+    - "moor://oauth/callback"
+    - "https://app.example.com/oauth/callback"
 
   providers:
     # Google OAuth2

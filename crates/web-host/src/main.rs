@@ -611,8 +611,20 @@ fn mk_routes(
                 get(host::oauth2_authorize_handler),
             )
             .route(
+                "/auth/oauth2/{provider}/app/start",
+                post(host::oauth2_app_start_handler),
+            )
+            .route(
                 "/auth/oauth2/{provider}/callback",
                 get(host::oauth2_callback_handler),
+            )
+            .route(
+                "/auth/oauth2/app/exchange",
+                post(host::oauth2_app_exchange_handler),
+            )
+            .route(
+                "/auth/oauth2/app/account",
+                post(host::oauth2_app_account_choice_handler),
             )
             .route(
                 "/auth/oauth2/account",

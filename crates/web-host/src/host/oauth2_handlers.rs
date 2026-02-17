@@ -15,7 +15,7 @@
 
 use crate::host::{
     WebHost,
-    oauth2::{OAuth2Manager, PendingOAuth2Code, PendingOAuth2Store},
+    oauth2::{FlowBinding, OAuth2Manager, PendingOAuth2Code, PendingOAuth2Store},
 };
 use axum::{
     Json,
@@ -81,6 +81,12 @@ pub struct AuthUrlResponse {
     pub state: String,
 }
 
+/// Response for app-bound OAuth2 start request
+#[derive(Serialize)]
+pub struct AppAuthUrlResponse {
+    pub auth_url: String,
+}
+
 /// Response for OAuth2 configuration
 #[derive(Serialize)]
 pub struct OAuth2ConfigResponse {
@@ -113,6 +119,22 @@ pub struct CodeExchangeRequest {
     pub code: String,
 }
 
+/// Request body for app-bound OAuth2 flow start
+#[derive(Deserialize)]
+pub struct AppStartRequest {
+    pub redirect_uri: String,
+    pub intent: Option<String>,
+    pub code_challenge: String,
+    pub code_challenge_method: String,
+}
+
+/// Request body for app-bound handoff code exchange
+#[derive(Deserialize)]
+pub struct AppExchangeRequest {
+    pub handoff_code: String,
+    pub code_verifier: String,
+}
+
 /// Request body for account choice submission.
 /// The `oauth2_code` is a one-time server-side code that resolves to the verified identity.
 #[derive(Deserialize)]
@@ -122,6 +144,23 @@ pub struct AccountChoiceRequest {
     pub player_name: Option<String>,       // For oauth2_create
     pub existing_email: Option<String>,    // For oauth2_connect
     pub existing_password: Option<String>, // For oauth2_connect
+}
+
+/// Request body for app-bound account choice submission.
+#[derive(Deserialize)]
+pub struct AppAccountChoiceRequest {
+    pub mode: String,                      // "oauth2_create" or "oauth2_connect"
+    pub identity_code: String,             // One-time identity code from app exchange
+    pub code_verifier: String,             // PKCE verifier for proof binding
+    pub player_name: Option<String>,       // For oauth2_create
+    pub existing_email: Option<String>,    // For oauth2_connect
+    pub existing_password: Option<String>, // For oauth2_connect
+}
+
+fn append_query_param(uri: &str, key: &str, value: &str) -> Option<String> {
+    let mut parsed = url::Url::parse(uri).ok()?;
+    parsed.query_pairs_mut().append_pair(key, value);
+    Some(parsed.into())
 }
 
 /// GET /auth/oauth2/:provider/authorize
@@ -145,9 +184,13 @@ pub async fn oauth2_authorize_handler(
         Ok((auth_url, csrf_token)) => {
             let state = csrf_token.secret().clone();
             let browser_nonce = uuid::Uuid::new_v4().to_string();
-            oauth2_state
-                .pending
-                .store_csrf_token(&provider, &state, browser_nonce.clone());
+            oauth2_state.pending.store_csrf_token(
+                &provider,
+                &state,
+                FlowBinding::Cookie {
+                    browser_nonce: browser_nonce.clone(),
+                },
+            );
             info!("Generated OAuth2 authorization URL for {}", provider);
             let response = Json(AuthUrlResponse { auth_url, state }).into_response();
             attach_set_cookie(
@@ -158,6 +201,75 @@ pub async fn oauth2_authorize_handler(
                     oauth2_state.manager.oauth_cookie_secure(),
                 ),
             )
+        }
+        Err(e) => {
+            error!("Failed to generate authorization URL: {}", e);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": format!("Invalid provider: {}", e)})),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// POST /auth/oauth2/:provider/app/start
+/// Start a proof-bound OAuth2 flow suitable for desktop/mobile/browser clients.
+pub async fn oauth2_app_start_handler(
+    State(oauth2_state): State<OAuth2State>,
+    Path(provider): Path<String>,
+    Json(request): Json<AppStartRequest>,
+) -> impl IntoResponse {
+    debug!("OAuth2 app start request for provider: {}", provider);
+
+    if !oauth2_state.manager.is_enabled() {
+        warn!("OAuth2 is not enabled");
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "OAuth2 not enabled"})),
+        )
+            .into_response();
+    }
+
+    if request.code_challenge_method != "S256" {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Only S256 code_challenge_method is supported"})),
+        )
+            .into_response();
+    }
+    if request.code_challenge.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "code_challenge is required"})),
+        )
+            .into_response();
+    }
+    if !oauth2_state
+        .manager
+        .app_redirect_allowed(&request.redirect_uri)
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "redirect_uri is not allowed"})),
+        )
+            .into_response();
+    }
+
+    match oauth2_state.manager.get_authorization_url(&provider) {
+        Ok((auth_url, csrf_token)) => {
+            let state = csrf_token.secret().clone();
+            oauth2_state.pending.store_csrf_token(
+                &provider,
+                &state,
+                FlowBinding::Proof {
+                    redirect_uri: request.redirect_uri,
+                    code_challenge: request.code_challenge,
+                    code_challenge_method: request.code_challenge_method,
+                    intent: request.intent,
+                },
+            );
+            Json(AppAuthUrlResponse { auth_url }).into_response()
         }
         Err(e) => {
             error!("Failed to generate authorization URL: {}", e);
@@ -186,19 +298,15 @@ pub async fn oauth2_callback_handler(
         return Redirect::to("/?error=oauth2_disabled").into_response();
     }
 
-    let Some(browser_nonce) = extract_cookie_value(&headers, OAUTH2_NONCE_COOKIE) else {
-        warn!("Missing OAuth2 browser nonce cookie in callback");
-        return Redirect::to("/?error=invalid_state").into_response();
-    };
-
-    // Validate CSRF state token (bound to provider)
-    if !oauth2_state
-        .pending
-        .validate_csrf_token(&provider, &query.state, &browser_nonce)
-    {
+    let browser_nonce = extract_cookie_value(&headers, OAUTH2_NONCE_COOKIE);
+    let Some(flow_binding) =
+        oauth2_state
+            .pending
+            .consume_csrf_token(&provider, &query.state, browser_nonce.as_deref())
+    else {
         warn!("Invalid or expired CSRF state token in OAuth2 callback");
         return Redirect::to("/?error=invalid_state").into_response();
-    }
+    };
 
     // Complete OAuth2 flow: exchange code and get user info
     let user_info = match oauth2_state
@@ -334,12 +442,24 @@ pub async fn oauth2_callback_handler(
         };
         let Some(code) = oauth2_state
             .pending
-            .store_pending_code(pending, browser_nonce.clone())
+            .store_pending_code(pending, flow_binding.clone())
         else {
             error!("Failed to store pending auth code");
             return Redirect::to("/?error=internal_error").into_response();
         };
-        Redirect::to(&format!("/#auth_code={}", code)).into_response()
+        match flow_binding {
+            FlowBinding::Cookie { .. } => {
+                Redirect::to(&format!("/#auth_code={}", code)).into_response()
+            }
+            FlowBinding::Proof { redirect_uri, .. } => {
+                let Some(redirect_url) = append_query_param(&redirect_uri, "handoff_code", &code)
+                else {
+                    error!("Invalid proof-bound redirect URI");
+                    return Redirect::to("/?error=internal_error").into_response();
+                };
+                Redirect::to(&redirect_url).into_response()
+            }
+        }
     } else {
         // New user — store verified identity server-side, redirect with one-time code + display hints
         let display_info = serde_json::json!({
@@ -351,18 +471,30 @@ pub async fn oauth2_callback_handler(
         let pending = PendingOAuth2Code::Identity(user_info);
         let Some(code) = oauth2_state
             .pending
-            .store_pending_code(pending, browser_nonce)
+            .store_pending_code(pending, flow_binding.clone())
         else {
             error!("Failed to store pending identity code");
             return Redirect::to("/?error=internal_error").into_response();
         };
-        let display_str = display_info.to_string();
-        let redirect_url = format!(
-            "/#oauth2_code={}&oauth2_display={}",
-            code,
-            urlencoding::encode(&display_str),
-        );
-        Redirect::to(&redirect_url).into_response()
+        match flow_binding {
+            FlowBinding::Cookie { .. } => {
+                let display_str = display_info.to_string();
+                let redirect_url = format!(
+                    "/#oauth2_code={}&oauth2_display={}",
+                    code,
+                    urlencoding::encode(&display_str),
+                );
+                Redirect::to(&redirect_url).into_response()
+            }
+            FlowBinding::Proof { redirect_uri, .. } => {
+                let Some(redirect_url) = append_query_param(&redirect_uri, "handoff_code", &code)
+                else {
+                    error!("Invalid proof-bound redirect URI");
+                    return Redirect::to("/?error=internal_error").into_response();
+                };
+                Redirect::to(&redirect_url).into_response()
+            }
+        }
     }
 }
 
@@ -385,7 +517,7 @@ pub async fn oauth2_exchange_handler(
 
     let payload = match oauth2_state
         .pending
-        .redeem_pending_code(&request.code, &browser_nonce)
+        .redeem_pending_code_cookie(&request.code, &browser_nonce)
     {
         Some(payload) => payload,
         None => {
@@ -423,6 +555,65 @@ pub async fn oauth2_exchange_handler(
             "username": user_info.username,
         }))
         .into_response(),
+    }
+}
+
+/// POST /auth/oauth2/app/exchange
+/// Exchange a proof-bound handoff code for auth session data or identity data.
+pub async fn oauth2_app_exchange_handler(
+    State(oauth2_state): State<OAuth2State>,
+    Json(request): Json<AppExchangeRequest>,
+) -> impl IntoResponse {
+    let Some((payload, binding)) = oauth2_state
+        .pending
+        .redeem_pending_code_proof_with_binding(&request.handoff_code, &request.code_verifier)
+    else {
+        warn!("Invalid or expired handoff_code in app exchange request");
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "Invalid or expired handoff_code"})),
+        )
+            .into_response();
+    };
+
+    match payload {
+        PendingOAuth2Code::AuthSession {
+            auth_token,
+            player_curie,
+            player_flags,
+            client_token,
+            client_id,
+        } => Json(serde_json::json!({
+            "type": "auth_session",
+            "auth_token": auth_token.0,
+            "player": player_curie,
+            "player_flags": player_flags,
+            "client_token": client_token.0,
+            "client_id": client_id.to_string(),
+        }))
+        .into_response(),
+        PendingOAuth2Code::Identity(user_info) => {
+            let Some(identity_code) = oauth2_state
+                .pending
+                .store_pending_code(PendingOAuth2Code::Identity(user_info.clone()), binding)
+            else {
+                error!("Failed to store identity code in app exchange");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "Internal error"})),
+                )
+                    .into_response();
+            };
+            Json(serde_json::json!({
+                "type": "identity",
+                "identity_code": identity_code,
+                "provider": user_info.provider,
+                "email": user_info.email,
+                "name": user_info.name,
+                "username": user_info.username,
+            }))
+            .into_response()
+        }
     }
 }
 
@@ -468,7 +659,7 @@ pub async fn oauth2_account_choice_handler(
     // Redeem the one-time code — must resolve to an Identity variant
     let user_info = match oauth2_state
         .pending
-        .redeem_pending_code(&choice.oauth2_code, &browser_nonce)
+        .redeem_pending_code_cookie(&choice.oauth2_code, &browser_nonce)
     {
         Some(PendingOAuth2Code::Identity(info)) => info,
         Some(_) => {
@@ -694,6 +885,273 @@ pub async fn oauth2_account_choice_handler(
         .into_response()
     } else {
         warn!("OAuth2 account {} failed", choice.mode);
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(OAuth2LoginResponse {
+                success: false,
+                auth_token: None,
+                player: None,
+                player_flags: None,
+                client_token: None,
+                client_id: None,
+                error: Some("Authentication failed".to_string()),
+            }),
+        )
+            .into_response()
+    }
+}
+
+/// POST /auth/oauth2/app/account
+/// Handle proof-bound account choice submission (create new or link existing).
+pub async fn oauth2_app_account_choice_handler(
+    State(oauth2_state): State<OAuth2State>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(choice): Json<AppAccountChoiceRequest>,
+) -> impl IntoResponse {
+    debug!("OAuth2 app account choice: mode={}", choice.mode);
+
+    if !oauth2_state.manager.is_enabled() {
+        warn!("OAuth2 is not enabled");
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "OAuth2 not enabled"})),
+        )
+            .into_response();
+    }
+
+    if choice.mode != "oauth2_create" && choice.mode != "oauth2_connect" {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid mode, must be oauth2_create or oauth2_connect"})),
+        )
+            .into_response();
+    }
+
+    let user_info = match oauth2_state
+        .pending
+        .redeem_pending_code_proof(&choice.identity_code, &choice.code_verifier)
+    {
+        Some(PendingOAuth2Code::Identity(info)) => info,
+        Some(_) => {
+            warn!("Code resolved to wrong type (expected identity)");
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid code type for account choice"})),
+            )
+                .into_response();
+        }
+        None => {
+            warn!("Invalid or expired identity_code in app account choice");
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Invalid or expired identity_code"})),
+            )
+                .into_response();
+        }
+    };
+
+    info!(
+        "Verified OAuth2 identity: provider={}, external_id={}",
+        user_info.provider, user_info.external_id
+    );
+
+    let final_args = if choice.mode == "oauth2_create" {
+        vec![
+            choice.mode.clone(),
+            user_info.provider,
+            user_info.external_id,
+            user_info.email.unwrap_or_default(),
+            user_info.name.unwrap_or_default(),
+            user_info.username.unwrap_or_default(),
+            choice.player_name.clone().unwrap_or_default(),
+        ]
+    } else {
+        vec![
+            choice.mode.clone(),
+            user_info.provider,
+            user_info.external_id,
+            user_info.email.unwrap_or_default(),
+            user_info.name.unwrap_or_default(),
+            user_info.username.unwrap_or_default(),
+            choice.existing_email.clone().unwrap_or_default(),
+            choice.existing_password.clone().unwrap_or_default(),
+        ]
+    };
+
+    let (client_id, rpc_client, client_token) = match oauth2_state
+        .web_host
+        .establish_client_connection(addr)
+        .await
+    {
+        Ok(connection) => connection,
+        Err(e) => {
+            error!("Failed to establish RPC connection: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to establish connection"})),
+            )
+                .into_response();
+        }
+    };
+
+    let login_msg = mk_login_command_msg(
+        &client_token,
+        &oauth2_state.web_host.handler_object,
+        final_args,
+        true,
+        None,
+        None,
+    );
+
+    let reply_bytes = match rpc_client.make_client_rpc_call(client_id, login_msg).await {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            error!("RPC call failed: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "RPC call failed"})),
+            )
+                .into_response();
+        }
+    };
+
+    let reply = match read_reply_result(&reply_bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to parse reply: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to parse reply"})),
+            )
+                .into_response();
+        }
+    };
+
+    let Ok(result) = reply.result() else {
+        error!("Missing result in reply");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Internal error"})),
+        )
+            .into_response();
+    };
+
+    let moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) = result else {
+        error!("Account choice failed");
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(OAuth2LoginResponse {
+                success: false,
+                auth_token: None,
+                player: None,
+                player_flags: None,
+                client_token: None,
+                client_id: None,
+                error: Some("Authentication failed".to_string()),
+            }),
+        )
+            .into_response();
+    };
+
+    let Ok(daemon_reply) = client_success.reply() else {
+        error!("Missing daemon reply");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Internal error"})),
+        )
+            .into_response();
+    };
+
+    let Ok(reply_union) = daemon_reply.reply() else {
+        error!("Missing reply union");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Internal error"})),
+        )
+            .into_response();
+    };
+
+    let moor_rpc::DaemonToClientReplyUnionRef::LoginResult(login_result) = reply_union else {
+        error!("Unexpected reply type from daemon");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Unexpected reply type"})),
+        )
+            .into_response();
+    };
+
+    let Ok(success) = login_result.success() else {
+        error!("Missing success field in login result");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Internal error"})),
+        )
+            .into_response();
+    };
+
+    if success {
+        let Ok(Some(token_ref)) = login_result.auth_token() else {
+            error!("Missing auth_token in login result");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Internal error"})),
+            )
+                .into_response();
+        };
+
+        let Ok(auth_token) = token_ref.token() else {
+            error!("Missing token string");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Internal error"})),
+            )
+                .into_response();
+        };
+
+        let Ok(Some(player_ref)) = login_result.player() else {
+            error!("Missing player in login result");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Internal error"})),
+            )
+                .into_response();
+        };
+
+        let Ok(player_obj) = moor_schema::convert::obj_from_ref(player_ref) else {
+            error!("Failed to decode player");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Internal error"})),
+            )
+                .into_response();
+        };
+
+        let Ok(player_flags) = login_result.player_flags() else {
+            error!("Missing player_flags in login result");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Internal error"})),
+            )
+                .into_response();
+        };
+
+        info!(
+            "OAuth2 app account {} successful (player: {}, flags: {})",
+            choice.mode, player_obj, player_flags
+        );
+
+        Json(OAuth2LoginResponse {
+            success: true,
+            auth_token: Some(auth_token.to_string()),
+            player: Some(ObjectRef::Id(player_obj).to_curie()),
+            player_flags: Some(player_flags),
+            client_token: Some(client_token.0.clone()),
+            client_id: Some(client_id.to_string()),
+            error: None,
+        })
+        .into_response()
+    } else {
+        warn!("OAuth2 app account {} failed", choice.mode);
         (
             StatusCode::UNAUTHORIZED,
             Json(OAuth2LoginResponse {
