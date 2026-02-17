@@ -1630,7 +1630,12 @@ impl TreeTransformer {
                 // An explicit global-declaration.
                 // global x, or global x = y
                 let mut parts = pair.into_inner();
-                let varname = parts.next().unwrap().as_str();
+                let first = parts.next().unwrap();
+                let varname = if first.as_rule() == Rule::global_keyword {
+                    parts.next().unwrap().as_str()
+                } else {
+                    first.as_str()
+                };
                 let id = {
                     let mut names = self.names.borrow_mut();
                     let Some(id) = names.find_or_add_name_global(varname, DeclType::Global) else {
@@ -3756,6 +3761,35 @@ endif
         "#;
         let parse = parse_program(program, CompileOptions::default()).unwrap();
         parse.variables.find_name("lets").expect("lets not found");
+    }
+
+    #[test]
+    fn test_global_prefix_identifier_not_global_decl_regression() {
+        let program = r#"
+        global_salt = 1;
+        return global_salt;
+        "#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+
+        let global_salt = parse
+            .variables
+            .find_name("global_salt")
+            .expect("global_salt not found");
+        assert!(
+            parse.variables.find_name("_salt").is_none(),
+            "_salt should not be introduced by parsing global_salt assignment"
+        );
+
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![
+                StmtNode::Expr(Expr::Assign {
+                    left: Box::new(Id(global_salt)),
+                    right: Box::new(Value(v_int(1))),
+                }),
+                StmtNode::mk_return(Id(global_salt)),
+            ]
+        );
     }
 
     #[test]

@@ -66,6 +66,7 @@ unlabelled_except     = { "(" ~ codes ~ ")" }
 begin_statement       = { begin_keyword ~ statements ~ end_keyword }
 begin_keyword         = @{ ^"begin" ~ !ident_continue }
 end_keyword           = @{ ^"end" ~ !ident_continue }
+global_keyword        = @{ ^"global" ~ !ident_continue }
 
 
 // Function definitions using fn/endfn
@@ -86,7 +87,7 @@ const_assign_scatter = { scatter_assign ~ expr }
 range_comprehension = { "{" ~ expr ~ "for" ~ ident ~ "in" ~ (for_range_clause | for_in_clause) ~ "}" }
 
 // globally scoped (same as default in MOO) adds explicitly to global scope.
-global_assignment = { ^"global" ~ ident ~ (ASSIGN ~ expr)? ~ ";" }
+global_assignment = { global_keyword ~ ident ~ (ASSIGN ~ expr)? ~ ";" }
 
 codes   = { anycode | exprlist }
 anycode = { ^"any" }
