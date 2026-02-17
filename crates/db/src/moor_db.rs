@@ -432,8 +432,13 @@ impl MoorDB {
                                 .ok();
                             continue;
                         }
-                        DbMessage::Commit(CommitSet::CommitReadOnly(combined_caches)) => {
-                            if combined_caches.has_changed() {
+                        DbMessage::Commit(CommitSet::CommitReadOnly {
+                            caches: combined_caches,
+                            snapshot_version,
+                        }) => {
+                            let current_version =
+                                this.commit_version.load(std::sync::atomic::Ordering::Acquire);
+                            if snapshot_version == current_version && combined_caches.has_changed() {
                                 this.caches.store(Arc::new(combined_caches));
                             }
                             // Read-only transactions don't need barrier tracking since we only

@@ -1586,6 +1586,98 @@ mod tests {
     }
 
     #[test]
+    fn test_regression_readonly_cache_cannot_poison_redefined_inherited_property() {
+        let db = test_db();
+
+        let mut tx = db.start_transaction();
+        let parent = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
+        let child = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child"),
+            )
+            .unwrap();
+        tx.define_property(
+            &parent,
+            &parent,
+            Symbol::mk("other_prop"),
+            &SYSTEM_OBJECT,
+            BitEnum::new(),
+            Some(v_int(1)),
+        )
+        .unwrap();
+        let prop_uuid = tx
+            .define_property(
+                &parent,
+                &parent,
+                Symbol::mk("lang_ratio"),
+                &SYSTEM_OBJECT,
+                BitEnum::new(),
+                Some(v_int(120)),
+            )
+            .unwrap();
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+
+        let mut tx_delete = db.start_transaction();
+        tx_delete.delete_property(&parent, prop_uuid).unwrap();
+        assert!(matches!(
+            tx_delete.commit(),
+            Ok(CommitResult::Success { .. })
+        ));
+
+        // Create a read-only transaction from the "property missing" snapshot and warm
+        // its local cache with a negative property lookup for the child.
+        let tx_stale_read = db.start_transaction();
+        let missing = tx_stale_read.resolve_property(&child, Symbol::mk("lang_ratio"));
+        assert_eq!(
+            missing.err().unwrap(),
+            WorldStateError::PropertyNotFound(child, "lang_ratio".to_string())
+        );
+
+        let mut tx_readd = db.start_transaction();
+        tx_readd
+            .define_property(
+                &parent,
+                &parent,
+                Symbol::mk("lang_ratio"),
+                &SYSTEM_OBJECT,
+                BitEnum::new(),
+                Some(v_int(120)),
+            )
+            .unwrap();
+        assert!(matches!(
+            tx_readd.commit(),
+            Ok(CommitResult::Success { .. })
+        ));
+
+        // This read-only commit should not be able to overwrite caches with stale misses.
+        assert!(matches!(
+            tx_stale_read.commit(),
+            Ok(CommitResult::Success { .. })
+        ));
+
+        // Commit a write transaction after the stale read-only commit to force FIFO
+        // processing of all prior commit-channel items before verification.
+        let mut tx_barrier = db.start_transaction();
+        tx_barrier
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
+        assert!(matches!(
+            tx_barrier.commit(),
+            Ok(CommitResult::Success { .. })
+        ));
+
+        let tx_verify = db.start_transaction();
+        let (_, value, _, is_clear) = tx_verify
+            .resolve_property(&child, Symbol::mk("lang_ratio"))
+            .expect("child should resolve inherited property after redefine");
+        assert_eq!(value, v_int(120));
+        assert!(is_clear);
+    }
+
+    #[test]
     fn test_regression_verb_cache_accidental_miss() {
         let db = test_db();
 

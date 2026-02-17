@@ -1312,11 +1312,14 @@ impl WorldStateTransaction {
             if self.verb_resolution_cache.has_changed() || self.prop_resolution_cache.has_changed()
             {
                 self.commit_channel
-                    .send(CommitSet::CommitReadOnly(Caches {
-                        verb_resolution_cache: self.verb_resolution_cache,
-                        prop_resolution_cache: self.prop_resolution_cache,
-                        ancestry_cache: self.ancestry_cache,
-                    }))
+                    .send(CommitSet::CommitReadOnly {
+                        caches: Caches {
+                            verb_resolution_cache: self.verb_resolution_cache,
+                            prop_resolution_cache: self.prop_resolution_cache,
+                            ancestry_cache: self.ancestry_cache,
+                        },
+                        snapshot_version: self.tx.snapshot_version,
+                    })
                     .expect("Unable to send commit request for read-only transaction");
             }
             let result = CommitResult::Success {
