@@ -953,7 +953,11 @@ pub fn moo_frame_execute(
                     }
                 }
             }
-            Op::PutPropAt(offset) => {
+            Op::PutPropAt {
+                offset,
+                jump_if_object,
+            } => {
+                let jump_if_object = *jump_if_object;
                 let offset = offset.0 as usize;
                 let len = f.valstack.len();
                 let rhs_idx = stack_index(len, offset, f.pc);
@@ -1004,9 +1008,13 @@ pub fn moo_frame_execute(
 
                 match update_result {
                     Ok(updated_base) => {
+                        let should_jump = base.as_object().is_some();
                         f.valstack[base_idx] = updated_base;
                         let mut to_remove = vec![rhs_idx, prop_idx];
                         remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
+                        if should_jump {
+                            f.jump(&jump_if_object);
+                        }
                     }
                     Err(e) => {
                         let mut to_remove = vec![rhs_idx, prop_idx, base_idx];

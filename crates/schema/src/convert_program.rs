@@ -48,7 +48,7 @@ use planus::{ReadAsRoot, WriteAsOffset};
 use std::collections::HashSet;
 use triomphe::Arc;
 
-const STORED_PROGRAM_VERSION: u16 = 2;
+const STORED_PROGRAM_VERSION: u16 = 3;
 
 // Helper to encode a Name into FlatBuffer StoredName
 fn encode_name(name: &Name) -> fb::StoredName {

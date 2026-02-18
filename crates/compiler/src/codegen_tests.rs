@@ -1157,6 +1157,10 @@ mod tests {
     fn test_indexed_assignment() {
         let program = r#"this.stack[5] = 5;"#;
         let binary = compile(program, CompileOptions::default()).unwrap();
+        let jump_if_object = match &binary.main_vector()[7] {
+            PutPropAt { jump_if_object, .. } => *jump_if_object,
+            _ => panic!("expected PutPropAt at opcode index 7"),
+        };
 
         /*
             PUSH this
@@ -1181,7 +1185,10 @@ mod tests {
                 ImmInt(5),
                 Dup,
                 IndexSetAt(Offset(1)),
-                PutPropAt(Offset(1)),
+                PutPropAt {
+                    offset: Offset(1),
+                    jump_if_object,
+                },
                 Swap,
                 Put(binary.find_var("this")),
                 Pop,
@@ -1189,6 +1196,26 @@ mod tests {
                 Done
             ]
         )
+    }
+
+    #[test]
+    fn test_nested_property_assignment_emits_short_circuit_jump() {
+        let program = r#"this.location.inventory = setremove(this.location.inventory, this);"#;
+        let binary = compile(program, CompileOptions::default()).unwrap();
+        let mut saw_short_circuit = false;
+        for op in binary.main_vector() {
+            if let PutPropAt {
+                jump_if_object: _, ..
+            } = op
+            {
+                saw_short_circuit = true;
+                break;
+            }
+        }
+        assert!(
+            saw_short_circuit,
+            "expected PutPropAt with jump_if_object for nested property assignment"
+        );
     }
 
     #[test]

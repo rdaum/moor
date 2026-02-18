@@ -114,7 +114,10 @@ pub enum Op {
     PushTemp,
     Put(Name),
     PutProp,
-    PutPropAt(Offset),
+    PutPropAt {
+        offset: Offset,
+        jump_if_object: Label,
+    },
     PutTemp,
     RangeRef,
     RangeSet,

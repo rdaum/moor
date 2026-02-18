@@ -700,6 +700,38 @@ mod tests {
     }
 
     #[test]
+    fn test_nested_builtin_location_property_assignment() {
+        assert_eq!(
+            run_moo(
+                r#"
+                let loc = create(#-1);
+                let o = create(#-1);
+                add_property(loc, "inventory", {o}, {player, "rw"});
+                move(o, loc);
+                o.location.inventory = setremove(o.location.inventory, o);
+                return loc.inventory;
+                "#
+            ),
+            Ok(v_empty_list())
+        );
+    }
+
+    #[test]
+    fn test_flyweight_assignment_through_object_property() {
+        assert_eq!(
+            run_moo(
+                r#"
+                let o = create(#-1);
+                add_property(o, "test_flyweight", <#1, .a = 5>, {player, "rw"});
+                o.test_flyweight.a = 3;
+                return o.test_flyweight.a;
+                "#
+            ),
+            Ok(v_int(3))
+        );
+    }
+
+    #[test]
     fn test_flyweight_builtins() {
         assert_eq!(
             run_moo(

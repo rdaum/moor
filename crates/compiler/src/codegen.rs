@@ -259,6 +259,25 @@ impl CodegenState {
         Offset(fv as u16)
     }
 
+    fn lvalue_stack_footprint(expr: &Expr, indexed_above: bool) -> usize {
+        match expr {
+            Expr::Range { base, .. } => Self::lvalue_stack_footprint(base.as_ref(), true) + 2,
+            Expr::Index(lhs, ..) => {
+                Self::lvalue_stack_footprint(lhs.as_ref(), true) + 1 + usize::from(indexed_above)
+            }
+            Expr::Id(..) => usize::from(indexed_above),
+            Expr::Prop { location, .. } => {
+                let loc = if Self::is_assignable_expr(location.as_ref()) {
+                    Self::lvalue_stack_footprint(location.as_ref(), true)
+                } else {
+                    1
+                };
+                loc + 1 + usize::from(indexed_above)
+            }
+            _ => 0,
+        }
+    }
+
     fn generate_assign(&mut self, left: &Expr, right: &Expr) -> Result<(), CompileError> {
         self.push_lvalue(left, false)?;
         self.generate_expr(right)?;
@@ -272,6 +291,7 @@ impl CodegenState {
         }
         let mut used_set = false;
         let mut handled_stack = false;
+        let mut prop_short_circuit_blocks: Vec<(Label, usize, usize)> = vec![];
         let mut e = left;
         loop {
             // Figure out the form of assignment, handle correctly, then walk through
@@ -311,12 +331,32 @@ impl CodegenState {
                     location,
                     property: _,
                 } => {
-                    self.emit(Op::PutPropAt(Offset(1)));
+                    let needs_prop_short_circuit = matches!(location.as_ref(), Expr::Prop { .. });
+                    let jump_if_object = self.make_jump_label(None);
+                    self.emit(Op::PutPropAt {
+                        offset: Offset(1),
+                        jump_if_object,
+                    });
                     self.pop_stack(2);
                     used_set = true;
                     if Self::is_assignable_expr(location.as_ref()) {
+                        if !needs_prop_short_circuit {
+                            self.commit_jump_label(jump_if_object);
+                        }
+                        if needs_prop_short_circuit {
+                            let cleanup_slots =
+                                Self::lvalue_stack_footprint(location.as_ref(), true);
+                            prop_short_circuit_blocks.push((
+                                jump_if_object,
+                                cleanup_slots,
+                                self.cur_stack,
+                            ));
+                        }
                         e = location;
                         continue;
+                    }
+                    if !needs_prop_short_circuit {
+                        self.commit_jump_label(jump_if_object);
                     }
                     break;
                 }
@@ -329,6 +369,26 @@ impl CodegenState {
             self.emit(Op::Swap);
             self.emit(Op::Pop);
             self.pop_stack(1);
+        }
+
+        if !prop_short_circuit_blocks.is_empty() {
+            let done_label = self.make_jump_label(None);
+            self.emit(Op::Jump { label: done_label });
+            let normal_path_stack = self.cur_stack;
+            for (label, cleanup_slots, entry_stack) in prop_short_circuit_blocks {
+                self.commit_jump_label(label);
+                self.cur_stack = entry_stack;
+                self.emit(Op::PutTemp);
+                for _ in 0..=cleanup_slots {
+                    self.emit(Op::Pop);
+                    self.pop_stack(1);
+                }
+                self.emit(Op::PushTemp);
+                self.push_stack(1);
+                self.emit(Op::Jump { label: done_label });
+                self.cur_stack = normal_path_stack;
+            }
+            self.commit_jump_label(done_label);
         }
 
         Ok(())

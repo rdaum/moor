@@ -410,9 +410,13 @@ impl OpStream {
             Op::GetProp => self.words.push(OP_GET_PROP),
             Op::PushGetProp => self.words.push(OP_PUSH_GET_PROP),
             Op::PutProp => self.words.push(OP_PUT_PROP),
-            Op::PutPropAt(offset) => {
+            Op::PutPropAt {
+                offset,
+                jump_if_object,
+            } => {
                 self.words.push(OP_PUT_PROP_AT);
                 self.words.push(offset.0);
+                self.words.push(jump_if_object.0);
             }
 
             Op::Jump { label } => {
@@ -759,7 +763,10 @@ impl OpStream {
             OP_GET_PROP => Ok(Op::GetProp),
             OP_PUSH_GET_PROP => Ok(Op::PushGetProp),
             OP_PUT_PROP => Ok(Op::PutProp),
-            OP_PUT_PROP_AT => Ok(Op::PutPropAt(Offset(self.read_u16(pc)?))),
+            OP_PUT_PROP_AT => Ok(Op::PutPropAt {
+                offset: Offset(self.read_u16(pc)?),
+                jump_if_object: Label(self.read_u16(pc)?),
+            }),
 
             OP_JUMP => Ok(Op::Jump {
                 label: Label(self.read_u16(pc)?),
@@ -1246,7 +1253,14 @@ mod tests {
             // Indexed ops
             Op::IndexSetAt(Offset(1)),
             Op::RangeSetAt(Offset(1)),
-            Op::PutPropAt(Offset(1)),
+            Op::PutPropAt {
+                offset: Offset(1),
+                jump_if_object: Label(76),
+            },
+            Op::PutPropAt {
+                offset: Offset(2),
+                jump_if_object: Label(77),
+            },
             // Control flow
             Op::Jump { label: Label(100) },
             Op::Return,

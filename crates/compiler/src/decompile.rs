@@ -1134,7 +1134,10 @@ impl Decompile {
                 };
                 self.push_expr(assign);
             }
-            Op::PutPropAt(offset) => {
+            Op::PutPropAt {
+                offset,
+                jump_if_object: _,
+            } => {
                 let offset = offset.0 as usize;
                 let location = self.remove_expr_at(offset + 2)?;
                 let property = self.remove_expr_at(offset + 1)?;
