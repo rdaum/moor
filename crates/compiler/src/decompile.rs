@@ -96,7 +96,12 @@ impl Decompile {
     fn pop_expr(&mut self) -> Result<Expr, DecompileError> {
         self.expr_stack
             .pop_front()
-            .ok_or_else(|| MalformedProgram("expected expression on stack".to_string()))
+            .ok_or_else(|| {
+                MalformedProgram(format!(
+                    "expected expression on stack at decompile position {}",
+                    self.position
+                ))
+            })
     }
     fn push_expr(&mut self, expr: Expr) {
         self.expr_stack.push_front(expr);
@@ -104,7 +109,12 @@ impl Decompile {
     fn remove_expr_at(&mut self, depth: usize) -> Result<Expr, DecompileError> {
         self.expr_stack
             .remove(depth)
-            .ok_or_else(|| MalformedProgram("expected expression on stack".to_string()))
+            .ok_or_else(|| {
+                MalformedProgram(format!(
+                    "expected expression on stack at decompile position {}, depth {}",
+                    self.position, depth
+                ))
+            })
     }
 
     fn find_jump(&self, label: &Label) -> Result<JumpLabel, DecompileError> {
@@ -671,6 +681,15 @@ impl Decompile {
                         break;
                     }
                 }
+
+                // Compiler-generated short-circuit cleanup block for nested property assignment:
+                // after assignment epilogue, jump over synthetic PutTemp/Pop cleanup ops.
+                if self.position < opcode_vector_len
+                    && let Op::Jump { label } = self.opcode_vector()[self.position]
+                {
+                    let jump = self.find_jump(&label)?;
+                    self.position = jump.position.0 as usize;
+                }
             }
             Op::RangeSet => {
                 let rval = self.pop_expr()?;
@@ -733,6 +752,15 @@ impl Decompile {
                         }
                         break;
                     }
+                }
+
+                // Nested property assignment emits a synthetic cleanup block guarded by a jump.
+                // Skip it so decompilation doesn't treat those ops as user source.
+                if self.position < opcode_vector_len
+                    && let Op::Jump { label } = self.opcode_vector()[self.position]
+                {
+                    let jump = self.find_jump(&label)?;
+                    self.position = jump.position.0 as usize;
                 }
             }
             Op::FuncCall { id } => {
@@ -1176,6 +1204,13 @@ impl Decompile {
                         }
                         break;
                     }
+                }
+
+                if self.position < opcode_vector_len
+                    && let Op::Jump { label } = self.opcode_vector()[self.position]
+                {
+                    let jump = self.find_jump(&label)?;
+                    self.position = jump.position.0 as usize;
                 }
             }
             Op::Jump { .. } | Op::PushTemp => {
@@ -1882,6 +1917,25 @@ return 0 && "Automatically Added Return";
         );
         let binary = compiled.unwrap();
         let decompiled = program_to_tree(&binary);
+        assert!(
+            decompiled.is_ok(),
+            "Decompile should succeed: {:?}",
+            decompiled.err()
+        );
+    }
+
+    #[test]
+    fn regression_server_started_decompile() {
+        let program = r#"
+            callers() && !caller_perms().wizard && return E_PERM;
+            server_log("Core starting...");
+            player_class = $login.default_player_class;
+            $login.player_setup_capability = $player:issue_capability(player_class, {'create_child, 'make_player}, 0, 0);
+            server_log("Issued player creation capability to $login");
+            $scheduler:resume_if_needed();
+        "#;
+        let compiled = compile(program, CompileOptions::default()).unwrap();
+        let decompiled = program_to_tree(&compiled);
         assert!(
             decompiled.is_ok(),
             "Decompile should succeed: {:?}",
