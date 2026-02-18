@@ -260,6 +260,7 @@ impl EventPersistence {
         }
     }
 
+    #[allow(dead_code)]
     fn write_presentation_state(
         &mut self,
         player_presentations: &PlayerPresentations,
