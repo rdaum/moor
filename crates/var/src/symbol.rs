@@ -370,6 +370,13 @@ impl Symbol {
     /// This is more efficient than `as_string()` when you need to share
     /// the string data or when the string will be cloned multiple times.
     pub fn as_arc_str(&self) -> ArcStr {
+        self.as_arc_str_ref().clone()
+    }
+
+    /// Get the original string as a borrowed `ArcStr` from the global interner.
+    ///
+    /// This does not clone or bump any reference counts.
+    pub fn as_arc_str_ref(&self) -> &ArcStr {
         GLOBAL_INTERNER
             .get_string_by_repr_id(self.repr_id)
             .unwrap_or_else(|| {
@@ -378,7 +385,11 @@ impl Symbol {
                     self.repr_id
                 )
             })
-            .clone()
+    }
+
+    /// Get the original string as a borrowed `&str` from the global interner.
+    pub fn as_str(&self) -> &str {
+        self.as_arc_str_ref().as_str()
     }
 
     /// Get the compare_id for this symbol.

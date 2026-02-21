@@ -23,8 +23,8 @@ use moor_common::{
 };
 use moor_compiler::{BuiltinId, Program, ScatterLabel};
 use moor_var::{
-    Error, Lambda, List, NOTHING, Obj, Symbol, Var, v_arc_str, v_empty_list, v_empty_str, v_list,
-    v_obj, v_str,
+    Error, Lambda, List, NOTHING, Obj, Symbol, Var, v_empty_list, v_empty_str, v_list, v_obj,
+    v_str, v_symbol_str,
 };
 
 use crate::vm::{moo_frame::MooStackFrame, scatter_assign::scatter_assign};
@@ -238,7 +238,7 @@ impl Activation {
                 v_obj(player),
                 this.clone(),
                 caller,
-                v_arc_str(verb_name.as_arc_str()),
+                v_symbol_str(verb_name),
                 args.clone().into(),
                 source,
             )
@@ -249,7 +249,7 @@ impl Activation {
                 v_obj(player),
                 this.clone(),
                 caller,
-                v_arc_str(verb_name.as_arc_str()),
+                v_symbol_str(verb_name),
                 args.clone().into(),
                 argstr,
             )

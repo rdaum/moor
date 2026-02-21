@@ -45,6 +45,7 @@ const TAG_OBJ: u8 = 5;
 const TAG_SYM: u8 = 6;
 const TAG_EMPTY_STR: u8 = 7;
 const TAG_EMPTY_LIST: u8 = 8;
+const TAG_SYMBOL_STR: u8 = 9;
 
 const COMPLEX_FLAG: u8 = 0x80;
 const TAG_STR: u8 = COMPLEX_FLAG | 1;
@@ -155,7 +156,9 @@ impl Var {
     /// Returns false for non-string types.
     #[inline(always)]
     pub fn str_is_ascii(&self) -> bool {
-        self.tag == TAG_EMPTY_STR || (self.tag == TAG_STR && self.meta[2] == 1)
+        self.tag == TAG_EMPTY_STR
+            || self.tag == TAG_SYMBOL_STR
+            || (self.tag == TAG_STR && self.meta[2] == 1)
     }
 
     // === String search and replace operations with cached ASCII optimization ===
@@ -329,6 +332,29 @@ impl Var {
     /// Create a Var from a Str type directly
     pub fn from_str_type(s: string::Str) -> Self {
         Self::from_str_type_with_hint(s, OP_HINT_NONE)
+    }
+
+    /// Create a string-typed Var from an interned symbol.
+    /// This avoids ArcStr clone/drop traffic on Var clone/drop.
+    pub fn from_symbol_str(symbol: Symbol) -> Self {
+        Self::from_symbol_str_with_hint(symbol, OP_HINT_NONE)
+    }
+
+    /// Create a symbol-backed string Var with an operation hint.
+    pub fn from_symbol_str_with_hint(symbol: Symbol, hint: u8) -> Self {
+        let str_ref = symbol.as_str();
+        if str_ref.is_empty() {
+            return Self::mk_empty_str_with_hint(hint);
+        }
+        let byte_len = str_ref.len();
+        let char_len = str_ref.chars().count();
+        // SAFETY: Symbol is repr(C) with two u32 fields, exactly 8 bytes.
+        let data: u64 = unsafe { std::mem::transmute(symbol) };
+        Self {
+            tag: TAG_SYMBOL_STR,
+            meta: Self::meta_with_str_info(char_len, byte_len, hint),
+            data,
+        }
     }
 
     /// Create a Var from a Str type with an operation hint
@@ -507,6 +533,7 @@ impl Var {
             }
             TAG_EMPTY_STR => Variant::Str(&*EMPTY_STR),
             TAG_EMPTY_LIST => Variant::List(&*EMPTY_LIST),
+            TAG_SYMBOL_STR => Variant::Str(self.as_str().unwrap()),
             // Str, List, Map, Lambda: data contains transmuted value, reinterpret &data as &Type
             TAG_STR => Variant::Str(unsafe { &*(&self.data as *const u64 as *const string::Str) }),
             TAG_LIST => Variant::List(unsafe { &*(&self.data as *const u64 as *const List) }),
@@ -637,6 +664,12 @@ impl Var {
         match self.tag {
             TAG_STR => Some(unsafe { &*(&self.data as *const u64 as *const string::Str) }),
             TAG_EMPTY_STR => Some(&*EMPTY_STR),
+            TAG_SYMBOL_STR => {
+                let sym: Symbol = unsafe { std::mem::transmute(self.data) };
+                let arc_ref = sym.as_arc_str_ref();
+                // SAFETY: Str is repr(transparent) over ArcStr.
+                Some(unsafe { &*(arc_ref as *const arcstr::ArcStr as *const string::Str) })
+            }
             _ => None,
         }
     }
@@ -713,7 +746,7 @@ impl Var {
             TAG_FLOAT => VarType::TYPE_FLOAT,
             TAG_OBJ => VarType::TYPE_OBJ,
             TAG_SYM => VarType::TYPE_SYMBOL,
-            TAG_STR | TAG_EMPTY_STR => VarType::TYPE_STR,
+            TAG_STR | TAG_EMPTY_STR | TAG_SYMBOL_STR => VarType::TYPE_STR,
             TAG_LIST | TAG_EMPTY_LIST => VarType::TYPE_LIST,
             TAG_MAP => VarType::TYPE_MAP,
             TAG_ERR => VarType::TYPE_ERR,
@@ -749,6 +782,7 @@ impl Var {
             // Complex types - need to access the data
             TAG_EMPTY_STR => false,
             TAG_EMPTY_LIST => false,
+            TAG_SYMBOL_STR => !self.as_str().unwrap().is_empty(),
             TAG_STR => !self.as_str().unwrap().is_empty(),
             TAG_LIST => !self.as_list().unwrap().is_empty(),
             TAG_MAP => !self.as_map().unwrap().is_empty(),
@@ -761,7 +795,7 @@ impl Var {
     pub fn type_class(&self) -> TypeClass<'_> {
         match self.tag {
             TAG_LIST | TAG_EMPTY_LIST => TypeClass::Sequence(self.as_list().unwrap()),
-            TAG_STR | TAG_EMPTY_STR => TypeClass::Sequence(self.as_str().unwrap()),
+            TAG_STR | TAG_EMPTY_STR | TAG_SYMBOL_STR => TypeClass::Sequence(self.as_str().unwrap()),
             TAG_BINARY => TypeClass::Sequence(self.as_binary().unwrap()),
             TAG_MAP => TypeClass::Associative(self.as_map().unwrap()),
             _ => TypeClass::Scalar,
@@ -771,7 +805,7 @@ impl Var {
     pub fn is_sequence(&self) -> bool {
         matches!(
             self.tag,
-            TAG_LIST | TAG_EMPTY_LIST | TAG_STR | TAG_EMPTY_STR | TAG_BINARY
+            TAG_LIST | TAG_EMPTY_LIST | TAG_STR | TAG_EMPTY_STR | TAG_SYMBOL_STR | TAG_BINARY
         )
     }
 
@@ -784,7 +818,7 @@ impl Var {
     }
 
     pub fn is_string(&self) -> bool {
-        self.tag == TAG_STR || self.tag == TAG_EMPTY_STR
+        self.tag == TAG_STR || self.tag == TAG_EMPTY_STR || self.tag == TAG_SYMBOL_STR
     }
 
     // === Collection operations ===
@@ -834,7 +868,7 @@ impl Var {
         // Dispatch directly on tag - we already know it's not scalar
         match self.tag {
             TAG_LIST | TAG_EMPTY_LIST => self.as_list().unwrap().index(idx),
-            TAG_STR | TAG_EMPTY_STR => self.as_str().unwrap().index(idx),
+            TAG_STR | TAG_EMPTY_STR | TAG_SYMBOL_STR => self.as_str().unwrap().index(idx),
             TAG_BINARY => self.as_binary().unwrap().index(idx),
             TAG_MAP => Ok(self.as_map().unwrap().index(idx)?.1),
             _ => unreachable!(),
@@ -1033,7 +1067,7 @@ impl Var {
 
     pub fn contains(&self, value: &Var, case_sensitive: bool) -> Result<Var, Error> {
         // Fast path for strings: use str_find with cached ASCII flag
-        if self.tag == TAG_STR || self.tag == TAG_EMPTY_STR {
+        if self.tag == TAG_STR || self.tag == TAG_EMPTY_STR || self.tag == TAG_SYMBOL_STR {
             if value.as_str().is_none() {
                 return Err(E_TYPE.with_msg(|| {
                     format!(
@@ -1071,7 +1105,7 @@ impl Var {
         index_mode: IndexMode,
     ) -> Result<Var, Error> {
         // Fast path for strings: use str_find with cached ASCII flag
-        if self.tag == TAG_STR || self.tag == TAG_EMPTY_STR {
+        if self.tag == TAG_STR || self.tag == TAG_EMPTY_STR || self.tag == TAG_SYMBOL_STR {
             if value.as_str().is_none() {
                 return Err(E_TYPE.with_msg(|| {
                     format!(
@@ -1410,8 +1444,8 @@ impl Hash for Var {
 impl PartialEq for Var {
     fn eq(&self, other: &Self) -> bool {
         if self.tag != other.tag {
-            let self_is_str = matches!(self.tag, TAG_STR | TAG_EMPTY_STR);
-            let other_is_str = matches!(other.tag, TAG_STR | TAG_EMPTY_STR);
+            let self_is_str = matches!(self.tag, TAG_STR | TAG_EMPTY_STR | TAG_SYMBOL_STR);
+            let other_is_str = matches!(other.tag, TAG_STR | TAG_EMPTY_STR | TAG_SYMBOL_STR);
             if self_is_str && other_is_str {
                 return self.as_str().unwrap() == other.as_str().unwrap();
             }
@@ -1435,6 +1469,7 @@ impl PartialEq for Var {
             }
             // Complex types - delegate to their PartialEq
             TAG_EMPTY_STR => true,
+            TAG_SYMBOL_STR => self.as_str().unwrap() == other.as_str().unwrap(),
             TAG_STR => self.as_str().unwrap() == other.as_str().unwrap(),
             TAG_EMPTY_LIST => true,
             TAG_LIST => self.as_list().unwrap() == other.as_list().unwrap(),
@@ -1537,7 +1572,7 @@ impl ByteSized for Var {
     fn size_bytes(&self) -> usize {
         match self.variant() {
             Variant::List(l) => l.iter().map(|e| e.size_bytes()).sum::<usize>(),
-            Variant::Str(s) => s.as_arc_str().len(),
+            Variant::Str(s) => s.as_str().len(),
             Variant::Map(m) => m
                 .iter()
                 .map(|(k, v)| k.size_bytes() + v.size_bytes())
@@ -1630,6 +1665,10 @@ pub fn v_string(s: String) -> Var {
 pub fn v_arc_str(s: arcstr::ArcStr) -> Var {
     let str_val = crate::string::Str::mk_arc_str(s);
     Var::from_str_type(str_val)
+}
+
+pub fn v_symbol_str(symbol: Symbol) -> Var {
+    Var::from_symbol_str(symbol)
 }
 
 pub fn v_list(values: &[Var]) -> Var {

@@ -41,7 +41,7 @@ pub use variant::{
     OP_HINT_MAP_INSERT, OP_HINT_NONE, OP_HINT_STR_APPEND, Var, Variant, v_arc_str, v_binary,
     v_bool, v_bool_int, v_empty_list, v_empty_map, v_empty_str, v_err, v_error, v_float,
     v_flyweight, v_int, v_list, v_list_iter, v_map, v_map_iter, v_none, v_nothing, v_obj, v_objid,
-    v_str, v_string, v_sym,
+    v_str, v_string, v_sym, v_symbol_str,
 };
 
 pub use encode::{ByteSized, DecodingError, EncodingError};
