@@ -38,7 +38,9 @@ use moor_kernel::{
 };
 use moor_model_checker::bench_common::{clear_screen, setup_db_path};
 use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
-use moor_var::{List, NOTHING, Obj, Symbol, Variant, program::ProgramType, v_int, v_obj};
+use moor_var::{
+    List, NOTHING, Obj, Symbol, Variant, program::ProgramType, v_empty_str, v_int, v_obj,
+};
 use tabled::{Table, Tabled};
 use tracing::info;
 
@@ -238,7 +240,7 @@ async fn run_workload(
             &ObjectRef::Id(player),
             Symbol::mk("opcode_test"),
             List::mk_list(&[]),
-            "".to_string(),
+            v_empty_str(),
             &player,
             session.clone(),
         )?;
@@ -304,7 +306,7 @@ async fn run_workload(
             &ObjectRef::Id(player),
             Symbol::mk("opcode_test"),
             List::mk_list(&[]),
-            "".to_string(),
+            v_empty_str(),
             &player,
             session.clone(),
         )?;

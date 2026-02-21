@@ -94,27 +94,23 @@ impl Decompile {
         Ok(op)
     }
     fn pop_expr(&mut self) -> Result<Expr, DecompileError> {
-        self.expr_stack
-            .pop_front()
-            .ok_or_else(|| {
-                MalformedProgram(format!(
-                    "expected expression on stack at decompile position {}",
-                    self.position
-                ))
-            })
+        self.expr_stack.pop_front().ok_or_else(|| {
+            MalformedProgram(format!(
+                "expected expression on stack at decompile position {}",
+                self.position
+            ))
+        })
     }
     fn push_expr(&mut self, expr: Expr) {
         self.expr_stack.push_front(expr);
     }
     fn remove_expr_at(&mut self, depth: usize) -> Result<Expr, DecompileError> {
-        self.expr_stack
-            .remove(depth)
-            .ok_or_else(|| {
-                MalformedProgram(format!(
-                    "expected expression on stack at decompile position {}, depth {}",
-                    self.position, depth
-                ))
-            })
+        self.expr_stack.remove(depth).ok_or_else(|| {
+            MalformedProgram(format!(
+                "expected expression on stack at decompile position {}, depth {}",
+                self.position, depth
+            ))
+        })
     }
 
     fn find_jump(&self, label: &Label) -> Result<JumpLabel, DecompileError> {

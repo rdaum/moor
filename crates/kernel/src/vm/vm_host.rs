@@ -193,7 +193,7 @@ impl VmHost {
             args,
             caller,
             argstr,
-            &command,
+            command,
             program,
         );
         self.running = true;
@@ -376,7 +376,7 @@ impl VmHost {
                         exec_request.args,
                         exec_request.caller,
                         exec_request.argstr,
-                        &exec_request.command,
+                        exec_request.command,
                         exec_request.program,
                     );
                     return ContinueOk;

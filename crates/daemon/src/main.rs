@@ -50,7 +50,7 @@ use moor_kernel::{
 };
 use moor_objdef::ObjectDefinitionLoader;
 use moor_textdump::{TextdumpImportOptions, textdump_load};
-use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
+use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, v_empty_str};
 use rand::Rng;
 use rpc_common::load_keypair;
 use sha2::{Digest, Sha256};
@@ -330,7 +330,7 @@ fn invoke_server_started_hook(
         &ObjectRef::Id(SYSTEM_OBJECT),
         server_started_verb,
         List::mk_list(&[]),
-        String::new(),
+        v_empty_str(),
         &SYSTEM_OBJECT,
         session,
     ) else {

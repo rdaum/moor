@@ -344,7 +344,7 @@ impl VMExecState {
         args: List,
         caller: Var,
         argstr: Var,
-        command: &ParsedCommand,
+        mut command: ParsedCommand,
         program: ProgramType,
     ) {
         // Initial command activation - no parent to inherit from
@@ -362,32 +362,25 @@ impl VMExecState {
         );
 
         // Set parsing variables from the parsed command
-        a.frame
-            .set_global_variable(GlobalName::argstr, v_string(command.argstr.clone()));
+        a.frame.set_global_variable(
+            GlobalName::argstr,
+            v_string(std::mem::take(&mut command.argstr)),
+        );
         a.frame
             .set_global_variable(GlobalName::dobj, v_obj(command.dobj.unwrap_or(NOTHING)));
         a.frame.set_global_variable(
             GlobalName::dobjstr,
-            command
-                .dobjstr
-                .as_ref()
-                .map_or_else(v_empty_str, |s| v_string(s.clone())),
+            command.dobjstr.take().map_or_else(v_empty_str, v_string),
         );
         a.frame.set_global_variable(
             GlobalName::prepstr,
-            command
-                .prepstr
-                .as_ref()
-                .map_or_else(v_empty_str, |s| v_string(s.clone())),
+            command.prepstr.take().map_or_else(v_empty_str, v_string),
         );
         a.frame
             .set_global_variable(GlobalName::iobj, v_obj(command.iobj.unwrap_or(NOTHING)));
         a.frame.set_global_variable(
             GlobalName::iobjstr,
-            command
-                .iobjstr
-                .as_ref()
-                .map_or_else(v_empty_str, |s| v_string(s.clone())),
+            command.iobjstr.take().map_or_else(v_empty_str, v_string),
         );
 
         self.stack.push(a);

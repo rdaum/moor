@@ -19,7 +19,7 @@ use moor_common::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
 use moor_common::tasks::{SchedulerError, SchedulerError::CompilationError, Session};
 use moor_common::util::PerfTimerGuard;
 use moor_compiler::{Program, compile};
-use moor_var::{List, Obj, Symbol, Var, v_string};
+use moor_var::{List, Obj, Symbol, Var};
 
 use crate::tasks::world_state_action::{
     WorldStateAction, WorldStateRequest, WorldStateResponse, WorldStateResult,
@@ -86,7 +86,7 @@ impl SchedulerClient {
         vloc: &ObjectRef,
         verb: Symbol,
         args: List,
-        argstr: String,
+        argstr: Var,
         perms: &Obj,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
@@ -99,7 +99,7 @@ impl SchedulerClient {
                 vloc: vloc.clone(),
                 verb,
                 args,
-                argstr: v_string(argstr),
+                argstr,
                 perms: *perms,
                 session,
                 reply,

@@ -19,7 +19,7 @@ use moor_schema::{
     rpc as moor_rpc,
     rpc::DaemonToClientReply,
 };
-use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var, Variant, v_str};
+use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var, Variant, v_str, v_string};
 use rpc_common::{
     AuthToken, ClientToken, MOOR_AUTH_TOKEN_FOOTER, MOOR_SESSION_TOKEN_FOOTER, RpcErr,
     RpcMessageError, auth_token_from_ref, client_token_from_ref, obj_fb,
@@ -171,7 +171,7 @@ impl RpcMessageHandler {
             &ObjectRef::Id(*handler_object),
             *crate::rpc::message_handler::DO_LOGIN_COMMAND,
             args.iter().map(|s| v_str(s)).collect(),
-            args.join(" "),
+            v_string(args.join(" ")),
             &SYSTEM_OBJECT,
             session,
         ) {

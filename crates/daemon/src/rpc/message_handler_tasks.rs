@@ -22,7 +22,7 @@ use eyre::{Context, Error};
 use moor_common::model::ObjectRef;
 use moor_kernel::{SchedulerClient, tasks::TaskNotification};
 use moor_schema::{convert::var_to_flatbuffer, rpc as moor_rpc};
-use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, Variant, v_obj};
+use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, Variant, v_empty_str, v_obj};
 use rpc_common::{RpcMessageError, scheduler_error_to_flatbuffer_struct};
 use std::sync::Arc;
 use tracing::{debug, error, warn};
@@ -59,7 +59,7 @@ impl RpcMessageHandler {
                 &ObjectRef::Id(*handler_object),
                 connected_verb,
                 List::mk_list(&[v_obj(*player)]),
-                "".to_string(),
+                v_empty_str(),
                 &SYSTEM_OBJECT,
                 session,
             )
@@ -88,7 +88,7 @@ impl RpcMessageHandler {
                 &ObjectRef::Id(*handler_object),
                 *USER_DISCONNECTED_SYM,
                 List::mk_list(&[v_obj(*player)]),
-                "".to_string(),
+                v_empty_str(),
                 &SYSTEM_OBJECT,
                 session,
             )
@@ -338,8 +338,8 @@ impl RpcMessageHandler {
             player,
             object,
             verb,
-            List::mk_list(&args),
-            "".to_string(),
+            List::from_iter(args),
+            v_empty_str(),
             &SYSTEM_OBJECT,
             session,
         ) {

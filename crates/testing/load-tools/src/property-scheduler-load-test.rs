@@ -41,7 +41,7 @@ use moor_kernel::{
 };
 use moor_model_checker::bench_common::{calculate_percentiles, clear_screen, setup_db_path};
 use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
-use moor_var::{List, NOTHING, Obj, Symbol, program::ProgramType, v_int, v_obj};
+use moor_var::{List, NOTHING, Obj, Symbol, program::ProgramType, v_empty_str, v_int, v_obj};
 use tabled::{Table, Tabled};
 use tracing::info;
 
@@ -336,7 +336,7 @@ async fn workload(
             &ObjectRef::Id(player),
             Symbol::mk("prop_test"),
             List::mk_list(&[]),
-            "".to_string(),
+            v_empty_str(),
             &player,
             session.clone(),
         )?;
@@ -386,7 +386,7 @@ async fn continuous_workload(
             &ObjectRef::Id(player),
             Symbol::mk("prop_test"),
             List::mk_list(&[]),
-            "".to_string(),
+            v_empty_str(),
             &player,
             session.clone(),
         )?;

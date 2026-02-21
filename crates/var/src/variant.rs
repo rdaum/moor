@@ -43,6 +43,8 @@ const TAG_INT: u8 = 3;
 const TAG_FLOAT: u8 = 4;
 const TAG_OBJ: u8 = 5;
 const TAG_SYM: u8 = 6;
+const TAG_EMPTY_STR: u8 = 7;
+const TAG_EMPTY_LIST: u8 = 8;
 
 const COMPLEX_FLAG: u8 = 0x80;
 const TAG_STR: u8 = COMPLEX_FLAG | 1;
@@ -62,8 +64,17 @@ pub const OP_HINT_FLYWEIGHT_ADD_SLOT: u8 = 3;
 pub const OP_HINT_FLYWEIGHT_APPEND_CONTENTS: u8 = 4;
 pub const OP_HINT_STR_APPEND: u8 = 5;
 
+/// Borrowed empty string storage for TAG_EMPTY_STR accessors.
+static EMPTY_STR: Lazy<Str> = Lazy::new(|| Str::mk_str(""));
+
+/// Borrowed empty list storage for TAG_EMPTY_LIST accessors.
+static EMPTY_LIST: Lazy<List> = Lazy::new(|| List::mk_list(&[]));
+
 /// Cached empty string Var.
-static EMPTY_STR_VAR: Lazy<Var> = Lazy::new(|| Var::from_str_type(Str::mk_str("")));
+static EMPTY_STR_VAR: Lazy<Var> = Lazy::new(Var::mk_empty_str);
+
+/// Cached empty list Var.
+static EMPTY_LIST_VAR: Lazy<Var> = Lazy::new(Var::mk_empty_list);
 
 /// Cached NOTHING object Var.
 static NOTHING_VAR: Lazy<Var> = Lazy::new(|| Var::mk_object(NOTHING));
@@ -144,7 +155,7 @@ impl Var {
     /// Returns false for non-string types.
     #[inline(always)]
     pub fn str_is_ascii(&self) -> bool {
-        self.tag == TAG_STR && self.meta[2] == 1
+        self.tag == TAG_EMPTY_STR || (self.tag == TAG_STR && self.meta[2] == 1)
     }
 
     // === String search and replace operations with cached ASCII optimization ===
@@ -288,11 +299,31 @@ impl Var {
     // We store them directly via transmute - no Box needed!
 
     pub fn mk_str(s: &str) -> Self {
+        if s.is_empty() {
+            return Self::mk_empty_str();
+        }
         Self::from_str_type(Str::mk_str(s))
     }
 
     pub fn mk_string(s: String) -> Self {
+        if s.is_empty() {
+            return Self::mk_empty_str();
+        }
         Self::from_str_type(Str::from(s))
+    }
+
+    #[inline(always)]
+    pub const fn mk_empty_str() -> Self {
+        Self::mk_empty_str_with_hint(OP_HINT_NONE)
+    }
+
+    #[inline(always)]
+    pub const fn mk_empty_str_with_hint(hint: u8) -> Self {
+        Self {
+            tag: TAG_EMPTY_STR,
+            meta: [0, 0, 1, 0, 0, 0, hint],
+            data: 0,
+        }
     }
 
     /// Create a Var from a Str type directly
@@ -303,6 +334,9 @@ impl Var {
     /// Create a Var from a Str type with an operation hint
     pub fn from_str_type_with_hint(s: string::Str, hint: u8) -> Self {
         let str_ref = s.as_str();
+        if str_ref.is_empty() {
+            return Self::mk_empty_str_with_hint(hint);
+        }
         let byte_len = str_ref.len();
         let char_len = str_ref.chars().count();
         // SAFETY: Str is #[repr(transparent)] around Arc<String>, exactly 8 bytes
@@ -315,6 +349,9 @@ impl Var {
     }
 
     pub fn mk_list(values: &[Var]) -> Self {
+        if values.is_empty() {
+            return Self::mk_empty_list();
+        }
         List::build(values)
     }
 
@@ -330,12 +367,29 @@ impl Var {
     /// Create a Var from a List with an operation hint
     pub fn from_list_with_hint(list: List, hint: u8) -> Self {
         let len = list.len();
+        if len == 0 {
+            return Self::mk_empty_list_with_hint(hint);
+        }
         // SAFETY: List is #[repr(transparent)] around Box<Vector>, exactly 8 bytes
         let data: u64 = unsafe { std::mem::transmute(list) };
         Self {
             tag: TAG_LIST,
             meta: Self::meta_with_len_and_hint(len, hint),
             data,
+        }
+    }
+
+    #[inline(always)]
+    pub const fn mk_empty_list() -> Self {
+        Self::mk_empty_list_with_hint(OP_HINT_NONE)
+    }
+
+    #[inline(always)]
+    pub const fn mk_empty_list_with_hint(hint: u8) -> Self {
+        Self {
+            tag: TAG_EMPTY_LIST,
+            meta: [0, 0, 0, 0, 0, 0, hint],
+            data: 0,
         }
     }
 
@@ -451,6 +505,8 @@ impl Var {
                 let sym: Symbol = unsafe { std::mem::transmute(self.data) };
                 Variant::Sym(sym)
             }
+            TAG_EMPTY_STR => Variant::Str(&*EMPTY_STR),
+            TAG_EMPTY_LIST => Variant::List(&*EMPTY_LIST),
             // Str, List, Map, Lambda: data contains transmuted value, reinterpret &data as &Type
             TAG_STR => Variant::Str(unsafe { &*(&self.data as *const u64 as *const string::Str) }),
             TAG_LIST => Variant::List(unsafe { &*(&self.data as *const u64 as *const List) }),
@@ -538,7 +594,7 @@ impl Var {
 
     #[inline(always)]
     pub fn is_list(&self) -> bool {
-        self.tag == TAG_LIST
+        self.tag == TAG_LIST || self.tag == TAG_EMPTY_LIST
     }
 
     /// Check if this is a numeric zero (int 0 or float 0.0).
@@ -578,10 +634,10 @@ impl Var {
     // Str, List, Map, Lambda: data contains transmuted value
     #[inline(always)]
     pub fn as_str(&self) -> Option<&string::Str> {
-        if self.tag == TAG_STR {
-            Some(unsafe { &*(&self.data as *const u64 as *const string::Str) })
-        } else {
-            None
+        match self.tag {
+            TAG_STR => Some(unsafe { &*(&self.data as *const u64 as *const string::Str) }),
+            TAG_EMPTY_STR => Some(&*EMPTY_STR),
+            _ => None,
         }
     }
 
@@ -593,10 +649,10 @@ impl Var {
 
     #[inline(always)]
     pub fn as_list(&self) -> Option<&List> {
-        if self.tag == TAG_LIST {
-            Some(unsafe { &*(&self.data as *const u64 as *const List) })
-        } else {
-            None
+        match self.tag {
+            TAG_LIST => Some(unsafe { &*(&self.data as *const u64 as *const List) }),
+            TAG_EMPTY_LIST => Some(&*EMPTY_LIST),
+            _ => None,
         }
     }
 
@@ -657,8 +713,8 @@ impl Var {
             TAG_FLOAT => VarType::TYPE_FLOAT,
             TAG_OBJ => VarType::TYPE_OBJ,
             TAG_SYM => VarType::TYPE_SYMBOL,
-            TAG_STR => VarType::TYPE_STR,
-            TAG_LIST => VarType::TYPE_LIST,
+            TAG_STR | TAG_EMPTY_STR => VarType::TYPE_STR,
+            TAG_LIST | TAG_EMPTY_LIST => VarType::TYPE_LIST,
             TAG_MAP => VarType::TYPE_MAP,
             TAG_ERR => VarType::TYPE_ERR,
             TAG_FLYWEIGHT => VarType::TYPE_FLYWEIGHT,
@@ -691,6 +747,8 @@ impl Var {
             TAG_FLOAT => f64::from_bits(self.data) != 0.0,
             TAG_SYM | TAG_LAMBDA => true,
             // Complex types - need to access the data
+            TAG_EMPTY_STR => false,
+            TAG_EMPTY_LIST => false,
             TAG_STR => !self.as_str().unwrap().is_empty(),
             TAG_LIST => !self.as_list().unwrap().is_empty(),
             TAG_MAP => !self.as_map().unwrap().is_empty(),
@@ -702,8 +760,8 @@ impl Var {
 
     pub fn type_class(&self) -> TypeClass<'_> {
         match self.tag {
-            TAG_LIST => TypeClass::Sequence(self.as_list().unwrap()),
-            TAG_STR => TypeClass::Sequence(self.as_str().unwrap()),
+            TAG_LIST | TAG_EMPTY_LIST => TypeClass::Sequence(self.as_list().unwrap()),
+            TAG_STR | TAG_EMPTY_STR => TypeClass::Sequence(self.as_str().unwrap()),
             TAG_BINARY => TypeClass::Sequence(self.as_binary().unwrap()),
             TAG_MAP => TypeClass::Associative(self.as_map().unwrap()),
             _ => TypeClass::Scalar,
@@ -711,7 +769,10 @@ impl Var {
     }
 
     pub fn is_sequence(&self) -> bool {
-        matches!(self.tag, TAG_LIST | TAG_STR | TAG_BINARY)
+        matches!(
+            self.tag,
+            TAG_LIST | TAG_EMPTY_LIST | TAG_STR | TAG_EMPTY_STR | TAG_BINARY
+        )
     }
 
     pub fn is_associative(&self) -> bool {
@@ -723,7 +784,7 @@ impl Var {
     }
 
     pub fn is_string(&self) -> bool {
-        self.tag == TAG_STR
+        self.tag == TAG_STR || self.tag == TAG_EMPTY_STR
     }
 
     // === Collection operations ===
@@ -772,8 +833,8 @@ impl Var {
 
         // Dispatch directly on tag - we already know it's not scalar
         match self.tag {
-            TAG_LIST => self.as_list().unwrap().index(idx),
-            TAG_STR => self.as_str().unwrap().index(idx),
+            TAG_LIST | TAG_EMPTY_LIST => self.as_list().unwrap().index(idx),
+            TAG_STR | TAG_EMPTY_STR => self.as_str().unwrap().index(idx),
             TAG_BINARY => self.as_binary().unwrap().index(idx),
             TAG_MAP => Ok(self.as_map().unwrap().index(idx)?.1),
             _ => unreachable!(),
@@ -972,7 +1033,7 @@ impl Var {
 
     pub fn contains(&self, value: &Var, case_sensitive: bool) -> Result<Var, Error> {
         // Fast path for strings: use str_find with cached ASCII flag
-        if self.tag == TAG_STR {
+        if self.tag == TAG_STR || self.tag == TAG_EMPTY_STR {
             if value.as_str().is_none() {
                 return Err(E_TYPE.with_msg(|| {
                     format!(
@@ -1010,7 +1071,7 @@ impl Var {
         index_mode: IndexMode,
     ) -> Result<Var, Error> {
         // Fast path for strings: use str_find with cached ASCII flag
-        if self.tag == TAG_STR {
+        if self.tag == TAG_STR || self.tag == TAG_EMPTY_STR {
             if value.as_str().is_none() {
                 return Err(E_TYPE.with_msg(|| {
                     format!(
@@ -1349,6 +1410,16 @@ impl Hash for Var {
 impl PartialEq for Var {
     fn eq(&self, other: &Self) -> bool {
         if self.tag != other.tag {
+            let self_is_str = matches!(self.tag, TAG_STR | TAG_EMPTY_STR);
+            let other_is_str = matches!(other.tag, TAG_STR | TAG_EMPTY_STR);
+            if self_is_str && other_is_str {
+                return self.as_str().unwrap() == other.as_str().unwrap();
+            }
+            let self_is_list = matches!(self.tag, TAG_LIST | TAG_EMPTY_LIST);
+            let other_is_list = matches!(other.tag, TAG_LIST | TAG_EMPTY_LIST);
+            if self_is_list && other_is_list {
+                return self.as_list().unwrap() == other.as_list().unwrap();
+            }
             return false;
         }
         // Tags match, compare data directly based on tag
@@ -1363,7 +1434,9 @@ impl PartialEq for Var {
                 l == r
             }
             // Complex types - delegate to their PartialEq
+            TAG_EMPTY_STR => true,
             TAG_STR => self.as_str().unwrap() == other.as_str().unwrap(),
+            TAG_EMPTY_LIST => true,
             TAG_LIST => self.as_list().unwrap() == other.as_list().unwrap(),
             TAG_MAP => self.as_map().unwrap() == other.as_map().unwrap(),
             TAG_ERR => self.as_error().unwrap() == other.as_error().unwrap(),
@@ -1609,7 +1682,7 @@ pub fn v_flyweight(delegate: Obj, slots: &[(Symbol, Var)], contents: List) -> Va
 }
 
 pub fn v_empty_list() -> Var {
-    v_list(&[])
+    EMPTY_LIST_VAR.clone()
 }
 
 pub fn v_empty_str() -> Var {

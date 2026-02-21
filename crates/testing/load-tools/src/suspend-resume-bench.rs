@@ -30,7 +30,7 @@ use moor_kernel::{
     tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
 };
 use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
-use moor_var::{List, NOTHING, Obj, Symbol, program::ProgramType, v_int};
+use moor_var::{List, NOTHING, Obj, Symbol, program::ProgramType, v_empty_str, v_int};
 use std::{sync::Arc, time::Instant};
 use tracing::info;
 
@@ -176,7 +176,7 @@ async fn main() -> Result<(), eyre::Error> {
             &ObjectRef::Id(player),
             Symbol::mk("suspend_bench"),
             List::from_iter(vec![v_int(args.cycles as i64)]),
-            "".to_string(),
+            v_empty_str(),
             &player,
             session,
         )?;

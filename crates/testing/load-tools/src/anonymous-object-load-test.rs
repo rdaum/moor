@@ -34,7 +34,7 @@ use moor_kernel::{
     tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
 };
 use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
-use moor_var::{List, NOTHING, Obj, Symbol, program::ProgramType, v_int, v_obj};
+use moor_var::{List, NOTHING, Obj, Symbol, program::ProgramType, v_empty_str, v_int, v_obj};
 use std::{
     path::PathBuf,
     sync::Arc,
@@ -215,7 +215,7 @@ async fn workload(
             &ObjectRef::Id(player),
             Symbol::mk("create_anonymous_objects"),
             List::from_iter(vec![v_int(args.num_objects_per_invocation as i64)]),
-            "".to_string(),
+            v_empty_str(),
             &player,
             session.clone(),
         )?;
@@ -278,7 +278,7 @@ async fn continuous_workload(
             &ObjectRef::Id(player),
             Symbol::mk("create_anonymous_objects"),
             List::from_iter(vec![v_int(args.num_objects_per_invocation as i64)]),
-            "".to_string(),
+            v_empty_str(),
             &player,
             session.clone(),
         )?;

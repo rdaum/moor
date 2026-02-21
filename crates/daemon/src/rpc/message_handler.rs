@@ -63,7 +63,7 @@ use moor_kernel::{
 use moor_schema::convert::{
     narrative_event_to_flatbuffer_struct, obj_from_ref, var_from_ref, var_to_flatbuffer,
 };
-use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, VarType::TYPE_NONE, v_sym};
+use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, VarType::TYPE_NONE, v_empty_str, v_sym};
 use rpc_common::{
     AuthToken, ClientToken, HostType, RpcErr, RpcMessageError, auth_token_from_ref,
     client_token_from_ref, extract_field_rpc, extract_host_type, extract_obj_rpc,
@@ -2113,8 +2113,8 @@ impl RpcMessageHandler {
             player,
             object,
             verb,
-            List::mk_list(&args),
-            "".to_string(),
+            List::from_iter(args),
+            v_empty_str(),
             &SYSTEM_OBJECT,
             session.clone(),
         ) {
