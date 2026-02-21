@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::CacheStats;
 use crate::prop_cache::{ANCESTRY_CACHE_STATS, VERB_CACHE_STATS};
 use ahash::AHasher;
 use arc_swap::ArcSwap;
@@ -42,6 +43,7 @@ fn remove_entries_for_objects(
 
 pub struct VerbResolutionCache {
     inner: ArcSwap<Inner>,
+    stats: &'static CacheStats,
 }
 
 impl Default for VerbResolutionCache {
@@ -60,6 +62,7 @@ impl VerbResolutionCache {
                 entries: Arc::new(HashMap::default()),
                 first_parent_with_verbs_cache: Arc::new(HashMap::default()),
             })),
+            stats: &VERB_CACHE_STATS,
         }
     }
 }
@@ -96,6 +99,7 @@ impl VerbResolutionCache {
         forked_inner.flushed = false;
         Box::new(Self {
             inner: ArcSwap::new(Arc::new(forked_inner)),
+            stats: self.stats,
         })
     }
 
@@ -122,11 +126,12 @@ impl VerbResolutionCache {
         let inner = self.inner.load();
         let key = make_cache_key(obj, verb);
         let result = inner.entries.get(&key).cloned();
+        let stats = self.stats;
 
         match &result {
-            Some(Some(_)) => VERB_CACHE_STATS.hit(),
-            Some(None) => VERB_CACHE_STATS.negative_hit(),
-            None => VERB_CACHE_STATS.miss(),
+            Some(Some(_)) => stats.hit(),
+            Some(None) => stats.negative_hit(),
+            None => stats.miss(),
         }
 
         result
@@ -142,8 +147,8 @@ impl VerbResolutionCache {
             new_inner.first_parent_cache_mut().clear();
             Arc::new(new_inner)
         });
-        VERB_CACHE_STATS.flush();
-        VERB_CACHE_STATS.remove_entries(entries_count);
+        self.stats.flush();
+        self.stats.remove_entries(entries_count);
     }
 
     pub fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbdef: &VerbDef) {
@@ -155,7 +160,7 @@ impl VerbResolutionCache {
             let is_new_entry = !new_inner.entries.contains_key(&key);
             new_inner.entries_mut().insert(key, Some(verbdef.clone()));
             if is_new_entry {
-                VERB_CACHE_STATS.add_entry();
+                self.stats.add_entry();
             }
             Arc::new(new_inner)
         });
@@ -169,7 +174,7 @@ impl VerbResolutionCache {
             let is_new_entry = !new_inner.entries.contains_key(&key);
             new_inner.entries_mut().insert(key, None);
             if is_new_entry {
-                VERB_CACHE_STATS.add_entry();
+                self.stats.add_entry();
             }
             Arc::new(new_inner)
         });
@@ -187,7 +192,7 @@ impl VerbResolutionCache {
             let removed = remove_entries_for_objects(new_inner.entries_mut(), &obj_ids);
             if removed > 0 {
                 changed = true;
-                VERB_CACHE_STATS.remove_entries(removed as isize);
+                self.stats.remove_entries(removed as isize);
             }
 
             let first_parent_cache = new_inner.first_parent_cache_mut();
@@ -210,6 +215,7 @@ impl VerbResolutionCache {
 pub struct AncestryCache {
     #[allow(clippy::type_complexity)]
     inner: ArcSwap<AncestryInner>,
+    stats: &'static CacheStats,
 }
 
 impl Default for AncestryCache {
@@ -221,6 +227,7 @@ impl Default for AncestryCache {
                 flushed: false,
                 entries: Arc::new(HashMap::default()),
             })),
+            stats: &ANCESTRY_CACHE_STATS,
         }
     }
 }
@@ -250,6 +257,7 @@ impl AncestryCache {
         forked_inner.flushed = false;
         Box::new(Self {
             inner: ArcSwap::new(Arc::new(forked_inner)),
+            stats: self.stats,
         })
     }
     pub fn lookup(&self, obj: &Obj) -> Option<Vec<Obj>> {
@@ -258,9 +266,9 @@ impl AncestryCache {
 
         // Ancestry cache doesn't use Option wrapping, so we only have hits and misses
         if result.is_some() {
-            ANCESTRY_CACHE_STATS.hit();
+            self.stats.hit();
         } else {
-            ANCESTRY_CACHE_STATS.miss();
+            self.stats.miss();
         }
 
         result
@@ -275,8 +283,8 @@ impl AncestryCache {
             new_inner.entries_mut().clear();
             Arc::new(new_inner)
         });
-        ANCESTRY_CACHE_STATS.flush();
-        ANCESTRY_CACHE_STATS.remove_entries(entries_count);
+        self.stats.flush();
+        self.stats.remove_entries(entries_count);
     }
 
     pub fn fill(&self, obj: &Obj, ancestors: &[Obj]) {
@@ -288,7 +296,7 @@ impl AncestryCache {
             let is_new_entry = !new_inner.entries.contains_key(&obj);
             new_inner.entries_mut().insert(obj, ancestors.clone());
             if is_new_entry {
-                ANCESTRY_CACHE_STATS.add_entry();
+                self.stats.add_entry();
             }
             Arc::new(new_inner)
         });
@@ -316,7 +324,7 @@ impl AncestryCache {
                 return inner.clone();
             }
             new_inner.version += 1;
-            ANCESTRY_CACHE_STATS.remove_entries(removed as isize);
+            self.stats.remove_entries(removed as isize);
             Arc::new(new_inner)
         });
     }

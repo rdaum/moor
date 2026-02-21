@@ -52,6 +52,7 @@ lazy_static! {
 
 pub struct PropResolutionCache {
     inner: ArcSwap<Inner>,
+    stats: &'static CacheStats,
 }
 
 impl Default for PropResolutionCache {
@@ -70,6 +71,7 @@ impl PropResolutionCache {
                 entries: Arc::new(HashMap::default()),
                 first_parent_with_props_cache: Arc::new(HashMap::default()),
             })),
+            stats: &PROP_CACHE_STATS,
         }
     }
 }
@@ -106,6 +108,7 @@ impl PropResolutionCache {
         forked_inner.flushed = false;
         Box::new(Self {
             inner: ArcSwap::new(Arc::new(forked_inner)),
+            stats: self.stats,
         })
     }
 
@@ -118,11 +121,12 @@ impl PropResolutionCache {
         let inner = self.inner.load();
         let key = make_cache_key(obj, prop);
         let result = inner.entries.get(&key).cloned();
+        let stats = self.stats;
 
         match &result {
-            Some(Some(_)) => PROP_CACHE_STATS.hit(),
-            Some(None) => PROP_CACHE_STATS.negative_hit(),
-            None => PROP_CACHE_STATS.miss(),
+            Some(Some(_)) => stats.hit(),
+            Some(None) => stats.negative_hit(),
+            None => stats.miss(),
         }
 
         result
@@ -138,8 +142,8 @@ impl PropResolutionCache {
             new_inner.first_parent_cache_mut().clear();
             Arc::new(new_inner)
         });
-        PROP_CACHE_STATS.flush();
-        PROP_CACHE_STATS.remove_entries(entries_count);
+        self.stats.flush();
+        self.stats.remove_entries(entries_count);
     }
 
     pub fn fill_hit(&self, obj: &Obj, prop: &Symbol, propd: &PropDef) {
@@ -151,7 +155,7 @@ impl PropResolutionCache {
             let is_new_entry = !new_inner.entries.contains_key(&key);
             new_inner.entries_mut().insert(key, Some(propd.clone()));
             if is_new_entry {
-                PROP_CACHE_STATS.add_entry();
+                self.stats.add_entry();
             }
             Arc::new(new_inner)
         });
@@ -165,7 +169,7 @@ impl PropResolutionCache {
             let is_new_entry = !new_inner.entries.contains_key(&key);
             new_inner.entries_mut().insert(key, None);
             if is_new_entry {
-                PROP_CACHE_STATS.add_entry();
+                self.stats.add_entry();
             }
             Arc::new(new_inner)
         });
@@ -197,7 +201,7 @@ impl PropResolutionCache {
             let removed = remove_entries_for_objects(new_inner.entries_mut(), &obj_ids);
             if removed > 0 {
                 changed = true;
-                PROP_CACHE_STATS.remove_entries(removed as isize);
+                self.stats.remove_entries(removed as isize);
             }
 
             let first_parent_cache = new_inner.first_parent_cache_mut();

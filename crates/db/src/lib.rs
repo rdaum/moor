@@ -16,7 +16,11 @@
 use moor_common::model::{CommitResult, WorldState, WorldStateError, WorldStateSource};
 use moor_var::{ByteSized, EncodingError, Obj, Var};
 use std::collections::HashSet;
-use std::{cmp::Ordering, path::Path, sync::Arc};
+use std::{
+    cmp::Ordering,
+    path::Path,
+    sync::{Arc, OnceLock},
+};
 use uuid::Uuid;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
@@ -428,13 +432,24 @@ impl Default for CacheStats {
 }
 
 impl CacheStats {
+    #[inline]
+    fn default_shard_count() -> usize {
+        static SHARD_COUNT: OnceLock<usize> = OnceLock::new();
+        *SHARD_COUNT.get_or_init(|| {
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+        })
+    }
+
     pub fn new() -> Self {
+        let shard_count = Self::default_shard_count();
         Self {
-            hits: ConcurrentCounter::new(0),
-            negative_hits: ConcurrentCounter::new(0),
-            misses: ConcurrentCounter::new(0),
-            flushes: ConcurrentCounter::new(0),
-            num_entries: ConcurrentCounter::new(0),
+            hits: ConcurrentCounter::new(shard_count),
+            negative_hits: ConcurrentCounter::new(shard_count),
+            misses: ConcurrentCounter::new(shard_count),
+            flushes: ConcurrentCounter::new(shard_count),
+            num_entries: ConcurrentCounter::new(shard_count),
         }
     }
 
