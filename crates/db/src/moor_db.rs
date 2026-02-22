@@ -519,7 +519,7 @@ impl MoorDB {
                         let _t = PerfTimerGuard::new(&counters.commit_apply_phase);
 
                         // Start collecting operations for this commit's batch
-                        this.batch_collector.start_commit(tx_timestamp);
+                        this.batch_collector.start_commit(tx_timestamp, num_tuples);
 
                         let checkers = match checkers.apply_all(relation_ws) {
                             Ok(checkers) => checkers,

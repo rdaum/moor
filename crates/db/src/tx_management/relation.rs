@@ -524,18 +524,17 @@ where
                     }
                     {
                         let _t = PerfTimerGuard::new(&counters.apply_index_insert);
-                        self.index
-                            .insert_entry(op.write_ts, domain.clone(), codomain);
+                        self.index.insert_entry(op.write_ts, domain, codomain);
                     }
                 }
                 OpType::Delete => {
                     {
-                        let _t = PerfTimerGuard::new(&counters.apply_index_insert);
-                        self.index.insert_tombstone(op.write_ts, domain.clone());
-                    }
-                    {
                         let _t = PerfTimerGuard::new(&counters.apply_source_put);
                         self.source.del(op.write_ts, &domain).unwrap();
+                    }
+                    {
+                        let _t = PerfTimerGuard::new(&counters.apply_index_insert);
+                        self.index.insert_tombstone(op.write_ts, domain);
                     }
                 }
             }

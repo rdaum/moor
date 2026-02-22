@@ -37,7 +37,7 @@ use flume::{Receiver, Sender};
 use gdt_cpus::ThreadPriority;
 use tracing::{error, info, warn};
 
-use crate::tx_management::Timestamp;
+use crate::tx_management::{Error, Timestamp};
 
 /// A single operation to be written to fjall.
 #[derive(Clone)]
@@ -50,8 +50,16 @@ pub struct BatchOp {
 
 #[derive(Clone)]
 pub enum BatchOpType {
-    Insert { key: Vec<u8>, value: Vec<u8> },
+    Insert {
+        key: Vec<u8>,
+        value: Arc<dyn BatchValue>,
+    },
     Delete { key: Vec<u8> },
+}
+
+/// Value hook used by the writer thread to produce serialized bytes.
+pub trait BatchValue: Send + Sync {
+    fn encode(&self) -> Result<Vec<u8>, Error>;
 }
 
 /// A batch of operations from a single commit, spanning all relations.
@@ -61,14 +69,19 @@ pub struct CommitBatch {
 }
 
 impl CommitBatch {
-    pub fn new(timestamp: Timestamp) -> Self {
+    pub fn with_capacity(timestamp: Timestamp, expected_operations: usize) -> Self {
         Self {
             timestamp,
-            operations: Vec::new(),
+            operations: Vec::with_capacity(expected_operations),
         }
     }
 
-    pub fn insert(&mut self, partition: fjall::Keyspace, key: Vec<u8>, value: Vec<u8>) {
+    pub fn insert(
+        &mut self,
+        partition: fjall::Keyspace,
+        key: Vec<u8>,
+        value: Arc<dyn BatchValue>,
+    ) {
         self.operations.push(BatchOp {
             partition,
             op_type: BatchOpType::Insert { key, value },
@@ -100,17 +113,22 @@ impl BatchCollector {
         }
     }
 
-    pub fn start_commit(&self, timestamp: Timestamp) {
+    pub fn start_commit(&self, timestamp: Timestamp, expected_operations: usize) {
         let mut current = self.current.lock().unwrap();
         debug_assert!(
             current.is_none(),
             "Previous commit batch not finished (timestamp {:?})",
             current.as_ref().map(|b| b.timestamp)
         );
-        *current = Some(CommitBatch::new(timestamp));
+        *current = Some(CommitBatch::with_capacity(timestamp, expected_operations));
     }
 
-    pub fn insert(&self, partition: fjall::Keyspace, key: Vec<u8>, value: Vec<u8>) {
+    pub fn insert(
+        &self,
+        partition: fjall::Keyspace,
+        key: Vec<u8>,
+        value: Arc<dyn BatchValue>,
+    ) {
         let mut current = self.current.lock().unwrap();
         current
             .as_mut()
@@ -142,7 +160,7 @@ impl BatchCollector {
 /// Pending operation for a key - either insert with value or delete.
 #[derive(Clone)]
 enum PendingOp {
-    Insert(Vec<u8>),
+    Insert(Arc<dyn BatchValue>),
     Delete,
 }
 
@@ -160,7 +178,7 @@ impl PartitionBuffer {
         }
     }
 
-    fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
+    fn insert(&mut self, key: Vec<u8>, value: Arc<dyn BatchValue>) {
         self.pending.insert(key, PendingOp::Insert(value));
     }
 
@@ -383,7 +401,14 @@ impl BatchWriter {
             for (key, op) in ops {
                 match op {
                     PendingOp::Insert(value) => {
-                        write_batch.insert(&buffer.keyspace, &key, &value);
+                        match value.encode() {
+                            Ok(encoded) => {
+                                write_batch.insert(&buffer.keyspace, &key, &encoded);
+                            }
+                            Err(e) => {
+                                error!("Failed to encode batch value: {e}");
+                            }
+                        }
                     }
                     PendingOp::Delete => {
                         write_batch.remove(&buffer.keyspace, &key);

@@ -44,7 +44,7 @@
 
 use crate::{
     db_counters,
-    provider::batch_writer::BatchCollector,
+    provider::batch_writer::{BatchCollector, BatchValue},
     tx_management::{EncodeFor, Error, RelationCodomain, RelationDomain, Timestamp},
 };
 use byteview::ByteView;
@@ -152,6 +152,28 @@ where
     result.extend_from_slice(&ts.0.to_le_bytes());
     result.extend_from_slice(&codomain_stored);
     Ok(result)
+}
+
+#[derive(Clone)]
+struct FjallBatchValue<Domain, Codomain>
+where
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
+{
+    provider: FjallProvider<Domain, Codomain>,
+    timestamp: Timestamp,
+    codomain: Codomain,
+}
+
+impl<Domain, Codomain> BatchValue for FjallBatchValue<Domain, Codomain>
+where
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
+    FjallProvider<Domain, Codomain>: EncodeFor<Codomain, Stored = ByteView>,
+{
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        encode_codomain_with_ts(&self.provider, self.timestamp, &self.codomain)
+    }
 }
 
 impl<Domain, Codomain> FjallProvider<Domain, Codomain>
@@ -263,10 +285,17 @@ where
 
         // Encode and add to shared batch collector
         let key_bytes = <Self as EncodeFor<Domain>>::encode(self, domain)?;
-        let value = encode_codomain_with_ts::<Self, Codomain>(self, timestamp, codomain)?;
+        let batch_value = Arc::new(FjallBatchValue {
+            provider: self.clone(),
+            timestamp,
+            codomain: codomain.clone(),
+        });
 
-        self.batch_collector
-            .insert(self.fjall_keyspace.clone(), key_bytes.to_vec(), value);
+        self.batch_collector.insert(
+            self.fjall_keyspace.clone(),
+            key_bytes.to_vec(),
+            batch_value,
+        );
 
         Ok(())
     }

@@ -129,14 +129,8 @@ where
         domain: Domain,
         codomain: Codomain,
     ) -> Option<Entry<Codomain>> {
-        // Update primary index
-        self.entries.insert(
-            domain.clone(),
-            Entry {
-                ts,
-                value: codomain.clone(),
-            },
-        )
+        // Update primary index using owned values from caller.
+        self.entries.insert(domain, Entry { ts, value: codomain })
     }
 
     fn insert_tombstone(&mut self, _ts: Timestamp, domain: Domain) -> Option<Entry<Codomain>> {
@@ -219,12 +213,12 @@ where
         }
     }
 
-    fn add_to_secondary(&mut self, codomain: &Codomain, domain: &Domain) {
+    fn add_to_secondary_owned(&mut self, codomain: Codomain, domain: Domain) {
         if let Some(ref mut secondary) = self.inner.secondary_index {
             secondary
-                .entry(codomain.clone())
+                .entry(codomain)
                 .or_insert_with(Default::default)
-                .insert(domain.clone());
+                .insert(domain);
         }
     }
 }
@@ -240,34 +234,22 @@ where
         domain: Domain,
         codomain: Codomain,
     ) -> Option<Entry<Codomain>> {
-        // Get old entry for secondary index cleanup
-        let old_entry = self.inner.entries.get(&domain).cloned();
-
-        // Update primary index using inner's method (handles tombstones automatically)
         let result = self
             .inner
             .insert_entry(ts, domain.clone(), codomain.clone());
 
-        // Update secondary index
-        if let Some(ref old) = old_entry {
-            // Remove from old codomain's set
+        if let Some(ref old) = result {
             self.remove_from_secondary(&old.value, &domain);
         }
-        // Add to new codomain's set
-        self.add_to_secondary(&codomain, &domain);
+        self.add_to_secondary_owned(codomain, domain);
 
         result
     }
 
     fn insert_tombstone(&mut self, ts: Timestamp, domain: Domain) -> Option<Entry<Codomain>> {
-        // Get old entry for secondary index cleanup
-        let old_entry = self.inner.entries.get(&domain).cloned();
-
-        // Update primary index using inner's method (handles tombstones automatically)
         let result = self.inner.insert_tombstone(ts, domain.clone());
 
-        // Clean up secondary index
-        if let Some(ref old) = old_entry {
+        if let Some(ref old) = result {
             self.remove_from_secondary(&old.value, &domain);
         }
 
