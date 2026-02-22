@@ -46,6 +46,18 @@ where
     fn remove_entry(&mut self, domain: &Domain) -> Option<Entry<Codomain>>;
     fn iter(&self) -> Box<dyn Iterator<Item = (&Domain, &Entry<Codomain>)> + '_>;
     fn len(&self) -> usize;
+    fn apply_batch(
+        &mut self,
+        inserts: Vec<(Timestamp, Domain, Codomain)>,
+        tombstones: Vec<(Timestamp, Domain)>,
+    ) {
+        for (ts, domain, codomain) in inserts {
+            self.insert_entry(ts, domain, codomain);
+        }
+        for (ts, domain) in tombstones {
+            self.insert_tombstone(ts, domain);
+        }
+    }
     fn fork(&self) -> Box<dyn RelationIndex<Domain, Codomain>>;
     fn as_any(&self) -> &dyn Any;
 
@@ -151,6 +163,19 @@ where
 
     fn len(&self) -> usize {
         self.entries.len()
+    }
+
+    fn apply_batch(
+        &mut self,
+        inserts: Vec<(Timestamp, Domain, Codomain)>,
+        tombstones: Vec<(Timestamp, Domain)>,
+    ) {
+        for (ts, domain, codomain) in inserts {
+            self.insert_entry(ts, domain, codomain);
+        }
+        for (ts, domain) in tombstones {
+            self.insert_tombstone(ts, domain);
+        }
     }
 
     fn fork(&self) -> Box<dyn RelationIndex<Domain, Codomain>> {
@@ -277,6 +302,19 @@ where
 
     fn len(&self) -> usize {
         self.inner.entries.len()
+    }
+
+    fn apply_batch(
+        &mut self,
+        inserts: Vec<(Timestamp, Domain, Codomain)>,
+        tombstones: Vec<(Timestamp, Domain)>,
+    ) {
+        for (ts, domain, codomain) in inserts {
+            self.insert_entry(ts, domain, codomain);
+        }
+        for (ts, domain) in tombstones {
+            self.insert_tombstone(ts, domain);
+        }
     }
 
     fn fork(&self) -> Box<dyn RelationIndex<Domain, Codomain>> {

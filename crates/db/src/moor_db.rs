@@ -12,7 +12,7 @@
 //
 
 use crate::{
-    AnonymousObjectMetadata, CommitSet, ObjAndUUIDHolder, StringHolder,
+    AnonymousObjectMetadata, ObjAndUUIDHolder, StringHolder,
     config::DatabaseConfig,
     db_worldstate::db_counters,
     prop_cache::PropResolutionCache,
@@ -33,8 +33,6 @@ use crate::{
 };
 use arc_swap::ArcSwap;
 use fjall::{Database, KeyspaceCreateOptions};
-use flume::Sender;
-use gdt_cpus::{ThreadPriority, set_thread_priority};
 use minstant::Instant;
 use moor_common::util::CachePadded;
 use moor_common::{
@@ -46,9 +44,8 @@ use std::{
     path::Path,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicI64, AtomicU64},
+        atomic::{AtomicI64, AtomicU64},
     },
-    thread::JoinHandle,
     time::Duration,
 };
 use tempfile::TempDir;
@@ -104,6 +101,8 @@ pub struct MoorDB {
     monotonic: CachePadded<AtomicU64>,
     /// Seqlock version counter: even = stable, odd = commit in progress
     commit_version: CachePadded<AtomicU64>,
+    /// Serializes write commit processing.
+    commit_apply_lock: Mutex<()>,
     keyspace: Database,
     relations: Relations,
     sequences: [Arc<CachePadded<AtomicI64>>; 16],
@@ -113,13 +112,9 @@ pub struct MoorDB {
     batch_collector: Arc<BatchCollector>,
     /// Single background writer for all fjall operations
     batch_writer: BatchWriter,
-    kill_switch: Arc<AtomicBool>,
-    commit_channel: Sender<CommitSet>,
-    usage_send: Sender<oneshot::Sender<usize>>,
     caches: ArcSwap<Caches>,
     /// Last write transaction timestamp that completed
     last_write_commit: AtomicU64,
-    jh: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl MoorDB {
@@ -176,7 +171,7 @@ impl MoorDB {
         }))
     }
 
-    pub(crate) fn start_transaction(&self) -> WorldStateTransaction {
+    pub(crate) fn start_transaction(self: &Arc<Self>) -> WorldStateTransaction {
         let mut backoff = 0u32;
         loop {
             // Check if commit is in progress (odd version)
@@ -217,8 +212,7 @@ impl MoorDB {
 
             let ws_tx = self.relations.start_transaction(
                 tx,
-                self.commit_channel.clone(),
-                self.usage_send.clone(),
+                self.clone(),
                 self.sequences.clone(),
                 forked_caches.verb_resolution_cache,
                 forked_caches.prop_resolution_cache,
@@ -238,14 +232,6 @@ impl MoorDB {
     }
 
     pub fn stop(&self) {
-        self.kill_switch
-            .store(true, std::sync::atomic::Ordering::SeqCst);
-
-        let mut jh_lock = self.jh.lock().unwrap();
-        if let Some(jh) = jh_lock.take() {
-            jh.join().unwrap();
-        }
-
         // Get the last write timestamp before stopping the writer
         let last_write_timestamp = Timestamp(
             self.last_write_commit
@@ -329,12 +315,6 @@ impl MoorDB {
         let batch_writer = BatchWriter::new(keyspace.clone());
 
         let relations = Relations::init(&keyspace, &config, batch_collector.clone());
-
-        // Bounded channel provides backpressure when commits can't keep up.
-        // 1000 items gives breathing room before blocking callers.
-        let (commit_channel, commit_receiver) = flume::bounded(1000);
-        let (usage_send, usage_recv) = flume::unbounded();
-        let kill_switch = Arc::new(AtomicBool::new(false));
         let caches = ArcSwap::new(Arc::new(Caches::new()));
 
         // Create background sequence writer
@@ -344,22 +324,16 @@ impl MoorDB {
         let s = Arc::new(Self {
             monotonic: CachePadded::new(AtomicU64::new(start_tx_num)),
             commit_version: CachePadded::new(AtomicU64::new(0)),
+            commit_apply_lock: Mutex::new(()),
             relations,
             sequences,
             sequence_writer,
             batch_collector,
             batch_writer,
-            commit_channel,
-            usage_send,
-            kill_switch: kill_switch.clone(),
             keyspace,
             caches,
             last_write_commit: AtomicU64::new(0),
-            jh: Mutex::new(None),
         });
-
-        s.clone()
-            .start_processing_thread(commit_receiver, usage_recv, kill_switch, config);
 
         (s, fresh)
     }
@@ -374,224 +348,176 @@ impl MoorDB {
         self.relations.mark_all_fully_loaded();
     }
 
-    fn start_processing_thread(
-        self: Arc<Self>,
-        receiver: flume::Receiver<CommitSet>,
-        usage_recv: flume::Receiver<oneshot::Sender<usize>>,
-        kill_switch: Arc<AtomicBool>,
-        _config: DatabaseConfig,
+    pub(crate) fn commit_read_only(
+        &self,
+        snapshot_version: u64,
+        combined_caches: Caches,
     ) {
-        let this_weak = Arc::downgrade(&self);
+        let current_version = self.commit_version.load(std::sync::atomic::Ordering::Acquire);
+        if snapshot_version == current_version && combined_caches.has_changed() {
+            self.caches.store(Arc::new(combined_caches));
+        }
+    }
 
-        let thread_builder = std::thread::Builder::new().name("moor-db-process".to_string());
-        let jh = thread_builder
-            .spawn(move || {
-                set_thread_priority(ThreadPriority::Highest).ok();
-                loop {
-                    let counters = db_counters();
+    pub(crate) fn commit_writes(
+        &self,
+        ws: Box<WorkingSets>,
+        enqueued_at: std::time::Instant,
+    ) -> CommitResult {
+        let counters = db_counters();
+        let _commit_guard = self.commit_apply_lock.lock().unwrap();
+        let dequeued_at = std::time::Instant::now();
+        counters.commit_lock_wait_phase.invocations().add(1);
+        counters
+            .commit_lock_wait_phase
+            .cumulative_duration_nanos()
+            .add(dequeued_at.duration_since(enqueued_at).as_nanos() as isize);
 
-                    if kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
-                        break;
-                    }
+        let result = self.process_commit_writes(ws, counters);
 
-                    // Use selector to block on both channels simultaneously
-                    enum DbMessage {
-                        Commit(CommitSet),
-                        Usage(oneshot::Sender<usize>),
-                    }
+        let reply_sent_at = std::time::Instant::now();
+        counters.commit_process_phase.invocations().add(1);
+        counters
+            .commit_process_phase
+            .cumulative_duration_nanos()
+            .add(reply_sent_at.duration_since(dequeued_at).as_nanos() as isize);
+        result
+    }
 
-                    let selector = flume::Selector::new()
-                        .recv(&receiver, |result| {
-                            result.ok().map(DbMessage::Commit)
-                        })
-                        .recv(&usage_recv, |result| {
-                            result.ok().map(DbMessage::Usage)
-                        });
+    fn process_commit_writes(
+        &self,
+        ws: Box<WorkingSets>,
+        counters: &moor_common::model::WorldStatePerf,
+    ) -> CommitResult {
+        let _t = PerfTimerGuard::new(&counters.commit_check_phase);
+        let start_time = Instant::now();
 
-                    // Wait for message without holding Arc reference
-                    let message = match selector.wait_timeout(Duration::from_millis(100)) {
-                        Ok(Some(msg)) => msg,
-                        Ok(None) | Err(_) => continue, // Timeout or disconnected - loop to check kill_switch
-                    };
+        let mut checkers = self.relations.begin_check_all();
 
-                    // Now upgrade to process the message - if upgrade fails, MoorDB was dropped
-                    let Some(this) = this_weak.upgrade() else {
-                        break;
-                    };
+        let num_tuples = ws.total_tuples();
+        if num_tuples > 10_000 {
+            warn!("Potential large batch @ commit... Checking {num_tuples} total tuples from the working set...");
+        }
 
-                    // Monitor commit queue depth
-                    let commit_queue_len = receiver.len();
-                    if commit_queue_len > 100 {
-                        warn!("Commit queue depth: {} pending commits", commit_queue_len);
-                    }
+        // Get the transaction timestamp and mutations flag before extracting working sets
+        let tx_timestamp = ws.tx.ts;
+        let snapshot_version = ws.tx.snapshot_version;
+        let has_mutations = ws.has_mutations;
+        let (mut relation_ws, verb_cache, prop_cache, ancestry_cache) = ws.extract_relation_working_sets();
 
-                    let (ws, reply) = match message {
-                        DbMessage::Usage(reply) => {
-                            reply.send(this.usage_bytes())
-                                .map_err(|e| warn!("{}", e))
-                                .ok();
-                            continue;
-                        }
-                        DbMessage::Commit(CommitSet::CommitReadOnly {
-                            caches: combined_caches,
-                            snapshot_version,
-                        }) => {
-                            let current_version =
-                                this.commit_version.load(std::sync::atomic::Ordering::Acquire);
-                            if snapshot_version == current_version && combined_caches.has_changed() {
-                                this.caches.store(Arc::new(combined_caches));
-                            }
-                            // Read-only transactions don't need barrier tracking since we only
-                            // wait for write transactions when creating snapshots
-                            continue;
-                        }
-                        DbMessage::Commit(CommitSet::CommitWrites(ws, reply)) => {
-                            // Process commit below
-                            (ws, reply)
-                        }
-                    };
+        // Optimization: If no commits completed since transaction start, skip conflict checking.
+        // The transaction already validated against its snapshot when creating operations.
+        // If the snapshot is still current (commit_version unchanged), those validations remain valid.
+        let current_version = self.commit_version.load(std::sync::atomic::Ordering::Acquire);
+        let skip_conflict_check = snapshot_version == current_version;
 
-                    let _t = PerfTimerGuard::new(&counters.commit_check_phase);
+        {
+            // Conflict validation - can skip if no concurrent commits
+            if !skip_conflict_check && let Err(conflict_info) = checkers.check_all(&mut relation_ws)
+            {
+                warn!("Transaction conflict during commit: {}", conflict_info);
+                return CommitResult::ConflictRetry {
+                    conflict_info: Some(conflict_info),
+                };
+            }
+            drop(_t);
 
-                    let start_time = Instant::now();
-
-                    let mut checkers = this.relations.begin_check_all();
-
-                    let num_tuples = ws.total_tuples();
-                    if num_tuples > 10_000 {
-                        warn!("Potential large batch @ commit... Checking {num_tuples} total tuples from the working set...");
-                    }
-
-                    // Get the transaction timestamp and mutations flag before extracting working sets
-                    let tx_timestamp = ws.tx.ts;
-                    let snapshot_version = ws.tx.snapshot_version;
-                    let has_mutations = ws.has_mutations;
-                    let (mut relation_ws, verb_cache, prop_cache, ancestry_cache) = ws.extract_relation_working_sets();
-
-                    // Optimization: If no commits completed since transaction start, skip conflict checking.
-                    // The transaction already validated against its snapshot when creating operations.
-                    // If the snapshot is still current (commit_version unchanged), those validations remain valid.
-                    let current_version = this.commit_version.load(std::sync::atomic::Ordering::Acquire);
-                    let skip_conflict_check = snapshot_version == current_version;
-
-                    {
-                        // Conflict validation - can skip if no concurrent commits
-                        if !skip_conflict_check
-                            && let Err(conflict_info) = checkers.check_all(&mut relation_ws)
-                        {
-                            warn!("Transaction conflict during commit: {}", conflict_info);
-                            reply
-                                .send(CommitResult::ConflictRetry {
-                                    conflict_info: Some(conflict_info),
-                                })
-                                .ok();
-                            continue;
-                        }
-                        drop(_t);
-
-                        // Mutation detection - use has_mutations since we might have skipped check_all
-                        // (which normally sets the dirty flags that all_clean checks)
-                        if !has_mutations {
-                            reply.send(CommitResult::Success {
-                                mutations_made: false,
-                                timestamp: tx_timestamp.0,
-                            }).ok();
-
-                            let combined_caches = Caches {
-                                verb_resolution_cache: verb_cache,
-                                prop_resolution_cache: prop_cache,
-                                ancestry_cache,
-                            };
-                            if combined_caches.has_changed() {
-                                this.caches.store(Arc::new(combined_caches));
-                            }
-                            continue;
-                        }
-
-                        // Warn if the check phase took a really long time
-                        if start_time.elapsed() > Duration::from_secs(5) {
-                            warn!(
-                                "Long running commit; check phase took {}s for {num_tuples} tuples",
-                                start_time.elapsed().as_secs_f32()
-                            );
-                        }
-
-                        let _t = PerfTimerGuard::new(&counters.commit_apply_phase);
-
-                        // Start collecting operations for this commit's batch
-                        this.batch_collector.start_commit(tx_timestamp, num_tuples);
-
-                        let checkers = match checkers.apply_all(relation_ws) {
-                            Ok(checkers) => checkers,
-                            Err(()) => {
-                                // Discard the batch on failure
-                                this.batch_collector.abort_commit();
-                                warn!("Transaction conflict during apply phase (no detailed info available)");
-                                reply
-                                    .send(CommitResult::ConflictRetry { conflict_info: None })
-                                    .ok();
-                                continue;
-                            }
-                        };
-
-                        // Take the completed batch and send to background writer
-                        let batch = this.batch_collector.finish_commit();
-                        let batch_op_count = batch.operations.len();
-                        let batch_write_start = Instant::now();
-                        if !batch.is_empty() {
-                            this.batch_writer.write(batch);
-                        }
-                        let batch_write_elapsed = batch_write_start.elapsed();
-
-                        // Use seqlock coordination to atomically swap relation indexes AND update caches.
-                        checkers.commit_all(
-                            &this.relations,
-                            &this.commit_version,
-                            &this.caches,
-                            verb_cache,
-                            prop_cache,
-                            ancestry_cache,
-                        );
-
-                        // Track the last write timestamp and send barrier
-                        this.last_write_commit.store(tx_timestamp.0, std::sync::atomic::Ordering::Release);
-                        this.batch_writer.send_barrier(tx_timestamp);
-
-                        reply.send(CommitResult::Success {
-                            mutations_made: has_mutations,
-                            timestamp: tx_timestamp.0,
-                        }).ok();
-
-                        // Warn if batch_write blocked (backpressure)
-                        if batch_write_elapsed > Duration::from_secs(1) {
-                            warn!(
-                                "Slow batch_write: {} ops blocked for {:.2}s (ts {})",
-                                batch_op_count, batch_write_elapsed.as_secs_f32(), tx_timestamp.0
-                            );
-                        }
-
-                        drop(_t);
-                    }
-
-                    // Queue sequence persistence to background thread
-                    // (Caches were already updated inside commit_all before seqlock was marked stable)
-                    // Store monotonic counter in sequence slot 15
-                    this.sequences[15].store(
-                        this.monotonic.load(std::sync::atomic::Ordering::Relaxed) as i64,
-                        std::sync::atomic::Ordering::Relaxed,
-                    );
-                    // Collect current sequence values and send to background writer
-                    let mut seq_values = [0i64; 16];
-                    for (i, seq) in this.sequences.iter().enumerate() {
-                        seq_values[i] = seq.load(std::sync::atomic::Ordering::Relaxed);
-                    }
-                    this.sequence_writer.write(seq_values);
+            // Mutation detection - use has_mutations since we might have skipped check_all
+            // (which normally sets the dirty flags that all_clean checks)
+            if !has_mutations {
+                let combined_caches = Caches {
+                    verb_resolution_cache: verb_cache,
+                    prop_resolution_cache: prop_cache,
+                    ancestry_cache,
+                };
+                if combined_caches.has_changed() {
+                    self.caches.store(Arc::new(combined_caches));
                 }
-            })
-            .expect("failed to start DB processing thread");
+                return CommitResult::Success {
+                    mutations_made: false,
+                    timestamp: tx_timestamp.0,
+                };
+            }
 
-        let mut jh_lock = self.jh.lock().unwrap();
-        *jh_lock = Some(jh);
+            // Warn if the check phase took a really long time
+            if start_time.elapsed() > Duration::from_secs(5) {
+                warn!(
+                    "Long running commit; check phase took {}s for {num_tuples} tuples",
+                    start_time.elapsed().as_secs_f32()
+                );
+            }
+
+            let _t = PerfTimerGuard::new(&counters.commit_apply_phase);
+
+            // Start collecting operations for this commit's batch
+            self.batch_collector.start_commit(tx_timestamp, num_tuples);
+
+            let checkers = match checkers.apply_all(relation_ws) {
+                Ok(checkers) => checkers,
+                Err(()) => {
+                    // Discard the batch on failure
+                    self.batch_collector.abort_commit();
+                    warn!("Transaction conflict during apply phase (no detailed info available)");
+                    return CommitResult::ConflictRetry {
+                        conflict_info: None,
+                    };
+                }
+            };
+
+            // Take the completed batch and send to background writer
+            let batch = self.batch_collector.finish_commit();
+            let batch_op_count = batch.operations.len();
+            let batch_write_start = Instant::now();
+            if !batch.is_empty() {
+                self.batch_writer.write(batch);
+            }
+            let batch_write_elapsed = batch_write_start.elapsed();
+
+            // Use seqlock coordination to atomically swap relation indexes AND update caches.
+            checkers.commit_all(
+                &self.relations,
+                &self.commit_version,
+                &self.caches,
+                verb_cache,
+                prop_cache,
+                ancestry_cache,
+            );
+
+            // Track the last write timestamp and send barrier
+            self.last_write_commit
+                .store(tx_timestamp.0, std::sync::atomic::Ordering::Release);
+            self.batch_writer.send_barrier(tx_timestamp);
+
+            // Warn if batch_write blocked (backpressure)
+            if batch_write_elapsed > Duration::from_secs(1) {
+                warn!(
+                    "Slow batch_write: {} ops blocked for {:.2}s (ts {})",
+                    batch_op_count,
+                    batch_write_elapsed.as_secs_f32(),
+                    tx_timestamp.0
+                );
+            }
+
+            drop(_t);
+        }
+
+        // Queue sequence persistence to background thread
+        // (Caches were already updated inside commit_all before seqlock was marked stable)
+        // Store monotonic counter in sequence slot 15
+        self.sequences[15].store(
+            self.monotonic.load(std::sync::atomic::Ordering::Relaxed) as i64,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        // Collect current sequence values and send to background writer
+        let mut seq_values = [0i64; 16];
+        for (i, seq) in self.sequences.iter().enumerate() {
+            seq_values[i] = seq.load(std::sync::atomic::Ordering::Relaxed);
+        }
+        self.sequence_writer.write(seq_values);
+        CommitResult::Success {
+            mutations_made: has_mutations,
+            timestamp: tx_timestamp.0,
+        }
     }
 }
 

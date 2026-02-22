@@ -141,7 +141,7 @@ impl Associative for Map {
         // Use OrdMap's range functionality to get keys >= from
         let range_pairs: Vec<(Var, Var)> = self
             .0
-            .range(from..)
+            .range::<_, Var>(from..)
             .take_while(|(k, _)| (*k).cmp(to) == Ordering::Less)
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
@@ -213,7 +213,7 @@ impl Associative for Map {
         if case_sensitive {
             // Case-sensitive requires linear search since OrdMap is organized case-insensitively
             // Find the exact case-sensitive match, then return the next item
-            let iter = self.0.range(key..);
+            let iter = self.0.range::<_, Var>(key..);
             let mut found = false;
             for (k, v) in iter {
                 if found {
@@ -227,7 +227,7 @@ impl Associative for Map {
         } else {
             // Case-insensitive: tree is organized case-insensitively, so skip the first key
             // (which is >= our key in tree order) and get the next
-            let mut iter = self.0.range(key..);
+            let mut iter = self.0.range::<_, Var>(key..);
             iter.next(); // skip first key (>= our key in case-insensitive order)
             iter.next()
                 .map(|(k, v)| (k.clone(), v.clone()))

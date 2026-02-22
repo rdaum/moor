@@ -273,12 +273,11 @@ macro_rules! define_relations {
                 /// Start a new transaction across all relations.
                 ///
                 /// Creates a WorldStateTransaction with relation transactions for all
-                /// defined relations, along with the necessary channels and caches.
+                /// defined relations, along with the necessary caches.
                 ///
                 /// # Parameters
                 /// - `tx`: The transaction timestamp and metadata
-                /// - `commit_channel`: Channel for sending commit requests
-                /// - `usage_channel`: Channel for requesting database usage statistics
+                /// - `db`: Database handle used for direct commit processing
                 /// - `sequences`: Array of sequence counters
                 /// - `verb_resolution_cache`: Forked verb resolution cache
                 /// - `prop_resolution_cache`: Forked property resolution cache
@@ -286,8 +285,7 @@ macro_rules! define_relations {
                 #[allow(clippy::too_many_arguments)]
                 fn start_transaction(&self,
                     tx: Tx,
-                    commit_channel: Sender<CommitSet>,
-                    usage_channel: Sender<oneshot::Sender<usize>>,
+                    db: Arc<crate::moor_db::MoorDB>,
                     sequences: [Arc<CachePadded<AtomicI64>>; 16],
                     verb_resolution_cache: Box<VerbResolutionCache>,
                     prop_resolution_cache: Box<PropResolutionCache>,
@@ -295,8 +293,7 @@ macro_rules! define_relations {
                 ) -> WorldStateTransaction {
                     WorldStateTransaction {
                         tx: tx.clone(),
-                        commit_channel,
-                        usage_channel,
+                        db,
                         $( $field: self.$field.start(&tx), )*
                         sequences,
                         verb_resolution_cache,
@@ -368,14 +365,12 @@ macro_rules! define_relations {
             ///
             /// This struct represents an active transaction that can read from and write to
             /// all defined database relations. It contains relation transactions for each
-            /// relation, along with caches and channels needed for transaction processing.
+            /// relation, along with caches needed for transaction processing.
             pub struct WorldStateTransaction {
                 #[allow(dead_code)]
                 pub(crate) tx: Tx,
-                /// Channel to send commit requests to the main database thread
-                pub(crate) commit_channel: Sender<CommitSet>,
-                /// Channel to request current database disk usage
-                pub(crate) usage_channel: Sender<oneshot::Sender<usize>>,
+                /// Database handle used for direct commit processing.
+                pub(crate) db: Arc<crate::moor_db::MoorDB>,
                 /// Relation transactions for each defined relation
                 $( pub(crate) $field: RelationTransaction<$domain, $codomain, R<$domain, $codomain>>, )*
                 /// Array of sequence counters for object ID generation

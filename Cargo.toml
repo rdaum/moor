@@ -192,7 +192,6 @@ syn = { version = "2.0", features = ["full", "parsing"] }
 ahash = "0.8"
 arrayvec = "0.7"
 imbl = { version = "7.0", features = ["triomphe"] }
-indexmap = "2.12"
 itertools = "0.14"
 smallvec = "1.13"
 triomphe = "0.1"

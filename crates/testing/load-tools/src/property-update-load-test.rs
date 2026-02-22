@@ -122,8 +122,6 @@ struct BenchmarkRow {
     avg_check: String,
     #[tabled(rename = "Avg Apply")]
     avg_apply: String,
-    #[tabled(rename = "Src Put")]
-    avg_source_put: String,
     #[tabled(rename = "Idx Ins")]
     avg_index_insert: String,
     #[tabled(rename = "p50")]
@@ -411,8 +409,6 @@ fn run_benchmark(
             .cumulative_duration_nanos()
             .sum();
         let baseline_apply_count = counters.commit_apply_phase.invocations().sum();
-        let baseline_source_put_nanos = counters.apply_source_put.cumulative_duration_nanos().sum();
-        let baseline_source_put_count = counters.apply_source_put.invocations().sum();
         let baseline_index_insert_nanos = counters
             .apply_index_insert
             .cumulative_duration_nanos()
@@ -473,10 +469,6 @@ fn run_benchmark(
             .sum()
             - baseline_apply_nanos;
         let apply_count = counters.commit_apply_phase.invocations().sum() - baseline_apply_count;
-        let source_put_nanos =
-            counters.apply_source_put.cumulative_duration_nanos().sum() - baseline_source_put_nanos;
-        let source_put_count =
-            counters.apply_source_put.invocations().sum() - baseline_source_put_count;
         let index_insert_nanos = counters
             .apply_index_insert
             .cumulative_duration_nanos()
@@ -501,11 +493,6 @@ fn run_benchmark(
         } else {
             0
         };
-        let avg_source_put_nanos = if source_put_count > 0 {
-            (source_put_nanos / source_put_count) as u64
-        } else {
-            0
-        };
         let avg_index_insert_nanos = if index_insert_count > 0 {
             (index_insert_nanos / index_insert_count) as u64
         } else {
@@ -522,7 +509,6 @@ fn run_benchmark(
             commit_thread_util: format!("{:.1}%", commit_thread_util_pct),
             avg_check: format_duration(Duration::from_nanos(avg_check_nanos)),
             avg_apply: format_duration(Duration::from_nanos(avg_apply_nanos)),
-            avg_source_put: format_duration(Duration::from_nanos(avg_source_put_nanos)),
             avg_index_insert: format_duration(Duration::from_nanos(avg_index_insert_nanos)),
             p50: format_duration(p50),
             p99: format_duration(p99),
