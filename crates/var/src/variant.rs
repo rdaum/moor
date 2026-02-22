@@ -531,8 +531,8 @@ impl Var {
                 let sym: Symbol = unsafe { std::mem::transmute(self.data) };
                 Variant::Sym(sym)
             }
-            TAG_EMPTY_STR => Variant::Str(&*EMPTY_STR),
-            TAG_EMPTY_LIST => Variant::List(&*EMPTY_LIST),
+            TAG_EMPTY_STR => Variant::Str(&EMPTY_STR),
+            TAG_EMPTY_LIST => Variant::List(&EMPTY_LIST),
             TAG_SYMBOL_STR => Variant::Str(self.as_str().unwrap()),
             // Str, List, Map, Lambda: data contains transmuted value, reinterpret &data as &Type
             TAG_STR => Variant::Str(unsafe { &*(&self.data as *const u64 as *const string::Str) }),
