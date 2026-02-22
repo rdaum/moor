@@ -1,21 +1,19 @@
-object GAME_UPDATE
+object #666
   name: "Game Update System"
   parent: ROOT
   owner: ARCH_WIZARD
   readable: true
 
+  property last_stats_time (owner: ARCH_WIZARD, flags: "r") = 0.0;
   property latency (owner: ARCH_WIZARD, flags: "r") = {};
   property running (owner: ARCH_WIZARD, flags: "r") = 0;
+  property stats_interval (owner: ARCH_WIZARD, flags: "r") = 10.0;
   property subscriber_faults (owner: ARCH_WIZARD, flags: "r") = [];
   property subscribers (owner: ARCH_WIZARD, flags: "r") = {};
   property task_id (owner: ARCH_WIZARD, flags: "r") = 0;
-  property update_hertz (owner: ARCH_WIZARD, flags: "r") = 20.0;
-  property update_commit_interval (owner: ARCH_WIZARD, flags: "r") = 20;
   property tick_count (owner: ARCH_WIZARD, flags: "r") = 0;
-  property last_stats_time (owner: ARCH_WIZARD, flags: "r") = 0.0;
-  property stats_interval (owner: ARCH_WIZARD, flags: "r") = 10.0;
-
-  override import_export_hierarchy = {};
+  property update_commit_interval (owner: ARCH_WIZARD, flags: "r") = 20;
+  property update_hertz (owner: ARCH_WIZARD, flags: "r") = 20.0;
 
   verb process_updates (this none this) owner: ARCH_WIZARD flags: "rxd"
     "Based on bitMuse game update loop, adapter for benchmarking game-tick type update loops.";
@@ -214,7 +212,6 @@ object GAME_UPDATE
       this.subscriber_faults = [];
     endif
   endverb
-
 
   verb resume_if_needed (this none this) owner: ARCH_WIZARD flags: "rxd"
     "Resume game update loop if there are subscribers. Called on server startup.";

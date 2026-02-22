@@ -4,22 +4,21 @@ object BENCH_SUBSCRIBER
   owner: ARCH_WIZARD
   readable: true
 
+  property append_mode (owner: ARCH_WIZARD, flags: "rw") = 0;
+  property checks_per_tick (owner: ARCH_WIZARD, flags: "rw") = 1;
+  property cooldowns (owner: ARCH_WIZARD, flags: "rw") = [];
   property counter (owner: ARCH_WIZARD, flags: "rw") = 0;
   property data (owner: ARCH_WIZARD, flags: "rw") = {};
-  property work_iterations (owner: ARCH_WIZARD, flags: "rw") = 10;
-  property append_mode (owner: ARCH_WIZARD, flags: "rw") = 0;
-  property mode (owner: ARCH_WIZARD, flags: "rw") = 0;
-  property fanout (owner: ARCH_WIZARD, flags: "rw") = 0;
-  property checks_per_tick (owner: ARCH_WIZARD, flags: "rw") = 1;
-  property state_writes (owner: ARCH_WIZARD, flags: "rw") = 2;
-  property delay_ratio (owner: ARCH_WIZARD, flags: "rw") = 0;
-  property momentum (owner: ARCH_WIZARD, flags: "rw") = 50.0;
   property defender_momentum (owner: ARCH_WIZARD, flags: "rw") = 50.0;
-  property cooldowns (owner: ARCH_WIZARD, flags: "rw") = [];
+  property delay_ratio (owner: ARCH_WIZARD, flags: "rw") = 0;
+  property fanout (owner: ARCH_WIZARD, flags: "rw") = 0;
   property fanout_cursor (owner: ARCH_WIZARD, flags: "rw") = 1;
   property last_attacker (owner: ARCH_WIZARD, flags: "rw") = #-1;
+  property mode (owner: ARCH_WIZARD, flags: "rw") = 0;
+  property momentum (owner: ARCH_WIZARD, flags: "rw") = 50.0;
+  property state_writes (owner: ARCH_WIZARD, flags: "rw") = 2;
+  property work_iterations (owner: ARCH_WIZARD, flags: "rw") = 10;
 
-  override import_export_hierarchy = {};
   override import_export_id = "bench_subscriber";
 
   verb fixed_update (this none this) owner: ARCH_WIZARD flags: "rxd"
@@ -83,7 +82,7 @@ object BENCH_SUBSCRIBER
       endfor
       "Write a handful of properties/maps each round.";
       for w in [1..state_writes]
-        key = tostr("stat_", ((w - 1) % 4) + 1);
+        key = tostr("stat_", (w - 1) % 4 + 1);
         this.cooldowns[key] = this.counter + w;
       endfor
       this:fanout_attack(check);

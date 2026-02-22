@@ -8,6 +8,11 @@ DURATION ?= 30
 SUBSCRIBERS ?= 256
 WORK_PER_TICK ?= 20
 APPEND_MODE ?= 0
+FANOUT ?= 4
+CHECKS_PER_TICK ?= 2
+STATE_WRITES ?= 4
+DELAY_RATIO ?= 10
+UPDATE_HZ ?= 20
 SLOW_DB_PATH ?= /tmp/moor-slow-mount/bench.db
 
 SRC_DIRECTORY = src
@@ -26,6 +31,10 @@ bench-game-update: $(wildcard src/*.moo)
 bench-write-stress: $(wildcard src/*.moo)
 	$(MOORC) --src-objdef-dir $(SRC_DIRECTORY) --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
 	--test-wizard=2 --run-tests true --test-filter "#668:test_write_stress" --test-timeout $$(($(DURATION) + 60)) --test-args "{$(DURATION), $(SUBSCRIBERS), $(WORK_PER_TICK), $(APPEND_MODE)}"
+
+bench-combat-stress: $(wildcard src/*.moo)
+	$(MOORC) --src-objdef-dir $(SRC_DIRECTORY) --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
+	--test-wizard=2 --run-tests true --test-filter "#668:test_combat_stress" --test-timeout $$(($(DURATION) + 60)) --test-args "{$(DURATION), $(SUBSCRIBERS), $(WORK_PER_TICK), $(FANOUT), $(CHECKS_PER_TICK), $(STATE_WRITES), $(DELAY_RATIO), $(UPDATE_HZ)}"
 
 # Profile with perf to identify blocking spots
 # After running, analyze with: perf report -g or perf report --stdio

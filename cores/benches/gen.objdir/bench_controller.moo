@@ -4,14 +4,13 @@ object BENCH_CONTROLLER
   owner: ARCH_WIZARD
   readable: true
 
-  property subscribers (owner: ARCH_WIZARD, flags: "rw") = {};
-  property running (owner: ARCH_WIZARD, flags: "r") = 0;
   property cycles_per_sample (owner: ARCH_WIZARD, flags: "rw") = 20;
+  property running (owner: ARCH_WIZARD, flags: "r") = 0;
   property samples_per_level (owner: ARCH_WIZARD, flags: "rw") = 10;
   property subscriber_counts (owner: ARCH_WIZARD, flags: "rw") = {1, 4, 16, 64, 256, 512, 1024};
+  property subscribers (owner: ARCH_WIZARD, flags: "rw") = {};
   property work_iterations (owner: ARCH_WIZARD, flags: "rw") = 10;
 
-  override import_export_hierarchy = {};
   override import_export_id = "bench_controller";
 
   verb run (this none this) owner: ARCH_WIZARD flags: "rxd"
@@ -41,7 +40,7 @@ object BENCH_CONTROLLER
     current = length(this.subscribers);
     if (current < target)
       "Add subscribers";
-      for i in [1..(target - current)]
+      for i in [1..target - current]
         sub = create(#667, #6);
         sub.work_iterations = this.work_iterations;
         this.subscribers = {@this.subscribers, sub};
@@ -54,7 +53,7 @@ object BENCH_CONTROLLER
         sub = this.subscribers[$];
         #666:unregister(sub);
         recycle(sub);
-        this.subscribers = this.subscribers[1..$ - 1];
+        this.subscribers = (this.subscribers)[1..$ - 1];
       endfor
     endif
     commit();
@@ -221,19 +220,16 @@ object BENCH_CONTROLLER
     "Stress test for write throughput. Creates many subscribers at high Hz.";
     "Optional args: duration, subscribers, work_per_tick, append_mode (defaults: 30, 256, 20, 0)";
     server_log("=== WRITE STRESS TEST STARTING ===");
-
     "Configure for aggressive write stress testing";
     run_duration = length(args) > 0 ? tofloat(args[1]) | 30.0;
     target_subscribers = length(args) > 1 ? toint(args[2]) | 256;
     work_per_tick = length(args) > 2 ? toint(args[3]) | 20;
     append_mode = length(args) > 3 ? toint(args[4]) | 0;
     update_hz = 50.0;
-
     "Set up the game update loop with high Hz";
     $game_update.update_hertz = update_hz;
     $game_update.stats_interval = 5.0;
     server_log("Update Hz: " + tostr(update_hz));
-
     "Create subscribers";
     server_log("Creating " + tostr(target_subscribers) + " subscribers (append_mode=" + tostr(append_mode) + ")...");
     for i in [1..target_subscribers]
@@ -247,11 +243,9 @@ object BENCH_CONTROLLER
       endif
     endfor
     commit();
-
     "Start the loop";
     counter_before = this:capture_perf_counters();
     $game_update:start();
-
     writes_per_second = target_subscribers * work_per_tick * update_hz;
     server_log("=== WRITE STRESS TEST RUNNING ===");
     server_log("Subscribers: " + tostr(target_subscribers));
@@ -259,10 +253,8 @@ object BENCH_CONTROLLER
     server_log("Target Hz: " + tostr(update_hz));
     server_log("Estimated writes/sec: " + tostr(writes_per_second));
     server_log("Running for " + tostr(run_duration) + " seconds...");
-
     "Let it run";
     suspend(run_duration);
-
     "Stop and cleanup";
     $game_update:stop();
     counter_after = this:capture_perf_counters();
@@ -275,7 +267,6 @@ object BENCH_CONTROLLER
     "Stress test that approximates bitmuse-style combat/update load.";
     "Optional args: duration, subscribers, rounds_per_tick, fanout, checks_per_round, state_writes, delay_ratio, update_hz";
     server_log("=== COMBAT STRESS TEST STARTING ===");
-
     run_duration = length(args) > 0 ? tofloat(args[1]) | 30.0;
     target_subscribers = length(args) > 1 ? toint(args[2]) | 256;
     rounds_per_tick = length(args) > 2 ? toint(args[3]) | 20;
@@ -284,11 +275,9 @@ object BENCH_CONTROLLER
     state_writes = length(args) > 5 ? toint(args[6]) | 4;
     delay_ratio = length(args) > 6 ? toint(args[7]) | 10;
     update_hz = length(args) > 7 ? tofloat(args[8]) | 20.0;
-
     $game_update.update_hertz = update_hz;
     $game_update.stats_interval = 5.0;
     server_log("Update Hz: " + tostr(update_hz));
-
     server_log("Creating " + tostr(target_subscribers) + " combat subscribers...");
     for i in [1..target_subscribers]
       sub = create($bench_subscriber, $arch_wizard);
@@ -306,10 +295,8 @@ object BENCH_CONTROLLER
       endif
     endfor
     commit();
-
     counter_before = this:capture_perf_counters();
     $game_update:start();
-
     rounds_per_second = target_subscribers * rounds_per_tick * update_hz;
     fanout_calls_per_second = rounds_per_second * fanout;
     server_log("=== COMBAT STRESS TEST RUNNING ===");
@@ -322,9 +309,7 @@ object BENCH_CONTROLLER
     server_log("Estimated rounds/sec: " + tostr(rounds_per_second));
     server_log("Estimated fanout calls/sec: " + tostr(fanout_calls_per_second));
     server_log("Running for " + tostr(run_duration) + " seconds...");
-
     suspend(run_duration);
-
     $game_update:stop();
     counter_after = this:capture_perf_counters();
     this:log_perf_delta("combat_stress", counter_before, counter_after);
