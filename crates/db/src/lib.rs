@@ -470,6 +470,27 @@ impl CacheStats {
         self.num_entries.add(1);
     }
 
+    #[inline]
+    pub fn add_hits(&self, count: isize) {
+        if count != 0 {
+            self.hits.add(count);
+        }
+    }
+
+    #[inline]
+    pub fn add_negative_hits(&self, count: isize) {
+        if count != 0 {
+            self.negative_hits.add(count);
+        }
+    }
+
+    #[inline]
+    pub fn add_misses(&self, count: isize) {
+        if count != 0 {
+            self.misses.add(count);
+        }
+    }
+
     pub fn remove_entries(&self, count: isize) {
         self.num_entries.add(-count);
     }

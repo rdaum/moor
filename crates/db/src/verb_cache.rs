@@ -18,6 +18,7 @@ use arc_swap::ArcSwap;
 use moor_common::model::VerbDef;
 use moor_var::{Obj, Symbol};
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
     hash::BuildHasherDefault,
     sync::Arc,
@@ -39,6 +40,140 @@ fn remove_entries_for_objects(
         !obj_ids.contains(&obj_id)
     });
     before - entries.len()
+}
+
+const LOCAL_STATS_BATCH_SIZE: u32 = 128;
+
+#[derive(Default)]
+struct LocalCacheStats {
+    hits: u32,
+    negative_hits: u32,
+    misses: u32,
+}
+
+impl LocalCacheStats {
+    #[inline]
+    fn should_flush(&self) -> bool {
+        self.hits + self.negative_hits + self.misses >= LOCAL_STATS_BATCH_SIZE
+    }
+}
+
+struct VerbCacheStatsTls(LocalCacheStats);
+
+impl VerbCacheStatsTls {
+    #[inline]
+    fn new() -> Self {
+        Self(LocalCacheStats::default())
+    }
+
+    #[inline]
+    fn flush_local(&mut self) {
+        VERB_CACHE_STATS.add_hits(self.0.hits as isize);
+        VERB_CACHE_STATS.add_negative_hits(self.0.negative_hits as isize);
+        VERB_CACHE_STATS.add_misses(self.0.misses as isize);
+        self.0 = LocalCacheStats::default();
+    }
+}
+
+impl Drop for VerbCacheStatsTls {
+    fn drop(&mut self) {
+        self.flush_local();
+    }
+}
+
+#[derive(Default)]
+struct LocalAncestryStats {
+    hits: u32,
+    misses: u32,
+}
+
+impl LocalAncestryStats {
+    #[inline]
+    fn should_flush(&self) -> bool {
+        self.hits + self.misses >= LOCAL_STATS_BATCH_SIZE
+    }
+}
+
+struct AncestryCacheStatsTls(LocalAncestryStats);
+
+impl AncestryCacheStatsTls {
+    #[inline]
+    fn new() -> Self {
+        Self(LocalAncestryStats::default())
+    }
+
+    #[inline]
+    fn flush_local(&mut self) {
+        ANCESTRY_CACHE_STATS.add_hits(self.0.hits as isize);
+        ANCESTRY_CACHE_STATS.add_misses(self.0.misses as isize);
+        self.0 = LocalAncestryStats::default();
+    }
+}
+
+impl Drop for AncestryCacheStatsTls {
+    fn drop(&mut self) {
+        self.flush_local();
+    }
+}
+
+thread_local! {
+    static VERB_CACHE_STATS_TLS: RefCell<VerbCacheStatsTls> = RefCell::new(VerbCacheStatsTls::new());
+    static ANCESTRY_CACHE_STATS_TLS: RefCell<AncestryCacheStatsTls> = RefCell::new(AncestryCacheStatsTls::new());
+}
+
+#[inline]
+fn verb_cache_hit() {
+    VERB_CACHE_STATS_TLS.with(|tls| {
+        let mut tls = tls.borrow_mut();
+        tls.0.hits += 1;
+        if tls.0.should_flush() {
+            tls.flush_local();
+        }
+    });
+}
+
+#[inline]
+fn verb_cache_negative_hit() {
+    VERB_CACHE_STATS_TLS.with(|tls| {
+        let mut tls = tls.borrow_mut();
+        tls.0.negative_hits += 1;
+        if tls.0.should_flush() {
+            tls.flush_local();
+        }
+    });
+}
+
+#[inline]
+fn verb_cache_miss() {
+    VERB_CACHE_STATS_TLS.with(|tls| {
+        let mut tls = tls.borrow_mut();
+        tls.0.misses += 1;
+        if tls.0.should_flush() {
+            tls.flush_local();
+        }
+    });
+}
+
+#[inline]
+fn ancestry_cache_hit() {
+    ANCESTRY_CACHE_STATS_TLS.with(|tls| {
+        let mut tls = tls.borrow_mut();
+        tls.0.hits += 1;
+        if tls.0.should_flush() {
+            tls.flush_local();
+        }
+    });
+}
+
+#[inline]
+fn ancestry_cache_miss() {
+    ANCESTRY_CACHE_STATS_TLS.with(|tls| {
+        let mut tls = tls.borrow_mut();
+        tls.0.misses += 1;
+        if tls.0.should_flush() {
+            tls.flush_local();
+        }
+    });
 }
 
 pub struct VerbResolutionCache {
@@ -126,12 +261,11 @@ impl VerbResolutionCache {
         let inner = self.inner.load();
         let key = make_cache_key(obj, verb);
         let result = inner.entries.get(&key).cloned();
-        let stats = self.stats;
 
         match &result {
-            Some(Some(_)) => stats.hit(),
-            Some(None) => stats.negative_hit(),
-            None => stats.miss(),
+            Some(Some(_)) => verb_cache_hit(),
+            Some(None) => verb_cache_negative_hit(),
+            None => verb_cache_miss(),
         }
 
         result
@@ -266,9 +400,9 @@ impl AncestryCache {
 
         // Ancestry cache doesn't use Option wrapping, so we only have hits and misses
         if result.is_some() {
-            self.stats.hit();
+            ancestry_cache_hit();
         } else {
-            self.stats.miss();
+            ancestry_cache_miss();
         }
 
         result

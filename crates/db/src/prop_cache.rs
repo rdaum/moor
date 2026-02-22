@@ -18,6 +18,7 @@ use lazy_static::lazy_static;
 use moor_common::model::PropDef;
 use moor_var::{Obj, Symbol};
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
     hash::BuildHasherDefault,
     sync::Arc,
@@ -48,6 +49,82 @@ lazy_static! {
     pub static ref VERB_CACHE_STATS: CacheStats = CacheStats::new();
     /// Global cache statistics for ancestry lookups
     pub static ref ANCESTRY_CACHE_STATS: CacheStats = CacheStats::new();
+}
+
+const LOCAL_STATS_BATCH_SIZE: u32 = 128;
+
+#[derive(Default)]
+struct LocalCacheStats {
+    hits: u32,
+    negative_hits: u32,
+    misses: u32,
+}
+
+impl LocalCacheStats {
+    #[inline]
+    fn should_flush(&self) -> bool {
+        self.hits + self.negative_hits + self.misses >= LOCAL_STATS_BATCH_SIZE
+    }
+}
+
+struct PropCacheStatsTls(LocalCacheStats);
+
+impl PropCacheStatsTls {
+    #[inline]
+    fn new() -> Self {
+        Self(LocalCacheStats::default())
+    }
+
+    #[inline]
+    fn flush_local(&mut self) {
+        PROP_CACHE_STATS.add_hits(self.0.hits as isize);
+        PROP_CACHE_STATS.add_negative_hits(self.0.negative_hits as isize);
+        PROP_CACHE_STATS.add_misses(self.0.misses as isize);
+        self.0 = LocalCacheStats::default();
+    }
+}
+
+impl Drop for PropCacheStatsTls {
+    fn drop(&mut self) {
+        self.flush_local();
+    }
+}
+
+thread_local! {
+    static PROP_CACHE_STATS_TLS: RefCell<PropCacheStatsTls> = RefCell::new(PropCacheStatsTls::new());
+}
+
+#[inline]
+fn prop_cache_hit() {
+    PROP_CACHE_STATS_TLS.with(|tls| {
+        let mut tls = tls.borrow_mut();
+        tls.0.hits += 1;
+        if tls.0.should_flush() {
+            tls.flush_local();
+        }
+    });
+}
+
+#[inline]
+fn prop_cache_negative_hit() {
+    PROP_CACHE_STATS_TLS.with(|tls| {
+        let mut tls = tls.borrow_mut();
+        tls.0.negative_hits += 1;
+        if tls.0.should_flush() {
+            tls.flush_local();
+        }
+    });
+}
+
+#[inline]
+fn prop_cache_miss() {
+    PROP_CACHE_STATS_TLS.with(|tls| {
+        let mut tls = tls.borrow_mut();
+        tls.0.misses += 1;
+        if tls.0.should_flush() {
+            tls.flush_local();
+        }
+    });
 }
 
 pub struct PropResolutionCache {
@@ -121,12 +198,11 @@ impl PropResolutionCache {
         let inner = self.inner.load();
         let key = make_cache_key(obj, prop);
         let result = inner.entries.get(&key).cloned();
-        let stats = self.stats;
 
         match &result {
-            Some(Some(_)) => stats.hit(),
-            Some(None) => stats.negative_hit(),
-            None => stats.miss(),
+            Some(Some(_)) => prop_cache_hit(),
+            Some(None) => prop_cache_negative_hit(),
+            None => prop_cache_miss(),
         }
 
         result
