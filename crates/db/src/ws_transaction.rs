@@ -12,7 +12,7 @@
 //
 
 use crate::{
-    CommitSet, Error, ObjAndUUIDHolder, StringHolder,
+    Error, ObjAndUUIDHolder, StringHolder,
     db_worldstate::db_counters,
     moor_db::{Caches, SEQUENCE_MAX_OBJECT, WorldStateTransaction},
     provider::fjall_provider::FjallProvider,
@@ -35,9 +35,8 @@ use std::fmt::Display;
 use std::{
     collections::VecDeque,
     hash::Hash,
-    time::{Duration, Instant},
+    time::Instant,
 };
-use tracing::warn;
 use uuid::Uuid;
 
 type RTx<Domain, Codomain> = RelationTransaction<
@@ -1263,11 +1262,7 @@ impl WorldStateTransaction {
     }
 
     pub fn db_usage(&self) -> Result<usize, WorldStateError> {
-        let (send, receive) = oneshot::channel();
-        self.usage_channel
-            .send(send)
-            .expect("Unable to send usage request");
-        Ok(receive.recv().expect("Unable to receive usage response"))
+        Ok(self.db.usage_bytes())
     }
 
     pub fn commit(self) -> Result<CommitResult, WorldStateError> {
@@ -1311,16 +1306,14 @@ impl WorldStateTransaction {
         if !self.has_mutations {
             if self.verb_resolution_cache.has_changed() || self.prop_resolution_cache.has_changed()
             {
-                self.commit_channel
-                    .send(CommitSet::CommitReadOnly {
-                        caches: Caches {
-                            verb_resolution_cache: self.verb_resolution_cache,
-                            prop_resolution_cache: self.prop_resolution_cache,
-                            ancestry_cache: self.ancestry_cache,
-                        },
-                        snapshot_version: self.tx.snapshot_version,
-                    })
-                    .expect("Unable to send commit request for read-only transaction");
+                self.db.commit_read_only(
+                    self.tx.snapshot_version,
+                    Caches {
+                        verb_resolution_cache: self.verb_resolution_cache,
+                        prop_resolution_cache: self.prop_resolution_cache,
+                        ancestry_cache: self.ancestry_cache,
+                    },
+                );
             }
             let result = CommitResult::Success {
                 mutations_made: false,
@@ -1331,64 +1324,20 @@ impl WorldStateTransaction {
         }
 
         // Pull out the working sets
-        let _t = PerfTimerGuard::new(&counters.tx_commit_mk_working_set_phase);
+        let _t = PerfTimerGuard::new(&counters.commit_prepare_working_set_phase);
 
-        // Extract commit channel before consuming self
-        let commit_channel = self.commit_channel.clone();
+        // Extract DB handle before consuming self
+        let db = self.db.clone();
         let ws = self.into_working_sets()?;
 
-        let tuple_count = ws.total_tuples();
-
-        // Send the working sets to the commit processing thread
+        // Dispatch commit work directly under the DB commit lock.
         drop(_t);
-        let _t = PerfTimerGuard::new(&counters.tx_commit_send_working_set_phase);
-        let (send, reply) = oneshot::channel();
-        let commit_msg = CommitSet::CommitWrites(ws, send);
+        let enqueued_at = std::time::Instant::now();
 
-        // Try non-blocking first to avoid backpressure overhead in the common case
-        match commit_channel.try_send(commit_msg) {
-            Ok(()) => {}
-            Err(flume::TrySendError::Full(msg)) => {
-                // Queue full - backpressure from slow I/O. Warn and block.
-                tracing::warn!(
-                    "Commit queue backpressure: queue full, blocking ({} tuples)",
-                    tuple_count
-                );
-                let bp_start = Instant::now();
-                commit_channel
-                    .send(msg)
-                    .expect("Could not send commit request -- channel closed?");
-                let elapsed = bp_start.elapsed();
-                if elapsed > Duration::from_secs(1) {
-                    tracing::warn!("Commit queue backpressure: blocked for {:?}", elapsed);
-                }
-            }
-            Err(flume::TrySendError::Disconnected(_)) => {
-                panic!("Could not send commit request -- channel closed?");
-            }
-        }
-
-        // Wait for the reply.
-        drop(_t);
-        let _t = PerfTimerGuard::new(&counters.tx_commit_wait_result_phase);
-        let mut last_check_time = Instant::now();
-        loop {
-            match reply.recv_timeout(Duration::from_millis(10)) {
-                Ok(reply) => {
-                    record_commit_result(&reply);
-                    return Ok(reply);
-                }
-                Err(_) => {
-                    if last_check_time.elapsed() > Duration::from_secs(5) {
-                        warn!(
-                            "Transaction commit (started {}s ago) taking a long time to commit. Contains {tuple_count} total tuples.",
-                            commit_start.elapsed().as_secs_f32(),
-                        );
-                    }
-                    last_check_time = Instant::now();
-                }
-            }
-        }
+        let _t = PerfTimerGuard::new(&counters.commit_wait_phase);
+        let result = db.commit_writes(ws, enqueued_at);
+        record_commit_result(&result);
+        Ok(result)
     }
 
     pub fn rollback(self) -> Result<(), WorldStateError> {

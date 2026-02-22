@@ -3437,7 +3437,6 @@ dependencies = [
  "flume",
  "gdt-cpus",
  "imbl",
- "indexmap",
  "lazy_static",
  "minstant",
  "moor-bench-utils",

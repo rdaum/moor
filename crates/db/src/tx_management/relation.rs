@@ -24,7 +24,6 @@ use crate::{
 };
 use arc_swap::ArcSwap;
 use minstant::Instant;
-use moor_common::util::PerfTimerGuard;
 use moor_var::Symbol;
 use std::{sync::Arc, time::Duration};
 use tracing::warn;
@@ -515,29 +514,34 @@ where
 
         // Apply phase.
         let counters = db_counters();
+        let total_ops = working_set.len();
+        let mut inserts = Vec::with_capacity(total_ops);
+        let mut tombstones = Vec::new();
+
         for (domain, op) in working_set.tuples().into_iter() {
             match op.operation {
                 OpType::Insert(codomain) | OpType::Update(codomain) => {
-                    {
-                        let _t = PerfTimerGuard::new(&counters.apply_source_put);
-                        self.source.put(op.write_ts, &domain, &codomain).ok();
-                    }
-                    {
-                        let _t = PerfTimerGuard::new(&counters.apply_index_insert);
-                        self.index.insert_entry(op.write_ts, domain, codomain);
-                    }
+                    self.source.put(op.write_ts, &domain, &codomain).ok();
+                    inserts.push((op.write_ts, domain, codomain));
                 }
                 OpType::Delete => {
-                    {
-                        let _t = PerfTimerGuard::new(&counters.apply_source_put);
-                        self.source.del(op.write_ts, &domain).unwrap();
-                    }
-                    {
-                        let _t = PerfTimerGuard::new(&counters.apply_index_insert);
-                        self.index.insert_tombstone(op.write_ts, domain);
-                    }
+                    self.source.del(op.write_ts, &domain).unwrap();
+                    tombstones.push((op.write_ts, domain));
                 }
             }
+        }
+
+        let index_ops = inserts.len() + tombstones.len();
+        if index_ops > 0 {
+            let start = Instant::now();
+            self.index.apply_batch(inserts, tombstones);
+            let elapsed_nanos = isize::try_from(start.elapsed().as_nanos()).unwrap_or(isize::MAX);
+            let invocation_count = isize::try_from(index_ops).unwrap_or(isize::MAX);
+            counters.apply_index_insert.invocations().add(invocation_count);
+            counters
+                .apply_index_insert
+                .cumulative_duration_nanos()
+                .add(elapsed_nanos);
         }
         Ok(())
     }

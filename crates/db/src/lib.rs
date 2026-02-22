@@ -13,7 +13,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_common::model::{CommitResult, WorldState, WorldStateError, WorldStateSource};
+use moor_common::model::{WorldState, WorldStateError, WorldStateSource};
 use moor_var::{ByteSized, EncodingError, Obj, Var};
 use std::collections::HashSet;
 use std::{
@@ -46,7 +46,7 @@ mod ws_transaction;
 
 use crate::{
     db_worldstate::DbWorldState,
-    moor_db::{Caches, MoorDB, WorkingSets},
+    moor_db::MoorDB,
 };
 pub use config::{DatabaseConfig, TableConfig};
 mod config;
@@ -403,17 +403,6 @@ impl ByteSized for ObjAndUUIDHolder {
     fn size_bytes(&self) -> usize {
         24 // Fixed size: 16 bytes (UUID) + 8 bytes (u64)
     }
-}
-
-enum CommitSet {
-    /// Commit the working sets of a transaction.
-    CommitWrites(Box<WorkingSets>, oneshot::Sender<CommitResult>),
-    /// This is a read only commit, we didn't do any mutations. We can just fire and forget,
-    /// just (maybe) updating the caches on the DB side, no need for locks, flushes, anything.
-    CommitReadOnly {
-        caches: Caches,
-        snapshot_version: u64,
-    },
 }
 
 /// Unified cache statistics structure
