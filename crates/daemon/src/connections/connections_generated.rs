@@ -1,36 +1,23 @@
-// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
-// software: you can redistribute it and/or modify it under the terms of the GNU
-// General Public License as published by the Free Software Foundation, version
-// 3.
-//
-// This program is distributed in the hope that it will be useful, but WITHOUT
-// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along with
-// this program. If not, see <https://www.gnu.org/licenses/>.
-//
-
 pub use root::*;
 
-const _: () = ::planus::check_version_compatibility("planus-1.2.0");
+const _: () = ::planus::check_version_compatibility("planus-1.3.0");
 
 /// The root namespace
 ///
 /// Generated from these locations:
-/// * File `connections.fbs`
+/// * File `crates/daemon/src/connections/connections.fbs`
 #[no_implicit_prelude]
-#[allow(dead_code, clippy::needless_lifetimes)]
+#[allow(clippy::needless_lifetimes)]
 mod root {
     /// The namespace `MoorConnections`
     ///
     /// Generated from these locations:
-    /// * File `connections.fbs`
+    /// * File `crates/daemon/src/connections/connections.fbs`
     pub mod moor_connections {
         /// The table `ByteArray` in the namespace `MoorConnections`
         ///
         /// Generated from these locations:
-        /// * Table `ByteArray` in the file `connections.fbs:32`
+        /// * Table `ByteArray` in the file `crates/daemon/src/connections/connections.fbs:32`
         #[derive(
             Clone,
             Debug,
@@ -178,7 +165,7 @@ mod root {
 
         /// Reference to a deserialized [ByteArray].
         #[derive(Copy, Clone)]
-        pub struct ByteArrayRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ByteArrayRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ByteArrayRef<'a> {
             /// Getter for the [`data` field](ByteArray#structfield.data).
@@ -283,7 +270,7 @@ mod root {
         /// The table `ClientAttribute` in the namespace `MoorConnections`
         ///
         /// Generated from these locations:
-        /// * Table `ClientAttribute` in the file `connections.fbs:37`
+        /// * Table `ClientAttribute` in the file `crates/daemon/src/connections/connections.fbs:37`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct ClientAttribute {
             /// The field `key` in the table `ClientAttribute`
@@ -404,9 +391,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAs<::planus::Offset<ClientAttribute>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAs<::planus::Offset<ClientAttribute>>
             for ClientAttributeBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<ClientAttribute>;
@@ -421,9 +408,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOptional<::planus::Offset<ClientAttribute>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOptional<::planus::Offset<ClientAttribute>>
             for ClientAttributeBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<ClientAttribute>;
@@ -438,9 +425,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOffset<ClientAttribute> for ClientAttributeBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOffset<ClientAttribute> for ClientAttributeBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -454,7 +441,7 @@ mod root {
 
         /// Reference to a deserialized [ClientAttribute].
         #[derive(Copy, Clone)]
-        pub struct ClientAttributeRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ClientAttributeRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ClientAttributeRef<'a> {
             /// Getter for the [`key` field](ClientAttribute#structfield.key).
@@ -571,7 +558,7 @@ mod root {
         /// The table `ConnectionRecord` in the namespace `MoorConnections`
         ///
         /// Generated from these locations:
-        /// * Table `ConnectionRecord` in the file `connections.fbs:43`
+        /// * Table `ConnectionRecord` in the file `crates/daemon/src/connections/connections.fbs:43`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct ConnectionRecord {
             /// The field `client_id_high` in the table `ConnectionRecord`
@@ -1104,8 +1091,8 @@ mod root {
             ) -> ConnectionRecordBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)>
             where
                 T11: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
+                >,
             {
                 let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) = self.0;
                 ConnectionRecordBuilder((v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, value))
@@ -1147,20 +1134,20 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<u32, u32>,
-            T4: ::planus::WriteAsDefault<u64, u64>,
-            T5: ::planus::WriteAsDefault<u32, u32>,
-            T6: ::planus::WriteAsDefault<u64, u64>,
-            T7: ::planus::WriteAsDefault<u32, u32>,
-            T8: ::planus::WriteAs<::planus::Offset<str>>,
-            T9: ::planus::WriteAsDefault<u16, u16>,
-            T10: ::planus::WriteAsDefault<u16, u16>,
-            T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>,
-            T12: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ClientAttribute>]>>,
-        > ::planus::WriteAs<::planus::Offset<ConnectionRecord>>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<u32, u32>,
+                T4: ::planus::WriteAsDefault<u64, u64>,
+                T5: ::planus::WriteAsDefault<u32, u32>,
+                T6: ::planus::WriteAsDefault<u64, u64>,
+                T7: ::planus::WriteAsDefault<u32, u32>,
+                T8: ::planus::WriteAs<::planus::Offset<str>>,
+                T9: ::planus::WriteAsDefault<u16, u16>,
+                T10: ::planus::WriteAsDefault<u16, u16>,
+                T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>,
+                T12: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ClientAttribute>]>>,
+            > ::planus::WriteAs<::planus::Offset<ConnectionRecord>>
             for ConnectionRecordBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)>
         {
             type Prepared = ::planus::Offset<ConnectionRecord>;
@@ -1175,20 +1162,20 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<u32, u32>,
-            T4: ::planus::WriteAsDefault<u64, u64>,
-            T5: ::planus::WriteAsDefault<u32, u32>,
-            T6: ::planus::WriteAsDefault<u64, u64>,
-            T7: ::planus::WriteAsDefault<u32, u32>,
-            T8: ::planus::WriteAs<::planus::Offset<str>>,
-            T9: ::planus::WriteAsDefault<u16, u16>,
-            T10: ::planus::WriteAsDefault<u16, u16>,
-            T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>,
-            T12: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ClientAttribute>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<ConnectionRecord>>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<u32, u32>,
+                T4: ::planus::WriteAsDefault<u64, u64>,
+                T5: ::planus::WriteAsDefault<u32, u32>,
+                T6: ::planus::WriteAsDefault<u64, u64>,
+                T7: ::planus::WriteAsDefault<u32, u32>,
+                T8: ::planus::WriteAs<::planus::Offset<str>>,
+                T9: ::planus::WriteAsDefault<u16, u16>,
+                T10: ::planus::WriteAsDefault<u16, u16>,
+                T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>,
+                T12: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ClientAttribute>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<ConnectionRecord>>
             for ConnectionRecordBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)>
         {
             type Prepared = ::planus::Offset<ConnectionRecord>;
@@ -1203,20 +1190,20 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<u32, u32>,
-            T4: ::planus::WriteAsDefault<u64, u64>,
-            T5: ::planus::WriteAsDefault<u32, u32>,
-            T6: ::planus::WriteAsDefault<u64, u64>,
-            T7: ::planus::WriteAsDefault<u32, u32>,
-            T8: ::planus::WriteAs<::planus::Offset<str>>,
-            T9: ::planus::WriteAsDefault<u16, u16>,
-            T10: ::planus::WriteAsDefault<u16, u16>,
-            T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>,
-            T12: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ClientAttribute>]>>,
-        > ::planus::WriteAsOffset<ConnectionRecord>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<u32, u32>,
+                T4: ::planus::WriteAsDefault<u64, u64>,
+                T5: ::planus::WriteAsDefault<u32, u32>,
+                T6: ::planus::WriteAsDefault<u64, u64>,
+                T7: ::planus::WriteAsDefault<u32, u32>,
+                T8: ::planus::WriteAs<::planus::Offset<str>>,
+                T9: ::planus::WriteAsDefault<u16, u16>,
+                T10: ::planus::WriteAsDefault<u16, u16>,
+                T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>,
+                T12: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ClientAttribute>]>>,
+            > ::planus::WriteAsOffset<ConnectionRecord>
             for ConnectionRecordBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)>
         {
             #[inline]
@@ -1233,7 +1220,7 @@ mod root {
 
         /// Reference to a deserialized [ConnectionRecord].
         #[derive(Copy, Clone)]
-        pub struct ConnectionRecordRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ConnectionRecordRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ConnectionRecordRef<'a> {
             /// Getter for the [`client_id_high` field](ConnectionRecord#structfield.client_id_high).
@@ -1488,7 +1475,7 @@ mod root {
         /// The table `ConnectionsRecords` in the namespace `MoorConnections`
         ///
         /// Generated from these locations:
-        /// * Table `ConnectionsRecords` in the file `connections.fbs:62`
+        /// * Table `ConnectionsRecords` in the file `crates/daemon/src/connections/connections.fbs:62`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct ConnectionsRecords {
             /// The field `connections` in the table `ConnectionsRecords`
@@ -1601,8 +1588,9 @@ mod root {
             }
         }
 
-        impl<T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ConnectionRecord>]>>>
-            ::planus::WriteAs<::planus::Offset<ConnectionsRecords>>
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ConnectionRecord>]>>,
+            > ::planus::WriteAs<::planus::Offset<ConnectionsRecords>>
             for ConnectionsRecordsBuilder<(T0,)>
         {
             type Prepared = ::planus::Offset<ConnectionsRecords>;
@@ -1616,8 +1604,9 @@ mod root {
             }
         }
 
-        impl<T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ConnectionRecord>]>>>
-            ::planus::WriteAsOptional<::planus::Offset<ConnectionsRecords>>
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ConnectionRecord>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<ConnectionsRecords>>
             for ConnectionsRecordsBuilder<(T0,)>
         {
             type Prepared = ::planus::Offset<ConnectionsRecords>;
@@ -1631,8 +1620,9 @@ mod root {
             }
         }
 
-        impl<T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ConnectionRecord>]>>>
-            ::planus::WriteAsOffset<ConnectionsRecords> for ConnectionsRecordsBuilder<(T0,)>
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ConnectionRecord>]>>,
+            > ::planus::WriteAsOffset<ConnectionsRecords> for ConnectionsRecordsBuilder<(T0,)>
         {
             #[inline]
             fn prepare(
@@ -1646,7 +1636,7 @@ mod root {
 
         /// Reference to a deserialized [ConnectionsRecords].
         #[derive(Copy, Clone)]
-        pub struct ConnectionsRecordsRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ConnectionsRecordsRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ConnectionsRecordsRef<'a> {
             /// Getter for the [`connections` field](ConnectionsRecords#structfield.connections).
@@ -1756,12 +1746,12 @@ mod root {
     /// The namespace `MoorCommon`
     ///
     /// Generated from these locations:
-    /// * File `../../../schema/schema/common.fbs`
+    /// * File `crates/schema/schema/common.fbs`
     pub mod moor_common {
         /// The table `VarBytes` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VarBytes` in the file `../../../schema/schema/common.fbs:30`
+        /// * Table `VarBytes` in the file `crates/schema/schema/common.fbs:30`
         #[derive(
             Clone,
             Debug,
@@ -1909,7 +1899,7 @@ mod root {
 
         /// Reference to a deserialized [VarBytes].
         #[derive(Copy, Clone)]
-        pub struct VarBytesRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarBytesRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarBytesRef<'a> {
             /// Getter for the [`data` field](VarBytes#structfield.data).
@@ -2010,7 +2000,7 @@ mod root {
         /// The table `Symbol` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Symbol` in the file `../../../schema/schema/common.fbs:34`
+        /// * Table `Symbol` in the file `crates/schema/schema/common.fbs:34`
         #[derive(
             Clone,
             Debug,
@@ -2158,7 +2148,7 @@ mod root {
 
         /// Reference to a deserialized [Symbol].
         #[derive(Copy, Clone)]
-        pub struct SymbolRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct SymbolRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> SymbolRef<'a> {
             /// Getter for the [`value` field](Symbol#structfield.value).
@@ -2259,7 +2249,7 @@ mod root {
         /// The table `Uuid` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Uuid` in the file `../../../schema/schema/common.fbs:38`
+        /// * Table `Uuid` in the file `crates/schema/schema/common.fbs:38`
         #[derive(
             Clone,
             Debug,
@@ -2407,7 +2397,7 @@ mod root {
 
         /// Reference to a deserialized [Uuid].
         #[derive(Copy, Clone)]
-        pub struct UuidRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct UuidRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> UuidRef<'a> {
             /// Getter for the [`data` field](Uuid#structfield.data).
@@ -2508,7 +2498,7 @@ mod root {
         /// The union `ObjUnion` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Union `ObjUnion` in the file `../../../schema/schema/common.fbs:46`
+        /// * Union `ObjUnion` in the file `crates/schema/schema/common.fbs:46`
         #[derive(
             Clone,
             Debug,
@@ -2764,7 +2754,7 @@ mod root {
         /// The table `ObjId` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjId` in the file `../../../schema/schema/common.fbs:52`
+        /// * Table `ObjId` in the file `crates/schema/schema/common.fbs:52`
         #[derive(
             Clone,
             Debug,
@@ -2921,7 +2911,7 @@ mod root {
 
         /// Reference to a deserialized [ObjId].
         #[derive(Copy, Clone)]
-        pub struct ObjIdRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ObjIdRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ObjIdRef<'a> {
             /// Getter for the [`id` field](ObjId#structfield.id).
@@ -3022,7 +3012,7 @@ mod root {
         /// The table `UuObjId` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `UuObjId` in the file `../../../schema/schema/common.fbs:56`
+        /// * Table `UuObjId` in the file `crates/schema/schema/common.fbs:56`
         #[derive(
             Clone,
             Debug,
@@ -3181,7 +3171,7 @@ mod root {
 
         /// Reference to a deserialized [UuObjId].
         #[derive(Copy, Clone)]
-        pub struct UuObjIdRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct UuObjIdRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> UuObjIdRef<'a> {
             /// Getter for the [`packed_value` field](UuObjId#structfield.packed_value).
@@ -3284,7 +3274,7 @@ mod root {
         /// The table `AnonymousObjId` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `AnonymousObjId` in the file `../../../schema/schema/common.fbs:61`
+        /// * Table `AnonymousObjId` in the file `crates/schema/schema/common.fbs:61`
         #[derive(
             Clone,
             Debug,
@@ -3446,7 +3436,7 @@ mod root {
 
         /// Reference to a deserialized [AnonymousObjId].
         #[derive(Copy, Clone)]
-        pub struct AnonymousObjIdRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct AnonymousObjIdRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> AnonymousObjIdRef<'a> {
             /// Getter for the [`packed_value` field](AnonymousObjId#structfield.packed_value).
@@ -3555,7 +3545,7 @@ mod root {
         /// The table `Obj` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Obj` in the file `../../../schema/schema/common.fbs:66`
+        /// * Table `Obj` in the file `crates/schema/schema/common.fbs:66`
         #[derive(
             Clone,
             Debug,
@@ -3696,7 +3686,7 @@ mod root {
 
         /// Reference to a deserialized [Obj].
         #[derive(Copy, Clone)]
-        pub struct ObjRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ObjRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ObjRef<'a> {
             /// Getter for the [`obj` field](Obj#structfield.obj).
@@ -3795,7 +3785,7 @@ mod root {
         /// The enum `ErrorCode` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Enum `ErrorCode` in the file `../../../schema/schema/common.fbs:74`
+        /// * Enum `ErrorCode` in the file `crates/schema/schema/common.fbs:74`
         #[derive(
             Copy,
             Clone,
@@ -4057,7 +4047,7 @@ mod root {
         /// The table `Error` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Error` in the file `../../../schema/schema/common.fbs:97`
+        /// * Table `Error` in the file `crates/schema/schema/common.fbs:97`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct Error {
             /// The field `err_type` in the table `Error`
@@ -4271,11 +4261,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::ErrorCode, self::ErrorCode>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
-            T3: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<Error>> for ErrorBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAsDefault<self::ErrorCode, self::ErrorCode>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<Error>> for ErrorBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<Error>;
 
@@ -4286,11 +4276,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::ErrorCode, self::ErrorCode>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
-            T3: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<Error>> for ErrorBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAsDefault<self::ErrorCode, self::ErrorCode>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<Error>>
+            for ErrorBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<Error>;
 
@@ -4304,11 +4295,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::ErrorCode, self::ErrorCode>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
-            T3: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOffset<Error> for ErrorBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAsDefault<self::ErrorCode, self::ErrorCode>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOffset<Error> for ErrorBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Error> {
@@ -4319,7 +4310,7 @@ mod root {
 
         /// Reference to a deserialized [Error].
         #[derive(Copy, Clone)]
-        pub struct ErrorRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ErrorRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ErrorRef<'a> {
             /// Getter for the [`err_type` field](Error#structfield.err_type).
@@ -4476,7 +4467,7 @@ mod root {
         /// The table `NarrativeEvent` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `NarrativeEvent` in the file `../../../schema/schema/common.fbs:108`
+        /// * Table `NarrativeEvent` in the file `crates/schema/schema/common.fbs:108`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct NarrativeEvent {
             /// The field `event_id` in the table `NarrativeEvent`
@@ -4646,11 +4637,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Event>>,
-        > ::planus::WriteAs<::planus::Offset<NarrativeEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Event>>,
+            > ::planus::WriteAs<::planus::Offset<NarrativeEvent>>
             for NarrativeEventBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<NarrativeEvent>;
@@ -4662,11 +4653,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Event>>,
-        > ::planus::WriteAsOptional<::planus::Offset<NarrativeEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Event>>,
+            > ::planus::WriteAsOptional<::planus::Offset<NarrativeEvent>>
             for NarrativeEventBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<NarrativeEvent>;
@@ -4681,11 +4672,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Event>>,
-        > ::planus::WriteAsOffset<NarrativeEvent> for NarrativeEventBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Event>>,
+            > ::planus::WriteAsOffset<NarrativeEvent> for NarrativeEventBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<NarrativeEvent> {
@@ -4696,7 +4687,7 @@ mod root {
 
         /// Reference to a deserialized [NarrativeEvent].
         #[derive(Copy, Clone)]
-        pub struct NarrativeEventRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct NarrativeEventRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> NarrativeEventRef<'a> {
             /// Getter for the [`event_id` field](NarrativeEvent#structfield.event_id).
@@ -4835,7 +4826,7 @@ mod root {
         /// The union `EventUnion` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Union `EventUnion` in the file `../../../schema/schema/common.fbs:115`
+        /// * Union `EventUnion` in the file `crates/schema/schema/common.fbs:115`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub enum EventUnion {
             /// The variant of type `NotifyEvent` in the union `EventUnion`
@@ -4849,6 +4840,9 @@ mod root {
 
             /// The variant of type `TracebackEvent` in the union `EventUnion`
             TracebackEvent(::planus::alloc::boxed::Box<self::TracebackEvent>),
+
+            /// The variant of type `DataEvent` in the union `EventUnion`
+            DataEvent(::planus::alloc::boxed::Box<self::DataEvent>),
         }
 
         impl EventUnion {
@@ -4889,6 +4883,14 @@ mod root {
             ) -> ::planus::UnionOffset<Self> {
                 ::planus::UnionOffset::new(4, value.prepare(builder).downcast())
             }
+
+            #[inline]
+            pub fn create_data_event(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::DataEvent>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(5, value.prepare(builder).downcast())
+            }
         }
 
         impl ::planus::WriteAsUnion<EventUnion> for EventUnion {
@@ -4899,6 +4901,7 @@ mod root {
                     Self::PresentEvent(value) => Self::create_present_event(builder, value),
                     Self::UnpresentEvent(value) => Self::create_unpresent_event(builder, value),
                     Self::TracebackEvent(value) => Self::create_traceback_event(builder, value),
+                    Self::DataEvent(value) => Self::create_data_event(builder, value),
                 }
             }
         }
@@ -4962,6 +4965,15 @@ mod root {
             ) -> EventUnionBuilder<::planus::Initialized<4, T>>
             where
                 T: ::planus::WriteAsOffset<self::TracebackEvent>,
+            {
+                EventUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`DataEvent` variant](EventUnion#variant.DataEvent).
+            #[inline]
+            pub fn data_event<T>(self, value: T) -> EventUnionBuilder<::planus::Initialized<5, T>>
+            where
+                T: ::planus::WriteAsOffset<self::DataEvent>,
             {
                 EventUnionBuilder(::planus::Initialized(value))
             }
@@ -5085,6 +5097,32 @@ mod root {
                 ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
             }
         }
+        impl<T> ::planus::WriteAsUnion<EventUnion> for EventUnionBuilder<::planus::Initialized<5, T>>
+        where
+            T: ::planus::WriteAsOffset<self::DataEvent>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::UnionOffset<EventUnion> {
+                ::planus::UnionOffset::new(5, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<EventUnion>
+            for EventUnionBuilder<::planus::Initialized<5, T>>
+        where
+            T: ::planus::WriteAsOffset<self::DataEvent>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<EventUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
 
         /// Reference to a deserialized [EventUnion].
         #[derive(Copy, Clone, Debug)]
@@ -5093,6 +5131,7 @@ mod root {
             PresentEvent(self::PresentEventRef<'a>),
             UnpresentEvent(self::UnpresentEventRef<'a>),
             TracebackEvent(self::TracebackEventRef<'a>),
+            DataEvent(self::DataEventRef<'a>),
         }
 
         impl<'a> ::core::convert::TryFrom<EventUnionRef<'a>> for EventUnion {
@@ -5123,6 +5162,12 @@ mod root {
                             ::core::convert::TryFrom::try_from(value)?,
                         ))
                     }
+
+                    EventUnionRef::DataEvent(value) => {
+                        Self::DataEvent(::planus::alloc::boxed::Box::new(
+                            ::core::convert::TryFrom::try_from(value)?,
+                        ))
+                    }
                 })
             }
         }
@@ -5146,6 +5191,9 @@ mod root {
                     4 => ::core::result::Result::Ok(Self::TracebackEvent(
                         ::planus::TableRead::from_buffer(buffer, field_offset)?,
                     )),
+                    5 => ::core::result::Result::Ok(Self::DataEvent(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
                     _ => {
                         ::core::result::Result::Err(::planus::errors::ErrorKind::UnknownUnionTag {
                             tag,
@@ -5159,10 +5207,283 @@ mod root {
             const VECTOR_NAME: &'static str = "[EventUnionRef]";
         }
 
+        /// The table `EventMetadata` in the namespace `MoorCommon`
+        ///
+        /// Generated from these locations:
+        /// * Table `EventMetadata` in the file `crates/schema/schema/common.fbs:123`
+        #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
+        pub struct EventMetadata {
+            /// The field `key` in the table `EventMetadata`
+            pub key: ::planus::alloc::boxed::Box<self::Symbol>,
+            /// The field `value` in the table `EventMetadata`
+            pub value: ::planus::alloc::boxed::Box<super::moor_var::Var>,
+        }
+
+        impl EventMetadata {
+            /// Creates a [EventMetadataBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> EventMetadataBuilder<()> {
+                EventMetadataBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_key: impl ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                field_value: impl ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_key = field_key.prepare(builder);
+                let prepared_value = field_value.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<8> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<self::Symbol>>(0);
+                table_writer.write_entry::<::planus::Offset<super::moor_var::Var>>(1);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_key);
+                        object_writer.write::<_, _, 4>(&prepared_value);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<EventMetadata>> for EventMetadata {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<EventMetadata> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<EventMetadata>> for EventMetadata {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<EventMetadata>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<EventMetadata> for EventMetadata {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<EventMetadata> {
+                EventMetadata::create(builder, &self.key, &self.value)
+            }
+        }
+
+        /// Builder for serializing an instance of the [EventMetadata] type.
+        ///
+        /// Can be created using the [EventMetadata::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct EventMetadataBuilder<State>(State);
+
+        impl EventMetadataBuilder<()> {
+            /// Setter for the [`key` field](EventMetadata#structfield.key).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn key<T0>(self, value: T0) -> EventMetadataBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            {
+                EventMetadataBuilder((value,))
+            }
+        }
+
+        impl<T0> EventMetadataBuilder<(T0,)> {
+            /// Setter for the [`value` field](EventMetadata#structfield.value).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn value<T1>(self, value: T1) -> EventMetadataBuilder<(T0, T1)>
+            where
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            {
+                let (v0,) = self.0;
+                EventMetadataBuilder((v0, value))
+            }
+        }
+
+        impl<T0, T1> EventMetadataBuilder<(T0, T1)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [EventMetadata].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<EventMetadata>
+            where
+                Self: ::planus::WriteAsOffset<EventMetadata>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAs<::planus::Offset<EventMetadata>>
+            for EventMetadataBuilder<(T0, T1)>
+        {
+            type Prepared = ::planus::Offset<EventMetadata>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<EventMetadata> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOptional<::planus::Offset<EventMetadata>>
+            for EventMetadataBuilder<(T0, T1)>
+        {
+            type Prepared = ::planus::Offset<EventMetadata>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<EventMetadata>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOffset<EventMetadata> for EventMetadataBuilder<(T0, T1)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<EventMetadata> {
+                let (v0, v1) = &self.0;
+                EventMetadata::create(builder, v0, v1)
+            }
+        }
+
+        /// Reference to a deserialized [EventMetadata].
+        #[derive(Copy, Clone)]
+        pub struct EventMetadataRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
+
+        impl<'a> EventMetadataRef<'a> {
+            /// Getter for the [`key` field](EventMetadata#structfield.key).
+            #[inline]
+            pub fn key(&self) -> ::planus::Result<self::SymbolRef<'a>> {
+                self.0.access_required(0, "EventMetadata", "key")
+            }
+
+            /// Getter for the [`value` field](EventMetadata#structfield.value).
+            #[inline]
+            pub fn value(&self) -> ::planus::Result<super::moor_var::VarRef<'a>> {
+                self.0.access_required(1, "EventMetadata", "value")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for EventMetadataRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("EventMetadataRef");
+                f.field("key", &self.key());
+                f.field("value", &self.value());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<EventMetadataRef<'a>> for EventMetadata {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: EventMetadataRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    key: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.key()?,
+                    )?),
+                    value: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.value()?,
+                    )?),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for EventMetadataRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for EventMetadataRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[EventMetadataRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<EventMetadata>> for EventMetadata {
+            type Value = ::planus::Offset<EventMetadata>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<EventMetadata>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for EventMetadataRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[EventMetadataRef]", "read_as_root", 0)
+                })
+            }
+        }
+
         /// The table `NotifyEvent` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `NotifyEvent` in the file `../../../schema/schema/common.fbs:122`
+        /// * Table `NotifyEvent` in the file `crates/schema/schema/common.fbs:128`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct NotifyEvent {
             /// The field `value` in the table `NotifyEvent`
@@ -5173,6 +5494,8 @@ mod root {
             pub no_flush: bool,
             /// The field `no_newline` in the table `NotifyEvent`
             pub no_newline: bool,
+            /// The field `metadata` in the table `NotifyEvent`
+            pub metadata: ::core::option::Option<::planus::alloc::vec::Vec<self::EventMetadata>>,
         }
 
         impl NotifyEvent {
@@ -5189,17 +5512,27 @@ mod root {
                 field_content_type: impl ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
                 field_no_flush: impl ::planus::WriteAsDefault<bool, bool>,
                 field_no_newline: impl ::planus::WriteAsDefault<bool, bool>,
+                field_metadata: impl ::planus::WriteAsOptional<
+                    ::planus::Offset<[::planus::Offset<self::EventMetadata>]>,
+                >,
             ) -> ::planus::Offset<Self> {
                 let prepared_value = field_value.prepare(builder);
                 let prepared_content_type = field_content_type.prepare(builder);
                 let prepared_no_flush = field_no_flush.prepare(builder, &false);
                 let prepared_no_newline = field_no_newline.prepare(builder, &false);
+                let prepared_metadata = field_metadata.prepare(builder);
 
-                let mut table_writer: ::planus::table_writer::TableWriter<12> =
+                let mut table_writer: ::planus::table_writer::TableWriter<14> =
                     ::core::default::Default::default();
                 table_writer.write_entry::<::planus::Offset<super::moor_var::Var>>(0);
                 if prepared_content_type.is_some() {
                     table_writer.write_entry::<::planus::Offset<self::Symbol>>(1);
+                }
+                if prepared_metadata.is_some() {
+                    table_writer
+                        .write_entry::<::planus::Offset<[::planus::Offset<self::EventMetadata>]>>(
+                            4,
+                        );
                 }
                 if prepared_no_flush.is_some() {
                     table_writer.write_entry::<bool>(2);
@@ -5215,6 +5548,9 @@ mod root {
                             prepared_content_type
                         {
                             object_writer.write::<_, _, 4>(&prepared_content_type);
+                        }
+                        if let ::core::option::Option::Some(prepared_metadata) = prepared_metadata {
+                            object_writer.write::<_, _, 4>(&prepared_metadata);
                         }
                         if let ::core::option::Option::Some(prepared_no_flush) = prepared_no_flush {
                             object_writer.write::<_, _, 1>(&prepared_no_flush);
@@ -5260,6 +5596,7 @@ mod root {
                     &self.content_type,
                     self.no_flush,
                     self.no_newline,
+                    &self.metadata,
                 )
             }
         }
@@ -5348,6 +5685,28 @@ mod root {
         }
 
         impl<T0, T1, T2, T3> NotifyEventBuilder<(T0, T1, T2, T3)> {
+            /// Setter for the [`metadata` field](NotifyEvent#structfield.metadata).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn metadata<T4>(self, value: T4) -> NotifyEventBuilder<(T0, T1, T2, T3, T4)>
+            where
+                T4: ::planus::WriteAsOptional<
+                    ::planus::Offset<[::planus::Offset<self::EventMetadata>]>,
+                >,
+            {
+                let (v0, v1, v2, v3) = self.0;
+                NotifyEventBuilder((v0, v1, v2, v3, value))
+            }
+
+            /// Sets the [`metadata` field](NotifyEvent#structfield.metadata) to null.
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn metadata_as_null(self) -> NotifyEventBuilder<(T0, T1, T2, T3, ())> {
+                self.metadata(())
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4> NotifyEventBuilder<(T0, T1, T2, T3, T4)> {
             /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [NotifyEvent].
             #[inline]
             pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<NotifyEvent>
@@ -5359,12 +5718,15 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
-            T2: ::planus::WriteAsDefault<bool, bool>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAs<::planus::Offset<NotifyEvent>>
-            for NotifyEventBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
+                T2: ::planus::WriteAsDefault<bool, bool>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+                T4: ::planus::WriteAsOptional<
+                    ::planus::Offset<[::planus::Offset<self::EventMetadata>]>,
+                >,
+            > ::planus::WriteAs<::planus::Offset<NotifyEvent>>
+            for NotifyEventBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<NotifyEvent>;
 
@@ -5375,12 +5737,15 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
-            T2: ::planus::WriteAsDefault<bool, bool>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOptional<::planus::Offset<NotifyEvent>>
-            for NotifyEventBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
+                T2: ::planus::WriteAsDefault<bool, bool>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+                T4: ::planus::WriteAsOptional<
+                    ::planus::Offset<[::planus::Offset<self::EventMetadata>]>,
+                >,
+            > ::planus::WriteAsOptional<::planus::Offset<NotifyEvent>>
+            for NotifyEventBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<NotifyEvent>;
 
@@ -5394,22 +5759,25 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
-            T2: ::planus::WriteAsDefault<bool, bool>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOffset<NotifyEvent> for NotifyEventBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
+                T2: ::planus::WriteAsDefault<bool, bool>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+                T4: ::planus::WriteAsOptional<
+                    ::planus::Offset<[::planus::Offset<self::EventMetadata>]>,
+                >,
+            > ::planus::WriteAsOffset<NotifyEvent> for NotifyEventBuilder<(T0, T1, T2, T3, T4)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<NotifyEvent> {
-                let (v0, v1, v2, v3) = &self.0;
-                NotifyEvent::create(builder, v0, v1, v2, v3)
+                let (v0, v1, v2, v3, v4) = &self.0;
+                NotifyEvent::create(builder, v0, v1, v2, v3, v4)
             }
         }
 
         /// Reference to a deserialized [NotifyEvent].
         #[derive(Copy, Clone)]
-        pub struct NotifyEventRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct NotifyEventRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> NotifyEventRef<'a> {
             /// Getter for the [`value` field](NotifyEvent#structfield.value).
@@ -5445,6 +5813,18 @@ mod root {
                         .unwrap_or(false),
                 )
             }
+
+            /// Getter for the [`metadata` field](NotifyEvent#structfield.metadata).
+            #[inline]
+            pub fn metadata(
+                &self,
+            ) -> ::planus::Result<
+                ::core::option::Option<
+                    ::planus::Vector<'a, ::planus::Result<self::EventMetadataRef<'a>>>,
+                >,
+            > {
+                self.0.access(4, "NotifyEvent", "metadata")
+            }
         }
 
         impl<'a> ::core::fmt::Debug for NotifyEventRef<'a> {
@@ -5458,6 +5838,9 @@ mod root {
                 }
                 f.field("no_flush", &self.no_flush());
                 f.field("no_newline", &self.no_newline());
+                if let ::core::option::Option::Some(field_metadata) = self.metadata().transpose() {
+                    f.field("metadata", &field_metadata);
+                }
                 f.finish()
             }
         }
@@ -5482,6 +5865,11 @@ mod root {
                     },
                     no_flush: ::core::convert::TryInto::try_into(value.no_flush()?)?,
                     no_newline: ::core::convert::TryInto::try_into(value.no_newline()?)?,
+                    metadata: if let ::core::option::Option::Some(metadata) = value.metadata()? {
+                        ::core::option::Option::Some(metadata.to_vec_result()?)
+                    } else {
+                        ::core::option::Option::None
+                    },
                 })
             }
         }
@@ -5562,7 +5950,7 @@ mod root {
         /// The table `PresentEvent` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PresentEvent` in the file `../../../schema/schema/common.fbs:129`
+        /// * Table `PresentEvent` in the file `crates/schema/schema/common.fbs:136`
         #[derive(
             Clone,
             Debug,
@@ -5711,7 +6099,7 @@ mod root {
 
         /// Reference to a deserialized [PresentEvent].
         #[derive(Copy, Clone)]
-        pub struct PresentEventRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct PresentEventRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> PresentEventRef<'a> {
             /// Getter for the [`presentation` field](PresentEvent#structfield.presentation).
@@ -5818,7 +6206,7 @@ mod root {
         /// The table `UnpresentEvent` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `UnpresentEvent` in the file `../../../schema/schema/common.fbs:133`
+        /// * Table `UnpresentEvent` in the file `crates/schema/schema/common.fbs:140`
         #[derive(
             Clone,
             Debug,
@@ -5967,7 +6355,7 @@ mod root {
 
         /// Reference to a deserialized [UnpresentEvent].
         #[derive(Copy, Clone)]
-        pub struct UnpresentEventRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct UnpresentEventRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> UnpresentEventRef<'a> {
             /// Getter for the [`presentation_id` field](UnpresentEvent#structfield.presentation_id).
@@ -6073,7 +6461,7 @@ mod root {
         /// The table `TracebackEvent` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `TracebackEvent` in the file `../../../schema/schema/common.fbs:137`
+        /// * Table `TracebackEvent` in the file `crates/schema/schema/common.fbs:144`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct TracebackEvent {
             /// The field `exception` in the table `TracebackEvent`
@@ -6212,7 +6600,7 @@ mod root {
 
         /// Reference to a deserialized [TracebackEvent].
         #[derive(Copy, Clone)]
-        pub struct TracebackEventRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct TracebackEventRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> TracebackEventRef<'a> {
             /// Getter for the [`exception` field](TracebackEvent#structfield.exception).
@@ -6316,10 +6704,314 @@ mod root {
             }
         }
 
+        /// The table `DataEvent` in the namespace `MoorCommon`
+        ///
+        /// Generated from these locations:
+        /// * Table `DataEvent` in the file `crates/schema/schema/common.fbs:148`
+        #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
+        pub struct DataEvent {
+            /// The field `domain` in the table `DataEvent`
+            pub domain: ::planus::alloc::boxed::Box<self::Symbol>,
+            /// The field `kind` in the table `DataEvent`
+            pub kind: ::planus::alloc::boxed::Box<self::Symbol>,
+            /// The field `payload` in the table `DataEvent`
+            pub payload: ::planus::alloc::boxed::Box<super::moor_var::Var>,
+        }
+
+        impl DataEvent {
+            /// Creates a [DataEventBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> DataEventBuilder<()> {
+                DataEventBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_domain: impl ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                field_kind: impl ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                field_payload: impl ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_domain = field_domain.prepare(builder);
+                let prepared_kind = field_kind.prepare(builder);
+                let prepared_payload = field_payload.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<10> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<self::Symbol>>(0);
+                table_writer.write_entry::<::planus::Offset<self::Symbol>>(1);
+                table_writer.write_entry::<::planus::Offset<super::moor_var::Var>>(2);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_domain);
+                        object_writer.write::<_, _, 4>(&prepared_kind);
+                        object_writer.write::<_, _, 4>(&prepared_payload);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<DataEvent>> for DataEvent {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<DataEvent> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<DataEvent>> for DataEvent {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<DataEvent>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<DataEvent> for DataEvent {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<DataEvent> {
+                DataEvent::create(builder, &self.domain, &self.kind, &self.payload)
+            }
+        }
+
+        /// Builder for serializing an instance of the [DataEvent] type.
+        ///
+        /// Can be created using the [DataEvent::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct DataEventBuilder<State>(State);
+
+        impl DataEventBuilder<()> {
+            /// Setter for the [`domain` field](DataEvent#structfield.domain).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn domain<T0>(self, value: T0) -> DataEventBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            {
+                DataEventBuilder((value,))
+            }
+        }
+
+        impl<T0> DataEventBuilder<(T0,)> {
+            /// Setter for the [`kind` field](DataEvent#structfield.kind).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn kind<T1>(self, value: T1) -> DataEventBuilder<(T0, T1)>
+            where
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            {
+                let (v0,) = self.0;
+                DataEventBuilder((v0, value))
+            }
+        }
+
+        impl<T0, T1> DataEventBuilder<(T0, T1)> {
+            /// Setter for the [`payload` field](DataEvent#structfield.payload).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn payload<T2>(self, value: T2) -> DataEventBuilder<(T0, T1, T2)>
+            where
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            {
+                let (v0, v1) = self.0;
+                DataEventBuilder((v0, v1, value))
+            }
+        }
+
+        impl<T0, T1, T2> DataEventBuilder<(T0, T1, T2)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [DataEvent].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<DataEvent>
+            where
+                Self: ::planus::WriteAsOffset<DataEvent>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAs<::planus::Offset<DataEvent>> for DataEventBuilder<(T0, T1, T2)>
+        {
+            type Prepared = ::planus::Offset<DataEvent>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<DataEvent> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOptional<::planus::Offset<DataEvent>>
+            for DataEventBuilder<(T0, T1, T2)>
+        {
+            type Prepared = ::planus::Offset<DataEvent>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<DataEvent>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOffset<DataEvent> for DataEventBuilder<(T0, T1, T2)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<DataEvent> {
+                let (v0, v1, v2) = &self.0;
+                DataEvent::create(builder, v0, v1, v2)
+            }
+        }
+
+        /// Reference to a deserialized [DataEvent].
+        #[derive(Copy, Clone)]
+        pub struct DataEventRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
+
+        impl<'a> DataEventRef<'a> {
+            /// Getter for the [`domain` field](DataEvent#structfield.domain).
+            #[inline]
+            pub fn domain(&self) -> ::planus::Result<self::SymbolRef<'a>> {
+                self.0.access_required(0, "DataEvent", "domain")
+            }
+
+            /// Getter for the [`kind` field](DataEvent#structfield.kind).
+            #[inline]
+            pub fn kind(&self) -> ::planus::Result<self::SymbolRef<'a>> {
+                self.0.access_required(1, "DataEvent", "kind")
+            }
+
+            /// Getter for the [`payload` field](DataEvent#structfield.payload).
+            #[inline]
+            pub fn payload(&self) -> ::planus::Result<super::moor_var::VarRef<'a>> {
+                self.0.access_required(2, "DataEvent", "payload")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for DataEventRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("DataEventRef");
+                f.field("domain", &self.domain());
+                f.field("kind", &self.kind());
+                f.field("payload", &self.payload());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<DataEventRef<'a>> for DataEvent {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: DataEventRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    domain: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.domain()?,
+                    )?),
+                    kind: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.kind()?,
+                    )?),
+                    payload: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.payload()?,
+                    )?),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for DataEventRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for DataEventRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[DataEventRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<DataEvent>> for DataEvent {
+            type Value = ::planus::Offset<DataEvent>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<DataEvent>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for DataEventRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[DataEventRef]", "read_as_root", 0)
+                })
+            }
+        }
+
         /// The table `Event` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Event` in the file `../../../schema/schema/common.fbs:141`
+        /// * Table `Event` in the file `crates/schema/schema/common.fbs:154`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct Event {
             /// The field `event` in the table `Event`
@@ -6450,7 +7142,7 @@ mod root {
 
         /// Reference to a deserialized [Event].
         #[derive(Copy, Clone)]
-        pub struct EventRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct EventRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> EventRef<'a> {
             /// Getter for the [`event` field](Event#structfield.event).
@@ -6551,7 +7243,7 @@ mod root {
         /// The table `Presentation` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Presentation` in the file `../../../schema/schema/common.fbs:145`
+        /// * Table `Presentation` in the file `crates/schema/schema/common.fbs:158`
         #[derive(
             Clone,
             Debug,
@@ -6734,8 +7426,8 @@ mod root {
             pub fn attributes<T4>(self, value: T4) -> PresentationBuilder<(T0, T1, T2, T3, T4)>
             where
                 T4: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>,
+                >,
             {
                 let (v0, v1, v2, v3) = self.0;
                 PresentationBuilder((v0, v1, v2, v3, value))
@@ -6754,12 +7446,14 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<str>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-            T3: ::planus::WriteAs<::planus::Offset<str>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>>,
-        > ::planus::WriteAs<::planus::Offset<Presentation>>
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+                T3: ::planus::WriteAs<::planus::Offset<str>>,
+                T4: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>,
+                >,
+            > ::planus::WriteAs<::planus::Offset<Presentation>>
             for PresentationBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<Presentation>;
@@ -6771,12 +7465,14 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<str>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-            T3: ::planus::WriteAs<::planus::Offset<str>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<Presentation>>
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+                T3: ::planus::WriteAs<::planus::Offset<str>>,
+                T4: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>,
+                >,
+            > ::planus::WriteAsOptional<::planus::Offset<Presentation>>
             for PresentationBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<Presentation>;
@@ -6791,12 +7487,14 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<str>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-            T3: ::planus::WriteAs<::planus::Offset<str>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>>,
-        > ::planus::WriteAsOffset<Presentation> for PresentationBuilder<(T0, T1, T2, T3, T4)>
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+                T3: ::planus::WriteAs<::planus::Offset<str>>,
+                T4: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>,
+                >,
+            > ::planus::WriteAsOffset<Presentation> for PresentationBuilder<(T0, T1, T2, T3, T4)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Presentation> {
@@ -6807,7 +7505,7 @@ mod root {
 
         /// Reference to a deserialized [Presentation].
         #[derive(Copy, Clone)]
-        pub struct PresentationRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct PresentationRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> PresentationRef<'a> {
             /// Getter for the [`id` field](Presentation#structfield.id).
@@ -6948,7 +7646,7 @@ mod root {
         /// The table `PresentationAttribute` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PresentationAttribute` in the file `../../../schema/schema/common.fbs:153`
+        /// * Table `PresentationAttribute` in the file `crates/schema/schema/common.fbs:166`
         #[derive(
             Clone,
             Debug,
@@ -7089,9 +7787,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<str>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<PresentationAttribute>>
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<PresentationAttribute>>
             for PresentationAttributeBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PresentationAttribute>;
@@ -7106,9 +7804,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<str>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<PresentationAttribute>>
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<PresentationAttribute>>
             for PresentationAttributeBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PresentationAttribute>;
@@ -7123,9 +7821,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<str>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<PresentationAttribute>
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<PresentationAttribute>
             for PresentationAttributeBuilder<(T0, T1)>
         {
             #[inline]
@@ -7140,7 +7838,9 @@ mod root {
 
         /// Reference to a deserialized [PresentationAttribute].
         #[derive(Copy, Clone)]
-        pub struct PresentationAttributeRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct PresentationAttributeRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> PresentationAttributeRef<'a> {
             /// Getter for the [`key` field](PresentationAttribute#structfield.key).
@@ -7255,7 +7955,7 @@ mod root {
         /// The table `Exception` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Exception` in the file `../../../schema/schema/common.fbs:158`
+        /// * Table `Exception` in the file `crates/schema/schema/common.fbs:171`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct Exception {
             /// The field `error` in the table `Exception`
@@ -7403,10 +8103,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Error>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-        > ::planus::WriteAs<::planus::Offset<Exception>> for ExceptionBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Error>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+            > ::planus::WriteAs<::planus::Offset<Exception>> for ExceptionBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<Exception>;
 
@@ -7417,10 +8117,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Error>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<Exception>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Error>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<Exception>>
             for ExceptionBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<Exception>;
@@ -7435,10 +8135,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Error>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-        > ::planus::WriteAsOffset<Exception> for ExceptionBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Error>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+            > ::planus::WriteAsOffset<Exception> for ExceptionBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Exception> {
@@ -7449,7 +8149,7 @@ mod root {
 
         /// Reference to a deserialized [Exception].
         #[derive(Copy, Clone)]
-        pub struct ExceptionRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ExceptionRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ExceptionRef<'a> {
             /// Getter for the [`error` field](Exception#structfield.error).
@@ -7578,7 +8278,7 @@ mod root {
         /// The table `CompileContext` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `CompileContext` in the file `../../../schema/schema/common.fbs:168`
+        /// * Table `CompileContext` in the file `crates/schema/schema/common.fbs:181`
         #[derive(
             Clone,
             Debug,
@@ -7767,7 +8467,7 @@ mod root {
 
         /// Reference to a deserialized [CompileContext].
         #[derive(Copy, Clone)]
-        pub struct CompileContextRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct CompileContextRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> CompileContextRef<'a> {
             /// Getter for the [`line` field](CompileContext#structfield.line).
@@ -7880,7 +8580,7 @@ mod root {
         /// The table `StringLexError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `StringLexError` in the file `../../../schema/schema/common.fbs:173`
+        /// * Table `StringLexError` in the file `crates/schema/schema/common.fbs:186`
         #[derive(
             Clone,
             Debug,
@@ -8012,9 +8712,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<StringLexError>> for StringLexErrorBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<StringLexError>>
+            for StringLexErrorBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StringLexError>;
 
@@ -8025,9 +8726,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<StringLexError>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<StringLexError>>
             for StringLexErrorBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StringLexError>;
@@ -8042,9 +8743,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<StringLexError> for StringLexErrorBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<StringLexError> for StringLexErrorBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<StringLexError> {
@@ -8055,7 +8756,7 @@ mod root {
 
         /// Reference to a deserialized [StringLexError].
         #[derive(Copy, Clone)]
-        pub struct StringLexErrorRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StringLexErrorRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> StringLexErrorRef<'a> {
             /// Getter for the [`context` field](StringLexError#structfield.context).
@@ -8170,7 +8871,7 @@ mod root {
         /// The table `ParseError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ParseError` in the file `../../../schema/schema/common.fbs:178`
+        /// * Table `ParseError` in the file `crates/schema/schema/common.fbs:191`
         #[derive(
             Clone,
             Debug,
@@ -8195,6 +8896,18 @@ mod root {
             pub has_end: bool,
             /// The field `message` in the table `ParseError`
             pub message: ::planus::alloc::string::String,
+            /// The field `span_start` in the table `ParseError`
+            pub span_start: u64,
+            /// The field `span_end` in the table `ParseError`
+            pub span_end: u64,
+            /// The field `has_span` in the table `ParseError`
+            pub has_span: bool,
+            /// The field `expected_tokens` in the table `ParseError`
+            pub expected_tokens:
+                ::core::option::Option<::planus::alloc::vec::Vec<::planus::alloc::string::String>>,
+            /// The field `notes` in the table `ParseError`
+            pub notes:
+                ::core::option::Option<::planus::alloc::vec::Vec<::planus::alloc::string::String>>,
         }
 
         #[allow(clippy::derivable_impls)]
@@ -8207,6 +8920,11 @@ mod root {
                     end_col: 0,
                     has_end: false,
                     message: ::core::default::Default::default(),
+                    span_start: 0,
+                    span_end: 0,
+                    has_span: false,
+                    expected_tokens: ::core::default::Default::default(),
+                    notes: ::core::default::Default::default(),
                 }
             }
         }
@@ -8227,6 +8945,13 @@ mod root {
                 field_end_col: impl ::planus::WriteAsDefault<u64, u64>,
                 field_has_end: impl ::planus::WriteAsDefault<bool, bool>,
                 field_message: impl ::planus::WriteAs<::planus::Offset<str>>,
+                field_span_start: impl ::planus::WriteAsDefault<u64, u64>,
+                field_span_end: impl ::planus::WriteAsDefault<u64, u64>,
+                field_has_span: impl ::planus::WriteAsDefault<bool, bool>,
+                field_expected_tokens: impl ::planus::WriteAsOptional<
+                    ::planus::Offset<[::planus::Offset<str>]>,
+                >,
+                field_notes: impl ::planus::WriteAsOptional<::planus::Offset<[::planus::Offset<str>]>>,
             ) -> ::planus::Offset<Self> {
                 let prepared_error_position = field_error_position.prepare(builder);
                 let prepared_context = field_context.prepare(builder);
@@ -8234,8 +8959,13 @@ mod root {
                 let prepared_end_col = field_end_col.prepare(builder, &0);
                 let prepared_has_end = field_has_end.prepare(builder, &false);
                 let prepared_message = field_message.prepare(builder);
+                let prepared_span_start = field_span_start.prepare(builder, &0);
+                let prepared_span_end = field_span_end.prepare(builder, &0);
+                let prepared_has_span = field_has_span.prepare(builder, &false);
+                let prepared_expected_tokens = field_expected_tokens.prepare(builder);
+                let prepared_notes = field_notes.prepare(builder);
 
-                let mut table_writer: ::planus::table_writer::TableWriter<16> =
+                let mut table_writer: ::planus::table_writer::TableWriter<26> =
                     ::core::default::Default::default();
                 if prepared_end_line.is_some() {
                     table_writer.write_entry::<u64>(2);
@@ -8243,11 +8973,26 @@ mod root {
                 if prepared_end_col.is_some() {
                     table_writer.write_entry::<u64>(3);
                 }
+                if prepared_span_start.is_some() {
+                    table_writer.write_entry::<u64>(6);
+                }
+                if prepared_span_end.is_some() {
+                    table_writer.write_entry::<u64>(7);
+                }
                 table_writer.write_entry::<::planus::Offset<self::CompileContext>>(0);
                 table_writer.write_entry::<::planus::Offset<str>>(1);
                 table_writer.write_entry::<::planus::Offset<str>>(5);
+                if prepared_expected_tokens.is_some() {
+                    table_writer.write_entry::<::planus::Offset<[::planus::Offset<str>]>>(9);
+                }
+                if prepared_notes.is_some() {
+                    table_writer.write_entry::<::planus::Offset<[::planus::Offset<str>]>>(10);
+                }
                 if prepared_has_end.is_some() {
                     table_writer.write_entry::<bool>(4);
+                }
+                if prepared_has_span.is_some() {
+                    table_writer.write_entry::<bool>(8);
                 }
 
                 unsafe {
@@ -8258,11 +9003,30 @@ mod root {
                         if let ::core::option::Option::Some(prepared_end_col) = prepared_end_col {
                             object_writer.write::<_, _, 8>(&prepared_end_col);
                         }
+                        if let ::core::option::Option::Some(prepared_span_start) =
+                            prepared_span_start
+                        {
+                            object_writer.write::<_, _, 8>(&prepared_span_start);
+                        }
+                        if let ::core::option::Option::Some(prepared_span_end) = prepared_span_end {
+                            object_writer.write::<_, _, 8>(&prepared_span_end);
+                        }
                         object_writer.write::<_, _, 4>(&prepared_error_position);
                         object_writer.write::<_, _, 4>(&prepared_context);
                         object_writer.write::<_, _, 4>(&prepared_message);
+                        if let ::core::option::Option::Some(prepared_expected_tokens) =
+                            prepared_expected_tokens
+                        {
+                            object_writer.write::<_, _, 4>(&prepared_expected_tokens);
+                        }
+                        if let ::core::option::Option::Some(prepared_notes) = prepared_notes {
+                            object_writer.write::<_, _, 4>(&prepared_notes);
+                        }
                         if let ::core::option::Option::Some(prepared_has_end) = prepared_has_end {
                             object_writer.write::<_, _, 1>(&prepared_has_end);
+                        }
+                        if let ::core::option::Option::Some(prepared_has_span) = prepared_has_span {
+                            object_writer.write::<_, _, 1>(&prepared_has_span);
                         }
                     });
                 }
@@ -8302,6 +9066,11 @@ mod root {
                     self.end_col,
                     self.has_end,
                     &self.message,
+                    self.span_start,
+                    self.span_end,
+                    self.has_span,
+                    &self.expected_tokens,
+                    &self.notes,
                 )
             }
         }
@@ -8418,6 +9187,137 @@ mod root {
         }
 
         impl<T0, T1, T2, T3, T4, T5> ParseErrorBuilder<(T0, T1, T2, T3, T4, T5)> {
+            /// Setter for the [`span_start` field](ParseError#structfield.span_start).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn span_start<T6>(
+                self,
+                value: T6,
+            ) -> ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6)>
+            where
+                T6: ::planus::WriteAsDefault<u64, u64>,
+            {
+                let (v0, v1, v2, v3, v4, v5) = self.0;
+                ParseErrorBuilder((v0, v1, v2, v3, v4, v5, value))
+            }
+
+            /// Sets the [`span_start` field](ParseError#structfield.span_start) to the default value.
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn span_start_as_default(
+                self,
+            ) -> ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, ::planus::DefaultValue)> {
+                self.span_start(::planus::DefaultValue)
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5, T6> ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6)> {
+            /// Setter for the [`span_end` field](ParseError#structfield.span_end).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn span_end<T7>(
+                self,
+                value: T7,
+            ) -> ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)>
+            where
+                T7: ::planus::WriteAsDefault<u64, u64>,
+            {
+                let (v0, v1, v2, v3, v4, v5, v6) = self.0;
+                ParseErrorBuilder((v0, v1, v2, v3, v4, v5, v6, value))
+            }
+
+            /// Sets the [`span_end` field](ParseError#structfield.span_end) to the default value.
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn span_end_as_default(
+                self,
+            ) -> ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6, ::planus::DefaultValue)>
+            {
+                self.span_end(::planus::DefaultValue)
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5, T6, T7> ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)> {
+            /// Setter for the [`has_span` field](ParseError#structfield.has_span).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn has_span<T8>(
+                self,
+                value: T8,
+            ) -> ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8)>
+            where
+                T8: ::planus::WriteAsDefault<bool, bool>,
+            {
+                let (v0, v1, v2, v3, v4, v5, v6, v7) = self.0;
+                ParseErrorBuilder((v0, v1, v2, v3, v4, v5, v6, v7, value))
+            }
+
+            /// Sets the [`has_span` field](ParseError#structfield.has_span) to the default value.
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn has_span_as_default(
+                self,
+            ) -> ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, ::planus::DefaultValue)>
+            {
+                self.has_span(::planus::DefaultValue)
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8> ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8)> {
+            /// Setter for the [`expected_tokens` field](ParseError#structfield.expected_tokens).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn expected_tokens<T9>(
+                self,
+                value: T9,
+            ) -> ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9)>
+            where
+                T9: ::planus::WriteAsOptional<::planus::Offset<[::planus::Offset<str>]>>,
+            {
+                let (v0, v1, v2, v3, v4, v5, v6, v7, v8) = self.0;
+                ParseErrorBuilder((v0, v1, v2, v3, v4, v5, v6, v7, v8, value))
+            }
+
+            /// Sets the [`expected_tokens` field](ParseError#structfield.expected_tokens) to null.
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn expected_tokens_as_null(
+                self,
+            ) -> ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, ())> {
+                self.expected_tokens(())
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9>
+            ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9)>
+        {
+            /// Setter for the [`notes` field](ParseError#structfield.notes).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn notes<T10>(
+                self,
+                value: T10,
+            ) -> ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)>
+            where
+                T10: ::planus::WriteAsOptional<::planus::Offset<[::planus::Offset<str>]>>,
+            {
+                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9) = self.0;
+                ParseErrorBuilder((v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, value))
+            }
+
+            /// Sets the [`notes` field](ParseError#structfield.notes) to null.
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn notes_as_null(
+                self,
+            ) -> ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, ())> {
+                self.notes(())
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>
+            ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)>
+        {
             /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [ParseError].
             #[inline]
             pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<ParseError>
@@ -8429,14 +9329,19 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<u64, u64>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<ParseError>>
-            for ParseErrorBuilder<(T0, T1, T2, T3, T4, T5)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<u64, u64>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAs<::planus::Offset<str>>,
+                T6: ::planus::WriteAsDefault<u64, u64>,
+                T7: ::planus::WriteAsDefault<u64, u64>,
+                T8: ::planus::WriteAsDefault<bool, bool>,
+                T9: ::planus::WriteAsOptional<::planus::Offset<[::planus::Offset<str>]>>,
+                T10: ::planus::WriteAsOptional<::planus::Offset<[::planus::Offset<str>]>>,
+            > ::planus::WriteAs<::planus::Offset<ParseError>>
+            for ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)>
         {
             type Prepared = ::planus::Offset<ParseError>;
 
@@ -8447,14 +9352,19 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<u64, u64>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<ParseError>>
-            for ParseErrorBuilder<(T0, T1, T2, T3, T4, T5)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<u64, u64>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAs<::planus::Offset<str>>,
+                T6: ::planus::WriteAsDefault<u64, u64>,
+                T7: ::planus::WriteAsDefault<u64, u64>,
+                T8: ::planus::WriteAsDefault<bool, bool>,
+                T9: ::planus::WriteAsOptional<::planus::Offset<[::planus::Offset<str>]>>,
+                T10: ::planus::WriteAsOptional<::planus::Offset<[::planus::Offset<str>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<ParseError>>
+            for ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)>
         {
             type Prepared = ::planus::Offset<ParseError>;
 
@@ -8468,24 +9378,30 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<u64, u64>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<ParseError> for ParseErrorBuilder<(T0, T1, T2, T3, T4, T5)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<u64, u64>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAs<::planus::Offset<str>>,
+                T6: ::planus::WriteAsDefault<u64, u64>,
+                T7: ::planus::WriteAsDefault<u64, u64>,
+                T8: ::planus::WriteAsDefault<bool, bool>,
+                T9: ::planus::WriteAsOptional<::planus::Offset<[::planus::Offset<str>]>>,
+                T10: ::planus::WriteAsOptional<::planus::Offset<[::planus::Offset<str>]>>,
+            > ::planus::WriteAsOffset<ParseError>
+            for ParseErrorBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<ParseError> {
-                let (v0, v1, v2, v3, v4, v5) = &self.0;
-                ParseError::create(builder, v0, v1, v2, v3, v4, v5)
+                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) = &self.0;
+                ParseError::create(builder, v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10)
             }
         }
 
         /// Reference to a deserialized [ParseError].
         #[derive(Copy, Clone)]
-        pub struct ParseErrorRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ParseErrorRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ParseErrorRef<'a> {
             /// Getter for the [`error_position` field](ParseError#structfield.error_position).
@@ -8525,6 +9441,52 @@ mod root {
             pub fn message(&self) -> ::planus::Result<&'a ::core::primitive::str> {
                 self.0.access_required(5, "ParseError", "message")
             }
+
+            /// Getter for the [`span_start` field](ParseError#structfield.span_start).
+            #[inline]
+            pub fn span_start(&self) -> ::planus::Result<u64> {
+                ::core::result::Result::Ok(
+                    self.0.access(6, "ParseError", "span_start")?.unwrap_or(0),
+                )
+            }
+
+            /// Getter for the [`span_end` field](ParseError#structfield.span_end).
+            #[inline]
+            pub fn span_end(&self) -> ::planus::Result<u64> {
+                ::core::result::Result::Ok(self.0.access(7, "ParseError", "span_end")?.unwrap_or(0))
+            }
+
+            /// Getter for the [`has_span` field](ParseError#structfield.has_span).
+            #[inline]
+            pub fn has_span(&self) -> ::planus::Result<bool> {
+                ::core::result::Result::Ok(
+                    self.0.access(8, "ParseError", "has_span")?.unwrap_or(false),
+                )
+            }
+
+            /// Getter for the [`expected_tokens` field](ParseError#structfield.expected_tokens).
+            #[inline]
+            pub fn expected_tokens(
+                &self,
+            ) -> ::planus::Result<
+                ::core::option::Option<
+                    ::planus::Vector<'a, ::planus::Result<&'a ::core::primitive::str>>,
+                >,
+            > {
+                self.0.access(9, "ParseError", "expected_tokens")
+            }
+
+            /// Getter for the [`notes` field](ParseError#structfield.notes).
+            #[inline]
+            pub fn notes(
+                &self,
+            ) -> ::planus::Result<
+                ::core::option::Option<
+                    ::planus::Vector<'a, ::planus::Result<&'a ::core::primitive::str>>,
+                >,
+            > {
+                self.0.access(10, "ParseError", "notes")
+            }
         }
 
         impl<'a> ::core::fmt::Debug for ParseErrorRef<'a> {
@@ -8536,6 +9498,17 @@ mod root {
                 f.field("end_col", &self.end_col());
                 f.field("has_end", &self.has_end());
                 f.field("message", &self.message());
+                f.field("span_start", &self.span_start());
+                f.field("span_end", &self.span_end());
+                f.field("has_span", &self.has_span());
+                if let ::core::option::Option::Some(field_expected_tokens) =
+                    self.expected_tokens().transpose()
+                {
+                    f.field("expected_tokens", &field_expected_tokens);
+                }
+                if let ::core::option::Option::Some(field_notes) = self.notes().transpose() {
+                    f.field("notes", &field_notes);
+                }
                 f.finish()
             }
         }
@@ -8554,6 +9527,21 @@ mod root {
                     end_col: ::core::convert::TryInto::try_into(value.end_col()?)?,
                     has_end: ::core::convert::TryInto::try_into(value.has_end()?)?,
                     message: ::core::convert::Into::into(value.message()?),
+                    span_start: ::core::convert::TryInto::try_into(value.span_start()?)?,
+                    span_end: ::core::convert::TryInto::try_into(value.span_end()?)?,
+                    has_span: ::core::convert::TryInto::try_into(value.has_span()?)?,
+                    expected_tokens: if let ::core::option::Option::Some(expected_tokens) =
+                        value.expected_tokens()?
+                    {
+                        ::core::option::Option::Some(expected_tokens.to_vec_result()?)
+                    } else {
+                        ::core::option::Option::None
+                    },
+                    notes: if let ::core::option::Option::Some(notes) = value.notes()? {
+                        ::core::option::Option::Some(notes.to_vec_result()?)
+                    } else {
+                        ::core::option::Option::None
+                    },
                 })
             }
         }
@@ -8634,7 +9622,7 @@ mod root {
         /// The table `UnknownBuiltinFunction` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `UnknownBuiltinFunction` in the file `../../../schema/schema/common.fbs:187`
+        /// * Table `UnknownBuiltinFunction` in the file `crates/schema/schema/common.fbs:205`
         #[derive(
             Clone,
             Debug,
@@ -8777,9 +9765,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<UnknownBuiltinFunction>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<UnknownBuiltinFunction>>
             for UnknownBuiltinFunctionBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownBuiltinFunction>;
@@ -8794,9 +9782,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<UnknownBuiltinFunction>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<UnknownBuiltinFunction>>
             for UnknownBuiltinFunctionBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownBuiltinFunction>;
@@ -8811,9 +9799,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<UnknownBuiltinFunction>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<UnknownBuiltinFunction>
             for UnknownBuiltinFunctionBuilder<(T0, T1)>
         {
             #[inline]
@@ -8828,7 +9816,9 @@ mod root {
 
         /// Reference to a deserialized [UnknownBuiltinFunction].
         #[derive(Copy, Clone)]
-        pub struct UnknownBuiltinFunctionRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct UnknownBuiltinFunctionRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> UnknownBuiltinFunctionRef<'a> {
             /// Getter for the [`context` field](UnknownBuiltinFunction#structfield.context).
@@ -8946,7 +9936,7 @@ mod root {
         /// The table `UnknownTypeConstant` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `UnknownTypeConstant` in the file `../../../schema/schema/common.fbs:192`
+        /// * Table `UnknownTypeConstant` in the file `crates/schema/schema/common.fbs:210`
         #[derive(
             Clone,
             Debug,
@@ -9087,9 +10077,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<UnknownTypeConstant>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<UnknownTypeConstant>>
             for UnknownTypeConstantBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownTypeConstant>;
@@ -9104,9 +10094,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<UnknownTypeConstant>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<UnknownTypeConstant>>
             for UnknownTypeConstantBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownTypeConstant>;
@@ -9121,9 +10111,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<UnknownTypeConstant> for UnknownTypeConstantBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<UnknownTypeConstant>
+            for UnknownTypeConstantBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -9137,7 +10128,9 @@ mod root {
 
         /// Reference to a deserialized [UnknownTypeConstant].
         #[derive(Copy, Clone)]
-        pub struct UnknownTypeConstantRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct UnknownTypeConstantRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> UnknownTypeConstantRef<'a> {
             /// Getter for the [`context` field](UnknownTypeConstant#structfield.context).
@@ -9252,7 +10245,7 @@ mod root {
         /// The table `UnknownLoopLabel` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `UnknownLoopLabel` in the file `../../../schema/schema/common.fbs:197`
+        /// * Table `UnknownLoopLabel` in the file `crates/schema/schema/common.fbs:215`
         #[derive(
             Clone,
             Debug,
@@ -9393,9 +10386,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<UnknownLoopLabel>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<UnknownLoopLabel>>
             for UnknownLoopLabelBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownLoopLabel>;
@@ -9410,9 +10403,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<UnknownLoopLabel>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<UnknownLoopLabel>>
             for UnknownLoopLabelBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownLoopLabel>;
@@ -9427,9 +10420,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<UnknownLoopLabel> for UnknownLoopLabelBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<UnknownLoopLabel> for UnknownLoopLabelBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -9443,7 +10436,7 @@ mod root {
 
         /// Reference to a deserialized [UnknownLoopLabel].
         #[derive(Copy, Clone)]
-        pub struct UnknownLoopLabelRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct UnknownLoopLabelRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> UnknownLoopLabelRef<'a> {
             /// Getter for the [`context` field](UnknownLoopLabel#structfield.context).
@@ -9558,7 +10551,7 @@ mod root {
         /// The table `DuplicateVariable` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `DuplicateVariable` in the file `../../../schema/schema/common.fbs:202`
+        /// * Table `DuplicateVariable` in the file `crates/schema/schema/common.fbs:220`
         #[derive(
             Clone,
             Debug,
@@ -9699,9 +10692,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<DuplicateVariable>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<DuplicateVariable>>
             for DuplicateVariableBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DuplicateVariable>;
@@ -9716,9 +10709,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<DuplicateVariable>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<DuplicateVariable>>
             for DuplicateVariableBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DuplicateVariable>;
@@ -9733,9 +10726,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOffset<DuplicateVariable> for DuplicateVariableBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOffset<DuplicateVariable> for DuplicateVariableBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -9749,7 +10742,7 @@ mod root {
 
         /// Reference to a deserialized [DuplicateVariable].
         #[derive(Copy, Clone)]
-        pub struct DuplicateVariableRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct DuplicateVariableRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> DuplicateVariableRef<'a> {
             /// Getter for the [`context` field](DuplicateVariable#structfield.context).
@@ -9866,7 +10859,7 @@ mod root {
         /// The table `AssignToConst` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `AssignToConst` in the file `../../../schema/schema/common.fbs:207`
+        /// * Table `AssignToConst` in the file `crates/schema/schema/common.fbs:225`
         #[derive(
             Clone,
             Debug,
@@ -9998,9 +10991,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<AssignToConst>> for AssignToConstBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<AssignToConst>>
+            for AssignToConstBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<AssignToConst>;
 
@@ -10011,9 +11005,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<AssignToConst>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<AssignToConst>>
             for AssignToConstBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<AssignToConst>;
@@ -10028,9 +11022,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOffset<AssignToConst> for AssignToConstBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOffset<AssignToConst> for AssignToConstBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<AssignToConst> {
@@ -10041,7 +11035,7 @@ mod root {
 
         /// Reference to a deserialized [AssignToConst].
         #[derive(Copy, Clone)]
-        pub struct AssignToConstRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct AssignToConstRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> AssignToConstRef<'a> {
             /// Getter for the [`context` field](AssignToConst#structfield.context).
@@ -10158,7 +11152,7 @@ mod root {
         /// The table `DisabledFeature` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `DisabledFeature` in the file `../../../schema/schema/common.fbs:212`
+        /// * Table `DisabledFeature` in the file `crates/schema/schema/common.fbs:230`
         #[derive(
             Clone,
             Debug,
@@ -10299,9 +11293,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<DisabledFeature>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<DisabledFeature>>
             for DisabledFeatureBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DisabledFeature>;
@@ -10316,9 +11310,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<DisabledFeature>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<DisabledFeature>>
             for DisabledFeatureBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DisabledFeature>;
@@ -10333,9 +11327,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<DisabledFeature> for DisabledFeatureBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<DisabledFeature> for DisabledFeatureBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -10349,7 +11343,7 @@ mod root {
 
         /// Reference to a deserialized [DisabledFeature].
         #[derive(Copy, Clone)]
-        pub struct DisabledFeatureRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct DisabledFeatureRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> DisabledFeatureRef<'a> {
             /// Getter for the [`context` field](DisabledFeature#structfield.context).
@@ -10464,7 +11458,7 @@ mod root {
         /// The table `BadSlotName` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `BadSlotName` in the file `../../../schema/schema/common.fbs:217`
+        /// * Table `BadSlotName` in the file `crates/schema/schema/common.fbs:235`
         #[derive(
             Clone,
             Debug,
@@ -10596,9 +11590,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<BadSlotName>> for BadSlotNameBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<BadSlotName>> for BadSlotNameBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<BadSlotName>;
 
@@ -10609,9 +11603,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<BadSlotName>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<BadSlotName>>
             for BadSlotNameBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<BadSlotName>;
@@ -10626,9 +11620,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<BadSlotName> for BadSlotNameBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<BadSlotName> for BadSlotNameBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<BadSlotName> {
@@ -10639,7 +11633,7 @@ mod root {
 
         /// Reference to a deserialized [BadSlotName].
         #[derive(Copy, Clone)]
-        pub struct BadSlotNameRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct BadSlotNameRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> BadSlotNameRef<'a> {
             /// Getter for the [`context` field](BadSlotName#structfield.context).
@@ -10754,7 +11748,7 @@ mod root {
         /// The table `InvalidAssignment` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `InvalidAssignment` in the file `../../../schema/schema/common.fbs:222`
+        /// * Table `InvalidAssignment` in the file `crates/schema/schema/common.fbs:240`
         #[derive(
             Clone,
             Debug,
@@ -10919,7 +11913,7 @@ mod root {
 
         /// Reference to a deserialized [InvalidAssignment].
         #[derive(Copy, Clone)]
-        pub struct InvalidAssignmentRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct InvalidAssignmentRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> InvalidAssignmentRef<'a> {
             /// Getter for the [`context` field](InvalidAssignment#structfield.context).
@@ -11023,10 +12017,662 @@ mod root {
             }
         }
 
+        /// The table `InvalidTypeLiteralAssignment` in the namespace `MoorCommon`
+        ///
+        /// Generated from these locations:
+        /// * Table `InvalidTypeLiteralAssignment` in the file `crates/schema/schema/common.fbs:244`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct InvalidTypeLiteralAssignment {
+            /// The field `context` in the table `InvalidTypeLiteralAssignment`
+            pub context: ::planus::alloc::boxed::Box<self::CompileContext>,
+            /// The field `literal` in the table `InvalidTypeLiteralAssignment`
+            pub literal: ::planus::alloc::string::String,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for InvalidTypeLiteralAssignment {
+            fn default() -> Self {
+                Self {
+                    context: ::core::default::Default::default(),
+                    literal: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl InvalidTypeLiteralAssignment {
+            /// Creates a [InvalidTypeLiteralAssignmentBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> InvalidTypeLiteralAssignmentBuilder<()> {
+                InvalidTypeLiteralAssignmentBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_context: impl ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                field_literal: impl ::planus::WriteAs<::planus::Offset<str>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_context = field_context.prepare(builder);
+                let prepared_literal = field_literal.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<8> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<self::CompileContext>>(0);
+                table_writer.write_entry::<::planus::Offset<str>>(1);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_context);
+                        object_writer.write::<_, _, 4>(&prepared_literal);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<InvalidTypeLiteralAssignment>>
+            for InvalidTypeLiteralAssignment
+        {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<InvalidTypeLiteralAssignment> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<InvalidTypeLiteralAssignment>>
+            for InvalidTypeLiteralAssignment
+        {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<InvalidTypeLiteralAssignment>>
+            {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<InvalidTypeLiteralAssignment> for InvalidTypeLiteralAssignment {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<InvalidTypeLiteralAssignment> {
+                InvalidTypeLiteralAssignment::create(builder, &self.context, &self.literal)
+            }
+        }
+
+        /// Builder for serializing an instance of the [InvalidTypeLiteralAssignment] type.
+        ///
+        /// Can be created using the [InvalidTypeLiteralAssignment::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct InvalidTypeLiteralAssignmentBuilder<State>(State);
+
+        impl InvalidTypeLiteralAssignmentBuilder<()> {
+            /// Setter for the [`context` field](InvalidTypeLiteralAssignment#structfield.context).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn context<T0>(self, value: T0) -> InvalidTypeLiteralAssignmentBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+            {
+                InvalidTypeLiteralAssignmentBuilder((value,))
+            }
+        }
+
+        impl<T0> InvalidTypeLiteralAssignmentBuilder<(T0,)> {
+            /// Setter for the [`literal` field](InvalidTypeLiteralAssignment#structfield.literal).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn literal<T1>(self, value: T1) -> InvalidTypeLiteralAssignmentBuilder<(T0, T1)>
+            where
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            {
+                let (v0,) = self.0;
+                InvalidTypeLiteralAssignmentBuilder((v0, value))
+            }
+        }
+
+        impl<T0, T1> InvalidTypeLiteralAssignmentBuilder<(T0, T1)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [InvalidTypeLiteralAssignment].
+            #[inline]
+            pub fn finish(
+                self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<InvalidTypeLiteralAssignment>
+            where
+                Self: ::planus::WriteAsOffset<InvalidTypeLiteralAssignment>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<InvalidTypeLiteralAssignment>>
+            for InvalidTypeLiteralAssignmentBuilder<(T0, T1)>
+        {
+            type Prepared = ::planus::Offset<InvalidTypeLiteralAssignment>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<InvalidTypeLiteralAssignment> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<InvalidTypeLiteralAssignment>>
+            for InvalidTypeLiteralAssignmentBuilder<(T0, T1)>
+        {
+            type Prepared = ::planus::Offset<InvalidTypeLiteralAssignment>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<InvalidTypeLiteralAssignment>>
+            {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<InvalidTypeLiteralAssignment>
+            for InvalidTypeLiteralAssignmentBuilder<(T0, T1)>
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<InvalidTypeLiteralAssignment> {
+                let (v0, v1) = &self.0;
+                InvalidTypeLiteralAssignment::create(builder, v0, v1)
+            }
+        }
+
+        /// Reference to a deserialized [InvalidTypeLiteralAssignment].
+        #[derive(Copy, Clone)]
+        pub struct InvalidTypeLiteralAssignmentRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
+
+        impl<'a> InvalidTypeLiteralAssignmentRef<'a> {
+            /// Getter for the [`context` field](InvalidTypeLiteralAssignment#structfield.context).
+            #[inline]
+            pub fn context(&self) -> ::planus::Result<self::CompileContextRef<'a>> {
+                self.0
+                    .access_required(0, "InvalidTypeLiteralAssignment", "context")
+            }
+
+            /// Getter for the [`literal` field](InvalidTypeLiteralAssignment#structfield.literal).
+            #[inline]
+            pub fn literal(&self) -> ::planus::Result<&'a ::core::primitive::str> {
+                self.0
+                    .access_required(1, "InvalidTypeLiteralAssignment", "literal")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for InvalidTypeLiteralAssignmentRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("InvalidTypeLiteralAssignmentRef");
+                f.field("context", &self.context());
+                f.field("literal", &self.literal());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<InvalidTypeLiteralAssignmentRef<'a>>
+            for InvalidTypeLiteralAssignment
+        {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: InvalidTypeLiteralAssignmentRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    context: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.context()?,
+                    )?),
+                    literal: ::core::convert::Into::into(value.literal()?),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for InvalidTypeLiteralAssignmentRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for InvalidTypeLiteralAssignmentRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[InvalidTypeLiteralAssignmentRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<InvalidTypeLiteralAssignment>>
+            for InvalidTypeLiteralAssignment
+        {
+            type Value = ::planus::Offset<InvalidTypeLiteralAssignment>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<InvalidTypeLiteralAssignment>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for InvalidTypeLiteralAssignmentRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[InvalidTypeLiteralAssignmentRef]",
+                        "read_as_root",
+                        0,
+                    )
+                })
+            }
+        }
+
+        /// The table `AssignmentToCapturedVariable` in the namespace `MoorCommon`
+        ///
+        /// Generated from these locations:
+        /// * Table `AssignmentToCapturedVariable` in the file `crates/schema/schema/common.fbs:249`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct AssignmentToCapturedVariable {
+            /// The field `context` in the table `AssignmentToCapturedVariable`
+            pub context: ::planus::alloc::boxed::Box<self::CompileContext>,
+            /// The field `var_name` in the table `AssignmentToCapturedVariable`
+            pub var_name: ::planus::alloc::boxed::Box<self::Symbol>,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for AssignmentToCapturedVariable {
+            fn default() -> Self {
+                Self {
+                    context: ::core::default::Default::default(),
+                    var_name: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl AssignmentToCapturedVariable {
+            /// Creates a [AssignmentToCapturedVariableBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> AssignmentToCapturedVariableBuilder<()> {
+                AssignmentToCapturedVariableBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_context: impl ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                field_var_name: impl ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_context = field_context.prepare(builder);
+                let prepared_var_name = field_var_name.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<8> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<self::CompileContext>>(0);
+                table_writer.write_entry::<::planus::Offset<self::Symbol>>(1);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_context);
+                        object_writer.write::<_, _, 4>(&prepared_var_name);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<AssignmentToCapturedVariable>>
+            for AssignmentToCapturedVariable
+        {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<AssignmentToCapturedVariable> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<AssignmentToCapturedVariable>>
+            for AssignmentToCapturedVariable
+        {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<AssignmentToCapturedVariable>>
+            {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<AssignmentToCapturedVariable> for AssignmentToCapturedVariable {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<AssignmentToCapturedVariable> {
+                AssignmentToCapturedVariable::create(builder, &self.context, &self.var_name)
+            }
+        }
+
+        /// Builder for serializing an instance of the [AssignmentToCapturedVariable] type.
+        ///
+        /// Can be created using the [AssignmentToCapturedVariable::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct AssignmentToCapturedVariableBuilder<State>(State);
+
+        impl AssignmentToCapturedVariableBuilder<()> {
+            /// Setter for the [`context` field](AssignmentToCapturedVariable#structfield.context).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn context<T0>(self, value: T0) -> AssignmentToCapturedVariableBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+            {
+                AssignmentToCapturedVariableBuilder((value,))
+            }
+        }
+
+        impl<T0> AssignmentToCapturedVariableBuilder<(T0,)> {
+            /// Setter for the [`var_name` field](AssignmentToCapturedVariable#structfield.var_name).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn var_name<T1>(self, value: T1) -> AssignmentToCapturedVariableBuilder<(T0, T1)>
+            where
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            {
+                let (v0,) = self.0;
+                AssignmentToCapturedVariableBuilder((v0, value))
+            }
+        }
+
+        impl<T0, T1> AssignmentToCapturedVariableBuilder<(T0, T1)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [AssignmentToCapturedVariable].
+            #[inline]
+            pub fn finish(
+                self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<AssignmentToCapturedVariable>
+            where
+                Self: ::planus::WriteAsOffset<AssignmentToCapturedVariable>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<AssignmentToCapturedVariable>>
+            for AssignmentToCapturedVariableBuilder<(T0, T1)>
+        {
+            type Prepared = ::planus::Offset<AssignmentToCapturedVariable>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<AssignmentToCapturedVariable> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<AssignmentToCapturedVariable>>
+            for AssignmentToCapturedVariableBuilder<(T0, T1)>
+        {
+            type Prepared = ::planus::Offset<AssignmentToCapturedVariable>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<AssignmentToCapturedVariable>>
+            {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOffset<AssignmentToCapturedVariable>
+            for AssignmentToCapturedVariableBuilder<(T0, T1)>
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<AssignmentToCapturedVariable> {
+                let (v0, v1) = &self.0;
+                AssignmentToCapturedVariable::create(builder, v0, v1)
+            }
+        }
+
+        /// Reference to a deserialized [AssignmentToCapturedVariable].
+        #[derive(Copy, Clone)]
+        pub struct AssignmentToCapturedVariableRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
+
+        impl<'a> AssignmentToCapturedVariableRef<'a> {
+            /// Getter for the [`context` field](AssignmentToCapturedVariable#structfield.context).
+            #[inline]
+            pub fn context(&self) -> ::planus::Result<self::CompileContextRef<'a>> {
+                self.0
+                    .access_required(0, "AssignmentToCapturedVariable", "context")
+            }
+
+            /// Getter for the [`var_name` field](AssignmentToCapturedVariable#structfield.var_name).
+            #[inline]
+            pub fn var_name(&self) -> ::planus::Result<self::SymbolRef<'a>> {
+                self.0
+                    .access_required(1, "AssignmentToCapturedVariable", "var_name")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for AssignmentToCapturedVariableRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("AssignmentToCapturedVariableRef");
+                f.field("context", &self.context());
+                f.field("var_name", &self.var_name());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<AssignmentToCapturedVariableRef<'a>>
+            for AssignmentToCapturedVariable
+        {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: AssignmentToCapturedVariableRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    context: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.context()?,
+                    )?),
+                    var_name: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.var_name()?,
+                    )?),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for AssignmentToCapturedVariableRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for AssignmentToCapturedVariableRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[AssignmentToCapturedVariableRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<AssignmentToCapturedVariable>>
+            for AssignmentToCapturedVariable
+        {
+            type Value = ::planus::Offset<AssignmentToCapturedVariable>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<AssignmentToCapturedVariable>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for AssignmentToCapturedVariableRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[AssignmentToCapturedVariableRef]",
+                        "read_as_root",
+                        0,
+                    )
+                })
+            }
+        }
+
         /// The union `CompileErrorUnion` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Union `CompileErrorUnion` in the file `../../../schema/schema/common.fbs:226`
+        /// * Union `CompileErrorUnion` in the file `crates/schema/schema/common.fbs:254`
         #[derive(
             Clone,
             Debug,
@@ -11068,6 +12714,16 @@ mod root {
 
             /// The variant of type `InvalidAssignment` in the union `CompileErrorUnion`
             InvalidAssignment(::planus::alloc::boxed::Box<self::InvalidAssignment>),
+
+            /// The variant of type `InvalidTypeLiteralAssignment` in the union `CompileErrorUnion`
+            InvalidTypeLiteralAssignment(
+                ::planus::alloc::boxed::Box<self::InvalidTypeLiteralAssignment>,
+            ),
+
+            /// The variant of type `AssignmentToCapturedVariable` in the union `CompileErrorUnion`
+            AssignmentToCapturedVariable(
+                ::planus::alloc::boxed::Box<self::AssignmentToCapturedVariable>,
+            ),
         }
 
         impl CompileErrorUnion {
@@ -11156,6 +12812,22 @@ mod root {
             ) -> ::planus::UnionOffset<Self> {
                 ::planus::UnionOffset::new(10, value.prepare(builder).downcast())
             }
+
+            #[inline]
+            pub fn create_invalid_type_literal_assignment(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::InvalidTypeLiteralAssignment>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(11, value.prepare(builder).downcast())
+            }
+
+            #[inline]
+            pub fn create_assignment_to_captured_variable(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::AssignmentToCapturedVariable>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(12, value.prepare(builder).downcast())
+            }
         }
 
         impl ::planus::WriteAsUnion<CompileErrorUnion> for CompileErrorUnion {
@@ -11181,6 +12853,12 @@ mod root {
                     Self::BadSlotName(value) => Self::create_bad_slot_name(builder, value),
                     Self::InvalidAssignment(value) => {
                         Self::create_invalid_assignment(builder, value)
+                    }
+                    Self::InvalidTypeLiteralAssignment(value) => {
+                        Self::create_invalid_type_literal_assignment(builder, value)
+                    }
+                    Self::AssignmentToCapturedVariable(value) => {
+                        Self::create_assignment_to_captured_variable(builder, value)
                     }
                 }
             }
@@ -11320,6 +12998,30 @@ mod root {
             ) -> CompileErrorUnionBuilder<::planus::Initialized<10, T>>
             where
                 T: ::planus::WriteAsOffset<self::InvalidAssignment>,
+            {
+                CompileErrorUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`InvalidTypeLiteralAssignment` variant](CompileErrorUnion#variant.InvalidTypeLiteralAssignment).
+            #[inline]
+            pub fn invalid_type_literal_assignment<T>(
+                self,
+                value: T,
+            ) -> CompileErrorUnionBuilder<::planus::Initialized<11, T>>
+            where
+                T: ::planus::WriteAsOffset<self::InvalidTypeLiteralAssignment>,
+            {
+                CompileErrorUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`AssignmentToCapturedVariable` variant](CompileErrorUnion#variant.AssignmentToCapturedVariable).
+            #[inline]
+            pub fn assignment_to_captured_variable<T>(
+                self,
+                value: T,
+            ) -> CompileErrorUnionBuilder<::planus::Initialized<12, T>>
+            where
+                T: ::planus::WriteAsOffset<self::AssignmentToCapturedVariable>,
             {
                 CompileErrorUnionBuilder(::planus::Initialized(value))
             }
@@ -11609,6 +13311,60 @@ mod root {
                 ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
             }
         }
+        impl<T> ::planus::WriteAsUnion<CompileErrorUnion>
+            for CompileErrorUnionBuilder<::planus::Initialized<11, T>>
+        where
+            T: ::planus::WriteAsOffset<self::InvalidTypeLiteralAssignment>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::UnionOffset<CompileErrorUnion> {
+                ::planus::UnionOffset::new(11, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<CompileErrorUnion>
+            for CompileErrorUnionBuilder<::planus::Initialized<11, T>>
+        where
+            T: ::planus::WriteAsOffset<self::InvalidTypeLiteralAssignment>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<CompileErrorUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+        impl<T> ::planus::WriteAsUnion<CompileErrorUnion>
+            for CompileErrorUnionBuilder<::planus::Initialized<12, T>>
+        where
+            T: ::planus::WriteAsOffset<self::AssignmentToCapturedVariable>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::UnionOffset<CompileErrorUnion> {
+                ::planus::UnionOffset::new(12, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<CompileErrorUnion>
+            for CompileErrorUnionBuilder<::planus::Initialized<12, T>>
+        where
+            T: ::planus::WriteAsOffset<self::AssignmentToCapturedVariable>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<CompileErrorUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
 
         /// Reference to a deserialized [CompileErrorUnion].
         #[derive(Copy, Clone, Debug)]
@@ -11623,6 +13379,8 @@ mod root {
             DisabledFeature(self::DisabledFeatureRef<'a>),
             BadSlotName(self::BadSlotNameRef<'a>),
             InvalidAssignment(self::InvalidAssignmentRef<'a>),
+            InvalidTypeLiteralAssignment(self::InvalidTypeLiteralAssignmentRef<'a>),
+            AssignmentToCapturedVariable(self::AssignmentToCapturedVariableRef<'a>),
         }
 
         impl<'a> ::core::convert::TryFrom<CompileErrorUnionRef<'a>> for CompileErrorUnion {
@@ -11689,6 +13447,18 @@ mod root {
                             ::core::convert::TryFrom::try_from(value)?,
                         ))
                     }
+
+                    CompileErrorUnionRef::InvalidTypeLiteralAssignment(value) => {
+                        Self::InvalidTypeLiteralAssignment(::planus::alloc::boxed::Box::new(
+                            ::core::convert::TryFrom::try_from(value)?,
+                        ))
+                    }
+
+                    CompileErrorUnionRef::AssignmentToCapturedVariable(value) => {
+                        Self::AssignmentToCapturedVariable(::planus::alloc::boxed::Box::new(
+                            ::core::convert::TryFrom::try_from(value)?,
+                        ))
+                    }
                 })
             }
         }
@@ -11730,6 +13500,12 @@ mod root {
                     10 => ::core::result::Result::Ok(Self::InvalidAssignment(
                         ::planus::TableRead::from_buffer(buffer, field_offset)?,
                     )),
+                    11 => ::core::result::Result::Ok(Self::InvalidTypeLiteralAssignment(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    12 => ::core::result::Result::Ok(Self::AssignmentToCapturedVariable(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
                     _ => {
                         ::core::result::Result::Err(::planus::errors::ErrorKind::UnknownUnionTag {
                             tag,
@@ -11746,7 +13522,7 @@ mod root {
         /// The table `CompileError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `CompileError` in the file `../../../schema/schema/common.fbs:239`
+        /// * Table `CompileError` in the file `crates/schema/schema/common.fbs:269`
         #[derive(
             Clone,
             Debug,
@@ -11888,7 +13664,7 @@ mod root {
 
         /// Reference to a deserialized [CompileError].
         #[derive(Copy, Clone)]
-        pub struct CompileErrorRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct CompileErrorRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> CompileErrorRef<'a> {
             /// Getter for the [`error` field](CompileError#structfield.error).
@@ -11993,7 +13769,7 @@ mod root {
         /// The union `ObjectRefUnion` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Union `ObjectRefUnion` in the file `../../../schema/schema/common.fbs:247`
+        /// * Union `ObjectRefUnion` in the file `crates/schema/schema/common.fbs:277`
         #[derive(
             Clone,
             Debug,
@@ -12276,7 +14052,7 @@ mod root {
         /// The table `ObjectRefId` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectRefId` in the file `../../../schema/schema/common.fbs:253`
+        /// * Table `ObjectRefId` in the file `crates/schema/schema/common.fbs:283`
         #[derive(
             Clone,
             Debug,
@@ -12415,7 +14191,7 @@ mod root {
 
         /// Reference to a deserialized [ObjectRefId].
         #[derive(Copy, Clone)]
-        pub struct ObjectRefIdRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ObjectRefIdRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ObjectRefIdRef<'a> {
             /// Getter for the [`obj` field](ObjectRefId#structfield.obj).
@@ -12522,7 +14298,7 @@ mod root {
         /// The table `ObjectRefSysObj` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectRefSysObj` in the file `../../../schema/schema/common.fbs:257`
+        /// * Table `ObjectRefSysObj` in the file `crates/schema/schema/common.fbs:287`
         #[derive(
             Clone,
             Debug,
@@ -12688,7 +14464,7 @@ mod root {
 
         /// Reference to a deserialized [ObjectRefSysObj].
         #[derive(Copy, Clone)]
-        pub struct ObjectRefSysObjRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ObjectRefSysObjRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ObjectRefSysObjRef<'a> {
             /// Getter for the [`symbols` field](ObjectRefSysObj#structfield.symbols).
@@ -12796,7 +14572,7 @@ mod root {
         /// The table `ObjectRefMatch` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectRefMatch` in the file `../../../schema/schema/common.fbs:261`
+        /// * Table `ObjectRefMatch` in the file `crates/schema/schema/common.fbs:291`
         #[derive(
             Clone,
             Debug,
@@ -12945,7 +14721,7 @@ mod root {
 
         /// Reference to a deserialized [ObjectRefMatch].
         #[derive(Copy, Clone)]
-        pub struct ObjectRefMatchRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ObjectRefMatchRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ObjectRefMatchRef<'a> {
             /// Getter for the [`match_string` field](ObjectRefMatch#structfield.match_string).
@@ -13050,7 +14826,7 @@ mod root {
         /// The table `ObjectRef` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectRef` in the file `../../../schema/schema/common.fbs:265`
+        /// * Table `ObjectRef` in the file `crates/schema/schema/common.fbs:295`
         #[derive(
             Clone,
             Debug,
@@ -13191,7 +14967,7 @@ mod root {
 
         /// Reference to a deserialized [ObjectRef].
         #[derive(Copy, Clone)]
-        pub struct ObjectRefRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ObjectRefRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ObjectRefRef<'a> {
             /// Getter for the [`ref` field](ObjectRef#structfield.ref_).
@@ -13296,7 +15072,7 @@ mod root {
         /// The union `WorldStateErrorUnion` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Union `WorldStateErrorUnion` in the file `../../../schema/schema/common.fbs:273`
+        /// * Union `WorldStateErrorUnion` in the file `crates/schema/schema/common.fbs:303`
         #[derive(
             Clone,
             Debug,
@@ -14642,7 +16418,7 @@ mod root {
         /// The table `ObjectNotFound` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectNotFound` in the file `../../../schema/schema/common.fbs:296`
+        /// * Table `ObjectNotFound` in the file `crates/schema/schema/common.fbs:326`
         #[derive(
             Clone,
             Debug,
@@ -14782,7 +16558,7 @@ mod root {
 
         /// Reference to a deserialized [ObjectNotFound].
         #[derive(Copy, Clone)]
-        pub struct ObjectNotFoundRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ObjectNotFoundRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ObjectNotFoundRef<'a> {
             /// Getter for the [`object_ref` field](ObjectNotFound#structfield.object_ref).
@@ -14889,7 +16665,7 @@ mod root {
         /// The table `ObjectAlreadyExists` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectAlreadyExists` in the file `../../../schema/schema/common.fbs:300`
+        /// * Table `ObjectAlreadyExists` in the file `crates/schema/schema/common.fbs:330`
         #[derive(
             Clone,
             Debug,
@@ -15045,7 +16821,9 @@ mod root {
 
         /// Reference to a deserialized [ObjectAlreadyExists].
         #[derive(Copy, Clone)]
-        pub struct ObjectAlreadyExistsRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ObjectAlreadyExistsRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> ObjectAlreadyExistsRef<'a> {
             /// Getter for the [`obj` field](ObjectAlreadyExists#structfield.obj).
@@ -15152,7 +16930,7 @@ mod root {
         /// The table `RecursiveMove` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `RecursiveMove` in the file `../../../schema/schema/common.fbs:304`
+        /// * Table `RecursiveMove` in the file `crates/schema/schema/common.fbs:334`
         #[derive(
             Clone,
             Debug,
@@ -15274,9 +17052,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-        > ::planus::WriteAs<::planus::Offset<RecursiveMove>> for RecursiveMoveBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+            > ::planus::WriteAs<::planus::Offset<RecursiveMove>>
+            for RecursiveMoveBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<RecursiveMove>;
 
@@ -15287,9 +17066,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-        > ::planus::WriteAsOptional<::planus::Offset<RecursiveMove>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+            > ::planus::WriteAsOptional<::planus::Offset<RecursiveMove>>
             for RecursiveMoveBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<RecursiveMove>;
@@ -15304,9 +17083,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-        > ::planus::WriteAsOffset<RecursiveMove> for RecursiveMoveBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+            > ::planus::WriteAsOffset<RecursiveMove> for RecursiveMoveBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<RecursiveMove> {
@@ -15317,7 +17096,7 @@ mod root {
 
         /// Reference to a deserialized [RecursiveMove].
         #[derive(Copy, Clone)]
-        pub struct RecursiveMoveRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct RecursiveMoveRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> RecursiveMoveRef<'a> {
             /// Getter for the [`from_obj` field](RecursiveMove#structfield.from_obj).
@@ -15434,7 +17213,7 @@ mod root {
         /// The table `ObjectPermissionDenied` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectPermissionDenied` in the file `../../../schema/schema/common.fbs:309`
+        /// * Table `ObjectPermissionDenied` in the file `crates/schema/schema/common.fbs:339`
         #[derive(
             Clone,
             Debug,
@@ -15570,7 +17349,9 @@ mod root {
 
         /// Reference to a deserialized [ObjectPermissionDenied].
         #[derive(Copy, Clone)]
-        pub struct ObjectPermissionDeniedRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ObjectPermissionDeniedRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> ObjectPermissionDeniedRef<'a> {}
 
@@ -15668,7 +17449,7 @@ mod root {
         /// The table `PropertyNotFound` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyNotFound` in the file `../../../schema/schema/common.fbs:312`
+        /// * Table `PropertyNotFound` in the file `crates/schema/schema/common.fbs:342`
         #[derive(
             Clone,
             Debug,
@@ -15799,9 +17580,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<PropertyNotFound>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<PropertyNotFound>>
             for PropertyNotFoundBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PropertyNotFound>;
@@ -15816,9 +17597,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<PropertyNotFound>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<PropertyNotFound>>
             for PropertyNotFoundBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PropertyNotFound>;
@@ -15833,9 +17614,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<PropertyNotFound> for PropertyNotFoundBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<PropertyNotFound> for PropertyNotFoundBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -15849,7 +17630,7 @@ mod root {
 
         /// Reference to a deserialized [PropertyNotFound].
         #[derive(Copy, Clone)]
-        pub struct PropertyNotFoundRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct PropertyNotFoundRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> PropertyNotFoundRef<'a> {
             /// Getter for the [`obj` field](PropertyNotFound#structfield.obj).
@@ -15964,7 +17745,7 @@ mod root {
         /// The table `PropertyPermissionDenied` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyPermissionDenied` in the file `../../../schema/schema/common.fbs:317`
+        /// * Table `PropertyPermissionDenied` in the file `crates/schema/schema/common.fbs:347`
         #[derive(
             Clone,
             Debug,
@@ -16100,7 +17881,9 @@ mod root {
 
         /// Reference to a deserialized [PropertyPermissionDenied].
         #[derive(Copy, Clone)]
-        pub struct PropertyPermissionDeniedRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct PropertyPermissionDeniedRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> PropertyPermissionDeniedRef<'a> {}
 
@@ -16202,7 +17985,7 @@ mod root {
         /// The table `PropertyDefinitionNotFound` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyDefinitionNotFound` in the file `../../../schema/schema/common.fbs:320`
+        /// * Table `PropertyDefinitionNotFound` in the file `crates/schema/schema/common.fbs:350`
         #[derive(
             Clone,
             Debug,
@@ -16337,9 +18120,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<PropertyDefinitionNotFound>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<PropertyDefinitionNotFound>>
             for PropertyDefinitionNotFoundBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PropertyDefinitionNotFound>;
@@ -16354,9 +18137,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<PropertyDefinitionNotFound>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<PropertyDefinitionNotFound>>
             for PropertyDefinitionNotFoundBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PropertyDefinitionNotFound>;
@@ -16371,9 +18154,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<PropertyDefinitionNotFound>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<PropertyDefinitionNotFound>
             for PropertyDefinitionNotFoundBuilder<(T0, T1)>
         {
             #[inline]
@@ -16388,7 +18171,9 @@ mod root {
 
         /// Reference to a deserialized [PropertyDefinitionNotFound].
         #[derive(Copy, Clone)]
-        pub struct PropertyDefinitionNotFoundRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct PropertyDefinitionNotFoundRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> PropertyDefinitionNotFoundRef<'a> {
             /// Getter for the [`obj` field](PropertyDefinitionNotFound#structfield.obj).
@@ -16513,7 +18298,7 @@ mod root {
         /// The table `DuplicatePropertyDefinition` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `DuplicatePropertyDefinition` in the file `../../../schema/schema/common.fbs:325`
+        /// * Table `DuplicatePropertyDefinition` in the file `crates/schema/schema/common.fbs:355`
         #[derive(
             Clone,
             Debug,
@@ -16648,9 +18433,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<DuplicatePropertyDefinition>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<DuplicatePropertyDefinition>>
             for DuplicatePropertyDefinitionBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DuplicatePropertyDefinition>;
@@ -16665,9 +18450,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<DuplicatePropertyDefinition>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<DuplicatePropertyDefinition>>
             for DuplicatePropertyDefinitionBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DuplicatePropertyDefinition>;
@@ -16682,9 +18467,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<DuplicatePropertyDefinition>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<DuplicatePropertyDefinition>
             for DuplicatePropertyDefinitionBuilder<(T0, T1)>
         {
             #[inline]
@@ -16699,7 +18484,9 @@ mod root {
 
         /// Reference to a deserialized [DuplicatePropertyDefinition].
         #[derive(Copy, Clone)]
-        pub struct DuplicatePropertyDefinitionRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct DuplicatePropertyDefinitionRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> DuplicatePropertyDefinitionRef<'a> {
             /// Getter for the [`obj` field](DuplicatePropertyDefinition#structfield.obj).
@@ -16824,7 +18611,7 @@ mod root {
         /// The table `ChparentPropertyNameConflict` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ChparentPropertyNameConflict` in the file `../../../schema/schema/common.fbs:330`
+        /// * Table `ChparentPropertyNameConflict` in the file `crates/schema/schema/common.fbs:360`
         #[derive(
             Clone,
             Debug,
@@ -16987,10 +18774,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<ChparentPropertyNameConflict>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<ChparentPropertyNameConflict>>
             for ChparentPropertyNameConflictBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<ChparentPropertyNameConflict>;
@@ -17005,10 +18792,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<ChparentPropertyNameConflict>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<ChparentPropertyNameConflict>>
             for ChparentPropertyNameConflictBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<ChparentPropertyNameConflict>;
@@ -17024,10 +18811,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<ChparentPropertyNameConflict>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<ChparentPropertyNameConflict>
             for ChparentPropertyNameConflictBuilder<(T0, T1, T2)>
         {
             #[inline]
@@ -17042,7 +18829,9 @@ mod root {
 
         /// Reference to a deserialized [ChparentPropertyNameConflict].
         #[derive(Copy, Clone)]
-        pub struct ChparentPropertyNameConflictRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ChparentPropertyNameConflictRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> ChparentPropertyNameConflictRef<'a> {
             /// Getter for the [`descendant` field](ChparentPropertyNameConflict#structfield.descendant).
@@ -17178,7 +18967,7 @@ mod root {
         /// The table `PropertyTypeMismatch` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyTypeMismatch` in the file `../../../schema/schema/common.fbs:336`
+        /// * Table `PropertyTypeMismatch` in the file `crates/schema/schema/common.fbs:366`
         #[derive(
             Clone,
             Debug,
@@ -17310,7 +19099,9 @@ mod root {
 
         /// Reference to a deserialized [PropertyTypeMismatch].
         #[derive(Copy, Clone)]
-        pub struct PropertyTypeMismatchRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct PropertyTypeMismatchRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> PropertyTypeMismatchRef<'a> {}
 
@@ -17406,7 +19197,7 @@ mod root {
         /// The table `VerbNotFound` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbNotFound` in the file `../../../schema/schema/common.fbs:339`
+        /// * Table `VerbNotFound` in the file `crates/schema/schema/common.fbs:369`
         #[derive(
             Clone,
             Debug,
@@ -17528,9 +19319,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<VerbNotFound>> for VerbNotFoundBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<VerbNotFound>> for VerbNotFoundBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VerbNotFound>;
 
@@ -17541,9 +19332,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VerbNotFound>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VerbNotFound>>
             for VerbNotFoundBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VerbNotFound>;
@@ -17558,9 +19349,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<VerbNotFound> for VerbNotFoundBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<VerbNotFound> for VerbNotFoundBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VerbNotFound> {
@@ -17571,7 +19362,7 @@ mod root {
 
         /// Reference to a deserialized [VerbNotFound].
         #[derive(Copy, Clone)]
-        pub struct VerbNotFoundRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VerbNotFoundRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VerbNotFoundRef<'a> {
             /// Getter for the [`obj` field](VerbNotFound#structfield.obj).
@@ -17686,7 +19477,7 @@ mod root {
         /// The table `InvalidVerb` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `InvalidVerb` in the file `../../../schema/schema/common.fbs:344`
+        /// * Table `InvalidVerb` in the file `crates/schema/schema/common.fbs:374`
         #[derive(
             Clone,
             Debug,
@@ -17843,7 +19634,7 @@ mod root {
 
         /// Reference to a deserialized [InvalidVerb].
         #[derive(Copy, Clone)]
-        pub struct InvalidVerbRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct InvalidVerbRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> InvalidVerbRef<'a> {
             /// Getter for the [`vid` field](InvalidVerb#structfield.vid).
@@ -17948,7 +19739,7 @@ mod root {
         /// The table `VerbDecodeError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbDecodeError` in the file `../../../schema/schema/common.fbs:348`
+        /// * Table `VerbDecodeError` in the file `crates/schema/schema/common.fbs:378`
         #[derive(
             Clone,
             Debug,
@@ -18079,9 +19870,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<VerbDecodeError>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<VerbDecodeError>>
             for VerbDecodeErrorBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VerbDecodeError>;
@@ -18096,9 +19887,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VerbDecodeError>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VerbDecodeError>>
             for VerbDecodeErrorBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VerbDecodeError>;
@@ -18113,9 +19904,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOffset<VerbDecodeError> for VerbDecodeErrorBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOffset<VerbDecodeError> for VerbDecodeErrorBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -18129,7 +19920,7 @@ mod root {
 
         /// Reference to a deserialized [VerbDecodeError].
         #[derive(Copy, Clone)]
-        pub struct VerbDecodeErrorRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VerbDecodeErrorRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VerbDecodeErrorRef<'a> {
             /// Getter for the [`obj` field](VerbDecodeError#structfield.obj).
@@ -18246,7 +20037,7 @@ mod root {
         /// The table `VerbPermissionDenied` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbPermissionDenied` in the file `../../../schema/schema/common.fbs:353`
+        /// * Table `VerbPermissionDenied` in the file `crates/schema/schema/common.fbs:383`
         #[derive(
             Clone,
             Debug,
@@ -18378,7 +20169,9 @@ mod root {
 
         /// Reference to a deserialized [VerbPermissionDenied].
         #[derive(Copy, Clone)]
-        pub struct VerbPermissionDeniedRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VerbPermissionDeniedRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> VerbPermissionDeniedRef<'a> {}
 
@@ -18474,7 +20267,7 @@ mod root {
         /// The table `DuplicateVerb` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `DuplicateVerb` in the file `../../../schema/schema/common.fbs:356`
+        /// * Table `DuplicateVerb` in the file `crates/schema/schema/common.fbs:386`
         #[derive(
             Clone,
             Debug,
@@ -18596,9 +20389,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<DuplicateVerb>> for DuplicateVerbBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<DuplicateVerb>>
+            for DuplicateVerbBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DuplicateVerb>;
 
@@ -18609,9 +20403,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<DuplicateVerb>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<DuplicateVerb>>
             for DuplicateVerbBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DuplicateVerb>;
@@ -18626,9 +20420,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOffset<DuplicateVerb> for DuplicateVerbBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOffset<DuplicateVerb> for DuplicateVerbBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<DuplicateVerb> {
@@ -18639,7 +20433,7 @@ mod root {
 
         /// Reference to a deserialized [DuplicateVerb].
         #[derive(Copy, Clone)]
-        pub struct DuplicateVerbRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct DuplicateVerbRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> DuplicateVerbRef<'a> {
             /// Getter for the [`obj` field](DuplicateVerb#structfield.obj).
@@ -18756,7 +20550,7 @@ mod root {
         /// The table `FailedMatch` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `FailedMatch` in the file `../../../schema/schema/common.fbs:361`
+        /// * Table `FailedMatch` in the file `crates/schema/schema/common.fbs:391`
         #[derive(
             Clone,
             Debug,
@@ -18904,7 +20698,7 @@ mod root {
 
         /// Reference to a deserialized [FailedMatch].
         #[derive(Copy, Clone)]
-        pub struct FailedMatchRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct FailedMatchRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> FailedMatchRef<'a> {
             /// Getter for the [`match_string` field](FailedMatch#structfield.match_string).
@@ -19009,7 +20803,7 @@ mod root {
         /// The table `AmbiguousMatch` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `AmbiguousMatch` in the file `../../../schema/schema/common.fbs:365`
+        /// * Table `AmbiguousMatch` in the file `crates/schema/schema/common.fbs:395`
         #[derive(
             Clone,
             Debug,
@@ -19158,7 +20952,7 @@ mod root {
 
         /// Reference to a deserialized [AmbiguousMatch].
         #[derive(Copy, Clone)]
-        pub struct AmbiguousMatchRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct AmbiguousMatchRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> AmbiguousMatchRef<'a> {
             /// Getter for the [`match_string` field](AmbiguousMatch#structfield.match_string).
@@ -19263,7 +21057,7 @@ mod root {
         /// The table `InvalidRenumber` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `InvalidRenumber` in the file `../../../schema/schema/common.fbs:369`
+        /// * Table `InvalidRenumber` in the file `crates/schema/schema/common.fbs:399`
         #[derive(
             Clone,
             Debug,
@@ -19427,7 +21221,7 @@ mod root {
 
         /// Reference to a deserialized [InvalidRenumber].
         #[derive(Copy, Clone)]
-        pub struct InvalidRenumberRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct InvalidRenumberRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> InvalidRenumberRef<'a> {
             /// Getter for the [`message` field](InvalidRenumber#structfield.message).
@@ -19532,7 +21326,7 @@ mod root {
         /// The table `WorldStateDatabaseError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `WorldStateDatabaseError` in the file `../../../schema/schema/common.fbs:373`
+        /// * Table `WorldStateDatabaseError` in the file `crates/schema/schema/common.fbs:403`
         #[derive(
             Clone,
             Debug,
@@ -19700,7 +21494,9 @@ mod root {
 
         /// Reference to a deserialized [WorldStateDatabaseError].
         #[derive(Copy, Clone)]
-        pub struct WorldStateDatabaseErrorRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct WorldStateDatabaseErrorRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> WorldStateDatabaseErrorRef<'a> {
             /// Getter for the [`message` field](WorldStateDatabaseError#structfield.message).
@@ -19812,7 +21608,7 @@ mod root {
         /// The table `RollbackRetry` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `RollbackRetry` in the file `../../../schema/schema/common.fbs:377`
+        /// * Table `RollbackRetry` in the file `crates/schema/schema/common.fbs:407`
         #[derive(
             Clone,
             Debug,
@@ -19927,7 +21723,7 @@ mod root {
 
         /// Reference to a deserialized [RollbackRetry].
         #[derive(Copy, Clone)]
-        pub struct RollbackRetryRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct RollbackRetryRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> RollbackRetryRef<'a> {}
 
@@ -20023,7 +21819,7 @@ mod root {
         /// The table `WorldStateError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `WorldStateError` in the file `../../../schema/schema/common.fbs:380`
+        /// * Table `WorldStateError` in the file `crates/schema/schema/common.fbs:410`
         #[derive(
             Clone,
             Debug,
@@ -20180,7 +21976,7 @@ mod root {
 
         /// Reference to a deserialized [WorldStateError].
         #[derive(Copy, Clone)]
-        pub struct WorldStateErrorRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct WorldStateErrorRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> WorldStateErrorRef<'a> {
             /// Getter for the [`error` field](WorldStateError#structfield.error).
@@ -20285,7 +22081,7 @@ mod root {
         /// The table `PropInfo` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropInfo` in the file `../../../schema/schema/common.fbs:388`
+        /// * Table `PropInfo` in the file `crates/schema/schema/common.fbs:418`
         #[derive(
             Clone,
             Debug,
@@ -20548,14 +22344,14 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAsDefault<bool, bool>,
-            T6: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAs<::planus::Offset<PropInfo>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAsDefault<bool, bool>,
+                T6: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAs<::planus::Offset<PropInfo>>
             for PropInfoBuilder<(T0, T1, T2, T3, T4, T5, T6)>
         {
             type Prepared = ::planus::Offset<PropInfo>;
@@ -20567,14 +22363,14 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAsDefault<bool, bool>,
-            T6: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOptional<::planus::Offset<PropInfo>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAsDefault<bool, bool>,
+                T6: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOptional<::planus::Offset<PropInfo>>
             for PropInfoBuilder<(T0, T1, T2, T3, T4, T5, T6)>
         {
             type Prepared = ::planus::Offset<PropInfo>;
@@ -20589,14 +22385,14 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAsDefault<bool, bool>,
-            T6: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOffset<PropInfo> for PropInfoBuilder<(T0, T1, T2, T3, T4, T5, T6)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAsDefault<bool, bool>,
+                T6: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOffset<PropInfo> for PropInfoBuilder<(T0, T1, T2, T3, T4, T5, T6)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<PropInfo> {
@@ -20607,7 +22403,7 @@ mod root {
 
         /// Reference to a deserialized [PropInfo].
         #[derive(Copy, Clone)]
-        pub struct PropInfoRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct PropInfoRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> PropInfoRef<'a> {
             /// Getter for the [`definer` field](PropInfo#structfield.definer).
@@ -20764,7 +22560,7 @@ mod root {
         /// The table `VerbInfo` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbInfo` in the file `../../../schema/schema/common.fbs:398`
+        /// * Table `VerbInfo` in the file `crates/schema/schema/common.fbs:428`
         #[derive(
             Clone,
             Debug,
@@ -21063,15 +22859,15 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAsDefault<bool, bool>,
-            T6: ::planus::WriteAsDefault<bool, bool>,
-            T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-        > ::planus::WriteAs<::planus::Offset<VerbInfo>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAsDefault<bool, bool>,
+                T6: ::planus::WriteAsDefault<bool, bool>,
+                T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+            > ::planus::WriteAs<::planus::Offset<VerbInfo>>
             for VerbInfoBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)>
         {
             type Prepared = ::planus::Offset<VerbInfo>;
@@ -21083,15 +22879,15 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAsDefault<bool, bool>,
-            T6: ::planus::WriteAsDefault<bool, bool>,
-            T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VerbInfo>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAsDefault<bool, bool>,
+                T6: ::planus::WriteAsDefault<bool, bool>,
+                T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VerbInfo>>
             for VerbInfoBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)>
         {
             type Prepared = ::planus::Offset<VerbInfo>;
@@ -21106,15 +22902,16 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAsDefault<bool, bool>,
-            T6: ::planus::WriteAsDefault<bool, bool>,
-            T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-        > ::planus::WriteAsOffset<VerbInfo> for VerbInfoBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAsDefault<bool, bool>,
+                T6: ::planus::WriteAsDefault<bool, bool>,
+                T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+            > ::planus::WriteAsOffset<VerbInfo>
+            for VerbInfoBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VerbInfo> {
@@ -21125,7 +22922,7 @@ mod root {
 
         /// Reference to a deserialized [VerbInfo].
         #[derive(Copy, Clone)]
-        pub struct VerbInfoRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VerbInfoRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VerbInfoRef<'a> {
             /// Getter for the [`location` field](VerbInfo#structfield.location).
@@ -21292,7 +23089,7 @@ mod root {
         /// The enum `ArgSpec` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Enum `ArgSpec` in the file `../../../schema/schema/common.fbs:414`
+        /// * Enum `ArgSpec` in the file `crates/schema/schema/common.fbs:444`
         #[derive(
             Copy,
             Clone,
@@ -21462,7 +23259,7 @@ mod root {
         /// The table `PrepSpec` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PrepSpec` in the file `../../../schema/schema/common.fbs:422`
+        /// * Table `PrepSpec` in the file `crates/schema/schema/common.fbs:452`
         #[derive(
             Clone,
             Debug,
@@ -21619,7 +23416,7 @@ mod root {
 
         /// Reference to a deserialized [PrepSpec].
         #[derive(Copy, Clone)]
-        pub struct PrepSpecRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct PrepSpecRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> PrepSpecRef<'a> {
             /// Getter for the [`value` field](PrepSpec#structfield.value).
@@ -21720,7 +23517,7 @@ mod root {
         /// The table `VerbArgsSpec` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbArgsSpec` in the file `../../../schema/schema/common.fbs:428`
+        /// * Table `VerbArgsSpec` in the file `crates/schema/schema/common.fbs:458`
         #[derive(
             Clone,
             Debug,
@@ -21905,10 +23702,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
-            T1: ::planus::WriteAsDefault<i16, i16>,
-            T2: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
-        > ::planus::WriteAs<::planus::Offset<VerbArgsSpec>> for VerbArgsSpecBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
+                T1: ::planus::WriteAsDefault<i16, i16>,
+                T2: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
+            > ::planus::WriteAs<::planus::Offset<VerbArgsSpec>>
+            for VerbArgsSpecBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<VerbArgsSpec>;
 
@@ -21919,10 +23717,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
-            T1: ::planus::WriteAsDefault<i16, i16>,
-            T2: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
-        > ::planus::WriteAsOptional<::planus::Offset<VerbArgsSpec>>
+                T0: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
+                T1: ::planus::WriteAsDefault<i16, i16>,
+                T2: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
+            > ::planus::WriteAsOptional<::planus::Offset<VerbArgsSpec>>
             for VerbArgsSpecBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<VerbArgsSpec>;
@@ -21937,10 +23735,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
-            T1: ::planus::WriteAsDefault<i16, i16>,
-            T2: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
-        > ::planus::WriteAsOffset<VerbArgsSpec> for VerbArgsSpecBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
+                T1: ::planus::WriteAsDefault<i16, i16>,
+                T2: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
+            > ::planus::WriteAsOffset<VerbArgsSpec> for VerbArgsSpecBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VerbArgsSpec> {
@@ -21951,7 +23749,7 @@ mod root {
 
         /// Reference to a deserialized [VerbArgsSpec].
         #[derive(Copy, Clone)]
-        pub struct VerbArgsSpecRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VerbArgsSpecRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VerbArgsSpecRef<'a> {
             /// Getter for the [`dobj` field](VerbArgsSpec#structfield.dobj).
@@ -22080,7 +23878,7 @@ mod root {
         /// The table `VerbDef` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbDef` in the file `../../../schema/schema/common.fbs:435`
+        /// * Table `VerbDef` in the file `crates/schema/schema/common.fbs:465`
         #[derive(
             Clone,
             Debug,
@@ -22299,13 +24097,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-            T4: ::planus::WriteAsDefault<u16, u16>,
-            T5: ::planus::WriteAs<::planus::Offset<self::VerbArgsSpec>>,
-        > ::planus::WriteAs<::planus::Offset<VerbDef>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+                T4: ::planus::WriteAsDefault<u16, u16>,
+                T5: ::planus::WriteAs<::planus::Offset<self::VerbArgsSpec>>,
+            > ::planus::WriteAs<::planus::Offset<VerbDef>>
             for VerbDefBuilder<(T0, T1, T2, T3, T4, T5)>
         {
             type Prepared = ::planus::Offset<VerbDef>;
@@ -22317,13 +24115,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-            T4: ::planus::WriteAsDefault<u16, u16>,
-            T5: ::planus::WriteAs<::planus::Offset<self::VerbArgsSpec>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VerbDef>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+                T4: ::planus::WriteAsDefault<u16, u16>,
+                T5: ::planus::WriteAs<::planus::Offset<self::VerbArgsSpec>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VerbDef>>
             for VerbDefBuilder<(T0, T1, T2, T3, T4, T5)>
         {
             type Prepared = ::planus::Offset<VerbDef>;
@@ -22338,13 +24136,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-            T4: ::planus::WriteAsDefault<u16, u16>,
-            T5: ::planus::WriteAs<::planus::Offset<self::VerbArgsSpec>>,
-        > ::planus::WriteAsOffset<VerbDef> for VerbDefBuilder<(T0, T1, T2, T3, T4, T5)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+                T4: ::planus::WriteAsDefault<u16, u16>,
+                T5: ::planus::WriteAs<::planus::Offset<self::VerbArgsSpec>>,
+            > ::planus::WriteAsOffset<VerbDef> for VerbDefBuilder<(T0, T1, T2, T3, T4, T5)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VerbDef> {
@@ -22355,7 +24153,7 @@ mod root {
 
         /// Reference to a deserialized [VerbDef].
         #[derive(Copy, Clone)]
-        pub struct VerbDefRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VerbDefRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VerbDefRef<'a> {
             /// Getter for the [`uuid` field](VerbDef#structfield.uuid).
@@ -22507,7 +24305,7 @@ mod root {
         /// The table `PropDef` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropDef` in the file `../../../schema/schema/common.fbs:445`
+        /// * Table `PropDef` in the file `crates/schema/schema/common.fbs:475`
         #[derive(
             Clone,
             Debug,
@@ -22673,11 +24471,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<PropDef>> for PropDefBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<PropDef>> for PropDefBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<PropDef>;
 
@@ -22688,11 +24486,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<PropDef>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<PropDef>>
             for PropDefBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<PropDef>;
@@ -22707,11 +24505,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOffset<PropDef> for PropDefBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOffset<PropDef> for PropDefBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<PropDef> {
@@ -22722,7 +24520,7 @@ mod root {
 
         /// Reference to a deserialized [PropDef].
         #[derive(Copy, Clone)]
-        pub struct PropDefRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct PropDefRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> PropDefRef<'a> {
             /// Getter for the [`uuid` field](PropDef#structfield.uuid).
@@ -22855,7 +24653,7 @@ mod root {
         /// The table `VerbDefs` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbDefs` in the file `../../../schema/schema/common.fbs:453`
+        /// * Table `VerbDefs` in the file `crates/schema/schema/common.fbs:483`
         #[derive(
             Clone,
             Debug,
@@ -23003,7 +24801,7 @@ mod root {
 
         /// Reference to a deserialized [VerbDefs].
         #[derive(Copy, Clone)]
-        pub struct VerbDefsRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VerbDefsRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VerbDefsRef<'a> {
             /// Getter for the [`verbs` field](VerbDefs#structfield.verbs).
@@ -23107,7 +24905,7 @@ mod root {
         /// The table `PropDefs` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropDefs` in the file `../../../schema/schema/common.fbs:458`
+        /// * Table `PropDefs` in the file `crates/schema/schema/common.fbs:488`
         #[derive(
             Clone,
             Debug,
@@ -23255,7 +25053,7 @@ mod root {
 
         /// Reference to a deserialized [PropDefs].
         #[derive(Copy, Clone)]
-        pub struct PropDefsRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct PropDefsRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> PropDefsRef<'a> {
             /// Getter for the [`props` field](PropDefs#structfield.props).
@@ -23359,7 +25157,7 @@ mod root {
         /// The table `ObjAttrs` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjAttrs` in the file `../../../schema/schema/common.fbs:463`
+        /// * Table `ObjAttrs` in the file `crates/schema/schema/common.fbs:493`
         #[derive(
             Clone,
             Debug,
@@ -23567,12 +25365,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-            T4: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-        > ::planus::WriteAs<::planus::Offset<ObjAttrs>> for ObjAttrsBuilder<(T0, T1, T2, T3, T4)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+                T4: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+            > ::planus::WriteAs<::planus::Offset<ObjAttrs>>
+            for ObjAttrsBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<ObjAttrs>;
 
@@ -23583,12 +25382,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-            T4: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<ObjAttrs>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+                T4: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<ObjAttrs>>
             for ObjAttrsBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<ObjAttrs>;
@@ -23603,12 +25402,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-            T4: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-        > ::planus::WriteAsOffset<ObjAttrs> for ObjAttrsBuilder<(T0, T1, T2, T3, T4)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+                T4: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+            > ::planus::WriteAsOffset<ObjAttrs> for ObjAttrsBuilder<(T0, T1, T2, T3, T4)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<ObjAttrs> {
@@ -23619,7 +25418,7 @@ mod root {
 
         /// Reference to a deserialized [ObjAttrs].
         #[derive(Copy, Clone)]
-        pub struct ObjAttrsRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ObjAttrsRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ObjAttrsRef<'a> {
             /// Getter for the [`owner` field](ObjAttrs#structfield.owner).
@@ -23762,12 +25561,12 @@ mod root {
     /// The namespace `MoorVar`
     ///
     /// Generated from these locations:
-    /// * File `../../../schema/schema/var.fbs`
+    /// * File `crates/schema/schema/var.fbs`
     pub mod moor_var {
         /// The union `VarUnion` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Union `VarUnion` in the file `../../../schema/schema/var.fbs:27`
+        /// * Union `VarUnion` in the file `crates/schema/schema/var.fbs:27`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub enum VarUnion {
             /// The variant of type `VarNone` in the union `VarUnion`
@@ -23808,6 +25607,9 @@ mod root {
 
             /// The variant of type `VarLambda` in the union `VarUnion`
             VarLambda(::planus::alloc::boxed::Box<self::VarLambda>),
+
+            /// The variant of type `VarAnonymous` in the union `VarUnion`
+            VarAnonymous(::planus::alloc::boxed::Box<self::VarAnonymous>),
         }
 
         impl VarUnion {
@@ -23920,6 +25722,14 @@ mod root {
             ) -> ::planus::UnionOffset<Self> {
                 ::planus::UnionOffset::new(13, value.prepare(builder).downcast())
             }
+
+            #[inline]
+            pub fn create_var_anonymous(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::VarAnonymous>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(14, value.prepare(builder).downcast())
+            }
         }
 
         impl ::planus::WriteAsUnion<VarUnion> for VarUnion {
@@ -23939,6 +25749,7 @@ mod root {
                     Self::VarBinary(value) => Self::create_var_binary(builder, value),
                     Self::VarFlyweight(value) => Self::create_var_flyweight(builder, value),
                     Self::VarLambda(value) => Self::create_var_lambda(builder, value),
+                    Self::VarAnonymous(value) => Self::create_var_anonymous(builder, value),
                 }
             }
         }
@@ -24074,6 +25885,15 @@ mod root {
             pub fn var_lambda<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<13, T>>
             where
                 T: ::planus::WriteAsOffset<self::VarLambda>,
+            {
+                VarUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`VarAnonymous` variant](VarUnion#variant.VarAnonymous).
+            #[inline]
+            pub fn var_anonymous<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<14, T>>
+            where
+                T: ::planus::WriteAsOffset<self::VarAnonymous>,
             {
                 VarUnionBuilder(::planus::Initialized(value))
             }
@@ -24376,6 +26196,28 @@ mod root {
                 ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
             }
         }
+        impl<T> ::planus::WriteAsUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<14, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarAnonymous>,
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<VarUnion> {
+                ::planus::UnionOffset::new(14, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<14, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarAnonymous>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<VarUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
 
         /// Reference to a deserialized [VarUnion].
         #[derive(Copy, Clone, Debug)]
@@ -24393,6 +26235,7 @@ mod root {
             VarBinary(self::VarBinaryRef<'a>),
             VarFlyweight(self::VarFlyweightRef<'a>),
             VarLambda(self::VarLambdaRef<'a>),
+            VarAnonymous(self::VarAnonymousRef<'a>),
         }
 
         impl<'a> ::core::convert::TryFrom<VarUnionRef<'a>> for VarUnion {
@@ -24459,6 +26302,12 @@ mod root {
                             ::core::convert::TryFrom::try_from(value)?,
                         ))
                     }
+
+                    VarUnionRef::VarAnonymous(value) => {
+                        Self::VarAnonymous(::planus::alloc::boxed::Box::new(
+                            ::core::convert::TryFrom::try_from(value)?,
+                        ))
+                    }
                 })
             }
         }
@@ -24509,6 +26358,9 @@ mod root {
                     13 => ::core::result::Result::Ok(Self::VarLambda(
                         ::planus::TableRead::from_buffer(buffer, field_offset)?,
                     )),
+                    14 => ::core::result::Result::Ok(Self::VarAnonymous(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
                     _ => {
                         ::core::result::Result::Err(::planus::errors::ErrorKind::UnknownUnionTag {
                             tag,
@@ -24525,7 +26377,7 @@ mod root {
         /// The table `VarNone` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarNone` in the file `../../../schema/schema/var.fbs:45`
+        /// * Table `VarNone` in the file `crates/schema/schema/var.fbs:49`
         #[derive(
             Clone,
             Debug,
@@ -24640,7 +26492,7 @@ mod root {
 
         /// Reference to a deserialized [VarNone].
         #[derive(Copy, Clone)]
-        pub struct VarNoneRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarNoneRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarNoneRef<'a> {}
 
@@ -24732,7 +26584,7 @@ mod root {
         /// The table `VarBool` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarBool` in the file `../../../schema/schema/var.fbs:48`
+        /// * Table `VarBool` in the file `crates/schema/schema/var.fbs:52`
         #[derive(
             Clone,
             Debug,
@@ -24889,7 +26741,7 @@ mod root {
 
         /// Reference to a deserialized [VarBool].
         #[derive(Copy, Clone)]
-        pub struct VarBoolRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarBoolRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarBoolRef<'a> {
             /// Getter for the [`value` field](VarBool#structfield.value).
@@ -24990,7 +26842,7 @@ mod root {
         /// The table `VarInt` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarInt` in the file `../../../schema/schema/var.fbs:52`
+        /// * Table `VarInt` in the file `crates/schema/schema/var.fbs:56`
         #[derive(
             Clone,
             Debug,
@@ -25147,7 +26999,7 @@ mod root {
 
         /// Reference to a deserialized [VarInt].
         #[derive(Copy, Clone)]
-        pub struct VarIntRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarIntRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarIntRef<'a> {
             /// Getter for the [`value` field](VarInt#structfield.value).
@@ -25248,7 +27100,7 @@ mod root {
         /// The table `VarFloat` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarFloat` in the file `../../../schema/schema/var.fbs:56`
+        /// * Table `VarFloat` in the file `crates/schema/schema/var.fbs:60`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct VarFloat {
             /// The field `value` in the table `VarFloat`
@@ -25395,7 +27247,7 @@ mod root {
 
         /// Reference to a deserialized [VarFloat].
         #[derive(Copy, Clone)]
-        pub struct VarFloatRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarFloatRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarFloatRef<'a> {
             /// Getter for the [`value` field](VarFloat#structfield.value).
@@ -25496,7 +27348,7 @@ mod root {
         /// The table `VarStr` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarStr` in the file `../../../schema/schema/var.fbs:60`
+        /// * Table `VarStr` in the file `crates/schema/schema/var.fbs:64`
         #[derive(
             Clone,
             Debug,
@@ -25644,7 +27496,7 @@ mod root {
 
         /// Reference to a deserialized [VarStr].
         #[derive(Copy, Clone)]
-        pub struct VarStrRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarStrRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarStrRef<'a> {
             /// Getter for the [`value` field](VarStr#structfield.value).
@@ -25745,7 +27597,7 @@ mod root {
         /// The table `VarObj` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarObj` in the file `../../../schema/schema/var.fbs:64`
+        /// * Table `VarObj` in the file `crates/schema/schema/var.fbs:68`
         #[derive(
             Clone,
             Debug,
@@ -25884,7 +27736,7 @@ mod root {
 
         /// Reference to a deserialized [VarObj].
         #[derive(Copy, Clone)]
-        pub struct VarObjRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarObjRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarObjRef<'a> {
             /// Getter for the [`obj` field](VarObj#structfield.obj).
@@ -25987,7 +27839,7 @@ mod root {
         /// The table `VarErr` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarErr` in the file `../../../schema/schema/var.fbs:68`
+        /// * Table `VarErr` in the file `crates/schema/schema/var.fbs:72`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct VarErr {
             /// The field `error` in the table `VarErr`
@@ -26125,7 +27977,7 @@ mod root {
 
         /// Reference to a deserialized [VarErr].
         #[derive(Copy, Clone)]
-        pub struct VarErrRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarErrRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarErrRef<'a> {
             /// Getter for the [`error` field](VarErr#structfield.error).
@@ -26228,7 +28080,7 @@ mod root {
         /// The table `VarSym` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarSym` in the file `../../../schema/schema/var.fbs:72`
+        /// * Table `VarSym` in the file `crates/schema/schema/var.fbs:76`
         #[derive(
             Clone,
             Debug,
@@ -26376,7 +28228,7 @@ mod root {
 
         /// Reference to a deserialized [VarSym].
         #[derive(Copy, Clone)]
-        pub struct VarSymRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarSymRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarSymRef<'a> {
             /// Getter for the [`symbol` field](VarSym#structfield.symbol).
@@ -26479,7 +28331,7 @@ mod root {
         /// The table `VarBinary` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarBinary` in the file `../../../schema/schema/var.fbs:76`
+        /// * Table `VarBinary` in the file `crates/schema/schema/var.fbs:80`
         #[derive(
             Clone,
             Debug,
@@ -26627,7 +28479,7 @@ mod root {
 
         /// Reference to a deserialized [VarBinary].
         #[derive(Copy, Clone)]
-        pub struct VarBinaryRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarBinaryRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarBinaryRef<'a> {
             /// Getter for the [`data` field](VarBinary#structfield.data).
@@ -26732,7 +28584,7 @@ mod root {
         /// The table `VarList` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarList` in the file `../../../schema/schema/var.fbs:80`
+        /// * Table `VarList` in the file `crates/schema/schema/var.fbs:84`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct VarList {
             /// The field `elements` in the table `VarList`
@@ -26870,7 +28722,7 @@ mod root {
 
         /// Reference to a deserialized [VarList].
         #[derive(Copy, Clone)]
-        pub struct VarListRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarListRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarListRef<'a> {
             /// Getter for the [`elements` field](VarList#structfield.elements).
@@ -26974,7 +28826,7 @@ mod root {
         /// The table `VarMapPair` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarMapPair` in the file `../../../schema/schema/var.fbs:84`
+        /// * Table `VarMapPair` in the file `crates/schema/schema/var.fbs:88`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct VarMapPair {
             /// The field `key` in the table `VarMapPair`
@@ -27086,9 +28938,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
-        > ::planus::WriteAs<::planus::Offset<VarMapPair>> for VarMapPairBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            > ::planus::WriteAs<::planus::Offset<VarMapPair>> for VarMapPairBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VarMapPair>;
 
@@ -27099,9 +28951,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VarMapPair>> for VarMapPairBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VarMapPair>>
+            for VarMapPairBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VarMapPair>;
 
@@ -27115,9 +28968,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
-        > ::planus::WriteAsOffset<VarMapPair> for VarMapPairBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            > ::planus::WriteAsOffset<VarMapPair> for VarMapPairBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarMapPair> {
@@ -27128,7 +28981,7 @@ mod root {
 
         /// Reference to a deserialized [VarMapPair].
         #[derive(Copy, Clone)]
-        pub struct VarMapPairRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarMapPairRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarMapPairRef<'a> {
             /// Getter for the [`key` field](VarMapPair#structfield.key).
@@ -27245,7 +29098,7 @@ mod root {
         /// The table `VarMap` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarMap` in the file `../../../schema/schema/var.fbs:89`
+        /// * Table `VarMap` in the file `crates/schema/schema/var.fbs:93`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct VarMap {
             /// The field `pairs` in the table `VarMap`
@@ -27386,7 +29239,7 @@ mod root {
 
         /// Reference to a deserialized [VarMap].
         #[derive(Copy, Clone)]
-        pub struct VarMapRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarMapRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarMapRef<'a> {
             /// Getter for the [`pairs` field](VarMap#structfield.pairs).
@@ -27490,7 +29343,7 @@ mod root {
         /// The table `FlyweightSlot` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `FlyweightSlot` in the file `../../../schema/schema/var.fbs:93`
+        /// * Table `FlyweightSlot` in the file `crates/schema/schema/var.fbs:97`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct FlyweightSlot {
             /// The field `name` in the table `FlyweightSlot`
@@ -27602,9 +29455,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
-        > ::planus::WriteAs<::planus::Offset<FlyweightSlot>> for FlyweightSlotBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            > ::planus::WriteAs<::planus::Offset<FlyweightSlot>>
+            for FlyweightSlotBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<FlyweightSlot>;
 
@@ -27615,9 +29469,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
-        > ::planus::WriteAsOptional<::planus::Offset<FlyweightSlot>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            > ::planus::WriteAsOptional<::planus::Offset<FlyweightSlot>>
             for FlyweightSlotBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<FlyweightSlot>;
@@ -27632,9 +29486,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
-        > ::planus::WriteAsOffset<FlyweightSlot> for FlyweightSlotBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            > ::planus::WriteAsOffset<FlyweightSlot> for FlyweightSlotBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<FlyweightSlot> {
@@ -27645,7 +29499,7 @@ mod root {
 
         /// Reference to a deserialized [FlyweightSlot].
         #[derive(Copy, Clone)]
-        pub struct FlyweightSlotRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct FlyweightSlotRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> FlyweightSlotRef<'a> {
             /// Getter for the [`name` field](FlyweightSlot#structfield.name).
@@ -27762,7 +29616,7 @@ mod root {
         /// The table `VarFlyweight` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarFlyweight` in the file `../../../schema/schema/var.fbs:98`
+        /// * Table `VarFlyweight` in the file `crates/schema/schema/var.fbs:102`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct VarFlyweight {
             /// The field `delegate` in the table `VarFlyweight`
@@ -27896,10 +29750,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
-        > ::planus::WriteAs<::planus::Offset<VarFlyweight>> for VarFlyweightBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
+            > ::planus::WriteAs<::planus::Offset<VarFlyweight>>
+            for VarFlyweightBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<VarFlyweight>;
 
@@ -27910,10 +29765,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VarFlyweight>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VarFlyweight>>
             for VarFlyweightBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<VarFlyweight>;
@@ -27928,10 +29783,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
-        > ::planus::WriteAsOffset<VarFlyweight> for VarFlyweightBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
+            > ::planus::WriteAsOffset<VarFlyweight> for VarFlyweightBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarFlyweight> {
@@ -27942,7 +29797,7 @@ mod root {
 
         /// Reference to a deserialized [VarFlyweight].
         #[derive(Copy, Clone)]
-        pub struct VarFlyweightRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarFlyweightRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarFlyweightRef<'a> {
             /// Getter for the [`delegate` field](VarFlyweight#structfield.delegate).
@@ -28070,7 +29925,7 @@ mod root {
         /// The table `VarLambda` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarLambda` in the file `../../../schema/schema/var.fbs:104`
+        /// * Table `VarLambda` in the file `crates/schema/schema/var.fbs:108`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct VarLambda {
             /// The field `params` in the table `VarLambda`
@@ -28083,18 +29938,6 @@ mod root {
             pub self_var: ::core::option::Option<
                 ::planus::alloc::boxed::Box<super::moor_program::StoredName>,
             >,
-        }
-
-        #[allow(clippy::derivable_impls)]
-        impl ::core::default::Default for VarLambda {
-            fn default() -> Self {
-                Self {
-                    params: ::core::default::Default::default(),
-                    body: ::core::default::Default::default(),
-                    captured_env: ::core::default::Default::default(),
-                    self_var: ::core::default::Default::default(),
-                }
-            }
         }
 
         impl VarLambda {
@@ -28259,11 +30102,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredScatterArgs>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredProgram>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VarList>]>>,
-            T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_program::StoredName>>,
-        > ::planus::WriteAs<::planus::Offset<VarLambda>> for VarLambdaBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredScatterArgs>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredProgram>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VarList>]>>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_program::StoredName>>,
+            > ::planus::WriteAs<::planus::Offset<VarLambda>>
+            for VarLambdaBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<VarLambda>;
 
@@ -28274,11 +30118,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredScatterArgs>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredProgram>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VarList>]>>,
-            T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_program::StoredName>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VarLambda>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredScatterArgs>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredProgram>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VarList>]>>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_program::StoredName>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VarLambda>>
             for VarLambdaBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<VarLambda>;
@@ -28293,11 +30137,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredScatterArgs>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredProgram>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VarList>]>>,
-            T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_program::StoredName>>,
-        > ::planus::WriteAsOffset<VarLambda> for VarLambdaBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredScatterArgs>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredProgram>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VarList>]>>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_program::StoredName>>,
+            > ::planus::WriteAsOffset<VarLambda> for VarLambdaBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarLambda> {
@@ -28308,7 +30152,7 @@ mod root {
 
         /// Reference to a deserialized [VarLambda].
         #[derive(Copy, Clone)]
-        pub struct VarLambdaRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarLambdaRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarLambdaRef<'a> {
             /// Getter for the [`params` field](VarLambda#structfield.params).
@@ -28454,10 +30298,257 @@ mod root {
             }
         }
 
+        /// The table `VarAnonymous` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `VarAnonymous` in the file `crates/schema/schema/var.fbs:115`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct VarAnonymous {
+            /// The field `obj` in the table `VarAnonymous`
+            pub obj: ::planus::alloc::boxed::Box<super::moor_common::Obj>,
+        }
+
+        impl VarAnonymous {
+            /// Creates a [VarAnonymousBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarAnonymousBuilder<()> {
+                VarAnonymousBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_obj: impl ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_obj = field_obj.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<super::moor_common::Obj>>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_obj);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarAnonymous>> for VarAnonymous {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarAnonymous> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarAnonymous>> for VarAnonymous {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarAnonymous>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarAnonymous> for VarAnonymous {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarAnonymous> {
+                VarAnonymous::create(builder, &self.obj)
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarAnonymous] type.
+        ///
+        /// Can be created using the [VarAnonymous::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarAnonymousBuilder<State>(State);
+
+        impl VarAnonymousBuilder<()> {
+            /// Setter for the [`obj` field](VarAnonymous#structfield.obj).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn obj<T0>(self, value: T0) -> VarAnonymousBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+            {
+                VarAnonymousBuilder((value,))
+            }
+        }
+
+        impl<T0> VarAnonymousBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VarAnonymous].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarAnonymous>
+            where
+                Self: ::planus::WriteAsOffset<VarAnonymous>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>>
+            ::planus::WriteAs<::planus::Offset<VarAnonymous>> for VarAnonymousBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarAnonymous>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarAnonymous> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>>
+            ::planus::WriteAsOptional<::planus::Offset<VarAnonymous>>
+            for VarAnonymousBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarAnonymous>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarAnonymous>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>>
+            ::planus::WriteAsOffset<VarAnonymous> for VarAnonymousBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarAnonymous> {
+                let (v0,) = &self.0;
+                VarAnonymous::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [VarAnonymous].
+        #[derive(Copy, Clone)]
+        pub struct VarAnonymousRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
+
+        impl<'a> VarAnonymousRef<'a> {
+            /// Getter for the [`obj` field](VarAnonymous#structfield.obj).
+            #[inline]
+            pub fn obj(&self) -> ::planus::Result<super::moor_common::ObjRef<'a>> {
+                self.0.access_required(0, "VarAnonymous", "obj")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VarAnonymousRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarAnonymousRef");
+                f.field("obj", &self.obj());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarAnonymousRef<'a>> for VarAnonymous {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VarAnonymousRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    obj: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.obj()?,
+                    )?),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarAnonymousRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarAnonymousRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[VarAnonymousRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VarAnonymous>> for VarAnonymous {
+            type Value = ::planus::Offset<VarAnonymous>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VarAnonymous>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarAnonymousRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VarAnonymousRef]", "read_as_root", 0)
+                })
+            }
+        }
+
         /// The table `Var` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `Var` in the file `../../../schema/schema/var.fbs:111`
+        /// * Table `Var` in the file `crates/schema/schema/var.fbs:119`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct Var {
             /// The field `variant` in the table `Var`
@@ -28588,7 +30679,7 @@ mod root {
 
         /// Reference to a deserialized [Var].
         #[derive(Copy, Clone)]
-        pub struct VarRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct VarRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> VarRef<'a> {
             /// Getter for the [`variant` field](Var#structfield.variant).
@@ -28687,12 +30778,12 @@ mod root {
     /// The namespace `MoorProgram`
     ///
     /// Generated from these locations:
-    /// * File `../../../schema/schema/moor_program.fbs`
+    /// * File `crates/schema/schema/moor_program.fbs`
     pub mod moor_program {
         /// The table `StoredName` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredName` in the file `../../../schema/schema/moor_program.fbs:35`
+        /// * Table `StoredName` in the file `crates/schema/schema/moor_program.fbs:35`
         #[derive(
             Clone,
             Debug,
@@ -28881,10 +30972,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u8, u8>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAs<::planus::Offset<StoredName>> for StoredNameBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u8, u8>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAs<::planus::Offset<StoredName>> for StoredNameBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredName>;
 
@@ -28895,10 +30986,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u8, u8>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredName>>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u8, u8>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredName>>
             for StoredNameBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredName>;
@@ -28913,10 +31004,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u8, u8>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOffset<StoredName> for StoredNameBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u8, u8>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOffset<StoredName> for StoredNameBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<StoredName> {
@@ -28927,7 +31018,7 @@ mod root {
 
         /// Reference to a deserialized [StoredName].
         #[derive(Copy, Clone)]
-        pub struct StoredNameRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredNameRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> StoredNameRef<'a> {
             /// Getter for the [`offset` field](StoredName#structfield.offset).
@@ -29050,7 +31141,7 @@ mod root {
         /// The table `StoredJumpLabel` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredJumpLabel` in the file `../../../schema/schema/moor_program.fbs:41`
+        /// * Table `StoredJumpLabel` in the file `crates/schema/schema/moor_program.fbs:41`
         #[derive(
             Clone,
             Debug,
@@ -29246,10 +31337,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
-        > ::planus::WriteAs<::planus::Offset<StoredJumpLabel>>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
+            > ::planus::WriteAs<::planus::Offset<StoredJumpLabel>>
             for StoredJumpLabelBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredJumpLabel>;
@@ -29264,10 +31355,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredJumpLabel>>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredJumpLabel>>
             for StoredJumpLabelBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredJumpLabel>;
@@ -29282,10 +31373,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
-        > ::planus::WriteAsOffset<StoredJumpLabel> for StoredJumpLabelBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
+            > ::planus::WriteAsOffset<StoredJumpLabel> for StoredJumpLabelBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(
@@ -29299,7 +31390,7 @@ mod root {
 
         /// Reference to a deserialized [StoredJumpLabel].
         #[derive(Copy, Clone)]
-        pub struct StoredJumpLabelRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredJumpLabelRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> StoredJumpLabelRef<'a> {
             /// Getter for the [`id` field](StoredJumpLabel#structfield.id).
@@ -29434,7 +31525,7 @@ mod root {
         /// The enum `StoredDeclType` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Enum `StoredDeclType` in the file `../../../schema/schema/moor_program.fbs:48`
+        /// * Enum `StoredDeclType` in the file `crates/schema/schema/moor_program.fbs:48`
         #[derive(
             Copy,
             Clone,
@@ -29641,7 +31732,7 @@ mod root {
         /// The union `StoredVarNameUnion` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Union `StoredVarNameUnion` in the file `../../../schema/schema/moor_program.fbs:61`
+        /// * Union `StoredVarNameUnion` in the file `crates/schema/schema/moor_program.fbs:61`
         #[derive(
             Clone,
             Debug,
@@ -29865,7 +31956,7 @@ mod root {
         /// The table `StoredNamedVar` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredNamedVar` in the file `../../../schema/schema/moor_program.fbs:66`
+        /// * Table `StoredNamedVar` in the file `crates/schema/schema/moor_program.fbs:66`
         #[derive(
             Clone,
             Debug,
@@ -30014,7 +32105,7 @@ mod root {
 
         /// Reference to a deserialized [StoredNamedVar].
         #[derive(Copy, Clone)]
-        pub struct StoredNamedVarRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredNamedVarRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> StoredNamedVarRef<'a> {
             /// Getter for the [`symbol` field](StoredNamedVar#structfield.symbol).
@@ -30121,7 +32212,7 @@ mod root {
         /// The table `StoredRegisterVar` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredRegisterVar` in the file `../../../schema/schema/moor_program.fbs:70`
+        /// * Table `StoredRegisterVar` in the file `crates/schema/schema/moor_program.fbs:70`
         #[derive(
             Clone,
             Debug,
@@ -30299,7 +32390,7 @@ mod root {
 
         /// Reference to a deserialized [StoredRegisterVar].
         #[derive(Copy, Clone)]
-        pub struct StoredRegisterVarRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredRegisterVarRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> StoredRegisterVarRef<'a> {
             /// Getter for the [`register_num` field](StoredRegisterVar#structfield.register_num).
@@ -30408,7 +32499,7 @@ mod root {
         /// The table `StoredVariable` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredVariable` in the file `../../../schema/schema/moor_program.fbs:75`
+        /// * Table `StoredVariable` in the file `crates/schema/schema/moor_program.fbs:75`
         #[derive(
             Clone,
             Debug,
@@ -30575,10 +32666,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsUnion<self::StoredVarNameUnion>,
-        > ::planus::WriteAs<::planus::Offset<StoredVariable>>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsUnion<self::StoredVarNameUnion>,
+            > ::planus::WriteAs<::planus::Offset<StoredVariable>>
             for StoredVariableBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredVariable>;
@@ -30590,10 +32681,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsUnion<self::StoredVarNameUnion>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredVariable>>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsUnion<self::StoredVarNameUnion>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredVariable>>
             for StoredVariableBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredVariable>;
@@ -30608,10 +32699,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsUnion<self::StoredVarNameUnion>,
-        > ::planus::WriteAsOffset<StoredVariable> for StoredVariableBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsUnion<self::StoredVarNameUnion>,
+            > ::planus::WriteAsOffset<StoredVariable> for StoredVariableBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<StoredVariable> {
@@ -30622,7 +32713,7 @@ mod root {
 
         /// Reference to a deserialized [StoredVariable].
         #[derive(Copy, Clone)]
-        pub struct StoredVariableRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredVariableRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> StoredVariableRef<'a> {
             /// Getter for the [`id` field](StoredVariable#structfield.id).
@@ -30746,7 +32837,7 @@ mod root {
         /// The table `StoredDecl` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredDecl` in the file `../../../schema/schema/moor_program.fbs:82`
+        /// * Table `StoredDecl` in the file `crates/schema/schema/moor_program.fbs:82`
         #[derive(
             Clone,
             Debug,
@@ -30985,12 +33076,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::StoredDeclType, self::StoredDeclType>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredVariable>>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-            T4: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAs<::planus::Offset<StoredDecl>>
+                T0: ::planus::WriteAsDefault<self::StoredDeclType, self::StoredDeclType>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredVariable>>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+                T4: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAs<::planus::Offset<StoredDecl>>
             for StoredDeclBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<StoredDecl>;
@@ -31002,12 +33093,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::StoredDeclType, self::StoredDeclType>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredVariable>>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-            T4: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredDecl>>
+                T0: ::planus::WriteAsDefault<self::StoredDeclType, self::StoredDeclType>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredVariable>>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+                T4: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredDecl>>
             for StoredDeclBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<StoredDecl>;
@@ -31022,12 +33113,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::StoredDeclType, self::StoredDeclType>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredVariable>>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-            T4: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOffset<StoredDecl> for StoredDeclBuilder<(T0, T1, T2, T3, T4)>
+                T0: ::planus::WriteAsDefault<self::StoredDeclType, self::StoredDeclType>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredVariable>>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+                T4: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOffset<StoredDecl> for StoredDeclBuilder<(T0, T1, T2, T3, T4)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<StoredDecl> {
@@ -31038,7 +33129,7 @@ mod root {
 
         /// Reference to a deserialized [StoredDecl].
         #[derive(Copy, Clone)]
-        pub struct StoredDeclRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredDeclRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> StoredDeclRef<'a> {
             /// Getter for the [`decl_type` field](StoredDecl#structfield.decl_type).
@@ -31183,7 +33274,7 @@ mod root {
         /// The table `StoredNameDeclPair` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredNameDeclPair` in the file `../../../schema/schema/moor_program.fbs:91`
+        /// * Table `StoredNameDeclPair` in the file `crates/schema/schema/moor_program.fbs:91`
         #[derive(
             Clone,
             Debug,
@@ -31314,9 +33405,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredDecl>>,
-        > ::planus::WriteAs<::planus::Offset<StoredNameDeclPair>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredDecl>>,
+            > ::planus::WriteAs<::planus::Offset<StoredNameDeclPair>>
             for StoredNameDeclPairBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StoredNameDeclPair>;
@@ -31331,9 +33422,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredDecl>>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredNameDeclPair>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredDecl>>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredNameDeclPair>>
             for StoredNameDeclPairBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StoredNameDeclPair>;
@@ -31348,9 +33439,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredDecl>>,
-        > ::planus::WriteAsOffset<StoredNameDeclPair> for StoredNameDeclPairBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredDecl>>,
+            > ::planus::WriteAsOffset<StoredNameDeclPair> for StoredNameDeclPairBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -31364,7 +33455,7 @@ mod root {
 
         /// Reference to a deserialized [StoredNameDeclPair].
         #[derive(Copy, Clone)]
-        pub struct StoredNameDeclPairRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredNameDeclPairRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> StoredNameDeclPairRef<'a> {
             /// Getter for the [`name` field](StoredNameDeclPair#structfield.name).
@@ -31481,7 +33572,7 @@ mod root {
         /// The table `StoredNames` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredNames` in the file `../../../schema/schema/moor_program.fbs:96`
+        /// * Table `StoredNames` in the file `crates/schema/schema/moor_program.fbs:96`
         #[derive(
             Clone,
             Debug,
@@ -31613,8 +33704,8 @@ mod root {
             pub fn decls<T1>(self, value: T1) -> StoredNamesBuilder<(T0, T1)>
             where
                 T1: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>,
+                >,
             {
                 let (v0,) = self.0;
                 StoredNamesBuilder((v0, value))
@@ -31633,9 +33724,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>>,
-        > ::planus::WriteAs<::planus::Offset<StoredNames>> for StoredNamesBuilder<(T0, T1)>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>>,
+            > ::planus::WriteAs<::planus::Offset<StoredNames>> for StoredNamesBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StoredNames>;
 
@@ -31646,9 +33737,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredNames>>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredNames>>
             for StoredNamesBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StoredNames>;
@@ -31663,9 +33754,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>>,
-        > ::planus::WriteAsOffset<StoredNames> for StoredNamesBuilder<(T0, T1)>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>>,
+            > ::planus::WriteAsOffset<StoredNames> for StoredNamesBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<StoredNames> {
@@ -31676,7 +33767,7 @@ mod root {
 
         /// Reference to a deserialized [StoredNames].
         #[derive(Copy, Clone)]
-        pub struct StoredNamesRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredNamesRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> StoredNamesRef<'a> {
             /// Getter for the [`global_width` field](StoredNames#structfield.global_width).
@@ -31797,7 +33888,7 @@ mod root {
         /// The union `StoredScatterLabelUnion` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Union `StoredScatterLabelUnion` in the file `../../../schema/schema/moor_program.fbs:105`
+        /// * Union `StoredScatterLabelUnion` in the file `crates/schema/schema/moor_program.fbs:105`
         #[derive(
             Clone,
             Debug,
@@ -32089,7 +34180,7 @@ mod root {
         /// The table `StoredScatterRequired` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredScatterRequired` in the file `../../../schema/schema/moor_program.fbs:111`
+        /// * Table `StoredScatterRequired` in the file `crates/schema/schema/moor_program.fbs:111`
         #[derive(
             Clone,
             Debug,
@@ -32254,7 +34345,9 @@ mod root {
 
         /// Reference to a deserialized [StoredScatterRequired].
         #[derive(Copy, Clone)]
-        pub struct StoredScatterRequiredRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredScatterRequiredRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> StoredScatterRequiredRef<'a> {
             /// Getter for the [`name` field](StoredScatterRequired#structfield.name).
@@ -32363,7 +34456,7 @@ mod root {
         /// The table `StoredScatterOptional` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredScatterOptional` in the file `../../../schema/schema/moor_program.fbs:115`
+        /// * Table `StoredScatterOptional` in the file `crates/schema/schema/moor_program.fbs:115`
         #[derive(
             Clone,
             Debug,
@@ -32559,10 +34652,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAs<::planus::Offset<StoredScatterOptional>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAs<::planus::Offset<StoredScatterOptional>>
             for StoredScatterOptionalBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredScatterOptional>;
@@ -32577,10 +34670,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredScatterOptional>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredScatterOptional>>
             for StoredScatterOptionalBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredScatterOptional>;
@@ -32595,10 +34688,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOffset<StoredScatterOptional>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOffset<StoredScatterOptional>
             for StoredScatterOptionalBuilder<(T0, T1, T2)>
         {
             #[inline]
@@ -32613,7 +34706,9 @@ mod root {
 
         /// Reference to a deserialized [StoredScatterOptional].
         #[derive(Copy, Clone)]
-        pub struct StoredScatterOptionalRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredScatterOptionalRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> StoredScatterOptionalRef<'a> {
             /// Getter for the [`name` field](StoredScatterOptional#structfield.name).
@@ -32746,7 +34841,7 @@ mod root {
         /// The table `StoredScatterRest` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredScatterRest` in the file `../../../schema/schema/moor_program.fbs:121`
+        /// * Table `StoredScatterRest` in the file `crates/schema/schema/moor_program.fbs:121`
         #[derive(
             Clone,
             Debug,
@@ -32911,7 +35006,7 @@ mod root {
 
         /// Reference to a deserialized [StoredScatterRest].
         #[derive(Copy, Clone)]
-        pub struct StoredScatterRestRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredScatterRestRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> StoredScatterRestRef<'a> {
             /// Getter for the [`name` field](StoredScatterRest#structfield.name).
@@ -33018,7 +35113,7 @@ mod root {
         /// The table `StoredScatterLabel` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredScatterLabel` in the file `../../../schema/schema/moor_program.fbs:125`
+        /// * Table `StoredScatterLabel` in the file `crates/schema/schema/moor_program.fbs:125`
         #[derive(
             Clone,
             Debug,
@@ -33176,7 +35271,7 @@ mod root {
 
         /// Reference to a deserialized [StoredScatterLabel].
         #[derive(Copy, Clone)]
-        pub struct StoredScatterLabelRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredScatterLabelRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> StoredScatterLabelRef<'a> {
             /// Getter for the [`label` field](StoredScatterLabel#structfield.label).
@@ -33282,7 +35377,7 @@ mod root {
         /// The table `StoredScatterArgs` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredScatterArgs` in the file `../../../schema/schema/moor_program.fbs:129`
+        /// * Table `StoredScatterArgs` in the file `crates/schema/schema/moor_program.fbs:129`
         #[derive(
             Clone,
             Debug,
@@ -33399,8 +35494,8 @@ mod root {
             pub fn labels<T0>(self, value: T0) -> StoredScatterArgsBuilder<(T0,)>
             where
                 T0: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>,
+                >,
             {
                 StoredScatterArgsBuilder((value,))
             }
@@ -33441,9 +35536,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAs<::planus::Offset<StoredScatterArgs>>
+                T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAs<::planus::Offset<StoredScatterArgs>>
             for StoredScatterArgsBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StoredScatterArgs>;
@@ -33458,9 +35553,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredScatterArgs>>
+                T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredScatterArgs>>
             for StoredScatterArgsBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StoredScatterArgs>;
@@ -33475,9 +35570,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOffset<StoredScatterArgs> for StoredScatterArgsBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOffset<StoredScatterArgs> for StoredScatterArgsBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -33491,7 +35586,7 @@ mod root {
 
         /// Reference to a deserialized [StoredScatterArgs].
         #[derive(Copy, Clone)]
-        pub struct StoredScatterArgsRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredScatterArgsRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> StoredScatterArgsRef<'a> {
             /// Getter for the [`labels` field](StoredScatterArgs#structfield.labels).
@@ -33610,7 +35705,7 @@ mod root {
         /// The table `StoredForSequenceOperand` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredForSequenceOperand` in the file `../../../schema/schema/moor_program.fbs:134`
+        /// * Table `StoredForSequenceOperand` in the file `crates/schema/schema/moor_program.fbs:134`
         #[derive(
             Clone,
             Debug,
@@ -33842,11 +35937,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAs<::planus::Offset<StoredForSequenceOperand>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAs<::planus::Offset<StoredForSequenceOperand>>
             for StoredForSequenceOperandBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<StoredForSequenceOperand>;
@@ -33861,11 +35956,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredForSequenceOperand>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredForSequenceOperand>>
             for StoredForSequenceOperandBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<StoredForSequenceOperand>;
@@ -33880,11 +35975,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOffset<StoredForSequenceOperand>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOffset<StoredForSequenceOperand>
             for StoredForSequenceOperandBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
@@ -33899,7 +35994,9 @@ mod root {
 
         /// Reference to a deserialized [StoredForSequenceOperand].
         #[derive(Copy, Clone)]
-        pub struct StoredForSequenceOperandRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredForSequenceOperandRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> StoredForSequenceOperandRef<'a> {
             /// Getter for the [`value_bind` field](StoredForSequenceOperand#structfield.value_bind).
@@ -34057,7 +36154,7 @@ mod root {
         /// The table `StoredForRangeOperand` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredForRangeOperand` in the file `../../../schema/schema/moor_program.fbs:141`
+        /// * Table `StoredForRangeOperand` in the file `crates/schema/schema/moor_program.fbs:141`
         #[derive(
             Clone,
             Debug,
@@ -34255,10 +36352,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAs<::planus::Offset<StoredForRangeOperand>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAs<::planus::Offset<StoredForRangeOperand>>
             for StoredForRangeOperandBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredForRangeOperand>;
@@ -34273,10 +36370,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredForRangeOperand>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredForRangeOperand>>
             for StoredForRangeOperandBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredForRangeOperand>;
@@ -34291,10 +36388,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOffset<StoredForRangeOperand>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOffset<StoredForRangeOperand>
             for StoredForRangeOperandBuilder<(T0, T1, T2)>
         {
             #[inline]
@@ -34309,7 +36406,9 @@ mod root {
 
         /// Reference to a deserialized [StoredForRangeOperand].
         #[derive(Copy, Clone)]
-        pub struct StoredForRangeOperandRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredForRangeOperandRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> StoredForRangeOperandRef<'a> {
             /// Getter for the [`loop_variable` field](StoredForRangeOperand#structfield.loop_variable).
@@ -34445,7 +36544,7 @@ mod root {
         /// The table `StoredRangeComprehend` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredRangeComprehend` in the file `../../../schema/schema/moor_program.fbs:147`
+        /// * Table `StoredRangeComprehend` in the file `crates/schema/schema/moor_program.fbs:147`
         #[derive(
             Clone,
             Debug,
@@ -34628,10 +36727,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAs<::planus::Offset<StoredRangeComprehend>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAs<::planus::Offset<StoredRangeComprehend>>
             for StoredRangeComprehendBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredRangeComprehend>;
@@ -34646,10 +36745,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredRangeComprehend>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredRangeComprehend>>
             for StoredRangeComprehendBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredRangeComprehend>;
@@ -34664,10 +36763,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOffset<StoredRangeComprehend>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOffset<StoredRangeComprehend>
             for StoredRangeComprehendBuilder<(T0, T1, T2)>
         {
             #[inline]
@@ -34682,7 +36781,9 @@ mod root {
 
         /// Reference to a deserialized [StoredRangeComprehend].
         #[derive(Copy, Clone)]
-        pub struct StoredRangeComprehendRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredRangeComprehendRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> StoredRangeComprehendRef<'a> {
             /// Getter for the [`position` field](StoredRangeComprehend#structfield.position).
@@ -34815,7 +36916,7 @@ mod root {
         /// The table `StoredListComprehend` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredListComprehend` in the file `../../../schema/schema/moor_program.fbs:153`
+        /// * Table `StoredListComprehend` in the file `crates/schema/schema/moor_program.fbs:153`
         #[derive(
             Clone,
             Debug,
@@ -35016,11 +37117,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAs<::planus::Offset<StoredListComprehend>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAs<::planus::Offset<StoredListComprehend>>
             for StoredListComprehendBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<StoredListComprehend>;
@@ -35035,11 +37136,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredListComprehend>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredListComprehend>>
             for StoredListComprehendBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<StoredListComprehend>;
@@ -35054,11 +37155,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOffset<StoredListComprehend>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOffset<StoredListComprehend>
             for StoredListComprehendBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
@@ -35073,7 +37174,9 @@ mod root {
 
         /// Reference to a deserialized [StoredListComprehend].
         #[derive(Copy, Clone)]
-        pub struct StoredListComprehendRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredListComprehendRef<'a>(
+            #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+        );
 
         impl<'a> StoredListComprehendRef<'a> {
             /// Getter for the [`position_register` field](StoredListComprehend#structfield.position_register).
@@ -35212,10 +37315,348 @@ mod root {
             }
         }
 
+        /// The table `StoredErrorOperand` in the namespace `MoorProgram`
+        ///
+        /// Generated from these locations:
+        /// * Table `StoredErrorOperand` in the file `crates/schema/schema/moor_program.fbs:164`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct StoredErrorOperand {
+            /// The field `discriminant` in the table `StoredErrorOperand`
+            pub discriminant: u8,
+            /// The field `symbol` in the table `StoredErrorOperand`
+            pub symbol: ::core::option::Option<::planus::alloc::string::String>,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for StoredErrorOperand {
+            fn default() -> Self {
+                Self {
+                    discriminant: 0,
+                    symbol: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl StoredErrorOperand {
+            /// Creates a [StoredErrorOperandBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> StoredErrorOperandBuilder<()> {
+                StoredErrorOperandBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_discriminant: impl ::planus::WriteAsDefault<u8, u8>,
+                field_symbol: impl ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_discriminant = field_discriminant.prepare(builder, &0);
+                let prepared_symbol = field_symbol.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<8> =
+                    ::core::default::Default::default();
+                if prepared_symbol.is_some() {
+                    table_writer.write_entry::<::planus::Offset<str>>(1);
+                }
+                if prepared_discriminant.is_some() {
+                    table_writer.write_entry::<u8>(0);
+                }
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        if let ::core::option::Option::Some(prepared_symbol) = prepared_symbol {
+                            object_writer.write::<_, _, 4>(&prepared_symbol);
+                        }
+                        if let ::core::option::Option::Some(prepared_discriminant) =
+                            prepared_discriminant
+                        {
+                            object_writer.write::<_, _, 1>(&prepared_discriminant);
+                        }
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<StoredErrorOperand>> for StoredErrorOperand {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<StoredErrorOperand> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<StoredErrorOperand>> for StoredErrorOperand {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<StoredErrorOperand>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<StoredErrorOperand> for StoredErrorOperand {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<StoredErrorOperand> {
+                StoredErrorOperand::create(builder, self.discriminant, &self.symbol)
+            }
+        }
+
+        /// Builder for serializing an instance of the [StoredErrorOperand] type.
+        ///
+        /// Can be created using the [StoredErrorOperand::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct StoredErrorOperandBuilder<State>(State);
+
+        impl StoredErrorOperandBuilder<()> {
+            /// Setter for the [`discriminant` field](StoredErrorOperand#structfield.discriminant).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn discriminant<T0>(self, value: T0) -> StoredErrorOperandBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAsDefault<u8, u8>,
+            {
+                StoredErrorOperandBuilder((value,))
+            }
+
+            /// Sets the [`discriminant` field](StoredErrorOperand#structfield.discriminant) to the default value.
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn discriminant_as_default(
+                self,
+            ) -> StoredErrorOperandBuilder<(::planus::DefaultValue,)> {
+                self.discriminant(::planus::DefaultValue)
+            }
+        }
+
+        impl<T0> StoredErrorOperandBuilder<(T0,)> {
+            /// Setter for the [`symbol` field](StoredErrorOperand#structfield.symbol).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn symbol<T1>(self, value: T1) -> StoredErrorOperandBuilder<(T0, T1)>
+            where
+                T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+            {
+                let (v0,) = self.0;
+                StoredErrorOperandBuilder((v0, value))
+            }
+
+            /// Sets the [`symbol` field](StoredErrorOperand#structfield.symbol) to null.
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn symbol_as_null(self) -> StoredErrorOperandBuilder<(T0, ())> {
+                self.symbol(())
+            }
+        }
+
+        impl<T0, T1> StoredErrorOperandBuilder<(T0, T1)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [StoredErrorOperand].
+            #[inline]
+            pub fn finish(
+                self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<StoredErrorOperand>
+            where
+                Self: ::planus::WriteAsOffset<StoredErrorOperand>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAsDefault<u8, u8>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+            > ::planus::WriteAs<::planus::Offset<StoredErrorOperand>>
+            for StoredErrorOperandBuilder<(T0, T1)>
+        {
+            type Prepared = ::planus::Offset<StoredErrorOperand>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<StoredErrorOperand> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAsDefault<u8, u8>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredErrorOperand>>
+            for StoredErrorOperandBuilder<(T0, T1)>
+        {
+            type Prepared = ::planus::Offset<StoredErrorOperand>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<StoredErrorOperand>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAsDefault<u8, u8>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+            > ::planus::WriteAsOffset<StoredErrorOperand> for StoredErrorOperandBuilder<(T0, T1)>
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<StoredErrorOperand> {
+                let (v0, v1) = &self.0;
+                StoredErrorOperand::create(builder, v0, v1)
+            }
+        }
+
+        /// Reference to a deserialized [StoredErrorOperand].
+        #[derive(Copy, Clone)]
+        pub struct StoredErrorOperandRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
+
+        impl<'a> StoredErrorOperandRef<'a> {
+            /// Getter for the [`discriminant` field](StoredErrorOperand#structfield.discriminant).
+            #[inline]
+            pub fn discriminant(&self) -> ::planus::Result<u8> {
+                ::core::result::Result::Ok(
+                    self.0
+                        .access(0, "StoredErrorOperand", "discriminant")?
+                        .unwrap_or(0),
+                )
+            }
+
+            /// Getter for the [`symbol` field](StoredErrorOperand#structfield.symbol).
+            #[inline]
+            pub fn symbol(
+                &self,
+            ) -> ::planus::Result<::core::option::Option<&'a ::core::primitive::str>> {
+                self.0.access(1, "StoredErrorOperand", "symbol")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for StoredErrorOperandRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("StoredErrorOperandRef");
+                f.field("discriminant", &self.discriminant());
+                if let ::core::option::Option::Some(field_symbol) = self.symbol().transpose() {
+                    f.field("symbol", &field_symbol);
+                }
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<StoredErrorOperandRef<'a>> for StoredErrorOperand {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: StoredErrorOperandRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    discriminant: ::core::convert::TryInto::try_into(value.discriminant()?)?,
+                    symbol: value.symbol()?.map(::core::convert::Into::into),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for StoredErrorOperandRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for StoredErrorOperandRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[StoredErrorOperandRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<StoredErrorOperand>> for StoredErrorOperand {
+            type Value = ::planus::Offset<StoredErrorOperand>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<StoredErrorOperand>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for StoredErrorOperandRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[StoredErrorOperandRef]", "read_as_root", 0)
+                })
+            }
+        }
+
         /// The table `ForkVector` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `ForkVector` in the file `../../../schema/schema/moor_program.fbs:164`
+        /// * Table `ForkVector` in the file `crates/schema/schema/moor_program.fbs:173`
         #[derive(
             Clone,
             Debug,
@@ -35357,8 +37798,10 @@ mod root {
             }
         }
 
-        impl<T0: ::planus::WriteAsDefault<u64, u64>, T1: ::planus::WriteAs<::planus::Offset<[u16]>>>
-            ::planus::WriteAs<::planus::Offset<ForkVector>> for ForkVectorBuilder<(T0, T1)>
+        impl<
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
+            > ::planus::WriteAs<::planus::Offset<ForkVector>> for ForkVectorBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<ForkVector>;
 
@@ -35368,8 +37811,10 @@ mod root {
             }
         }
 
-        impl<T0: ::planus::WriteAsDefault<u64, u64>, T1: ::planus::WriteAs<::planus::Offset<[u16]>>>
-            ::planus::WriteAsOptional<::planus::Offset<ForkVector>>
+        impl<
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<ForkVector>>
             for ForkVectorBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<ForkVector>;
@@ -35383,8 +37828,10 @@ mod root {
             }
         }
 
-        impl<T0: ::planus::WriteAsDefault<u64, u64>, T1: ::planus::WriteAs<::planus::Offset<[u16]>>>
-            ::planus::WriteAsOffset<ForkVector> for ForkVectorBuilder<(T0, T1)>
+        impl<
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
+            > ::planus::WriteAsOffset<ForkVector> for ForkVectorBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<ForkVector> {
@@ -35395,7 +37842,7 @@ mod root {
 
         /// Reference to a deserialized [ForkVector].
         #[derive(Copy, Clone)]
-        pub struct ForkVectorRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ForkVectorRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ForkVectorRef<'a> {
             /// Getter for the [`offset` field](ForkVector#structfield.offset).
@@ -35505,63 +37952,63 @@ mod root {
             }
         }
 
-        /// The table `StoredProgram` in the namespace `MoorProgram`
+        /// The table `StoredMooRProgram` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredProgram` in the file `../../../schema/schema/moor_program.fbs:173`
+        /// * Table `StoredMooRProgram` in the file `crates/schema/schema/moor_program.fbs:183`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
-        pub struct StoredProgram {
-            /// The field `version` in the table `StoredProgram`
+        pub struct StoredMooRProgram {
+            /// The field `version` in the table `StoredMooRProgram`
             pub version: u16,
-            /// The field `main_vector` in the table `StoredProgram`
+            /// The field `builtin_signature` in the table `StoredMooRProgram`
+            pub builtin_signature: u64,
+            /// The field `main_vector` in the table `StoredMooRProgram`
             pub main_vector: ::planus::alloc::vec::Vec<u16>,
-            /// The field `fork_vectors` in the table `StoredProgram`
+            /// The field `fork_vectors` in the table `StoredMooRProgram`
             pub fork_vectors: ::planus::alloc::vec::Vec<self::ForkVector>,
-            /// The field `literals` in the table `StoredProgram`
+            /// The field `literals` in the table `StoredMooRProgram`
             pub literals: ::planus::alloc::vec::Vec<super::moor_var::Var>,
-            /// The field `jump_labels` in the table `StoredProgram`
+            /// The field `jump_labels` in the table `StoredMooRProgram`
             pub jump_labels: ::planus::alloc::vec::Vec<self::StoredJumpLabel>,
-            /// The field `var_names` in the table `StoredProgram`
+            /// The field `var_names` in the table `StoredMooRProgram`
             pub var_names: ::planus::alloc::boxed::Box<self::StoredNames>,
-            /// The field `symbol_table` in the table `StoredProgram`
-            pub symbol_table: ::planus::alloc::vec::Vec<super::moor_common::Symbol>,
-            /// The field `scatter_tables` in the table `StoredProgram`
+            /// The field `scatter_tables` in the table `StoredMooRProgram`
             pub scatter_tables: ::planus::alloc::vec::Vec<self::StoredScatterArgs>,
-            /// The field `for_sequence_operands` in the table `StoredProgram`
+            /// The field `for_sequence_operands` in the table `StoredMooRProgram`
             pub for_sequence_operands: ::planus::alloc::vec::Vec<self::StoredForSequenceOperand>,
-            /// The field `for_range_operands` in the table `StoredProgram`
+            /// The field `for_range_operands` in the table `StoredMooRProgram`
             pub for_range_operands: ::planus::alloc::vec::Vec<self::StoredForRangeOperand>,
-            /// The field `range_comprehensions` in the table `StoredProgram`
+            /// The field `range_comprehensions` in the table `StoredMooRProgram`
             pub range_comprehensions: ::planus::alloc::vec::Vec<self::StoredRangeComprehend>,
-            /// The field `list_comprehensions` in the table `StoredProgram`
+            /// The field `list_comprehensions` in the table `StoredMooRProgram`
             pub list_comprehensions: ::planus::alloc::vec::Vec<self::StoredListComprehend>,
-            /// The field `error_operands` in the table `StoredProgram`
-            pub error_operands: ::planus::alloc::vec::Vec<u8>,
-            /// The field `lambda_programs` in the table `StoredProgram`
-            pub lambda_programs: ::planus::alloc::vec::Vec<self::StoredProgram>,
-            /// The field `line_number_spans` in the table `StoredProgram`
+            /// The field `error_operands_full` in the table `StoredMooRProgram`
+            pub error_operands_full: ::planus::alloc::vec::Vec<self::StoredErrorOperand>,
+            /// The field `lambda_programs` in the table `StoredMooRProgram`
+            pub lambda_programs: ::planus::alloc::vec::Vec<self::StoredMooRProgram>,
+            /// The field `line_number_spans` in the table `StoredMooRProgram`
             pub line_number_spans: ::planus::alloc::vec::Vec<self::LineSpan>,
-            /// The field `fork_line_number_spans` in the table `StoredProgram`
+            /// The field `fork_line_number_spans` in the table `StoredMooRProgram`
             pub fork_line_number_spans: ::planus::alloc::vec::Vec<self::ForkLineSpans>,
         }
 
         #[allow(clippy::derivable_impls)]
-        impl ::core::default::Default for StoredProgram {
+        impl ::core::default::Default for StoredMooRProgram {
             fn default() -> Self {
                 Self {
                     version: 0,
+                    builtin_signature: 0,
                     main_vector: ::core::default::Default::default(),
                     fork_vectors: ::core::default::Default::default(),
                     literals: ::core::default::Default::default(),
                     jump_labels: ::core::default::Default::default(),
                     var_names: ::core::default::Default::default(),
-                    symbol_table: ::core::default::Default::default(),
                     scatter_tables: ::core::default::Default::default(),
                     for_sequence_operands: ::core::default::Default::default(),
                     for_range_operands: ::core::default::Default::default(),
                     range_comprehensions: ::core::default::Default::default(),
                     list_comprehensions: ::core::default::Default::default(),
-                    error_operands: ::core::default::Default::default(),
+                    error_operands_full: ::core::default::Default::default(),
                     lambda_programs: ::core::default::Default::default(),
                     line_number_spans: ::core::default::Default::default(),
                     fork_line_number_spans: ::core::default::Default::default(),
@@ -35569,17 +38016,18 @@ mod root {
             }
         }
 
-        impl StoredProgram {
-            /// Creates a [StoredProgramBuilder] for serializing an instance of this table.
+        impl StoredMooRProgram {
+            /// Creates a [StoredMooRProgramBuilder] for serializing an instance of this table.
             #[inline]
-            pub fn builder() -> StoredProgramBuilder<()> {
-                StoredProgramBuilder(())
+            pub fn builder() -> StoredMooRProgramBuilder<()> {
+                StoredMooRProgramBuilder(())
             }
 
             #[allow(clippy::too_many_arguments)]
             pub fn create(
                 builder: &mut ::planus::Builder,
                 field_version: impl ::planus::WriteAsDefault<u16, u16>,
+                field_builtin_signature: impl ::planus::WriteAsDefault<u64, u64>,
                 field_main_vector: impl ::planus::WriteAs<::planus::Offset<[u16]>>,
                 field_fork_vectors: impl ::planus::WriteAs<
                     ::planus::Offset<[::planus::Offset<self::ForkVector>]>,
@@ -35591,9 +38039,6 @@ mod root {
                     ::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>,
                 >,
                 field_var_names: impl ::planus::WriteAs<::planus::Offset<self::StoredNames>>,
-                field_symbol_table: impl ::planus::WriteAs<
-                    ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
-                >,
                 field_scatter_tables: impl ::planus::WriteAs<
                     ::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>,
                 >,
@@ -35609,9 +38054,11 @@ mod root {
                 field_list_comprehensions: impl ::planus::WriteAs<
                     ::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>,
                 >,
-                field_error_operands: impl ::planus::WriteAs<::planus::Offset<[u8]>>,
+                field_error_operands_full: impl ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredErrorOperand>]>,
+                >,
                 field_lambda_programs: impl ::planus::WriteAs<
-                    ::planus::Offset<[::planus::Offset<self::StoredProgram>]>,
+                    ::planus::Offset<[::planus::Offset<self::StoredMooRProgram>]>,
                 >,
                 field_line_number_spans: impl ::planus::WriteAs<
                     ::planus::Offset<[::planus::Offset<self::LineSpan>]>,
@@ -35621,33 +38068,35 @@ mod root {
                 >,
             ) -> ::planus::Offset<Self> {
                 let prepared_version = field_version.prepare(builder, &0);
+                let prepared_builtin_signature = field_builtin_signature.prepare(builder, &0);
                 let prepared_main_vector = field_main_vector.prepare(builder);
                 let prepared_fork_vectors = field_fork_vectors.prepare(builder);
                 let prepared_literals = field_literals.prepare(builder);
                 let prepared_jump_labels = field_jump_labels.prepare(builder);
                 let prepared_var_names = field_var_names.prepare(builder);
-                let prepared_symbol_table = field_symbol_table.prepare(builder);
                 let prepared_scatter_tables = field_scatter_tables.prepare(builder);
                 let prepared_for_sequence_operands = field_for_sequence_operands.prepare(builder);
                 let prepared_for_range_operands = field_for_range_operands.prepare(builder);
                 let prepared_range_comprehensions = field_range_comprehensions.prepare(builder);
                 let prepared_list_comprehensions = field_list_comprehensions.prepare(builder);
-                let prepared_error_operands = field_error_operands.prepare(builder);
+                let prepared_error_operands_full = field_error_operands_full.prepare(builder);
                 let prepared_lambda_programs = field_lambda_programs.prepare(builder);
                 let prepared_line_number_spans = field_line_number_spans.prepare(builder);
                 let prepared_fork_line_number_spans = field_fork_line_number_spans.prepare(builder);
 
                 let mut table_writer: ::planus::table_writer::TableWriter<36> =
                     ::core::default::Default::default();
-                table_writer.write_entry::<::planus::Offset<[u16]>>(1);
+                if prepared_builtin_signature.is_some() {
+                    table_writer.write_entry::<u64>(1);
+                }
+                table_writer.write_entry::<::planus::Offset<[u16]>>(2);
                 table_writer
-                    .write_entry::<::planus::Offset<[::planus::Offset<self::ForkVector>]>>(2);
+                    .write_entry::<::planus::Offset<[::planus::Offset<self::ForkVector>]>>(3);
                 table_writer
-                    .write_entry::<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>(3);
+                    .write_entry::<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>(4);
                 table_writer
-                    .write_entry::<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>(4);
-                table_writer.write_entry::<::planus::Offset<self::StoredNames>>(5);
-                table_writer.write_entry::<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>(6);
+                    .write_entry::<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>(5);
+                table_writer.write_entry::<::planus::Offset<self::StoredNames>>(6);
                 table_writer
                     .write_entry::<::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>>(
                         7,
@@ -35656,9 +38105,14 @@ mod root {
                 table_writer.write_entry::<::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>>(9);
                 table_writer.write_entry::<::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>>(10);
                 table_writer.write_entry::<::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>>(11);
-                table_writer.write_entry::<::planus::Offset<[u8]>>(12);
                 table_writer
-                    .write_entry::<::planus::Offset<[::planus::Offset<self::StoredProgram>]>>(13);
+                    .write_entry::<::planus::Offset<[::planus::Offset<self::StoredErrorOperand>]>>(
+                        12,
+                    );
+                table_writer
+                    .write_entry::<::planus::Offset<[::planus::Offset<self::StoredMooRProgram>]>>(
+                        13,
+                    );
                 table_writer
                     .write_entry::<::planus::Offset<[::planus::Offset<self::LineSpan>]>>(14);
                 table_writer
@@ -35669,24 +38123,1122 @@ mod root {
 
                 unsafe {
                     table_writer.finish(builder, |object_writer| {
+                        if let ::core::option::Option::Some(prepared_builtin_signature) =
+                            prepared_builtin_signature
+                        {
+                            object_writer.write::<_, _, 8>(&prepared_builtin_signature);
+                        }
                         object_writer.write::<_, _, 4>(&prepared_main_vector);
                         object_writer.write::<_, _, 4>(&prepared_fork_vectors);
                         object_writer.write::<_, _, 4>(&prepared_literals);
                         object_writer.write::<_, _, 4>(&prepared_jump_labels);
                         object_writer.write::<_, _, 4>(&prepared_var_names);
-                        object_writer.write::<_, _, 4>(&prepared_symbol_table);
                         object_writer.write::<_, _, 4>(&prepared_scatter_tables);
                         object_writer.write::<_, _, 4>(&prepared_for_sequence_operands);
                         object_writer.write::<_, _, 4>(&prepared_for_range_operands);
                         object_writer.write::<_, _, 4>(&prepared_range_comprehensions);
                         object_writer.write::<_, _, 4>(&prepared_list_comprehensions);
-                        object_writer.write::<_, _, 4>(&prepared_error_operands);
+                        object_writer.write::<_, _, 4>(&prepared_error_operands_full);
                         object_writer.write::<_, _, 4>(&prepared_lambda_programs);
                         object_writer.write::<_, _, 4>(&prepared_line_number_spans);
                         object_writer.write::<_, _, 4>(&prepared_fork_line_number_spans);
                         if let ::core::option::Option::Some(prepared_version) = prepared_version {
                             object_writer.write::<_, _, 2>(&prepared_version);
                         }
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<StoredMooRProgram>> for StoredMooRProgram {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<StoredMooRProgram> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<StoredMooRProgram>> for StoredMooRProgram {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<StoredMooRProgram>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<StoredMooRProgram> for StoredMooRProgram {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<StoredMooRProgram> {
+                StoredMooRProgram::create(
+                    builder,
+                    self.version,
+                    self.builtin_signature,
+                    &self.main_vector,
+                    &self.fork_vectors,
+                    &self.literals,
+                    &self.jump_labels,
+                    &self.var_names,
+                    &self.scatter_tables,
+                    &self.for_sequence_operands,
+                    &self.for_range_operands,
+                    &self.range_comprehensions,
+                    &self.list_comprehensions,
+                    &self.error_operands_full,
+                    &self.lambda_programs,
+                    &self.line_number_spans,
+                    &self.fork_line_number_spans,
+                )
+            }
+        }
+
+        /// Builder for serializing an instance of the [StoredMooRProgram] type.
+        ///
+        /// Can be created using the [StoredMooRProgram::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct StoredMooRProgramBuilder<State>(State);
+
+        impl StoredMooRProgramBuilder<()> {
+            /// Setter for the [`version` field](StoredMooRProgram#structfield.version).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn version<T0>(self, value: T0) -> StoredMooRProgramBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAsDefault<u16, u16>,
+            {
+                StoredMooRProgramBuilder((value,))
+            }
+
+            /// Sets the [`version` field](StoredMooRProgram#structfield.version) to the default value.
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn version_as_default(self) -> StoredMooRProgramBuilder<(::planus::DefaultValue,)> {
+                self.version(::planus::DefaultValue)
+            }
+        }
+
+        impl<T0> StoredMooRProgramBuilder<(T0,)> {
+            /// Setter for the [`builtin_signature` field](StoredMooRProgram#structfield.builtin_signature).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn builtin_signature<T1>(self, value: T1) -> StoredMooRProgramBuilder<(T0, T1)>
+            where
+                T1: ::planus::WriteAsDefault<u64, u64>,
+            {
+                let (v0,) = self.0;
+                StoredMooRProgramBuilder((v0, value))
+            }
+
+            /// Sets the [`builtin_signature` field](StoredMooRProgram#structfield.builtin_signature) to the default value.
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn builtin_signature_as_default(
+                self,
+            ) -> StoredMooRProgramBuilder<(T0, ::planus::DefaultValue)> {
+                self.builtin_signature(::planus::DefaultValue)
+            }
+        }
+
+        impl<T0, T1> StoredMooRProgramBuilder<(T0, T1)> {
+            /// Setter for the [`main_vector` field](StoredMooRProgram#structfield.main_vector).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn main_vector<T2>(self, value: T2) -> StoredMooRProgramBuilder<(T0, T1, T2)>
+            where
+                T2: ::planus::WriteAs<::planus::Offset<[u16]>>,
+            {
+                let (v0, v1) = self.0;
+                StoredMooRProgramBuilder((v0, v1, value))
+            }
+        }
+
+        impl<T0, T1, T2> StoredMooRProgramBuilder<(T0, T1, T2)> {
+            /// Setter for the [`fork_vectors` field](StoredMooRProgram#structfield.fork_vectors).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn fork_vectors<T3>(self, value: T3) -> StoredMooRProgramBuilder<(T0, T1, T2, T3)>
+            where
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkVector>]>>,
+            {
+                let (v0, v1, v2) = self.0;
+                StoredMooRProgramBuilder((v0, v1, v2, value))
+            }
+        }
+
+        impl<T0, T1, T2, T3> StoredMooRProgramBuilder<(T0, T1, T2, T3)> {
+            /// Setter for the [`literals` field](StoredMooRProgram#structfield.literals).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn literals<T4>(self, value: T4) -> StoredMooRProgramBuilder<(T0, T1, T2, T3, T4)>
+            where
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+            {
+                let (v0, v1, v2, v3) = self.0;
+                StoredMooRProgramBuilder((v0, v1, v2, v3, value))
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4> StoredMooRProgramBuilder<(T0, T1, T2, T3, T4)> {
+            /// Setter for the [`jump_labels` field](StoredMooRProgram#structfield.jump_labels).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn jump_labels<T5>(
+                self,
+                value: T5,
+            ) -> StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5)>
+            where
+                T5: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>,
+            {
+                let (v0, v1, v2, v3, v4) = self.0;
+                StoredMooRProgramBuilder((v0, v1, v2, v3, v4, value))
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5> StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5)> {
+            /// Setter for the [`var_names` field](StoredMooRProgram#structfield.var_names).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn var_names<T6>(
+                self,
+                value: T6,
+            ) -> StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5, T6)>
+            where
+                T6: ::planus::WriteAs<::planus::Offset<self::StoredNames>>,
+            {
+                let (v0, v1, v2, v3, v4, v5) = self.0;
+                StoredMooRProgramBuilder((v0, v1, v2, v3, v4, v5, value))
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5, T6> StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5, T6)> {
+            /// Setter for the [`scatter_tables` field](StoredMooRProgram#structfield.scatter_tables).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn scatter_tables<T7>(
+                self,
+                value: T7,
+            ) -> StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)>
+            where
+                T7: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>,
+                >,
+            {
+                let (v0, v1, v2, v3, v4, v5, v6) = self.0;
+                StoredMooRProgramBuilder((v0, v1, v2, v3, v4, v5, v6, value))
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5, T6, T7> StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)> {
+            /// Setter for the [`for_sequence_operands` field](StoredMooRProgram#structfield.for_sequence_operands).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn for_sequence_operands<T8>(
+                self,
+                value: T8,
+            ) -> StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8)>
+            where
+                T8: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>,
+                >,
+            {
+                let (v0, v1, v2, v3, v4, v5, v6, v7) = self.0;
+                StoredMooRProgramBuilder((v0, v1, v2, v3, v4, v5, v6, v7, value))
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8>
+            StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8)>
+        {
+            /// Setter for the [`for_range_operands` field](StoredMooRProgram#structfield.for_range_operands).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn for_range_operands<T9>(
+                self,
+                value: T9,
+            ) -> StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9)>
+            where
+                T9: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>,
+                >,
+            {
+                let (v0, v1, v2, v3, v4, v5, v6, v7, v8) = self.0;
+                StoredMooRProgramBuilder((v0, v1, v2, v3, v4, v5, v6, v7, v8, value))
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9>
+            StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9)>
+        {
+            /// Setter for the [`range_comprehensions` field](StoredMooRProgram#structfield.range_comprehensions).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn range_comprehensions<T10>(
+                self,
+                value: T10,
+            ) -> StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)>
+            where
+                T10: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>,
+                >,
+            {
+                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9) = self.0;
+                StoredMooRProgramBuilder((v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, value))
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>
+            StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)>
+        {
+            /// Setter for the [`list_comprehensions` field](StoredMooRProgram#structfield.list_comprehensions).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn list_comprehensions<T11>(
+                self,
+                value: T11,
+            ) -> StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)>
+            where
+                T11: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>,
+                >,
+            {
+                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) = self.0;
+                StoredMooRProgramBuilder((v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, value))
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11>
+            StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)>
+        {
+            /// Setter for the [`error_operands_full` field](StoredMooRProgram#structfield.error_operands_full).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn error_operands_full<T12>(
+                self,
+                value: T12,
+            ) -> StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)>
+            where
+                T12: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredErrorOperand>]>,
+                >,
+            {
+                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11) = self.0;
+                StoredMooRProgramBuilder((v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, value))
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12>
+            StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)>
+        {
+            /// Setter for the [`lambda_programs` field](StoredMooRProgram#structfield.lambda_programs).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn lambda_programs<T13>(
+                self,
+                value: T13,
+            ) -> StoredMooRProgramBuilder<(
+                T0,
+                T1,
+                T2,
+                T3,
+                T4,
+                T5,
+                T6,
+                T7,
+                T8,
+                T9,
+                T10,
+                T11,
+                T12,
+                T13,
+            )>
+            where
+                T13: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredMooRProgram>]>,
+                >,
+            {
+                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12) = self.0;
+                StoredMooRProgramBuilder((
+                    v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, value,
+                ))
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13>
+            StoredMooRProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13)>
+        {
+            /// Setter for the [`line_number_spans` field](StoredMooRProgram#structfield.line_number_spans).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn line_number_spans<T14>(
+                self,
+                value: T14,
+            ) -> StoredMooRProgramBuilder<(
+                T0,
+                T1,
+                T2,
+                T3,
+                T4,
+                T5,
+                T6,
+                T7,
+                T8,
+                T9,
+                T10,
+                T11,
+                T12,
+                T13,
+                T14,
+            )>
+            where
+                T14: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::LineSpan>]>>,
+            {
+                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13) = self.0;
+                StoredMooRProgramBuilder((
+                    v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, value,
+                ))
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14>
+            StoredMooRProgramBuilder<(
+                T0,
+                T1,
+                T2,
+                T3,
+                T4,
+                T5,
+                T6,
+                T7,
+                T8,
+                T9,
+                T10,
+                T11,
+                T12,
+                T13,
+                T14,
+            )>
+        {
+            /// Setter for the [`fork_line_number_spans` field](StoredMooRProgram#structfield.fork_line_number_spans).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn fork_line_number_spans<T15>(
+                self,
+                value: T15,
+            ) -> StoredMooRProgramBuilder<(
+                T0,
+                T1,
+                T2,
+                T3,
+                T4,
+                T5,
+                T6,
+                T7,
+                T8,
+                T9,
+                T10,
+                T11,
+                T12,
+                T13,
+                T14,
+                T15,
+            )>
+            where
+                T15: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkLineSpans>]>>,
+            {
+                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14) = self.0;
+                StoredMooRProgramBuilder((
+                    v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, value,
+                ))
+            }
+        }
+
+        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15>
+            StoredMooRProgramBuilder<(
+                T0,
+                T1,
+                T2,
+                T3,
+                T4,
+                T5,
+                T6,
+                T7,
+                T8,
+                T9,
+                T10,
+                T11,
+                T12,
+                T13,
+                T14,
+                T15,
+            )>
+        {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [StoredMooRProgram].
+            #[inline]
+            pub fn finish(
+                self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<StoredMooRProgram>
+            where
+                Self: ::planus::WriteAsOffset<StoredMooRProgram>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAs<::planus::Offset<[u16]>>,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkVector>]>>,
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+                T5: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>,
+                T6: ::planus::WriteAs<::planus::Offset<self::StoredNames>>,
+                T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>>,
+                T8: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>,
+                >,
+                T9: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>,
+                >,
+                T10: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>,
+                >,
+                T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>>,
+                T12: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredErrorOperand>]>>,
+                T13: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredMooRProgram>]>>,
+                T14: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::LineSpan>]>>,
+                T15: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkLineSpans>]>>,
+            > ::planus::WriteAs<::planus::Offset<StoredMooRProgram>>
+            for StoredMooRProgramBuilder<(
+                T0,
+                T1,
+                T2,
+                T3,
+                T4,
+                T5,
+                T6,
+                T7,
+                T8,
+                T9,
+                T10,
+                T11,
+                T12,
+                T13,
+                T14,
+                T15,
+            )>
+        {
+            type Prepared = ::planus::Offset<StoredMooRProgram>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<StoredMooRProgram> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAs<::planus::Offset<[u16]>>,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkVector>]>>,
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+                T5: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>,
+                T6: ::planus::WriteAs<::planus::Offset<self::StoredNames>>,
+                T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>>,
+                T8: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>,
+                >,
+                T9: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>,
+                >,
+                T10: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>,
+                >,
+                T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>>,
+                T12: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredErrorOperand>]>>,
+                T13: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredMooRProgram>]>>,
+                T14: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::LineSpan>]>>,
+                T15: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkLineSpans>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredMooRProgram>>
+            for StoredMooRProgramBuilder<(
+                T0,
+                T1,
+                T2,
+                T3,
+                T4,
+                T5,
+                T6,
+                T7,
+                T8,
+                T9,
+                T10,
+                T11,
+                T12,
+                T13,
+                T14,
+                T15,
+            )>
+        {
+            type Prepared = ::planus::Offset<StoredMooRProgram>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<StoredMooRProgram>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAs<::planus::Offset<[u16]>>,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkVector>]>>,
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+                T5: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>,
+                T6: ::planus::WriteAs<::planus::Offset<self::StoredNames>>,
+                T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>>,
+                T8: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>,
+                >,
+                T9: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>,
+                >,
+                T10: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>,
+                >,
+                T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>>,
+                T12: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredErrorOperand>]>>,
+                T13: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredMooRProgram>]>>,
+                T14: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::LineSpan>]>>,
+                T15: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkLineSpans>]>>,
+            > ::planus::WriteAsOffset<StoredMooRProgram>
+            for StoredMooRProgramBuilder<(
+                T0,
+                T1,
+                T2,
+                T3,
+                T4,
+                T5,
+                T6,
+                T7,
+                T8,
+                T9,
+                T10,
+                T11,
+                T12,
+                T13,
+                T14,
+                T15,
+            )>
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<StoredMooRProgram> {
+                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15) =
+                    &self.0;
+                StoredMooRProgram::create(
+                    builder, v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15,
+                )
+            }
+        }
+
+        /// Reference to a deserialized [StoredMooRProgram].
+        #[derive(Copy, Clone)]
+        pub struct StoredMooRProgramRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
+
+        impl<'a> StoredMooRProgramRef<'a> {
+            /// Getter for the [`version` field](StoredMooRProgram#structfield.version).
+            #[inline]
+            pub fn version(&self) -> ::planus::Result<u16> {
+                ::core::result::Result::Ok(
+                    self.0
+                        .access(0, "StoredMooRProgram", "version")?
+                        .unwrap_or(0),
+                )
+            }
+
+            /// Getter for the [`builtin_signature` field](StoredMooRProgram#structfield.builtin_signature).
+            #[inline]
+            pub fn builtin_signature(&self) -> ::planus::Result<u64> {
+                ::core::result::Result::Ok(
+                    self.0
+                        .access(1, "StoredMooRProgram", "builtin_signature")?
+                        .unwrap_or(0),
+                )
+            }
+
+            /// Getter for the [`main_vector` field](StoredMooRProgram#structfield.main_vector).
+            #[inline]
+            pub fn main_vector(&self) -> ::planus::Result<::planus::Vector<'a, u16>> {
+                self.0
+                    .access_required(2, "StoredMooRProgram", "main_vector")
+            }
+
+            /// Getter for the [`fork_vectors` field](StoredMooRProgram#structfield.fork_vectors).
+            #[inline]
+            pub fn fork_vectors(
+                &self,
+            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<self::ForkVectorRef<'a>>>>
+            {
+                self.0
+                    .access_required(3, "StoredMooRProgram", "fork_vectors")
+            }
+
+            /// Getter for the [`literals` field](StoredMooRProgram#structfield.literals).
+            #[inline]
+            pub fn literals(
+                &self,
+            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<super::moor_var::VarRef<'a>>>>
+            {
+                self.0.access_required(4, "StoredMooRProgram", "literals")
+            }
+
+            /// Getter for the [`jump_labels` field](StoredMooRProgram#structfield.jump_labels).
+            #[inline]
+            pub fn jump_labels(
+                &self,
+            ) -> ::planus::Result<
+                ::planus::Vector<'a, ::planus::Result<self::StoredJumpLabelRef<'a>>>,
+            > {
+                self.0
+                    .access_required(5, "StoredMooRProgram", "jump_labels")
+            }
+
+            /// Getter for the [`var_names` field](StoredMooRProgram#structfield.var_names).
+            #[inline]
+            pub fn var_names(&self) -> ::planus::Result<self::StoredNamesRef<'a>> {
+                self.0.access_required(6, "StoredMooRProgram", "var_names")
+            }
+
+            /// Getter for the [`scatter_tables` field](StoredMooRProgram#structfield.scatter_tables).
+            #[inline]
+            pub fn scatter_tables(
+                &self,
+            ) -> ::planus::Result<
+                ::planus::Vector<'a, ::planus::Result<self::StoredScatterArgsRef<'a>>>,
+            > {
+                self.0
+                    .access_required(7, "StoredMooRProgram", "scatter_tables")
+            }
+
+            /// Getter for the [`for_sequence_operands` field](StoredMooRProgram#structfield.for_sequence_operands).
+            #[inline]
+            pub fn for_sequence_operands(
+                &self,
+            ) -> ::planus::Result<
+                ::planus::Vector<'a, ::planus::Result<self::StoredForSequenceOperandRef<'a>>>,
+            > {
+                self.0
+                    .access_required(8, "StoredMooRProgram", "for_sequence_operands")
+            }
+
+            /// Getter for the [`for_range_operands` field](StoredMooRProgram#structfield.for_range_operands).
+            #[inline]
+            pub fn for_range_operands(
+                &self,
+            ) -> ::planus::Result<
+                ::planus::Vector<'a, ::planus::Result<self::StoredForRangeOperandRef<'a>>>,
+            > {
+                self.0
+                    .access_required(9, "StoredMooRProgram", "for_range_operands")
+            }
+
+            /// Getter for the [`range_comprehensions` field](StoredMooRProgram#structfield.range_comprehensions).
+            #[inline]
+            pub fn range_comprehensions(
+                &self,
+            ) -> ::planus::Result<
+                ::planus::Vector<'a, ::planus::Result<self::StoredRangeComprehendRef<'a>>>,
+            > {
+                self.0
+                    .access_required(10, "StoredMooRProgram", "range_comprehensions")
+            }
+
+            /// Getter for the [`list_comprehensions` field](StoredMooRProgram#structfield.list_comprehensions).
+            #[inline]
+            pub fn list_comprehensions(
+                &self,
+            ) -> ::planus::Result<
+                ::planus::Vector<'a, ::planus::Result<self::StoredListComprehendRef<'a>>>,
+            > {
+                self.0
+                    .access_required(11, "StoredMooRProgram", "list_comprehensions")
+            }
+
+            /// Getter for the [`error_operands_full` field](StoredMooRProgram#structfield.error_operands_full).
+            #[inline]
+            pub fn error_operands_full(
+                &self,
+            ) -> ::planus::Result<
+                ::planus::Vector<'a, ::planus::Result<self::StoredErrorOperandRef<'a>>>,
+            > {
+                self.0
+                    .access_required(12, "StoredMooRProgram", "error_operands_full")
+            }
+
+            /// Getter for the [`lambda_programs` field](StoredMooRProgram#structfield.lambda_programs).
+            #[inline]
+            pub fn lambda_programs(
+                &self,
+            ) -> ::planus::Result<
+                ::planus::Vector<'a, ::planus::Result<self::StoredMooRProgramRef<'a>>>,
+            > {
+                self.0
+                    .access_required(13, "StoredMooRProgram", "lambda_programs")
+            }
+
+            /// Getter for the [`line_number_spans` field](StoredMooRProgram#structfield.line_number_spans).
+            #[inline]
+            pub fn line_number_spans(
+                &self,
+            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<self::LineSpanRef<'a>>>>
+            {
+                self.0
+                    .access_required(14, "StoredMooRProgram", "line_number_spans")
+            }
+
+            /// Getter for the [`fork_line_number_spans` field](StoredMooRProgram#structfield.fork_line_number_spans).
+            #[inline]
+            pub fn fork_line_number_spans(
+                &self,
+            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<self::ForkLineSpansRef<'a>>>>
+            {
+                self.0
+                    .access_required(15, "StoredMooRProgram", "fork_line_number_spans")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for StoredMooRProgramRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("StoredMooRProgramRef");
+                f.field("version", &self.version());
+                f.field("builtin_signature", &self.builtin_signature());
+                f.field("main_vector", &self.main_vector());
+                f.field("fork_vectors", &self.fork_vectors());
+                f.field("literals", &self.literals());
+                f.field("jump_labels", &self.jump_labels());
+                f.field("var_names", &self.var_names());
+                f.field("scatter_tables", &self.scatter_tables());
+                f.field("for_sequence_operands", &self.for_sequence_operands());
+                f.field("for_range_operands", &self.for_range_operands());
+                f.field("range_comprehensions", &self.range_comprehensions());
+                f.field("list_comprehensions", &self.list_comprehensions());
+                f.field("error_operands_full", &self.error_operands_full());
+                f.field("lambda_programs", &self.lambda_programs());
+                f.field("line_number_spans", &self.line_number_spans());
+                f.field("fork_line_number_spans", &self.fork_line_number_spans());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<StoredMooRProgramRef<'a>> for StoredMooRProgram {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: StoredMooRProgramRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    version: ::core::convert::TryInto::try_into(value.version()?)?,
+                    builtin_signature: ::core::convert::TryInto::try_into(
+                        value.builtin_signature()?,
+                    )?,
+                    main_vector: value.main_vector()?.to_vec()?,
+                    fork_vectors: value.fork_vectors()?.to_vec_result()?,
+                    literals: value.literals()?.to_vec_result()?,
+                    jump_labels: value.jump_labels()?.to_vec_result()?,
+                    var_names: ::planus::alloc::boxed::Box::new(
+                        ::core::convert::TryInto::try_into(value.var_names()?)?,
+                    ),
+                    scatter_tables: value.scatter_tables()?.to_vec_result()?,
+                    for_sequence_operands: value.for_sequence_operands()?.to_vec_result()?,
+                    for_range_operands: value.for_range_operands()?.to_vec_result()?,
+                    range_comprehensions: value.range_comprehensions()?.to_vec_result()?,
+                    list_comprehensions: value.list_comprehensions()?.to_vec_result()?,
+                    error_operands_full: value.error_operands_full()?.to_vec_result()?,
+                    lambda_programs: value.lambda_programs()?.to_vec_result()?,
+                    line_number_spans: value.line_number_spans()?.to_vec_result()?,
+                    fork_line_number_spans: value.fork_line_number_spans()?.to_vec_result()?,
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for StoredMooRProgramRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for StoredMooRProgramRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[StoredMooRProgramRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<StoredMooRProgram>> for StoredMooRProgram {
+            type Value = ::planus::Offset<StoredMooRProgram>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<StoredMooRProgram>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for StoredMooRProgramRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[StoredMooRProgramRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The union `StoredProgramLanguage` in the namespace `MoorProgram`
+        ///
+        /// Generated from these locations:
+        /// * Union `StoredProgramLanguage` in the file `crates/schema/schema/moor_program.fbs:234`
+        #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
+        pub enum StoredProgramLanguage {
+            /// The variant of type `StoredMooRProgram` in the union `StoredProgramLanguage`
+            StoredMooRProgram(::planus::alloc::boxed::Box<self::StoredMooRProgram>),
+        }
+
+        impl StoredProgramLanguage {
+            /// Creates a [StoredProgramLanguageBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> StoredProgramLanguageBuilder<::planus::Uninitialized> {
+                StoredProgramLanguageBuilder(::planus::Uninitialized)
+            }
+
+            #[inline]
+            pub fn create_stored_moo_r_program(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::StoredMooRProgram>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(1, value.prepare(builder).downcast())
+            }
+        }
+
+        impl ::planus::WriteAsUnion<StoredProgramLanguage> for StoredProgramLanguage {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<Self> {
+                match self {
+                    Self::StoredMooRProgram(value) => {
+                        Self::create_stored_moo_r_program(builder, value)
+                    }
+                }
+            }
+        }
+
+        impl ::planus::WriteAsOptionalUnion<StoredProgramLanguage> for StoredProgramLanguage {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<Self>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+
+        /// Builder for serializing an instance of the [StoredProgramLanguage] type.
+        ///
+        /// Can be created using the [StoredProgramLanguage::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct StoredProgramLanguageBuilder<T>(T);
+
+        impl StoredProgramLanguageBuilder<::planus::Uninitialized> {
+            /// Creates an instance of the [`StoredMooRProgram` variant](StoredProgramLanguage#variant.StoredMooRProgram).
+            #[inline]
+            pub fn stored_moo_r_program<T>(
+                self,
+                value: T,
+            ) -> StoredProgramLanguageBuilder<::planus::Initialized<1, T>>
+            where
+                T: ::planus::WriteAsOffset<self::StoredMooRProgram>,
+            {
+                StoredProgramLanguageBuilder(::planus::Initialized(value))
+            }
+        }
+
+        impl<const N: u8, T> StoredProgramLanguageBuilder<::planus::Initialized<N, T>> {
+            /// Finish writing the builder to get an [UnionOffset](::planus::UnionOffset) to a serialized [StoredProgramLanguage].
+            #[inline]
+            pub fn finish(
+                self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::UnionOffset<StoredProgramLanguage>
+            where
+                Self: ::planus::WriteAsUnion<StoredProgramLanguage>,
+            {
+                ::planus::WriteAsUnion::prepare(&self, builder)
+            }
+        }
+
+        impl<T> ::planus::WriteAsUnion<StoredProgramLanguage>
+            for StoredProgramLanguageBuilder<::planus::Initialized<1, T>>
+        where
+            T: ::planus::WriteAsOffset<self::StoredMooRProgram>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::UnionOffset<StoredProgramLanguage> {
+                ::planus::UnionOffset::new(1, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<StoredProgramLanguage>
+            for StoredProgramLanguageBuilder<::planus::Initialized<1, T>>
+        where
+            T: ::planus::WriteAsOffset<self::StoredMooRProgram>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<StoredProgramLanguage>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+
+        /// Reference to a deserialized [StoredProgramLanguage].
+        #[derive(Copy, Clone, Debug)]
+        pub enum StoredProgramLanguageRef<'a> {
+            StoredMooRProgram(self::StoredMooRProgramRef<'a>),
+        }
+
+        impl<'a> ::core::convert::TryFrom<StoredProgramLanguageRef<'a>> for StoredProgramLanguage {
+            type Error = ::planus::Error;
+
+            fn try_from(value: StoredProgramLanguageRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(match value {
+                    StoredProgramLanguageRef::StoredMooRProgram(value) => {
+                        Self::StoredMooRProgram(::planus::alloc::boxed::Box::new(
+                            ::core::convert::TryFrom::try_from(value)?,
+                        ))
+                    }
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableReadUnion<'a> for StoredProgramLanguageRef<'a> {
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                tag: u8,
+                field_offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                match tag {
+                    1 => ::core::result::Result::Ok(Self::StoredMooRProgram(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    _ => {
+                        ::core::result::Result::Err(::planus::errors::ErrorKind::UnknownUnionTag {
+                            tag,
+                        })
+                    }
+                }
+            }
+        }
+
+        impl<'a> ::planus::VectorReadUnion<'a> for StoredProgramLanguageRef<'a> {
+            const VECTOR_NAME: &'static str = "[StoredProgramLanguageRef]";
+        }
+
+        /// The table `StoredProgram` in the namespace `MoorProgram`
+        ///
+        /// Generated from these locations:
+        /// * Table `StoredProgram` in the file `crates/schema/schema/moor_program.fbs:240`
+        #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
+        pub struct StoredProgram {
+            /// The field `language` in the table `StoredProgram`
+            pub language: self::StoredProgramLanguage,
+        }
+
+        impl StoredProgram {
+            /// Creates a [StoredProgramBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> StoredProgramBuilder<()> {
+                StoredProgramBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_language: impl ::planus::WriteAsUnion<self::StoredProgramLanguage>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_language = field_language.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<8> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<self::StoredProgramLanguage>>(1);
+                table_writer.write_entry::<u8>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_language.offset());
+                        object_writer.write::<_, _, 1>(&prepared_language.tag());
                     });
                 }
                 builder.current_offset()
@@ -35717,25 +39269,7 @@ mod root {
         impl ::planus::WriteAsOffset<StoredProgram> for StoredProgram {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<StoredProgram> {
-                StoredProgram::create(
-                    builder,
-                    self.version,
-                    &self.main_vector,
-                    &self.fork_vectors,
-                    &self.literals,
-                    &self.jump_labels,
-                    &self.var_names,
-                    &self.symbol_table,
-                    &self.scatter_tables,
-                    &self.for_sequence_operands,
-                    &self.for_range_operands,
-                    &self.range_comprehensions,
-                    &self.list_comprehensions,
-                    &self.error_operands,
-                    &self.lambda_programs,
-                    &self.line_number_spans,
-                    &self.fork_line_number_spans,
-                )
+                StoredProgram::create(builder, &self.language)
             }
         }
 
@@ -35747,346 +39281,18 @@ mod root {
         pub struct StoredProgramBuilder<State>(State);
 
         impl StoredProgramBuilder<()> {
-            /// Setter for the [`version` field](StoredProgram#structfield.version).
+            /// Setter for the [`language` field](StoredProgram#structfield.language).
             #[inline]
             #[allow(clippy::type_complexity)]
-            pub fn version<T0>(self, value: T0) -> StoredProgramBuilder<(T0,)>
+            pub fn language<T0>(self, value: T0) -> StoredProgramBuilder<(T0,)>
             where
-                T0: ::planus::WriteAsDefault<u16, u16>,
+                T0: ::planus::WriteAsUnion<self::StoredProgramLanguage>,
             {
                 StoredProgramBuilder((value,))
-            }
-
-            /// Sets the [`version` field](StoredProgram#structfield.version) to the default value.
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn version_as_default(self) -> StoredProgramBuilder<(::planus::DefaultValue,)> {
-                self.version(::planus::DefaultValue)
             }
         }
 
         impl<T0> StoredProgramBuilder<(T0,)> {
-            /// Setter for the [`main_vector` field](StoredProgram#structfield.main_vector).
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn main_vector<T1>(self, value: T1) -> StoredProgramBuilder<(T0, T1)>
-            where
-                T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
-            {
-                let (v0,) = self.0;
-                StoredProgramBuilder((v0, value))
-            }
-        }
-
-        impl<T0, T1> StoredProgramBuilder<(T0, T1)> {
-            /// Setter for the [`fork_vectors` field](StoredProgram#structfield.fork_vectors).
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn fork_vectors<T2>(self, value: T2) -> StoredProgramBuilder<(T0, T1, T2)>
-            where
-                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkVector>]>>,
-            {
-                let (v0, v1) = self.0;
-                StoredProgramBuilder((v0, v1, value))
-            }
-        }
-
-        impl<T0, T1, T2> StoredProgramBuilder<(T0, T1, T2)> {
-            /// Setter for the [`literals` field](StoredProgram#structfield.literals).
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn literals<T3>(self, value: T3) -> StoredProgramBuilder<(T0, T1, T2, T3)>
-            where
-                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-            {
-                let (v0, v1, v2) = self.0;
-                StoredProgramBuilder((v0, v1, v2, value))
-            }
-        }
-
-        impl<T0, T1, T2, T3> StoredProgramBuilder<(T0, T1, T2, T3)> {
-            /// Setter for the [`jump_labels` field](StoredProgram#structfield.jump_labels).
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn jump_labels<T4>(self, value: T4) -> StoredProgramBuilder<(T0, T1, T2, T3, T4)>
-            where
-                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>,
-            {
-                let (v0, v1, v2, v3) = self.0;
-                StoredProgramBuilder((v0, v1, v2, v3, value))
-            }
-        }
-
-        impl<T0, T1, T2, T3, T4> StoredProgramBuilder<(T0, T1, T2, T3, T4)> {
-            /// Setter for the [`var_names` field](StoredProgram#structfield.var_names).
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn var_names<T5>(self, value: T5) -> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5)>
-            where
-                T5: ::planus::WriteAs<::planus::Offset<self::StoredNames>>,
-            {
-                let (v0, v1, v2, v3, v4) = self.0;
-                StoredProgramBuilder((v0, v1, v2, v3, v4, value))
-            }
-        }
-
-        impl<T0, T1, T2, T3, T4, T5> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5)> {
-            /// Setter for the [`symbol_table` field](StoredProgram#structfield.symbol_table).
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn symbol_table<T6>(
-                self,
-                value: T6,
-            ) -> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6)>
-            where
-                T6: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
-                    >,
-            {
-                let (v0, v1, v2, v3, v4, v5) = self.0;
-                StoredProgramBuilder((v0, v1, v2, v3, v4, v5, value))
-            }
-        }
-
-        impl<T0, T1, T2, T3, T4, T5, T6> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6)> {
-            /// Setter for the [`scatter_tables` field](StoredProgram#structfield.scatter_tables).
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn scatter_tables<T7>(
-                self,
-                value: T7,
-            ) -> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)>
-            where
-                T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>>,
-            {
-                let (v0, v1, v2, v3, v4, v5, v6) = self.0;
-                StoredProgramBuilder((v0, v1, v2, v3, v4, v5, v6, value))
-            }
-        }
-
-        impl<T0, T1, T2, T3, T4, T5, T6, T7> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)> {
-            /// Setter for the [`for_sequence_operands` field](StoredProgram#structfield.for_sequence_operands).
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn for_sequence_operands<T8>(
-                self,
-                value: T8,
-            ) -> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8)>
-            where
-                T8: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>,
-                    >,
-            {
-                let (v0, v1, v2, v3, v4, v5, v6, v7) = self.0;
-                StoredProgramBuilder((v0, v1, v2, v3, v4, v5, v6, v7, value))
-            }
-        }
-
-        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8>
-            StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8)>
-        {
-            /// Setter for the [`for_range_operands` field](StoredProgram#structfield.for_range_operands).
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn for_range_operands<T9>(
-                self,
-                value: T9,
-            ) -> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9)>
-            where
-                T9: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>,
-                    >,
-            {
-                let (v0, v1, v2, v3, v4, v5, v6, v7, v8) = self.0;
-                StoredProgramBuilder((v0, v1, v2, v3, v4, v5, v6, v7, v8, value))
-            }
-        }
-
-        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9>
-            StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9)>
-        {
-            /// Setter for the [`range_comprehensions` field](StoredProgram#structfield.range_comprehensions).
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn range_comprehensions<T10>(
-                self,
-                value: T10,
-            ) -> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)>
-            where
-                T10: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>,
-                    >,
-            {
-                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9) = self.0;
-                StoredProgramBuilder((v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, value))
-            }
-        }
-
-        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>
-            StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)>
-        {
-            /// Setter for the [`list_comprehensions` field](StoredProgram#structfield.list_comprehensions).
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn list_comprehensions<T11>(
-                self,
-                value: T11,
-            ) -> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)>
-            where
-                T11: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>,
-                    >,
-            {
-                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) = self.0;
-                StoredProgramBuilder((v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, value))
-            }
-        }
-
-        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11>
-            StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)>
-        {
-            /// Setter for the [`error_operands` field](StoredProgram#structfield.error_operands).
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn error_operands<T12>(
-                self,
-                value: T12,
-            ) -> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)>
-            where
-                T12: ::planus::WriteAs<::planus::Offset<[u8]>>,
-            {
-                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11) = self.0;
-                StoredProgramBuilder((v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, value))
-            }
-        }
-
-        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12>
-            StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)>
-        {
-            /// Setter for the [`lambda_programs` field](StoredProgram#structfield.lambda_programs).
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn lambda_programs<T13>(
-                self,
-                value: T13,
-            ) -> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13)>
-            where
-                T13: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredProgram>]>>,
-            {
-                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12) = self.0;
-                StoredProgramBuilder((v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, value))
-            }
-        }
-
-        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13>
-            StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13)>
-        {
-            /// Setter for the [`line_number_spans` field](StoredProgram#structfield.line_number_spans).
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn line_number_spans<T14>(
-                self,
-                value: T14,
-            ) -> StoredProgramBuilder<(
-                T0,
-                T1,
-                T2,
-                T3,
-                T4,
-                T5,
-                T6,
-                T7,
-                T8,
-                T9,
-                T10,
-                T11,
-                T12,
-                T13,
-                T14,
-            )>
-            where
-                T14: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::LineSpan>]>>,
-            {
-                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13) = self.0;
-                StoredProgramBuilder((
-                    v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, value,
-                ))
-            }
-        }
-
-        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14>
-            StoredProgramBuilder<(
-                T0,
-                T1,
-                T2,
-                T3,
-                T4,
-                T5,
-                T6,
-                T7,
-                T8,
-                T9,
-                T10,
-                T11,
-                T12,
-                T13,
-                T14,
-            )>
-        {
-            /// Setter for the [`fork_line_number_spans` field](StoredProgram#structfield.fork_line_number_spans).
-            #[inline]
-            #[allow(clippy::type_complexity)]
-            pub fn fork_line_number_spans<T15>(
-                self,
-                value: T15,
-            ) -> StoredProgramBuilder<(
-                T0,
-                T1,
-                T2,
-                T3,
-                T4,
-                T5,
-                T6,
-                T7,
-                T8,
-                T9,
-                T10,
-                T11,
-                T12,
-                T13,
-                T14,
-                T15,
-            )>
-            where
-                T15: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkLineSpans>]>>,
-            {
-                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14) = self.0;
-                StoredProgramBuilder((
-                    v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, value,
-                ))
-            }
-        }
-
-        impl<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15>
-            StoredProgramBuilder<(
-                T0,
-                T1,
-                T2,
-                T3,
-                T4,
-                T5,
-                T6,
-                T7,
-                T8,
-                T9,
-                T10,
-                T11,
-                T12,
-                T13,
-                T14,
-                T15,
-            )>
-        {
             /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [StoredProgram].
             #[inline]
             pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<StoredProgram>
@@ -36097,42 +39303,8 @@ mod root {
             }
         }
 
-        impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkVector>]>>,
-            T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>,
-            T5: ::planus::WriteAs<::planus::Offset<self::StoredNames>>,
-            T6: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>,
-            T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>>,
-            T8: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>>,
-            T9: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>>,
-            T10: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>>,
-            T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>>,
-            T12: ::planus::WriteAs<::planus::Offset<[u8]>>,
-            T13: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredProgram>]>>,
-            T14: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::LineSpan>]>>,
-            T15: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkLineSpans>]>>,
-        > ::planus::WriteAs<::planus::Offset<StoredProgram>>
-            for StoredProgramBuilder<(
-                T0,
-                T1,
-                T2,
-                T3,
-                T4,
-                T5,
-                T6,
-                T7,
-                T8,
-                T9,
-                T10,
-                T11,
-                T12,
-                T13,
-                T14,
-                T15,
-            )>
+        impl<T0: ::planus::WriteAsUnion<self::StoredProgramLanguage>>
+            ::planus::WriteAs<::planus::Offset<StoredProgram>> for StoredProgramBuilder<(T0,)>
         {
             type Prepared = ::planus::Offset<StoredProgram>;
 
@@ -36142,42 +39314,9 @@ mod root {
             }
         }
 
-        impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkVector>]>>,
-            T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>,
-            T5: ::planus::WriteAs<::planus::Offset<self::StoredNames>>,
-            T6: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>,
-            T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>>,
-            T8: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>>,
-            T9: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>>,
-            T10: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>>,
-            T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>>,
-            T12: ::planus::WriteAs<::planus::Offset<[u8]>>,
-            T13: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredProgram>]>>,
-            T14: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::LineSpan>]>>,
-            T15: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkLineSpans>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredProgram>>
-            for StoredProgramBuilder<(
-                T0,
-                T1,
-                T2,
-                T3,
-                T4,
-                T5,
-                T6,
-                T7,
-                T8,
-                T9,
-                T10,
-                T11,
-                T12,
-                T13,
-                T14,
-                T15,
-            )>
+        impl<T0: ::planus::WriteAsUnion<self::StoredProgramLanguage>>
+            ::planus::WriteAsOptional<::planus::Offset<StoredProgram>>
+            for StoredProgramBuilder<(T0,)>
         {
             type Prepared = ::planus::Offset<StoredProgram>;
 
@@ -36190,227 +39329,32 @@ mod root {
             }
         }
 
-        impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkVector>]>>,
-            T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>,
-            T5: ::planus::WriteAs<::planus::Offset<self::StoredNames>>,
-            T6: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>,
-            T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>>,
-            T8: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>>,
-            T9: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>>,
-            T10: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>>,
-            T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>>,
-            T12: ::planus::WriteAs<::planus::Offset<[u8]>>,
-            T13: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredProgram>]>>,
-            T14: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::LineSpan>]>>,
-            T15: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkLineSpans>]>>,
-        > ::planus::WriteAsOffset<StoredProgram>
-            for StoredProgramBuilder<(
-                T0,
-                T1,
-                T2,
-                T3,
-                T4,
-                T5,
-                T6,
-                T7,
-                T8,
-                T9,
-                T10,
-                T11,
-                T12,
-                T13,
-                T14,
-                T15,
-            )>
+        impl<T0: ::planus::WriteAsUnion<self::StoredProgramLanguage>>
+            ::planus::WriteAsOffset<StoredProgram> for StoredProgramBuilder<(T0,)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<StoredProgram> {
-                let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15) =
-                    &self.0;
-                StoredProgram::create(
-                    builder, v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15,
-                )
+                let (v0,) = &self.0;
+                StoredProgram::create(builder, v0)
             }
         }
 
         /// Reference to a deserialized [StoredProgram].
         #[derive(Copy, Clone)]
-        pub struct StoredProgramRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct StoredProgramRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> StoredProgramRef<'a> {
-            /// Getter for the [`version` field](StoredProgram#structfield.version).
+            /// Getter for the [`language` field](StoredProgram#structfield.language).
             #[inline]
-            pub fn version(&self) -> ::planus::Result<u16> {
-                ::core::result::Result::Ok(
-                    self.0.access(0, "StoredProgram", "version")?.unwrap_or(0),
-                )
-            }
-
-            /// Getter for the [`main_vector` field](StoredProgram#structfield.main_vector).
-            #[inline]
-            pub fn main_vector(&self) -> ::planus::Result<::planus::Vector<'a, u16>> {
-                self.0.access_required(1, "StoredProgram", "main_vector")
-            }
-
-            /// Getter for the [`fork_vectors` field](StoredProgram#structfield.fork_vectors).
-            #[inline]
-            pub fn fork_vectors(
-                &self,
-            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<self::ForkVectorRef<'a>>>>
-            {
-                self.0.access_required(2, "StoredProgram", "fork_vectors")
-            }
-
-            /// Getter for the [`literals` field](StoredProgram#structfield.literals).
-            #[inline]
-            pub fn literals(
-                &self,
-            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<super::moor_var::VarRef<'a>>>>
-            {
-                self.0.access_required(3, "StoredProgram", "literals")
-            }
-
-            /// Getter for the [`jump_labels` field](StoredProgram#structfield.jump_labels).
-            #[inline]
-            pub fn jump_labels(
-                &self,
-            ) -> ::planus::Result<
-                ::planus::Vector<'a, ::planus::Result<self::StoredJumpLabelRef<'a>>>,
-            > {
-                self.0.access_required(4, "StoredProgram", "jump_labels")
-            }
-
-            /// Getter for the [`var_names` field](StoredProgram#structfield.var_names).
-            #[inline]
-            pub fn var_names(&self) -> ::planus::Result<self::StoredNamesRef<'a>> {
-                self.0.access_required(5, "StoredProgram", "var_names")
-            }
-
-            /// Getter for the [`symbol_table` field](StoredProgram#structfield.symbol_table).
-            #[inline]
-            pub fn symbol_table(
-                &self,
-            ) -> ::planus::Result<
-                ::planus::Vector<'a, ::planus::Result<super::moor_common::SymbolRef<'a>>>,
-            > {
-                self.0.access_required(6, "StoredProgram", "symbol_table")
-            }
-
-            /// Getter for the [`scatter_tables` field](StoredProgram#structfield.scatter_tables).
-            #[inline]
-            pub fn scatter_tables(
-                &self,
-            ) -> ::planus::Result<
-                ::planus::Vector<'a, ::planus::Result<self::StoredScatterArgsRef<'a>>>,
-            > {
-                self.0.access_required(7, "StoredProgram", "scatter_tables")
-            }
-
-            /// Getter for the [`for_sequence_operands` field](StoredProgram#structfield.for_sequence_operands).
-            #[inline]
-            pub fn for_sequence_operands(
-                &self,
-            ) -> ::planus::Result<
-                ::planus::Vector<'a, ::planus::Result<self::StoredForSequenceOperandRef<'a>>>,
-            > {
-                self.0
-                    .access_required(8, "StoredProgram", "for_sequence_operands")
-            }
-
-            /// Getter for the [`for_range_operands` field](StoredProgram#structfield.for_range_operands).
-            #[inline]
-            pub fn for_range_operands(
-                &self,
-            ) -> ::planus::Result<
-                ::planus::Vector<'a, ::planus::Result<self::StoredForRangeOperandRef<'a>>>,
-            > {
-                self.0
-                    .access_required(9, "StoredProgram", "for_range_operands")
-            }
-
-            /// Getter for the [`range_comprehensions` field](StoredProgram#structfield.range_comprehensions).
-            #[inline]
-            pub fn range_comprehensions(
-                &self,
-            ) -> ::planus::Result<
-                ::planus::Vector<'a, ::planus::Result<self::StoredRangeComprehendRef<'a>>>,
-            > {
-                self.0
-                    .access_required(10, "StoredProgram", "range_comprehensions")
-            }
-
-            /// Getter for the [`list_comprehensions` field](StoredProgram#structfield.list_comprehensions).
-            #[inline]
-            pub fn list_comprehensions(
-                &self,
-            ) -> ::planus::Result<
-                ::planus::Vector<'a, ::planus::Result<self::StoredListComprehendRef<'a>>>,
-            > {
-                self.0
-                    .access_required(11, "StoredProgram", "list_comprehensions")
-            }
-
-            /// Getter for the [`error_operands` field](StoredProgram#structfield.error_operands).
-            #[inline]
-            pub fn error_operands(&self) -> ::planus::Result<&'a [u8]> {
-                self.0
-                    .access_required(12, "StoredProgram", "error_operands")
-            }
-
-            /// Getter for the [`lambda_programs` field](StoredProgram#structfield.lambda_programs).
-            #[inline]
-            pub fn lambda_programs(
-                &self,
-            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<self::StoredProgramRef<'a>>>>
-            {
-                self.0
-                    .access_required(13, "StoredProgram", "lambda_programs")
-            }
-
-            /// Getter for the [`line_number_spans` field](StoredProgram#structfield.line_number_spans).
-            #[inline]
-            pub fn line_number_spans(
-                &self,
-            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<self::LineSpanRef<'a>>>>
-            {
-                self.0
-                    .access_required(14, "StoredProgram", "line_number_spans")
-            }
-
-            /// Getter for the [`fork_line_number_spans` field](StoredProgram#structfield.fork_line_number_spans).
-            #[inline]
-            pub fn fork_line_number_spans(
-                &self,
-            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<self::ForkLineSpansRef<'a>>>>
-            {
-                self.0
-                    .access_required(15, "StoredProgram", "fork_line_number_spans")
+            pub fn language(&self) -> ::planus::Result<self::StoredProgramLanguageRef<'a>> {
+                self.0.access_union_required(0, "StoredProgram", "language")
             }
         }
 
         impl<'a> ::core::fmt::Debug for StoredProgramRef<'a> {
             fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 let mut f = f.debug_struct("StoredProgramRef");
-                f.field("version", &self.version());
-                f.field("main_vector", &self.main_vector());
-                f.field("fork_vectors", &self.fork_vectors());
-                f.field("literals", &self.literals());
-                f.field("jump_labels", &self.jump_labels());
-                f.field("var_names", &self.var_names());
-                f.field("symbol_table", &self.symbol_table());
-                f.field("scatter_tables", &self.scatter_tables());
-                f.field("for_sequence_operands", &self.for_sequence_operands());
-                f.field("for_range_operands", &self.for_range_operands());
-                f.field("range_comprehensions", &self.range_comprehensions());
-                f.field("list_comprehensions", &self.list_comprehensions());
-                f.field("error_operands", &self.error_operands());
-                f.field("lambda_programs", &self.lambda_programs());
-                f.field("line_number_spans", &self.line_number_spans());
-                f.field("fork_line_number_spans", &self.fork_line_number_spans());
+                f.field("language", &self.language());
                 f.finish()
             }
         }
@@ -36421,24 +39365,7 @@ mod root {
             #[allow(unreachable_code)]
             fn try_from(value: StoredProgramRef<'a>) -> ::planus::Result<Self> {
                 ::core::result::Result::Ok(Self {
-                    version: ::core::convert::TryInto::try_into(value.version()?)?,
-                    main_vector: value.main_vector()?.to_vec()?,
-                    fork_vectors: value.fork_vectors()?.to_vec_result()?,
-                    literals: value.literals()?.to_vec_result()?,
-                    jump_labels: value.jump_labels()?.to_vec_result()?,
-                    var_names: ::planus::alloc::boxed::Box::new(
-                        ::core::convert::TryInto::try_into(value.var_names()?)?,
-                    ),
-                    symbol_table: value.symbol_table()?.to_vec_result()?,
-                    scatter_tables: value.scatter_tables()?.to_vec_result()?,
-                    for_sequence_operands: value.for_sequence_operands()?.to_vec_result()?,
-                    for_range_operands: value.for_range_operands()?.to_vec_result()?,
-                    range_comprehensions: value.range_comprehensions()?.to_vec_result()?,
-                    list_comprehensions: value.list_comprehensions()?.to_vec_result()?,
-                    error_operands: value.error_operands()?.to_vec(),
-                    lambda_programs: value.lambda_programs()?.to_vec_result()?,
-                    line_number_spans: value.line_number_spans()?.to_vec_result()?,
-                    fork_line_number_spans: value.fork_line_number_spans()?.to_vec_result()?,
+                    language: ::core::convert::TryInto::try_into(value.language()?)?,
                 })
             }
         }
@@ -36519,7 +39446,7 @@ mod root {
         /// The table `LineSpan` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `LineSpan` in the file `../../../schema/schema/moor_program.fbs:223`
+        /// * Table `LineSpan` in the file `crates/schema/schema/moor_program.fbs:244`
         #[derive(
             Clone,
             Debug,
@@ -36711,7 +39638,7 @@ mod root {
 
         /// Reference to a deserialized [LineSpan].
         #[derive(Copy, Clone)]
-        pub struct LineSpanRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct LineSpanRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> LineSpanRef<'a> {
             /// Getter for the [`offset` field](LineSpan#structfield.offset).
@@ -36822,7 +39749,7 @@ mod root {
         /// The table `ForkLineSpans` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `ForkLineSpans` in the file `../../../schema/schema/moor_program.fbs:228`
+        /// * Table `ForkLineSpans` in the file `crates/schema/schema/moor_program.fbs:249`
         #[derive(
             Clone,
             Debug,
@@ -36973,7 +39900,7 @@ mod root {
 
         /// Reference to a deserialized [ForkLineSpans].
         #[derive(Copy, Clone)]
-        pub struct ForkLineSpansRef<'a>(::planus::table_reader::Table<'a>);
+        pub struct ForkLineSpansRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
 
         impl<'a> ForkLineSpansRef<'a> {
             /// Getter for the [`spans` field](ForkLineSpans#structfield.spans).

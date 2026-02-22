@@ -600,7 +600,7 @@ fn main() -> Result<(), eyre::Report> {
                     &ObjectRef::Id(o),
                     verb,
                     test_args_list.clone(),
-                    "".to_string(),
+                    "".into(),
                     &wizard,
                     session,
                 )
