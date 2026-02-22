@@ -30,7 +30,7 @@ use moor_common::{
 use tabled::{Table, Tabled};
 
 use moor_compiler::compile;
-use moor_db::{Database, TxDB, db_worldstate::db_counters};
+use moor_db::{Database, TxDB, db_worldstate::db_counters, prop_cache::VERB_CACHE_STATS};
 use moor_kernel::{
     SchedulerClient,
     config::{Config, FeaturesConfig},
@@ -151,6 +151,10 @@ struct BenchmarkRow {
     setup_avg: String,
     #[tabled(rename = "find avg")]
     find_avg: String,
+    #[tabled(rename = "verb cache h/n/m")]
+    verb_cache_mix: String,
+    #[tabled(rename = "verb cache count")]
+    verb_cache_count: String,
     #[tabled(rename = "sched_msg avg")]
     sched_msg_avg: String,
     #[tabled(rename = "wakeup avg")]
@@ -630,6 +634,9 @@ async fn load_test_workload(
             .find_method_verb_on
             .cumulative_duration_nanos()
             .sum();
+        let baseline_verb_cache_hits = VERB_CACHE_STATS.hit_count();
+        let baseline_verb_cache_negative_hits = VERB_CACHE_STATS.negative_hit_count();
+        let baseline_verb_cache_misses = VERB_CACHE_STATS.miss_count();
 
         let mut workload_futures = FuturesUnordered::new();
         for _i in 0..num_concurrent_workload {
@@ -717,6 +724,21 @@ async fn load_test_workload(
         } else {
             0
         };
+        let verb_cache_hits = VERB_CACHE_STATS.hit_count() - baseline_verb_cache_hits;
+        let verb_cache_negative_hits =
+            VERB_CACHE_STATS.negative_hit_count() - baseline_verb_cache_negative_hits;
+        let verb_cache_misses = VERB_CACHE_STATS.miss_count() - baseline_verb_cache_misses;
+        let verb_cache_total = verb_cache_hits + verb_cache_negative_hits + verb_cache_misses;
+        let (verb_cache_hit_pct, verb_cache_negative_hit_pct, verb_cache_miss_pct) =
+            if verb_cache_total > 0 {
+                (
+                    (verb_cache_hits as f64 / verb_cache_total as f64) * 100.0,
+                    (verb_cache_negative_hits as f64 / verb_cache_total as f64) * 100.0,
+                    (verb_cache_misses as f64 / verb_cache_total as f64) * 100.0,
+                )
+            } else {
+                (0.0, 0.0, 0.0)
+            };
 
         let sched_msg_count =
             counters.handle_scheduler_msg.invocations().sum() - baseline_sched_msg_count;
@@ -762,6 +784,14 @@ async fn load_test_workload(
             submit_max: format!("{:.2?}", max),
             setup_avg: format!("{}ns", setup_task_avg_nanos),
             find_avg: format!("{}ns", find_verb_avg_nanos),
+            verb_cache_mix: format!(
+                "{:.1}/{:.1}/{:.1}%",
+                verb_cache_hit_pct, verb_cache_negative_hit_pct, verb_cache_miss_pct
+            ),
+            verb_cache_count: format!(
+                "{}/{}/{}",
+                verb_cache_hits, verb_cache_negative_hits, verb_cache_misses
+            ),
             sched_msg_avg: format!("{}ns", sched_msg_avg_nanos),
             wakeup_avg: format!("{}ns", wakeup_avg_nanos),
         });

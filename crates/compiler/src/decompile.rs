@@ -700,7 +700,6 @@ impl Decompile {
                         self.position = target;
                     }
                 }
-
             }
             Op::RangeSet => {
                 let rval = self.pop_expr()?;
@@ -774,7 +773,6 @@ impl Decompile {
                         self.position = target;
                     }
                 }
-
             }
             Op::FuncCall { id } => {
                 let args = self.pop_expr()?;
@@ -1228,7 +1226,6 @@ impl Decompile {
                         self.position = target;
                     }
                 }
-
             }
             Op::Jump { .. } | Op::PushTemp => {
                 // unreachable!("should have been handled other decompilation branches")

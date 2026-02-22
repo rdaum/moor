@@ -645,20 +645,35 @@ impl Sequence for Str {
         };
 
         let base_str = self.as_str();
+        let char_len = self.len();
         let from = max(from, 0) as usize;
 
-        if from > base_str.len() {
+        if from > char_len {
             return Err(E_RANGE.with_msg(|| {
                 format!(
                     "Range start {} out of bounds for string of length {}",
-                    from,
-                    base_str.len()
+                    from, char_len
                 )
             }));
         }
 
+        let char_index_to_byte_index = |char_index: usize| -> usize {
+            if char_index == 0 {
+                0
+            } else if char_index >= char_len {
+                base_str.len()
+            } else {
+                base_str
+                    .char_indices()
+                    .nth(char_index)
+                    .map(|(i, _)| i)
+                    .unwrap_or(base_str.len())
+            }
+        };
+
+        let start_byte = char_index_to_byte_index(from);
         let mut result_str = if from > 0 {
-            base_str[..from].to_string()
+            base_str[..start_byte].to_string()
         } else {
             "".to_string()
         };
@@ -666,8 +681,9 @@ impl Sequence for Str {
 
         match to.to_usize() {
             Some(to) => {
-                if to + 1 < base_str.len() {
-                    result_str.push_str(&base_str[to + 1..]);
+                if to + 1 < char_len {
+                    let suffix_start = char_index_to_byte_index(to + 1);
+                    result_str.push_str(&base_str[suffix_start..]);
                 }
             }
             None => {
@@ -1005,6 +1021,15 @@ mod tests {
             .unwrap();
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_string_range_set_with_multibyte_char() {
+        let base = v_str("ab∈cd");
+        let value = v_str("X");
+        let expected = v_str("abXcd");
+        let result = base.range_set(&v_int(3), &v_int(3), &value, IndexMode::OneBased);
+        assert_eq!(result, Ok(expected));
     }
 
     // ============================================================================
