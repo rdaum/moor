@@ -175,6 +175,19 @@ impl Decompile {
         self.decompile_statements_sub_offset(label, 0)
     }
 
+    fn can_skip_short_circuit_cleanup(&self, from: usize, to: usize) -> bool {
+        if to <= from + 1 {
+            return false;
+        }
+        let opcode_vector = self.opcode_vector();
+        if to > opcode_vector.len() {
+            return false;
+        }
+        opcode_vector[from + 1..to]
+            .iter()
+            .all(|op| matches!(op, Op::PutTemp | Op::Pop | Op::PushTemp | Op::Jump { .. }))
+    }
+
     fn decompile_until_branch_end(
         &mut self,
         label: &Label,
@@ -678,14 +691,16 @@ impl Decompile {
                     }
                 }
 
-                // Compiler-generated short-circuit cleanup block for nested property assignment:
-                // after assignment epilogue, jump over synthetic PutTemp/Pop cleanup ops.
                 if self.position < opcode_vector_len
                     && let Op::Jump { label } = self.opcode_vector()[self.position]
                 {
                     let jump = self.find_jump(&label)?;
-                    self.position = jump.position.0 as usize;
+                    let target = jump.position.0 as usize;
+                    if self.can_skip_short_circuit_cleanup(self.position, target) {
+                        self.position = target;
+                    }
                 }
+
             }
             Op::RangeSet => {
                 let rval = self.pop_expr()?;
@@ -750,14 +765,16 @@ impl Decompile {
                     }
                 }
 
-                // Nested property assignment emits a synthetic cleanup block guarded by a jump.
-                // Skip it so decompilation doesn't treat those ops as user source.
                 if self.position < opcode_vector_len
                     && let Op::Jump { label } = self.opcode_vector()[self.position]
                 {
                     let jump = self.find_jump(&label)?;
-                    self.position = jump.position.0 as usize;
+                    let target = jump.position.0 as usize;
+                    if self.can_skip_short_circuit_cleanup(self.position, target) {
+                        self.position = target;
+                    }
                 }
+
             }
             Op::FuncCall { id } => {
                 let args = self.pop_expr()?;
@@ -1206,8 +1223,12 @@ impl Decompile {
                     && let Op::Jump { label } = self.opcode_vector()[self.position]
                 {
                     let jump = self.find_jump(&label)?;
-                    self.position = jump.position.0 as usize;
+                    let target = jump.position.0 as usize;
+                    if self.can_skip_short_circuit_cleanup(self.position, target) {
+                        self.position = target;
+                    }
                 }
+
             }
             Op::Jump { .. } | Op::PushTemp => {
                 // unreachable!("should have been handled other decompilation branches")
