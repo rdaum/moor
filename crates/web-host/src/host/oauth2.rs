@@ -153,9 +153,7 @@ impl PendingOAuth2Store {
         let Ok(mut tokens) = self.csrf_tokens.write() else {
             return None;
         };
-        let Some(entry) = tokens.remove(&key) else {
-            return None;
-        };
+        let entry = tokens.remove(&key)?;
         if entry.created.elapsed() >= CSRF_TOKEN_TTL {
             return None;
         }
@@ -202,9 +200,7 @@ impl PendingOAuth2Store {
         let Ok(mut codes) = self.pending_codes.write() else {
             return None;
         };
-        let Some(entry) = codes.remove(code) else {
-            return None;
-        };
+        let entry = codes.remove(code)?;
         if entry.created.elapsed() >= PENDING_CODE_TTL {
             return None;
         }
@@ -233,9 +229,7 @@ impl PendingOAuth2Store {
         let Ok(mut codes) = self.pending_codes.write() else {
             return None;
         };
-        let Some(entry) = codes.remove(code) else {
-            return None;
-        };
+        let entry = codes.remove(code)?;
         if entry.created.elapsed() >= PENDING_CODE_TTL {
             return None;
         }
