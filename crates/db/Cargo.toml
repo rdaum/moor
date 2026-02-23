@@ -51,6 +51,7 @@ fjall.workspace = true
 arc-swap.workspace = true
 flume.workspace = true
 oneshot.workspace = true
+parking_lot.workspace = true
 
 # Collections & Data Structures
 ahash.workspace = true

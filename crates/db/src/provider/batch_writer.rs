@@ -26,7 +26,7 @@
 use std::{
     collections::HashMap,
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicBool, AtomicU64, Ordering},
     },
     thread::JoinHandle,
@@ -35,6 +35,7 @@ use std::{
 
 use flume::{Receiver, Sender};
 use gdt_cpus::ThreadPriority;
+use parking_lot::Mutex;
 use tracing::{error, info, warn};
 
 use crate::tx_management::{Error, Timestamp};
@@ -111,7 +112,7 @@ impl BatchCollector {
     }
 
     pub fn start_commit(&self, timestamp: Timestamp, expected_operations: usize) {
-        let mut current = self.current.lock().unwrap();
+        let mut current = self.current.lock();
         debug_assert!(
             current.is_none(),
             "Previous commit batch not finished (timestamp {:?})",
@@ -121,7 +122,7 @@ impl BatchCollector {
     }
 
     pub fn insert(&self, partition: fjall::Keyspace, key: Vec<u8>, value: Arc<dyn BatchValue>) {
-        let mut current = self.current.lock().unwrap();
+        let mut current = self.current.lock();
         current
             .as_mut()
             .expect("No active commit batch - call start_commit() first")
@@ -129,7 +130,7 @@ impl BatchCollector {
     }
 
     pub fn delete(&self, partition: fjall::Keyspace, key: Vec<u8>) {
-        let mut current = self.current.lock().unwrap();
+        let mut current = self.current.lock();
         current
             .as_mut()
             .expect("No active commit batch - call start_commit() first")
@@ -139,13 +140,12 @@ impl BatchCollector {
     pub fn finish_commit(&self) -> CommitBatch {
         self.current
             .lock()
-            .unwrap()
             .take()
             .expect("No active commit batch to finish")
     }
 
     pub fn abort_commit(&self) {
-        self.current.lock().unwrap().take();
+        self.current.lock().take();
     }
 }
 
@@ -477,7 +477,7 @@ impl BatchWriter {
     pub fn stop(&self) {
         self.kill_switch.store(true, Ordering::SeqCst);
 
-        let mut jh = self.join_handle.lock().unwrap();
+        let mut jh = self.join_handle.lock();
         if let Some(handle) = jh.take() {
             handle.join().ok();
         }

@@ -40,10 +40,11 @@ use moor_common::{
     util::{BitEnum, PerfTimerGuard},
 };
 use moor_var::{Obj, Symbol, Var, program::ProgramType};
+use parking_lot::Mutex;
 use std::{
     path::Path,
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicI64, AtomicU64},
     },
     time::Duration,
@@ -115,6 +116,20 @@ pub struct MoorDB {
     caches: ArcSwap<Caches>,
     /// Last write transaction timestamp that completed
     last_write_commit: AtomicU64,
+}
+
+impl TransactionContext for MoorDB {
+    fn commit_writes(&self, ws: Box<WorkingSets>, enqueued_at: std::time::Instant) -> CommitResult {
+        self.commit_writes(ws, enqueued_at)
+    }
+
+    fn commit_read_only(&self, snapshot_version: u64, caches: Caches) {
+        self.commit_read_only(snapshot_version, caches);
+    }
+
+    fn usage_bytes(&self) -> usize {
+        self.usage_bytes()
+    }
 }
 
 impl MoorDB {
@@ -363,7 +378,7 @@ impl MoorDB {
         enqueued_at: std::time::Instant,
     ) -> CommitResult {
         let counters = db_counters();
-        let _commit_guard = self.commit_apply_lock.lock().unwrap();
+        let _commit_guard = self.commit_apply_lock.lock();
         let dequeued_at = std::time::Instant::now();
         counters.commit_lock_wait_phase.invocations().add(1);
         counters
