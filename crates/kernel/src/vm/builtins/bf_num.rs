@@ -66,14 +66,41 @@ fn bf_max(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_ARGS.msg("max() takes at least 1 argument"),
         ));
     }
+
+    if let Variant::Int(first) = bf_args.args[0].variant() {
+        let mut maximum = first;
+        for arg in bf_args.args.iter().skip(1) {
+            let Variant::Int(i) = arg.variant() else {
+                return Err(BfErr::ErrValue(E_TYPE.msg("max() takes numbers")));
+            };
+            if i > maximum {
+                maximum = i;
+            }
+        }
+        return Ok(Ret(v_int(maximum)));
+    }
+
+    if let Variant::Float(first) = bf_args.args[0].variant() {
+        let mut maximum = first;
+        for arg in bf_args.args.iter().skip(1) {
+            let Variant::Float(f) = arg.variant() else {
+                return Err(BfErr::ErrValue(E_TYPE.msg("max() takes numbers")));
+            };
+            if f > maximum {
+                maximum = f;
+            }
+        }
+        return Ok(Ret(v_float(maximum)));
+    }
+
     let expected_type = bf_args.args[0].type_code();
     let mut maximum = bf_args.args[0].clone();
-    for arg in bf_args.args.iter() {
+    for arg in bf_args.args.iter().skip(1) {
         if arg.type_code() != expected_type {
             return Err(BfErr::ErrValue(E_TYPE.msg("max() takes numbers")));
         }
         if arg.gt(&maximum) {
-            maximum = arg.clone();
+            maximum = arg;
         }
     }
     Ok(Ret(maximum))

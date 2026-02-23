@@ -157,8 +157,12 @@ struct BenchmarkRow {
     verb_cache_count: String,
     #[tabled(rename = "sched_msg avg")]
     sched_msg_avg: String,
-    #[tabled(rename = "wakeup avg")]
-    wakeup_avg: String,
+    #[tabled(rename = "queue avg")]
+    resume_queue_avg: String,
+    #[tabled(rename = "dispatch avg")]
+    wake_dispatch_avg: String,
+    #[tabled(rename = "submit->run avg")]
+    submit_to_first_run_avg: String,
 }
 
 fn setup_test_database(
@@ -624,9 +628,22 @@ async fn load_test_workload(
             .handle_scheduler_msg
             .cumulative_duration_nanos()
             .sum();
-        let baseline_wakeup_count = counters.task_wakeup_latency.invocations().sum();
-        let baseline_wakeup_nanos = counters
-            .task_wakeup_latency
+        let baseline_resume_queue_count = counters.task_resume_queue_delay_latency.invocations().sum();
+        let baseline_resume_queue_nanos = counters
+            .task_resume_queue_delay_latency
+            .cumulative_duration_nanos()
+            .sum();
+        let baseline_wake_dispatch_count = counters.task_wake_dispatch_latency.invocations().sum();
+        let baseline_wake_dispatch_nanos = counters
+            .task_wake_dispatch_latency
+            .cumulative_duration_nanos()
+            .sum();
+        let baseline_submit_to_first_run_count = counters
+            .task_submit_to_first_run_latency
+            .invocations()
+            .sum();
+        let baseline_submit_to_first_run_nanos = counters
+            .task_submit_to_first_run_latency
             .cumulative_duration_nanos()
             .sum();
         let baseline_find_verb_count = db_counters().find_method_verb_on.invocations().sum();
@@ -753,14 +770,44 @@ async fn load_test_workload(
             0
         };
 
-        let wakeup_count = counters.task_wakeup_latency.invocations().sum() - baseline_wakeup_count;
-        let wakeup_total_nanos = counters
-            .task_wakeup_latency
+        let resume_queue_count = counters.task_resume_queue_delay_latency.invocations().sum()
+            - baseline_resume_queue_count;
+        let resume_queue_total_nanos = counters
+            .task_resume_queue_delay_latency
             .cumulative_duration_nanos()
             .sum()
-            - baseline_wakeup_nanos;
-        let wakeup_avg_nanos = if wakeup_count > 0 {
-            (wakeup_total_nanos / wakeup_count) as u64
+            - baseline_resume_queue_nanos;
+        let resume_queue_avg_nanos = if resume_queue_count > 0 {
+            (resume_queue_total_nanos / resume_queue_count) as u64
+        } else {
+            0
+        };
+
+        let wake_dispatch_count =
+            counters.task_wake_dispatch_latency.invocations().sum() - baseline_wake_dispatch_count;
+        let wake_dispatch_total_nanos = counters
+            .task_wake_dispatch_latency
+            .cumulative_duration_nanos()
+            .sum()
+            - baseline_wake_dispatch_nanos;
+        let wake_dispatch_avg_nanos = if wake_dispatch_count > 0 {
+            (wake_dispatch_total_nanos / wake_dispatch_count) as u64
+        } else {
+            0
+        };
+
+        let submit_to_first_run_count = counters
+            .task_submit_to_first_run_latency
+            .invocations()
+            .sum()
+            - baseline_submit_to_first_run_count;
+        let submit_to_first_run_total_nanos = counters
+            .task_submit_to_first_run_latency
+            .cumulative_duration_nanos()
+            .sum()
+            - baseline_submit_to_first_run_nanos;
+        let submit_to_first_run_avg_nanos = if submit_to_first_run_count > 0 {
+            (submit_to_first_run_total_nanos / submit_to_first_run_count) as u64
         } else {
             0
         };
@@ -793,7 +840,9 @@ async fn load_test_workload(
                 verb_cache_hits, verb_cache_negative_hits, verb_cache_misses
             ),
             sched_msg_avg: format!("{}ns", sched_msg_avg_nanos),
-            wakeup_avg: format!("{}ns", wakeup_avg_nanos),
+            resume_queue_avg: format!("{}ns", resume_queue_avg_nanos),
+            wake_dispatch_avg: format!("{}ns", wake_dispatch_avg_nanos),
+            submit_to_first_run_avg: format!("{}ns", submit_to_first_run_avg_nanos),
         });
 
         // Clear screen and redraw table

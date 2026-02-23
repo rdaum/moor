@@ -23,6 +23,7 @@ use moor_var::{
     ByteSized, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Sequence, Variant, v_err, v_float, v_int, v_obj,
     v_objid, v_str, v_sym,
 };
+use std::fmt::Write;
 use uuid::Uuid;
 
 /// Usage: `int typeof(any value)`
@@ -38,35 +39,48 @@ fn bf_typeof(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// Integers are formatted as decimal numbers, floats with decimal notation, objects as "#N",
 /// errors as their name (e.g., "E_PERM"), and lists/maps as "{list}" or "[map]".
 fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    let mut result = String::new();
+    let mut result = String::with_capacity(bf_args.args.len().saturating_mul(16));
     for arg in bf_args.args.iter() {
         match arg.variant() {
             Variant::None => result.push_str("None"),
-            Variant::Bool(b) => result.push_str(format!("{b}").as_str()),
-            Variant::Int(i) => result.push_str(&i.to_string()),
-            Variant::Float(f) => result.push_str(format!("{f:?}").as_str()),
+            Variant::Bool(true) => result.push_str("true"),
+            Variant::Bool(false) => result.push_str("false"),
+            Variant::Int(i) => {
+                let _ = write!(result, "{i}");
+            }
+            Variant::Float(f) => {
+                let _ = write!(result, "{f:?}");
+            }
             Variant::Str(s) => result.push_str(s.as_str()),
-            Variant::Binary(b) => result.push_str(&format!("<binary {} bytes>", b.len())),
-            Variant::Obj(o) => result.push_str(&o.to_string()),
+            Variant::Binary(b) => {
+                let _ = write!(result, "<binary {} bytes>", b.len());
+            }
+            Variant::Obj(o) => {
+                let _ = write!(result, "{o}");
+            }
             Variant::List(_) => result.push_str("{list}"),
             Variant::Map(_) => result.push_str("[map]"),
-            Variant::Sym(s) => result.push_str(&s.to_string()),
+            Variant::Sym(s) => {
+                let _ = write!(result, "{s}");
+            }
             Variant::Err(e) => result.push_str(&e.name().as_arc_str()),
             Variant::Flyweight(_) => result.push_str("<flyweight>"),
             Variant::Lambda(l) => {
                 use moor_var::program::opcode::ScatterLabel;
-                let param_str =
-                    l.0.params
-                        .labels
-                        .iter()
-                        .map(|label| match label {
-                            ScatterLabel::Required(_) => "x".to_string(),
-                            ScatterLabel::Optional(_, _) => "?x".to_string(),
-                            ScatterLabel::Rest(_) => "@x".to_string(),
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                result.push_str(&format!("<lambda:({param_str})>"));
+                result.push_str("<lambda:(");
+                let mut first = true;
+                for label in l.0.params.labels.iter() {
+                    if !first {
+                        result.push_str(", ");
+                    }
+                    first = false;
+                    match label {
+                        ScatterLabel::Required(_) => result.push('x'),
+                        ScatterLabel::Optional(_, _) => result.push_str("?x"),
+                        ScatterLabel::Rest(_) => result.push_str("@x"),
+                    }
+                }
+                result.push_str(")>");
             }
         }
     }

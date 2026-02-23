@@ -660,12 +660,12 @@ impl VMExecState {
             config: exec_args.config,
         };
         let bf_counters = bf_perf_counters();
-        bf_counters.counter_for(bf_id).invocations().add(1);
+        let bf_counter = bf_counters.counter_for(bf_id);
+        bf_counter.invocations().add(1);
 
         let bf_result = bf(&mut bf_args);
         let elapsed_nanos = start.elapsed().as_nanos();
-        bf_counters
-            .counter_for(bf_id)
+        bf_counter
             .cumulative_duration_nanos()
             .add(elapsed_nanos as isize);
 
@@ -735,8 +735,8 @@ impl VMExecState {
         let bf_result = bf(&mut bf_args);
         let elapsed_nanos = start.elapsed().as_nanos();
         let bf_counters = bf_perf_counters();
-        bf_counters
-            .counter_for(bf_id)
+        let bf_counter = bf_counters.counter_for(bf_id);
+        bf_counter
             .cumulative_duration_nanos()
             .add(elapsed_nanos as isize);
 

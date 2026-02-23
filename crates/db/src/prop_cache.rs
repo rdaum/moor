@@ -13,7 +13,6 @@
 
 use crate::CacheStats;
 use ahash::AHasher;
-use arc_swap::ArcSwap;
 use lazy_static::lazy_static;
 use moor_common::model::PropDef;
 use moor_var::{Obj, Symbol};
@@ -21,7 +20,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     hash::BuildHasherDefault,
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 /// Create an optimized cache key by packing Obj and Symbol into a single u128.
@@ -128,7 +127,7 @@ fn prop_cache_miss() {
 }
 
 pub struct PropResolutionCache {
-    inner: ArcSwap<Inner>,
+    inner: Mutex<Inner>,
     stats: &'static CacheStats,
 }
 
@@ -141,13 +140,13 @@ impl Default for PropResolutionCache {
 impl PropResolutionCache {
     pub fn new() -> Self {
         Self {
-            inner: ArcSwap::new(Arc::new(Inner {
+            inner: Mutex::new(Inner {
                 version: 0,
                 orig_version: 0,
                 flushed: false,
                 entries: Arc::new(HashMap::default()),
                 first_parent_with_props_cache: Arc::new(HashMap::default()),
-            })),
+            }),
             stats: &PROP_CACHE_STATS,
         }
     }
@@ -179,23 +178,23 @@ impl Inner {
 
 impl PropResolutionCache {
     pub fn fork(&self) -> Box<Self> {
-        let inner = self.inner.load_full();
-        let mut forked_inner = (*inner).clone();
+        let inner = self.inner.lock().expect("prop cache mutex poisoned");
+        let mut forked_inner = inner.clone();
         forked_inner.orig_version = inner.version;
         forked_inner.flushed = false;
         Box::new(Self {
-            inner: ArcSwap::new(Arc::new(forked_inner)),
+            inner: Mutex::new(forked_inner),
             stats: self.stats,
         })
     }
 
     pub fn has_changed(&self) -> bool {
-        let inner = self.inner.load();
+        let inner = self.inner.lock().expect("prop cache mutex poisoned");
         inner.version > inner.orig_version
     }
 
     pub fn lookup(&self, obj: &Obj, prop: &Symbol) -> Option<Option<PropDef>> {
-        let inner = self.inner.load();
+        let inner = self.inner.lock().expect("prop cache mutex poisoned");
         let key = make_cache_key(obj, prop);
         let result = inner.entries.get(&key).cloned();
 
@@ -209,60 +208,47 @@ impl PropResolutionCache {
     }
 
     pub fn flush(&self) {
-        let entries_count = self.inner.load().entries.len() as isize;
-        self.inner.rcu(|inner| {
-            let mut new_inner = (**inner).clone();
-            new_inner.flushed = true;
-            new_inner.version += 1;
-            new_inner.entries_mut().clear();
-            new_inner.first_parent_cache_mut().clear();
-            Arc::new(new_inner)
-        });
+        let mut inner = self.inner.lock().expect("prop cache mutex poisoned");
+        let entries_count = inner.entries.len() as isize;
+        inner.flushed = true;
+        inner.version += 1;
+        inner.entries_mut().clear();
+        inner.first_parent_cache_mut().clear();
         self.stats.flush();
         self.stats.remove_entries(entries_count);
     }
 
     pub fn fill_hit(&self, obj: &Obj, prop: &Symbol, propd: &PropDef) {
         let key = make_cache_key(obj, prop);
-        let propd = propd.clone();
-        self.inner.rcu(|inner| {
-            let mut new_inner = (**inner).clone();
-            new_inner.version += 1;
-            let is_new_entry = !new_inner.entries.contains_key(&key);
-            new_inner.entries_mut().insert(key, Some(propd.clone()));
-            if is_new_entry {
-                self.stats.add_entry();
-            }
-            Arc::new(new_inner)
-        });
+        let mut inner = self.inner.lock().expect("prop cache mutex poisoned");
+        inner.version += 1;
+        let is_new_entry = !inner.entries.contains_key(&key);
+        inner.entries_mut().insert(key, Some(propd.clone()));
+        if is_new_entry {
+            self.stats.add_entry();
+        }
     }
 
     pub fn fill_miss(&self, obj: &Obj, prop: &Symbol) {
         let key = make_cache_key(obj, prop);
-        self.inner.rcu(|inner| {
-            let mut new_inner = (**inner).clone();
-            new_inner.version += 1;
-            let is_new_entry = !new_inner.entries.contains_key(&key);
-            new_inner.entries_mut().insert(key, None);
-            if is_new_entry {
-                self.stats.add_entry();
-            }
-            Arc::new(new_inner)
-        });
+        let mut inner = self.inner.lock().expect("prop cache mutex poisoned");
+        inner.version += 1;
+        let is_new_entry = !inner.entries.contains_key(&key);
+        inner.entries_mut().insert(key, None);
+        if is_new_entry {
+            self.stats.add_entry();
+        }
     }
 
     pub fn lookup_first_parent_with_props(&self, obj: &Obj) -> Option<Option<Obj>> {
-        let inner = self.inner.load();
+        let inner = self.inner.lock().expect("prop cache mutex poisoned");
         inner.first_parent_with_props_cache.get(obj).cloned()
     }
 
     pub fn fill_first_parent_with_props(&self, obj: &Obj, parent: Option<Obj>) {
-        self.inner.rcu(|inner| {
-            let mut new_inner = (**inner).clone();
-            new_inner.version += 1;
-            new_inner.first_parent_cache_mut().insert(*obj, parent);
-            Arc::new(new_inner)
-        });
+        let mut inner = self.inner.lock().expect("prop cache mutex poisoned");
+        inner.version += 1;
+        inner.first_parent_cache_mut().insert(*obj, parent);
     }
 
     pub fn invalidate_objects(&self, objects: &[Obj]) {
@@ -270,29 +256,24 @@ impl PropResolutionCache {
             return;
         }
         let obj_ids: HashSet<u64> = objects.iter().map(|o| o.as_u64()).collect();
-        self.inner.rcu(|inner| {
-            let mut new_inner = (**inner).clone();
-            let mut changed = false;
+        let mut inner = self.inner.lock().expect("prop cache mutex poisoned");
+        let mut changed = false;
 
-            let removed = remove_entries_for_objects(new_inner.entries_mut(), &obj_ids);
-            if removed > 0 {
-                changed = true;
-                self.stats.remove_entries(removed as isize);
-            }
+        let removed = remove_entries_for_objects(inner.entries_mut(), &obj_ids);
+        if removed > 0 {
+            changed = true;
+            self.stats.remove_entries(removed as isize);
+        }
 
-            let first_parent_cache = new_inner.first_parent_cache_mut();
-            let before = first_parent_cache.len();
-            first_parent_cache.retain(|obj, _| !obj_ids.contains(&obj.as_u64()));
-            if before != first_parent_cache.len() {
-                changed = true;
-            }
+        let first_parent_cache = inner.first_parent_cache_mut();
+        let before = first_parent_cache.len();
+        first_parent_cache.retain(|obj, _| !obj_ids.contains(&obj.as_u64()));
+        if before != first_parent_cache.len() {
+            changed = true;
+        }
 
-            if !changed {
-                return inner.clone();
-            }
-
-            new_inner.version += 1;
-            Arc::new(new_inner)
-        });
+        if changed {
+            inner.version += 1;
+        }
     }
 }

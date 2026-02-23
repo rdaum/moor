@@ -521,8 +521,11 @@ impl Activation {
         _verb_flags: BitEnum<VerbFlag>,
         player: Obj,
     ) -> Self {
+        // Builtin frames do not need cryptographically random UUIDs. Use a stable
+        // deterministic UUID derived from the builtin id to avoid per-call RNG/syscalls.
+        let builtin_uuid = Uuid::from_u128((bf_id.0 as u128) | (1u128 << 127));
         let verbdef = VerbDef::new(
-            Uuid::new_v4(),
+            builtin_uuid,
             NOTHING,
             NOTHING,
             &[bf_name],

@@ -14,14 +14,13 @@
 use crate::CacheStats;
 use crate::prop_cache::{ANCESTRY_CACHE_STATS, VERB_CACHE_STATS};
 use ahash::AHasher;
-use arc_swap::ArcSwap;
 use moor_common::model::VerbDef;
 use moor_var::{Obj, Symbol};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     hash::BuildHasherDefault,
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 /// Create an optimized cache key by packing Obj and Symbol into a single u128.
@@ -177,7 +176,7 @@ fn ancestry_cache_miss() {
 }
 
 pub struct VerbResolutionCache {
-    inner: ArcSwap<Inner>,
+    inner: Mutex<Inner>,
     stats: &'static CacheStats,
 }
 
@@ -190,13 +189,13 @@ impl Default for VerbResolutionCache {
 impl VerbResolutionCache {
     pub fn new() -> Self {
         Self {
-            inner: ArcSwap::new(Arc::new(Inner {
+            inner: Mutex::new(Inner {
                 version: 0,
                 orig_version: 0,
                 flushed: false,
                 entries: Arc::new(HashMap::default()),
                 first_parent_with_verbs_cache: Arc::new(HashMap::default()),
-            })),
+            }),
             stats: &VERB_CACHE_STATS,
         }
     }
@@ -228,37 +227,34 @@ impl Inner {
 
 impl VerbResolutionCache {
     pub fn fork(&self) -> Box<Self> {
-        let inner = self.inner.load_full();
-        let mut forked_inner = (*inner).clone();
+        let inner = self.inner.lock().expect("verb cache mutex poisoned");
+        let mut forked_inner = inner.clone();
         forked_inner.orig_version = inner.version;
         forked_inner.flushed = false;
         Box::new(Self {
-            inner: ArcSwap::new(Arc::new(forked_inner)),
+            inner: Mutex::new(forked_inner),
             stats: self.stats,
         })
     }
 
     pub fn has_changed(&self) -> bool {
-        let inner = self.inner.load();
+        let inner = self.inner.lock().expect("verb cache mutex poisoned");
         inner.version > inner.orig_version
     }
 
     pub(crate) fn lookup_first_parent_with_verbs(&self, obj: &Obj) -> Option<Option<Obj>> {
-        let inner = self.inner.load();
+        let inner = self.inner.lock().expect("verb cache mutex poisoned");
         inner.first_parent_with_verbs_cache.get(obj).cloned()
     }
 
     pub(crate) fn fill_first_parent_with_verbs(&self, obj: &Obj, parent: Option<Obj>) {
-        self.inner.rcu(|inner| {
-            let mut new_inner = (**inner).clone();
-            new_inner.version += 1;
-            new_inner.first_parent_cache_mut().insert(*obj, parent);
-            Arc::new(new_inner)
-        });
+        let mut inner = self.inner.lock().expect("verb cache mutex poisoned");
+        inner.version += 1;
+        inner.first_parent_cache_mut().insert(*obj, parent);
     }
 
     pub fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<VerbDef>> {
-        let inner = self.inner.load();
+        let inner = self.inner.lock().expect("verb cache mutex poisoned");
         let key = make_cache_key(obj, verb);
         let result = inner.entries.get(&key).cloned();
 
@@ -272,46 +268,36 @@ impl VerbResolutionCache {
     }
 
     pub fn flush(&self) {
-        let entries_count = self.inner.load().entries.len() as isize;
-        self.inner.rcu(|inner| {
-            let mut new_inner = (**inner).clone();
-            new_inner.flushed = true;
-            new_inner.version += 1;
-            new_inner.entries_mut().clear();
-            new_inner.first_parent_cache_mut().clear();
-            Arc::new(new_inner)
-        });
+        let mut inner = self.inner.lock().expect("verb cache mutex poisoned");
+        let entries_count = inner.entries.len() as isize;
+        inner.flushed = true;
+        inner.version += 1;
+        inner.entries_mut().clear();
+        inner.first_parent_cache_mut().clear();
         self.stats.flush();
         self.stats.remove_entries(entries_count);
     }
 
     pub fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbdef: &VerbDef) {
         let key = make_cache_key(obj, verb);
-        let verbdef = verbdef.clone();
-        self.inner.rcu(|inner| {
-            let mut new_inner = (**inner).clone();
-            new_inner.version += 1;
-            let is_new_entry = !new_inner.entries.contains_key(&key);
-            new_inner.entries_mut().insert(key, Some(verbdef.clone()));
-            if is_new_entry {
-                self.stats.add_entry();
-            }
-            Arc::new(new_inner)
-        });
+        let mut inner = self.inner.lock().expect("verb cache mutex poisoned");
+        inner.version += 1;
+        let is_new_entry = !inner.entries.contains_key(&key);
+        inner.entries_mut().insert(key, Some(verbdef.clone()));
+        if is_new_entry {
+            self.stats.add_entry();
+        }
     }
 
     pub fn fill_miss(&self, obj: &Obj, verb: &Symbol) {
         let key = make_cache_key(obj, verb);
-        self.inner.rcu(|inner| {
-            let mut new_inner = (**inner).clone();
-            new_inner.version += 1;
-            let is_new_entry = !new_inner.entries.contains_key(&key);
-            new_inner.entries_mut().insert(key, None);
-            if is_new_entry {
-                self.stats.add_entry();
-            }
-            Arc::new(new_inner)
-        });
+        let mut inner = self.inner.lock().expect("verb cache mutex poisoned");
+        inner.version += 1;
+        let is_new_entry = !inner.entries.contains_key(&key);
+        inner.entries_mut().insert(key, None);
+        if is_new_entry {
+            self.stats.add_entry();
+        }
     }
 
     pub fn invalidate_objects(&self, objects: &[Obj]) {
@@ -319,48 +305,43 @@ impl VerbResolutionCache {
             return;
         }
         let obj_ids: HashSet<u64> = objects.iter().map(|o| o.as_u64()).collect();
-        self.inner.rcu(|inner| {
-            let mut new_inner = (**inner).clone();
-            let mut changed = false;
+        let mut inner = self.inner.lock().expect("verb cache mutex poisoned");
+        let mut changed = false;
 
-            let removed = remove_entries_for_objects(new_inner.entries_mut(), &obj_ids);
-            if removed > 0 {
-                changed = true;
-                self.stats.remove_entries(removed as isize);
-            }
+        let removed = remove_entries_for_objects(inner.entries_mut(), &obj_ids);
+        if removed > 0 {
+            changed = true;
+            self.stats.remove_entries(removed as isize);
+        }
 
-            let first_parent_cache = new_inner.first_parent_cache_mut();
-            let before = first_parent_cache.len();
-            first_parent_cache.retain(|obj, _| !obj_ids.contains(&obj.as_u64()));
-            if before != first_parent_cache.len() {
-                changed = true;
-            }
+        let first_parent_cache = inner.first_parent_cache_mut();
+        let before = first_parent_cache.len();
+        first_parent_cache.retain(|obj, _| !obj_ids.contains(&obj.as_u64()));
+        if before != first_parent_cache.len() {
+            changed = true;
+        }
 
-            if !changed {
-                return inner.clone();
-            }
-
-            new_inner.version += 1;
-            Arc::new(new_inner)
-        });
+        if changed {
+            inner.version += 1;
+        }
     }
 }
 
 pub struct AncestryCache {
     #[allow(clippy::type_complexity)]
-    inner: ArcSwap<AncestryInner>,
+    inner: Mutex<AncestryInner>,
     stats: &'static CacheStats,
 }
 
 impl Default for AncestryCache {
     fn default() -> Self {
         Self {
-            inner: ArcSwap::new(Arc::new(AncestryInner {
+            inner: Mutex::new(AncestryInner {
                 orig_version: 0,
                 version: 0,
                 flushed: false,
                 entries: Arc::new(HashMap::default()),
-            })),
+            }),
             stats: &ANCESTRY_CACHE_STATS,
         }
     }
@@ -385,17 +366,17 @@ impl AncestryInner {
 
 impl AncestryCache {
     pub fn fork(&self) -> Box<Self> {
-        let inner = self.inner.load_full();
-        let mut forked_inner = (*inner).clone();
+        let inner = self.inner.lock().expect("ancestry cache mutex poisoned");
+        let mut forked_inner = inner.clone();
         forked_inner.orig_version = inner.version;
         forked_inner.flushed = false;
         Box::new(Self {
-            inner: ArcSwap::new(Arc::new(forked_inner)),
+            inner: Mutex::new(forked_inner),
             stats: self.stats,
         })
     }
     pub fn lookup(&self, obj: &Obj) -> Option<Vec<Obj>> {
-        let inner = self.inner.load();
+        let inner = self.inner.lock().expect("ancestry cache mutex poisoned");
         let result = inner.entries.get(obj).cloned();
 
         // Ancestry cache doesn't use Option wrapping, so we only have hits and misses
@@ -409,35 +390,28 @@ impl AncestryCache {
     }
 
     pub fn flush(&self) {
-        let entries_count = self.inner.load().entries.len() as isize;
-        self.inner.rcu(|inner| {
-            let mut new_inner = (**inner).clone();
-            new_inner.flushed = true;
-            new_inner.version += 1;
-            new_inner.entries_mut().clear();
-            Arc::new(new_inner)
-        });
+        let mut inner = self.inner.lock().expect("ancestry cache mutex poisoned");
+        let entries_count = inner.entries.len() as isize;
+        inner.flushed = true;
+        inner.version += 1;
+        inner.entries_mut().clear();
         self.stats.flush();
         self.stats.remove_entries(entries_count);
     }
 
     pub fn fill(&self, obj: &Obj, ancestors: &[Obj]) {
         let obj = *obj;
-        let ancestors = ancestors.to_vec();
-        self.inner.rcu(|inner| {
-            let mut new_inner = (**inner).clone();
-            new_inner.version += 1;
-            let is_new_entry = !new_inner.entries.contains_key(&obj);
-            new_inner.entries_mut().insert(obj, ancestors.clone());
-            if is_new_entry {
-                self.stats.add_entry();
-            }
-            Arc::new(new_inner)
-        });
+        let mut inner = self.inner.lock().expect("ancestry cache mutex poisoned");
+        inner.version += 1;
+        let is_new_entry = !inner.entries.contains_key(&obj);
+        inner.entries_mut().insert(obj, ancestors.to_vec());
+        if is_new_entry {
+            self.stats.add_entry();
+        }
     }
 
     pub fn has_changed(&self) -> bool {
-        let inner = self.inner.load();
+        let inner = self.inner.lock().expect("ancestry cache mutex poisoned");
         inner.version > inner.orig_version
     }
 
@@ -446,20 +420,17 @@ impl AncestryCache {
             return;
         }
         let objs: HashSet<Obj> = objects.iter().copied().collect();
-        self.inner.rcu(|inner| {
-            let mut new_inner = (**inner).clone();
-            let removed = {
-                let entries = new_inner.entries_mut();
-                let before = entries.len();
-                entries.retain(|obj, _| !objs.contains(obj));
-                before - entries.len()
-            };
-            if removed == 0 {
-                return inner.clone();
-            }
-            new_inner.version += 1;
-            self.stats.remove_entries(removed as isize);
-            Arc::new(new_inner)
-        });
+        let mut inner = self.inner.lock().expect("ancestry cache mutex poisoned");
+        let removed = {
+            let entries = inner.entries_mut();
+            let before = entries.len();
+            entries.retain(|obj, _| !objs.contains(obj));
+            before - entries.len()
+        };
+        if removed == 0 {
+            return;
+        }
+        inner.version += 1;
+        self.stats.remove_entries(removed as isize);
     }
 }

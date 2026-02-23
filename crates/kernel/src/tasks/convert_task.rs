@@ -1911,6 +1911,7 @@ pub fn suspended_task_from_ref(
     let task = Box::new(task_from_ref(task_ref)?);
 
     Ok(KernelSuspendedTask {
+        enqueued_at: minstant::Instant::now(),
         wake_condition,
         task,
         session: Arc::new(NoopClientSession::new()),
