@@ -32,11 +32,7 @@ use moor_var::{
 };
 use std::collections::HashSet;
 use std::fmt::Display;
-use std::{
-    collections::VecDeque,
-    hash::Hash,
-    time::Instant,
-};
+use std::{collections::VecDeque, hash::Hash, time::Instant};
 use uuid::Uuid;
 
 type RTx<Domain, Codomain> = RelationTransaction<

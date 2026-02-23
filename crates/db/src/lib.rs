@@ -44,10 +44,7 @@ mod moor_db_tests;
 mod relation_defs;
 mod ws_transaction;
 
-use crate::{
-    db_worldstate::DbWorldState,
-    moor_db::MoorDB,
-};
+use crate::{db_worldstate::DbWorldState, moor_db::MoorDB};
 pub use config::{DatabaseConfig, TableConfig};
 mod config;
 mod gc;

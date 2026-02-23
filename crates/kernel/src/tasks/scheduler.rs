@@ -1308,8 +1308,6 @@ impl Scheduler {
                 self.process_fork_request(fork_request, reply, new_session);
             }
             TaskControlMsg::TaskSuspend(wake_condition, task) => {
-                let perfc = sched_counters();
-                let _t = PerfTimerGuard::new(&perfc.suspend_task);
                 // Task is suspended. The resume time (if any) is the system time at which
                 // the scheduler should try to wake us up.
 
@@ -2573,7 +2571,7 @@ impl TaskQ {
         self.thread_pool.spawn(move || {
             let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 let perfc = sched_counters();
-                Self::record_latency(&perfc.task_wake_dispatch_latency, dispatch_started_at);
+                Self::record_latency(&perfc.task_thread_handoff_latency, dispatch_started_at);
 
                 if is_created {
                     Self::record_latency(
@@ -2745,7 +2743,7 @@ impl TaskQ {
         self.thread_pool.spawn(move || {
             let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 let perfc = sched_counters();
-                Self::record_latency(&perfc.task_wake_dispatch_latency, dispatch_started_at);
+                Self::record_latency(&perfc.task_thread_handoff_latency, dispatch_started_at);
 
                 let _tx_guard = TaskGuard::new(
                     world_state,

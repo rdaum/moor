@@ -54,7 +54,9 @@ pub enum BatchOpType {
         key: Vec<u8>,
         value: Arc<dyn BatchValue>,
     },
-    Delete { key: Vec<u8> },
+    Delete {
+        key: Vec<u8>,
+    },
 }
 
 /// Value hook used by the writer thread to produce serialized bytes.
@@ -76,12 +78,7 @@ impl CommitBatch {
         }
     }
 
-    pub fn insert(
-        &mut self,
-        partition: fjall::Keyspace,
-        key: Vec<u8>,
-        value: Arc<dyn BatchValue>,
-    ) {
+    pub fn insert(&mut self, partition: fjall::Keyspace, key: Vec<u8>, value: Arc<dyn BatchValue>) {
         self.operations.push(BatchOp {
             partition,
             op_type: BatchOpType::Insert { key, value },
@@ -123,12 +120,7 @@ impl BatchCollector {
         *current = Some(CommitBatch::with_capacity(timestamp, expected_operations));
     }
 
-    pub fn insert(
-        &self,
-        partition: fjall::Keyspace,
-        key: Vec<u8>,
-        value: Arc<dyn BatchValue>,
-    ) {
+    pub fn insert(&self, partition: fjall::Keyspace, key: Vec<u8>, value: Arc<dyn BatchValue>) {
         let mut current = self.current.lock().unwrap();
         current
             .as_mut()
@@ -400,16 +392,14 @@ impl BatchWriter {
             let ops: Vec<_> = buffer.drain().collect();
             for (key, op) in ops {
                 match op {
-                    PendingOp::Insert(value) => {
-                        match value.encode() {
-                            Ok(encoded) => {
-                                write_batch.insert(&buffer.keyspace, &key, &encoded);
-                            }
-                            Err(e) => {
-                                error!("Failed to encode batch value: {e}");
-                            }
+                    PendingOp::Insert(value) => match value.encode() {
+                        Ok(encoded) => {
+                            write_batch.insert(&buffer.keyspace, &key, &encoded);
                         }
-                    }
+                        Err(e) => {
+                            error!("Failed to encode batch value: {e}");
+                        }
+                    },
                     PendingOp::Delete => {
                         write_batch.remove(&buffer.keyspace, &key);
                     }

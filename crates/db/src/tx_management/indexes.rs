@@ -142,7 +142,13 @@ where
         codomain: Codomain,
     ) -> Option<Entry<Codomain>> {
         // Update primary index using owned values from caller.
-        self.entries.insert(domain, Entry { ts, value: codomain })
+        self.entries.insert(
+            domain,
+            Entry {
+                ts,
+                value: codomain,
+            },
+        )
     }
 
     fn insert_tombstone(&mut self, _ts: Timestamp, domain: Domain) -> Option<Entry<Codomain>> {
