@@ -112,6 +112,20 @@ macro_rules! define_relations {
                 $( $field: CheckRelation<$domain, $codomain, FjallProvider<$domain, $codomain>>, )*
             }
 
+            /// Trait defining the interface for processing transaction commits.
+            ///
+            /// This trait decouples the WorldStateTransaction from the concrete
+            /// database implementation, allowing for different commit backends
+            /// (e.g., real database vs. mock/in-memory for testing).
+            pub(crate) trait TransactionContext: Send + Sync {
+                /// Commit a write transaction with its working sets.
+                fn commit_writes(&self, ws: Box<WorkingSets>, enqueued_at: std::time::Instant) -> moor_common::model::CommitResult;
+                /// Commit a read-only transaction, potentially updating caches.
+                fn commit_read_only(&self, snapshot_version: u64, caches: crate::moor_db::Caches);
+                /// Get the current database disk usage in bytes.
+                fn usage_bytes(&self) -> usize;
+            }
+
             impl RelationCheckers {
                 /// Check all relations for conflicts with the given working sets.
                 ///
@@ -285,7 +299,7 @@ macro_rules! define_relations {
                 #[allow(clippy::too_many_arguments)]
                 fn start_transaction(&self,
                     tx: Tx,
-                    db: Arc<crate::moor_db::MoorDB>,
+                    db: std::sync::Arc<dyn TransactionContext>,
                     sequences: [Arc<CachePadded<AtomicI64>>; 16],
                     verb_resolution_cache: Box<VerbResolutionCache>,
                     prop_resolution_cache: Box<PropResolutionCache>,
@@ -370,7 +384,7 @@ macro_rules! define_relations {
                 #[allow(dead_code)]
                 pub(crate) tx: Tx,
                 /// Database handle used for direct commit processing.
-                pub(crate) db: Arc<crate::moor_db::MoorDB>,
+                pub(crate) db: std::sync::Arc<dyn TransactionContext>,
                 /// Relation transactions for each defined relation
                 $( pub(crate) $field: RelationTransaction<$domain, $codomain, R<$domain, $codomain>>, )*
                 /// Array of sequence counters for object ID generation

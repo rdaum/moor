@@ -3444,6 +3444,7 @@ dependencies = [
  "moor-schema",
  "moor-var",
  "oneshot",
+ "parking_lot",
  "paste",
  "planus",
  "rand 0.9.2",
