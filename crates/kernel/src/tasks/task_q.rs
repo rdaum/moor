@@ -226,6 +226,8 @@ impl TaskQ {
 /// State a suspended task sits in inside the `suspended` side of the task queue.
 /// When tasks are not running they are moved into these.
 pub struct SuspendedTask {
+    /// Timestamp when this task entered the suspended queue.
+    pub enqueued_at: Instant,
     pub wake_condition: WakeCondition,
     pub task: Box<Task>,
     pub session: Arc<dyn Session>,
@@ -584,6 +586,7 @@ impl SuspensionQ {
         };
 
         let sr = SuspendedTask {
+            enqueued_at: now,
             wake_condition,
             task,
             session,

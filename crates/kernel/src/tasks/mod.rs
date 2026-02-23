@@ -193,7 +193,9 @@ pub struct SchedulerPerfCounters {
     pub task_begin_transaction_latency: PerfCounter,
 
     // Task lifecycle latency counters
-    pub task_wakeup_latency: PerfCounter,
+    pub task_resume_queue_delay_latency: PerfCounter,
+    pub task_wake_dispatch_latency: PerfCounter,
+    pub task_submit_to_first_run_latency: PerfCounter,
 }
 
 impl Default for SchedulerPerfCounters {
@@ -242,7 +244,11 @@ impl SchedulerPerfCounters {
             task_active_tasks_latency: PerfCounter::new("task_active_tasks_latency"),
             task_begin_transaction_latency: PerfCounter::new("task_begin_transaction_latency"),
 
-            task_wakeup_latency: PerfCounter::new("task_wakeup_latency"),
+            task_resume_queue_delay_latency: PerfCounter::new("task_resume_queue_delay_latency"),
+            task_wake_dispatch_latency: PerfCounter::new("task_wake_dispatch_latency"),
+            task_submit_to_first_run_latency: PerfCounter::new(
+                "task_submit_to_first_run_latency",
+            ),
         }
     }
 
@@ -280,7 +286,9 @@ impl SchedulerPerfCounters {
             &self.task_checkpoint_latency,
             &self.task_active_tasks_latency,
             &self.task_begin_transaction_latency,
-            &self.task_wakeup_latency,
+            &self.task_resume_queue_delay_latency,
+            &self.task_wake_dispatch_latency,
+            &self.task_submit_to_first_run_latency,
         ]
     }
 }

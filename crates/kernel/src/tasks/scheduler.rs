@@ -45,7 +45,7 @@ use crate::{
         sched_counters,
         scheduler_client::{SchedulerClient, SchedulerClientMsg},
         task::Task,
-        task_q::{RunningTask, SuspensionQ, TaskQ, WakeCondition},
+        task_q::{RunningTask, SuspendedTask, SuspensionQ, TaskQ, WakeCondition},
         task_scheduler_client::{TaskControlMsg, TaskSchedulerClient, WorkerInfo},
         tasks_db::TasksDb,
         workers::{WorkerRequest, WorkerResponse},
@@ -68,7 +68,7 @@ use moor_common::{
         },
         Session, SessionFactory, SystemControl, TaskId, WorkerError,
     },
-    util::PerfTimerGuard,
+    util::{PerfCounter, PerfTimerGuard},
 };
 use moor_objdef::{collect_object, collect_object_definitions, dump_object, extract_index_names};
 use moor_var::{
@@ -433,10 +433,8 @@ impl Scheduler {
 
                     if is_retry {
                         // Retry tasks need special handling - restore state and restart
-                        self.task_q.wake_retry_task(
-                            sr.task,
-                            sr.session,
-                            sr.result_sender,
+                        self.task_q.wake_retry_suspended_task(
+                            sr,
                             &self.task_control_sender,
                             self.database.as_ref(),
                             self.builtin_registry.clone(),
@@ -455,11 +453,9 @@ impl Scheduler {
                             }
                             _ => v_int(0),
                         };
-                        if let Err(e) = self.task_q.wake_task_thread(
-                            sr.task,
+                        if let Err(e) = self.task_q.wake_suspended_task(
+                            sr,
                             ResumeAction::Return(resume_value),
-                            sr.session,
-                            sr.result_sender,
                             &self.task_control_sender,
                             self.database.as_ref(),
                             self.builtin_registry.clone(),
@@ -655,6 +651,7 @@ impl Scheduler {
                 self.task_q.wake_task_thread(
                     task,
                     ResumeAction::Return(v_int(0)),
+                    None,
                     session,
                     result_sender,
                     &self.task_control_sender,
@@ -767,11 +764,9 @@ impl Scheduler {
                 };
 
                 // Wake and bake.
-                let response = self.task_q.wake_task_thread(
-                    sr.task,
+                let response = self.task_q.wake_suspended_task(
+                    sr,
                     ResumeAction::Return(input),
-                    sr.session,
-                    sr.result_sender,
                     &self.task_control_sender,
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
@@ -1942,8 +1937,8 @@ impl Scheduler {
 
         // Extract the return value from the wake condition
         // Note: Time-based tasks may arrive here if their timer expired before insertion
-        let return_value = match sr.wake_condition {
-            WakeCondition::Immediate(val) => val.unwrap_or_else(|| v_int(0)),
+        let return_value = match &sr.wake_condition {
+            WakeCondition::Immediate(val) => val.clone().unwrap_or_else(|| v_int(0)),
             WakeCondition::Time(_) => v_int(0), // Expired timer - return 0 as suspend() normally does
             WakeCondition::TaskMessage(_) => {
                 // Task was waiting for messages — drain the queue and return as list
@@ -1974,11 +1969,9 @@ impl Scheduler {
             );
         }
 
-        if let Err(e) = self.task_q.wake_task_thread(
-            sr.task,
+        if let Err(e) = self.task_q.wake_suspended_task(
+            sr,
             ResumeAction::Return(return_value),
-            sr.session,
-            sr.result_sender,
             &self.task_control_sender,
             self.database.as_ref(),
             self.builtin_registry.clone(),
@@ -2048,11 +2041,9 @@ impl Scheduler {
             );
         }
 
-        if let Err(e) = self.task_q.wake_task_thread(
-            sr.task,
+        if let Err(e) = self.task_q.wake_suspended_task(
+            sr,
             resume_action,
-            sr.session,
-            sr.result_sender,
             &self.task_control_sender,
             self.database.as_ref(),
             self.builtin_registry.clone(),
@@ -2402,6 +2393,72 @@ enum TaskSubmission {
 }
 
 impl TaskQ {
+    #[inline]
+    fn record_latency(counter: &PerfCounter, started_at: Instant) {
+        counter.invocations().add(1);
+        counter
+            .cumulative_duration_nanos()
+            .add(started_at.elapsed().as_nanos() as isize);
+    }
+
+    #[inline]
+    fn wake_suspended_task(
+        &mut self,
+        suspended_task: SuspendedTask,
+        resume_action: ResumeAction,
+        control_sender: &Sender<(TaskId, TaskControlMsg)>,
+        database: &dyn Database,
+        builtin_registry: BuiltinRegistry,
+        config: Arc<Config>,
+    ) -> Result<(), SchedulerError> {
+        let SuspendedTask {
+            enqueued_at,
+            task,
+            session,
+            result_sender,
+            ..
+        } = suspended_task;
+        self.wake_task_thread(
+            task,
+            resume_action,
+            Some(enqueued_at),
+            session,
+            result_sender,
+            control_sender,
+            database,
+            builtin_registry,
+            config,
+        )
+    }
+
+    #[inline]
+    fn wake_retry_suspended_task(
+        &mut self,
+        suspended_task: SuspendedTask,
+        control_sender: &Sender<(TaskId, TaskControlMsg)>,
+        database: &dyn Database,
+        builtin_registry: BuiltinRegistry,
+        config: Arc<Config>,
+    ) {
+        let SuspendedTask {
+            enqueued_at,
+            task,
+            session,
+            result_sender,
+            ..
+        } = suspended_task;
+        self.wake_retry_task(
+            task,
+            enqueued_at,
+            session,
+            result_sender,
+            control_sender,
+            database,
+            builtin_registry,
+            config,
+        );
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn submit_new_task(
         &mut self,
@@ -2462,6 +2519,7 @@ impl TaskQ {
         &mut self,
         mut task: Box<Task>,
         resume_action: ResumeAction,
+        queued_at: Option<Instant>,
         session: Arc<dyn Session>,
         result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
@@ -2472,13 +2530,9 @@ impl TaskQ {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.resume_task);
 
-        // Record wakeup latency from creation to now
-        let wakeup_latency_nanos = task.creation_time.elapsed().as_nanos() as isize;
-        perfc.task_wakeup_latency.invocations().add(1);
-        perfc
-            .task_wakeup_latency
-            .cumulative_duration_nanos()
-            .add(wakeup_latency_nanos);
+        if let Some(queued_at) = queued_at {
+            Self::record_latency(&perfc.task_resume_queue_delay_latency, queued_at);
+        }
 
         // Take a task out of a suspended state and start running it again.
         // For Created tasks, we need to call setup_task_start first.
@@ -2515,8 +2569,19 @@ impl TaskQ {
         // Check if this is a brand new task or a resuming task
         let is_created = matches!(task.state, crate::tasks::task::TaskState::Pending(_));
 
+        let dispatch_started_at = Instant::now();
         self.thread_pool.spawn(move || {
             let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let perfc = sched_counters();
+                Self::record_latency(&perfc.task_wake_dispatch_latency, dispatch_started_at);
+
+                if is_created {
+                    Self::record_latency(
+                        &perfc.task_submit_to_first_run_latency,
+                        task.creation_time,
+                    );
+                }
+
                 // Set up transaction context for this thread
                 let _tx_guard = TaskGuard::new(
                     world_state,
@@ -2626,6 +2691,7 @@ impl TaskQ {
     fn wake_retry_task(
         &mut self,
         mut task: Box<Task>,
+        queued_at: Instant,
         session: Arc<dyn Session>,
         result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
@@ -2635,6 +2701,7 @@ impl TaskQ {
     ) {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.retry_task);
+        Self::record_latency(&perfc.task_resume_queue_delay_latency, queued_at);
 
         let task_id = task.task_id;
 
@@ -2674,8 +2741,12 @@ impl TaskQ {
         };
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
         let player = task.player;
+        let dispatch_started_at = Instant::now();
         self.thread_pool.spawn(move || {
             let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let perfc = sched_counters();
+                Self::record_latency(&perfc.task_wake_dispatch_latency, dispatch_started_at);
+
                 let _tx_guard = TaskGuard::new(
                     world_state,
                     task_scheduler_client.clone(),
@@ -2824,11 +2895,9 @@ impl TaskQ {
         let sr = self.suspended.remove_task(queued_task_id).unwrap();
 
         if self
-            .wake_task_thread(
-                sr.task,
+            .wake_suspended_task(
+                sr,
                 ResumeAction::Return(return_value),
-                sr.session,
-                sr.result_sender,
                 control_sender,
                 database,
                 builtin_registry,
