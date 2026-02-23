@@ -312,10 +312,7 @@ where
             } else {
                 OpType::Insert(value)
             };
-            let old_value = match std::mem::replace(
-                &mut entry.operation,
-                next_op,
-            ) {
+            let old_value = match std::mem::replace(&mut entry.operation, next_op) {
                 OpType::Insert(old_value) | OpType::Update(old_value) => old_value,
                 OpType::Delete => return Ok(None),
             };
@@ -423,10 +420,7 @@ where
                     } else {
                         OpType::Insert(value)
                     };
-                    let old_value = match std::mem::replace(
-                        &mut entry.operation,
-                        next_op,
-                    ) {
+                    let old_value = match std::mem::replace(&mut entry.operation, next_op) {
                         OpType::Insert(old) | OpType::Update(old) => {
                             // Update local secondary index
                             old

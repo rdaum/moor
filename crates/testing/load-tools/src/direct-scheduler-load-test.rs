@@ -159,8 +159,8 @@ struct BenchmarkRow {
     sched_msg_avg: String,
     #[tabled(rename = "queue avg")]
     resume_queue_avg: String,
-    #[tabled(rename = "dispatch avg")]
-    wake_dispatch_avg: String,
+    #[tabled(rename = "handoff avg")]
+    thread_handoff_avg: String,
     #[tabled(rename = "submit->run avg")]
     submit_to_first_run_avg: String,
 }
@@ -628,14 +628,16 @@ async fn load_test_workload(
             .handle_scheduler_msg
             .cumulative_duration_nanos()
             .sum();
-        let baseline_resume_queue_count = counters.task_resume_queue_delay_latency.invocations().sum();
+        let baseline_resume_queue_count =
+            counters.task_resume_queue_delay_latency.invocations().sum();
         let baseline_resume_queue_nanos = counters
             .task_resume_queue_delay_latency
             .cumulative_duration_nanos()
             .sum();
-        let baseline_wake_dispatch_count = counters.task_wake_dispatch_latency.invocations().sum();
-        let baseline_wake_dispatch_nanos = counters
-            .task_wake_dispatch_latency
+        let baseline_thread_handoff_count =
+            counters.task_thread_handoff_latency.invocations().sum();
+        let baseline_thread_handoff_nanos = counters
+            .task_thread_handoff_latency
             .cumulative_duration_nanos()
             .sum();
         let baseline_submit_to_first_run_count = counters
@@ -783,15 +785,15 @@ async fn load_test_workload(
             0
         };
 
-        let wake_dispatch_count =
-            counters.task_wake_dispatch_latency.invocations().sum() - baseline_wake_dispatch_count;
-        let wake_dispatch_total_nanos = counters
-            .task_wake_dispatch_latency
+        let thread_handoff_count = counters.task_thread_handoff_latency.invocations().sum()
+            - baseline_thread_handoff_count;
+        let thread_handoff_total_nanos = counters
+            .task_thread_handoff_latency
             .cumulative_duration_nanos()
             .sum()
-            - baseline_wake_dispatch_nanos;
-        let wake_dispatch_avg_nanos = if wake_dispatch_count > 0 {
-            (wake_dispatch_total_nanos / wake_dispatch_count) as u64
+            - baseline_thread_handoff_nanos;
+        let thread_handoff_avg_nanos = if thread_handoff_count > 0 {
+            (thread_handoff_total_nanos / thread_handoff_count) as u64
         } else {
             0
         };
@@ -841,7 +843,7 @@ async fn load_test_workload(
             ),
             sched_msg_avg: format!("{}ns", sched_msg_avg_nanos),
             resume_queue_avg: format!("{}ns", resume_queue_avg_nanos),
-            wake_dispatch_avg: format!("{}ns", wake_dispatch_avg_nanos),
+            thread_handoff_avg: format!("{}ns", thread_handoff_avg_nanos),
             submit_to_first_run_avg: format!("{}ns", submit_to_first_run_avg_nanos),
         });
 

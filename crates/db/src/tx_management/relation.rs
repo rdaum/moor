@@ -537,7 +537,10 @@ where
             self.index.apply_batch(inserts, tombstones);
             let elapsed_nanos = isize::try_from(start.elapsed().as_nanos()).unwrap_or(isize::MAX);
             let invocation_count = isize::try_from(index_ops).unwrap_or(isize::MAX);
-            counters.apply_index_insert.invocations().add(invocation_count);
+            counters
+                .apply_index_insert
+                .invocations()
+                .add(invocation_count);
             counters
                 .apply_index_insert
                 .cumulative_duration_nanos()

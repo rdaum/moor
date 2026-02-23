@@ -348,12 +348,10 @@ impl MoorDB {
         self.relations.mark_all_fully_loaded();
     }
 
-    pub(crate) fn commit_read_only(
-        &self,
-        snapshot_version: u64,
-        combined_caches: Caches,
-    ) {
-        let current_version = self.commit_version.load(std::sync::atomic::Ordering::Acquire);
+    pub(crate) fn commit_read_only(&self, snapshot_version: u64, combined_caches: Caches) {
+        let current_version = self
+            .commit_version
+            .load(std::sync::atomic::Ordering::Acquire);
         if snapshot_version == current_version && combined_caches.has_changed() {
             self.caches.store(Arc::new(combined_caches));
         }
@@ -396,19 +394,24 @@ impl MoorDB {
 
         let num_tuples = ws.total_tuples();
         if num_tuples > 10_000 {
-            warn!("Potential large batch @ commit... Checking {num_tuples} total tuples from the working set...");
+            warn!(
+                "Potential large batch @ commit... Checking {num_tuples} total tuples from the working set..."
+            );
         }
 
         // Get the transaction timestamp and mutations flag before extracting working sets
         let tx_timestamp = ws.tx.ts;
         let snapshot_version = ws.tx.snapshot_version;
         let has_mutations = ws.has_mutations;
-        let (mut relation_ws, verb_cache, prop_cache, ancestry_cache) = ws.extract_relation_working_sets();
+        let (mut relation_ws, verb_cache, prop_cache, ancestry_cache) =
+            ws.extract_relation_working_sets();
 
         // Optimization: If no commits completed since transaction start, skip conflict checking.
         // The transaction already validated against its snapshot when creating operations.
         // If the snapshot is still current (commit_version unchanged), those validations remain valid.
-        let current_version = self.commit_version.load(std::sync::atomic::Ordering::Acquire);
+        let current_version = self
+            .commit_version
+            .load(std::sync::atomic::Ordering::Acquire);
         let skip_conflict_check = snapshot_version == current_version;
 
         {

@@ -167,7 +167,6 @@ pub struct SchedulerPerfCounters {
     task_abort_cancelled: PerfCounter,
     task_abort_limits: PerfCounter,
     fork_task: PerfCounter,
-    suspend_task: PerfCounter,
     task_exception: PerfCounter,
     pub handle_scheduler_msg: PerfCounter,
     handle_task_msg: PerfCounter,
@@ -194,7 +193,7 @@ pub struct SchedulerPerfCounters {
 
     // Task lifecycle latency counters
     pub task_resume_queue_delay_latency: PerfCounter,
-    pub task_wake_dispatch_latency: PerfCounter,
+    pub task_thread_handoff_latency: PerfCounter,
     pub task_submit_to_first_run_latency: PerfCounter,
 }
 
@@ -219,7 +218,6 @@ impl SchedulerPerfCounters {
             task_abort_cancelled: PerfCounter::new("task_abort_cancelled"),
             task_abort_limits: PerfCounter::new("task_abort_limits"),
             fork_task: PerfCounter::new("fork_task"),
-            suspend_task: PerfCounter::new("suspend_task"),
             task_exception: PerfCounter::new("task_exception"),
             handle_scheduler_msg: PerfCounter::new("handle_scheduler_msg"),
             handle_task_msg: PerfCounter::new("handle_task_msg"),
@@ -245,10 +243,8 @@ impl SchedulerPerfCounters {
             task_begin_transaction_latency: PerfCounter::new("task_begin_transaction_latency"),
 
             task_resume_queue_delay_latency: PerfCounter::new("task_resume_queue_delay_latency"),
-            task_wake_dispatch_latency: PerfCounter::new("task_wake_dispatch_latency"),
-            task_submit_to_first_run_latency: PerfCounter::new(
-                "task_submit_to_first_run_latency",
-            ),
+            task_thread_handoff_latency: PerfCounter::new("task_thread_handoff_latency"),
+            task_submit_to_first_run_latency: PerfCounter::new("task_submit_to_first_run_latency"),
         }
     }
 
@@ -266,7 +262,6 @@ impl SchedulerPerfCounters {
             &self.task_abort_cancelled,
             &self.task_abort_limits,
             &self.fork_task,
-            &self.suspend_task,
             &self.task_exception,
             &self.handle_scheduler_msg,
             &self.handle_task_msg,
@@ -287,7 +282,7 @@ impl SchedulerPerfCounters {
             &self.task_active_tasks_latency,
             &self.task_begin_transaction_latency,
             &self.task_resume_queue_delay_latency,
-            &self.task_wake_dispatch_latency,
+            &self.task_thread_handoff_latency,
             &self.task_submit_to_first_run_latency,
         ]
     }
