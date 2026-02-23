@@ -27,8 +27,8 @@ mod tests {
     use moor_var::program::ProgramType;
     use moor_var::{
         E_ARGS, E_DIV, E_PERM, E_QUOTA, E_RANGE, E_TYPE, Error, IndexMode, List, NOTHING, Obj,
-        SYSTEM_OBJECT, Symbol, Var, v_bool_int, v_empty_list, v_err, v_float, v_flyweight, v_int,
-        v_list, v_map, v_obj, v_objid, v_str, v_sym,
+        SYSTEM_OBJECT, Symbol, Var, v_bool, v_bool_int, v_empty_list, v_err, v_float, v_flyweight,
+        v_int, v_list, v_map, v_obj, v_objid, v_str, v_sym,
     };
     use test_case::test_case;
 
@@ -2599,5 +2599,236 @@ return 99;"#;
             result,
             Ok(v_list(&[v_int(0), v_int(1), v_int(2), v_int(3)]))
         );
+    }
+
+    // =========================================================================
+    // Nursery (anonymous object) tests
+    // =========================================================================
+
+    mod nursery_tests {
+        use super::*;
+        use crate::config::FeaturesConfig;
+        use crate::testing::vm_test_utils::call_verb_with_config;
+
+        fn features_config_with_anon() -> FeaturesConfig {
+            FeaturesConfig {
+                anonymous_objects: true,
+                ..FeaturesConfig::default()
+            }
+        }
+
+        fn run_moo_with_anon(program: &str) -> ExecResult {
+            let binary = compile(program, CompileOptions::default()).unwrap();
+            let db = test_db_with_verb("test", &binary);
+            let state = db.new_world_state().unwrap();
+            let session = Arc::new(NoopClientSession::new());
+            call_verb_with_config(
+                state,
+                session,
+                BuiltinRegistry::new(),
+                "test",
+                List::mk_list(&[]),
+                features_config_with_anon(),
+            )
+        }
+
+        #[test]
+        fn test_nursery_object_is_anonymous() {
+            // Nursery objects (created with create(parent, owner, 1)) should be anonymous
+            assert_eq!(
+                run_moo_with_anon(r#"
+                    o = create(#-1, #0, 1);
+                    return is_anonymous(o);
+                "#),
+                Ok(v_bool(true))
+            );
+        }
+
+        #[test]
+        fn test_nursery_object_valid() {
+            // Nursery objects should be valid
+            // Note: valid() returns 1/0 in MOO, not true/false
+            assert_eq!(
+                run_moo_with_anon(r#"
+                    o = create(#-1, #0, 1);
+                    return valid(o);
+                "#),
+                Ok(v_int(1))
+            );
+        }
+
+        #[test]
+        fn test_nursery_object_property_access() {
+            // Basic property access on nursery objects
+            assert_eq!(
+                run_moo_with_anon(r#"
+                    o = create(#-1, #0, 1);
+                    o.name = "test";
+                    return o.name;
+                "#),
+                Ok(v_str("test"))
+            );
+        }
+
+        #[test]
+        fn test_nursery_promotion_preserves_property() {
+            // After promotion (storing to a DB property), the local reference
+            // should still work for property access
+            assert_eq!(
+                run_moo_with_anon(r#"
+                    o = create(#-1, #0, 1);
+                    o.name = "before promotion";
+                    #0.test = o;
+                    return o.name;
+                "#),
+                Ok(v_str("before promotion"))
+            );
+        }
+
+        #[test]
+        fn test_nursery_promotion_set_after() {
+            // After promotion, we can still set properties on the local reference
+            assert_eq!(
+                run_moo_with_anon(r#"
+                    o = create(#-1, #0, 1);
+                    o.name = "initial";
+                    #0.test = o;
+                    o.name = "after promotion";
+                    return o.name;
+                "#),
+                Ok(v_str("after promotion"))
+            );
+        }
+
+        #[test]
+        fn test_nursery_promotion_changes_visible_via_stored_ref() {
+            // After promotion, changes through local ref should be visible via stored ref
+            assert_eq!(
+                run_moo_with_anon(r#"
+                    o = create(#-1, #0, 1);
+                    o.name = "initial";
+                    #0.test = o;
+                    o.name = "changed";
+                    return #0.test.name;
+                "#),
+                Ok(v_str("changed"))
+            );
+        }
+
+        #[test]
+        fn test_nursery_valid_after_promotion() {
+            // valid() should work on promoted nursery objects
+            // Note: valid() returns 1/0 in MOO, not true/false
+            assert_eq!(
+                run_moo_with_anon(r#"
+                    o = create(#-1, #0, 1);
+                    #0.test = o;
+                    return valid(o);
+                "#),
+                Ok(v_int(1))
+            );
+        }
+
+        #[test]
+        fn test_nursery_is_anonymous_after_promotion() {
+            // is_anonymous() should still return true after promotion
+            assert_eq!(
+                run_moo_with_anon(r#"
+                    o = create(#-1, #0, 1);
+                    #0.test = o;
+                    return is_anonymous(o);
+                "#),
+                Ok(v_bool(true))
+            );
+        }
+
+        #[test]
+        fn test_nursery_name_type_error() {
+            let result = run_moo_with_anon(r#"
+                o = create(#-1, #0, 1);
+                o.name = 42;
+                return 0;
+            "#);
+            assert!(matches!(result, Err(e) if e.error == E_TYPE));
+        }
+
+        #[test]
+        fn test_nursery_owner_type_error() {
+            let result = run_moo_with_anon(r#"
+                o = create(#-1, #0, 1);
+                o.owner = "not an object";
+                return 0;
+            "#);
+            assert!(matches!(result, Err(e) if e.error == E_TYPE));
+        }
+
+        #[test]
+        fn test_nursery_flag_accepts_bool() {
+            assert_eq!(
+                run_moo_with_anon(r#"
+                    o = create(#-1, #0, 1);
+                    o.r = true;
+                    o.w = false;
+                    o.f = true;
+                    return {o.r, o.w, o.f};
+                "#),
+                Ok(v_list(&[v_bool_int(true), v_bool_int(false), v_bool_int(true)]))
+            );
+        }
+
+        #[test]
+        fn test_nursery_flag_type_error() {
+            let result = run_moo_with_anon(r#"
+                o = create(#-1, #0, 1);
+                o.r = "yes";
+                return 0;
+            "#);
+            assert!(matches!(result, Err(e) if e.error == E_TYPE));
+        }
+
+        #[test]
+        fn test_nursery_programmer_requires_wizard() {
+            let result = run_moo_with_anon(r#"
+                o = create(#-1, #0, 1);
+                p = create(#-1, #0, 0);
+                set_task_perms(p);
+                o.programmer = 1;
+                return 0;
+            "#);
+            assert!(matches!(result, Err(e) if e.error == E_PERM));
+        }
+
+        #[test]
+        fn test_nursery_location_readonly() {
+            let result = run_moo_with_anon(r#"
+                o = create(#-1, #0, 1);
+                o.location = #0;
+                return 0;
+            "#);
+            assert!(matches!(result, Err(e) if e.error == E_PERM));
+        }
+
+        #[test]
+        fn test_nursery_promotion_preserves_flags_and_fields() {
+            assert_eq!(
+                run_moo_with_anon(r#"
+                    o = create(#-1, #0, 1);
+                    o.name = "nursery";
+                    o.owner = #0;
+                    o.r = true;
+                    o.w = false;
+                    o.f = true;
+                    #0.test = o;
+                    return {o.name, o.owner, o.r, o.w, o.f};
+                "#),
+                Ok(v_list(&[
+                    v_str("nursery"),
+                    v_obj(SYSTEM_OBJECT),
+                    v_bool_int(true),
+                    v_bool_int(false),
+                    v_bool_int(true),
+                ]))
+            );
+        }
     }
 }

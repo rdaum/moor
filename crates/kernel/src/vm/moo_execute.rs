@@ -22,10 +22,12 @@ use crate::{
     },
 };
 use lazy_static::lazy_static;
+use moor_common::model::ObjFlag;
 use moor_compiler::{Op, to_literal};
 use moor_var::{
-    E_ARGS, E_DIV, E_INVARG, E_INVIND, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, Error, IndexMode, NOTHING,
-    Obj, Symbol, TypeClass, Var, VarType, program::names::Name, v_arc_str, v_bool, v_bool_int,
+    E_ARGS, E_DIV, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, Error,
+    IndexMode, Obj, Symbol, TypeClass, Var, VarType, program::names::Name, v_arc_str, v_bool,
+    v_bool_int,
     v_empty_list, v_empty_map, v_err, v_error, v_float, v_flyweight, v_int, v_list, v_map, v_none,
     v_obj, v_sym,
 };
@@ -942,24 +944,143 @@ pub fn moo_frame_execute(
                     );
                 };
 
-                // Nursery object case - store in nursery slots
+                // Nursery object case - store in nursery slots, or use promoted object
                 if obj.is_nursery() {
-                    let success = with_current_nursery_mut(|nursery| {
-                        if let Some(nursery_id) = obj.nursery_id()
-                            && let Some(nursery_obj) = nursery.get_mut(nursery_id)
-                        {
-                            nursery_obj.slots.insert(propname, rhs.clone());
-                            return true;
-                        }
-                        false
+                    // Check if this nursery object has been promoted
+                    let promoted = with_current_nursery(|nursery| {
+                        obj.nursery_id().and_then(|id| nursery.get_promoted(id))
                     });
 
-                    if success {
-                        f.poke(0, rhs);
+                    if let Some(promoted_obj) = promoted {
+                        // Use the promoted object for property update
+                        let update_result = with_current_transaction_mut(|world_state| {
+                            world_state.update_property(&permissions, &promoted_obj, propname, &rhs)
+                        });
+
+                        match update_result {
+                            Ok(()) => {
+                                f.poke(0, rhs);
+                            }
+                            Err(e) => {
+                                return ExecutionResult::PushError(e.to_error());
+                            }
+                        }
                     } else {
-                        return ExecutionResult::PushError(
-                            E_INVIND.with_msg(|| format!("Invalid nursery object: {}", obj)),
-                        );
+                        // Not promoted - store in nursery slots or implicit fields
+                        use crate::tasks::nursery::{ImplicitProperty, implicit_property_kind};
+
+                        let is_wizard = match with_current_transaction_mut(|world_state| {
+                            world_state.flags_of(&permissions)
+                        }) {
+                            Ok(flags) => flags.contains(ObjFlag::Wizard),
+                            Err(e) => return ExecutionResult::PushError(e.to_error()),
+                        };
+
+                        let update_result = with_current_nursery_mut(|nursery| {
+                            let Some(nursery_id) = obj.nursery_id() else {
+                                return Err(E_INVIND.with_msg(|| format!("Invalid nursery object: {}", obj)));
+                            };
+                            let Some(nursery_obj) = nursery.get_mut(nursery_id) else {
+                                return Err(E_INVIND.with_msg(|| format!("Invalid nursery object: {}", obj)));
+                            };
+
+                            let Some(implicit_kind) = implicit_property_kind(propname) else {
+                                nursery_obj.slots.insert(propname, rhs.clone());
+                                return Ok(());
+                            };
+
+                            match implicit_kind {
+                                ImplicitProperty::Location
+                                | ImplicitProperty::Contents
+                                | ImplicitProperty::Parent
+                                | ImplicitProperty::Children => {
+                                    return Err(E_PERM.msg("property is read-only"));
+                                }
+                                ImplicitProperty::Name => {
+                                    let can_write = is_wizard
+                                        || permissions == nursery_obj.owner
+                                        || nursery_obj.flags.contains(ObjFlag::Write);
+                                    if !can_write {
+                                        return Err(E_PERM.msg("permission denied"));
+                                    }
+                                    let Some(name) = rhs.as_string() else {
+                                        return Err(E_TYPE.msg("name must be a string"));
+                                    };
+                                    if nursery_obj.flags.contains(ObjFlag::User) && !is_wizard {
+                                        return Err(E_PERM.msg("only wizards can rename players"));
+                                    }
+                                    nursery_obj.name = Some(name.to_string());
+                                }
+                                ImplicitProperty::Owner => {
+                                    let can_write = is_wizard
+                                        || permissions == nursery_obj.owner
+                                        || nursery_obj.flags.contains(ObjFlag::Write);
+                                    if !can_write {
+                                        return Err(E_PERM.msg("permission denied"));
+                                    }
+                                    let Some(owner) = rhs.as_object() else {
+                                        return Err(E_TYPE.msg("owner must be an object"));
+                                    };
+                                    nursery_obj.owner = owner;
+                                }
+                                ImplicitProperty::Programmer => {
+                                    if !is_wizard {
+                                        return Err(E_PERM.msg("programmer flag requires wizard"));
+                                    }
+                                    if rhs.is_true() {
+                                        nursery_obj.flags.set(ObjFlag::Programmer);
+                                    } else {
+                                        nursery_obj.flags.clear(ObjFlag::Programmer);
+                                    }
+                                }
+                                ImplicitProperty::Wizard => {
+                                    if !is_wizard {
+                                        return Err(E_PERM.msg("wizard flag requires wizard"));
+                                    }
+                                    if rhs.is_true() {
+                                        nursery_obj.flags.set(ObjFlag::Wizard);
+                                    } else {
+                                        nursery_obj.flags.clear(ObjFlag::Wizard);
+                                    }
+                                }
+                                ImplicitProperty::Read | ImplicitProperty::Write | ImplicitProperty::Fertile => {
+                                    let can_write = is_wizard
+                                        || permissions == nursery_obj.owner
+                                        || nursery_obj.flags.contains(ObjFlag::Write);
+                                    if !can_write {
+                                        return Err(E_PERM.msg("permission denied"));
+                                    }
+                                    let flag_value = if let Some(v) = rhs.as_integer() {
+                                        v == 1
+                                    } else if let Some(v) = rhs.as_bool() {
+                                        v
+                                    } else {
+                                        return Err(E_TYPE.msg("flag value must be int or bool"));
+                                    };
+                                    let flag = match implicit_kind {
+                                        ImplicitProperty::Read => ObjFlag::Read,
+                                        ImplicitProperty::Write => ObjFlag::Write,
+                                        ImplicitProperty::Fertile => ObjFlag::Fertile,
+                                        _ => unreachable!(),
+                                    };
+                                    if flag_value {
+                                        nursery_obj.flags.set(flag);
+                                    } else {
+                                        nursery_obj.flags.clear(flag);
+                                    }
+                                }
+                            }
+                            Ok(())
+                        });
+
+                        match update_result {
+                            Ok(()) => {
+                                f.poke(0, rhs);
+                            }
+                            Err(e) => {
+                                return ExecutionResult::PushError(e);
+                            }
+                        }
                     }
                 } else {
                     // Normal DB update - swizzle any nursery refs first
@@ -1021,11 +1142,163 @@ pub fn moo_frame_execute(
                 };
 
                 let update_result = if let Some(obj) = base.as_object() {
-                    with_current_transaction_mut(|world_state| {
-                        world_state.update_property(&permissions, &obj, propname, &rhs)
-                    })
-                    .map(|()| base.clone())
-                    .map_err(|e| e.to_error())
+                    if obj.is_nursery() {
+                        // Nursery object case - store in nursery slots or implicit fields
+                        let promoted = with_current_nursery(|nursery| {
+                            obj.nursery_id().and_then(|id| nursery.get_promoted(id))
+                        });
+
+                        if let Some(promoted_obj) = promoted {
+                            with_current_transaction_mut(|world_state| {
+                                world_state.update_property(&permissions, &promoted_obj, propname, &rhs)
+                            })
+                            .map(|()| base.clone())
+                            .map_err(|e| e.to_error())
+                        } else {
+                            use crate::tasks::nursery::{ImplicitProperty, implicit_property_kind};
+
+                            let is_wizard = match with_current_transaction_mut(|world_state| {
+                                world_state.flags_of(&permissions)
+                            }) {
+                                Ok(flags) => flags.contains(ObjFlag::Wizard),
+                                Err(e) => {
+                                    let mut to_remove = vec![rhs_idx, prop_idx, base_idx];
+                                    if offset > 0 {
+                                        to_remove.push(len - 1);
+                                    }
+                                    remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
+                                    return ExecutionResult::PushError(e.to_error());
+                                }
+                            };
+
+                            with_current_nursery_mut(|nursery| {
+                                let Some(nursery_id) = obj.nursery_id() else {
+                                    return Err(E_INVIND.with_msg(|| format!("Invalid nursery object: {}", obj)));
+                                };
+                                let Some(nursery_obj) = nursery.get_mut(nursery_id) else {
+                                    return Err(E_INVIND.with_msg(|| format!("Invalid nursery object: {}", obj)));
+                                };
+
+                                let Some(implicit_kind) = implicit_property_kind(propname) else {
+                                    nursery_obj.slots.insert(propname, rhs.clone());
+                                    return Ok(());
+                                };
+
+                                match implicit_kind {
+                                    ImplicitProperty::Location
+                                    | ImplicitProperty::Contents
+                                    | ImplicitProperty::Parent
+                                    | ImplicitProperty::Children => {
+                                        return Err(E_PERM.msg("property is read-only"));
+                                    }
+                                    ImplicitProperty::Name => {
+                                        let can_write = is_wizard
+                                            || permissions == nursery_obj.owner
+                                            || nursery_obj.flags.contains(ObjFlag::Write);
+                                        if !can_write {
+                                            return Err(E_PERM.msg("permission denied"));
+                                        }
+                                        let Some(name) = rhs.as_string() else {
+                                            return Err(E_TYPE.msg("name must be a string"));
+                                        };
+                                        if nursery_obj.flags.contains(ObjFlag::User) && !is_wizard {
+                                            return Err(E_PERM.msg("cannot rename user objects"));
+                                        }
+                                        nursery_obj.name = Some(name.to_string());
+                                    }
+                                    ImplicitProperty::Owner => {
+                                        let can_write = is_wizard
+                                            || permissions == nursery_obj.owner
+                                            || nursery_obj.flags.contains(ObjFlag::Write);
+                                        if !can_write {
+                                            return Err(E_PERM.msg("permission denied"));
+                                        }
+                                        let Some(owner) = rhs.as_object() else {
+                                            return Err(E_TYPE.msg("owner must be an object"));
+                                        };
+                                        nursery_obj.owner = owner;
+                                    }
+                                    ImplicitProperty::Programmer => {
+                                        if !is_wizard {
+                                            return Err(E_PERM.msg("only wizards can set .programmer"));
+                                        }
+                                        if rhs.is_true() {
+                                            nursery_obj.flags.set(ObjFlag::Programmer);
+                                        } else {
+                                            nursery_obj.flags.clear(ObjFlag::Programmer);
+                                        }
+                                    }
+                                    ImplicitProperty::Wizard => {
+                                        if !is_wizard {
+                                            return Err(E_PERM.msg("only wizards can set .wizard"));
+                                        }
+                                        if rhs.is_true() {
+                                            nursery_obj.flags.set(ObjFlag::Wizard);
+                                        } else {
+                                            nursery_obj.flags.clear(ObjFlag::Wizard);
+                                        }
+                                    }
+                                    ImplicitProperty::Read | ImplicitProperty::Write | ImplicitProperty::Fertile => {
+                                        let can_write = is_wizard
+                                            || permissions == nursery_obj.owner
+                                            || nursery_obj.flags.contains(ObjFlag::Write);
+                                        if !can_write {
+                                            return Err(E_PERM.msg("permission denied"));
+                                        }
+                                        let flag_value = if let Some(v) = rhs.as_integer() {
+                                            v == 1
+                                        } else if let Some(v) = rhs.as_bool() {
+                                            v
+                                        } else {
+                                            return Err(E_TYPE.msg("flag value must be int or bool"));
+                                        };
+                                        let flag = match implicit_kind {
+                                            ImplicitProperty::Read => ObjFlag::Read,
+                                            ImplicitProperty::Write => ObjFlag::Write,
+                                            ImplicitProperty::Fertile => ObjFlag::Fertile,
+                                            _ => unreachable!(),
+                                        };
+                                        if flag_value {
+                                            nursery_obj.flags.set(flag);
+                                        } else {
+                                            nursery_obj.flags.clear(flag);
+                                        }
+                                    }
+                                }
+                                Ok(())
+                            })
+                            .map(|()| base.clone())
+                        }
+                    } else {
+                        // Normal DB property update - swizzle any nursery refs first
+                        use crate::tasks::nursery::contains_nursery_refs;
+
+                        let rhs_to_store = if contains_nursery_refs(&rhs) {
+                            use crate::tasks::nursery::swizzle_value;
+
+                            match with_nursery_and_transaction_mut(|nursery, ws| {
+                                swizzle_value(rhs.clone(), nursery, ws, &permissions)
+                            }) {
+                                Ok(swizzled) => swizzled,
+                                Err(e) => {
+                                    let mut to_remove = vec![rhs_idx, prop_idx, base_idx];
+                                    if offset > 0 {
+                                        to_remove.push(len - 1);
+                                    }
+                                    remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
+                                    return ExecutionResult::PushError(e.to_error());
+                                }
+                            }
+                        } else {
+                            rhs.clone()
+                        };
+
+                        with_current_transaction_mut(|world_state| {
+                            world_state.update_property(&permissions, &obj, propname, &rhs_to_store)
+                        })
+                        .map(|()| base.clone())
+                        .map_err(|e| e.to_error())
+                    }
                 } else if let Some(flyweight) = base.as_flyweight() {
                     if propname == *DELEGATE_SYM || propname == *SLOTS_SYM {
                         let mut to_remove = vec![rhs_idx, prop_idx, base_idx];
@@ -1484,21 +1757,49 @@ fn get_property(
     if let Some(obj_ref) = obj.as_object() {
         // Nursery object case - check local slots, then delegate to parent
         if obj_ref.is_nursery() {
-            // First, try to get from nursery slots or get the parent for delegation
+            // Check if this nursery object has been promoted to a real anonymous object
+            let promoted = with_current_nursery(|nursery| {
+                obj_ref.nursery_id().and_then(|id| nursery.get_promoted(id))
+            });
+
+            if let Some(promoted_obj) = promoted {
+                // Use the promoted anonymous object for property access
+                return with_current_transaction_mut(|world_state| {
+                    world_state.retrieve_property(permissions, &promoted_obj, propname)
+                })
+                .map_err(|e| e.to_error());
+            }
+
+            // First, try to get from implicit properties or nursery slots
             let nursery_result = with_current_nursery(|nursery| {
-                if let Some(nursery_id) = obj_ref.nursery_id()
-                    && let Some(nursery_obj) = nursery.get(nursery_id)
-                {
-                    // Check local slots first
-                    if let Some(value) = nursery_obj.slots.get(&propname) {
-                        return Some(Ok(value.clone()));
-                    }
-                    // Need to delegate to parent
-                    if !nursery_obj.parent.is_nothing() {
-                        return None; // Signal: delegate to parent
-                    }
+                let Some(nursery_id) = obj_ref.nursery_id() else {
+                    // Not a valid nursery reference
+                    return Some(Err(E_INVIND.with_msg(|| format!("Invalid nursery object: {}", obj_ref))));
+                };
+
+                let Some(nursery_obj) = nursery.get(nursery_id) else {
+                    // Nursery object not found - invalid indirection
+                    return Some(Err(E_INVIND.with_msg(|| format!("Invalid nursery object: {}", obj_ref))));
+                };
+
+                if let Some(value) = crate::tasks::nursery::implicit_property_value(
+                    nursery_obj,
+                    propname,
+                ) {
+                    return Some(Ok(value));
                 }
-                // Nursery object not found - error
+
+                // Check local slots first
+                if let Some(value) = nursery_obj.slots.get(&propname) {
+                    return Some(Ok(value.clone()));
+                }
+
+                // Need to delegate to parent if we have one
+                if !nursery_obj.parent.is_nothing() {
+                    return None; // Signal: delegate to parent
+                }
+
+                // Nursery object exists but property not found and no parent to delegate to
                 Some(Err(E_PROPNF.with_msg(|| format!("Property not found: {}", propname))))
             });
 
@@ -1508,22 +1809,19 @@ fn get_property(
             }
 
             // Need to delegate to parent - get parent outside the nursery borrow
+            // (nursery_result is None only when nursery object exists with a valid parent)
             let parent = with_current_nursery(|nursery| {
                 obj_ref
                     .nursery_id()
                     .and_then(|id| nursery.get(id))
                     .map(|obj| obj.parent)
-                    .unwrap_or(NOTHING)
+                    .expect("nursery_result is None only when parent exists")
             });
 
-            if !parent.is_nothing() {
-                return with_current_transaction_mut(|world_state| {
-                    world_state.retrieve_property(permissions, &parent, propname)
-                })
-                .map_err(|e| e.to_error());
-            }
-
-            return Err(E_PROPNF.with_msg(|| format!("Property not found: {}", propname)));
+            return with_current_transaction_mut(|world_state| {
+                world_state.retrieve_property(permissions, &parent, propname)
+            })
+            .map_err(|e| e.to_error());
         }
 
         // Regular object case

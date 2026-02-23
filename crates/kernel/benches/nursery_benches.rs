@@ -24,7 +24,7 @@ use std::{hint::black_box, sync::Arc, time::Duration};
 use criterion::{Criterion, criterion_group, criterion_main};
 
 use moor_common::{
-    model::{CommitResult, ObjectKind, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource},
+    model::{CommitResult, ObjFlag, ObjectKind, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource},
     tasks::NoopClientSession,
     util::BitEnum,
 };
@@ -78,9 +78,9 @@ fn prepare_call_verb(
     let (program, verbdef) = world_state
         .find_method_verb_on(&SYSTEM_OBJECT, &SYSTEM_OBJECT, verb_name)
         .unwrap();
+    let permissions_flags = BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer;
     vm_host.start_call_method_verb(
         0,
-        SYSTEM_OBJECT,
         verbdef,
         verb_name,
         v_obj(SYSTEM_OBJECT),
@@ -88,6 +88,7 @@ fn prepare_call_verb(
         List::mk_list(&[]),
         v_obj(SYSTEM_OBJECT),
         v_empty_str(),
+        permissions_flags,
         program,
     );
     vm_host

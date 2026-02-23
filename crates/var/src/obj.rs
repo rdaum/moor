@@ -350,6 +350,7 @@ impl Obj {
             OBJID_TYPE_CODE => self.decode_as_objid() >= 0,
             UUOBJID_TYPE_CODE => true, // UuObjids are always valid object references
             ANONYMOUS_TYPE_CODE => true, // Anonymous objects are always valid object references
+            NURSERY_TYPE_CODE => true,   // Nursery objects are valid task-local object references
             _ => false,
         }
     }
@@ -759,6 +760,7 @@ mod tests {
         assert!(!obj.is_anonymous());
         assert!(!obj.is_uuobjid());
         assert!(!obj.is_sysobj());
+        assert!(obj.is_valid_object()); // Nursery objects are valid object references
         assert_eq!(obj.nursery_id(), Some(NurseryId(nursery_id)));
     }
 
