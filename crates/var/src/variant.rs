@@ -572,6 +572,16 @@ impl Var {
         }
     }
 
+    /// Return numeric value as float, accepting both float and int variants.
+    #[inline(always)]
+    pub fn as_float_numeric(&self) -> Option<f64> {
+        match self.tag {
+            TAG_FLOAT => Some(f64::from_bits(self.data)),
+            TAG_INT => Some(self.data as i64 as f64),
+            _ => None,
+        }
+    }
+
     #[inline(always)]
     pub fn as_bool(&self) -> Option<bool> {
         match self.tag {
@@ -1800,6 +1810,18 @@ mod tests {
             Variant::Float(f) => assert_eq!(f, 42.0),
             _ => panic!("Expected float"),
         }
+    }
+
+    #[test]
+    fn test_as_float_numeric_for_int() {
+        let i = Var::mk_integer(42);
+        assert_eq!(i.as_float_numeric(), Some(42.0));
+    }
+
+    #[test]
+    fn test_as_float_numeric_for_float() {
+        let f = Var::mk_float(42.5);
+        assert_eq!(f.as_float_numeric(), Some(42.5));
     }
 
     #[test]

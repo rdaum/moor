@@ -159,7 +159,7 @@ impl Task {
             task_id,
             max_stack_depth,
             max_ticks,
-            Duration::from_secs(max_seconds),
+            Duration::from_secs_f64(max_seconds),
         );
 
         let retry_state = vm_host.snapshot_state();
@@ -1211,9 +1211,9 @@ mod tests {
         let (control_sender, control_receiver) = unbounded();
         let kill_switch = Arc::new(AtomicBool::new(false));
         let server_options = ServerOptions {
-            bg_seconds: 5,
+            bg_seconds: 5.0,
             bg_ticks: 50000,
-            fg_seconds: 5,
+            fg_seconds: 5.0,
             fg_ticks: 50000,
             max_stack_depth: 5,
             dump_interval: None,

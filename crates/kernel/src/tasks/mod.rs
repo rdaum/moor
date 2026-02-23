@@ -41,8 +41,8 @@ pub(crate) mod world_state_executor;
 
 pub const DEFAULT_FG_TICKS: usize = 60_000;
 pub const DEFAULT_BG_TICKS: usize = 30_000;
-pub const DEFAULT_FG_SECONDS: u64 = 5;
-pub const DEFAULT_BG_SECONDS: u64 = 3;
+pub const DEFAULT_FG_SECONDS: f64 = 5.0;
+pub const DEFAULT_BG_SECONDS: f64 = 3.0;
 pub const DEFAULT_MAX_STACK_DEPTH: usize = 50;
 pub const DEFAULT_GC_INTERVAL_SECONDS: u64 = 30;
 pub const DEFAULT_MAX_TASK_RETRIES: u8 = 10;
@@ -125,11 +125,11 @@ pub struct TaskDescription {
 #[derive(Debug, Clone)]
 pub struct ServerOptions {
     /// The number of seconds allotted to background tasks.
-    pub bg_seconds: u64,
+    pub bg_seconds: f64,
     /// The number of ticks allotted to background tasks.
     pub bg_ticks: usize,
     /// The number of seconds allotted to foreground tasks.
-    pub fg_seconds: u64,
+    pub fg_seconds: f64,
     /// The number of ticks allotted to foreground tasks.
     pub fg_ticks: usize,
     /// The maximum number of levels of nested verb calls.
@@ -145,7 +145,7 @@ pub struct ServerOptions {
 }
 
 impl ServerOptions {
-    pub fn max_vm_values(&self, is_background: bool) -> (u64, usize, usize) {
+    pub fn max_vm_values(&self, is_background: bool) -> (f64, usize, usize) {
         if is_background {
             (self.bg_seconds, self.bg_ticks, self.max_stack_depth)
         } else {
