@@ -1651,6 +1651,7 @@ mod tests {
     #[test_case("return x[1..2];"; "range")]
     #[test_case("return x:y(1,2,3);"; "call_verb")]
     #[test_case(r#"return x:("y")(1,2,3);"#; "call_verb_expr")]
+    #[test_case(r#"return $ansi:(this.some_function)();"#; "call_verb_computed_prop")]
     #[test_case("{connection} = args;"; "scatter")]
     #[test_case("{connection, player} = args;"; "scatter_2")]
     #[test_case("{connection, player, ?arg3} = args;"; "scatter_3")]

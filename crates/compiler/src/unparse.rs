@@ -303,7 +303,7 @@ impl<'a> Unparse<'a> {
                             });
                         (s, needs_parens, is_identifier)
                     }
-                    _ => (brace_if_needed(verb, ParenPosition::Right), true, false),
+                    _ => (self.unparse_expr(verb)?, true, false),
                 };
 
                 // Now determine location string. Only use `$` shorthand for sysobj when
@@ -2106,6 +2106,13 @@ endif"#;
     #[test]
     fn test_empty_map_complex_expression_roundtrip() {
         compare_parse_roundtrip(r#"return [] == [] && "yes" || "no";"#);
+    }
+
+    #[test]
+    fn test_computed_verb_name_no_extra_parens() {
+        // Regression test for #626: computed verb names should not get double-wrapped in parens.
+        // $ansi:(this.some_function)() should NOT become $ansi:((this.some_function))()
+        compare_parse_roundtrip("return $ansi:(this.some_function)();");
     }
 
     // Tests for multi-statement lambda unparsing
