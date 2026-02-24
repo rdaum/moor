@@ -204,9 +204,9 @@ mod tests {
     fn save_load() {
         let task_id = 0;
         let so = ServerOptions {
-            bg_seconds: 0,
+            bg_seconds: 0.0,
             bg_ticks: 0,
-            fg_seconds: 0,
+            fg_seconds: 0.0,
             fg_ticks: 0,
             max_stack_depth: 0,
             dump_interval: None,
@@ -267,9 +267,9 @@ mod tests {
         let mut tasks = vec![];
         for task_id in 0..50 {
             let so = ServerOptions {
-                bg_seconds: 0,
+                bg_seconds: 0.0,
                 bg_ticks: 0,
-                fg_seconds: 0,
+                fg_seconds: 0.0,
                 fg_ticks: 0,
                 max_stack_depth: 0,
                 dump_interval: None,
@@ -329,9 +329,9 @@ mod tests {
         let mut tasks = vec![];
         for task_id in 0..50 {
             let so = ServerOptions {
-                bg_seconds: 0,
+                bg_seconds: 0.0,
                 bg_ticks: 0,
-                fg_seconds: 0,
+                fg_seconds: 0.0,
                 fg_ticks: 0,
                 max_stack_depth: 0,
                 dump_interval: None,
@@ -404,9 +404,9 @@ mod tests {
         let path = tmpdir.path();
 
         let so = ServerOptions {
-            bg_seconds: 0,
+            bg_seconds: 0.0,
             bg_ticks: 0,
-            fg_seconds: 0,
+            fg_seconds: 0.0,
             fg_ticks: 0,
             max_stack_depth: 0,
             dump_interval: None,
@@ -516,9 +516,9 @@ mod tests {
         let _path = tmpdir.path();
 
         let so = ServerOptions {
-            bg_seconds: 0,
+            bg_seconds: 0.0,
             bg_ticks: 0,
-            fg_seconds: 0,
+            fg_seconds: 0.0,
             fg_ticks: 0,
             max_stack_depth: 0,
             dump_interval: None,
@@ -590,9 +590,9 @@ mod tests {
         let path = tmpdir.path();
 
         let so = ServerOptions {
-            bg_seconds: 0,
+            bg_seconds: 0.0,
             bg_ticks: 0,
-            fg_seconds: 0,
+            fg_seconds: 0.0,
             fg_ticks: 0,
             max_stack_depth: 0,
             dump_interval: None,
