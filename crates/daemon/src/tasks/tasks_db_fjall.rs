@@ -235,6 +235,7 @@ mod tests {
 
         // Mock task...
         let suspended = SuspendedTask {
+            enqueued_at: minstant::Instant::now(),
             wake_condition: WakeCondition::Never,
             task,
             session: Arc::new(NoopClientSession::new()),
@@ -293,6 +294,7 @@ mod tests {
 
             // Mock task...
             let suspended = SuspendedTask {
+                enqueued_at: minstant::Instant::now(),
                 wake_condition: WakeCondition::Never,
                 task,
                 session: Arc::new(NoopClientSession::new()),
@@ -355,6 +357,7 @@ mod tests {
 
             // Mock task...
             let suspended = SuspendedTask {
+                enqueued_at: minstant::Instant::now(),
                 wake_condition: WakeCondition::Never,
                 task,
                 session: Arc::new(NoopClientSession::new()),
@@ -456,6 +459,7 @@ mod tests {
             );
 
             let suspended = SuspendedTask {
+                enqueued_at: minstant::Instant::now(),
                 wake_condition,
                 task,
                 session: Arc::new(NoopClientSession::new()),
@@ -554,6 +558,7 @@ mod tests {
             );
 
             let suspended = SuspendedTask {
+                enqueued_at: minstant::Instant::now(),
                 wake_condition: WakeCondition::Time(*wake_time),
                 task,
                 session: Arc::new(NoopClientSession::new()),
@@ -617,6 +622,7 @@ mod tests {
 
         let wake_time = minstant::Instant::now() + Duration::from_secs(30);
         let suspended = SuspendedTask {
+            enqueued_at: minstant::Instant::now(),
             wake_condition: WakeCondition::Time(wake_time),
             task,
             session: Arc::new(NoopClientSession::new()),

@@ -16,7 +16,7 @@ use crate::{
     db_worldstate::db_counters,
     moor_db::{Caches, SEQUENCE_MAX_OBJECT, WorldStateTransaction},
     provider::fjall_provider::FjallProvider,
-    tx_management::{EncodeFor, Relation, RelationTransaction},
+    tx_management::{EncodeFor, RelationTransaction},
 };
 use byteview::ByteView;
 use moor_common::{
@@ -35,11 +35,7 @@ use std::fmt::Display;
 use std::{collections::VecDeque, hash::Hash, time::Instant};
 use uuid::Uuid;
 
-type RTx<Domain, Codomain> = RelationTransaction<
-    Domain,
-    Codomain,
-    Relation<Domain, Codomain, FjallProvider<Domain, Codomain>>,
->;
+type RTx<Domain, Codomain> = RelationTransaction<Domain, Codomain, FjallProvider<Domain, Codomain>>;
 
 fn upsert<Domain, Codomain>(
     table: &mut RTx<Domain, Codomain>,

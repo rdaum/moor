@@ -15,6 +15,7 @@ mod indexes;
 mod relation;
 mod relation_tx;
 
+pub use indexes::RelationIndex;
 pub use relation::{
     AcceptIdentical, CheckRelation, ConflictResolver, FailOnConflict, PotentialConflict,
     ProposedOp, Relation,
@@ -332,6 +333,8 @@ pub trait EncodeFor<T> {
 
 /// Represents a "canonical" source for some domain/codomain pair, to be supplied to a
 /// transaction.
+#[cfg(test)]
+#[allow(dead_code)]
 pub trait Canonical<Domain, Codomain> {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error>;
     fn scan<F>(&self, f: &F) -> Result<Vec<(Timestamp, Domain, Codomain)>, Error>
