@@ -112,6 +112,13 @@ macro_rules! define_relations {
                 $( $field: CheckRelation<$domain, $codomain, FjallProvider<$domain, $codomain>>, )*
             }
 
+            #[derive(Clone)]
+            pub(crate) struct WorldStateSnapshot {
+                pub(crate) version: u64,
+                pub(crate) caches: std::sync::Arc<crate::moor_db::Caches>,
+                $( pub(crate) $field: std::sync::Arc<Box<dyn crate::tx_management::RelationIndex<$domain, $codomain>>>, )*
+            }
+
             /// Trait defining the interface for processing transaction commits.
             ///
             /// This trait decouples the WorldStateTransaction from the concrete
@@ -164,49 +171,30 @@ macro_rules! define_relations {
                     Ok(self)
                 }
 
-                /// Commit all changes to the relations with seqlock coordination.
-                ///
-                /// Uses the commit_version counter as a seqlock to ensure transaction starts
-                /// see atomic snapshots. Increments version to odd (in-progress), swaps all
-                /// dirty relation indexes AND updates caches, then increments to even (complete).
-                ///
-                /// CRITICAL: Cache updates must happen BEFORE marking seqlock complete to prevent
-                /// transactions from seeing stale cache + new relations (race condition).
+                /// Commit all changes to the relations by constructing a new world snapshot.
                 fn commit_all(
                     self,
-                    relations: &Relations,
-                    commit_version: &std::sync::atomic::AtomicU64,
-                    caches: &arc_swap::ArcSwap<crate::moor_db::Caches>,
+                    current_root: &std::sync::Arc<WorldStateSnapshot>,
                     verb_cache: Box<VerbResolutionCache>,
                     prop_cache: Box<PropResolutionCache>,
                     ancestry_cache: Box<AncestryCache>,
-                ) {
-                    // Mark commit in progress (odd version)
-                    commit_version.fetch_add(1, std::sync::atomic::Ordering::Release);
-
-                    // Swap all dirty relations
-                    $(
-                        if self.$field.dirty() {
-                            self.$field.commit(relations.$field.index());
-                        }
-                    )*
-
-                    // Update caches BEFORE marking seqlock complete
-                    // This prevents transactions from seeing stable seqlock with stale caches
+                ) -> std::sync::Arc<WorldStateSnapshot> {
                     let combined_caches = crate::moor_db::Caches {
                         verb_resolution_cache: verb_cache,
                         prop_resolution_cache: prop_cache,
                         ancestry_cache,
                     };
-                    if combined_caches.has_changed() {
-                        caches.store(std::sync::Arc::new(combined_caches));
-                    }
+                    let caches = if combined_caches.has_changed() {
+                        std::sync::Arc::new(combined_caches)
+                    } else {
+                        current_root.caches.clone()
+                    };
 
-                    // Release fence ensures all swaps AND cache updates are visible before marking complete
-                    std::sync::atomic::fence(std::sync::atomic::Ordering::Release);
-
-                    // Mark commit complete (even version)
-                    commit_version.fetch_add(1, std::sync::atomic::Ordering::Release);
+                    std::sync::Arc::new(WorldStateSnapshot {
+                        version: current_root.version + 1,
+                        caches,
+                        $( $field: self.$field.committed_index_or(current_root.$field.clone()), )*
+                    })
                 }
             }
 
@@ -251,19 +239,47 @@ macro_rules! define_relations {
                         // Create relation with symbolized field name
                         let [<$field _relation>] = define_relations!(@create_relation $arrow, $field, [<$field _provider>]);
 
-                        // Seed the relation by scanning all existing data
-                        [<$field _relation>]
-                            .scan(&|_, _| true)
-                            .expect(concat!("Failed to seed ", stringify!($field)));
                     )*
 
                     let relations = Relations {
                         $( $field: [<$field _relation>], )*
                     };
-                    // All data has been scanned from providers into cache - mark as fully loaded
-                    // to skip provider I/O on subsequent scans
-                    relations.mark_all_fully_loaded();
                     relations
+                }
+
+                fn snapshot(
+                    &self,
+                    version: u64,
+                    caches: std::sync::Arc<crate::moor_db::Caches>,
+                ) -> WorldStateSnapshot {
+                    WorldStateSnapshot {
+                        version,
+                        caches,
+                        $(
+                            $field: {
+                                let index = self.$field.seeded_index()
+                                    .expect(concat!("Failed to seed ", stringify!($field), " index"));
+                                std::sync::Arc::new(index)
+                            },
+                        )*
+                    }
+                }
+
+                fn snapshot_with_all_fully_loaded(
+                    &self,
+                    current_root: &std::sync::Arc<WorldStateSnapshot>,
+                ) -> std::sync::Arc<WorldStateSnapshot> {
+                    std::sync::Arc::new(WorldStateSnapshot {
+                        version: current_root.version,
+                        caches: current_root.caches.clone(),
+                        $(
+                            $field: {
+                                let mut index = (**current_root.$field).fork();
+                                index.set_provider_fully_loaded(true);
+                                std::sync::Arc::new(index)
+                            },
+                        )*
+                    })
                 }
 
                 /// Stop all relation providers.
@@ -278,9 +294,9 @@ macro_rules! define_relations {
                 ///
                 /// Creates RelationCheckers for all relations, which can then be used
                 /// to check for conflicts during transaction commit.
-                fn begin_check_all(&self) -> RelationCheckers {
+                fn begin_check_all(&self, snapshot: &std::sync::Arc<WorldStateSnapshot>) -> RelationCheckers {
                     RelationCheckers {
-                        $( $field: self.$field.begin_check(), )*
+                        $( $field: self.$field.begin_check_from_index(snapshot.$field.clone()), )*
                     }
                 }
 
@@ -300,6 +316,7 @@ macro_rules! define_relations {
                 fn start_transaction(&self,
                     tx: Tx,
                     db: std::sync::Arc<dyn TransactionContext>,
+                    snapshot: std::sync::Arc<WorldStateSnapshot>,
                     sequences: [Arc<CachePadded<AtomicI64>>; 16],
                     verb_resolution_cache: Box<VerbResolutionCache>,
                     prop_resolution_cache: Box<PropResolutionCache>,
@@ -308,20 +325,13 @@ macro_rules! define_relations {
                     WorldStateTransaction {
                         tx: tx.clone(),
                         db,
-                        $( $field: self.$field.start(&tx), )*
+                        $( $field: self.$field.start_from_index(&tx, snapshot.$field.clone()), )*
                         sequences,
                         verb_resolution_cache,
                         prop_resolution_cache,
                         ancestry_cache,
                         has_mutations: false,
                     }
-                }
-
-
-                /// Mark all relations as fully loaded from their backing providers.
-                /// After calling this, scans will skip provider I/O and use only cached data.
-                pub fn mark_all_fully_loaded(&self) {
-                    $( self.$field.mark_fully_loaded(); )*
                 }
             }
 
@@ -386,7 +396,7 @@ macro_rules! define_relations {
                 /// Database handle used for direct commit processing.
                 pub(crate) db: std::sync::Arc<dyn TransactionContext>,
                 /// Relation transactions for each defined relation
-                $( pub(crate) $field: RelationTransaction<$domain, $codomain, R<$domain, $codomain>>, )*
+                $( pub(crate) $field: RelationTransaction<$domain, $codomain, FjallProvider<$domain, $codomain>>, )*
                 /// Array of sequence counters for object ID generation
                 pub(crate) sequences: [Arc<CachePadded<AtomicI64>>; 16],
                 /// Local fork of the verb resolution cache

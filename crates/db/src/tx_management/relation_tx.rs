@@ -11,9 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tx_management::{
-    Canonical, ConflictInfo, ConflictType, Error, RelationCodomain, RelationDomain, Timestamp, Tx,
-    indexes::RelationIndex,
+use crate::{
+    provider::Provider,
+    tx_management::{
+        ConflictInfo, ConflictType, Error, RelationCodomain, RelationDomain, Timestamp, Tx,
+        indexes::RelationIndex,
+    },
 };
 use ahash::AHasher;
 use moor_common::model::WorldStateError;
@@ -26,7 +29,7 @@ use std::{collections::HashMap, hash::BuildHasherDefault, sync::Arc};
 /// global transactional cache.
 pub struct RelationTransaction<Domain, Codomain, Source>
 where
-    Source: Canonical<Domain, Codomain>,
+    Source: Provider<Domain, Codomain>,
     Domain: RelationDomain,
     Codomain: RelationCodomain,
 {
@@ -189,7 +192,7 @@ where
 /// Represents the state of a relation in the context of a current transaction.
 impl<Domain, Codomain, Source> RelationTransaction<Domain, Codomain, Source>
 where
-    Source: Canonical<Domain, Codomain>,
+    Source: Provider<Domain, Codomain>,
     Domain: RelationDomain,
     Codomain: RelationCodomain,
 {
@@ -811,10 +814,12 @@ where
     /// Helper method to fully load all data from the provider into the master index
     fn fully_load_from_provider(&mut self) -> Result<(), Error> {
         // Scan all data from the provider that's visible to this transaction
-        let _provider_data = self.backing_source.scan(&|_domain, _codomain| true)?;
-
-        // The scan() call above will have populated the master_entries index as a side effect
-        // due to the Canonical::scan() implementation, so we don't need to do anything else here
+        let provider_data = self.backing_source.scan(&|_domain, _codomain| true)?;
+        for (ts, domain, codomain) in provider_data {
+            if ts <= self.tx.ts {
+                self.index.master_entries.insert_entry(ts, domain, codomain);
+            }
+        }
 
         // Mark the master entries as fully loaded
         self.index.master_entries.set_provider_fully_loaded(true);

@@ -16,19 +16,22 @@
 use crate::{
     provider::Provider,
     tx_management::{
-        Canonical, ConflictInfo, ConflictType, Error, RelationCodomain, RelationCodomainHashable,
+        ConflictInfo, ConflictType, Error, RelationCodomain, RelationCodomainHashable,
         RelationDomain, Timestamp, Tx,
         indexes::{HashRelationIndex, RelationIndex},
         relation_tx::{Op, OpType, RelationTransaction, WorkingSet},
     },
 };
-use arc_swap::ArcSwap;
 use minstant::Instant;
 use moor_var::Symbol;
 use std::{sync::Arc, time::Duration};
 use tracing::warn;
 
 use crate::db_worldstate::db_counters;
+#[cfg(test)]
+use crate::tx_management::Canonical;
+#[cfg(test)]
+use arc_swap::ArcSwap;
 
 /// Represents a detected conflict during transaction commit that may be resolvable.
 ///
@@ -219,15 +222,35 @@ where
 }
 
 /// Represents the current "canonical" state of a relation.
+type IndexFactory<Domain, Codomain> = fn() -> Box<dyn RelationIndex<Domain, Codomain>>;
+
+fn primary_index_factory<Domain, Codomain>() -> Box<dyn RelationIndex<Domain, Codomain>>
+where
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
+{
+    Box::new(HashRelationIndex::new())
+}
+
+fn secondary_index_factory<Domain, Codomain>() -> Box<dyn RelationIndex<Domain, Codomain>>
+where
+    Domain: RelationDomain,
+    Codomain: RelationCodomainHashable,
+{
+    Box::new(crate::tx_management::indexes::SecondaryIndexRelation::new())
+}
+
 #[derive(Clone)]
 pub struct Relation<Domain, Codomain, Source>
 where
     Domain: RelationDomain,
     Codomain: RelationCodomain,
 {
-    index: Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>>,
     relation_name: Symbol,
     source: Arc<Source>,
+    index_factory: IndexFactory<Domain, Codomain>,
+    #[cfg(test)]
+    test_index: Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>>,
 }
 
 pub struct CheckRelation<Domain, Codomain, P>
@@ -549,8 +572,19 @@ where
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn commit(self, index_swap: &Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>>) {
         index_swap.store(Arc::new(self.index));
+    }
+
+    pub fn committed_index_or(
+        self,
+        existing: Arc<Box<dyn RelationIndex<Domain, Codomain>>>,
+    ) -> Arc<Box<dyn RelationIndex<Domain, Codomain>>> {
+        if self.dirty {
+            return Arc::new(self.index);
+        }
+        existing
     }
 }
 
@@ -562,9 +596,14 @@ where
 {
     pub fn new(relation_name: Symbol, source: Arc<Source>) -> Self {
         Self {
-            index: Arc::new(ArcSwap::new(Arc::new(Box::new(HashRelationIndex::new())))),
             relation_name,
             source,
+            index_factory: primary_index_factory::<Domain, Codomain>,
+            #[cfg(test)]
+            test_index: Arc::new(ArcSwap::new(Arc::new(primary_index_factory::<
+                Domain,
+                Codomain,
+            >()))),
         }
     }
 
@@ -573,29 +612,48 @@ where
         Codomain: RelationCodomainHashable,
     {
         Self {
-            index: Arc::new(ArcSwap::new(Arc::new(Box::new(
-                crate::tx_management::indexes::SecondaryIndexRelation::new(),
-            )))),
             relation_name,
             source,
+            index_factory: secondary_index_factory::<Domain, Codomain>,
+            #[cfg(test)]
+            test_index: Arc::new(ArcSwap::new(Arc::new(secondary_index_factory::<
+                Domain,
+                Codomain,
+            >()))),
         }
-    }
-
-    pub fn index(&self) -> &Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>> {
-        &self.index
     }
 
     pub fn source(&self) -> &Arc<Source> {
         &self.source
     }
 
-    pub fn start(&self, tx: &Tx) -> RelationTransaction<Domain, Codomain, Self> {
-        let index = self.index.load();
-        RelationTransaction::new(*tx, self.relation_name, (**index).fork(), self.clone())
+    pub fn seeded_index(&self) -> Result<Box<dyn RelationIndex<Domain, Codomain>>, Error> {
+        let mut index = (self.index_factory)();
+        let tuples = self.source.scan(&|_, _| true)?;
+        for (ts, domain, codomain) in tuples {
+            index.insert_entry(ts, domain, codomain);
+        }
+        index.set_provider_fully_loaded(true);
+        Ok(index)
     }
 
-    pub fn begin_check(&self) -> CheckRelation<Domain, Codomain, Source> {
-        let index = self.index.load();
+    pub fn start_from_index(
+        &self,
+        tx: &Tx,
+        index: Arc<Box<dyn RelationIndex<Domain, Codomain>>>,
+    ) -> RelationTransaction<Domain, Codomain, Source> {
+        RelationTransaction::new(
+            *tx,
+            self.relation_name,
+            (**index).fork(),
+            (*self.source).clone(),
+        )
+    }
+
+    pub fn begin_check_from_index(
+        &self,
+        index: Arc<Box<dyn RelationIndex<Domain, Codomain>>>,
+    ) -> CheckRelation<Domain, Codomain, Source> {
         CheckRelation {
             index: (**index).fork(),
             relation_name: self.relation_name,
@@ -604,16 +662,35 @@ where
         }
     }
 
+    #[cfg(test)]
+    pub fn index(&self) -> &Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>> {
+        &self.test_index
+    }
+
+    #[cfg(test)]
+    pub fn start(&self, tx: &Tx) -> RelationTransaction<Domain, Codomain, Source> {
+        let index = self.test_index.load();
+        self.start_from_index(tx, Arc::clone(&index))
+    }
+
+    #[cfg(test)]
+    pub fn begin_check(&self) -> CheckRelation<Domain, Codomain, Source> {
+        let index = self.test_index.load();
+        self.begin_check_from_index(Arc::clone(&index))
+    }
+
+    #[cfg(test)]
     /// Mark this relation as fully loaded from its backing provider.
     /// After this call, scans will skip provider I/O and use only cached data.
     pub fn mark_fully_loaded(&self) {
-        let index = self.index.load();
+        let index = self.test_index.load();
         let mut new_index = (**index).fork();
         new_index.set_provider_fully_loaded(true);
-        self.index.store(Arc::new(new_index));
+        self.test_index.store(Arc::new(new_index));
     }
 }
 
+#[cfg(test)]
 impl<Domain, Codomain, Source> Canonical<Domain, Codomain> for Relation<Domain, Codomain, Source>
 where
     Domain: RelationDomain,
@@ -622,7 +699,7 @@ where
 {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
         // Try read path first
-        let index = self.index.load();
+        let index = self.test_index.load();
         if let Some(entry) = index.index_lookup(domain) {
             return Ok(Some((entry.ts, entry.value.clone())));
         }
@@ -637,7 +714,7 @@ where
         let mut new_index = (**index).fork();
         if let Some((ts, codomain)) = self.source.get(domain)? {
             new_index.insert_entry(ts, domain.clone(), codomain.clone());
-            self.index.store(Arc::new(new_index));
+            self.test_index.store(Arc::new(new_index));
             Ok(Some((ts, codomain)))
         } else {
             Ok(None)
@@ -648,7 +725,7 @@ where
     where
         F: Fn(&Domain, &Codomain) -> bool,
     {
-        let index = self.index.load();
+        let index = self.test_index.load();
 
         // If provider is fully loaded, scan directly from index
         if index.is_provider_fully_loaded() {
@@ -678,12 +755,12 @@ where
             new_index.set_provider_fully_loaded(true);
         }
 
-        self.index.store(Arc::new(new_index));
+        self.test_index.store(Arc::new(new_index));
         Ok(results)
     }
 
     fn get_by_codomain(&self, codomain: &Codomain) -> Vec<Domain> {
-        let index = self.index.load();
+        let index = self.test_index.load();
         index.get_by_codomain(codomain)
     }
 }
@@ -699,6 +776,8 @@ where
 
     /// Check if a predicate represents a full scan (accepts everything)
     /// We can detect this by testing with dummy values, but for now we'll use a simpler approach
+    #[cfg(test)]
+    #[allow(dead_code)]
     fn is_full_scan_predicate<F>(&self, _predicate: &F) -> bool
     where
         F: Fn(&Domain, &Codomain) -> bool,
@@ -892,8 +971,11 @@ mod tests {
             cr_2.commit(relation.index());
         }
 
-        // Now T1 tries to update based on its read - this should conflict
-        let check_result = r_tx_1.update(&domain, TestCodomain(11));
+        // Now T1 tries to update based on its read - conflict should be detected during check.
+        r_tx_1.update(&domain, TestCodomain(11)).unwrap();
+        let mut ws_1 = r_tx_1.working_set().unwrap();
+        let mut cr_1 = relation.begin_check();
+        let check_result = cr_1.check(&mut ws_1);
         assert!(matches!(check_result, Err(Error::Conflict(_))));
     }
 
@@ -1204,8 +1286,11 @@ mod tests {
             cr_newer.commit(relation.index());
         }
 
-        // Now older transaction tries to update - should conflict due to newer timestamp in cache
-        let check_result = r_tx_older.update(&domain, TestCodomain(300));
+        // Now older transaction tries to update - conflict should be detected during check.
+        r_tx_older.update(&domain, TestCodomain(300)).unwrap();
+        let mut ws_older = r_tx_older.working_set().unwrap();
+        let mut cr_older = relation.begin_check();
+        let check_result = cr_older.check(&mut ws_older);
         assert!(matches!(check_result, Err(Error::Conflict(_))));
     }
 
@@ -1262,7 +1347,8 @@ mod tests {
         // Create relation with secondary index support
         let relation = Arc::new(Relation {
             relation_name: Symbol::mk("test"),
-            index: Arc::new(ArcSwap::new(Arc::new(Box::new(
+            index_factory: secondary_index_factory::<TestDomain, TestCodomain>,
+            test_index: Arc::new(ArcSwap::new(Arc::new(Box::new(
                 SecondaryIndexRelation::new(),
             )))),
             source: provider,

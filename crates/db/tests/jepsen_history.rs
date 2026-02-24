@@ -136,9 +136,10 @@ pub fn parse_edn(path: &Path) -> Vec<Entry> {
 #[cfg(test)]
 mod tests {
     use crate::{Operation, Type};
+    use arc_swap::ArcSwap;
     use eyre::bail;
     use moor_common::model::WorldStateError;
-    use moor_db::{Error, Provider, Relation, RelationCodomain, Timestamp, Tx};
+    use moor_db::{Error, Provider, Relation, RelationCodomain, RelationIndex, Timestamp, Tx};
     use moor_var::Symbol;
     use std::{
         collections::HashMap,
@@ -224,6 +225,12 @@ mod tests {
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
         let backing_store = Arc::new(Relation::new(Symbol::mk("test"), provider.clone()));
+        let root_index: Arc<ArcSwap<Box<dyn RelationIndex<TestDomain, TestCodomain>>>> =
+            Arc::new(ArcSwap::new(Arc::new(
+                backing_store
+                    .seeded_index()
+                    .map_err(|e| eyre::eyre!("seeded_index failed: {e:?}"))?,
+            )));
 
         let mut transactions = HashMap::new();
 
@@ -239,8 +246,10 @@ mod tests {
                         ts: Timestamp(tx_counter),
                         snapshot_version: 0,
                     };
-                    let transaction = backing_store.clone().start(&tx);
-                    backing_store.clone().start(&tx);
+                    let snapshot = root_index.load();
+                    let transaction = backing_store
+                        .clone()
+                        .start_from_index(&tx, Arc::clone(&snapshot));
 
                     if transactions
                         .insert(entry.process, (tx, transaction))
@@ -279,10 +288,12 @@ mod tests {
                     let mut ws = cache.working_set().expect("check failed in working set");
 
                     {
-                        let mut cr = backing_store.begin_check();
+                        let snapshot = root_index.load();
+                        let mut cr = backing_store.begin_check_from_index(Arc::clone(&snapshot));
                         cr.check(&mut ws).expect("check failed in begin");
                         cr.apply(ws).expect("apply failed in begin");
-                        cr.commit(backing_store.index());
+                        let next = cr.committed_index_or(Arc::clone(&snapshot));
+                        root_index.store(next);
                     }
                 }
                 Type::Fail => {
@@ -319,7 +330,8 @@ mod tests {
                                 panic!("unexpected error in working set: {e:?}");
                             }
                         };
-                        let mut cr = backing_store.begin_check();
+                        let snapshot = root_index.load();
+                        let mut cr = backing_store.begin_check_from_index(Arc::clone(&snapshot));
 
                         match cr.check(&mut ws) {
                             Ok(_) => Err(eyre::eyre!("Expected conflict, check succeeded")),

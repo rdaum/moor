@@ -58,8 +58,8 @@ pub use gc::{GCError, GCInterface};
 use moor_common::util::ConcurrentCounter;
 pub use tx_management::{
     AcceptIdentical, ConflictResolver, Error, FailOnConflict, PotentialConflict, ProposedOp,
-    Relation, RelationCodomain, RelationCodomainHashable, RelationDomain, RelationTransaction,
-    Timestamp, Tx, WorkingSet,
+    Relation, RelationCodomain, RelationCodomainHashable, RelationDomain, RelationIndex,
+    RelationTransaction, Timestamp, Tx, WorkingSet,
 };
 
 // Re-export sequence constants for use in VM
