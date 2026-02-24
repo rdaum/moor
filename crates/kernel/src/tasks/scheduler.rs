@@ -259,7 +259,6 @@ impl Scheduler {
         let task_receiver = self.task_control_receiver.clone();
         let scheduler_receiver = self.scheduler_receiver.clone();
         let worker_receiver = self.worker_request_recv.clone();
-        let immediate_wake_receiver = self.task_q.suspended.immediate_wake_receiver().clone();
 
         self.reload_server_options();
         while self.running {
@@ -299,8 +298,11 @@ impl Scheduler {
                 Task(TaskId, TaskControlMsg),
                 Scheduler(SchedulerClientMsg),
                 Worker(WorkerResponse),
-                ImmediateWake(TaskId),
             }
+
+            // Immediate wakes are produced by scheduler-owned state transitions.
+            // Drain them first to avoid waiting for channel activity.
+            self.drain_immediate_wakes();
 
             // Use flume's Selector to properly select across channels with different types
             let selector = flume::Selector::new();
@@ -327,12 +329,6 @@ impl Scheduler {
                 selector
             };
 
-            // Add immediate wake receiver
-            let selector = selector.recv(&immediate_wake_receiver, |result| match result {
-                Ok(task_id) => Some(SchedulerMessage::ImmediateWake(task_id)),
-                Err(_) => None,
-            });
-
             let tick_duration = self
                 .config
                 .runtime
@@ -349,9 +345,6 @@ impl Scheduler {
                 }
                 Ok(Some(SchedulerMessage::Worker(response))) => {
                     self.handle_worker_response(response);
-                }
-                Ok(Some(SchedulerMessage::ImmediateWake(task_id))) => {
-                    self.handle_immediate_wake(task_id);
                 }
                 Ok(None) | Err(_) => {
                     // Timeout or channel disconnected, continue
@@ -382,20 +375,16 @@ impl Scheduler {
                     found_message = true;
                 }
 
-                // Check immediate wake receiver
-                if let Ok(task_id) = immediate_wake_receiver.try_recv() {
-                    self.handle_immediate_wake(task_id);
-                    found_message = true;
-                }
-
                 // If no messages were found, exit the drain loop
                 if !found_message {
                     break;
                 }
             }
 
+            self.drain_immediate_wakes();
+
             // Check for tasks that need to be woken (timer wheel handles timing internally)
-            if let Some(to_wake) = self.task_q.collect_wake_tasks(self.gc_sweep_in_progress) {
+            if let Some(to_wake) = self.task_q.collect_wake_tasks() {
                 for sr in to_wake {
                     let task_id = sr.task.task_id;
                     let is_retry = matches!(sr.wake_condition, WakeCondition::Retry(_));
@@ -916,6 +905,7 @@ impl Scheduler {
                         mutation_timestamp_before_mark,
                         self.last_mutation_timestamp
                     );
+                    self.task_q.suspended.enqueue_gc_waiting_tasks();
                     return;
                 }
 
@@ -925,11 +915,13 @@ impl Scheduler {
                         "Minor GC cycle #{}: mark phase found no objects to collect, skipping sweep phase",
                         self.gc_cycle_count
                     );
+                    self.task_q.suspended.enqueue_gc_waiting_tasks();
                     return;
                 }
 
                 // Start blocking sweep phase
                 let _ = self.run_blocking_sweep_phase(unreachable_objects);
+                self.task_q.suspended.enqueue_gc_waiting_tasks();
             }
             SchedulerClientMsg::SubmitSystemHandlerTask {
                 player,
@@ -1181,7 +1173,7 @@ impl Scheduler {
                 let _t = PerfTimerGuard::new(&perfc.task_abort_limits);
 
                 // Get the task's session and player for notifications and handler invocation
-                let Some(task) = self.task_q.active.remove(&task_id) else {
+                let Some(mut task) = self.task_q.active.remove(&task_id) else {
                     warn!(task_id, "Task not found for abort");
                     return;
                 };
@@ -1257,8 +1249,12 @@ impl Scheduler {
                 }
 
                 // Report the original task as aborted (handler outcome doesn't affect this)
-                self.task_q
-                    .send_task_result(task_id, Err(TaskAbortedLimit(limit_reason)));
+                self.task_q.suspended.enqueue_dependents_for(task_id);
+                TaskQ::send_task_result_direct(
+                    task_id,
+                    task.result_sender.take(),
+                    Err(TaskAbortedLimit(limit_reason)),
+                );
             }
             TaskControlMsg::TaskException(exception) => {
                 let perfc = sched_counters();
@@ -1926,8 +1922,14 @@ impl Scheduler {
         }
     }
 
+    fn drain_immediate_wakes(&mut self) {
+        while let Some(task_id) = self.task_q.suspended.pop_immediate_wake() {
+            self.handle_immediate_wake(task_id);
+        }
+    }
+
     fn handle_immediate_wake(&mut self, task_id: TaskId) {
-        // Handle immediate wake task from channel
+        // Handle a task queued for immediate wake
         let Some(sr) = self.task_q.suspended.remove_task(task_id) else {
             // Task was already removed (e.g., killed), ignore
             return;
@@ -2189,11 +2191,15 @@ impl Scheduler {
 
         // Run concurrent mark & sweep GC with retry logic for conflicts
         let max_retries = 3;
+        let mut mark_started = false;
         for attempt in 1..=max_retries {
             let result = self.run_concurrent_gc();
 
             match result {
-                Ok(()) => break, // Success, exit retry loop
+                Ok(()) => {
+                    mark_started = true;
+                    break;
+                } // Success, exit retry loop
                 Err(e)
                     if e.to_string().contains("GC transaction conflict")
                         && attempt < max_retries =>
@@ -2211,6 +2217,10 @@ impl Scheduler {
                     break;
                 }
             }
+        }
+
+        if !mark_started {
+            self.task_q.suspended.enqueue_gc_waiting_tasks();
         }
 
         // Update the timestamp AFTER GC completes, not before
@@ -2663,6 +2673,7 @@ impl TaskQ {
             warn!(task_id, "Task not found for notification, ignoring");
             return;
         };
+        self.suspended.enqueue_dependents_for(task_id);
         let result_sender = task_control.result_sender.take();
         Self::send_task_result_direct(task_id, result_sender, result);
     }
@@ -2828,7 +2839,11 @@ impl TaskQ {
 
         // If suspended we can just remove completely and move on.
         if is_suspended {
-            if self.suspended.remove_task(victim_task_id).is_none() {
+            if self
+                .suspended
+                .remove_task_terminal(victim_task_id)
+                .is_none()
+            {
                 error!(
                     task = victim_task_id,
                     "Task not found in suspended list for kill request"
@@ -2845,6 +2860,7 @@ impl TaskQ {
                 return v_err(E_INVARG);
             }
         };
+        self.suspended.enqueue_dependents_for(victim_task_id);
         victim_task.kill_switch.store(true, Ordering::SeqCst);
         v_bool_int(false)
     }
