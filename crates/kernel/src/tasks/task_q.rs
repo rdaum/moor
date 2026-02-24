@@ -12,7 +12,7 @@
 //
 
 use ahash::AHasher;
-use flume::{Receiver, Sender};
+use flume::Sender;
 use hierarchical_hash_wheel_timer::wheels::{
     Skip, TimerEntryWithDelay,
     quad_wheel::{PruneDecision, QuadWheelWithOverflow},
@@ -113,13 +113,9 @@ impl TaskQ {
         self.suspended.task_owner(task_id)
     }
 
-    /// Collect tasks that need to be woken up, pull them from our suspended list, and return them.
-    /// Uses segmented storage types for O(1) operations instead of O(n) linear scan.
-    /// Note: Immediate wake tasks are handled via channel in scheduler select loop.
-    pub(crate) fn collect_wake_tasks(
-        &mut self,
-        gc_in_progress: bool,
-    ) -> Option<Vec<SuspendedTask>> {
+    /// Collect tasks that need to be woken up by timer, pull them from our suspended list, and
+    /// return them. Other wake paths are event-driven through the immediate wake queue.
+    pub(crate) fn collect_wake_tasks(&mut self) -> Option<Vec<SuspendedTask>> {
         let mut to_wake: Option<Vec<TaskId>> = None;
 
         // 1. Advance timer wheel based on elapsed time and collect expired timers
@@ -133,26 +129,6 @@ impl TaskQ {
         if self.suspended.tasks.is_empty() {
             return None;
         }
-
-        // 2. Check for task dependencies that should wake (O(1) per dependency check)
-        for (dependency_task_id, dependent_task_ids) in &self.suspended.task_dependencies {
-            // If the dependency task is no longer running or suspended, wake dependents
-            if !self.suspended.tasks.contains_key(dependency_task_id)
-                && !self.active.contains_key(dependency_task_id)
-            {
-                to_wake
-                    .get_or_insert_with(Vec::new)
-                    .extend(dependent_task_ids.iter().copied());
-            }
-        }
-
-        // 3. Check for GC-waiting tasks when GC is not in progress
-        if !gc_in_progress && !self.suspended.gc_waiting_tasks.is_empty() {
-            to_wake
-                .get_or_insert_with(Vec::new)
-                .extend(self.suspended.gc_waiting_tasks.iter().copied());
-        }
-
         let to_wake = to_wake?;
         let tasks: Vec<_> = to_wake
             .into_iter()
@@ -193,7 +169,7 @@ impl TaskQ {
             .message_waiting_tasks
             .contains(&target_task_id)
         {
-            let _ = self.suspended.immediate_wake_sender.send(target_task_id);
+            self.suspended.enqueue_immediate_wake(target_task_id);
         }
     }
 
@@ -299,9 +275,8 @@ pub struct SuspensionQ {
     /// Last time we advanced the timer wheel (for tracking elapsed time)
     last_timer_advance: Option<Instant>,
 
-    /// Channel for tasks that should wake immediately (O(1) send/recv)
-    immediate_wake_sender: Sender<TaskId>,
-    immediate_wake_receiver: Receiver<TaskId>,
+    /// Queue for tasks that should wake immediately (O(1) push/pop)
+    immediate_wake_queue: VecDeque<TaskId>,
 
     /// Tasks waiting for other tasks to complete (O(1) lookup by dependency)
     task_dependencies: HashMap<TaskId, Vec<TaskId>, BuildHasherDefault<AHasher>>,
@@ -326,14 +301,12 @@ pub struct SuspensionQ {
 
 impl SuspensionQ {
     pub fn new(tasks_database: Box<dyn TasksDb>) -> Self {
-        let (immediate_wake_sender, immediate_wake_receiver) = flume::unbounded();
         Self {
             tasks: Default::default(),
             // Create timer wheel with pruner that keeps all entries
             timer_wheel: QuadWheelWithOverflow::new(|_| PruneDecision::Keep),
             last_timer_advance: Some(Instant::now()),
-            immediate_wake_sender,
-            immediate_wake_receiver,
+            immediate_wake_queue: VecDeque::new(),
             task_dependencies: HashMap::default(),
             input_requests: HashMap::default(),
             worker_requests: HashMap::default(),
@@ -349,9 +322,34 @@ impl SuspensionQ {
         self.tasks.get(&task_id).map(|st| st.task.perms)
     }
 
-    /// Get the receiver for immediate wake tasks. Used by scheduler for select loop.
-    pub fn immediate_wake_receiver(&self) -> &Receiver<TaskId> {
-        &self.immediate_wake_receiver
+    /// Queue a task for immediate wake.
+    #[inline]
+    pub(crate) fn enqueue_immediate_wake(&mut self, task_id: TaskId) {
+        self.immediate_wake_queue.push_back(task_id);
+    }
+
+    /// Pop the next task queued for immediate wake.
+    #[inline]
+    pub(crate) fn pop_immediate_wake(&mut self) -> Option<TaskId> {
+        self.immediate_wake_queue.pop_front()
+    }
+
+    /// Queue all tasks waiting on `dependency_task_id` for immediate wake.
+    pub(crate) fn enqueue_dependents_for(&mut self, dependency_task_id: TaskId) {
+        let Some(dependents) = self.task_dependencies.remove(&dependency_task_id) else {
+            return;
+        };
+        for task_id in dependents {
+            self.enqueue_immediate_wake(task_id);
+        }
+    }
+
+    /// Queue all tasks waiting for GC completion for immediate wake.
+    pub(crate) fn enqueue_gc_waiting_tasks(&mut self) {
+        let waiting_tasks = std::mem::take(&mut self.gc_waiting_tasks);
+        for task_id in waiting_tasks {
+            self.enqueue_immediate_wake(task_id);
+        }
     }
 
     /// Advance the timer wheel based on elapsed time and return expired entries.
@@ -427,17 +425,11 @@ impl SuspensionQ {
                     };
                     if !inserted {
                         // Past deadline or timer expired - wake immediately
-                        let _ = self.immediate_wake_sender.send(task_id);
+                        self.enqueue_immediate_wake(task_id);
                     }
                 }
                 WakeCondition::Immediate(_) => {
-                    if let Err(e) = self.immediate_wake_sender.send(task_id) {
-                        error!(
-                            ?e,
-                            ?task_id,
-                            "Failed to send immediate wake task to channel during load"
-                        );
-                    }
+                    self.enqueue_immediate_wake(task_id);
                 }
                 WakeCondition::Task(dependency_task_id) => {
                     self.task_dependencies
@@ -469,7 +461,7 @@ impl SuspensionQ {
                             .is_ok()
                     };
                     if !inserted {
-                        let _ = self.immediate_wake_sender.send(task_id);
+                        self.enqueue_immediate_wake(task_id);
                     }
                 }
                 WakeCondition::TaskMessage(wake_time) => {
@@ -483,7 +475,7 @@ impl SuspensionQ {
                             .is_ok()
                     };
                     if !inserted {
-                        let _ = self.immediate_wake_sender.send(task_id);
+                        self.enqueue_immediate_wake(task_id);
                     }
                 }
             }
@@ -520,18 +512,12 @@ impl SuspensionQ {
                 };
                 if !inserted {
                     // Past deadline or timer expired - wake immediately
-                    let _ = self.immediate_wake_sender.send(task_id);
+                    self.enqueue_immediate_wake(task_id);
                 }
                 inserted // Persist only if successfully inserted into timer wheel
             }
             WakeCondition::Immediate(_) => {
-                if let Err(e) = self.immediate_wake_sender.send(task_id) {
-                    error!(
-                        ?e,
-                        ?task_id,
-                        "Failed to send immediate wake task to channel"
-                    );
-                }
+                self.enqueue_immediate_wake(task_id);
                 false // Skip database persistence for immediate wake
             }
             WakeCondition::Task(dependency_task_id) => {
@@ -564,7 +550,7 @@ impl SuspensionQ {
                 };
                 if !inserted {
                     // Past deadline - wake immediately for retry
-                    let _ = self.immediate_wake_sender.send(task_id);
+                    self.enqueue_immediate_wake(task_id);
                 }
                 false // Don't persist retry tasks - they're transient
             }
@@ -579,7 +565,7 @@ impl SuspensionQ {
                 };
                 if !inserted {
                     // Past deadline - wake immediately
-                    let _ = self.immediate_wake_sender.send(task_id);
+                    self.enqueue_immediate_wake(task_id);
                 }
                 true // Persist - message queue state should survive restarts
             }
@@ -611,8 +597,8 @@ impl SuspensionQ {
                     // No manual cleanup needed
                 }
                 WakeCondition::Immediate(_) => {
-                    // No cleanup needed for channel - scheduler will ignore messages
-                    // for tasks no longer in the suspended tasks map
+                    // No cleanup needed for queue - scheduler will ignore stale task ids
+                    // if task is no longer in the suspended tasks map.
                 }
                 WakeCondition::Task(dependency_task_id) => {
                     // Remove from task dependencies
@@ -645,6 +631,15 @@ impl SuspensionQ {
 
             // Try to delete from database - will be a no-op for tasks that were never persisted
             let _ = self.tasks_database.delete_task(task_id);
+        }
+        task
+    }
+
+    /// Remove a task permanently from suspension and wake tasks depending on it.
+    pub(crate) fn remove_task_terminal(&mut self, task_id: TaskId) -> Option<SuspendedTask> {
+        let task = self.remove_task(task_id);
+        if task.is_some() {
+            self.enqueue_dependents_for(task_id);
         }
         task
     }
@@ -835,7 +830,7 @@ impl SuspensionQ {
             })
             .collect::<Vec<_>>();
         for task_id in to_remove {
-            self.remove_task(task_id);
+            self.remove_task_terminal(task_id);
         }
     }
 
