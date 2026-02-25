@@ -13,7 +13,7 @@
 
 use crate::{
     config::FeaturesConfig,
-    task_context::with_current_transaction_mut,
+    task_context::with_current_transaction,
     vm::{
         Fork,
         activation::{Activation, Frame},
@@ -31,7 +31,7 @@ use lazy_static::lazy_static;
 use minstant::Instant;
 use moor_common::{
     matching::ParsedCommand,
-    model::{ObjFlag, VerbDef, WorldStateError},
+    model::{DispatchFlagsSource, ObjFlag, VerbDef, WorldStateError},
     tasks::Session,
     util::BitEnum,
 };
@@ -61,6 +61,8 @@ lazy_static! {
 pub struct VerbExecutionRequest {
     /// The applicable permissions.
     pub permissions: Obj,
+    /// The precomputed flags for `permissions`.
+    pub permissions_flags: BitEnum<ObjFlag>,
     /// The resolved verb.
     pub resolved_verb: VerbDef,
     /// Verb name
@@ -84,6 +86,8 @@ pub struct VerbExecutionRequest {
 pub struct CommandVerbExecutionRequest {
     /// The applicable permissions.
     pub permissions: Obj,
+    /// The precomputed flags for `permissions`.
+    pub permissions_flags: BitEnum<ObjFlag>,
     /// The resolved verb.
     pub resolved_verb: VerbDef,
     /// Verb name
@@ -167,7 +171,7 @@ impl VMExecState {
             }
         };
         let perms = self.top().permissions;
-        let prop_val = with_current_transaction_mut(|world_state| {
+        let prop_val = with_current_transaction(|world_state| {
             match world_state.retrieve_property(&perms, &SYSTEM_OBJECT, sysprop_sym) {
                 Ok(prop_val) => Ok(prop_val),
                 Err(e) => Err(e.to_error()),
@@ -219,19 +223,30 @@ impl VMExecState {
             activation_player
         };
 
-        let self_valid = with_current_transaction_mut(|world_state| world_state.valid(&location))
-            .expect("Error checking object validity");
-        if !self_valid {
+        let lookup = with_current_transaction(|world_state| {
+            let self_valid = world_state
+                .valid(&location)
+                .expect("Error checking object validity");
+            if !self_valid {
+                return None;
+            }
+
+            let verb_result = world_state.find_method_verb_for_dispatch(
+                &self.top().permissions,
+                &location,
+                verb_name,
+                DispatchFlagsSource::VerbOwner,
+            );
+            Some(verb_result)
+        });
+
+        let Some(verb_result) = lookup else {
             return self.push_error(
                 E_INVIND.with_msg(|| format!("Invalid object ({location}) for verb dispatch")),
             );
-        }
-        // Find the callable verb ...
-        let verb_result = with_current_transaction_mut(|world_state| {
-            world_state.find_method_verb_on(&self.top().permissions, &location, verb_name)
-        });
+        };
 
-        let (program, resolved_verb) = match verb_result {
+        let (program, resolved_verb, permissions_flags) = match verb_result {
             Ok(vi) => vi,
             Err(WorldStateError::ObjectPermissionDenied) => {
                 return self.push_error(E_PERM.into());
@@ -257,9 +272,6 @@ impl VMExecState {
         };
 
         // Permissions for the activation are the verb's owner.
-        let permissions_flags =
-            with_current_transaction_mut(|ws| ws.flags_of(&resolved_verb.owner()))
-                .unwrap_or_default();
         self.exec_call_request(
             permissions_flags,
             resolved_verb,
@@ -281,31 +293,37 @@ impl VMExecState {
         // get parent of verb definer object & current verb name.
         let definer = self.top().verb_definer();
         let permissions = &self.top().permissions;
+        let verb = self.top().verb_name;
 
-        let parent_result = with_current_transaction_mut(|world_state| {
-            world_state.parent_of(permissions, &definer)
+        let lookup = with_current_transaction(|world_state| {
+            let parent = world_state.parent_of(permissions, &definer)?;
+            let parent_valid = world_state
+                .valid(&parent)
+                .expect("Error checking object validity");
+            if !parent_valid {
+                return Ok(None);
+            }
+
+            let verb_result = world_state.find_method_verb_for_dispatch(
+                permissions,
+                &parent,
+                verb,
+                DispatchFlagsSource::Permissions,
+            );
+            Ok(Some(verb_result))
         });
-        let parent = match parent_result {
-            Ok(parent) => parent,
+
+        let lookup = match lookup {
+            Ok(lookup) => lookup,
             Err(WorldStateError::RollbackRetry) => {
                 return ExecutionResult::TaskRollbackRestart;
             }
             Err(e) => return self.raise_error(e.to_error()),
         };
-        let verb = self.top().verb_name;
-
-        // if `parent` is not a valid object, raise E_INVIND
-        let parent_valid = with_current_transaction_mut(|world_state| world_state.valid(&parent))
-            .expect("Error checking object validity");
-        if !parent_valid {
+        let Some(verb_result) = lookup else {
             return self.push_error(E_INVIND.msg("Invalid object for pass() verb dispatch"));
-        }
-
-        // call verb on parent, but with our current 'this'
-        let verb_result = with_current_transaction_mut(|world_state| {
-            world_state.find_method_verb_on(permissions, &parent, verb)
-        });
-        let (program, resolved_verb) = match verb_result {
+        };
+        let (program, resolved_verb, permissions_flags) = match verb_result {
             Ok(vi) => vi,
             Err(WorldStateError::RollbackRetry) => {
                 return ExecutionResult::TaskRollbackRestart;
@@ -316,10 +334,10 @@ impl VMExecState {
         let caller = self.caller();
         let this = self.top().this.clone();
         let player = self.top().player;
-        let args_list = args.iter().collect();
-
+        let args_list = args.clone();
         ExecutionResult::DispatchVerb(Box::new(VerbExecutionRequest {
             permissions: *permissions,
+            permissions_flags,
             resolved_verb,
             verb_name: verb,
             this,
@@ -462,7 +480,7 @@ impl VMExecState {
         initial_env: Option<&[(Symbol, Var)]>,
     ) {
         let permissions_flags =
-            with_current_transaction_mut(|ws| ws.flags_of(permissions)).unwrap_or_default();
+            with_current_transaction(|ws| ws.flags_of(permissions)).unwrap_or_default();
         let a = Activation::for_eval(
             *permissions,
             permissions_flags,
@@ -583,22 +601,24 @@ impl VMExecState {
         }
 
         // Look for it...
-        let (program, resolved_verb) = with_current_transaction_mut(|world_state| {
-            world_state.find_method_verb_on(
+        let (program, resolved_verb, permissions_flags) = with_current_transaction(|world_state| {
+            world_state.find_method_verb_for_dispatch(
                 &self.top().permissions,
                 &SYSTEM_OBJECT,
                 bf_override_name,
+                DispatchFlagsSource::Permissions,
             )
         })
         .ok()?;
 
         let player = self.top().player;
         let caller = self.caller();
-        let args_list = args.iter().collect();
-
+        let args_list = args.clone();
+        let permissions = self.top().permissions;
         Some(ExecutionResult::DispatchVerb(Box::new(
             VerbExecutionRequest {
-                permissions: self.top().permissions,
+                permissions,
+                permissions_flags,
                 resolved_verb,
                 verb_name: bf_override_name,
                 this: v_obj(SYSTEM_OBJECT),

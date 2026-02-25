@@ -21,7 +21,7 @@ pub use crate::model::{
     props::{PropAttr, PropAttrs, PropFlag, PropPerms, prop_flags_string},
     verbdef::{VerbDef, VerbDefs},
     verbs::{BinaryType, VerbAttr, VerbAttrs, VerbFlag, Vid, verb_perms_string},
-    world_state::{ObjectKind, WorldState, WorldStateSource},
+    world_state::{DispatchFlagsSource, ObjectKind, WorldState, WorldStateSource},
 };
 use serde::Serialize;
 use std::fmt::{Debug, Display};

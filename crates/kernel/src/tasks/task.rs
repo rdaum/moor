@@ -51,9 +51,9 @@ use crate::{
 #[cfg(feature = "trace_events")]
 use moor_common::tasks::AbortLimitReason;
 use moor_common::{
-    model::{CommitResult, VerbDef, WorldState, WorldStateError},
+    model::{CommitResult, DispatchFlagsSource, ObjFlag, VerbDef, WorldState, WorldStateError},
     tasks::{CommandError, CommandError::PermissionDenied, Exception, TaskId},
-    util::{PerfTimerGuard, parse_into_words},
+    util::{BitEnum, PerfTimerGuard, parse_into_words},
 };
 use moor_var::{
     Error, ErrorCode, List, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant, v_empty_str, v_err,
@@ -562,14 +562,15 @@ impl Task {
                 } else {
                     // Try to find and invoke $handle_uncaught_error on #0 (SYSTEM_OBJECT)
                     let verb_lookup = with_current_transaction(|world_state| {
-                        world_state.find_method_verb_on(
+                        world_state.find_method_verb_for_dispatch(
                             &self.perms,
                             &SYSTEM_OBJECT,
                             *HANDLE_UNCAUGHT_ERROR_SYM,
+                            DispatchFlagsSource::Permissions,
                         )
                     });
 
-                    if let Ok((program, verbdef)) = verb_lookup {
+                    if let Ok((program, verbdef, permissions_flags)) = verb_lookup {
                         // Handler exists - prepare to invoke it
                         // Prepare arguments: {code, msg, value, stack, traceback}
                         let code = v_err(exception.error.err_type);
@@ -594,9 +595,6 @@ impl Task {
                         self.handling_uncaught_error = true;
 
                         // Set up the handler as a method call on SYSTEM_OBJECT
-                        let permissions_flags =
-                            with_current_transaction(|ws| ws.flags_of(&self.perms))
-                                .unwrap_or_default();
                         self.vm_host.start_call_method_verb(
                             self.task_id,
                             verbdef,
@@ -812,7 +810,12 @@ impl Task {
                     }
                 };
                 match with_current_transaction(|world_state| {
-                    world_state.find_method_verb_on(&self.perms, &object_location, verb_name)
+                    world_state.find_method_verb_for_dispatch(
+                        &self.perms,
+                        &object_location,
+                        verb_name,
+                        DispatchFlagsSource::Permissions,
+                    )
                 }) {
                     Err(WorldStateError::VerbNotFound(_, _)) => {
                         control_sender
@@ -829,10 +832,7 @@ impl Task {
                                "World state error while resolving verb: {:?}", e);
                         panic!("Could not resolve verb: {e:?}");
                     }
-                    Ok((program, verbdef)) => {
-                        let permissions_flags =
-                            with_current_transaction(|ws| ws.flags_of(&self.perms))
-                                .unwrap_or_default();
+                    Ok((program, verbdef, permissions_flags)) => {
                         self.vm_host.start_call_method_verb(
                             self.task_id,
                             verbdef,
@@ -875,10 +875,11 @@ impl Task {
                 // Start $handle_uncaught_error on the system object with the exception args
                 // Find and set up the handler verb
                 match with_current_transaction(|world_state| {
-                    world_state.find_method_verb_on(
+                    world_state.find_method_verb_for_dispatch(
                         &self.perms,
                         &SYSTEM_OBJECT,
                         *HANDLE_UNCAUGHT_ERROR_SYM,
+                        DispatchFlagsSource::Permissions,
                     )
                 }) {
                     Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -890,10 +891,7 @@ impl Task {
                         error!(task_id = ?self.task_id, "Error resolving handle_uncaught_error: {e:?}");
                         return false;
                     }
-                    Ok((program, verbdef)) => {
-                        let permissions_flags =
-                            with_current_transaction(|ws| ws.flags_of(&self.perms))
-                                .unwrap_or_default();
+                    Ok((program, verbdef, permissions_flags)) => {
                         self.vm_host.start_call_method_verb(
                             self.task_id,
                             verbdef,
@@ -938,17 +936,20 @@ impl Task {
         // First check to see if we have a $do_command at all, if yes, we're actually starting
         // that verb with the command as an argument. If that then fails (non-true return code)
         // we'll end up in the start_parse_command phase.
-        let do_command =
-            world_state.find_method_verb_on(&self.perms, &SYSTEM_OBJECT, *DO_COMMAND_SYM);
+        let do_command = world_state.find_method_verb_for_dispatch(
+            &self.perms,
+            &SYSTEM_OBJECT,
+            *DO_COMMAND_SYM,
+            DispatchFlagsSource::Permissions,
+        );
 
         match do_command {
             Err(WorldStateError::VerbNotFound(_, _)) => {
                 self.setup_start_parse_command(player, command, world_state)?;
             }
-            Ok((program, verbdef)) => {
+            Ok((program, verbdef, permissions_flags)) => {
                 let arguments = parse_into_words(command);
                 let args = List::from_iter(arguments.iter().map(|s| v_str(s)));
-                let permissions_flags = world_state.flags_of(&self.perms).unwrap_or_default();
                 self.vm_host.start_call_method_verb(
                     self.task_id,
                     verbdef,
@@ -1021,7 +1022,7 @@ impl Task {
         // Look for the verb...
         let parse_results =
             find_verb_for_command(player, &player_location, &parsed_command, world_state)?;
-        let ((program, verbdef), target) = match parse_results {
+        let ((program, verbdef, permissions_flags), target) = match parse_results {
             // If we have a successful match, that's what we'll call into
             Some((verb_info, target)) => (verb_info, target),
             // Otherwise, we want to try to call :huh, if it exists.
@@ -1031,16 +1032,19 @@ impl Task {
                 }
                 // Try to find :huh. If it exists, we'll dispatch to that, instead.
                 // If we don't find it, that's the end of the line.
-                let Ok((program, verbdef)) =
-                    world_state.find_method_verb_on(&self.perms, &player_location, *HUH_SYM)
+                let Ok((program, verbdef, permissions_flags)) = world_state
+                    .find_method_verb_for_dispatch(
+                        &self.perms,
+                        &player_location,
+                        *HUH_SYM,
+                        DispatchFlagsSource::VerbOwner,
+                    )
                 else {
                     return Err(CommandError::NoCommandMatch);
                 };
-                ((program, verbdef), player_location)
+                ((program, verbdef, permissions_flags), player_location)
             }
         };
-        let verb_owner = verbdef.owner();
-        let permissions_flags = world_state.flags_of(&verb_owner).unwrap_or_default();
         self.vm_host.start_call_command_verb(
             self.task_id,
             verbdef,
@@ -1120,7 +1124,7 @@ fn find_verb_for_command(
     player_location: &Obj,
     pc: &ParsedCommand,
     ws: &mut dyn WorldState,
-) -> Result<Option<((ProgramType, VerbDef), Obj)>, CommandError> {
+) -> Result<Option<((ProgramType, VerbDef, BitEnum<ObjFlag>), Obj)>, CommandError> {
     let perfc = sched_counters();
     let _t = PerfTimerGuard::new(&perfc.find_verb_for_command);
     let targets_to_search = vec![
@@ -1130,13 +1134,14 @@ fn find_verb_for_command(
         pc.iobj.unwrap_or(NOTHING),
     ];
     for target in targets_to_search {
-        let match_result = ws.find_command_verb_on(
+        let match_result = ws.find_command_verb_for_dispatch(
             player,
             &target,
             pc.verb,
             &pc.dobj.unwrap_or(NOTHING),
             pc.prep,
             &pc.iobj.unwrap_or(NOTHING),
+            DispatchFlagsSource::VerbOwner,
         );
         let match_result = match match_result {
             Ok(m) => m,

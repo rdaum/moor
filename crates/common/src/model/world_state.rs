@@ -45,6 +45,15 @@ pub enum ObjectKind {
     Anonymous,
 }
 
+/// Controls which object's flags should be returned for dispatch activation setup.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum DispatchFlagsSource {
+    /// Return flags for the `perms` object passed into lookup.
+    Permissions,
+    /// Return flags for the resolved verb owner.
+    VerbOwner,
+}
+
 /// Errors related to the world state and operations on it.
 #[derive(Error, Debug, Eq, PartialEq, Clone)]
 pub enum WorldStateError {
@@ -367,6 +376,33 @@ pub trait WorldState: Send {
         vname: Symbol,
     ) -> Result<(ProgramType, VerbDef), WorldStateError>;
 
+    /// Retrieve only verb metadata for a method lookup, without loading program binary.
+    fn find_method_verb_def_on(
+        &self,
+        perms: &Obj,
+        obj: &Obj,
+        vname: Symbol,
+    ) -> Result<VerbDef, WorldStateError> {
+        let (_, verbdef) = self.find_method_verb_on(perms, obj, vname)?;
+        Ok(verbdef)
+    }
+
+    /// Retrieve a verb/method and the precomputed activation flags used by dispatch.
+    fn find_method_verb_for_dispatch(
+        &self,
+        perms: &Obj,
+        obj: &Obj,
+        vname: Symbol,
+        flags_source: DispatchFlagsSource,
+    ) -> Result<(ProgramType, VerbDef, BitEnum<ObjFlag>), WorldStateError> {
+        let (program, verbdef) = self.find_method_verb_on(perms, obj, vname)?;
+        let permissions_flags = match flags_source {
+            DispatchFlagsSource::Permissions => self.flags_of(perms).unwrap_or_default(),
+            DispatchFlagsSource::VerbOwner => self.flags_of(&verbdef.owner()).unwrap_or_default(),
+        };
+        Ok((program, verbdef, permissions_flags))
+    }
+
     /// Seek the verb referenced by the given command on the given object.
     fn find_command_verb_on(
         &self,
@@ -377,6 +413,47 @@ pub trait WorldState: Send {
         prep: PrepSpec,
         iobj: &Obj,
     ) -> Result<Option<(ProgramType, VerbDef)>, WorldStateError>;
+
+    /// Retrieve only verb metadata for a command lookup, without loading program binary.
+    fn find_command_verb_def_on(
+        &self,
+        perms: &Obj,
+        obj: &Obj,
+        command_verb: Symbol,
+        dobj: &Obj,
+        prep: PrepSpec,
+        iobj: &Obj,
+    ) -> Result<Option<VerbDef>, WorldStateError> {
+        let Some((_, verbdef)) =
+            self.find_command_verb_on(perms, obj, command_verb, dobj, prep, iobj)?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(verbdef))
+    }
+
+    /// Retrieve a command verb and the precomputed activation flags used by dispatch.
+    fn find_command_verb_for_dispatch(
+        &self,
+        perms: &Obj,
+        obj: &Obj,
+        command_verb: Symbol,
+        dobj: &Obj,
+        prep: PrepSpec,
+        iobj: &Obj,
+        flags_source: DispatchFlagsSource,
+    ) -> Result<Option<(ProgramType, VerbDef, BitEnum<ObjFlag>)>, WorldStateError> {
+        let Some((program, verbdef)) =
+            self.find_command_verb_on(perms, obj, command_verb, dobj, prep, iobj)?
+        else {
+            return Ok(None);
+        };
+        let permissions_flags = match flags_source {
+            DispatchFlagsSource::Permissions => self.flags_of(perms).unwrap_or_default(),
+            DispatchFlagsSource::VerbOwner => self.flags_of(&verbdef.owner()).unwrap_or_default(),
+        };
+        Ok(Some((program, verbdef, permissions_flags)))
+    }
 
     /// Get the object that is the parent of the given object.
     fn parent_of(&self, perms: &Obj, obj: &Obj) -> Result<Obj, WorldStateError>;

@@ -737,8 +737,8 @@ fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let name = bf_args.args[1].as_symbol().map_err(BfErr::ErrValue)?;
 
-    let Ok((_, vd)) = with_current_transaction(|world_state| {
-        world_state.find_method_verb_on(&task_perms, &obj, name)
+    let Ok(vd) = with_current_transaction(|world_state| {
+        world_state.find_method_verb_def_on(&task_perms, &obj, name)
     }) else {
         return Ok(Ret(bf_args.v_bool(false)));
     };

@@ -347,11 +347,8 @@ impl VmHost {
                     continue;
                 }
                 ExecutionResult::DispatchVerb(exec_request) => {
-                    let perms_flags =
-                        with_current_transaction(|ws| ws.flags_of(&exec_request.permissions))
-                            .unwrap_or_default();
                     self.vm_exec_state.exec_call_request(
-                        perms_flags,
+                        exec_request.permissions_flags,
                         exec_request.resolved_verb,
                         exec_request.verb_name,
                         exec_request.this,
@@ -364,11 +361,8 @@ impl VmHost {
                     return ContinueOk;
                 }
                 ExecutionResult::DispatchCommandVerb(exec_request) => {
-                    let perms_flags =
-                        with_current_transaction(|ws| ws.flags_of(&exec_request.permissions))
-                            .unwrap_or_default();
                     self.vm_exec_state.exec_command_request(
-                        perms_flags,
+                        exec_request.permissions_flags,
                         exec_request.resolved_verb,
                         exec_request.verb_name,
                         exec_request.this,
