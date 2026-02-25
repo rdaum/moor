@@ -38,6 +38,8 @@ Databases from beta7 and earlier cannot be loaded directly.
 - `round()` now accepts optional second argument to specify decimal places
 - Flyweight slots can now be assigned in-place like maps and lists (e.g., `myfw.slot = value;`)
   without using `flyslotset()`. This is a copy-on-write operation.
+- New `emit_data()` builtin for structured client state synchronization over the websocket
+- New `flycontentsset()` builtin
 
 `list_sets`:
 
@@ -48,6 +50,7 @@ Databases from beta7 and earlier cannot be loaded directly.
 `daemon`:
 
 - Support for both IPC and TCP 0mq binding on same daemon
+- New OAuth2 non-cookie flow support
 
 `db`:
 
@@ -56,6 +59,7 @@ Databases from beta7 and earlier cannot be loaded directly.
 `testing`:
 
 - Basic benchmarking "core" and simple bench tool for now just an example tick loop
+- New "RPG"-like bench core utility
 
 `db`:
 
@@ -86,9 +90,17 @@ Databases from beta7 and earlier cannot be loaded directly.
 - Interactive UUID-based object IDs with click-to-copy support and toast notification feedback
 - Object ID highlighting now works for plain object IDs, not just UUID-based ones
 
+`web-sdk`:
+
+- New reusable mock web-host transport test harnesses for client testing
+- Web-host version of MCP tool
+- Centralized E2E decryption and DTO mapping
+
 `docs`:
 
 - New Flyweights chapter in the book
+- OpenAPI 3.1.0 spec added and served at `/openapi.yaml`
+- OpenAPI-derived WebSocket documentation added to the book
 
 ### Changed
 
@@ -102,6 +114,8 @@ Databases from beta7 and earlier cannot be loaded directly.
 - Fork dispatch now commits and requests a fresh transaction before scheduling new tasks
 - `queued_tasks()` prefers the top non-builtin activation for prepared tasks
 - `parse_command()` now accepts optional 4th argument to specify fuzzy match threshold
+- Stored program format bumped to version 3 to enforce hard incompatibility with chained
+  assignments through builtin properties
 
 `regex`:
 
@@ -112,10 +126,12 @@ Databases from beta7 and earlier cannot be loaded directly.
 - Improved server/client heartbeat for better detection of lost connections
 - Add SIGUSR1 handler for graceful shutdown which also exports an objdef dump
 - Trigger said SIGUSR1 when low-level (fjall) DB write failures occur
+- API routes versioned under `/v1` prefix (replacing `/api/*`)
 
 `telnet-host`:
 
 - Default content output changed to plain ASCII
+- Support for screenreader no-ansi-grafx mode
 
 `db`:
 
@@ -133,6 +149,11 @@ Databases from beta7 and earlier cannot be loaded directly.
 
 - Web-client split into its own repository [`meadow`](https://codeberg.org/timbran/meadow) to
   decouple release cadences and separate issue tracking
+- Generic TypeScript webclient pieces split into separate web-sdk NPM package
+
+`web-sdk`:
+
+- Initial attach now skips reattach to preserve "connected" semantics
 
 `infra`:
 
@@ -152,6 +173,10 @@ Databases from beta7 and earlier cannot be loaded directly.
 - Added missing `E_PERM` mapping for `!r` verbs
 - Return `false`/`0` for unprogrammed verbs for LambdaMOO compatibility (#621)
 - Use proper exponential backoff for transaction abort-retry
+- Chained assignments through builtin properties (e.g., `this.location.inventory = xxx`) no longer
+  cause E_PERM errors; fixed excessive redundant writes (#625)
+- Variables beginning with `global` (e.g., `global_salt`) now compile correctly
+- `range_set()` on strings now returns `E_RANGE` when the start index is out of bounds (#627)
 
 `list_sets`:
 
@@ -161,17 +186,15 @@ Databases from beta7 and earlier cannot be loaded directly.
 
 - `pcre_match()` now handles unmatched optional capture groups without panicking
 
-`var`:
-
-- `range_set()` on strings now returns `E_RANGE` when the start index is out of bounds
-
 `compiler`:
 
 - Decompilation for optional lambda arguments now handled correctly
+- Fixed decompilation for various set operations including `PutPropAt`
 
 `db`:
 
 - Cleaned up transaction conflict UUID holder output in logs
+- Fixed subtle race condition on verb/prop/ancest cache
 
 `daemon`:
 
@@ -179,16 +202,37 @@ Databases from beta7 and earlier cannot be loaded directly.
 - IPC worker processes no longer assume CURVE encryption is required
 - Reduced log spam for dangling connections, `bf_respond_to`, remote verb invocations, and
   connection handling
+- `bg_seconds()` and `fg_seconds()` now accept float arguments
+
+`var`:
+
+- `range_set()` on strings now handles UTF-8 offsetting correctly (#627)
 
 `mcp-host`:
 
 - Added ping/pong support for proper connection liveness checking
+- Fixed resolve_object bugs
+- Fixed connection management
 
 `telnet-host`:
 
 - UTF-8 multibyte character input sequences now handled correctly
 - Handle multibyte IAC telnet sequences, passing them to `$do_out_of_band_command` as Binary
   payloads
+
+`web-host`:
+
+- Unify auth extraction and RPC client usage with typed Axum extractors
+- Fixed initial websocket attach to skip reattach and preserve "connected" semantics
+- Improved reconnect diagnostics
+
+`web-sdk`:
+
+- Fixed event ID attribution for historical event logging to prevent event duplication on refresh
+- Fixed web MCP runners
+- Patched places where `None` values were leaking through (e.g., `clear_property` now raises
+  `E_INVARG` for properties with no parent)
+- Allow multiple MOOs for web-mcp client
 
 `web-client`:
 
