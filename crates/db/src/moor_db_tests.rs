@@ -20,12 +20,12 @@ mod tests {
     use moor_common::{
         model::{
             CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, ObjectRef,
-            PropFlag, ValSet, VerbArgsSpec, VerbAttrs, VerbFlag, WorldStateError,
+            PropAttrs, PropFlag, ValSet, VerbArgsSpec, VerbAttrs, VerbFlag, WorldStateError,
         },
         util::BitEnum,
     };
     use moor_var::{
-        Associative, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant,
+        Associative, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Var, Variant,
         program::{ProgramType, program::Program},
         v_int, v_none, v_str,
     };
@@ -521,6 +521,233 @@ mod tests {
                 "test_prop".to_string()
             ))
         );
+    }
+
+    #[test]
+    pub fn test_worldstate_owner_transfer_requires_wizard() {
+        use crate::db_worldstate::DbWorldState;
+        use moor_common::model::WorldState;
+
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        let player = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "player"),
+            )
+            .unwrap();
+        let new_owner = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "new_owner"),
+            )
+            .unwrap();
+        let wizard = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(
+                    NOTHING,
+                    NOTHING,
+                    NOTHING,
+                    BitEnum::new_with(ObjFlag::Wizard),
+                    "wizard",
+                ),
+            )
+            .unwrap();
+        let target = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(player, NOTHING, NOTHING, BitEnum::new(), "target"),
+            )
+            .unwrap();
+
+        let mut ws = DbWorldState { tx };
+        let new_owner_var = Var::from(new_owner);
+
+        assert_eq!(
+            ws.update_property(&player, &target, Symbol::mk("owner"), &new_owner_var),
+            Err(WorldStateError::ObjectPermissionDenied)
+        );
+
+        ws.update_property(&wizard, &target, Symbol::mk("owner"), &new_owner_var)
+            .unwrap();
+        assert_eq!(ws.owner_of(&target).unwrap(), new_owner);
+    }
+
+    #[test]
+    pub fn test_worldstate_property_owner_transfer_requires_wizard() {
+        use crate::db_worldstate::DbWorldState;
+        use moor_common::model::WorldState;
+
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        let player = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "player"),
+            )
+            .unwrap();
+        let new_owner = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "new_owner"),
+            )
+            .unwrap();
+        let wizard = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(
+                    NOTHING,
+                    NOTHING,
+                    NOTHING,
+                    BitEnum::new_with(ObjFlag::Wizard),
+                    "wizard",
+                ),
+            )
+            .unwrap();
+        let target = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(player, NOTHING, NOTHING, BitEnum::new(), "target"),
+            )
+            .unwrap();
+
+        let mut ws = DbWorldState { tx };
+        ws.define_property(
+            &wizard,
+            &target,
+            &target,
+            Symbol::mk("p"),
+            &player,
+            BitEnum::new_with(PropFlag::Write),
+            Some(v_int(1)),
+        )
+        .unwrap();
+
+        let transfer_attrs = PropAttrs {
+            name: None,
+            value: None,
+            location: None,
+            owner: Some(new_owner),
+            flags: Some(BitEnum::new_with(PropFlag::Write)),
+        };
+        assert_eq!(
+            ws.set_property_info(&player, &target, Symbol::mk("p"), transfer_attrs),
+            Err(WorldStateError::PropertyPermissionDenied)
+        );
+
+        let same_owner_attrs = PropAttrs {
+            name: None,
+            value: None,
+            location: None,
+            owner: Some(player),
+            flags: Some(BitEnum::new_with(PropFlag::Read)),
+        };
+        ws.set_property_info(&player, &target, Symbol::mk("p"), same_owner_attrs)
+            .unwrap();
+
+        let transfer_by_wizard = PropAttrs {
+            name: None,
+            value: None,
+            location: None,
+            owner: Some(new_owner),
+            flags: Some(BitEnum::new_with(PropFlag::Read)),
+        };
+        ws.set_property_info(&wizard, &target, Symbol::mk("p"), transfer_by_wizard)
+            .unwrap();
+        let (_pdef, perms) = ws.get_property_info(&wizard, &target, Symbol::mk("p")).unwrap();
+        assert_eq!(perms.owner(), new_owner);
+    }
+
+    #[test]
+    pub fn test_worldstate_verb_owner_semantics_match_lambdamoo() {
+        use crate::db_worldstate::DbWorldState;
+        use moor_common::model::WorldState;
+
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        let player = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "player"),
+            )
+            .unwrap();
+        let new_owner = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "new_owner"),
+            )
+            .unwrap();
+        let wizard = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(
+                    NOTHING,
+                    NOTHING,
+                    NOTHING,
+                    BitEnum::new_with(ObjFlag::Wizard),
+                    "wizard",
+                ),
+            )
+            .unwrap();
+        let target = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(player, NOTHING, NOTHING, BitEnum::new(), "target"),
+            )
+            .unwrap();
+
+        let mut ws = DbWorldState { tx };
+
+        assert_eq!(
+            ws.add_verb(
+                &player,
+                &target,
+                vec![Symbol::mk("testverb")],
+                &new_owner,
+                BitEnum::new_with(VerbFlag::Exec),
+                VerbArgsSpec::this_none_this(),
+                ProgramType::MooR(Program::new()),
+            ),
+            Err(WorldStateError::ObjectPermissionDenied)
+        );
+
+        ws.add_verb(
+            &player,
+            &target,
+            vec![Symbol::mk("testverb")],
+            &player,
+            BitEnum::new_with(VerbFlag::Exec),
+            VerbArgsSpec::this_none_this(),
+            ProgramType::MooR(Program::new()),
+        )
+        .unwrap();
+
+        let transfer_owner = VerbAttrs {
+            definer: None,
+            owner: Some(new_owner),
+            names: None,
+            flags: None,
+            args_spec: None,
+            program: None,
+        };
+        assert_eq!(
+            ws.update_verb(
+                &player,
+                &target,
+                Symbol::mk("testverb"),
+                transfer_owner.clone()
+            ),
+            Err(WorldStateError::VerbPermissionDenied)
+        );
+
+        ws.update_verb(&wizard, &target, Symbol::mk("testverb"), transfer_owner)
+            .unwrap();
+        let verb = ws.get_verb(&wizard, &target, Symbol::mk("testverb")).unwrap();
+        assert_eq!(verb.owner(), new_owner);
     }
 
     #[test]

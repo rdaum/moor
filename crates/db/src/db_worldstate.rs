@@ -96,6 +96,14 @@ impl DbWorldState {
         let perms = self.perms(perms)?;
         perms.check_verb_allows(&verbdef.owner(), verbdef.flags(), VerbFlag::Write)?;
 
+        // LambdaMOO/ToastStunt semantics: only wizards can transfer verb ownership.
+        if let Some(new_owner) = verb_attrs.owner
+            && !perms.check_is_wizard()?
+            && new_owner != verbdef.owner()
+        {
+            return Err(WorldStateError::VerbPermissionDenied);
+        }
+
         // If the verb code is being altered, a programmer or wizard bit is required.
         if verb_attrs.program.is_some()
             && !perms.check_is_wizard()?
@@ -409,9 +417,17 @@ impl WorldState for DbWorldState {
         attrs: PropAttrs,
     ) -> Result<(), WorldStateError> {
         let _t = PerfTimerGuard::new(&db_counters().set_property_info);
+        let perms_who = self.perms(perms)?;
         let (pdef, _, propperms, _) = self.get_tx().resolve_property(obj, pname)?;
-        self.perms(perms)?
-            .check_property_allows(&propperms, PropFlag::Write)?;
+        perms_who.check_property_allows(&propperms, PropFlag::Write)?;
+
+        // LambdaMOO/ToastStunt semantics: non-wizards may not transfer property ownership.
+        if let Some(new_owner) = attrs.owner
+            && !perms_who.check_is_wizard()?
+            && new_owner != propperms.owner()
+        {
+            return Err(WorldStateError::PropertyPermissionDenied);
+        }
 
         // TODO Also keep a close eye on 'clear' & perms:
         //  "raises `E_INVARG' if <owner> is not valid" & If <object> is the definer of the property
@@ -474,6 +490,7 @@ impl WorldState for DbWorldState {
                 let Some(owner) = value.as_object() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
+                self.perms(perms)?.check_wizard()?;
                 self.get_tx_mut().set_object_owner(obj, &owner)?;
                 return Ok(());
             }
@@ -671,8 +688,10 @@ impl WorldState for DbWorldState {
     ) -> Result<(), WorldStateError> {
         let _t = PerfTimerGuard::new(&db_counters().add_verb);
         let (objflags, obj_owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
-        self.perms(perms)?
-            .check_object_allows(&obj_owner, objflags, ObjFlag::Write.into())?;
+        let perms = self.perms(perms)?;
+        perms.check_object_allows(&obj_owner, objflags, ObjFlag::Write.into())?;
+        // LambdaMOO/ToastStunt semantics: non-wizards can only create verbs owned by themselves.
+        perms.check_obj_owner_perms(owner)?;
 
         self.get_tx_mut()
             .add_object_verb(obj, owner, &names, program, flags, args)?;
