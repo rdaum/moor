@@ -43,7 +43,8 @@ pub struct JsonRpcNotification {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonRpcResponse {
     pub jsonrpc: String,
-    pub id: RequestId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<RequestId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -54,7 +55,7 @@ impl JsonRpcResponse {
     pub fn success(id: RequestId, result: Value) -> Self {
         Self {
             jsonrpc: "2.0".to_string(),
-            id,
+            id: Some(id),
             result: Some(result),
             error: None,
         }
@@ -63,7 +64,16 @@ impl JsonRpcResponse {
     pub fn error(id: RequestId, error: JsonRpcError) -> Self {
         Self {
             jsonrpc: "2.0".to_string(),
-            id,
+            id: Some(id),
+            result: None,
+            error: Some(error),
+        }
+    }
+
+    pub fn error_without_id(error: JsonRpcError) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            id: None,
             result: None,
             error: Some(error),
         }

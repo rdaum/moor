@@ -149,15 +149,14 @@ impl McpServer {
 
             debug!("Received: {}", line);
 
-            // Parse the JSON-RPC message
+            // Parse and handle the JSON-RPC message
             let response = match serde_json::from_str::<Value>(line) {
-                Ok(msg) => self.handle_message(msg).await,
+                Ok(msg) => self.handle_envelope(msg).await,
                 Err(e) => {
                     error!("Failed to parse JSON: {}", e);
-                    Some(JsonRpcResponse::error(
-                        RequestId::Number(0),
-                        JsonRpcError::parse_error(e.to_string()),
-                    ))
+                    let response =
+                        JsonRpcResponse::error_without_id(JsonRpcError::parse_error(e.to_string()));
+                    Some(serde_json::to_value(response).unwrap())
                 }
             };
 
@@ -183,36 +182,140 @@ impl McpServer {
         Ok(())
     }
 
+    /// Handle either a JSON-RPC request/notification object or batch envelope.
+    async fn handle_envelope(&mut self, msg: Value) -> Option<Value> {
+        match msg {
+            Value::Object(_) => self
+                .handle_message(msg)
+                .await
+                .map(|response| serde_json::to_value(response).unwrap()),
+            Value::Array(batch) => self.handle_batch(batch).await,
+            _ => {
+                let response = JsonRpcResponse::error_without_id(JsonRpcError::invalid_request(
+                    "JSON-RPC message must be an object or a batch array",
+                ));
+                Some(serde_json::to_value(response).unwrap())
+            }
+        }
+    }
+
+    /// Handle a JSON-RPC batch request.
+    async fn handle_batch(&mut self, batch: Vec<Value>) -> Option<Value> {
+        if batch.is_empty() {
+            let response =
+                JsonRpcResponse::error_without_id(JsonRpcError::invalid_request("Empty batch"));
+            return Some(serde_json::to_value(response).unwrap());
+        }
+
+        let mut responses = Vec::new();
+        for item in batch {
+            if !item.is_object() {
+                let response = JsonRpcResponse::error_without_id(JsonRpcError::invalid_request(
+                    "Batch element must be a JSON object",
+                ));
+                responses.push(serde_json::to_value(response).unwrap());
+                continue;
+            }
+
+            if let Some(response) = self.handle_message(item).await {
+                responses.push(serde_json::to_value(response).unwrap());
+            }
+        }
+
+        if responses.is_empty() {
+            None
+        } else {
+            Some(Value::Array(responses))
+        }
+    }
+
     /// Handle an incoming JSON-RPC message
     async fn handle_message(&mut self, msg: Value) -> Option<JsonRpcResponse> {
-        // Check if this is a notification (no id) or request (has id)
-        let id = msg.get("id").cloned();
+        if !msg.is_object() {
+            return Some(JsonRpcResponse::error_without_id(
+                JsonRpcError::invalid_request("Message must be a JSON object"),
+            ));
+        }
+
+        let request_id = match msg.get("id") {
+            Some(id_value) => match parse_request_id(id_value) {
+                Some(id) => Some(id),
+                None => {
+                    return Some(JsonRpcResponse::error_without_id(
+                        JsonRpcError::invalid_request("id must be a string or integer"),
+                    ));
+                }
+            },
+            None => None,
+        };
+
+        let jsonrpc = msg.get("jsonrpc").and_then(|v| v.as_str());
+        if jsonrpc != Some("2.0") {
+            return Some(match request_id {
+                Some(id) => JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::invalid_request("jsonrpc must be \"2.0\""),
+                ),
+                None => JsonRpcResponse::error_without_id(JsonRpcError::invalid_request(
+                    "jsonrpc must be \"2.0\"",
+                )),
+            });
+        }
         let method = msg.get("method").and_then(|m| m.as_str());
         let params = msg.get("params").cloned().unwrap_or(json!({}));
 
         let method = match method {
             Some(m) => m,
             None => {
-                return id.map(|id| {
-                    JsonRpcResponse::error(
-                        parse_request_id(&id),
-                        JsonRpcError::invalid_request("Missing method"),
-                    )
+                return Some(match request_id {
+                    Some(id) => {
+                        JsonRpcResponse::error(id, JsonRpcError::invalid_request("Missing method"))
+                    }
+                    None => JsonRpcResponse::error_without_id(JsonRpcError::invalid_request(
+                        "Missing method",
+                    )),
                 });
             }
         };
 
         debug!("Handling method: {}", method);
 
-        // Handle the method
-        let result = match method {
-            // Lifecycle methods
-            "initialize" => self.handle_initialize(&params).await,
-            "initialized" => {
-                self.initialized = true;
-                info!("Client initialized");
-                return None; // Notification, no response
+        // Handle notifications (messages without an id), which must not produce responses.
+        if request_id.is_none() {
+            match method {
+                "initialized" | "notifications/initialized" => {
+                    self.initialized = true;
+                    info!("Client initialized");
+                    return None;
+                }
+                "notifications/cancelled" => {
+                    debug!("Request cancelled by client");
+                    return None;
+                }
+                _ if method.starts_with("notifications/") => {
+                    debug!("Ignoring unknown notification: {}", method);
+                    return None;
+                }
+                _ => {}
             }
+        }
+
+        // Notification methods are invalid if sent as requests (with an id).
+        if let Some(id) = request_id.clone()
+            && (method == "initialized" || method.starts_with("notifications/"))
+        {
+            return Some(JsonRpcResponse::error(
+                id,
+                JsonRpcError::invalid_request(format!(
+                    "Method '{}' is a notification and must not include id",
+                    method
+                )),
+            ));
+        }
+
+        // Handle requests (have an id, expect a response)
+        let result = match method {
+            "initialize" => self.handle_initialize(&params).await,
             "shutdown" => {
                 info!("Shutdown requested");
                 self.shutdown_requested = true;
@@ -241,10 +344,20 @@ impl McpServer {
             }
         };
 
-        // Convert result to response
-        let request_id = id
-            .map(|id| parse_request_id(&id))
-            .unwrap_or(RequestId::Number(0));
+        // Only produce a response for requests (messages with an id).
+        // Per JSON-RPC 2.0, notifications (no id) must not receive responses.
+        let request_id = match request_id {
+            Some(id) => id,
+            None => {
+                if let Err(e) = &result {
+                    warn!(
+                        "Dropping error for notification '{}': {}",
+                        method, e.message
+                    );
+                }
+                return None;
+            }
+        };
 
         Some(match result {
             Ok(value) => JsonRpcResponse::success(request_id, value),
@@ -544,10 +657,203 @@ impl McpServer {
 }
 
 /// Parse a request ID from JSON value
-fn parse_request_id(value: &Value) -> RequestId {
+fn parse_request_id(value: &Value) -> Option<RequestId> {
     match value {
-        Value::String(s) => RequestId::String(s.clone()),
-        Value::Number(n) => RequestId::Number(n.as_i64().unwrap_or(0)),
-        _ => RequestId::Number(0),
+        Value::String(s) => Some(RequestId::String(s.clone())),
+        Value::Number(n) => n.as_i64().map(RequestId::Number),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::connection::{ConnectionConfig, ConnectionManager};
+    use crate::moor_client::MoorClientConfig;
+    use serde_json::json;
+
+    fn test_server() -> McpServer {
+        let config = ConnectionConfig {
+            client_config: MoorClientConfig {
+                rpc_address: "tcp://127.0.0.1:1".to_string(),
+                events_address: "tcp://127.0.0.1:1".to_string(),
+                curve_keys: None,
+            },
+            programmer_credentials: None,
+            wizard_credentials: None,
+        };
+        McpServer::new(ConnectionManager::new(config))
+    }
+
+    #[tokio::test]
+    async fn initialized_notification_without_id_gets_no_response() {
+        let mut server = test_server();
+        let response = server
+            .handle_message(json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized"
+            }))
+            .await;
+
+        assert!(response.is_none());
+        assert!(server.initialized);
+    }
+
+    #[tokio::test]
+    async fn initialized_with_id_returns_error_response_instead_of_being_dropped() {
+        let mut server = test_server();
+        let response = server
+            .handle_message(json!({
+                "jsonrpc": "2.0",
+                "id": 7,
+                "method": "notifications/initialized"
+            }))
+            .await
+            .expect("id-bearing message should receive a response");
+
+        assert_eq!(response.id, Some(RequestId::Number(7)));
+        let error = response
+            .error
+            .expect("unknown id-bearing method should return an error");
+        assert_eq!(error.code, -32600);
+        assert!(!server.initialized);
+    }
+
+    #[tokio::test]
+    async fn unknown_notification_without_id_is_ignored() {
+        let mut server = test_server();
+        let response = server
+            .handle_message(json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/something-custom"
+            }))
+            .await;
+
+        assert!(response.is_none());
+    }
+
+    #[tokio::test]
+    async fn unknown_notification_with_id_returns_error_response() {
+        let mut server = test_server();
+        let response = server
+            .handle_message(json!({
+                "jsonrpc": "2.0",
+                "id": "abc",
+                "method": "notifications/something-custom"
+            }))
+            .await
+            .expect("id-bearing message should receive a response");
+
+        assert_eq!(response.id, Some(RequestId::String("abc".to_string())));
+        let error = response
+            .error
+            .expect("id-bearing notification method should return an error");
+        assert_eq!(error.code, -32600);
+    }
+
+    #[tokio::test]
+    async fn missing_method_without_id_returns_invalid_request_without_response_id() {
+        let mut server = test_server();
+        let response = server
+            .handle_message(json!({
+                "jsonrpc": "2.0"
+            }))
+            .await
+            .expect("invalid request should produce an error response");
+
+        assert_eq!(response.id, None);
+        let error = response.error.expect("invalid request should return error");
+        assert_eq!(error.code, -32600);
+    }
+
+    #[tokio::test]
+    async fn invalid_id_type_returns_invalid_request_without_response_id() {
+        let mut server = test_server();
+        let response = server
+            .handle_message(json!({
+                "jsonrpc": "2.0",
+                "id": {"bad": true},
+                "method": "ping"
+            }))
+            .await
+            .expect("invalid id should produce an error response");
+
+        assert_eq!(response.id, None);
+        let error = response.error.expect("invalid request should return error");
+        assert_eq!(error.code, -32600);
+    }
+
+    #[tokio::test]
+    async fn wrong_jsonrpc_version_with_valid_id_preserves_response_id() {
+        let mut server = test_server();
+        let response = server
+            .handle_message(json!({
+                "jsonrpc": "1.0",
+                "id": 42,
+                "method": "ping"
+            }))
+            .await
+            .expect("invalid request should produce an error response");
+
+        assert_eq!(response.id, Some(RequestId::Number(42)));
+        let error = response.error.expect("invalid request should return error");
+        assert_eq!(error.code, -32600);
+    }
+
+    #[tokio::test]
+    async fn empty_batch_returns_invalid_request() {
+        let mut server = test_server();
+        let response = server
+            .handle_batch(Vec::new())
+            .await
+            .expect("empty batch should return an error response");
+
+        let response = response
+            .as_object()
+            .expect("empty batch response should be a single error object");
+        let error = response
+            .get("error")
+            .and_then(|e| e.as_object())
+            .expect("error object should be present");
+        assert_eq!(error.get("code").and_then(|v| v.as_i64()), Some(-32600));
+    }
+
+    #[tokio::test]
+    async fn batch_with_only_notifications_returns_no_response() {
+        let mut server = test_server();
+        let response = server
+            .handle_batch(vec![json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized"
+            })])
+            .await;
+
+        assert!(response.is_none());
+    }
+
+    #[tokio::test]
+    async fn batch_mixes_responses_and_notifications() {
+        let mut server = test_server();
+        let response = server
+            .handle_batch(vec![
+                json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/initialized"
+                }),
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "ping"
+                }),
+            ])
+            .await
+            .expect("batch with request should return responses");
+
+        let responses = response
+            .as_array()
+            .expect("batch response should be an array");
+        assert_eq!(responses.len(), 1);
+        assert_eq!(responses[0].get("id").and_then(|v| v.as_i64()), Some(1));
+        assert!(responses[0].get("result").is_some());
     }
 }
