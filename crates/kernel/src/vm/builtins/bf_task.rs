@@ -22,8 +22,8 @@ use moor_common::builtins::offset_for_builtin;
 use moor_common::model::Named;
 use moor_common::tasks::TaskId;
 use moor_var::{
-    E_ARGS, E_INVARG, E_PERM, E_TYPE, Sequence, Symbol, Variant, v_arc_str, v_int, v_list,
-    v_list_iter, v_obj, v_str, v_string, v_sym,
+    E_ARGS, E_INVARG, E_PERM, E_TYPE, Symbol, Variant, v_arc_str, v_int, v_list, v_list_iter,
+    v_obj, v_str, v_string, v_sym,
 };
 use std::time::{Duration, SystemTime};
 use tracing::warn;

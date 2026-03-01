@@ -342,12 +342,10 @@ impl Var {
 
     /// Create a symbol-backed string Var with an operation hint.
     pub fn from_symbol_str_with_hint(symbol: Symbol, hint: u8) -> Self {
-        let str_ref = symbol.as_str();
-        if str_ref.is_empty() {
+        let (byte_len, char_len, _is_ascii) = symbol.str_metadata();
+        if byte_len == 0 {
             return Self::mk_empty_str_with_hint(hint);
         }
-        let byte_len = str_ref.len();
-        let char_len = str_ref.chars().count();
         // SAFETY: Symbol is repr(C) with two u32 fields, exactly 8 bytes.
         let data: u64 = unsafe { std::mem::transmute(symbol) };
         Self {
@@ -364,7 +362,11 @@ impl Var {
             return Self::mk_empty_str_with_hint(hint);
         }
         let byte_len = str_ref.len();
-        let char_len = str_ref.chars().count();
+        let char_len = if str_ref.is_ascii() {
+            byte_len
+        } else {
+            str_ref.chars().count()
+        };
         // SAFETY: Str is #[repr(transparent)] around Arc<String>, exactly 8 bytes
         let data: u64 = unsafe { std::mem::transmute(s) };
         Self {
@@ -1623,7 +1625,7 @@ impl From<&str> for Var {
 
 impl From<String> for Var {
     fn from(s: String) -> Self {
-        Var::mk_str(&s)
+        Var::mk_string(s)
     }
 }
 
@@ -1669,7 +1671,7 @@ pub fn v_str(s: &str) -> Var {
 }
 
 pub fn v_string(s: String) -> Var {
-    Var::mk_str(&s)
+    Var::mk_string(s)
 }
 
 pub fn v_arc_str(s: arcstr::ArcStr) -> Var {

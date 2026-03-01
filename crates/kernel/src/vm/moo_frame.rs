@@ -21,7 +21,7 @@ use moor_var::{
         labels::Offset,
         names::{GlobalName, Name},
     },
-    v_empty_str, v_none, v_nothing,
+    v_none,
 };
 use std::cmp::max;
 use strum::EnumCount;
@@ -149,21 +149,8 @@ impl MooStackFrame {
         let width = max(program.var_names().global_width(), GlobalName::COUNT);
         Self {
             program,
-            environment: Environment::with_initial_values(
-                [
-                    player,
-                    this,
-                    caller,
-                    verb,
-                    args,
-                    argstr,
-                    v_nothing(),
-                    v_empty_str(),
-                    v_empty_str(),
-                    v_nothing(),
-                    v_empty_str(),
-                ],
-                width,
+            environment: Environment::with_call_globals(
+                player, this, caller, verb, args, argstr, width,
             ),
             pc: 0,
             pc_type: PcType::Main,
@@ -190,11 +177,13 @@ impl MooStackFrame {
         let width = max(program.var_names().global_width(), GlobalName::COUNT);
         Self {
             program,
-            environment: Environment::with_values_and_copy(
-                [player, this, caller, verb, args],
+            environment: Environment::with_call_globals_copy_parsing(
+                player,
+                this,
+                caller,
+                verb,
+                args,
                 &source_frame.environment,
-                GlobalName::argstr as usize,
-                GlobalName::iobjstr as usize,
                 width,
             ),
             pc: 0,

@@ -42,8 +42,8 @@ use crate::vm::builtins::{
 };
 use moor_compiler::{offset_for_builtin, to_literal};
 use moor_var::{
-    E_ARGS, E_INVARG, E_TYPE, Sequence, Symbol, Var, Variant, v_binary, v_error, v_float, v_int,
-    v_list, v_map, v_obj, v_str, v_string, v_sym,
+    E_ARGS, E_INVARG, E_TYPE, Symbol, Var, Variant, v_binary, v_error, v_float, v_int, v_list,
+    v_map, v_obj, v_str, v_string, v_sym,
 };
 
 lazy_static! {

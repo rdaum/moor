@@ -15,7 +15,7 @@
 //! Uses a single Vec for all scopes to reduce allocations and improve cache locality.
 //! Uninitialized slots use v_none() (all zeros) as a sentinel, enabling fast zero-fill.
 
-use moor_var::Var;
+use moor_var::{Var, program::names::GlobalName, v_empty_str, v_nothing};
 use smallvec::SmallVec;
 use std::ptr;
 
@@ -66,23 +66,90 @@ impl Environment {
         }
     }
 
-    /// Create environment with initial values directly, avoiding double-write.
-    /// First N slots get the provided values, remaining slots get v_none().
+    /// Create environment for top-level verb calls with all globals initialized.
+    /// Avoids building a temporary `[Var; 11]` on the hot path.
     #[inline]
-    pub fn with_initial_values<const N: usize>(values_arr: [Var; N], total_width: usize) -> Self {
+    pub fn with_call_globals(
+        player: Var,
+        this: Var,
+        caller: Var,
+        verb: Var,
+        args: Var,
+        argstr: Var,
+        total_width: usize,
+    ) -> Self {
         let mut values: SmallVec<[Var; INLINE_VALUES]> = SmallVec::new();
         values.reserve(total_width);
 
-        // SAFETY: We reserved total_width, write N values then zero-fill the rest
+        // SAFETY: We reserved total_width, write first 11 globals then zero-fill the rest.
         unsafe {
             let ptr = values.as_mut_ptr();
-            // Write initial values
-            for (i, v) in values_arr.into_iter().enumerate() {
-                ptr.add(i).write(v);
+            ptr.add(0).write(player);
+            ptr.add(1).write(this);
+            ptr.add(2).write(caller);
+            ptr.add(3).write(verb);
+            ptr.add(4).write(args);
+            ptr.add(5).write(argstr);
+            ptr.add(6).write(v_nothing());
+            ptr.add(7).write(v_empty_str());
+            ptr.add(8).write(v_empty_str());
+            ptr.add(9).write(v_nothing());
+            ptr.add(10).write(v_empty_str());
+
+            if total_width > 11 {
+                ptr::write_bytes(ptr.add(11), 0, total_width - 11);
             }
-            // Zero-fill remaining slots (v_none() is all zeros)
-            if total_width > N {
-                ptr::write_bytes(ptr.add(N), 0, total_width - N);
+            values.set_len(total_width);
+        }
+
+        Self {
+            values,
+            scope_offsets: smallvec::smallvec![0],
+            scope_widths: smallvec::smallvec![total_width as u16],
+        }
+    }
+
+    /// Create environment for nested verb calls.
+    /// Writes core globals directly and clones parsing globals from source.
+    #[inline]
+    pub fn with_call_globals_copy_parsing(
+        player: Var,
+        this: Var,
+        caller: Var,
+        verb: Var,
+        args: Var,
+        source: &Environment,
+        total_width: usize,
+    ) -> Self {
+        let mut values: SmallVec<[Var; INLINE_VALUES]> = SmallVec::new();
+        values.reserve(total_width);
+
+        let src_base = source.scope_offsets[0] as usize;
+        let src_argstr = src_base + GlobalName::argstr as usize;
+        let src_dobj = src_base + GlobalName::dobj as usize;
+        let src_dobjstr = src_base + GlobalName::dobjstr as usize;
+        let src_prepstr = src_base + GlobalName::prepstr as usize;
+        let src_iobj = src_base + GlobalName::iobj as usize;
+        let src_iobjstr = src_base + GlobalName::iobjstr as usize;
+
+        // SAFETY: We reserved total_width.
+        unsafe {
+            let ptr = values.as_mut_ptr();
+            ptr.add(0).write(player);
+            ptr.add(1).write(this);
+            ptr.add(2).write(caller);
+            ptr.add(3).write(verb);
+            ptr.add(4).write(args);
+            ptr.add(5).write(source.values[src_argstr].clone());
+            ptr.add(6).write(source.values[src_dobj].clone());
+            ptr.add(7).write(source.values[src_dobjstr].clone());
+            ptr.add(8).write(source.values[src_prepstr].clone());
+            ptr.add(9).write(source.values[src_iobj].clone());
+            ptr.add(10).write(source.values[src_iobjstr].clone());
+
+            let filled = 11;
+            if total_width > filled {
+                ptr::write_bytes(ptr.add(filled), 0, total_width - filled);
             }
             values.set_len(total_width);
         }
@@ -148,53 +215,6 @@ impl Environment {
         let idx = self.absolute_index(scope_index, var_index);
         let v = &self.values[idx];
         if v.is_none() { None } else { Some(v) }
-    }
-
-    /// Create environment with initial values and copy remaining from source.
-    /// Used for nested verb calls that inherit parsing globals from parent.
-    /// Avoids double-write by building directly without initial None fill.
-    #[inline]
-    pub fn with_values_and_copy<const N: usize>(
-        values_arr: [Var; N],
-        source: &Environment,
-        copy_start: usize,
-        copy_end: usize,
-        total_width: usize,
-    ) -> Self {
-        let mut values: SmallVec<[Var; INLINE_VALUES]> = SmallVec::new();
-        values.reserve(total_width);
-
-        let copy_len = copy_end - copy_start + 1;
-        let src_base = source.scope_offsets[0] as usize + copy_start;
-
-        // SAFETY: We reserved total_width
-        unsafe {
-            let ptr = values.as_mut_ptr();
-
-            // Write initial values
-            for (i, v) in values_arr.into_iter().enumerate() {
-                ptr.add(i).write(v);
-            }
-
-            // Clone values from source
-            for i in 0..copy_len {
-                ptr.add(N + i).write(source.values[src_base + i].clone());
-            }
-
-            // Zero-fill remaining slots
-            let filled = N + copy_len;
-            if total_width > filled {
-                ptr::write_bytes(ptr.add(filled), 0, total_width - filled);
-            }
-
-            values.set_len(total_width);
-        }
-
-        Self {
-            values,
-            scope_offsets: smallvec::smallvec![0],
-            scope_widths: smallvec::smallvec![total_width as u16],
-        }
     }
 
     /// Convert the environment to nested Vecs for serialization.

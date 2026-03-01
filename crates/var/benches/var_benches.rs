@@ -12,7 +12,10 @@
 //
 
 use moor_bench_utils::{BenchContext, NoContext, black_box};
-use moor_var::{IndexMode, Var, v_bool, v_float, v_int, v_list, v_none, v_str};
+use moor_var::{
+    IndexMode, Obj, Symbol, Var, v_arc_str, v_bool, v_float, v_int, v_list, v_none, v_obj, v_str,
+    v_string, v_sym, v_symbol_str,
+};
 
 // Context for integer benchmarks
 struct IntContext(Var);
@@ -142,6 +145,268 @@ fn var_construct_nested_lists(_ctx: &mut NoContext, chunk_size: usize, _chunk_nu
     for i in 0..chunk_size {
         let inner = v_list(&[v_int(i as i64), v_str("nested")]);
         let var = v_list(&[inner, v_int((i + 1) as i64)]);
+        black_box(var);
+    }
+}
+
+const VAR_CONSTRUCT_INPUT_POOL_SIZE: usize = 4096;
+const VAR_CONSTRUCT_SYMBOL_HOT_SET_SIZE: usize = 8;
+const VAR_CONSTRUCT_HOT_SET_SIZE: usize = 8;
+
+struct VarConstructInputsContext {
+    ints: Vec<i64>,
+    objs: Vec<Obj>,
+    ascii_strings: Vec<String>,
+    unicode_strings: Vec<String>,
+    ascii_arc_strings: Vec<arcstr::ArcStr>,
+    hot_symbol_names: Vec<String>,
+    hot_symbols: Vec<Symbol>,
+}
+
+impl BenchContext for VarConstructInputsContext {
+    fn prepare(_num_chunks: usize) -> Self {
+        let mut ints = Vec::with_capacity(VAR_CONSTRUCT_INPUT_POOL_SIZE);
+        let mut objs = Vec::with_capacity(VAR_CONSTRUCT_INPUT_POOL_SIZE);
+        let mut ascii_strings = Vec::with_capacity(VAR_CONSTRUCT_INPUT_POOL_SIZE);
+        let mut unicode_strings = Vec::with_capacity(VAR_CONSTRUCT_INPUT_POOL_SIZE);
+        let mut ascii_arc_strings = Vec::with_capacity(VAR_CONSTRUCT_INPUT_POOL_SIZE);
+
+        for i in 0..VAR_CONSTRUCT_INPUT_POOL_SIZE {
+            ints.push(i as i64);
+            objs.push(Obj::mk_id((i as i32) + 1));
+
+            let ascii = format!("bench_ascii_{i}");
+            let unicode = format!("bench_{i}_héllø");
+
+            ascii_arc_strings.push(arcstr::ArcStr::from(ascii.clone()));
+            ascii_strings.push(ascii);
+            unicode_strings.push(unicode);
+        }
+
+        let mut hot_symbol_names = Vec::with_capacity(VAR_CONSTRUCT_SYMBOL_HOT_SET_SIZE);
+        let mut hot_symbols = Vec::with_capacity(VAR_CONSTRUCT_SYMBOL_HOT_SET_SIZE);
+        for i in 0..VAR_CONSTRUCT_SYMBOL_HOT_SET_SIZE {
+            let name = format!("bench_hot_symbol_{i}");
+            hot_symbols.push(Symbol::mk(&name));
+            hot_symbol_names.push(name);
+        }
+
+        Self {
+            ints,
+            objs,
+            ascii_strings,
+            unicode_strings,
+            ascii_arc_strings,
+            hot_symbol_names,
+            hot_symbols,
+        }
+    }
+}
+
+fn var_construct_variant_int(
+    ctx: &mut VarConstructInputsContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        let idx = i & (VAR_CONSTRUCT_INPUT_POOL_SIZE - 1);
+        let var = v_int(ctx.ints[idx]);
+        black_box(var);
+    }
+}
+
+fn var_construct_variant_obj(
+    ctx: &mut VarConstructInputsContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        let idx = i & (VAR_CONSTRUCT_INPUT_POOL_SIZE - 1);
+        let var = v_obj(ctx.objs[idx]);
+        black_box(var);
+    }
+}
+
+fn var_construct_variant_str_ascii(
+    ctx: &mut VarConstructInputsContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        let idx = i & (VAR_CONSTRUCT_INPUT_POOL_SIZE - 1);
+        let var = v_str(ctx.ascii_strings[idx].as_str());
+        black_box(var);
+    }
+}
+
+fn var_construct_variant_str_unicode(
+    ctx: &mut VarConstructInputsContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        let idx = i & (VAR_CONSTRUCT_INPUT_POOL_SIZE - 1);
+        let var = v_str(ctx.unicode_strings[idx].as_str());
+        black_box(var);
+    }
+}
+
+fn var_construct_variant_string_owned_ascii(
+    ctx: &mut VarConstructInputsContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        let idx = i & (VAR_CONSTRUCT_INPUT_POOL_SIZE - 1);
+        let var = v_string(ctx.ascii_strings[idx].clone());
+        black_box(var);
+    }
+}
+
+fn var_construct_variant_arc_str_ascii(
+    ctx: &mut VarConstructInputsContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        let idx = i & (VAR_CONSTRUCT_INPUT_POOL_SIZE - 1);
+        let var = v_arc_str(ctx.ascii_arc_strings[idx].clone());
+        black_box(var);
+    }
+}
+
+fn var_construct_variant_symbol_str_cached(
+    ctx: &mut VarConstructInputsContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        let idx = i & (VAR_CONSTRUCT_SYMBOL_HOT_SET_SIZE - 1);
+        let var = v_symbol_str(ctx.hot_symbols[idx]);
+        black_box(var);
+    }
+}
+
+fn var_construct_variant_sym_from_hot_str(
+    ctx: &mut VarConstructInputsContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        let idx = i & (VAR_CONSTRUCT_SYMBOL_HOT_SET_SIZE - 1);
+        let var = v_sym(ctx.hot_symbol_names[idx].as_str());
+        black_box(var);
+    }
+}
+
+struct VarConstructHotSetContext {
+    ascii_strings: Vec<String>,
+    unicode_strings: Vec<String>,
+    ascii_arc_strings: Vec<arcstr::ArcStr>,
+    symbols: Vec<Symbol>,
+}
+
+impl BenchContext for VarConstructHotSetContext {
+    fn prepare(_num_chunks: usize) -> Self {
+        let ascii_literals = [
+            "hot_ascii_0",
+            "hot_ascii_1",
+            "hot_ascii_2",
+            "hot_ascii_3",
+            "hot_ascii_4",
+            "hot_ascii_5",
+            "hot_ascii_6",
+            "hot_ascii_7",
+        ];
+        let unicode_literals = [
+            "hot_0_héllø",
+            "hot_1_héllø",
+            "hot_2_héllø",
+            "hot_3_héllø",
+            "hot_4_héllø",
+            "hot_5_héllø",
+            "hot_6_héllø",
+            "hot_7_héllø",
+        ];
+
+        let mut ascii_strings = Vec::with_capacity(VAR_CONSTRUCT_HOT_SET_SIZE);
+        let mut unicode_strings = Vec::with_capacity(VAR_CONSTRUCT_HOT_SET_SIZE);
+        let mut ascii_arc_strings = Vec::with_capacity(VAR_CONSTRUCT_HOT_SET_SIZE);
+        let mut symbols = Vec::with_capacity(VAR_CONSTRUCT_HOT_SET_SIZE);
+
+        for i in 0..VAR_CONSTRUCT_HOT_SET_SIZE {
+            let ascii = ascii_literals[i].to_string();
+            ascii_arc_strings.push(arcstr::ArcStr::from(ascii.clone()));
+            symbols.push(Symbol::mk(ascii_literals[i]));
+            ascii_strings.push(ascii);
+            unicode_strings.push(unicode_literals[i].to_string());
+        }
+
+        Self {
+            ascii_strings,
+            unicode_strings,
+            ascii_arc_strings,
+            symbols,
+        }
+    }
+}
+
+fn var_construct_variant_str_ascii_hot(
+    ctx: &mut VarConstructHotSetContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        let idx = i & (VAR_CONSTRUCT_HOT_SET_SIZE - 1);
+        let var = v_str(ctx.ascii_strings[idx].as_str());
+        black_box(var);
+    }
+}
+
+fn var_construct_variant_str_unicode_hot(
+    ctx: &mut VarConstructHotSetContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        let idx = i & (VAR_CONSTRUCT_HOT_SET_SIZE - 1);
+        let var = v_str(ctx.unicode_strings[idx].as_str());
+        black_box(var);
+    }
+}
+
+fn var_construct_variant_string_owned_ascii_hot(
+    ctx: &mut VarConstructHotSetContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        let idx = i & (VAR_CONSTRUCT_HOT_SET_SIZE - 1);
+        let var = v_string(ctx.ascii_strings[idx].clone());
+        black_box(var);
+    }
+}
+
+fn var_construct_variant_arc_str_ascii_hot(
+    ctx: &mut VarConstructHotSetContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        let idx = i & (VAR_CONSTRUCT_HOT_SET_SIZE - 1);
+        let var = v_arc_str(ctx.ascii_arc_strings[idx].clone());
+        black_box(var);
+    }
+}
+
+fn var_construct_variant_symbol_str_cached_hot(
+    ctx: &mut VarConstructHotSetContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        let idx = i & (VAR_CONSTRUCT_HOT_SET_SIZE - 1);
+        let var = v_symbol_str(ctx.symbols[idx]);
         black_box(var);
     }
 }
@@ -477,6 +742,77 @@ pub fn main() {
         },
     ];
 
+    let construct_variant_benchmarks = [
+        BenchmarkDef {
+            name: "var_construct_variant_int",
+            group: "construct",
+            func: var_construct_variant_int,
+        },
+        BenchmarkDef {
+            name: "var_construct_variant_obj",
+            group: "construct",
+            func: var_construct_variant_obj,
+        },
+        BenchmarkDef {
+            name: "var_construct_variant_str_ascii",
+            group: "construct",
+            func: var_construct_variant_str_ascii,
+        },
+        BenchmarkDef {
+            name: "var_construct_variant_str_unicode",
+            group: "construct",
+            func: var_construct_variant_str_unicode,
+        },
+        BenchmarkDef {
+            name: "var_construct_variant_string_owned_ascii",
+            group: "construct",
+            func: var_construct_variant_string_owned_ascii,
+        },
+        BenchmarkDef {
+            name: "var_construct_variant_arc_str_ascii",
+            group: "construct",
+            func: var_construct_variant_arc_str_ascii,
+        },
+        BenchmarkDef {
+            name: "var_construct_variant_symbol_str_cached",
+            group: "construct",
+            func: var_construct_variant_symbol_str_cached,
+        },
+        BenchmarkDef {
+            name: "var_construct_variant_sym_from_hot_str",
+            group: "construct",
+            func: var_construct_variant_sym_from_hot_str,
+        },
+    ];
+
+    let construct_hot_set_benchmarks = [
+        BenchmarkDef {
+            name: "var_construct_variant_str_ascii_hot",
+            group: "construct",
+            func: var_construct_variant_str_ascii_hot,
+        },
+        BenchmarkDef {
+            name: "var_construct_variant_str_unicode_hot",
+            group: "construct",
+            func: var_construct_variant_str_unicode_hot,
+        },
+        BenchmarkDef {
+            name: "var_construct_variant_string_owned_ascii_hot",
+            group: "construct",
+            func: var_construct_variant_string_owned_ascii_hot,
+        },
+        BenchmarkDef {
+            name: "var_construct_variant_arc_str_ascii_hot",
+            group: "construct",
+            func: var_construct_variant_arc_str_ascii_hot,
+        },
+        BenchmarkDef {
+            name: "var_construct_variant_symbol_str_cached_hot",
+            group: "construct",
+            func: var_construct_variant_symbol_str_cached_hot,
+        },
+    ];
+
     let drop_benchmarks = [
         BenchmarkDef {
             name: "var_drop_ints",
@@ -532,6 +868,16 @@ pub fn main() {
         filter,
     );
     run_benchmark_group::<NoContext>(&construct_benchmarks, "Var Construction Benchmarks", filter);
+    run_benchmark_group::<VarConstructInputsContext>(
+        &construct_variant_benchmarks,
+        "Var Constructor Variant Benchmarks",
+        filter,
+    );
+    run_benchmark_group::<VarConstructHotSetContext>(
+        &construct_hot_set_benchmarks,
+        "Var Constructor Hot-Set Benchmarks",
+        filter,
+    );
     run_benchmark_group::<DropContext>(&drop_benchmarks, "Var Drop Benchmarks", filter);
 
     run_benchmark_group::<IntCloneContext>(

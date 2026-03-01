@@ -24,8 +24,8 @@ use moor_common::tasks::Event::{Present, Unpresent};
 use moor_common::tasks::{NarrativeEvent, Presentation, SessionError};
 use moor_var::VarType::TYPE_STR;
 use moor_var::{
-    E_ARGS, E_INVARG, E_PERM, E_TYPE, Sequence, Symbol, Var, Variant, v_arc_str, v_float, v_int,
-    v_list, v_list_iter, v_map, v_obj, v_str, v_string, v_sym,
+    E_ARGS, E_INVARG, E_PERM, E_TYPE, Symbol, Var, Variant, v_arc_str, v_float, v_int, v_list,
+    v_list_iter, v_map, v_obj, v_str, v_string, v_sym,
 };
 use std::time::{Duration, SystemTime};
 use tracing::{info, warn};

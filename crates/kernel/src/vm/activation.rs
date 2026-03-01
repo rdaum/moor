@@ -220,6 +220,15 @@ impl Activation {
         current_activation: Option<&Activation>,
         program: ProgramType,
     ) -> Self {
+        #[inline]
+        fn args_to_global_var(args: &List) -> Var {
+            if args.is_empty() {
+                v_empty_list()
+            } else {
+                args.clone().into()
+            }
+        }
+
         let verb_owner = resolved_verb.owner();
 
         let ProgramType::MooR(program) = program else {
@@ -231,27 +240,30 @@ impl Activation {
             Frame::Moo(frame) => Some(frame),
             Frame::Bf(_) => None,
         });
+        let player_var = v_obj(player);
+        let verb_var = v_symbol_str(verb_name);
+        let args_var = args_to_global_var(&args);
 
         let moo_frame = if let Some(source) = source_frame {
             // Direct construction for nested calls
             MooStackFrame::new_with_globals_from_source(
                 program,
-                v_obj(player),
+                player_var,
                 this.clone(),
                 caller,
-                v_symbol_str(verb_name),
-                args.clone().into(),
+                verb_var,
+                args_var,
                 source,
             )
         } else {
             // Direct construction for top-level calls
             MooStackFrame::new_with_all_globals(
                 program,
-                v_obj(player),
+                player_var,
                 this.clone(),
                 caller,
-                v_symbol_str(verb_name),
-                args.clone().into(),
+                verb_var,
+                args_var,
                 argstr,
             )
         };

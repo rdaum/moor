@@ -20,7 +20,7 @@ use crate::{
 use base64::{Engine, engine::general_purpose};
 use moor_common::util::quote_str;
 use moor_var::{
-    Obj, Sequence, Symbol, Var, Variant,
+    Obj, Symbol, Var, Variant,
     program::{names::Variable, opcode::ScatterLabel},
 };
 use std::collections::HashMap;

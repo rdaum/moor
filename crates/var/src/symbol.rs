@@ -121,6 +121,14 @@ struct SymbolData {
     compare_id: u32,
 }
 
+/// Reverse-lookup entry keyed by repr_id.
+struct SymbolReprData {
+    original_string: ArcStr,
+    byte_len: usize,
+    char_len: usize,
+    is_ascii: bool,
+}
+
 /// Container for all case variants of a symbol.
 struct SymbolGroup {
     compare_id: u32,
@@ -159,7 +167,19 @@ impl SymbolGroup {
 
         // Push to global boxcar and use returned index as repr_id
         let arc_str = ArcStr::from(original);
-        let repr_id = global_state.repr_id_to_symbol.push(arc_str.clone()) as u32;
+        let byte_len = arc_str.len();
+        let is_ascii = arc_str.is_ascii();
+        let char_len = if is_ascii {
+            byte_len
+        } else {
+            arc_str.chars().count()
+        };
+        let repr_id = global_state.repr_id_to_symbol.push(SymbolReprData {
+            original_string: arc_str.clone(),
+            byte_len,
+            char_len,
+            is_ascii,
+        }) as u32;
 
         let symbol_data = SymbolData {
             original_string: arc_str,
@@ -227,7 +247,7 @@ struct GlobalInternerState {
     /// Single map: case-insensitive key -> symbol group containing all case variants
     groups: HashMap<UniCase<String>, std::sync::Arc<SymbolGroup>, BuildHasherDefault<AHasher>>,
     /// Fast reverse lookup: repr_id as index -> symbol data
-    repr_id_to_symbol: BoxcarVec<ArcStr>,
+    repr_id_to_symbol: BoxcarVec<SymbolReprData>,
     /// Atomic counter for compare_id generation
     next_compare_id: CachePadded<AtomicU32>,
     /// Lock for atomic reservation of repr_id + boxcar slot (only used for NEW symbols)
@@ -264,7 +284,7 @@ impl GlobalInternerState {
         (symbol_data.compare_id, symbol_data.repr_id)
     }
 
-    fn get_string_by_repr_id(&self, repr_id: u32) -> Option<&ArcStr> {
+    fn get_repr_data_by_repr_id(&self, repr_id: u32) -> Option<&SymbolReprData> {
         // Fast O(1) lookup using direct boxcar indexing
         // repr_id == boxcar_index invariant is maintained by using push() return value as repr_id
         self.repr_id_to_symbol.get(repr_id as usize)
@@ -355,13 +375,14 @@ impl Symbol {
     /// Get the original string as an owned `String`.
     pub fn as_string(&self) -> String {
         GLOBAL_INTERNER
-            .get_string_by_repr_id(self.repr_id)
+            .get_repr_data_by_repr_id(self.repr_id)
             .unwrap_or_else(|| {
                 panic!(
                     "Symbol: Invalid repr_id {}. String not found in interner.",
                     self.repr_id
                 )
             })
+            .original_string
             .to_string()
     }
 
@@ -377,19 +398,35 @@ impl Symbol {
     ///
     /// This does not clone or bump any reference counts.
     pub fn as_arc_str_ref(&self) -> &ArcStr {
-        GLOBAL_INTERNER
-            .get_string_by_repr_id(self.repr_id)
+        let repr = GLOBAL_INTERNER
+            .get_repr_data_by_repr_id(self.repr_id)
             .unwrap_or_else(|| {
                 panic!(
                     "Symbol: Invalid repr_id {}. String not found in interner.",
                     self.repr_id
                 )
-            })
+            });
+        &repr.original_string
     }
 
     /// Get the original string as a borrowed `&str` from the global interner.
     pub fn as_str(&self) -> &str {
         self.as_arc_str_ref().as_str()
+    }
+
+    /// Get cached string metadata for this symbol.
+    /// Returns `(byte_len, char_len, is_ascii)`.
+    #[inline]
+    pub fn str_metadata(&self) -> (usize, usize, bool) {
+        let repr = GLOBAL_INTERNER
+            .get_repr_data_by_repr_id(self.repr_id)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Symbol: Invalid repr_id {}. String metadata not found in interner.",
+                    self.repr_id
+                )
+            });
+        (repr.byte_len, repr.char_len, repr.is_ascii)
     }
 
     /// Get the compare_id for this symbol.
@@ -442,10 +479,10 @@ impl Display for Symbol {
 
 impl Debug for Symbol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match GLOBAL_INTERNER.get_string_by_repr_id(self.repr_id) {
+        match GLOBAL_INTERNER.get_repr_data_by_repr_id(self.repr_id) {
             Some(s) => f
                 .debug_struct("Symbol")
-                .field("value", &&**s)
+                .field("value", &&*s.original_string)
                 .field("cmp_id", &self.compare_id)
                 .field("repr_id", &self.repr_id)
                 .finish(),
@@ -553,8 +590,9 @@ mod tests {
         // Test retrieval from the interner we used to create it
         assert_eq!(
             interner
-                .get_string_by_repr_id(sym.repr_id)
+                .get_repr_data_by_repr_id(sym.repr_id)
                 .unwrap()
+                .original_string
                 .as_str(),
             original
         );

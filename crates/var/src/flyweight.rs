@@ -31,7 +31,7 @@
 //! Flyweights are immutable. Use builtins such as `toflyweight`, `flyslots`, `flycontents`,
 //! `flyslotset`, and `flyslotremove` to construct or modify them.
 
-use crate::{List, Obj, Sequence, Symbol, Var};
+use crate::{List, Obj, Symbol, Var};
 use std::{
     fmt::{Debug, Formatter},
     sync::Arc,

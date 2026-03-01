@@ -15,7 +15,7 @@
 
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction};
 use moor_compiler::offset_for_builtin;
-use moor_var::{E_ARGS, E_PERM, E_TYPE, Flyweight, List, Sequence, Symbol, Var, v_map, v_sym};
+use moor_var::{E_ARGS, E_PERM, E_TYPE, Flyweight, List, Symbol, Var, v_map, v_sym};
 
 fn ensure_enabled(bf_args: &BfCallState<'_>) -> Result<(), BfErr> {
     if !bf_args.config.flyweight_type {

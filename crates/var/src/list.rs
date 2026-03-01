@@ -33,6 +33,16 @@ use std::{
 pub struct List(Box<imbl::Vector<Var>>);
 
 impl List {
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn build(values: &[Var]) -> Var {
         let l = imbl::Vector::from(values.to_vec());
         Var::from_list(List(Box::new(l)))

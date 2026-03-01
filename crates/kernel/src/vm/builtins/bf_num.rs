@@ -16,7 +16,7 @@
 use rand::Rng;
 
 use moor_compiler::offset_for_builtin;
-use moor_var::{E_ARGS, E_INVARG, E_TYPE, Sequence, Var, Variant, v_float, v_int, v_str};
+use moor_var::{E_ARGS, E_INVARG, E_TYPE, Var, Variant, v_float, v_int, v_str};
 
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction};
 

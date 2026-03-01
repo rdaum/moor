@@ -13,12 +13,16 @@
 
 //! VM testing utilities for executing verbs, eval, and forks in test environments
 
-use std::{sync::Arc, time::Duration};
+use std::{cmp::max, sync::Arc, time::Duration};
 
 use moor_common::model::{ObjFlag, WorldState};
 use moor_common::util::BitEnum;
 use moor_compiler::Program;
-use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, v_empty_str, v_obj};
+use moor_var::{
+    List, Obj, SYSTEM_OBJECT, Symbol, Var, program::names::GlobalName, v_empty_str, v_obj,
+    v_symbol_str,
+};
+use strum::EnumCount;
 
 use crate::{
     config::FeaturesConfig,
@@ -237,6 +241,247 @@ impl ActivationBenchResult {
     pub(crate) fn as_ref(&self) -> &crate::vm::activation::Activation {
         &self.inner
     }
+}
+
+/// Opaque wrapper for benchmarking MooStackFrame construction without exposing internals.
+/// Holds the result of creating a raw MOO frame.
+pub struct MooFrameBenchResult {
+    inner: crate::vm::moo_frame::MooStackFrame,
+}
+
+impl MooFrameBenchResult {
+    pub(crate) fn as_ref(&self) -> &crate::vm::moo_frame::MooStackFrame {
+        &self.inner
+    }
+}
+
+/// Opaque state for directly benchmarking activation assembly around a prebuilt MOO frame.
+/// This reuses owned values across iterations to avoid measuring clone/setup overhead.
+pub struct ActivationAssemblyBenchState {
+    frame: Option<crate::vm::moo_frame::MooStackFrame>,
+    this: Option<Var>,
+    args: Option<List>,
+    verbdef: Option<moor_common::model::VerbDef>,
+    player: Obj,
+    verb_name: Symbol,
+    permissions_flags: BitEnum<ObjFlag>,
+}
+
+/// Opaque wrapper for benchmarking Environment construction without exposing internals.
+/// Holds the result of creating a raw environment for a frame.
+#[allow(dead_code)]
+pub struct EnvironmentBenchResult {
+    inner: crate::vm::environment::Environment,
+}
+
+/// Create a top-level MooStackFrame for benchmarking purposes.
+/// This isolates `MooStackFrame::new_with_all_globals`.
+#[allow(clippy::too_many_arguments)]
+#[allow(irrefutable_let_patterns)]
+pub fn create_top_level_moo_frame_for_bench(
+    verb_name: Symbol,
+    this: Var,
+    player: Obj,
+    args: List,
+    caller: Var,
+    argstr: Var,
+    program: moor_var::program::ProgramType,
+) -> MooFrameBenchResult {
+    let moor_var::program::ProgramType::MooR(program) = program else {
+        unimplemented!("Only MOO programs are supported");
+    };
+
+    let frame = crate::vm::moo_frame::MooStackFrame::new_with_all_globals(
+        program,
+        v_obj(player),
+        this,
+        caller,
+        v_symbol_str(verb_name),
+        args.into(),
+        argstr,
+    );
+    MooFrameBenchResult { inner: frame }
+}
+
+/// Create a nested MooStackFrame for benchmarking purposes.
+/// This isolates `MooStackFrame::new_with_globals_from_source`.
+#[allow(clippy::too_many_arguments)]
+#[allow(irrefutable_let_patterns)]
+pub fn create_nested_moo_frame_for_bench(
+    verb_name: Symbol,
+    this: Var,
+    player: Obj,
+    args: List,
+    caller: Var,
+    source: &MooFrameBenchResult,
+    program: moor_var::program::ProgramType,
+) -> MooFrameBenchResult {
+    let moor_var::program::ProgramType::MooR(program) = program else {
+        unimplemented!("Only MOO programs are supported");
+    };
+
+    let frame = crate::vm::moo_frame::MooStackFrame::new_with_globals_from_source(
+        program,
+        v_obj(player),
+        this,
+        caller,
+        v_symbol_str(verb_name),
+        args.into(),
+        source.as_ref(),
+    );
+    MooFrameBenchResult { inner: frame }
+}
+
+/// Prepare reusable state for direct activation assembly benchmarking from a prebuilt frame.
+#[allow(clippy::too_many_arguments)]
+pub fn create_activation_assembly_state_for_bench(
+    verbdef: moor_common::model::VerbDef,
+    verb_name: Symbol,
+    this: Var,
+    player: Obj,
+    args: List,
+    frame: MooFrameBenchResult,
+) -> ActivationAssemblyBenchState {
+    ActivationAssemblyBenchState {
+        frame: Some(frame.inner),
+        this: Some(this),
+        args: Some(args),
+        verbdef: Some(verbdef),
+        player,
+        verb_name,
+        permissions_flags: BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer,
+    }
+}
+
+/// Execute one direct activation assembly cycle using prebuilt state.
+/// This isolates struct assembly/disassembly with a prebuilt `MooStackFrame`.
+pub fn run_activation_assembly_cycle_for_bench(state: &mut ActivationAssemblyBenchState) {
+    let frame = state
+        .frame
+        .take()
+        .expect("activation assembly bench state missing frame");
+    let this = state
+        .this
+        .take()
+        .expect("activation assembly bench state missing this");
+    let args = state
+        .args
+        .take()
+        .expect("activation assembly bench state missing args");
+    let verbdef = state
+        .verbdef
+        .take()
+        .expect("activation assembly bench state missing verbdef");
+
+    let activation = crate::vm::activation::Activation {
+        frame: crate::vm::activation::Frame::Moo(frame),
+        this,
+        player: state.player,
+        args,
+        verb_name: state.verb_name,
+        permissions: verbdef.owner(),
+        verbdef,
+        permissions_flags: state.permissions_flags,
+    };
+    let activation = std::hint::black_box(activation);
+
+    let crate::vm::activation::Frame::Moo(frame) = activation.frame else {
+        unreachable!("activation assembly bench uses only MOO frames")
+    };
+    state.frame = Some(frame);
+    state.this = Some(activation.this);
+    state.args = Some(activation.args);
+    state.verbdef = Some(activation.verbdef);
+}
+
+/// Execute one cycle of activation assembly state plumbing without constructing an Activation.
+/// This isolates benchmark harness overhead for corrected assembly attribution.
+pub fn run_activation_assembly_cycle_overhead_for_bench(state: &mut ActivationAssemblyBenchState) {
+    let frame = state
+        .frame
+        .take()
+        .expect("activation assembly bench state missing frame");
+    let this = state
+        .this
+        .take()
+        .expect("activation assembly bench state missing this");
+    let args = state
+        .args
+        .take()
+        .expect("activation assembly bench state missing args");
+    let verbdef = state
+        .verbdef
+        .take()
+        .expect("activation assembly bench state missing verbdef");
+
+    let (frame, this, args, verbdef) = std::hint::black_box((frame, this, args, verbdef));
+
+    state.frame = Some(frame);
+    state.this = Some(this);
+    state.args = Some(args);
+    state.verbdef = Some(verbdef);
+}
+
+/// Create a top-level Environment for benchmarking purposes.
+/// This isolates top-level call global environment construction.
+#[allow(clippy::too_many_arguments)]
+#[allow(irrefutable_let_patterns)]
+pub fn create_top_level_environment_for_bench(
+    verb_name: Symbol,
+    this: Var,
+    player: Obj,
+    args: List,
+    caller: Var,
+    argstr: Var,
+    program: moor_var::program::ProgramType,
+) -> EnvironmentBenchResult {
+    let moor_var::program::ProgramType::MooR(program) = program else {
+        unimplemented!("Only MOO programs are supported");
+    };
+    let width = max(program.var_names().global_width(), GlobalName::COUNT);
+
+    let env = crate::vm::environment::Environment::with_call_globals(
+        v_obj(player),
+        this,
+        caller,
+        v_symbol_str(verb_name),
+        args.into(),
+        argstr,
+        width,
+    );
+
+    EnvironmentBenchResult { inner: env }
+}
+
+/// Create a nested Environment for benchmarking purposes.
+/// This isolates nested call global construction with parsing-global copy.
+#[allow(clippy::too_many_arguments)]
+#[allow(irrefutable_let_patterns)]
+pub fn create_nested_environment_for_bench(
+    verb_name: Symbol,
+    this: Var,
+    player: Obj,
+    args: List,
+    caller: Var,
+    source: &MooFrameBenchResult,
+    program: moor_var::program::ProgramType,
+) -> EnvironmentBenchResult {
+    let moor_var::program::ProgramType::MooR(program) = program else {
+        unimplemented!("Only MOO programs are supported");
+    };
+    let width = max(program.var_names().global_width(), GlobalName::COUNT);
+
+    let env = crate::vm::environment::Environment::with_call_globals_copy_parsing(
+        v_obj(player),
+        this,
+        caller,
+        v_symbol_str(verb_name),
+        args.into(),
+        &source.as_ref().environment,
+        width,
+    );
+
+    EnvironmentBenchResult { inner: env }
 }
 
 /// Create an Activation for benchmarking purposes.
