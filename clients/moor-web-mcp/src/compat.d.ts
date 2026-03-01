@@ -11,18 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// Copyright (C) 2026 Ryan Daum <ryan.daum@gmail.com> This program is free
-// software: you can redistribute it and/or modify it under the terms of the GNU
-// General Public License as published by the Free Software Foundation, version
-// 3.
-//
-// This program is distributed in the hope that it will be useful, but WITHOUT
-// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along with
-// this program. If not, see <https://www.gnu.org/licenses/>.
-
 declare module "node:fs" {
     export function readFileSync(path: string, encoding: string): string;
 }
@@ -84,12 +72,22 @@ declare module "@moor/web-sdk" {
         },
     ): { wsUrl: string; protocols: string[] };
 
+    export function bytesFromWebSocketMessage(data: unknown): Uint8Array | null;
+    export function handleWebSocketControlFrame(
+        bytes: Uint8Array,
+        send: (payload: Uint8Array) => void,
+    ): boolean;
+    export function decodeCredentialsUpdatedEvent(
+        credentials: unknown,
+    ): { clientId: string; clientToken: string } | null;
+
     export function dispatchClientEvent(
         bytes: Uint8Array,
         handlers: {
             onNarrativeEventMessage?: (narrative: unknown) => void;
             onTaskErrorEvent?: (event: { error(): unknown }) => void;
             onTaskSuccessEvent?: () => void;
+            onCredentialsUpdatedEvent?: (credentials: unknown) => void;
         },
     ): void;
 

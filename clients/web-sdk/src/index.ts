@@ -37,3 +37,4 @@ export * from "./welcome";
 export * from "./ws";
 export * from "./ws-dispatch";
 export * from "./ws-narrative";
+export * from "./ws-session";

@@ -114,8 +114,8 @@ Databases from beta7 and earlier cannot be loaded directly.
 - Fork dispatch now commits and requests a fresh transaction before scheduling new tasks
 - `queued_tasks()` prefers the top non-builtin activation for prepared tasks
 - `parse_command()` now accepts optional 4th argument to specify fuzzy match threshold
-- Stored program format bumped to version 3 to enforce hard incompatibility with chained
-  assignments through builtin properties
+- Stored program format bumped to version 3 to enforce hard incompatibility with chained assignments
+  through builtin properties
 
 `regex`:
 

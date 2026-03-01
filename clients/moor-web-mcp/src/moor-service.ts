@@ -11,21 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// Copyright (C) 2026 Ryan Daum <ryan.daum@gmail.com> This program is free
-// software: you can redistribute it and/or modify it under the terms of the GNU
-// General Public License as published by the Free Software Foundation, version
-// 3.
-//
-// This program is distributed in the hope that it will be useful, but WITHOUT
-// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along with
-// this program. If not, see <https://www.gnu.org/licenses/>.
-
 import {
     buildWsAttach,
+    bytesFromWebSocketMessage,
+    decodeCredentialsUpdatedEvent,
     dispatchClientEvent,
+    handleWebSocketControlFrame,
     MoorVar,
     parseEvalResultVar,
     parseWsNarrativeEventMessage,
@@ -241,7 +232,13 @@ export class MoorWebClient {
 
         const onMessage = (data: unknown) => {
             try {
-                const bytes = data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer);
+                const bytes = bytesFromWebSocketMessage(data);
+                if (!bytes) {
+                    return;
+                }
+                if (handleWebSocketControlFrame(bytes, (payload) => ws.send(payload))) {
+                    return;
+                }
                 dispatchClientEvent(bytes, {
                     onNarrativeEventMessage: (narrative: unknown) => {
                         const parsed = parseWsNarrativeEventMessage(
@@ -488,7 +485,13 @@ export class MoorWebClient {
 
         ws.on("message", (rawData: unknown) => {
             try {
-                const bytes = rawData instanceof Uint8Array ? rawData : new Uint8Array(rawData as ArrayBuffer);
+                const bytes = bytesFromWebSocketMessage(rawData);
+                if (!bytes) {
+                    return;
+                }
+                if (handleWebSocketControlFrame(bytes, (payload) => ws.send(payload))) {
+                    return;
+                }
                 dispatchClientEvent(bytes, {
                     onNarrativeEventMessage: (narrative: unknown) => {
                         const parsed = parseWsNarrativeEventMessage(
@@ -504,6 +507,14 @@ export class MoorWebClient {
                         if (session.recentEvents.length > 200) {
                             session.recentEvents.shift();
                         }
+                    },
+                    onCredentialsUpdatedEvent: (credentials: unknown) => {
+                        const updated = decodeCredentialsUpdatedEvent(credentials as any);
+                        if (!updated) {
+                            return;
+                        }
+                        session.clientId = updated.clientId;
+                        session.clientToken = updated.clientToken;
                     },
                 });
             } catch {

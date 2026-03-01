@@ -8,8 +8,8 @@ Use these scripts to profile activation/frame construction paths in isolation fr
 tools/perf/activation-profile.sh
 ```
 
-This builds `activation_profile` in release mode and writes outputs under
-`target/perf/activation` by default:
+This builds `activation_profile` in release mode and writes outputs under `target/perf/activation`
+by default:
 
 - `stat-default.csv` (`perf stat -d -d -d`)
 - `stat-events.csv` (explicit hardware counter set)
