@@ -586,17 +586,6 @@ where
         }
         existing
     }
-
-    #[cfg(test)]
-    pub fn committed_index_or_box(
-        self,
-        existing: Arc<Box<dyn RelationIndex<Domain, Codomain>>>,
-    ) -> Arc<Box<dyn RelationIndex<Domain, Codomain>>> {
-        if self.dirty {
-            return Arc::new(self.index);
-        }
-        existing
-    }
 }
 
 impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>

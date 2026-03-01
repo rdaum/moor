@@ -290,8 +290,7 @@ mod tests {
                         let mut cr = backing_store.begin_check_from_index(&**snapshot);
                         cr.check(&mut ws).expect("check failed in begin");
                         cr.apply(ws).expect("apply failed in begin");
-                        let next = cr.committed_index_or_box(Arc::clone(&snapshot));
-                        root_index.store(next);
+                        cr.commit(&root_index);
                     }
                 }
                 Type::Fail => {

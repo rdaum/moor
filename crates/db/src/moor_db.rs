@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::provider::fjall_provider;
 use crate::{
     AnonymousObjectMetadata, ObjAndUUIDHolder, StringHolder,
     config::DatabaseConfig,
-    db_worldstate::db_counters,
     prop_cache::PropResolutionCache,
     tx_management::{CheckRelation, Relation, RelationTransaction, Timestamp, Tx, WorkingSet},
     verb_cache::{AncestryCache, VerbResolutionCache},
@@ -29,13 +29,13 @@ use crate::{
     },
     relation_defs::define_relations,
 };
-use arc_swap::ArcSwap;
 use fjall::{Database, KeyspaceCreateOptions};
 use minstant::Instant;
+use moor_common::model::loader::SnapshotInterface;
 use moor_common::util::CachePadded;
 use moor_common::{
     model::{CommitResult, ObjFlag, PropDefs, PropPerms, VerbDefs},
-    util::{BitEnum, PerfTimerGuard},
+    util::BitEnum,
 };
 use moor_var::{Obj, Symbol, Var, program::ProgramType};
 use parking_lot::Mutex;
@@ -45,10 +45,15 @@ use std::{
         Arc,
         atomic::{AtomicI64, AtomicU64},
     },
-    time::Duration,
 };
 use tempfile::TempDir;
 use tracing::{error, info, warn};
+
+mod commit_pipeline;
+mod snapshot_planes;
+
+use snapshot_planes::SnapshotPlanes;
+pub(crate) use snapshot_planes::TxSeed;
 
 define_relations! {
     object_location == Obj, Obj,
@@ -67,17 +72,17 @@ define_relations! {
 
 /// Combined cache structure to ensure atomic updates across all caches
 pub struct Caches {
-    pub verb_resolution_cache: Box<VerbResolutionCache>,
-    pub prop_resolution_cache: Box<PropResolutionCache>,
-    pub ancestry_cache: Box<AncestryCache>,
+    pub verb_resolution_cache: VerbResolutionCache,
+    pub prop_resolution_cache: PropResolutionCache,
+    pub ancestry_cache: AncestryCache,
 }
 
 impl Caches {
     pub fn new() -> Self {
         Self {
-            verb_resolution_cache: Box::new(VerbResolutionCache::new()),
-            prop_resolution_cache: Box::new(PropResolutionCache::new()),
-            ancestry_cache: Box::new(AncestryCache::default()),
+            verb_resolution_cache: VerbResolutionCache::new(),
+            prop_resolution_cache: PropResolutionCache::new(),
+            ancestry_cache: AncestryCache::default(),
         }
     }
 
@@ -96,25 +101,16 @@ impl Caches {
     }
 }
 
-struct CachePublication {
-    version: u64,
-    caches: Arc<Caches>,
-}
-
 pub struct MoorDB {
     monotonic: CachePadded<AtomicU64>,
     /// Serializes write commit processing.
     commit_apply_lock: Mutex<()>,
     keyspace: Database,
     relations: Relations,
-    root_state: ArcSwap<WorldStateSnapshot>,
-    /// Read-mostly cache publication sidecar for read-only commits.
-    ///
-    /// This allows cache updates to publish without touching the main root snapshot pointer.
-    cache_publication: ArcSwap<CachePublication>,
+    snapshot_planes: SnapshotPlanes,
     sequences: Arc<[CachePadded<AtomicI64>; 16]>,
     /// Background writer for sequence persistence
-    sequence_writer: crate::provider::fjall_provider::SequenceWriter,
+    sequence_writer: fjall_provider::SequenceWriter,
     /// Shared batch collector for all providers
     batch_collector: Arc<BatchCollector>,
     /// Single background writer for all fjall operations
@@ -141,8 +137,7 @@ impl MoorDB {
     /// Create a snapshot-based SnapshotInterface for consistent read-only access
     pub fn create_snapshot(
         &self,
-    ) -> Result<Box<dyn moor_common::model::loader::SnapshotInterface>, crate::tx_management::Error>
-    {
+    ) -> Result<Box<dyn SnapshotInterface>, crate::tx_management::Error> {
         // Wait for all write transactions up to the last completed write to finish
         // This ensures the snapshot captures all committed write data
         let last_write_timestamp = Timestamp(
@@ -192,31 +187,8 @@ impl MoorDB {
     }
 
     pub(crate) fn start_transaction(self: &Arc<Self>) -> WorldStateTransaction {
-        let snapshot = self.root_state.load();
-        let cache_publication = self.cache_publication.load();
-        let base_caches = if cache_publication.version == snapshot.version {
-            &cache_publication.caches
-        } else {
-            &snapshot.caches
-        };
-        let tx = Tx {
-            ts: Timestamp(
-                self.monotonic
-                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-            ),
-            snapshot_version: snapshot.version,
-        };
-
-        let forked_caches = base_caches.fork();
-        self.relations.start_transaction(
-            tx,
-            self.clone(),
-            snapshot.as_ref(),
-            self.sequences.clone(),
-            forked_caches.verb_resolution_cache,
-            forked_caches.prop_resolution_cache,
-            forked_caches.ancestry_cache,
-        )
+        self.relations
+            .start_transaction(self.clone(), self.acquire_tx_seed())
     }
 
     pub fn stop(&self) {
@@ -304,23 +276,16 @@ impl MoorDB {
 
         let relations = Relations::init(&keyspace, &config, batch_collector.clone());
         let initial_root = Arc::new(relations.snapshot(0, Arc::new(Caches::new())));
-        let initial_cache_publication = Arc::new(CachePublication {
-            version: initial_root.version,
-            caches: initial_root.caches.clone(),
-        });
-        let root_state = ArcSwap::new(initial_root);
-        let cache_publication = ArcSwap::new(initial_cache_publication);
+        let snapshot_planes = SnapshotPlanes::new(initial_root);
 
         // Create background sequence writer
-        let sequence_writer =
-            crate::provider::fjall_provider::SequenceWriter::new(sequences_partition.clone());
+        let sequence_writer = fjall_provider::SequenceWriter::new(sequences_partition.clone());
 
         let s = Arc::new(Self {
             monotonic: CachePadded::new(AtomicU64::new(start_tx_num)),
             commit_apply_lock: Mutex::new(()),
             relations,
-            root_state,
-            cache_publication,
+            snapshot_planes,
             sequences,
             sequence_writer,
             batch_collector,
@@ -340,171 +305,25 @@ impl MoorDB {
     /// Call this after bulk import operations to enable optimized reads.
     pub fn mark_all_fully_loaded(&self) {
         let relations = &self.relations;
-        self.root_state
-            .rcu(|current_root| relations.snapshot_with_all_fully_loaded(current_root));
+        self.snapshot_planes
+            .update_root(|current_root| relations.snapshot_with_all_fully_loaded(current_root));
     }
+}
 
-    pub(crate) fn commit_read_only(&self, snapshot_version: u64, combined_caches: Caches) {
-        if !combined_caches.has_changed() {
-            return;
-        }
-
-        let current_root = self.root_state.load();
-        if current_root.version != snapshot_version {
-            return;
-        }
-
-        self.cache_publication.store(Arc::new(CachePublication {
-            version: snapshot_version,
-            caches: Arc::new(combined_caches),
-        }));
-    }
-
-    pub(crate) fn commit_writes(&self, ws: Box<WorkingSets>, enqueued_at: Instant) -> CommitResult {
-        let counters = db_counters();
-        let lock_wait_timer =
-            PerfTimerGuard::from_start(&counters.commit_lock_wait_phase, enqueued_at);
-        let _commit_guard = self.commit_apply_lock.lock();
-        drop(lock_wait_timer);
-
-        let _process_timer = PerfTimerGuard::new(&counters.commit_process_phase);
-        self.process_commit_writes(ws, counters)
-    }
-
-    fn process_commit_writes(
-        &self,
-        ws: Box<WorkingSets>,
-        counters: &moor_common::model::WorldStatePerf,
-    ) -> CommitResult {
-        let _t = PerfTimerGuard::new(&counters.commit_check_phase);
-        let start_time = Instant::now();
-
-        let current_root = self.root_state.load();
-        let mut checkers = self.relations.begin_check_all(&current_root);
-
-        let num_tuples = ws.total_tuples();
-        if num_tuples > 10_000 {
-            warn!(
-                "Potential large batch @ commit... Checking {num_tuples} total tuples from the working set..."
-            );
-        }
-
-        // Get the transaction timestamp and mutations flag before extracting working sets
-        let tx_timestamp = ws.tx.ts;
-        let snapshot_version = ws.tx.snapshot_version;
-        let has_mutations = ws.has_mutations;
-        let (mut relation_ws, verb_cache, prop_cache, ancestry_cache) =
-            ws.extract_relation_working_sets();
-
-        // Optimization: If no mutation commits completed since transaction start, skip conflict checking.
-        // The transaction already validated against its snapshot when creating operations.
-        let skip_conflict_check = snapshot_version == current_root.version;
-
-        {
-            // Conflict validation - can skip if no concurrent commits
-            if !skip_conflict_check && let Err(conflict_info) = checkers.check_all(&mut relation_ws)
-            {
-                warn!("Transaction conflict during commit: {}", conflict_info);
-                return CommitResult::ConflictRetry {
-                    conflict_info: Some(conflict_info),
-                };
-            }
-            drop(_t);
-
-            // Mutation detection - use has_mutations since we might have skipped check_all
-            // (which normally sets the dirty flags that all_clean checks)
-            if !has_mutations {
-                self.commit_read_only(
-                    snapshot_version,
-                    Caches {
-                        verb_resolution_cache: verb_cache,
-                        prop_resolution_cache: prop_cache,
-                        ancestry_cache,
-                    },
-                );
-                return CommitResult::Success {
-                    mutations_made: false,
-                    timestamp: tx_timestamp.0,
-                };
-            }
-
-            // Warn if the check phase took a really long time
-            if start_time.elapsed() > Duration::from_secs(5) {
-                warn!(
-                    "Long running commit; check phase took {}s for {num_tuples} tuples",
-                    start_time.elapsed().as_secs_f32()
-                );
-            }
-
-            let _t = PerfTimerGuard::new(&counters.commit_apply_phase);
-
-            // Start collecting operations for this commit's batch
-            self.batch_collector.start_commit(tx_timestamp, num_tuples);
-
-            let checkers = match checkers.apply_all(relation_ws) {
-                Ok(checkers) => checkers,
-                Err(()) => {
-                    // Discard the batch on failure
-                    self.batch_collector.abort_commit();
-                    warn!("Transaction conflict during apply phase (no detailed info available)");
-                    return CommitResult::ConflictRetry {
-                        conflict_info: None,
-                    };
-                }
-            };
-
-            // Take the completed batch and send to background writer
-            let batch = self.batch_collector.finish_commit();
-            let batch_op_count = batch.operations.len();
-            let batch_write_start = Instant::now();
-            if !batch.is_empty() {
-                self.batch_writer.write(batch);
-            }
-            let batch_write_elapsed = batch_write_start.elapsed();
-
-            let next_root =
-                checkers.commit_all(&current_root, verb_cache, prop_cache, ancestry_cache);
-            let next_cache_publication = Arc::new(CachePublication {
-                version: next_root.version,
-                caches: next_root.caches.clone(),
-            });
-            self.root_state.store(next_root);
-            self.cache_publication.store(next_cache_publication);
-
-            // Track the last write timestamp and send barrier
-            self.last_write_commit
-                .store(tx_timestamp.0, std::sync::atomic::Ordering::Release);
-            self.batch_writer.send_barrier(tx_timestamp);
-
-            // Warn if batch_write blocked (backpressure)
-            if batch_write_elapsed > Duration::from_secs(1) {
-                warn!(
-                    "Slow batch_write: {} ops blocked for {:.2}s (ts {})",
-                    batch_op_count,
-                    batch_write_elapsed.as_secs_f32(),
-                    tx_timestamp.0
-                );
-            }
-
-            drop(_t);
-        }
-
-        // Queue sequence persistence to background thread
-        // (Caches and relation indexes were published atomically in the root snapshot)
-        // Store monotonic counter in sequence slot 15
-        self.sequences[15].store(
-            self.monotonic.load(std::sync::atomic::Ordering::Relaxed) as i64,
-            std::sync::atomic::Ordering::Relaxed,
-        );
-        // Collect current sequence values and send to background writer
-        let mut seq_values = [0i64; 16];
-        for (i, seq) in self.sequences.iter().enumerate() {
-            seq_values[i] = seq.load(std::sync::atomic::Ordering::Relaxed);
-        }
-        self.sequence_writer.write(seq_values);
-        CommitResult::Success {
-            mutations_made: has_mutations,
-            timestamp: tx_timestamp.0,
+impl MoorDB {
+    fn acquire_tx_seed(&self) -> TxSeed {
+        let (snapshot, caches) = self.snapshot_planes.acquire_seed_caches();
+        TxSeed {
+            tx: Tx {
+                ts: Timestamp(
+                    self.monotonic
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+                ),
+                snapshot_version: snapshot.version,
+            },
+            snapshot,
+            sequences: self.sequences.clone(),
+            caches,
         }
     }
 }

@@ -175,9 +175,9 @@ macro_rules! define_relations {
                 fn commit_all(
                     self,
                     current_root: &std::sync::Arc<WorldStateSnapshot>,
-                    verb_cache: Box<VerbResolutionCache>,
-                    prop_cache: Box<PropResolutionCache>,
-                    ancestry_cache: Box<AncestryCache>,
+                    verb_cache: VerbResolutionCache,
+                    prop_cache: PropResolutionCache,
+                    ancestry_cache: AncestryCache,
                 ) -> std::sync::Arc<WorldStateSnapshot> {
                     let combined_caches = crate::moor_db::Caches {
                         verb_resolution_cache: verb_cache,
@@ -306,24 +306,26 @@ macro_rules! define_relations {
                 /// defined relations, along with the necessary caches.
                 ///
                 /// # Parameters
-                /// - `tx`: The transaction timestamp and metadata
                 /// - `db`: Database handle used for direct commit processing
-                /// - `sequences`: Array of sequence counters
-                /// - `verb_resolution_cache`: Forked verb resolution cache
-                /// - `prop_resolution_cache`: Forked property resolution cache
-                /// - `ancestry_cache`: Forked ancestry cache
-                #[allow(clippy::too_many_arguments)]
+                /// - `seed`: Transaction startup context with tx metadata, snapshot, sequences,
+                ///   and forked resolution caches.
                 fn start_transaction(&self,
-                    tx: Tx,
                     db: std::sync::Arc<dyn TransactionContext>,
-                    snapshot: &WorldStateSnapshot,
-                    sequences: Arc<[CachePadded<AtomicI64>; 16]>,
-                    verb_resolution_cache: Box<VerbResolutionCache>,
-                    prop_resolution_cache: Box<PropResolutionCache>,
-                    ancestry_cache: Box<AncestryCache>
+                    seed: crate::moor_db::TxSeed,
                 ) -> WorldStateTransaction {
+                    let crate::moor_db::TxSeed {
+                        tx,
+                        snapshot,
+                        sequences,
+                        caches,
+                    } = seed;
+                    let crate::moor_db::Caches {
+                        verb_resolution_cache,
+                        prop_resolution_cache,
+                        ancestry_cache,
+                    } = caches;
                     WorldStateTransaction {
-                        tx: tx.clone(),
+                        tx,
                         db,
                         $( $field: self.$field.start_from_index(&tx, &*snapshot.$field), )*
                         sequences,
@@ -343,9 +345,9 @@ macro_rules! define_relations {
                 #[allow(dead_code)]
                 pub(crate) tx: Tx,
                 $( pub(crate) $field: WorkingSet<$domain, $codomain>, )*
-                pub(crate) verb_resolution_cache: Box<VerbResolutionCache>,
-                pub(crate) prop_resolution_cache: Box<PropResolutionCache>,
-                pub(crate) ancestry_cache: Box<AncestryCache>,
+                pub(crate) verb_resolution_cache: VerbResolutionCache,
+                pub(crate) prop_resolution_cache: PropResolutionCache,
+                pub(crate) ancestry_cache: AncestryCache,
                 pub(crate) has_mutations: bool,
             }
 
@@ -366,10 +368,10 @@ macro_rules! define_relations {
                 /// # Returns
                 /// A tuple containing:
                 /// - `RelationWorkingSets`: Working sets for all relations
-                /// - `Box<VerbResolutionCache>`: Verb resolution cache
-                /// - `Box<PropResolutionCache>`: Property resolution cache
-                /// - `Box<AncestryCache>`: Ancestry cache
-                fn extract_relation_working_sets(self) -> (RelationWorkingSets, Box<VerbResolutionCache>, Box<PropResolutionCache>, Box<AncestryCache>) {
+                /// - `VerbResolutionCache`: Verb resolution cache
+                /// - `PropResolutionCache`: Property resolution cache
+                /// - `AncestryCache`: Ancestry cache
+                fn extract_relation_working_sets(self) -> (RelationWorkingSets, VerbResolutionCache, PropResolutionCache, AncestryCache) {
                     let ws = RelationWorkingSets {
                         $( $field: self.$field, )*
                     };
@@ -400,11 +402,11 @@ macro_rules! define_relations {
                 /// Array of sequence counters for object ID generation
                 pub(crate) sequences: Arc<[CachePadded<AtomicI64>; 16]>,
                 /// Local fork of the verb resolution cache
-                pub(crate) verb_resolution_cache: Box<VerbResolutionCache>,
+                pub(crate) verb_resolution_cache: VerbResolutionCache,
                 /// Local fork of the property resolution cache
-                pub(crate) prop_resolution_cache: Box<PropResolutionCache>,
+                pub(crate) prop_resolution_cache: PropResolutionCache,
                 /// Local fork of the ancestry cache
-                pub(crate) ancestry_cache: Box<AncestryCache>,
+                pub(crate) ancestry_cache: AncestryCache,
                 /// Whether this transaction has performed any mutations
                 pub(crate) has_mutations: bool,
             }

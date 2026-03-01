@@ -226,15 +226,15 @@ impl Inner {
 }
 
 impl VerbResolutionCache {
-    pub fn fork(&self) -> Box<Self> {
+    pub fn fork(&self) -> Self {
         let inner = self.inner.lock().expect("verb cache mutex poisoned");
         let mut forked_inner = inner.clone();
         forked_inner.orig_version = inner.version;
         forked_inner.flushed = false;
-        Box::new(Self {
+        Self {
             inner: Mutex::new(forked_inner),
             stats: self.stats,
-        })
+        }
     }
 
     pub fn has_changed(&self) -> bool {
@@ -365,15 +365,15 @@ impl AncestryInner {
 }
 
 impl AncestryCache {
-    pub fn fork(&self) -> Box<Self> {
+    pub fn fork(&self) -> Self {
         let inner = self.inner.lock().expect("ancestry cache mutex poisoned");
         let mut forked_inner = inner.clone();
         forked_inner.orig_version = inner.version;
         forked_inner.flushed = false;
-        Box::new(Self {
+        Self {
             inner: Mutex::new(forked_inner),
             stats: self.stats,
-        })
+        }
     }
     pub fn lookup(&self, obj: &Obj) -> Option<Vec<Obj>> {
         let inner = self.inner.lock().expect("ancestry cache mutex poisoned");
