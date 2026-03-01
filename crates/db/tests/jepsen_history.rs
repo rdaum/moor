@@ -247,9 +247,7 @@ mod tests {
                         snapshot_version: 0,
                     };
                     let snapshot = root_index.load();
-                    let transaction = backing_store
-                        .clone()
-                        .start_from_index(&tx, Arc::clone(&snapshot));
+                    let transaction = backing_store.clone().start_from_index(&tx, &**snapshot);
 
                     if transactions
                         .insert(entry.process, (tx, transaction))
@@ -289,10 +287,10 @@ mod tests {
 
                     {
                         let snapshot = root_index.load();
-                        let mut cr = backing_store.begin_check_from_index(Arc::clone(&snapshot));
+                        let mut cr = backing_store.begin_check_from_index(&**snapshot);
                         cr.check(&mut ws).expect("check failed in begin");
                         cr.apply(ws).expect("apply failed in begin");
-                        let next = cr.committed_index_or(Arc::clone(&snapshot));
+                        let next = cr.committed_index_or_box(Arc::clone(&snapshot));
                         root_index.store(next);
                     }
                 }
@@ -331,7 +329,7 @@ mod tests {
                             }
                         };
                         let snapshot = root_index.load();
-                        let mut cr = backing_store.begin_check_from_index(Arc::clone(&snapshot));
+                        let mut cr = backing_store.begin_check_from_index(&**snapshot);
 
                         match cr.check(&mut ws) {
                             Ok(_) => Err(eyre::eyre!("Expected conflict, check succeeded")),

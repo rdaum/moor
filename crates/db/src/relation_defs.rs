@@ -116,7 +116,7 @@ macro_rules! define_relations {
             pub(crate) struct WorldStateSnapshot {
                 pub(crate) version: u64,
                 pub(crate) caches: std::sync::Arc<crate::moor_db::Caches>,
-                $( pub(crate) $field: std::sync::Arc<Box<dyn crate::tx_management::RelationIndex<$domain, $codomain>>>, )*
+                $( pub(crate) $field: std::sync::Arc<dyn crate::tx_management::RelationIndex<$domain, $codomain>>, )*
             }
 
             /// Trait defining the interface for processing transaction commits.
@@ -259,7 +259,7 @@ macro_rules! define_relations {
                             $field: {
                                 let index = self.$field.seeded_index()
                                     .expect(concat!("Failed to seed ", stringify!($field), " index"));
-                                std::sync::Arc::new(index)
+                                std::sync::Arc::from(index)
                             },
                         )*
                     }
@@ -274,9 +274,9 @@ macro_rules! define_relations {
                         caches: current_root.caches.clone(),
                         $(
                             $field: {
-                                let mut index = (**current_root.$field).fork();
+                                let mut index = current_root.$field.fork();
                                 index.set_provider_fully_loaded(true);
-                                std::sync::Arc::new(index)
+                                std::sync::Arc::from(index)
                             },
                         )*
                     })
@@ -294,9 +294,9 @@ macro_rules! define_relations {
                 ///
                 /// Creates RelationCheckers for all relations, which can then be used
                 /// to check for conflicts during transaction commit.
-                fn begin_check_all(&self, snapshot: &std::sync::Arc<WorldStateSnapshot>) -> RelationCheckers {
+                fn begin_check_all(&self, snapshot: &WorldStateSnapshot) -> RelationCheckers {
                     RelationCheckers {
-                        $( $field: self.$field.begin_check_from_index(snapshot.$field.clone()), )*
+                        $( $field: self.$field.begin_check_from_index(&*snapshot.$field), )*
                     }
                 }
 
@@ -316,8 +316,8 @@ macro_rules! define_relations {
                 fn start_transaction(&self,
                     tx: Tx,
                     db: std::sync::Arc<dyn TransactionContext>,
-                    snapshot: std::sync::Arc<WorldStateSnapshot>,
-                    sequences: [Arc<CachePadded<AtomicI64>>; 16],
+                    snapshot: &WorldStateSnapshot,
+                    sequences: Arc<[CachePadded<AtomicI64>; 16]>,
                     verb_resolution_cache: Box<VerbResolutionCache>,
                     prop_resolution_cache: Box<PropResolutionCache>,
                     ancestry_cache: Box<AncestryCache>
@@ -325,7 +325,7 @@ macro_rules! define_relations {
                     WorldStateTransaction {
                         tx: tx.clone(),
                         db,
-                        $( $field: self.$field.start_from_index(&tx, snapshot.$field.clone()), )*
+                        $( $field: self.$field.start_from_index(&tx, &*snapshot.$field), )*
                         sequences,
                         verb_resolution_cache,
                         prop_resolution_cache,
@@ -398,7 +398,7 @@ macro_rules! define_relations {
                 /// Relation transactions for each defined relation
                 $( pub(crate) $field: RelationTransaction<$domain, $codomain, FjallProvider<$domain, $codomain>>, )*
                 /// Array of sequence counters for object ID generation
-                pub(crate) sequences: [Arc<CachePadded<AtomicI64>>; 16],
+                pub(crate) sequences: Arc<[CachePadded<AtomicI64>; 16]>,
                 /// Local fork of the verb resolution cache
                 pub(crate) verb_resolution_cache: Box<VerbResolutionCache>,
                 /// Local fork of the property resolution cache

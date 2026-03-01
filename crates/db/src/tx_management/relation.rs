@@ -579,6 +579,17 @@ where
 
     pub fn committed_index_or(
         self,
+        existing: Arc<dyn RelationIndex<Domain, Codomain>>,
+    ) -> Arc<dyn RelationIndex<Domain, Codomain>> {
+        if self.dirty {
+            return Arc::from(self.index);
+        }
+        existing
+    }
+
+    #[cfg(test)]
+    pub fn committed_index_or_box(
+        self,
         existing: Arc<Box<dyn RelationIndex<Domain, Codomain>>>,
     ) -> Arc<Box<dyn RelationIndex<Domain, Codomain>>> {
         if self.dirty {
@@ -640,22 +651,22 @@ where
     pub fn start_from_index(
         &self,
         tx: &Tx,
-        index: Arc<Box<dyn RelationIndex<Domain, Codomain>>>,
+        index: &dyn RelationIndex<Domain, Codomain>,
     ) -> RelationTransaction<Domain, Codomain, Source> {
         RelationTransaction::new(
             *tx,
             self.relation_name,
-            (**index).fork(),
+            index.fork(),
             (*self.source).clone(),
         )
     }
 
     pub fn begin_check_from_index(
         &self,
-        index: Arc<Box<dyn RelationIndex<Domain, Codomain>>>,
+        index: &dyn RelationIndex<Domain, Codomain>,
     ) -> CheckRelation<Domain, Codomain, Source> {
         CheckRelation {
-            index: (**index).fork(),
+            index: index.fork(),
             relation_name: self.relation_name,
             source: self.source.clone(),
             dirty: false,
@@ -670,13 +681,13 @@ where
     #[cfg(test)]
     pub fn start(&self, tx: &Tx) -> RelationTransaction<Domain, Codomain, Source> {
         let index = self.test_index.load();
-        self.start_from_index(tx, Arc::clone(&index))
+        self.start_from_index(tx, &**index)
     }
 
     #[cfg(test)]
     pub fn begin_check(&self) -> CheckRelation<Domain, Codomain, Source> {
         let index = self.test_index.load();
-        self.begin_check_from_index(Arc::clone(&index))
+        self.begin_check_from_index(&**index)
     }
 
     #[cfg(test)]

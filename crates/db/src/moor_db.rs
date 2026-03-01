@@ -103,7 +103,7 @@ pub struct MoorDB {
     keyspace: Database,
     relations: Relations,
     root_state: ArcSwap<WorldStateSnapshot>,
-    sequences: [Arc<CachePadded<AtomicI64>>; 16],
+    sequences: Arc<[CachePadded<AtomicI64>; 16]>,
     /// Background writer for sequence persistence
     sequence_writer: crate::provider::fjall_provider::SequenceWriter,
     /// Shared batch collector for all providers
@@ -196,7 +196,7 @@ impl MoorDB {
         self.relations.start_transaction(
             tx,
             self.clone(),
-            Arc::clone(&snapshot),
+            snapshot.as_ref(),
             self.sequences.clone(),
             forked_caches.verb_resolution_cache,
             forked_caches.prop_resolution_cache,
@@ -252,7 +252,7 @@ impl MoorDB {
             .keyspace("sequences", KeyspaceCreateOptions::default)
             .unwrap();
 
-        let sequences = [(); 16].map(|_| Arc::new(CachePadded::new(AtomicI64::new(-1))));
+        let sequences = Arc::new([(); 16].map(|_| CachePadded::new(AtomicI64::new(-1))));
 
         let mut fresh = false;
         if !keyspace.keyspace_exists("object_location") {
