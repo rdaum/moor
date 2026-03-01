@@ -96,6 +96,11 @@ impl Caches {
     }
 }
 
+struct CachePublication {
+    version: u64,
+    caches: Arc<Caches>,
+}
+
 pub struct MoorDB {
     monotonic: CachePadded<AtomicU64>,
     /// Serializes write commit processing.
@@ -103,6 +108,10 @@ pub struct MoorDB {
     keyspace: Database,
     relations: Relations,
     root_state: ArcSwap<WorldStateSnapshot>,
+    /// Read-mostly cache publication sidecar for read-only commits.
+    ///
+    /// This allows cache updates to publish without touching the main root snapshot pointer.
+    cache_publication: ArcSwap<CachePublication>,
     sequences: Arc<[CachePadded<AtomicI64>; 16]>,
     /// Background writer for sequence persistence
     sequence_writer: crate::provider::fjall_provider::SequenceWriter,
@@ -184,6 +193,12 @@ impl MoorDB {
 
     pub(crate) fn start_transaction(self: &Arc<Self>) -> WorldStateTransaction {
         let snapshot = self.root_state.load();
+        let cache_publication = self.cache_publication.load();
+        let base_caches = if cache_publication.version == snapshot.version {
+            &cache_publication.caches
+        } else {
+            &snapshot.caches
+        };
         let tx = Tx {
             ts: Timestamp(
                 self.monotonic
@@ -192,7 +207,7 @@ impl MoorDB {
             snapshot_version: snapshot.version,
         };
 
-        let forked_caches = snapshot.caches.fork();
+        let forked_caches = base_caches.fork();
         self.relations.start_transaction(
             tx,
             self.clone(),
@@ -288,7 +303,13 @@ impl MoorDB {
         let batch_writer = BatchWriter::new(keyspace.clone());
 
         let relations = Relations::init(&keyspace, &config, batch_collector.clone());
-        let root_state = ArcSwap::new(Arc::new(relations.snapshot(0, Arc::new(Caches::new()))));
+        let initial_root = Arc::new(relations.snapshot(0, Arc::new(Caches::new())));
+        let initial_cache_publication = Arc::new(CachePublication {
+            version: initial_root.version,
+            caches: initial_root.caches.clone(),
+        });
+        let root_state = ArcSwap::new(initial_root);
+        let cache_publication = ArcSwap::new(initial_cache_publication);
 
         // Create background sequence writer
         let sequence_writer =
@@ -299,6 +320,7 @@ impl MoorDB {
             commit_apply_lock: Mutex::new(()),
             relations,
             root_state,
+            cache_publication,
             sequences,
             sequence_writer,
             batch_collector,
@@ -327,16 +349,15 @@ impl MoorDB {
             return;
         }
 
-        let next_caches = Arc::new(combined_caches);
-        self.root_state.rcu(|current_root| {
-            if current_root.version != snapshot_version {
-                return current_root.clone();
-            }
+        let current_root = self.root_state.load();
+        if current_root.version != snapshot_version {
+            return;
+        }
 
-            let mut next_root = (**current_root).clone();
-            next_root.caches = next_caches.clone();
-            Arc::new(next_root)
-        });
+        self.cache_publication.store(Arc::new(CachePublication {
+            version: snapshot_version,
+            caches: Arc::new(combined_caches),
+        }));
     }
 
     pub(crate) fn commit_writes(&self, ws: Box<WorkingSets>, enqueued_at: Instant) -> CommitResult {
@@ -443,7 +464,12 @@ impl MoorDB {
 
             let next_root =
                 checkers.commit_all(&current_root, verb_cache, prop_cache, ancestry_cache);
+            let next_cache_publication = Arc::new(CachePublication {
+                version: next_root.version,
+                caches: next_root.caches.clone(),
+            });
             self.root_state.store(next_root);
+            self.cache_publication.store(next_cache_publication);
 
             // Track the last write timestamp and send barrier
             self.last_write_commit
