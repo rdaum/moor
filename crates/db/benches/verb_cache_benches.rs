@@ -153,8 +153,8 @@ struct RealisticCacheContext {
 
 impl BenchContext for RealisticCacheContext {
     fn prepare(_num_chunks: usize) -> Self {
-        let verb_cache = Box::new(VerbResolutionCache::new());
-        let ancestry_cache = Box::new(AncestryCache::default());
+        let mut verb_cache = Box::new(VerbResolutionCache::new());
+        let mut ancestry_cache = Box::new(AncestryCache::default());
 
         // Realistic object count - approximate 120 objects based on 633 verb entries and ~5 verbs per object
         let test_objs: Vec<Obj> = (1..=120).map(Obj::mk_id).collect();
@@ -231,8 +231,8 @@ struct PopulatedCacheContext {
 
 impl BenchContext for PopulatedCacheContext {
     fn prepare(_num_chunks: usize) -> Self {
-        let verb_cache = Box::new(VerbResolutionCache::new());
-        let ancestry_cache = Box::new(AncestryCache::default());
+        let mut verb_cache = Box::new(VerbResolutionCache::new());
+        let mut ancestry_cache = Box::new(AncestryCache::default());
 
         let test_objs: Vec<Obj> = (1..=100).map(Obj::mk_id).collect();
         let test_verbs: Vec<Symbol> = [

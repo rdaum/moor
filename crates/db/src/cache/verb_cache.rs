@@ -18,9 +18,9 @@ use moor_common::model::VerbDef;
 use moor_var::{Obj, Symbol};
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map::Entry},
     hash::BuildHasherDefault,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 /// Create an optimized cache key by packing Obj and Symbol into a single u128.
@@ -102,7 +102,7 @@ fn verb_cache_miss() {
 }
 
 pub struct VerbResolutionCache {
-    inner: Mutex<Inner>,
+    inner: Inner,
     stats: &'static CacheStats,
 }
 
@@ -115,13 +115,13 @@ impl Default for VerbResolutionCache {
 impl VerbResolutionCache {
     pub fn new() -> Self {
         Self {
-            inner: Mutex::new(Inner {
+            inner: Inner {
                 version: 0,
                 orig_version: 0,
                 flushed: false,
                 entries: Arc::new(HashMap::default()),
                 first_parent_with_verbs_cache: Arc::new(HashMap::default()),
-            }),
+            },
             stats: &VERB_CACHE_STATS,
         }
     }
@@ -153,36 +153,31 @@ impl Inner {
 
 impl VerbResolutionCache {
     pub fn fork(&self) -> Self {
-        let inner = self.inner.lock().expect("verb cache mutex poisoned");
-        let mut forked_inner = inner.clone();
-        forked_inner.orig_version = inner.version;
+        let mut forked_inner = self.inner.clone();
+        forked_inner.orig_version = self.inner.version;
         forked_inner.flushed = false;
         Self {
-            inner: Mutex::new(forked_inner),
+            inner: forked_inner,
             stats: self.stats,
         }
     }
 
     pub fn has_changed(&self) -> bool {
-        let inner = self.inner.lock().expect("verb cache mutex poisoned");
-        inner.version > inner.orig_version
+        self.inner.version > self.inner.orig_version
     }
 
     pub(crate) fn lookup_first_parent_with_verbs(&self, obj: &Obj) -> Option<Option<Obj>> {
-        let inner = self.inner.lock().expect("verb cache mutex poisoned");
-        inner.first_parent_with_verbs_cache.get(obj).cloned()
+        self.inner.first_parent_with_verbs_cache.get(obj).cloned()
     }
 
-    pub(crate) fn fill_first_parent_with_verbs(&self, obj: &Obj, parent: Option<Obj>) {
-        let mut inner = self.inner.lock().expect("verb cache mutex poisoned");
-        inner.version += 1;
-        inner.first_parent_cache_mut().insert(*obj, parent);
+    pub(crate) fn fill_first_parent_with_verbs(&mut self, obj: &Obj, parent: Option<Obj>) {
+        self.inner.version += 1;
+        self.inner.first_parent_cache_mut().insert(*obj, parent);
     }
 
     pub fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<VerbDef>> {
-        let inner = self.inner.lock().expect("verb cache mutex poisoned");
         let key = make_cache_key(obj, verb);
-        let result = inner.entries.get(&key).cloned();
+        let result = self.inner.entries.get(&key).cloned();
 
         match &result {
             Some(Some(_)) => verb_cache_hit(),
@@ -193,54 +188,64 @@ impl VerbResolutionCache {
         result
     }
 
-    pub fn flush(&self) {
-        let mut inner = self.inner.lock().expect("verb cache mutex poisoned");
-        let entries_count = inner.entries.len() as isize;
-        inner.flushed = true;
-        inner.version += 1;
-        inner.entries_mut().clear();
-        inner.first_parent_cache_mut().clear();
+    pub fn flush(&mut self) {
+        let entries_count = self.inner.entries.len() as isize;
+        self.inner.flushed = true;
+        self.inner.version += 1;
+        self.inner.entries_mut().clear();
+        self.inner.first_parent_cache_mut().clear();
         self.stats.flush();
         self.stats.remove_entries(entries_count);
     }
 
-    pub fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbdef: &VerbDef) {
+    pub fn fill_hit(&mut self, obj: &Obj, verb: &Symbol, verbdef: &VerbDef) {
         let key = make_cache_key(obj, verb);
-        let mut inner = self.inner.lock().expect("verb cache mutex poisoned");
-        inner.version += 1;
-        let is_new_entry = !inner.entries.contains_key(&key);
-        inner.entries_mut().insert(key, Some(verbdef.clone()));
+        self.inner.version += 1;
+        let is_new_entry = match self.inner.entries_mut().entry(key) {
+            Entry::Occupied(mut occupied) => {
+                occupied.insert(Some(verbdef.clone()));
+                false
+            }
+            Entry::Vacant(vacant) => {
+                vacant.insert(Some(verbdef.clone()));
+                true
+            }
+        };
         if is_new_entry {
             self.stats.add_entry();
         }
     }
 
-    pub fn fill_miss(&self, obj: &Obj, verb: &Symbol) {
+    pub fn fill_miss(&mut self, obj: &Obj, verb: &Symbol) {
         let key = make_cache_key(obj, verb);
-        let mut inner = self.inner.lock().expect("verb cache mutex poisoned");
-        inner.version += 1;
-        let is_new_entry = !inner.entries.contains_key(&key);
-        inner.entries_mut().insert(key, None);
+        self.inner.version += 1;
+        let is_new_entry = match self.inner.entries_mut().entry(key) {
+            Entry::Occupied(mut occupied) => {
+                occupied.insert(None);
+                false
+            }
+            Entry::Vacant(vacant) => {
+                vacant.insert(None);
+                true
+            }
+        };
         if is_new_entry {
             self.stats.add_entry();
         }
     }
 
-    pub fn invalidate_objects(&self, objects: &[Obj]) {
+    pub fn invalidate_objects(&mut self, objects: &[Obj]) {
         if objects.is_empty() {
             return;
         }
         let obj_ids: HashSet<u64> = objects.iter().map(|o| o.as_u64()).collect();
-        let mut inner = self.inner.lock().expect("verb cache mutex poisoned");
         let mut changed = false;
-
-        let removed = remove_entries_for_objects(inner.entries_mut(), &obj_ids);
+        let removed = remove_entries_for_objects(self.inner.entries_mut(), &obj_ids);
         if removed > 0 {
             changed = true;
-            self.stats.remove_entries(removed as isize);
         }
 
-        let first_parent_cache = inner.first_parent_cache_mut();
+        let first_parent_cache = self.inner.first_parent_cache_mut();
         let before = first_parent_cache.len();
         first_parent_cache.retain(|obj, _| !obj_ids.contains(&obj.as_u64()));
         if before != first_parent_cache.len() {
@@ -248,7 +253,11 @@ impl VerbResolutionCache {
         }
 
         if changed {
-            inner.version += 1;
+            self.inner.version += 1;
+        }
+
+        if removed > 0 {
+            self.stats.remove_entries(removed as isize);
         }
     }
 }

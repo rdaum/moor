@@ -97,7 +97,8 @@ impl WorldStateTransaction {
 
     pub fn ancestors(&self, obj: &Obj, include_self: bool) -> Result<ObjSet, WorldStateError> {
         // Check ancestry cache first.
-        let results_sans_self = match self.ancestry_cache.lookup(obj) {
+        let cached_ancestors = self.ancestry_cache.borrow().lookup(obj);
+        let results_sans_self = match cached_ancestors {
             Some(hit) => hit,
             None => {
                 let mut ancestors = vec![];
@@ -118,7 +119,7 @@ impl WorldStateTransaction {
                     }
                 }
                 // Fill in the cache.
-                self.ancestry_cache.fill(obj, &ancestors);
+                self.ancestry_cache.borrow_mut().fill(obj, &ancestors);
 
                 ancestors
             }
@@ -662,7 +663,8 @@ impl WorldStateTransaction {
     pub fn get_verb_by_name(&self, obj: &Obj, name: Symbol) -> Result<VerbDef, WorldStateError> {
         // Check verb cache first, and then if we get a hit and definer == obj, we've got one,
         // otherwise, go hunting.
-        match self.verb_resolution_cache.lookup(obj, &name) {
+        let cached_verb = self.verb_resolution_cache.borrow().lookup(obj, &name);
+        match cached_verb {
             Some(Some(verbdef)) if verbdef.location().eq(obj) => Ok(verbdef),
             Some(None) => Err(WorldStateError::VerbNotFound(*obj, name.to_string())),
             Some(Some(_verbdef)) => {
@@ -679,7 +681,9 @@ impl WorldStateTransaction {
 
                 // Fill cache with the direct verb (this might replace the inherited one,
                 // but that's okay since this is more specific)
-                self.verb_resolution_cache.fill_hit(obj, &name, verb);
+                self.verb_resolution_cache
+                    .borrow_mut()
+                    .fill_hit(obj, &name, verb);
                 Ok(verb.clone())
             }
             None => {
@@ -693,7 +697,9 @@ impl WorldStateTransaction {
                 };
 
                 // Fill cache
-                self.verb_resolution_cache.fill_hit(obj, &name, verb);
+                self.verb_resolution_cache
+                    .borrow_mut()
+                    .fill_hit(obj, &name, verb);
                 Ok(verb.clone())
             }
         }
@@ -719,7 +725,8 @@ impl WorldStateTransaction {
         flagspec: Option<BitEnum<VerbFlag>>,
     ) -> Result<VerbDef, WorldStateError> {
         // Check the cache first.
-        if let Some(cache_result) = self.verb_resolution_cache.lookup(obj, &name) {
+        let cache_lookup = self.verb_resolution_cache.borrow().lookup(obj, &name);
+        if let Some(cache_result) = cache_lookup {
             // We recorded a miss here before..
             let Some(verbdef) = cache_result else {
                 return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
@@ -733,10 +740,11 @@ impl WorldStateTransaction {
         // If we do, we can jump straight to that as our search_o
         let mut first_parent_hit = false;
         let mut search_o = {
-            match self
+            let first_parent_lookup = self
                 .verb_resolution_cache
-                .lookup_first_parent_with_verbs(obj)
-            {
+                .borrow()
+                .lookup_first_parent_with_verbs(obj);
+            match first_parent_lookup {
                 Some(Some(o)) => {
                     first_parent_hit = true;
                     o
@@ -756,6 +764,7 @@ impl WorldStateTransaction {
             if let Some(verbdefs) = verbdefs {
                 if !first_parent_hit {
                     self.verb_resolution_cache
+                        .borrow_mut()
                         .fill_first_parent_with_verbs(obj, Some(search_o));
                     first_parent_hit = true;
                 }
@@ -767,7 +776,9 @@ impl WorldStateTransaction {
                 // Fill the verb cache.
                 let verb = named.first();
                 if let Some(verb) = verb {
-                    self.verb_resolution_cache.fill_hit(obj, &name, verb);
+                    self.verb_resolution_cache
+                        .borrow_mut()
+                        .fill_hit(obj, &name, verb);
 
                     found = true;
                     if verb.matches_spec(&argspec, &flagspec) {
@@ -784,7 +795,9 @@ impl WorldStateTransaction {
         // Record the miss, but only if we actually didn't find anything, otherwise we can end up
         // recording a miss for things where the argspec didn't match
         if !found {
-            self.verb_resolution_cache.fill_miss(obj, &name);
+            self.verb_resolution_cache
+                .borrow_mut()
+                .fill_miss(obj, &name);
         }
         Err(WorldStateError::VerbNotFound(*obj, name.to_string()))
     }
@@ -1164,17 +1177,19 @@ impl WorldStateTransaction {
 
     fn find_property_by_name(&self, obj: &Obj, name: Symbol) -> Option<PropDef> {
         // Check the cache first.
-        if let Some(cache_result) = self.prop_resolution_cache.lookup(obj, &name) {
+        let cached_prop = self.prop_resolution_cache.borrow().lookup(obj, &name);
+        if let Some(cache_result) = cached_prop {
             return cache_result;
         }
 
         // Look in the cache for the first parent with non-empty propdefs. If we have no cache entry,
         // then seek upwards until we find one, record that, and then look there.
         let (mut propdefs, mut search_o) = {
-            match self
+            let first_parent_lookup = self
                 .prop_resolution_cache
-                .lookup_first_parent_with_props(obj)
-            {
+                .borrow()
+                .lookup_first_parent_with_props(obj);
+            match first_parent_lookup {
                 Some(Some(o)) => (self.get_properties(&o).ok()?, o),
                 Some(None) => {
                     // No ancestors with verbs, verbnf
@@ -1186,6 +1201,7 @@ impl WorldStateTransaction {
                         let propdefs = self.get_properties(&search_o).ok()?;
                         if !propdefs.is_empty() {
                             self.prop_resolution_cache
+                                .borrow_mut()
                                 .fill_first_parent_with_props(obj, Some(search_o));
 
                             break propdefs;
@@ -1216,12 +1232,14 @@ impl WorldStateTransaction {
             propdefs = self.get_properties(&search_o).ok()?;
         }
         let Some(propdef) = found_propdef else {
-            self.prop_resolution_cache.fill_miss(obj, &name);
+            self.prop_resolution_cache.borrow_mut().fill_miss(obj, &name);
             return None;
         };
 
         // Cache it
-        self.prop_resolution_cache.fill_hit(obj, &name, &propdef);
+        self.prop_resolution_cache
+            .borrow_mut()
+            .fill_hit(obj, &name, &propdef);
 
         Some(propdef)
     }
@@ -1305,14 +1323,15 @@ impl WorldStateTransaction {
         // Did we have any mutations at all?  If not, just fire and forget the verb cache and
         // return immediate success.
         if !self.has_mutations {
-            if self.verb_resolution_cache.has_changed() || self.prop_resolution_cache.has_changed()
-            {
+            let caches_changed = self.verb_resolution_cache.borrow().has_changed()
+                || self.prop_resolution_cache.borrow().has_changed();
+            if caches_changed {
                 self.db.commit_read_only(
                     self.tx.snapshot_version,
                     Caches {
-                        verb_resolution_cache: self.verb_resolution_cache,
-                        prop_resolution_cache: self.prop_resolution_cache,
-                        ancestry_cache: self.ancestry_cache,
+                        verb_resolution_cache: self.verb_resolution_cache.into_inner(),
+                        prop_resolution_cache: self.prop_resolution_cache.into_inner(),
+                        ancestry_cache: self.ancestry_cache.into_inner(),
                     },
                 );
             }
@@ -1371,9 +1390,9 @@ impl WorldStateTransaction {
     /// Flush all internal caches (verb resolution, property resolution, ancestry).
     /// This ensures that subsequent queries will see fresh data.
     pub fn flush_caches(&mut self) {
-        self.verb_resolution_cache.flush();
-        self.prop_resolution_cache.flush();
-        self.ancestry_cache.flush();
+        self.verb_resolution_cache.borrow_mut().flush();
+        self.prop_resolution_cache.borrow_mut().flush();
+        self.ancestry_cache.borrow_mut().flush();
     }
 }
 
@@ -1925,21 +1944,27 @@ impl WorldStateTransaction {
         if objects.is_empty() {
             return;
         }
-        self.verb_resolution_cache.invalidate_objects(objects);
+        self.verb_resolution_cache
+            .borrow_mut()
+            .invalidate_objects(objects);
     }
 
     fn invalidate_prop_cache_for_objects(&self, objects: &[Obj]) {
         if objects.is_empty() {
             return;
         }
-        self.prop_resolution_cache.invalidate_objects(objects);
+        self.prop_resolution_cache
+            .borrow_mut()
+            .invalidate_objects(objects);
     }
 
     fn invalidate_ancestry_cache_for_objects(&self, objects: &[Obj]) {
         if objects.is_empty() {
             return;
         }
-        self.ancestry_cache.invalidate_objects(objects);
+        self.ancestry_cache
+            .borrow_mut()
+            .invalidate_objects(objects);
     }
 
     fn invalidate_verb_cache_for_branch(&self, root: &Obj) -> Result<(), WorldStateError> {

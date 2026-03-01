@@ -329,9 +329,9 @@ macro_rules! define_relations {
                         db,
                         $( $field: self.$field.start_from_index(&tx, &*snapshot.$field), )*
                         sequences,
-                        verb_resolution_cache,
-                        prop_resolution_cache,
-                        ancestry_cache,
+                        verb_resolution_cache: std::cell::RefCell::new(verb_resolution_cache),
+                        prop_resolution_cache: std::cell::RefCell::new(prop_resolution_cache),
+                        ancestry_cache: std::cell::RefCell::new(ancestry_cache),
                         has_mutations: false,
                     }
                 }
@@ -402,11 +402,11 @@ macro_rules! define_relations {
                 /// Array of sequence counters for object ID generation
                 pub(crate) sequences: Arc<[CachePadded<AtomicI64>; 16]>,
                 /// Local fork of the verb resolution cache
-                pub(crate) verb_resolution_cache: VerbResolutionCache,
+                pub(crate) verb_resolution_cache: std::cell::RefCell<VerbResolutionCache>,
                 /// Local fork of the property resolution cache
-                pub(crate) prop_resolution_cache: PropResolutionCache,
+                pub(crate) prop_resolution_cache: std::cell::RefCell<PropResolutionCache>,
                 /// Local fork of the ancestry cache
-                pub(crate) ancestry_cache: AncestryCache,
+                pub(crate) ancestry_cache: std::cell::RefCell<AncestryCache>,
                 /// Whether this transaction has performed any mutations
                 pub(crate) has_mutations: bool,
             }
@@ -427,9 +427,9 @@ macro_rules! define_relations {
                     let ws = Box::new(WorkingSets {
                         tx: self.tx,
                         $( $field, )*
-                        verb_resolution_cache: self.verb_resolution_cache,
-                        prop_resolution_cache: self.prop_resolution_cache,
-                        ancestry_cache: self.ancestry_cache,
+                        verb_resolution_cache: self.verb_resolution_cache.into_inner(),
+                        prop_resolution_cache: self.prop_resolution_cache.into_inner(),
+                        ancestry_cache: self.ancestry_cache.into_inner(),
                         has_mutations: self.has_mutations,
                     });
 

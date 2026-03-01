@@ -17,9 +17,9 @@ use ahash::AHasher;
 use moor_var::Obj;
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map::Entry},
     hash::BuildHasherDefault,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 struct AncestryCacheStatsTls(LocalCacheStats);
@@ -72,19 +72,19 @@ fn ancestry_cache_miss() {
 
 pub struct AncestryCache {
     #[allow(clippy::type_complexity)]
-    inner: Mutex<AncestryInner>,
+    inner: AncestryInner,
     stats: &'static CacheStats,
 }
 
 impl Default for AncestryCache {
     fn default() -> Self {
         Self {
-            inner: Mutex::new(AncestryInner {
+            inner: AncestryInner {
                 orig_version: 0,
                 version: 0,
                 flushed: false,
                 entries: Arc::new(HashMap::default()),
-            }),
+            },
             stats: &ANCESTRY_CACHE_STATS,
         }
     }
@@ -109,19 +109,17 @@ impl AncestryInner {
 
 impl AncestryCache {
     pub fn fork(&self) -> Self {
-        let inner = self.inner.lock().expect("ancestry cache mutex poisoned");
-        let mut forked_inner = inner.clone();
-        forked_inner.orig_version = inner.version;
+        let mut forked_inner = self.inner.clone();
+        forked_inner.orig_version = self.inner.version;
         forked_inner.flushed = false;
         Self {
-            inner: Mutex::new(forked_inner),
+            inner: forked_inner,
             stats: self.stats,
         }
     }
 
     pub fn lookup(&self, obj: &Obj) -> Option<Vec<Obj>> {
-        let inner = self.inner.lock().expect("ancestry cache mutex poisoned");
-        let result = inner.entries.get(obj).cloned();
+        let result = self.inner.entries.get(obj).cloned();
 
         if result.is_some() {
             ancestry_cache_hit();
@@ -132,40 +130,44 @@ impl AncestryCache {
         result
     }
 
-    pub fn flush(&self) {
-        let mut inner = self.inner.lock().expect("ancestry cache mutex poisoned");
-        let entries_count = inner.entries.len() as isize;
-        inner.flushed = true;
-        inner.version += 1;
-        inner.entries_mut().clear();
+    pub fn flush(&mut self) {
+        let entries_count = self.inner.entries.len() as isize;
+        self.inner.flushed = true;
+        self.inner.version += 1;
+        self.inner.entries_mut().clear();
         self.stats.flush();
         self.stats.remove_entries(entries_count);
     }
 
-    pub fn fill(&self, obj: &Obj, ancestors: &[Obj]) {
+    pub fn fill(&mut self, obj: &Obj, ancestors: &[Obj]) {
         let obj = *obj;
-        let mut inner = self.inner.lock().expect("ancestry cache mutex poisoned");
-        inner.version += 1;
-        let is_new_entry = !inner.entries.contains_key(&obj);
-        inner.entries_mut().insert(obj, ancestors.to_vec());
+        self.inner.version += 1;
+        let is_new_entry = match self.inner.entries_mut().entry(obj) {
+            Entry::Occupied(mut occupied) => {
+                occupied.insert(ancestors.to_vec());
+                false
+            }
+            Entry::Vacant(vacant) => {
+                vacant.insert(ancestors.to_vec());
+                true
+            }
+        };
         if is_new_entry {
             self.stats.add_entry();
         }
     }
 
     pub fn has_changed(&self) -> bool {
-        let inner = self.inner.lock().expect("ancestry cache mutex poisoned");
-        inner.version > inner.orig_version
+        self.inner.version > self.inner.orig_version
     }
 
-    pub fn invalidate_objects(&self, objects: &[Obj]) {
+    pub fn invalidate_objects(&mut self, objects: &[Obj]) {
         if objects.is_empty() {
             return;
         }
         let objs: HashSet<Obj> = objects.iter().copied().collect();
-        let mut inner = self.inner.lock().expect("ancestry cache mutex poisoned");
         let removed = {
-            let entries = inner.entries_mut();
+            let entries = self.inner.entries_mut();
             let before = entries.len();
             entries.retain(|obj, _| !objs.contains(obj));
             before - entries.len()
@@ -173,7 +175,7 @@ impl AncestryCache {
         if removed == 0 {
             return;
         }
-        inner.version += 1;
+        self.inner.version += 1;
         self.stats.remove_entries(removed as isize);
     }
 }

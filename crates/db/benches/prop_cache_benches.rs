@@ -132,7 +132,7 @@ struct RealisticPropCacheContext {
 
 impl BenchContext for RealisticPropCacheContext {
     fn prepare(_num_chunks: usize) -> Self {
-        let prop_cache = Box::new(PropResolutionCache::new());
+        let mut prop_cache = Box::new(PropResolutionCache::new());
 
         // Realistic object count - approximate 50 objects based on 355 property entries and ~7 props per object
         let test_objs: Vec<Obj> = (1..=50).map(Obj::mk_id).collect();
@@ -187,7 +187,7 @@ struct PopulatedPropCacheContext {
 
 impl BenchContext for PopulatedPropCacheContext {
     fn prepare(_num_chunks: usize) -> Self {
-        let prop_cache = Box::new(PropResolutionCache::new());
+        let mut prop_cache = Box::new(PropResolutionCache::new());
 
         let test_objs: Vec<Obj> = (1..=100).map(Obj::mk_id).collect();
         let test_props: Vec<Symbol> = [
