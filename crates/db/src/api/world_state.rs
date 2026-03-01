@@ -27,10 +27,10 @@ use crate::{
 };
 use moor_common::{
     model::{
-        ArgSpec, CommitResult, DispatchFlagsSource, HasUuid, ObjAttrs, ObjFlag, ObjSet, ObjectKind,
-        ObjectRef, Perms, PrepSpec, PropAttrs, PropDef, PropDefs, PropFlag, PropPerms, ValSet,
-        VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag, WorldState, WorldStateError,
-        WorldStatePerf,
+        ArgSpec, CommandVerbDispatch, CommitResult, DispatchFlagsSource, HasUuid, ObjAttrs,
+        ObjFlag, ObjSet, ObjectKind, ObjectRef, Perms, PrepSpec, PropAttrs, PropDef, PropDefs,
+        PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
+        WorldState, WorldStateError, WorldStatePerf,
     },
     util::{BitEnum, PerfTimerGuard},
 };
@@ -967,11 +967,7 @@ impl WorldState for DbWorldState {
         &self,
         perms: &Obj,
         obj: &Obj,
-        command_verb: Symbol,
-        dobj: &Obj,
-        prep: PrepSpec,
-        iobj: &Obj,
-        flags_source: DispatchFlagsSource,
+        lookup: CommandVerbDispatch<'_>,
     ) -> Result<Option<(ProgramType, VerbDef, BitEnum<ObjFlag>)>, WorldStateError> {
         let _t = PerfTimerGuard::new(&db_counters().find_command_verb_on);
         if !self.valid(obj)? {
@@ -988,13 +984,17 @@ impl WorldState for DbWorldState {
             }
         };
 
-        let dobj = spec_for_fn(obj, dobj);
-        let iobj = spec_for_fn(obj, iobj);
-        let argspec = VerbArgsSpec { dobj, prep, iobj };
+        let dobj = spec_for_fn(obj, lookup.dobj);
+        let iobj = spec_for_fn(obj, lookup.iobj);
+        let argspec = VerbArgsSpec {
+            dobj,
+            prep: lookup.prep,
+            iobj,
+        };
 
         let vh = self
             .get_tx()
-            .resolve_verb(obj, command_verb, Some(argspec), None);
+            .resolve_verb(obj, lookup.command_verb, Some(argspec), None);
         let vh = match vh {
             Ok(vh) => vh,
             Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -1008,7 +1008,7 @@ impl WorldState for DbWorldState {
         let perms = self.perms(perms)?;
         perms.check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
         let program = self.get_tx().get_verb_program(&vh.location(), vh.uuid())?;
-        let permissions_flags = match flags_source {
+        let permissions_flags = match lookup.flags_source {
             DispatchFlagsSource::Permissions => perms.flags,
             DispatchFlagsSource::VerbOwner => self.flags_of(&vh.owner()).unwrap_or_default(),
         };

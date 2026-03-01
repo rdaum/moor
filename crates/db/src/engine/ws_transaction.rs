@@ -832,11 +832,11 @@ impl WorldStateTransaction {
         })?;
         self.has_mutations = true;
 
-        if verb_attrs.program.is_some() {
+        if let Some(program) = verb_attrs.program {
             upsert(
                 &mut self.object_verbs,
                 ObjAndUUIDHolder::new(obj, uuid),
-                verb_attrs.program.unwrap(),
+                program,
             )
             .map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error setting verb binary: {e:?}"))
@@ -1232,7 +1232,9 @@ impl WorldStateTransaction {
             propdefs = self.get_properties(&search_o).ok()?;
         }
         let Some(propdef) = found_propdef else {
-            self.prop_resolution_cache.borrow_mut().fill_miss(obj, &name);
+            self.prop_resolution_cache
+                .borrow_mut()
+                .fill_miss(obj, &name);
             return None;
         };
 
@@ -1962,9 +1964,7 @@ impl WorldStateTransaction {
         if objects.is_empty() {
             return;
         }
-        self.ancestry_cache
-            .borrow_mut()
-            .invalidate_objects(objects);
+        self.ancestry_cache.borrow_mut().invalidate_objects(objects);
     }
 
     fn invalidate_verb_cache_for_branch(&self, root: &Obj) -> Result<(), WorldStateError> {

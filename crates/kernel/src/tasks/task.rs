@@ -51,7 +51,10 @@ use crate::{
 #[cfg(feature = "trace_events")]
 use moor_common::tasks::AbortLimitReason;
 use moor_common::{
-    model::{CommitResult, DispatchFlagsSource, ObjFlag, VerbDef, WorldState, WorldStateError},
+    model::{
+        CommandVerbDispatch, CommitResult, DispatchFlagsSource, ObjFlag, VerbDef, WorldState,
+        WorldStateError,
+    },
     tasks::{CommandError, CommandError::PermissionDenied, Exception, TaskId},
     util::{BitEnum, PerfTimerGuard, parse_into_words},
 };
@@ -1137,11 +1140,13 @@ fn find_verb_for_command(
         let match_result = ws.find_command_verb_for_dispatch(
             player,
             &target,
-            pc.verb,
-            &pc.dobj.unwrap_or(NOTHING),
-            pc.prep,
-            &pc.iobj.unwrap_or(NOTHING),
-            DispatchFlagsSource::VerbOwner,
+            CommandVerbDispatch {
+                command_verb: pc.verb,
+                dobj: &pc.dobj.unwrap_or(NOTHING),
+                prep: pc.prep,
+                iobj: &pc.iobj.unwrap_or(NOTHING),
+                flags_source: DispatchFlagsSource::VerbOwner,
+            },
         );
         let match_result = match match_result {
             Ok(m) => m,

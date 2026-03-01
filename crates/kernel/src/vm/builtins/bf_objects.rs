@@ -22,7 +22,10 @@ use moor_common::matching::{
 };
 use moor_common::model::{ObjSet, PrepSpec, verb_perms_string};
 use moor_common::{
-    model::{DispatchFlagsSource, Named, ObjFlag, ObjectKind, ValSet, WorldStateError},
+    model::{
+        CommandVerbDispatch, DispatchFlagsSource, Named, ObjFlag, ObjectKind, ValSet,
+        WorldStateError,
+    },
     util::BitEnum,
 };
 use moor_compiler::offset_for_builtin;
@@ -1979,11 +1982,13 @@ fn bf_dispatch_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
                 world_state.find_command_verb_for_dispatch(
                     &caller_perms,
                     &target,
-                    verb_name,
-                    &dobj,
-                    prep,
-                    &iobj,
-                    DispatchFlagsSource::VerbOwner,
+                    CommandVerbDispatch {
+                        command_verb: verb_name,
+                        dobj: &dobj,
+                        prep,
+                        iobj: &iobj,
+                        flags_source: DispatchFlagsSource::VerbOwner,
+                    },
                 )
             });
 

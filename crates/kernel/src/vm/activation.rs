@@ -66,8 +66,9 @@ fn lambda_scatter_assign(
             // For lambdas with defaults, the lambda program should start with code that checks
             // each optional parameter and evaluates its default if the parameter is v_int(0).
             // We set unassigned optionals to v_int(0) as a sentinel value.
-            if result.needs_defaults && result.first_default_index.is_some() {
-                let first_idx = result.first_default_index.unwrap();
+            if result.needs_defaults
+                && let Some(first_idx) = result.first_default_index
+            {
                 // Only set sentinel for parameters at or after the first one needing defaults
                 for (idx, label) in scatter_args.labels.iter().enumerate() {
                     if idx >= first_idx

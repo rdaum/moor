@@ -46,6 +46,9 @@ where
     fn remove_entry(&mut self, domain: &Domain) -> Option<Entry<Codomain>>;
     fn iter(&self) -> Box<dyn Iterator<Item = (&Domain, &Entry<Codomain>)> + '_>;
     fn len(&self) -> usize;
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
     fn apply_batch(
         &mut self,
         inserts: Vec<(Timestamp, Domain, Codomain)>,

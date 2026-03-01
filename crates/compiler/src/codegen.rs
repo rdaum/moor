@@ -1213,8 +1213,8 @@ impl CodegenState {
                 for (i, ex) in excepts.iter().enumerate() {
                     self.commit_jump_label(labels[i]);
                     self.push_stack(1);
-                    if ex.id.is_some() {
-                        self.emit(Op::Put(self.find_name(ex.id.as_ref().unwrap())));
+                    if let Some(id) = &ex.id {
+                        self.emit(Op::Put(self.find_name(id)));
                     }
                     self.emit(Op::Pop);
                     self.pop_stack(1);

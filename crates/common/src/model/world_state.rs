@@ -54,6 +54,16 @@ pub enum DispatchFlagsSource {
     VerbOwner,
 }
 
+/// Parameters for looking up a command verb and preparing activation flags.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct CommandVerbDispatch<'a> {
+    pub command_verb: Symbol,
+    pub dobj: &'a Obj,
+    pub prep: PrepSpec,
+    pub iobj: &'a Obj,
+    pub flags_source: DispatchFlagsSource,
+}
+
 /// Errors related to the world state and operations on it.
 #[derive(Error, Debug, Eq, PartialEq, Clone)]
 pub enum WorldStateError {
@@ -437,18 +447,20 @@ pub trait WorldState: Send {
         &self,
         perms: &Obj,
         obj: &Obj,
-        command_verb: Symbol,
-        dobj: &Obj,
-        prep: PrepSpec,
-        iobj: &Obj,
-        flags_source: DispatchFlagsSource,
+        lookup: CommandVerbDispatch<'_>,
     ) -> Result<Option<(ProgramType, VerbDef, BitEnum<ObjFlag>)>, WorldStateError> {
-        let Some((program, verbdef)) =
-            self.find_command_verb_on(perms, obj, command_verb, dobj, prep, iobj)?
+        let Some((program, verbdef)) = self.find_command_verb_on(
+            perms,
+            obj,
+            lookup.command_verb,
+            lookup.dobj,
+            lookup.prep,
+            lookup.iobj,
+        )?
         else {
             return Ok(None);
         };
-        let permissions_flags = match flags_source {
+        let permissions_flags = match lookup.flags_source {
             DispatchFlagsSource::Permissions => self.flags_of(perms).unwrap_or_default(),
             DispatchFlagsSource::VerbOwner => self.flags_of(&verbdef.owner()).unwrap_or_default(),
         };

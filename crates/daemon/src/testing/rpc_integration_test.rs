@@ -32,10 +32,10 @@ mod tests {
     use moor_var::{Obj, SYSTEM_OBJECT};
     use planus::ReadAsRoot;
     use rpc_common::{
-        mk_client_pong_msg, mk_command_msg, mk_connection_establish_msg, mk_detach_host_msg,
-        mk_detach_msg, mk_host_pong_msg, mk_login_command_msg, mk_properties_msg,
-        mk_register_host_msg, mk_request_performance_counters_msg, mk_request_sys_prop_msg,
-        mk_requested_input_msg, mk_verbs_msg, obj_fb, RpcMessageError,
+        RpcMessageError, mk_client_pong_msg, mk_command_msg, mk_connection_establish_msg,
+        mk_detach_host_msg, mk_detach_msg, mk_host_pong_msg, mk_login_command_msg,
+        mk_properties_msg, mk_register_host_msg, mk_request_performance_counters_msg,
+        mk_request_sys_prop_msg, mk_requested_input_msg, mk_verbs_msg, obj_fb,
     };
     use std::{
         net::SocketAddr,
@@ -122,7 +122,11 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
     }
 
     fn has_successful_login_result(
-        client_replies: &[(Uuid, Vec<u8>, Result<moor_rpc::DaemonToClientReply, RpcMessageError>)],
+        client_replies: &[(
+            Uuid,
+            Vec<u8>,
+            Result<moor_rpc::DaemonToClientReply, RpcMessageError>,
+        )],
     ) -> bool {
         client_replies.iter().any(|(_, _, reply)| {
             matches!(
@@ -133,7 +137,11 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
     }
 
     fn successful_login_auth_token(
-        client_replies: &[(Uuid, Vec<u8>, Result<moor_rpc::DaemonToClientReply, RpcMessageError>)],
+        client_replies: &[(
+            Uuid,
+            Vec<u8>,
+            Result<moor_rpc::DaemonToClientReply, RpcMessageError>,
+        )],
     ) -> rpc_common::AuthToken {
         client_replies
             .iter()
