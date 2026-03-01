@@ -13,7 +13,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{config::DatabaseConfig, db_worldstate::DbWorldState, moor_db::MoorDB};
+    use crate::{api::world_state::DbWorldState, config::DatabaseConfig, engine::moor_db::MoorDB};
     use moor_common::{
         model::{
             ArgSpec, CommitResult, ObjectKind, PrepSpec, PropFlag, ValSet, VerbArgsSpec, VerbFlag,

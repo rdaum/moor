@@ -115,7 +115,7 @@ macro_rules! define_relations {
             #[derive(Clone)]
             pub(crate) struct WorldStateSnapshot {
                 pub(crate) version: u64,
-                pub(crate) caches: std::sync::Arc<crate::moor_db::Caches>,
+                pub(crate) caches: std::sync::Arc<crate::engine::moor_db::Caches>,
                 $( pub(crate) $field: std::sync::Arc<dyn crate::tx_management::RelationIndex<$domain, $codomain>>, )*
             }
 
@@ -128,7 +128,7 @@ macro_rules! define_relations {
                 /// Commit a write transaction with its working sets.
                 fn commit_writes(&self, ws: Box<WorkingSets>, enqueued_at: minstant::Instant) -> moor_common::model::CommitResult;
                 /// Commit a read-only transaction, potentially updating caches.
-                fn commit_read_only(&self, snapshot_version: u64, caches: crate::moor_db::Caches);
+                fn commit_read_only(&self, snapshot_version: u64, caches: crate::engine::moor_db::Caches);
                 /// Get the current database disk usage in bytes.
                 fn usage_bytes(&self) -> usize;
             }
@@ -179,7 +179,7 @@ macro_rules! define_relations {
                     prop_cache: PropResolutionCache,
                     ancestry_cache: AncestryCache,
                 ) -> std::sync::Arc<WorldStateSnapshot> {
-                    let combined_caches = crate::moor_db::Caches {
+                    let combined_caches = crate::engine::moor_db::Caches {
                         verb_resolution_cache: verb_cache,
                         prop_resolution_cache: prop_cache,
                         ancestry_cache,
@@ -250,7 +250,7 @@ macro_rules! define_relations {
                 fn snapshot(
                     &self,
                     version: u64,
-                    caches: std::sync::Arc<crate::moor_db::Caches>,
+                    caches: std::sync::Arc<crate::engine::moor_db::Caches>,
                 ) -> WorldStateSnapshot {
                     WorldStateSnapshot {
                         version,
@@ -311,15 +311,15 @@ macro_rules! define_relations {
                 ///   and forked resolution caches.
                 fn start_transaction(&self,
                     db: std::sync::Arc<dyn TransactionContext>,
-                    seed: crate::moor_db::TxSeed,
+                    seed: crate::engine::moor_db::TxSeed,
                 ) -> WorldStateTransaction {
-                    let crate::moor_db::TxSeed {
+                    let crate::engine::moor_db::TxSeed {
                         tx,
                         snapshot,
                         sequences,
                         caches,
                     } = seed;
-                    let crate::moor_db::Caches {
+                    let crate::engine::moor_db::Caches {
                         verb_resolution_cache,
                         prop_resolution_cache,
                         ancestry_cache,

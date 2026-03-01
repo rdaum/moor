@@ -30,7 +30,7 @@ use moor_common::{
 use tabled::{Table, Tabled};
 
 use moor_compiler::compile;
-use moor_db::{Database, TxDB, db_worldstate::db_counters, prop_cache::VERB_CACHE_STATS};
+use moor_db::{Database, TxDB, VERB_CACHE_STATS, db_counters};
 use moor_kernel::{
     SchedulerClient,
     config::{Config, FeaturesConfig},

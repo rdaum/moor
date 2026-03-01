@@ -11,6 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! Garbage collection surface exposed by the DB crate.
+//!
+//! Implementations are provided by transaction-backed adapters such as
+//! `DbWorldState`.
+
 use moor_common::model::{CommitResult, WorldStateError};
 use moor_var::Obj;
 use std::collections::HashSet;

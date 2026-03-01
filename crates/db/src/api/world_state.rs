@@ -11,13 +11,19 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! `WorldState` adapter backed by a single transaction.
+//!
+//! `DbWorldState` is the shared façade used by higher layers. It delegates
+//! reads and writes to `WorldStateTransaction`, applies permission checks and
+//! semantic rules, and records operation-level performance counters.
+
 use lazy_static::lazy_static;
 use std::collections::HashSet;
 use uuid::Uuid;
 
 use crate::{
-    gc::{GCError, GCInterface},
-    moor_db::WorldStateTransaction,
+    api::gc::{GCError, GCInterface},
+    engine::moor_db::WorldStateTransaction,
 };
 use moor_common::{
     model::{

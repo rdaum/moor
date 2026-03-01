@@ -11,15 +11,23 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! Primary database engine type and lifecycle.
+//!
+//! `MoorDB` owns relation snapshots, transaction seeding, serialized write
+//! commit application, and background durability workers.
+
 use crate::provider::fjall_provider;
 use crate::{
     AnonymousObjectMetadata, ObjAndUUIDHolder, StringHolder,
+    cache::{
+        ancestry_cache::AncestryCache, prop_cache::PropResolutionCache,
+        verb_cache::VerbResolutionCache,
+    },
     config::DatabaseConfig,
-    prop_cache::PropResolutionCache,
     tx_management::{CheckRelation, Relation, RelationTransaction, Timestamp, Tx, WorkingSet},
-    verb_cache::{AncestryCache, VerbResolutionCache},
 };
 use crate::{
+    engine::relation_defs::define_relations,
     provider::{
         Migrator,
         batch_writer::{BatchCollector, BatchWriter},
@@ -27,7 +35,6 @@ use crate::{
         fjall_provider::FjallProvider,
         fjall_snapshot_loader::FjallSnapshotLoader,
     },
-    relation_defs::define_relations,
 };
 use fjall::{Database, KeyspaceCreateOptions};
 use minstant::Instant;
@@ -70,7 +77,10 @@ define_relations! {
     anonymous_object_metadata => Obj, AnonymousObjectMetadata,
 }
 
-/// Combined cache structure to ensure atomic updates across all caches
+/// Transaction-scoped bundle of resolution caches.
+///
+/// These caches are forked together at transaction start and published together
+/// on commit to avoid mixed cache generations.
 pub struct Caches {
     pub verb_resolution_cache: VerbResolutionCache,
     pub prop_resolution_cache: PropResolutionCache,
@@ -78,6 +88,7 @@ pub struct Caches {
 }
 
 impl Caches {
+    /// Build empty caches for initial startup.
     pub fn new() -> Self {
         Self {
             verb_resolution_cache: VerbResolutionCache::new(),
@@ -86,6 +97,7 @@ impl Caches {
         }
     }
 
+    /// Fork all cache planes for use by a new transaction.
     pub fn fork(&self) -> Self {
         Self {
             verb_resolution_cache: self.verb_resolution_cache.fork(),
@@ -94,6 +106,7 @@ impl Caches {
         }
     }
 
+    /// Returns `true` if any cache in this bundle has staged modifications.
     pub fn has_changed(&self) -> bool {
         self.verb_resolution_cache.has_changed()
             || self.prop_resolution_cache.has_changed()
@@ -101,6 +114,7 @@ impl Caches {
     }
 }
 
+/// Core storage engine for transactional world-state access.
 pub struct MoorDB {
     monotonic: CachePadded<AtomicU64>,
     /// Serializes write commit processing.
@@ -186,11 +200,13 @@ impl MoorDB {
         }))
     }
 
+    /// Create a transaction bound to the current published snapshot.
     pub(crate) fn start_transaction(self: &Arc<Self>) -> WorldStateTransaction {
         self.relations
             .start_transaction(self.clone(), self.acquire_tx_seed())
     }
 
+    /// Stop background workers and drain queued persistence work.
     pub fn stop(&self) {
         // Get the last write timestamp before stopping the writer
         let last_write_timestamp = Timestamp(
@@ -220,6 +236,9 @@ impl MoorDB {
         self.relations.stop_all();
     }
 
+    /// Open (or initialize) a database and return `(db, fresh)`.
+    ///
+    /// `fresh` indicates no existing relation keyspaces were found.
     pub fn open(path: Option<&Path>, config: DatabaseConfig) -> (Arc<Self>, bool) {
         let tmpdir = if path.is_none() {
             Some(TempDir::new().unwrap())
@@ -297,6 +316,7 @@ impl MoorDB {
         (s, fresh)
     }
 
+    /// Return current on-disk database usage in bytes.
     pub fn usage_bytes(&self) -> usize {
         self.keyspace.disk_space().unwrap_or_default() as usize
     }
@@ -311,6 +331,7 @@ impl MoorDB {
 }
 
 impl MoorDB {
+    /// Capture timestamp, snapshot, sequence handles, and forked caches for startup.
     fn acquire_tx_seed(&self) -> TxSeed {
         let (snapshot, caches) = self.snapshot_planes.acquire_seed_caches();
         TxSeed {

@@ -13,7 +13,7 @@
 
 use moor_bench_utils::{BenchContext, black_box};
 use moor_common::model::{VerbArgsSpec, VerbDef, VerbFlag};
-use moor_db::verb_cache::{AncestryCache, VerbResolutionCache};
+use moor_db::{AncestryCache, VerbResolutionCache};
 use moor_var::{Obj, Symbol};
 use uuid::Uuid;
 
@@ -325,7 +325,7 @@ impl BenchContext for ConcurrentCacheContext {
 
         // Create several forked caches to simulate transactions
         for _ in 0..10 {
-            caches.push(*caches[0].fork());
+            caches.push(caches[0].fork());
         }
 
         let test_objs: Vec<Obj> = (1..=50).map(Obj::mk_id).collect();

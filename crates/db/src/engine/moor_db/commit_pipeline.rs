@@ -11,8 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! Write and read-only commit execution pipeline for `MoorDB`.
+//!
+//! This module implements the serialized write commit path, including conflict
+//! checking, relation apply, root publication, and async durability handoff.
+
 use super::{Caches, MoorDB, WorkingSets};
-use crate::db_worldstate::db_counters;
+use crate::api::world_state::db_counters;
 use minstant::Instant;
 use moor_common::model::CommitResult;
 use moor_common::util::PerfTimerGuard;
@@ -20,11 +25,13 @@ use std::time::Duration;
 use tracing::warn;
 
 impl MoorDB {
+    /// Publish read-only cache updates for the transaction snapshot version.
     pub(crate) fn commit_read_only(&self, snapshot_version: u64, combined_caches: Caches) {
         self.snapshot_planes
             .publish_read_only_cache(snapshot_version, combined_caches);
     }
 
+    /// Execute the serialized write-commit path for a transaction.
     pub(crate) fn commit_writes(&self, ws: Box<WorkingSets>, enqueued_at: Instant) -> CommitResult {
         let counters = db_counters();
         let lock_wait_timer =
@@ -36,6 +43,7 @@ impl MoorDB {
         self.process_commit_writes(ws, counters)
     }
 
+    /// Perform conflict check, apply, publication, and durability scheduling.
     fn process_commit_writes(
         &self,
         ws: Box<WorkingSets>,

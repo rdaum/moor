@@ -13,7 +13,7 @@
 
 use moor_bench_utils::{BenchContext, black_box};
 use moor_common::model::PropDef;
-use moor_db::prop_cache::PropResolutionCache;
+use moor_db::PropResolutionCache;
 use moor_var::{Obj, Symbol};
 use uuid::Uuid;
 

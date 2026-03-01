@@ -11,9 +11,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::CacheStats;
+use crate::cache::PROP_CACHE_STATS;
+use crate::cache::stats::{CacheStats, LocalCacheStats};
 use ahash::AHasher;
-use lazy_static::lazy_static;
 use moor_common::model::PropDef;
 use moor_var::{Obj, Symbol};
 use std::{
@@ -39,31 +39,6 @@ fn remove_entries_for_objects(
         !obj_ids.contains(&obj_id)
     });
     before - entries.len()
-}
-
-lazy_static! {
-    /// Global cache statistics for property lookups
-    pub static ref PROP_CACHE_STATS: CacheStats = CacheStats::new();
-    /// Global cache statistics for verb lookups
-    pub static ref VERB_CACHE_STATS: CacheStats = CacheStats::new();
-    /// Global cache statistics for ancestry lookups
-    pub static ref ANCESTRY_CACHE_STATS: CacheStats = CacheStats::new();
-}
-
-const LOCAL_STATS_BATCH_SIZE: u32 = 128;
-
-#[derive(Default)]
-struct LocalCacheStats {
-    hits: u32,
-    negative_hits: u32,
-    misses: u32,
-}
-
-impl LocalCacheStats {
-    #[inline]
-    fn should_flush(&self) -> bool {
-        self.hits + self.negative_hits + self.misses >= LOCAL_STATS_BATCH_SIZE
-    }
 }
 
 struct PropCacheStatsTls(LocalCacheStats);

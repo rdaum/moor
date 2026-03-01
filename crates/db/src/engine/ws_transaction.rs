@@ -11,10 +11,16 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! Transaction operations over relation working sets.
+//!
+//! This module contains the high-level object/verb/property operations exposed
+//! by `WorldStateTransaction`, backed by relation transactions and resolution
+//! caches.
+
 use crate::{
     Error, ObjAndUUIDHolder, StringHolder,
-    db_worldstate::db_counters,
-    moor_db::{Caches, SEQUENCE_MAX_OBJECT, WorldStateTransaction},
+    api::world_state::db_counters,
+    engine::moor_db::{Caches, SEQUENCE_MAX_OBJECT, WorldStateTransaction},
     provider::fjall_provider::FjallProvider,
     tx_management::{EncodeFor, RelationTransaction},
 };
@@ -38,6 +44,7 @@ use uuid::Uuid;
 
 type RTx<Domain, Codomain> = RelationTransaction<Domain, Codomain, FjallProvider<Domain, Codomain>>;
 
+/// Upsert helper with shared trait bounds for relation-backed fields.
 fn upsert<Domain, Codomain>(
     table: &mut RTx<Domain, Codomain>,
     d: Domain,
@@ -52,6 +59,7 @@ where
     table.upsert(d, c)
 }
 
+/// Insert helper for relations that guarantee domain-key uniqueness.
 fn insert_guaranteed_unique<Domain, Codomain>(
     table: &mut RTx<Domain, Codomain>,
     d: Domain,
@@ -1803,7 +1811,7 @@ impl WorldStateTransaction {
         for (holder, prop_value) in all_propvalues {
             let obj = holder.obj;
             let obj_refs = reference_map.entry(obj).or_insert_with(HashSet::new);
-            crate::extract_anonymous_refs(&prop_value, obj_refs);
+            crate::model::extract_anonymous_refs(&prop_value, obj_refs);
         }
 
         // Get all objects for remaining checks (parent, location, verbdefs, propdefs metadata)

@@ -27,10 +27,9 @@ use moor_var::Symbol;
 use std::{sync::Arc, time::Duration};
 use tracing::warn;
 
-use crate::db_worldstate::db_counters;
+use crate::api::world_state::db_counters;
 #[cfg(test)]
 use crate::tx_management::Canonical;
-#[cfg(test)]
 use arc_swap::ArcSwap;
 
 /// Represents a detected conflict during transaction commit that may be resolvable.
@@ -572,7 +571,6 @@ where
         Ok(())
     }
 
-    #[cfg(test)]
     pub fn commit(self, index_swap: &Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>>) {
         index_swap.store(Arc::new(self.index));
     }
@@ -670,13 +668,13 @@ where
     #[cfg(test)]
     pub fn start(&self, tx: &Tx) -> RelationTransaction<Domain, Codomain, Source> {
         let index = self.test_index.load();
-        self.start_from_index(tx, &**index)
+        self.start_from_index(tx, index.as_ref().as_ref())
     }
 
     #[cfg(test)]
     pub fn begin_check(&self) -> CheckRelation<Domain, Codomain, Source> {
         let index = self.test_index.load();
-        self.begin_check_from_index(&**index)
+        self.begin_check_from_index(index.as_ref().as_ref())
     }
 
     #[cfg(test)]

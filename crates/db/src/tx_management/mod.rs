@@ -25,7 +25,7 @@ pub use relation_tx::{RelationTransaction, WorkingSet};
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
-use crate::{AnonymousObjectMetadata, ObjAndUUIDHolder, StringHolder};
+use crate::model::{AnonymousObjectMetadata, ObjAndUUIDHolder, StringHolder};
 use moor_common::model::{ObjFlag, PropDefs, PropPerms, VerbDefs};
 use moor_common::util::BitEnum;
 use moor_var::{Associative, Obj, Sequence, Var, program::ProgramType};

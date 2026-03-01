@@ -247,7 +247,9 @@ mod tests {
                         snapshot_version: 0,
                     };
                     let snapshot = root_index.load();
-                    let transaction = backing_store.clone().start_from_index(&tx, &**snapshot);
+                    let transaction = backing_store
+                        .clone()
+                        .start_from_index(&tx, snapshot.as_ref().as_ref());
 
                     if transactions
                         .insert(entry.process, (tx, transaction))
@@ -287,7 +289,8 @@ mod tests {
 
                     {
                         let snapshot = root_index.load();
-                        let mut cr = backing_store.begin_check_from_index(&**snapshot);
+                        let mut cr =
+                            backing_store.begin_check_from_index(snapshot.as_ref().as_ref());
                         cr.check(&mut ws).expect("check failed in begin");
                         cr.apply(ws).expect("apply failed in begin");
                         cr.commit(&root_index);
@@ -328,7 +331,8 @@ mod tests {
                             }
                         };
                         let snapshot = root_index.load();
-                        let mut cr = backing_store.begin_check_from_index(&**snapshot);
+                        let mut cr =
+                            backing_store.begin_check_from_index(snapshot.as_ref().as_ref());
 
                         match cr.check(&mut ws) {
                             Ok(_) => Err(eyre::eyre!("Expected conflict, check succeeded")),

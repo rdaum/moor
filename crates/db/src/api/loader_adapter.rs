@@ -11,9 +11,15 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! Loader and snapshot adapters on top of `DbWorldState`.
+//!
+//! This module implements the import/export-oriented interfaces
+//! (`LoaderInterface`, `SnapshotInterface`) using the same transactional
+//! machinery as normal world-state operations.
+
 use uuid::Uuid;
 
-use crate::db_worldstate::DbWorldState;
+use crate::api::world_state::DbWorldState;
 use moor_common::{
     model::{
         CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, PropDef, PropDefs,

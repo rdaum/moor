@@ -33,7 +33,7 @@ use moor_common::{
     model::{CommitResult, ObjAttrs, ObjFlag, ObjectKind, PropFlag},
     util::BitEnum,
 };
-use moor_db::{Database, TxDB, db_worldstate::db_counters};
+use moor_db::{Database, TxDB, db_counters};
 use moor_model_checker::bench_common::{
     calculate_percentiles, clear_screen, format_duration, format_throughput, setup_db_path,
     update_spinner,

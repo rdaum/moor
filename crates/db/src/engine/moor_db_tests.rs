@@ -16,7 +16,7 @@ mod tests {
     use crate::{DatabaseConfig, ObjAndUUIDHolder};
     use std::collections::HashSet;
 
-    use crate::moor_db::MoorDB;
+    use crate::engine::moor_db::MoorDB;
     use moor_common::{
         model::{
             CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, ObjectRef,
@@ -436,7 +436,7 @@ mod tests {
 
     #[test]
     pub fn test_last_move_worldstate_property() {
-        use crate::db_worldstate::DbWorldState;
+        use crate::api::world_state::DbWorldState;
         use moor_common::model::WorldState;
 
         let db = test_db();
@@ -488,7 +488,7 @@ mod tests {
 
     #[test]
     pub fn test_worldstate_clear_property_on_definer_returns_e_invarg() {
-        use crate::db_worldstate::DbWorldState;
+        use crate::api::world_state::DbWorldState;
         use moor_common::model::WorldState;
 
         let db = test_db();
@@ -525,7 +525,7 @@ mod tests {
 
     #[test]
     pub fn test_worldstate_owner_transfer_requires_wizard() {
-        use crate::db_worldstate::DbWorldState;
+        use crate::api::world_state::DbWorldState;
         use moor_common::model::WorldState;
 
         let db = test_db();
@@ -577,7 +577,7 @@ mod tests {
 
     #[test]
     pub fn test_worldstate_property_owner_transfer_requires_wizard() {
-        use crate::db_worldstate::DbWorldState;
+        use crate::api::world_state::DbWorldState;
         use moor_common::model::WorldState;
 
         let db = test_db();
@@ -665,7 +665,7 @@ mod tests {
 
     #[test]
     pub fn test_worldstate_verb_owner_semantics_match_lambdamoo() {
-        use crate::db_worldstate::DbWorldState;
+        use crate::api::world_state::DbWorldState;
         use moor_common::model::WorldState;
 
         let db = test_db();
