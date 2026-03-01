@@ -19,6 +19,7 @@ use crate::{
     tx_management::{EncodeFor, RelationTransaction},
 };
 use byteview::ByteView;
+use minstant::Instant;
 use moor_common::{
     model::{
         CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, ObjectRef, PropDef,
@@ -32,7 +33,7 @@ use moor_var::{
 };
 use std::collections::HashSet;
 use std::fmt::Display;
-use std::{collections::VecDeque, hash::Hash, time::Instant};
+use std::{collections::VecDeque, hash::Hash};
 use uuid::Uuid;
 
 type RTx<Domain, Codomain> = RelationTransaction<Domain, Codomain, FjallProvider<Domain, Codomain>>;
@@ -1324,7 +1325,7 @@ impl WorldStateTransaction {
 
         // Dispatch commit work directly under the DB commit lock.
         drop(_t);
-        let enqueued_at = std::time::Instant::now();
+        let enqueued_at = Instant::now();
 
         let _t = PerfTimerGuard::new(&counters.commit_wait_phase);
         let result = db.commit_writes(ws, enqueued_at);

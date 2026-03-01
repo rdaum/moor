@@ -115,7 +115,7 @@ pub struct MoorDB {
 }
 
 impl TransactionContext for MoorDB {
-    fn commit_writes(&self, ws: Box<WorkingSets>, enqueued_at: std::time::Instant) -> CommitResult {
+    fn commit_writes(&self, ws: Box<WorkingSets>, enqueued_at: Instant) -> CommitResult {
         self.commit_writes(ws, enqueued_at)
     }
 
@@ -339,29 +339,15 @@ impl MoorDB {
         });
     }
 
-    pub(crate) fn commit_writes(
-        &self,
-        ws: Box<WorkingSets>,
-        enqueued_at: std::time::Instant,
-    ) -> CommitResult {
+    pub(crate) fn commit_writes(&self, ws: Box<WorkingSets>, enqueued_at: Instant) -> CommitResult {
         let counters = db_counters();
+        let lock_wait_timer =
+            PerfTimerGuard::from_start(&counters.commit_lock_wait_phase, enqueued_at);
         let _commit_guard = self.commit_apply_lock.lock();
-        let dequeued_at = std::time::Instant::now();
-        counters.commit_lock_wait_phase.invocations().add(1);
-        counters
-            .commit_lock_wait_phase
-            .cumulative_duration_nanos()
-            .add(dequeued_at.duration_since(enqueued_at).as_nanos() as isize);
+        drop(lock_wait_timer);
 
-        let result = self.process_commit_writes(ws, counters);
-
-        let reply_sent_at = std::time::Instant::now();
-        counters.commit_process_phase.invocations().add(1);
-        counters
-            .commit_process_phase
-            .cumulative_duration_nanos()
-            .add(reply_sent_at.duration_since(dequeued_at).as_nanos() as isize);
-        result
+        let _process_timer = PerfTimerGuard::new(&counters.commit_process_phase);
+        self.process_commit_writes(ws, counters)
     }
 
     fn process_commit_writes(

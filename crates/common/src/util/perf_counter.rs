@@ -58,6 +58,10 @@ impl<'a> PerfTimerGuard<'a> {
     pub fn new(perf: &'a PerfCounter) -> Self {
         Self(perf, Instant::now())
     }
+
+    pub fn from_start(perf: &'a PerfCounter, start: Instant) -> Self {
+        Self(perf, start)
+    }
 }
 
 impl Drop for PerfTimerGuard<'_> {
