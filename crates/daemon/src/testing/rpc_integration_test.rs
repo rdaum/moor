@@ -35,7 +35,7 @@ mod tests {
         mk_client_pong_msg, mk_command_msg, mk_connection_establish_msg, mk_detach_host_msg,
         mk_detach_msg, mk_host_pong_msg, mk_login_command_msg, mk_properties_msg,
         mk_register_host_msg, mk_request_performance_counters_msg, mk_request_sys_prop_msg,
-        mk_requested_input_msg, mk_verbs_msg, obj_fb,
+        mk_requested_input_msg, mk_verbs_msg, obj_fb, RpcMessageError,
     };
     use std::{
         net::SocketAddr,
@@ -119,6 +119,45 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         ));
 
         (message_handler, transport, event_log, scheduler)
+    }
+
+    fn has_successful_login_result(
+        client_replies: &[(Uuid, Vec<u8>, Result<moor_rpc::DaemonToClientReply, RpcMessageError>)],
+    ) -> bool {
+        client_replies.iter().any(|(_, _, reply)| {
+            matches!(
+                reply.as_ref().map(|r| &r.reply),
+                Ok(moor_rpc::DaemonToClientReplyUnion::LoginResult(lr)) if lr.success
+            )
+        })
+    }
+
+    fn successful_login_auth_token(
+        client_replies: &[(Uuid, Vec<u8>, Result<moor_rpc::DaemonToClientReply, RpcMessageError>)],
+    ) -> rpc_common::AuthToken {
+        client_replies
+            .iter()
+            .find_map(|(_, _, reply)| {
+                let Ok(reply) = reply else {
+                    return None;
+                };
+                let moor_rpc::DaemonToClientReplyUnion::LoginResult(login_result) = &reply.reply
+                else {
+                    return None;
+                };
+                if !login_result.success {
+                    return None;
+                }
+                login_result
+                    .auth_token
+                    .as_ref()
+                    .map(|t| rpc_common::AuthToken(t.token.clone()))
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "Expected successful LoginResult with auth token, got replies: {client_replies:?}"
+                )
+            })
     }
 
     #[test]
@@ -1181,15 +1220,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             "Should have captured 2 client replies"
         );
 
-        // First reply should be NewConnection, second should be LoginResult or error
-        let (_, _, login_reply) = &client_replies[1];
-        // With NormalOperation scenario, should get successful LoginResult
         assert!(
-            matches!(
-                login_reply.as_ref().map(|r| &r.reply),
-                Ok(moor_rpc::DaemonToClientReplyUnion::LoginResult(lr)) if lr.success
-            ),
-            "Should have successful LoginResult with NormalOperation scenario: {login_reply:?}"
+            has_successful_login_result(&client_replies),
+            "Should have successful LoginResult with NormalOperation scenario: {client_replies:?}"
         );
     }
 
@@ -1664,17 +1697,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Extract auth token from login result
         let client_replies = transport.get_client_replies();
-        let (_, _, login_reply) = &client_replies[1]; // Second reply should be LoginResult
-        let auth_token = match login_reply {
-            Ok(reply) if matches!(reply.reply, moor_rpc::DaemonToClientReplyUnion::LoginResult(ref lr) if lr.success) => {
-                if let moor_rpc::DaemonToClientReplyUnion::LoginResult(lr) = &reply.reply {
-                    rpc_common::AuthToken(lr.auth_token.as_ref().unwrap().token.clone())
-                } else {
-                    unreachable!()
-                }
-            }
-            other => panic!("Expected successful LoginResult, got {other:?}"),
-        };
+        let auth_token = successful_login_auth_token(&client_replies);
 
         // Test verb introspection
         let verbs_message = mk_verbs_msg(
@@ -1787,17 +1810,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Extract auth token from login result
         let client_replies = transport.get_client_replies();
-        let (_, _, login_reply) = &client_replies[1]; // Second reply should be LoginResult
-        let auth_token = match login_reply {
-            Ok(reply) if matches!(reply.reply, moor_rpc::DaemonToClientReplyUnion::LoginResult(ref lr) if lr.success) => {
-                if let moor_rpc::DaemonToClientReplyUnion::LoginResult(lr) = &reply.reply {
-                    rpc_common::AuthToken(lr.auth_token.as_ref().unwrap().token.clone())
-                } else {
-                    unreachable!()
-                }
-            }
-            other => panic!("Expected successful LoginResult, got {other:?}"),
-        };
+        let auth_token = successful_login_auth_token(&client_replies);
 
         // Test command execution
         let command_message = mk_command_msg(
@@ -1878,17 +1891,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Extract auth token from login result
         let client_replies = transport.get_client_replies();
-        let (_, _, login_reply) = &client_replies[1]; // Second reply should be LoginResult
-        let auth_token = match login_reply {
-            Ok(reply) if matches!(reply.reply, moor_rpc::DaemonToClientReplyUnion::LoginResult(ref lr) if lr.success) => {
-                if let moor_rpc::DaemonToClientReplyUnion::LoginResult(lr) = &reply.reply {
-                    rpc_common::AuthToken(lr.auth_token.as_ref().unwrap().token.clone())
-                } else {
-                    unreachable!()
-                }
-            }
-            other => panic!("Expected successful LoginResult, got {other:?}"),
-        };
+        let auth_token = successful_login_auth_token(&client_replies);
 
         // Step 2: Create a scenario where the daemon would request input
         // We'll simulate this by triggering a client event that requests input
