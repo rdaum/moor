@@ -22,6 +22,7 @@ serde.workspace = true
 serde_json.workspace = true
 
 # Other utilities
+gdt-cpus.workspace = true
 lazy_static.workspace = true
 
 # Linux-specific performance counters (dev-only is fine here)

@@ -3266,6 +3266,7 @@ dependencies = [
 name = "moor-bench-utils"
 version = "1.0.0-rc1"
 dependencies = [
+ "gdt-cpus",
  "lazy_static",
  "minstant",
  "perf-event2",

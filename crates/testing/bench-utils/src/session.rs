@@ -15,8 +15,9 @@ use crate::TableFormatter;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     fs::{self, File},
+    path::PathBuf,
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -69,11 +70,49 @@ pub fn get_session_results() -> Vec<BenchmarkResult> {
         .unwrap_or_default()
 }
 
+/// Clear all collected benchmark results from this process.
+pub fn clear_session_results() {
+    if let Ok(mut results) = SESSION_RESULTS.lock() {
+        results.clear();
+    }
+}
+
+fn safe_percent_change(current: f64, previous: f64) -> Option<f64> {
+    if !current.is_finite() || !previous.is_finite() || previous.abs() <= f64::EPSILON {
+        return None;
+    }
+
+    Some(((current - previous) / previous) * 100.0)
+}
+
+fn format_percent_change(change: Option<f64>) -> String {
+    let Some(change) = change else {
+        return "n/a".to_string();
+    };
+
+    if change.abs() < 1.0 {
+        "~0%".to_string()
+    } else if change > 0.0 {
+        format!("+{change:.1}% 🚀")
+    } else {
+        format!("{change:.1}% 📉")
+    }
+}
+
+fn finite_mops(result: &BenchmarkResult) -> Option<f64> {
+    let mops = result.mops_per_sec;
+    if mops.is_finite() && mops >= 0.0 {
+        Some(mops)
+    } else {
+        None
+    }
+}
+
 /// Get the target directory for saving benchmark results, following criterion's approach
-fn get_target_directory() -> std::path::PathBuf {
+fn get_target_directory() -> PathBuf {
     // Check CARGO_TARGET_DIR environment variable first
     if let Some(target_dir) = std::env::var_os("CARGO_TARGET_DIR") {
-        return std::path::PathBuf::from(target_dir);
+        return PathBuf::from(target_dir);
     }
 
     // Try cargo metadata to get target directory
@@ -81,20 +120,17 @@ fn get_target_directory() -> std::path::PathBuf {
         && let Ok(output) = std::process::Command::new(cargo)
             .args(["metadata", "--format-version", "1"])
             .output()
-        && let Ok(metadata_str) = String::from_utf8(output.stdout)
+        && output.status.success()
+        && let Ok(metadata_json) = serde_json::from_slice::<serde_json::Value>(&output.stdout)
+        && let Some(target_dir) = metadata_json
+            .get("target_directory")
+            .and_then(serde_json::Value::as_str)
     {
-        // Simple JSON parsing to extract target_directory
-        if let Some(start) = metadata_str.find("\"target_directory\":\"") {
-            let start = start + "\"target_directory\":\"".len();
-            if let Some(end) = metadata_str[start..].find('"') {
-                let target_dir = &metadata_str[start..start + end];
-                return std::path::PathBuf::from(target_dir);
-            }
-        }
+        return PathBuf::from(target_dir);
     }
 
     // Fallback to ./target
-    std::path::PathBuf::from("target")
+    PathBuf::from("target")
 }
 
 /// Save current session results to JSON file
@@ -175,14 +211,17 @@ fn load_previous_results() -> Option<BenchmarkSession> {
     });
     json_files.reverse();
 
-    // Get the most recent file (since current session hasn't been saved yet)
-    if json_files.is_empty() {
-        return None;
+    // Return the most recent parseable session.
+    for entry in json_files {
+        let Ok(file) = File::open(entry.path()) else {
+            continue;
+        };
+        if let Ok(session) = serde_json::from_reader(file) {
+            return Some(session);
+        }
     }
 
-    let previous_file = &json_files[0];
-    let file = File::open(previous_file.path()).ok()?;
-    serde_json::from_reader(file).ok()
+    None
 }
 
 /// Generate final session summary with regression analysis
@@ -207,7 +246,7 @@ pub fn generate_session_summary() {
     }
 
     // Group results by category
-    let mut groups: HashMap<String, Vec<&BenchmarkResult>> = HashMap::new();
+    let mut groups: BTreeMap<String, Vec<&BenchmarkResult>> = BTreeMap::new();
     for result in &current_results {
         groups.entry(result.group.clone()).or_default().push(result);
     }
@@ -232,16 +271,9 @@ pub fn generate_session_summary() {
                     .iter()
                     .find(|r| r.name == result.name)
                     .map(|prev_result| {
-                        let mops_change = ((result.mops_per_sec - prev_result.mops_per_sec)
-                            / prev_result.mops_per_sec)
-                            * 100.0;
-                        if mops_change.abs() < 1.0 {
-                            "~0%".to_string()
-                        } else if mops_change > 0.0 {
-                            format!("+{mops_change:.1}% 🚀")
-                        } else {
-                            format!("{mops_change:.1}% 📉")
-                        }
+                        let change =
+                            safe_percent_change(result.mops_per_sec, prev_result.mops_per_sec);
+                        format_percent_change(change)
                     })
                     .unwrap_or_else(|| "NEW".to_string())
             } else {
@@ -264,24 +296,23 @@ pub fn generate_session_summary() {
     println!("🔍 KEY INSIGHTS:");
     let fastest = current_results
         .iter()
-        .max_by(|a, b| a.mops_per_sec.partial_cmp(&b.mops_per_sec).unwrap());
+        .filter_map(|result| finite_mops(result).map(|mops| (result, mops)))
+        .max_by(|a, b| a.1.total_cmp(&b.1));
     let slowest = current_results
         .iter()
-        .min_by(|a, b| a.mops_per_sec.partial_cmp(&b.mops_per_sec).unwrap());
+        .filter_map(|result| finite_mops(result).map(|mops| (result, mops)))
+        .min_by(|a, b| a.1.total_cmp(&b.1));
 
-    if let (Some(fast), Some(slow)) = (fastest, slowest) {
-        println!(
-            "   🏆 Fastest: {} ({:.1} Mops/s)",
-            fast.name, fast.mops_per_sec
-        );
-        println!(
-            "   🐌 Slowest: {} ({:.1} Mops/s)",
-            slow.name, slow.mops_per_sec
-        );
-        println!(
-            "   📊 Speed difference: {:.1}x",
-            fast.mops_per_sec / slow.mops_per_sec
-        );
+    if let (Some((fast, fast_mops)), Some((slow, slow_mops))) = (fastest, slowest) {
+        println!("   🏆 Fastest: {} ({:.1} Mops/s)", fast.name, fast_mops);
+        println!("   🐌 Slowest: {} ({:.1} Mops/s)", slow.name, slow_mops);
+        if slow_mops > f64::EPSILON {
+            println!("   📊 Speed difference: {:.1}x", fast_mops / slow_mops);
+        } else {
+            println!("   📊 Speed difference: n/a");
+        }
+    } else {
+        println!("   No finite throughput values available for insights.");
     }
 
     // Regression analysis summary
@@ -289,12 +320,14 @@ pub fn generate_session_summary() {
         let mut improvements = 0;
         let mut regressions = 0;
         let mut total_change = 0.0;
+        let mut comparable_count = 0;
 
         for result in &current_results {
-            if let Some(prev_result) = prev.results.iter().find(|r| r.name == result.name) {
-                let change = ((result.mops_per_sec - prev_result.mops_per_sec)
-                    / prev_result.mops_per_sec)
-                    * 100.0;
+            if let Some(prev_result) = prev.results.iter().find(|r| r.name == result.name)
+                && let Some(change) =
+                    safe_percent_change(result.mops_per_sec, prev_result.mops_per_sec)
+            {
+                comparable_count += 1;
                 total_change += change;
                 if change > 1.0 {
                     improvements += 1;
@@ -308,10 +341,14 @@ pub fn generate_session_summary() {
         println!("📊 REGRESSION ANALYSIS:");
         println!("   ✅ Improvements: {improvements} benchmarks");
         println!("   ❌ Regressions: {regressions} benchmarks");
-        println!(
-            "   📈 Average change: {:.1}%",
-            total_change / current_results.len() as f64
-        );
+        if comparable_count > 0 {
+            println!(
+                "   📈 Average change: {:.1}%",
+                total_change / comparable_count as f64
+            );
+        } else {
+            println!("   📈 Average change: n/a");
+        }
     }
 
     // Save results
@@ -321,4 +358,61 @@ pub fn generate_session_summary() {
     }
 
     println!("═══════════════════════════════════════════════════════════════════════");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_result(name: &str, mops_per_sec: f64) -> BenchmarkResult {
+        BenchmarkResult {
+            name: name.to_string(),
+            group: "test".to_string(),
+            benchmark_type: "standard".to_string(),
+            mops_per_sec,
+            ns_per_op: 1.0,
+            instructions_per_op: 1.0,
+            branches_per_op: 1.0,
+            branch_miss_rate: 0.0,
+            branch_misses_per_op: 0.0,
+            cache_miss_rate: 0.0,
+            cv_percent: 0.0,
+            samples: 1,
+            operations: 1,
+            total_duration_sec: 1.0,
+        }
+    }
+
+    #[test]
+    fn safe_percent_change_handles_invalid_input() {
+        assert_eq!(safe_percent_change(10.0, 0.0), None);
+        assert_eq!(safe_percent_change(f64::NAN, 10.0), None);
+        assert_eq!(safe_percent_change(10.0, f64::INFINITY), None);
+        assert_eq!(safe_percent_change(12.0, 10.0), Some(20.0));
+    }
+
+    #[test]
+    fn format_percent_change_handles_none_and_threshold() {
+        assert_eq!(format_percent_change(None), "n/a");
+        assert_eq!(format_percent_change(Some(0.3)), "~0%");
+        assert_eq!(format_percent_change(Some(3.2)), "+3.2% 🚀");
+        assert_eq!(format_percent_change(Some(-3.2)), "-3.2% 📉");
+    }
+
+    #[test]
+    fn finite_mops_filters_out_non_finite_values() {
+        assert_eq!(finite_mops(&make_result("ok", 1.0)), Some(1.0));
+        assert_eq!(finite_mops(&make_result("nan", f64::NAN)), None);
+        assert_eq!(finite_mops(&make_result("neg", -1.0)), None);
+    }
+
+    #[test]
+    fn clear_session_results_clears_global_state() {
+        clear_session_results();
+        add_session_result(make_result("bench_a", 1.0));
+        assert_eq!(get_session_results().len(), 1);
+
+        clear_session_results();
+        assert!(get_session_results().is_empty());
+    }
 }

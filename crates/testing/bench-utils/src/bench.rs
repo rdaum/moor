@@ -16,11 +16,14 @@ use minstant;
 use std::{
     hint::black_box,
     io::{self, Write},
+    sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
 
 #[cfg(target_os = "linux")]
-use perf_event::{Builder, events::Hardware};
+use perf_event::{Builder, Group, events::Hardware};
+#[cfg(target_os = "linux")]
+use std::sync::{Mutex, OnceLock};
 
 const MIN_CHUNK_SIZE: usize = 100_000; // Large enough for reliable timing
 const MAX_CHUNK_SIZE: usize = 50_000_000; // Maximum reasonable chunk
@@ -29,8 +32,350 @@ const WARM_UP_DURATION_MS: u64 = 1_000; // 1 second warm-up
 const MIN_BENCHMARK_DURATION_MS: u64 = 5_000; // At least 5 seconds of actual benchmarking
 const MIN_SAMPLES: usize = 20; // More samples for better statistics
 const MAX_SAMPLES: usize = 50; // Reasonable upper bound
+const MIN_PMU_ACTIVE_PERCENT: f64 = 95.0; // Reject heavily multiplexed PMU runs
 
 type BenchFunction<T> = fn(&mut T, usize, usize);
+
+fn flush_stdout() {
+    let _ = io::stdout().flush();
+}
+
+fn safe_ratio_f64(numerator: f64, denominator: f64) -> f64 {
+    if denominator > 0.0 && denominator.is_finite() && numerator.is_finite() {
+        numerator / denominator
+    } else {
+        0.0
+    }
+}
+
+fn throughput_ops_per_sec(result: &Results) -> Option<f64> {
+    let seconds = result.duration.as_secs_f64();
+    if seconds <= 0.0 || !seconds.is_finite() || result.iterations == 0 {
+        return None;
+    }
+
+    Some(result.iterations as f64 / seconds)
+}
+
+fn coefficient_of_variation_percent(samples: &[Results]) -> f64 {
+    let throughputs: Vec<f64> = samples.iter().filter_map(throughput_ops_per_sec).collect();
+    if throughputs.is_empty() {
+        return 0.0;
+    }
+
+    let mean = throughputs.iter().sum::<f64>() / throughputs.len() as f64;
+    if mean <= 0.0 || !mean.is_finite() {
+        return 0.0;
+    }
+
+    let variance = throughputs
+        .iter()
+        .map(|&throughput| (throughput - mean).powi(2))
+        .sum::<f64>()
+        / throughputs.len() as f64;
+
+    if !variance.is_finite() || variance < 0.0 {
+        return 0.0;
+    }
+
+    (variance.sqrt() / mean) * 100.0
+}
+
+fn scale_multiplexed_count(raw: u64, enabled_ns: u64, running_ns: u64) -> u64 {
+    if raw == 0 {
+        return 0;
+    }
+
+    if enabled_ns == 0 || running_ns == 0 {
+        return raw;
+    }
+
+    if running_ns >= enabled_ns {
+        return raw;
+    }
+
+    ((raw as u128 * enabled_ns as u128) / running_ns as u128).min(u64::MAX as u128) as u64
+}
+
+fn pmu_active_percent(results: &Results) -> f64 {
+    safe_ratio_f64(
+        results.pmu_time_running_ns as f64,
+        results.pmu_time_enabled_ns as f64,
+    ) * 100.0
+}
+
+fn enforce_pmu_quality(name: &str, has_perf_counters: bool, results: &Results) {
+    if !has_perf_counters || results.pmu_time_enabled_ns == 0 || results.pmu_time_running_ns == 0 {
+        return;
+    }
+
+    let active_percent = pmu_active_percent(results);
+    if active_percent < MIN_PMU_ACTIVE_PERCENT {
+        panic!(
+            "PMU counters were multiplexed too heavily for benchmark '{name}': active {active_percent:.1}% < {MIN_PMU_ACTIVE_PERCENT:.1}%"
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn perf_issues() -> &'static Mutex<Vec<String>> {
+    static PERF_ISSUES: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+    PERF_ISSUES.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+#[cfg(target_os = "linux")]
+fn record_perf_issue(message: impl Into<String>) {
+    let message = message.into();
+    let lock = perf_issues().lock();
+    let mut issues = match lock {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    if issues.iter().any(|existing| existing == &message) {
+        return;
+    }
+    if issues.len() >= 6 {
+        return;
+    }
+    issues.push(message);
+}
+
+#[cfg(target_os = "linux")]
+fn clear_perf_issues() {
+    let lock = perf_issues().lock();
+    let mut issues = match lock {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    issues.clear();
+}
+
+#[cfg(target_os = "linux")]
+fn current_perf_issues() -> Vec<String> {
+    let lock = perf_issues().lock();
+    match lock {
+        Ok(guard) => guard.clone(),
+        Err(poisoned) => poisoned.into_inner().clone(),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_perf_hint(has_perf_counters: bool, issues: &[String]) -> Option<String> {
+    if has_perf_counters {
+        return None;
+    }
+
+    let looks_like_perf_access_issue = issues.iter().any(|issue| {
+        issue.contains("unusable timing window")
+            || issue.contains("Operation not permitted")
+            || issue.contains("Permission denied")
+    });
+    if !looks_like_perf_access_issue {
+        return None;
+    }
+
+    let paranoid = std::fs::read_to_string("/proc/sys/kernel/perf_event_paranoid")
+        .ok()
+        .and_then(|value| value.trim().parse::<i32>().ok());
+
+    match paranoid {
+        Some(value) if value > 2 => Some(format!(
+            "kernel.perf_event_paranoid={value}; lower it to 2 or less (or grant CAP_PERFMON/CAP_SYS_ADMIN) to enable PMU counters"
+        )),
+        Some(value) => Some(format!(
+            "kernel.perf_event_paranoid={value}; PMU still unavailable, likely due to missing CAP_PERFMON/CAP_SYS_ADMIN or container perf_event restrictions"
+        )),
+        None => Some(
+            "PMU still unavailable; check /proc/sys/kernel/perf_event_paranoid and container capabilities (CAP_PERFMON/CAP_SYS_ADMIN)".to_string(),
+        ),
+    }
+}
+
+fn warn_affinity_once(message: impl Into<String>) {
+    static WARNED: AtomicBool = AtomicBool::new(false);
+    if !WARNED.swap(true, Ordering::Relaxed) {
+        eprintln!("⚠️  {}", message.into());
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn core_has_usable_pmu(core_id: usize) -> bool {
+    if gdt_cpus::pin_thread_to_core(core_id).is_err() {
+        return false;
+    }
+
+    let mut counter = match Builder::new(Hardware::INSTRUCTIONS).build() {
+        Ok(counter) => counter,
+        Err(_) => return false,
+    };
+    if counter.enable().is_err() {
+        return false;
+    }
+
+    let mut acc = 0_u64;
+    for i in 0..100_000 {
+        acc = acc.wrapping_add(i);
+    }
+    black_box(acc);
+
+    let _ = counter.disable();
+    match counter.read_count_and_time() {
+        Ok(cat) => cat.count > 0 || cat.time_running > 0,
+        Err(_) => false,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn choose_default_pin_core(
+    cpu_info: &gdt_cpus::CpuInfo,
+    allowed_mask: &gdt_cpus::AffinityMask,
+) -> Option<usize> {
+    let mut candidates: Vec<usize> = Vec::new();
+    for core_id in cpu_info.performance_core_mask().iter() {
+        if allowed_mask.contains(core_id) && !candidates.contains(&core_id) {
+            candidates.push(core_id);
+        }
+    }
+    for core_id in cpu_info.all_cores_mask().iter() {
+        if allowed_mask.contains(core_id) && !candidates.contains(&core_id) {
+            candidates.push(core_id);
+        }
+    }
+
+    for core_id in &candidates {
+        if core_has_usable_pmu(*core_id) {
+            return Some(*core_id);
+        }
+    }
+
+    candidates.first().copied()
+}
+
+struct BenchAffinityGuard {
+    restore_mask: Option<gdt_cpus::AffinityMask>,
+}
+
+impl BenchAffinityGuard {
+    fn acquire() -> Self {
+        let Ok(cpu_info) = gdt_cpus::cpu_info() else {
+            warn_affinity_once(
+                "Could not read CPU topology; benchmark will run without CPU pinning",
+            );
+            return Self { restore_mask: None };
+        };
+
+        let restore_mask = cpu_info.all_cores_mask();
+        let requested_core = std::env::var("MOOR_BENCH_PIN_CORE")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok());
+        let core_to_pin = requested_core
+            .filter(|core_id| restore_mask.contains(*core_id))
+            .or_else(|| {
+                #[cfg(target_os = "linux")]
+                {
+                    choose_default_pin_core(cpu_info, &restore_mask)
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    cpu_info
+                        .performance_core_mask()
+                        .iter()
+                        .next()
+                        .or_else(|| cpu_info.all_cores_mask().iter().next())
+                }
+            });
+
+        let Some(core_id) = core_to_pin else {
+            warn_affinity_once(
+                "No logical cores detected for pinning; benchmark will run without CPU pinning",
+            );
+            return Self { restore_mask: None };
+        };
+
+        if let Err(error) = gdt_cpus::pin_thread_to_core(core_id) {
+            warn_affinity_once(format!(
+                "Could not pin benchmark thread to core {core_id}: {error}. Continuing without pinning"
+            ));
+            return Self { restore_mask: None };
+        }
+
+        Self {
+            restore_mask: Some(restore_mask),
+        }
+    }
+}
+
+impl Drop for BenchAffinityGuard {
+    fn drop(&mut self) {
+        let Some(mask) = &self.restore_mask else {
+            return;
+        };
+
+        if let Err(error) = gdt_cpus::set_thread_affinity(mask) {
+            warn_affinity_once(format!(
+                "Could not restore benchmark thread affinity after run: {error}"
+            ));
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+struct PerfGroupCounters {
+    group: Group,
+    instructions: Option<perf_event::Counter>,
+    branches: Option<perf_event::Counter>,
+    branch_misses: Option<perf_event::Counter>,
+    cache_misses: Option<perf_event::Counter>,
+}
+
+#[cfg(target_os = "linux")]
+fn try_add_group_counter(
+    group: &mut Group,
+    event: Hardware,
+    name: &str,
+) -> Option<perf_event::Counter> {
+    match group.add(&Builder::new(event)) {
+        Ok(counter) => Some(counter),
+        Err(error) => {
+            record_perf_issue(format!("perf event '{name}' unavailable: {error}"));
+            None
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn build_perf_counter_group() -> Option<PerfGroupCounters> {
+    let mut group = match Group::new() {
+        Ok(group) => group,
+        Err(error) => {
+            record_perf_issue(format!("perf group unavailable: {error}"));
+            return None;
+        }
+    };
+
+    let instructions = try_add_group_counter(&mut group, Hardware::INSTRUCTIONS, "instructions");
+    let branches = try_add_group_counter(&mut group, Hardware::BRANCH_INSTRUCTIONS, "branches");
+    let branch_misses = try_add_group_counter(&mut group, Hardware::BRANCH_MISSES, "branch-misses");
+    let cache_misses = try_add_group_counter(&mut group, Hardware::CACHE_MISSES, "cache-misses");
+
+    if instructions.is_none()
+        && branches.is_none()
+        && branch_misses.is_none()
+        && cache_misses.is_none()
+    {
+        record_perf_issue("no perf events could be added to perf group".to_string());
+        return None;
+    }
+
+    Some(PerfGroupCounters {
+        group,
+        instructions,
+        branches,
+        branch_misses,
+        cache_misses,
+    })
+}
 
 #[derive(Clone, Default)]
 pub struct Results {
@@ -38,6 +383,8 @@ pub struct Results {
     pub branches: u64,
     pub branch_misses: u64,
     pub cache_misses: u64,
+    pub pmu_time_enabled_ns: u64,
+    pub pmu_time_running_ns: u64,
     pub duration: Duration,
     pub iterations: u64,
     pub chunks_executed: u64,
@@ -49,6 +396,8 @@ impl Results {
         self.branches += other.branches;
         self.branch_misses += other.branch_misses;
         self.cache_misses += other.cache_misses;
+        self.pmu_time_enabled_ns += other.pmu_time_enabled_ns;
+        self.pmu_time_running_ns += other.pmu_time_running_ns;
         self.duration += other.duration;
         self.iterations += other.iterations;
         self.chunks_executed += other.chunks_executed;
@@ -60,6 +409,8 @@ impl Results {
             self.branches /= divisor;
             self.branch_misses /= divisor;
             self.cache_misses /= divisor;
+            self.pmu_time_enabled_ns /= divisor;
+            self.pmu_time_running_ns /= divisor;
             self.duration /= divisor as u32;
             self.iterations /= divisor;
             self.chunks_executed /= divisor;
@@ -96,51 +447,57 @@ impl Default for PerfCounters {
 
 #[cfg(target_os = "linux")]
 impl PerfCounters {
-    pub fn new() -> Self {
-        PerfCounters {
-            instructions_counter: Builder::new(Hardware::INSTRUCTIONS).build().unwrap(),
-            cycles_counter: Builder::new(Hardware::CPU_CYCLES).build().unwrap(),
-            branch_counter: Builder::new(Hardware::BRANCH_INSTRUCTIONS).build().unwrap(),
-            branch_misses: Builder::new(Hardware::BRANCH_MISSES).build().unwrap(),
-            cache_misses: Builder::new(Hardware::CACHE_MISSES).build().unwrap(),
-            l1i_misses: Builder::new(Hardware::CACHE_MISSES).build().unwrap(), // Use generic as fallback
-            stalled_frontend: Builder::new(Hardware::CACHE_MISSES).build().unwrap(), // Use generic as fallback
-            stalled_backend: Builder::new(Hardware::CACHE_MISSES).build().unwrap(), // Use generic as fallback
+    pub fn try_new() -> io::Result<Self> {
+        Ok(PerfCounters {
+            instructions_counter: Builder::new(Hardware::INSTRUCTIONS).build()?,
+            cycles_counter: Builder::new(Hardware::CPU_CYCLES).build()?,
+            branch_counter: Builder::new(Hardware::BRANCH_INSTRUCTIONS).build()?,
+            branch_misses: Builder::new(Hardware::BRANCH_MISSES).build()?,
+            cache_misses: Builder::new(Hardware::CACHE_MISSES).build()?,
+            l1i_misses: Builder::new(Hardware::CACHE_MISSES).build()?, // Use generic as fallback
+            stalled_frontend: Builder::new(Hardware::CACHE_MISSES).build()?, // Use generic as fallback
+            stalled_backend: Builder::new(Hardware::CACHE_MISSES).build()?, // Use generic as fallback
             start_time: None,
-        }
+        })
+    }
+
+    pub fn new() -> Self {
+        Self::try_new().expect("failed to initialize perf counters")
     }
 
     pub fn start(&mut self) {
         self.start_time = Some(minstant::Instant::now());
-        self.instructions_counter.enable().unwrap();
-        self.cycles_counter.enable().unwrap();
-        self.branch_counter.enable().unwrap();
-        self.branch_misses.enable().unwrap();
-        self.cache_misses.enable().unwrap();
-        self.l1i_misses.enable().unwrap();
-        self.stalled_frontend.enable().unwrap();
-        self.stalled_backend.enable().unwrap();
+        let _ = self.instructions_counter.enable();
+        let _ = self.cycles_counter.enable();
+        let _ = self.branch_counter.enable();
+        let _ = self.branch_misses.enable();
+        let _ = self.cache_misses.enable();
+        let _ = self.l1i_misses.enable();
+        let _ = self.stalled_frontend.enable();
+        let _ = self.stalled_backend.enable();
     }
 
     pub fn stop(&mut self) -> (Duration, u64, u64, u64, u64, u64, u64, u64, u64) {
-        self.instructions_counter.disable().unwrap();
-        self.cycles_counter.disable().unwrap();
-        self.branch_counter.disable().unwrap();
-        self.branch_misses.disable().unwrap();
-        self.cache_misses.disable().unwrap();
-        self.l1i_misses.disable().unwrap();
-        self.stalled_frontend.disable().unwrap();
-        self.stalled_backend.disable().unwrap();
+        let _ = self.instructions_counter.disable();
+        let _ = self.cycles_counter.disable();
+        let _ = self.branch_counter.disable();
+        let _ = self.branch_misses.disable();
+        let _ = self.cache_misses.disable();
+        let _ = self.l1i_misses.disable();
+        let _ = self.stalled_frontend.disable();
+        let _ = self.stalled_backend.disable();
 
-        let duration = self.start_time.unwrap().elapsed();
-        let instructions = self.instructions_counter.read().unwrap();
-        let cycles = self.cycles_counter.read().unwrap();
-        let branches = self.branch_counter.read().unwrap();
-        let branch_misses = self.branch_misses.read().unwrap();
-        let cache_misses = self.cache_misses.read().unwrap();
-        let l1i_misses = self.l1i_misses.read().unwrap();
-        let stalled_frontend = self.stalled_frontend.read().unwrap();
-        let stalled_backend = self.stalled_backend.read().unwrap();
+        let duration = self
+            .start_time
+            .map_or(Duration::from_secs(0), |start| start.elapsed());
+        let instructions = self.instructions_counter.read().unwrap_or(0);
+        let cycles = self.cycles_counter.read().unwrap_or(0);
+        let branches = self.branch_counter.read().unwrap_or(0);
+        let branch_misses = self.branch_misses.read().unwrap_or(0);
+        let cache_misses = self.cache_misses.read().unwrap_or(0);
+        let l1i_misses = self.l1i_misses.read().unwrap_or(0);
+        let stalled_frontend = self.stalled_frontend.read().unwrap_or(0);
+        let stalled_backend = self.stalled_backend.read().unwrap_or(0);
 
         (
             duration,
@@ -190,7 +547,7 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
     factory: &dyn Fn() -> T,
 ) -> BenchmarkConfig {
     print!("🔥 Warming up");
-    io::stdout().flush().unwrap();
+    flush_stdout();
 
     if let Some(preferred_chunk_size) = T::chunk_size() {
         println!(" ✅");
@@ -207,7 +564,7 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
             if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
             {
                 print!(".");
-                io::stdout().flush().unwrap();
+                flush_stdout();
                 last_dot_time = minstant::Instant::now();
             }
         }
@@ -253,7 +610,7 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
 
         if i % 2 == 0 {
             print!(".");
-            io::stdout().flush().unwrap();
+            flush_stdout();
         }
     }
 
@@ -267,7 +624,7 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
 
         if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
             print!(".");
-            io::stdout().flush().unwrap();
+            flush_stdout();
             last_dot_time = minstant::Instant::now();
         }
     }
@@ -307,7 +664,7 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
     factory: &dyn Fn() -> T,
 ) -> BenchmarkConfig {
     print!("🔥 Warming up");
-    io::stdout().flush().unwrap();
+    flush_stdout();
 
     if let Some(preferred_chunk_size) = T::chunk_size() {
         println!(" ✅");
@@ -324,7 +681,7 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
             if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
             {
                 print!(".");
-                io::stdout().flush().unwrap();
+                flush_stdout();
                 last_dot_time = minstant::Instant::now();
             }
         }
@@ -370,7 +727,7 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
 
         if i % 2 == 0 {
             print!(".");
-            io::stdout().flush().unwrap();
+            flush_stdout();
         }
     }
 
@@ -384,7 +741,7 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
 
         if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
             print!(".");
-            io::stdout().flush().unwrap();
+            flush_stdout();
             last_dot_time = minstant::Instant::now();
         }
     }
@@ -421,7 +778,7 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
 #[cfg(target_os = "linux")]
 fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConfig {
     print!("🔥 Warming up");
-    io::stdout().flush().unwrap();
+    flush_stdout();
 
     // Check if context has a preferred chunk size
     if let Some(preferred_chunk_size) = T::chunk_size() {
@@ -440,7 +797,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
             if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
             {
                 print!(".");
-                io::stdout().flush().unwrap();
+                flush_stdout();
                 last_dot_time = minstant::Instant::now();
             }
         }
@@ -493,7 +850,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
         if i % 2 == 0 {
             // Only print dot every other iteration
             print!(".");
-            io::stdout().flush().unwrap();
+            flush_stdout();
         }
     }
 
@@ -509,7 +866,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
         // Print a dot every 100ms instead of every 5 iterations
         if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
             print!(".");
-            io::stdout().flush().unwrap();
+            flush_stdout();
             last_dot_time = minstant::Instant::now();
         }
     }
@@ -547,7 +904,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
 #[cfg(not(target_os = "linux"))]
 fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConfig {
     print!("🔥 Warming up");
-    io::stdout().flush().unwrap();
+    flush_stdout();
 
     // Check if context has a preferred chunk size
     if let Some(preferred_chunk_size) = T::chunk_size() {
@@ -566,7 +923,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
             if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
             {
                 print!(".");
-                io::stdout().flush().unwrap();
+                flush_stdout();
                 last_dot_time = minstant::Instant::now();
             }
         }
@@ -613,7 +970,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
 
         if i % 2 == 0 {
             print!(".");
-            io::stdout().flush().unwrap();
+            flush_stdout();
         }
     }
 
@@ -628,7 +985,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
 
         if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
             print!(".");
-            io::stdout().flush().unwrap();
+            flush_stdout();
             last_dot_time = minstant::Instant::now();
         }
     }
@@ -661,6 +1018,257 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
     }
 }
 
+fn execute_timing_only<T: BenchContext>(
+    f: &BenchFunction<T>,
+    prepared: &mut T,
+    chunk_size: usize,
+    chunk_num: usize,
+    ops: u64,
+) -> Results {
+    let start_time = minstant::Instant::now();
+    black_box(|| f(prepared, chunk_size, chunk_num))();
+    let duration = start_time.elapsed();
+
+    Results {
+        duration,
+        iterations: ops,
+        chunks_executed: 1,
+        ..Results::default()
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn try_build_individual_counter(event: Hardware, name: &str) -> Option<perf_event::Counter> {
+    match Builder::new(event).build() {
+        Ok(counter) => Some(counter),
+        Err(error) => {
+            record_perf_issue(format!("perf event '{name}' unavailable: {error}"));
+            None
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn read_scaled_counter(counter: &mut Option<perf_event::Counter>, name: &str) -> (u64, u64, u64) {
+    let Some(counter) = counter else {
+        return (0, 0, 0);
+    };
+
+    match counter.read_count_and_time() {
+        Ok(cat) => {
+            if cat.count > 0 && (cat.time_enabled == 0 || cat.time_running == 0) {
+                record_perf_issue(format!(
+                    "perf event '{name}' missing timing metadata (enabled/running); using raw count"
+                ));
+            }
+            (
+                scale_multiplexed_count(cat.count, cat.time_enabled, cat.time_running),
+                cat.time_enabled,
+                cat.time_running,
+            )
+        }
+        Err(error) => {
+            record_perf_issue(format!("perf event '{name}' read failed: {error}"));
+            (0, 0, 0)
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn enable_counter(counter: &mut Option<perf_event::Counter>, name: &str) {
+    let Some(mut inner) = counter.take() else {
+        return;
+    };
+
+    if let Err(error) = inner.enable() {
+        record_perf_issue(format!("perf event '{name}' enable failed: {error}"));
+        return;
+    }
+
+    *counter = Some(inner);
+}
+
+#[cfg(target_os = "linux")]
+fn disable_counter(counter: &mut Option<perf_event::Counter>, name: &str) {
+    let Some(counter) = counter.as_mut() else {
+        return;
+    };
+
+    if let Err(error) = counter.disable() {
+        record_perf_issue(format!("perf event '{name}' disable failed: {error}"));
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn execute_with_individual_counters<T: BenchContext>(
+    f: &BenchFunction<T>,
+    prepared: &mut T,
+    chunk_size: usize,
+    chunk_num: usize,
+    ops: u64,
+) -> Results {
+    let mut instructions_counter =
+        try_build_individual_counter(Hardware::INSTRUCTIONS, "instructions");
+    let mut branches_counter =
+        try_build_individual_counter(Hardware::BRANCH_INSTRUCTIONS, "branches");
+    let mut branch_misses_counter =
+        try_build_individual_counter(Hardware::BRANCH_MISSES, "branch-misses");
+    let mut cache_misses_counter =
+        try_build_individual_counter(Hardware::CACHE_MISSES, "cache-misses");
+
+    if instructions_counter.is_none()
+        && branches_counter.is_none()
+        && branch_misses_counter.is_none()
+        && cache_misses_counter.is_none()
+    {
+        return execute_timing_only(f, prepared, chunk_size, chunk_num, ops);
+    }
+
+    record_perf_issue("using ungrouped perf counters fallback".to_string());
+
+    enable_counter(&mut instructions_counter, "instructions");
+    enable_counter(&mut branches_counter, "branches");
+    enable_counter(&mut branch_misses_counter, "branch-misses");
+    enable_counter(&mut cache_misses_counter, "cache-misses");
+
+    let start_time = minstant::Instant::now();
+    black_box(|| f(prepared, chunk_size, chunk_num))();
+    let duration = start_time.elapsed();
+
+    disable_counter(&mut instructions_counter, "instructions");
+    disable_counter(&mut branches_counter, "branches");
+    disable_counter(&mut branch_misses_counter, "branch-misses");
+    disable_counter(&mut cache_misses_counter, "cache-misses");
+
+    let (instructions, instructions_enabled, instructions_running) =
+        read_scaled_counter(&mut instructions_counter, "instructions");
+    let (branches, branches_enabled, branches_running) =
+        read_scaled_counter(&mut branches_counter, "branches");
+    let (branch_misses, branch_misses_enabled, branch_misses_running) =
+        read_scaled_counter(&mut branch_misses_counter, "branch-misses");
+    let (cache_misses, cache_misses_enabled, cache_misses_running) =
+        read_scaled_counter(&mut cache_misses_counter, "cache-misses");
+
+    let timing_candidates = [
+        (instructions_enabled, instructions_running),
+        (branches_enabled, branches_running),
+        (branch_misses_enabled, branch_misses_running),
+        (cache_misses_enabled, cache_misses_running),
+    ];
+
+    let (pmu_time_enabled_ns, pmu_time_running_ns) = timing_candidates
+        .iter()
+        .copied()
+        .find(|(_, running)| *running > 0)
+        .or_else(|| {
+            timing_candidates
+                .iter()
+                .copied()
+                .find(|(enabled, _)| *enabled > 0)
+        })
+        .unwrap_or((0, 0));
+
+    Results {
+        instructions,
+        branches,
+        branch_misses,
+        cache_misses,
+        pmu_time_enabled_ns,
+        pmu_time_running_ns,
+        duration,
+        iterations: ops,
+        chunks_executed: 1,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn execute_with_perf_group<T: BenchContext>(
+    f: &BenchFunction<T>,
+    prepared: &mut T,
+    chunk_size: usize,
+    chunk_num: usize,
+    ops: u64,
+) -> Results {
+    let Some(mut perf) = build_perf_counter_group() else {
+        return execute_with_individual_counters(f, prepared, chunk_size, chunk_num, ops);
+    };
+
+    if let Err(error) = perf.group.enable() {
+        record_perf_issue(format!("perf group enable failed: {error}"));
+        return execute_with_individual_counters(f, prepared, chunk_size, chunk_num, ops);
+    }
+
+    let start_time = minstant::Instant::now();
+    black_box(|| f(prepared, chunk_size, chunk_num))();
+    let duration = start_time.elapsed();
+    if let Err(error) = perf.group.disable() {
+        record_perf_issue(format!("perf group disable failed: {error}"));
+    }
+
+    let counts = match perf.group.read() {
+        Ok(counts) => counts,
+        Err(error) => {
+            record_perf_issue(format!("perf group read failed: {error}"));
+            return execute_with_individual_counters(f, prepared, chunk_size, chunk_num, ops);
+        }
+    };
+
+    let enabled_ns = counts
+        .time_enabled()
+        .map(|duration| duration.as_nanos().min(u64::MAX as u128) as u64)
+        .unwrap_or(0);
+    let running_ns = counts
+        .time_running()
+        .map(|duration| duration.as_nanos().min(u64::MAX as u128) as u64)
+        .unwrap_or(0);
+
+    let instructions_raw = perf
+        .instructions
+        .as_ref()
+        .and_then(|counter| counts.get(counter).map(|entry| entry.value()))
+        .unwrap_or(0);
+    let branches_raw = perf
+        .branches
+        .as_ref()
+        .and_then(|counter| counts.get(counter).map(|entry| entry.value()))
+        .unwrap_or(0);
+    let branch_misses_raw = perf
+        .branch_misses
+        .as_ref()
+        .and_then(|counter| counts.get(counter).map(|entry| entry.value()))
+        .unwrap_or(0);
+    let cache_misses_raw = perf
+        .cache_misses
+        .as_ref()
+        .and_then(|counter| counts.get(counter).map(|entry| entry.value()))
+        .unwrap_or(0);
+
+    if enabled_ns == 0 || running_ns == 0 {
+        record_perf_issue(
+            "perf counters reported unusable timing window (enabled/running)".to_string(),
+        );
+        if instructions_raw == 0
+            && branches_raw == 0
+            && branch_misses_raw == 0
+            && cache_misses_raw == 0
+        {
+            return execute_with_individual_counters(f, prepared, chunk_size, chunk_num, ops);
+        }
+    }
+
+    Results {
+        instructions: scale_multiplexed_count(instructions_raw, enabled_ns, running_ns),
+        branches: scale_multiplexed_count(branches_raw, enabled_ns, running_ns),
+        branch_misses: scale_multiplexed_count(branch_misses_raw, enabled_ns, running_ns),
+        cache_misses: scale_multiplexed_count(cache_misses_raw, enabled_ns, running_ns),
+        pmu_time_enabled_ns: enabled_ns,
+        pmu_time_running_ns: running_ns,
+        duration,
+        iterations: ops,
+        chunks_executed: 1,
+    }
+}
+
 /// Execute a single benchmark sample with custom factory (Linux with perf counters)
 #[cfg(target_os = "linux")]
 fn execute_sample_with_factory<T: BenchContext>(
@@ -670,64 +1278,8 @@ fn execute_sample_with_factory<T: BenchContext>(
     factory: &dyn Fn() -> T,
 ) -> Results {
     let mut prepared = factory();
-
-    let counters = (|| -> Result<_, Box<dyn std::error::Error>> {
-        let instructions_counter = Builder::new(Hardware::INSTRUCTIONS).build()?;
-        let branch_counter = Builder::new(Hardware::BRANCH_INSTRUCTIONS).build()?;
-        let branch_misses = Builder::new(Hardware::BRANCH_MISSES).build()?;
-        let cache_misses = Builder::new(Hardware::CACHE_MISSES).build()?;
-        Ok((
-            instructions_counter,
-            branch_counter,
-            branch_misses,
-            cache_misses,
-        ))
-    })();
-
-    match counters {
-        Ok((mut instructions_counter, mut branch_counter, mut branch_misses, mut cache_misses)) => {
-            instructions_counter.enable().unwrap();
-            branch_counter.enable().unwrap();
-            branch_misses.enable().unwrap();
-            cache_misses.enable().unwrap();
-
-            let start_time = minstant::Instant::now();
-            black_box(|| f(&mut prepared, chunk_size, chunk_num))();
-            let duration = start_time.elapsed();
-
-            instructions_counter.disable().unwrap();
-            branch_counter.disable().unwrap();
-            branch_misses.disable().unwrap();
-            cache_misses.disable().unwrap();
-
-            let ops = T::operations_per_chunk().unwrap_or(chunk_size as u64);
-            Results {
-                instructions: instructions_counter.read().unwrap(),
-                branches: branch_counter.read().unwrap(),
-                branch_misses: branch_misses.read().unwrap(),
-                cache_misses: cache_misses.read().unwrap(),
-                duration,
-                iterations: ops,
-                chunks_executed: 1,
-            }
-        }
-        Err(_) => {
-            let start_time = minstant::Instant::now();
-            black_box(|| f(&mut prepared, chunk_size, chunk_num))();
-            let duration = start_time.elapsed();
-
-            let ops = T::operations_per_chunk().unwrap_or(chunk_size as u64);
-            Results {
-                instructions: 0,
-                branches: 0,
-                branch_misses: 0,
-                cache_misses: 0,
-                duration,
-                iterations: ops,
-                chunks_executed: 1,
-            }
-        }
-    }
+    let ops = T::operations_per_chunk().unwrap_or(chunk_size as u64);
+    execute_with_perf_group(f, &mut prepared, chunk_size, chunk_num, ops)
 }
 
 /// Execute a single benchmark sample with custom factory (non-Linux)
@@ -739,20 +1291,8 @@ fn execute_sample_with_factory<T: BenchContext>(
     factory: &dyn Fn() -> T,
 ) -> Results {
     let mut prepared = factory();
-
-    let start_time = minstant::Instant::now();
-    black_box(|| f(&mut prepared, chunk_size, chunk_num))();
-    let duration = start_time.elapsed();
-
-    Results {
-        instructions: 0,
-        branches: 0,
-        branch_misses: 0,
-        cache_misses: 0,
-        duration,
-        iterations: T::operations_per_chunk().unwrap_or(chunk_size as u64),
-        chunks_executed: 1,
-    }
+    let ops = T::operations_per_chunk().unwrap_or(chunk_size as u64);
+    execute_timing_only(f, &mut prepared, chunk_size, chunk_num, ops)
 }
 
 /// Execute a single benchmark sample with performance counters (if available)
@@ -763,65 +1303,8 @@ fn execute_sample<T: BenchContext>(
     chunk_num: usize,
 ) -> Results {
     let mut prepared = T::prepare(chunk_size);
-
-    // Try to create performance counters, fall back to timing-only if they fail
-    let counters = (|| -> Result<_, Box<dyn std::error::Error>> {
-        let instructions_counter = Builder::new(Hardware::INSTRUCTIONS).build()?;
-        let branch_counter = Builder::new(Hardware::BRANCH_INSTRUCTIONS).build()?;
-        let branch_misses = Builder::new(Hardware::BRANCH_MISSES).build()?;
-        let cache_misses = Builder::new(Hardware::CACHE_MISSES).build()?;
-        Ok((
-            instructions_counter,
-            branch_counter,
-            branch_misses,
-            cache_misses,
-        ))
-    })();
-
-    match counters {
-        Ok((mut instructions_counter, mut branch_counter, mut branch_misses, mut cache_misses)) => {
-            // Performance counters available - use them
-            instructions_counter.enable().unwrap();
-            branch_counter.enable().unwrap();
-            branch_misses.enable().unwrap();
-            cache_misses.enable().unwrap();
-
-            let start_time = minstant::Instant::now();
-            black_box(|| f(&mut prepared, chunk_size, chunk_num))();
-            let duration = start_time.elapsed();
-
-            instructions_counter.disable().unwrap();
-            branch_counter.disable().unwrap();
-            branch_misses.disable().unwrap();
-            cache_misses.disable().unwrap();
-
-            Results {
-                instructions: instructions_counter.read().unwrap(),
-                branches: branch_counter.read().unwrap(),
-                branch_misses: branch_misses.read().unwrap(),
-                cache_misses: cache_misses.read().unwrap(),
-                duration,
-                iterations: T::operations_per_chunk().unwrap_or(chunk_size as u64),
-                chunks_executed: 1,
-            }
-        }
-        Err(_) => {
-            // Performance counters not available - fall back to timing only
-            let start_time = minstant::Instant::now();
-            black_box(|| f(&mut prepared, chunk_size, chunk_num))();
-            let duration = start_time.elapsed();
-
-            Results {
-                instructions: 0,
-                branches: 0,
-                branch_misses: 0,
-                cache_misses: 0,
-                duration,
-                iterations: T::operations_per_chunk().unwrap_or(chunk_size as u64),
-                chunks_executed: 1,
-            }
-        }
-    }
+    let ops = T::operations_per_chunk().unwrap_or(chunk_size as u64);
+    execute_with_perf_group(f, &mut prepared, chunk_size, chunk_num, ops)
 }
 
 /// Execute a single benchmark sample without performance counters
@@ -832,20 +1315,8 @@ fn execute_sample<T: BenchContext>(
     chunk_num: usize,
 ) -> Results {
     let mut prepared = T::prepare(chunk_size);
-
-    let start_time = minstant::Instant::now();
-    black_box(|| f(&mut prepared, chunk_size, chunk_num))();
-    let duration = start_time.elapsed();
-
-    Results {
-        instructions: 0,
-        branches: 0,
-        branch_misses: 0,
-        cache_misses: 0,
-        duration,
-        iterations: T::operations_per_chunk().unwrap_or(chunk_size as u64),
-        chunks_executed: 1,
-    }
+    let ops = T::operations_per_chunk().unwrap_or(chunk_size as u64);
+    execute_timing_only(f, &mut prepared, chunk_size, chunk_num, ops)
 }
 
 /// Progress bar with terminal-compatible characters
@@ -884,7 +1355,7 @@ fn update_progress_bar(current: usize, total: usize, current_throughput: f64) {
 
     print!("] {percentage}% ({current}/{total}) {throughput_display}");
 
-    io::stdout().flush().unwrap();
+    flush_stdout();
 }
 
 /// Benchmark with a custom context factory function
@@ -916,6 +1387,11 @@ pub fn op_bench_with_factory_filtered<T: BenchContext>(
         return;
     }
 
+    #[cfg(target_os = "linux")]
+    clear_perf_issues();
+
+    let _affinity_guard = BenchAffinityGuard::acquire();
+
     println!("\n🚀 Benchmarking: {name}");
 
     // Warm-up and calibration phase (using factory instead of T::prepare)
@@ -936,8 +1412,9 @@ pub fn op_bench_with_factory_filtered<T: BenchContext>(
         let sample_result = execute_sample_with_factory(&f, config.chunk_size, sample, factory);
 
         let duration_ms = sample_result.duration.as_millis() as f64;
-        if duration_ms > 0.0 {
-            let sample_throughput_mops = (sample_result.iterations as f64 / duration_ms) / 1000.0;
+        let sample_throughput_mops =
+            safe_ratio_f64(sample_result.iterations as f64, duration_ms) / 1000.0;
+        if sample_throughput_mops > 0.0 {
             running_throughput = running_throughput * 0.9 + sample_throughput_mops * 0.1;
         }
 
@@ -955,39 +1432,29 @@ pub fn op_bench_with_factory_filtered<T: BenchContext>(
     let mut results = summed_results.clone();
     results.divide(config.target_samples as u64);
 
-    let ops_per_sec = results.iterations as f64 / results.duration.as_secs_f64();
-    let ns_per_op = results.duration.as_nanos() as f64 / results.iterations as f64;
-    let instructions_per_op = results.instructions as f64 / results.iterations as f64;
-    let branches_per_op = results.branches as f64 / results.iterations as f64;
-    let branch_miss_rate = if results.branches > 0 {
-        (results.branch_misses as f64 / results.branches as f64) * 100.0
-    } else {
-        0.0
-    };
-    let branch_misses_per_op = results.branch_misses as f64 / results.iterations as f64;
-    let cache_miss_rate_per_op = results.cache_misses as f64 / results.iterations as f64;
-
-    let sample_throughputs: Vec<f64> = all_results
-        .iter()
-        .map(|r| r.iterations as f64 / r.duration.as_secs_f64())
-        .collect();
-
-    let mean_throughput = sample_throughputs.iter().sum::<f64>() / sample_throughputs.len() as f64;
-    let variance: f64 = sample_throughputs
-        .iter()
-        .map(|&throughput| (throughput - mean_throughput).powi(2))
-        .sum::<f64>()
-        / sample_throughputs.len() as f64;
-    let std_dev = variance.sqrt();
-    let cv_percent = if mean_throughput > 0.0 {
-        (std_dev / mean_throughput) * 100.0
-    } else {
-        0.0
-    };
+    let ops_per_sec = safe_ratio_f64(results.iterations as f64, results.duration.as_secs_f64());
+    let ns_per_op = safe_ratio_f64(
+        results.duration.as_nanos() as f64,
+        results.iterations as f64,
+    );
+    let instructions_per_op =
+        safe_ratio_f64(results.instructions as f64, results.iterations as f64);
+    let branches_per_op = safe_ratio_f64(results.branches as f64, results.iterations as f64);
+    let branch_miss_rate =
+        safe_ratio_f64(results.branch_misses as f64, results.branches as f64) * 100.0;
+    let branch_misses_per_op =
+        safe_ratio_f64(results.branch_misses as f64, results.iterations as f64);
+    let cache_miss_rate_per_op =
+        safe_ratio_f64(results.cache_misses as f64, results.iterations as f64);
+    let cv_percent = coefficient_of_variation_percent(&all_results);
 
     println!("\n📈 Results for {name}:");
 
-    let has_perf_counters = results.instructions > 0 || results.branches > 0;
+    let has_perf_counters = results.pmu_time_running_ns > 0
+        || results.instructions > 0
+        || results.branches > 0
+        || results.branch_misses > 0
+        || results.cache_misses > 0;
 
     if !has_perf_counters {
         #[cfg(target_os = "linux")]
@@ -997,6 +1464,18 @@ pub fn op_bench_with_factory_filtered<T: BenchContext>(
         #[cfg(not(target_os = "linux"))]
         println!("   Note: Performance counters not available on this platform");
     }
+    #[cfg(target_os = "linux")]
+    {
+        let issues = current_perf_issues();
+        if !issues.is_empty() {
+            println!("   PMU issues: {}", issues.join(" | "));
+        }
+        if let Some(hint) = linux_perf_hint(has_perf_counters, &issues) {
+            println!("   PMU hint: {hint}");
+        }
+    }
+
+    enforce_pmu_quality(name, has_perf_counters, &results);
 
     let mut table = TableFormatter::new(vec![], vec![23, 23, 23]);
 
@@ -1013,6 +1492,11 @@ pub fn op_bench_with_factory_filtered<T: BenchContext>(
     ]);
 
     if has_perf_counters {
+        let active_percent = pmu_active_percent(&results);
+        let pmu_avg_running_sec = results.pmu_time_running_ns as f64 / 1_000_000_000.0;
+        let pmu_avg_enabled_sec = results.pmu_time_enabled_ns as f64 / 1_000_000_000.0;
+        let pmu_total_running_sec = summed_results.pmu_time_running_ns as f64 / 1_000_000_000.0;
+        let pmu_total_enabled_sec = summed_results.pmu_time_enabled_ns as f64 / 1_000_000_000.0;
         table.add_row(vec![
             &format!("{instructions_per_op:.1} inst/op"),
             &format!("{branches_per_op:.1} br/op"),
@@ -1023,6 +1507,18 @@ pub fn op_bench_with_factory_filtered<T: BenchContext>(
             &format!("{branch_misses_per_op:.4} br.miss/op"),
             &format!("{cache_miss_rate_per_op:.4} cache.miss/op"),
             &format!("{:.1}M branches", results.branches as f64 / 1_000_000.0),
+        ]);
+
+        table.add_row(vec![
+            &format!("PMU active: {active_percent:.1}%"),
+            &format!("{pmu_avg_running_sec:.3}s avg running"),
+            &format!("{pmu_avg_enabled_sec:.3}s avg enabled"),
+        ]);
+
+        table.add_row(vec![
+            "PMU totals",
+            &format!("{pmu_total_running_sec:.3}s total running"),
+            &format!("{pmu_total_enabled_sec:.3}s total enabled"),
         ]);
     } else {
         table.add_row(vec![
@@ -1054,6 +1550,11 @@ pub fn op_bench_with_factory_filtered<T: BenchContext>(
 }
 
 pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
+    #[cfg(target_os = "linux")]
+    clear_perf_issues();
+
+    let _affinity_guard = BenchAffinityGuard::acquire();
+
     println!("\n🚀 Benchmarking: {name}");
 
     // Warm-up and calibration phase
@@ -1076,8 +1577,9 @@ pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
 
         // Update running throughput estimate using millisecond precision for reliability
         let duration_ms = sample_result.duration.as_millis() as f64;
-        if duration_ms > 0.0 {
-            let sample_throughput_mops = (sample_result.iterations as f64 / duration_ms) / 1000.0; // Convert ops/ms to Mops/s
+        let sample_throughput_mops =
+            safe_ratio_f64(sample_result.iterations as f64, duration_ms) / 1000.0; // Convert ops/ms to Mops/s
+        if sample_throughput_mops > 0.0 {
             running_throughput = running_throughput * 0.9 + sample_throughput_mops * 0.1;
         }
 
@@ -1097,41 +1599,30 @@ pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
     results.divide(config.target_samples as u64);
 
     // Calculate throughput metrics
-    let ops_per_sec = results.iterations as f64 / results.duration.as_secs_f64();
-    let ns_per_op = results.duration.as_nanos() as f64 / results.iterations as f64;
-    let instructions_per_op = results.instructions as f64 / results.iterations as f64;
-    let branches_per_op = results.branches as f64 / results.iterations as f64;
-    let branch_miss_rate = if results.branches > 0 {
-        (results.branch_misses as f64 / results.branches as f64) * 100.0
-    } else {
-        0.0
-    };
-    let branch_misses_per_op = results.branch_misses as f64 / results.iterations as f64;
-    let cache_miss_rate_per_op = results.cache_misses as f64 / results.iterations as f64;
-
-    // Calculate variance for throughput using consistent units
-    let sample_throughputs: Vec<f64> = all_results
-        .iter()
-        .map(|r| r.iterations as f64 / r.duration.as_secs_f64())
-        .collect();
-
-    let mean_throughput = sample_throughputs.iter().sum::<f64>() / sample_throughputs.len() as f64;
-    let variance: f64 = sample_throughputs
-        .iter()
-        .map(|&throughput| (throughput - mean_throughput).powi(2))
-        .sum::<f64>()
-        / sample_throughputs.len() as f64;
-    let std_dev = variance.sqrt();
-    let cv_percent = if mean_throughput > 0.0 {
-        (std_dev / mean_throughput) * 100.0
-    } else {
-        0.0
-    };
+    let ops_per_sec = safe_ratio_f64(results.iterations as f64, results.duration.as_secs_f64());
+    let ns_per_op = safe_ratio_f64(
+        results.duration.as_nanos() as f64,
+        results.iterations as f64,
+    );
+    let instructions_per_op =
+        safe_ratio_f64(results.instructions as f64, results.iterations as f64);
+    let branches_per_op = safe_ratio_f64(results.branches as f64, results.iterations as f64);
+    let branch_miss_rate =
+        safe_ratio_f64(results.branch_misses as f64, results.branches as f64) * 100.0;
+    let branch_misses_per_op =
+        safe_ratio_f64(results.branch_misses as f64, results.iterations as f64);
+    let cache_miss_rate_per_op =
+        safe_ratio_f64(results.cache_misses as f64, results.iterations as f64);
+    let cv_percent = coefficient_of_variation_percent(&all_results);
 
     println!("\n📈 Results for {name}:");
 
     // Check if performance counters were actually used (non-zero values indicate they worked)
-    let has_perf_counters = results.instructions > 0 || results.branches > 0;
+    let has_perf_counters = results.pmu_time_running_ns > 0
+        || results.instructions > 0
+        || results.branches > 0
+        || results.branch_misses > 0
+        || results.cache_misses > 0;
 
     if !has_perf_counters {
         #[cfg(target_os = "linux")]
@@ -1141,6 +1632,18 @@ pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
         #[cfg(not(target_os = "linux"))]
         println!("   Note: Performance counters not available on this platform");
     }
+    #[cfg(target_os = "linux")]
+    {
+        let issues = current_perf_issues();
+        if !issues.is_empty() {
+            println!("   PMU issues: {}", issues.join(" | "));
+        }
+        if let Some(hint) = linux_perf_hint(has_perf_counters, &issues) {
+            println!("   PMU hint: {hint}");
+        }
+    }
+
+    enforce_pmu_quality(name, has_perf_counters, &results);
 
     // Use the generic TableFormatter for consistent formatting (no headers for metrics grid)
     let mut table = TableFormatter::new(
@@ -1161,6 +1664,11 @@ pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
     ]);
 
     if has_perf_counters {
+        let active_percent = pmu_active_percent(&results);
+        let pmu_avg_running_sec = results.pmu_time_running_ns as f64 / 1_000_000_000.0;
+        let pmu_avg_enabled_sec = results.pmu_time_enabled_ns as f64 / 1_000_000_000.0;
+        let pmu_total_running_sec = summed_results.pmu_time_running_ns as f64 / 1_000_000_000.0;
+        let pmu_total_enabled_sec = summed_results.pmu_time_enabled_ns as f64 / 1_000_000_000.0;
         table.add_row(vec![
             &format!("{instructions_per_op:.1} inst/op"),
             &format!("{branches_per_op:.1} br/op"),
@@ -1171,6 +1679,18 @@ pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
             &format!("{branch_misses_per_op:.4} br.miss/op"),
             &format!("{cache_miss_rate_per_op:.4} cache.miss/op"),
             &format!("{:.1}M branches", results.branches as f64 / 1_000_000.0),
+        ]);
+
+        table.add_row(vec![
+            &format!("PMU active: {active_percent:.1}%"),
+            &format!("{pmu_avg_running_sec:.3}s avg running"),
+            &format!("{pmu_avg_enabled_sec:.3}s avg enabled"),
+        ]);
+
+        table.add_row(vec![
+            "PMU totals",
+            &format!("{pmu_total_running_sec:.3}s total running"),
+            &format!("{pmu_total_enabled_sec:.3}s total enabled"),
         ]);
     } else {
         table.add_row(vec![

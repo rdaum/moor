@@ -34,8 +34,8 @@ pub use table::TableFormatter;
 #[cfg(target_os = "linux")]
 pub use bench::PerfCounters;
 pub use session::{
-    BenchmarkResult, BenchmarkSession, add_session_result, generate_session_summary,
-    get_session_results,
+    BenchmarkResult, BenchmarkSession, add_session_result, clear_session_results,
+    generate_session_summary, get_session_results,
 };
 
 // Re-export key types for convenience
