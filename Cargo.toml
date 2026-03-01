@@ -246,7 +246,7 @@ jotdown = { version = "0.9", default-features = false }
 rustyline = "17.0"
 termimad = "0.34"
 
-# Patches to fix CURVE key generation issue in zmq 0.10
-# See: https://github.com/erickt/rust-zmq/issues/401
+# Patch to forked (maintained by me) version of ZeroMQ
 [patch.crates-io]
-zmq = { git = "https://github.com/jito-labs/rust-zmq", branch = "eric/libsodium-fix" }
+zmq = { git = "https://github.com/rdaum/rust-zmq" }
+
