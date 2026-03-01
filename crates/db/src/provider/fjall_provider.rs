@@ -291,11 +291,8 @@ where
             codomain: codomain.clone(),
         });
 
-        self.batch_collector.insert(
-            self.fjall_keyspace.clone(),
-            key_bytes.to_vec(),
-            batch_value,
-        );
+        self.batch_collector
+            .insert(self.fjall_keyspace.clone(), key_bytes.to_vec(), batch_value);
 
         Ok(())
     }

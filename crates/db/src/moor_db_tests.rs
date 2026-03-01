@@ -657,7 +657,9 @@ mod tests {
         };
         ws.set_property_info(&wizard, &target, Symbol::mk("p"), transfer_by_wizard)
             .unwrap();
-        let (_pdef, perms) = ws.get_property_info(&wizard, &target, Symbol::mk("p")).unwrap();
+        let (_pdef, perms) = ws
+            .get_property_info(&wizard, &target, Symbol::mk("p"))
+            .unwrap();
         assert_eq!(perms.owner(), new_owner);
     }
 
@@ -746,7 +748,9 @@ mod tests {
 
         ws.update_verb(&wizard, &target, Symbol::mk("testverb"), transfer_owner)
             .unwrap();
-        let verb = ws.get_verb(&wizard, &target, Symbol::mk("testverb")).unwrap();
+        let verb = ws
+            .get_verb(&wizard, &target, Symbol::mk("testverb"))
+            .unwrap();
         assert_eq!(verb.owner(), new_owner);
     }
 
