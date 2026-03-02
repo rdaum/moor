@@ -710,7 +710,7 @@ mod tests {
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_textdump::{TextdumpImportOptions, textdump_load};
     use moor_var::{
-        Obj, SYSTEM_OBJECT, Sequence, Symbol, Var,
+        Obj, SYSTEM_OBJECT, Symbol, Var,
         program::{
             labels::Label,
             names::Name,
