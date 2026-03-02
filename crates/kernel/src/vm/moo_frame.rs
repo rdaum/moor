@@ -329,18 +329,15 @@ impl MooStackFrame {
         self.pc = 0;
     }
 
-    pub fn lookahead(&self) -> Option<Op> {
+    pub fn lookahead_ref(&self) -> Option<&Op> {
         match self.pc_type {
-            PcType::Main => self.program.main_vector().get(self.pc).cloned(),
-            PcType::ForkVector(fork_vector) => {
-                self.program.fork_vector(fork_vector).get(self.pc).cloned()
-            }
+            PcType::Main => self.program.main_vector().get(self.pc),
+            PcType::ForkVector(fork_vector) => self.program.fork_vector(fork_vector).get(self.pc),
             PcType::Lambda(lambda_offset) => self
                 .program
                 .lambda_program(lambda_offset)
                 .main_vector()
-                .get(self.pc)
-                .cloned(),
+                .get(self.pc),
         }
     }
 
@@ -364,11 +361,6 @@ impl MooStackFrame {
 
     pub fn peek_top_mut(&mut self) -> &mut Var {
         self.valstack.last_mut().expect("stack underflow")
-    }
-
-    pub fn peek_range(&self, width: usize) -> Vec<Var> {
-        let l = self.valstack.len();
-        Vec::from(&self.valstack[l - width..])
     }
 
     pub(crate) fn peek_abs(&self, amt: usize) -> &Var {

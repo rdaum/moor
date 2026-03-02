@@ -15,7 +15,7 @@ use crate::{
     config::FeaturesConfig,
     task_context::with_current_transaction_mut,
     vm::{
-        moo_frame::{CatchType, MooStackFrame, ScopeType},
+        moo_frame::{CatchType, MooStackFrame, PcType, ScopeType},
         scatter_assign::scatter_assign,
         vm_host::ExecutionResult,
         vm_unwind::FinallyReason,
@@ -163,36 +163,55 @@ pub fn moo_frame_execute(
     // Note this is not the same as the total amount of ticks aportioned to the task -- that's
     // `max_ticks` on the task itself.
     // For clarity, to avoid regressions again:
-    // `tick_count` tracks the total task execution, `task_slice` the maximum current _slice_
-    //   and the variable `tick_slice_count` that slice's progress.
-    //  `max_ticks` on the task is the total limit which is checked above us, outside this loop.
-    let mut tick_slice_count = 0;
-    while tick_slice_count < tick_slice {
-        tick_slice_count += 1;
+    // `tick_count` tracks total task execution across slices.
+    // `tick_slice` is only the maximum work for this call into the interpreter.
+    // `max_ticks` on the task is the total limit which is checked above us, outside this loop.
+    //
+    // Opcode stream is selected once for this execute call. This relies on pc_type staying
+    // stable while a frame is running in this function.
+    let pc_type = f.pc_type;
+    let program = f.program.clone();
+    let opcodes: &[Op] = match pc_type {
+        PcType::Main => program.main_vector(),
+        PcType::ForkVector(fork_vector) => program.fork_vector(fork_vector),
+        PcType::Lambda(lambda_offset) => program.lambda_program(lambda_offset).main_vector(),
+    };
+
+    let tick_slice_end = (*tick_count).saturating_add(tick_slice);
+    while *tick_count < tick_slice_end {
         *tick_count += 1;
 
         // Otherwise, start poppin' opcodes.
         // We panic here if we run out of opcodes, as that means there's a bug in either the
         // compiler or in opcode execution, and we'd dearly like to know about it, not hide it.
+        debug_assert_eq!(f.pc_type, pc_type, "pc_type changed mid-frame execution");
         let pc = f.pc;
         f.pc += 1;
-        let op = &f.opcodes()[pc];
+        let op = &opcodes[pc];
 
         match op {
-            Op::If(label, environment_width)
-            | Op::Eif(label, environment_width)
-            | Op::While {
+            Op::If(label, environment_width) => {
+                let (environment_width, label) = (*environment_width, *label);
+                f.push_scope(ScopeType::If, environment_width, &label);
+                let cond = f.pop();
+                if !cond.is_true() {
+                    f.jump(&label);
+                }
+            }
+            Op::Eif(label, environment_width) => {
+                let (environment_width, label) = (*environment_width, *label);
+                f.push_scope(ScopeType::Eif, environment_width, &label);
+                let cond = f.pop();
+                if !cond.is_true() {
+                    f.jump(&label);
+                }
+            }
+            Op::While {
                 jump_label: label,
                 environment_width,
             } => {
-                let scope_type = match op {
-                    Op::If(..) => ScopeType::If,
-                    Op::Eif(..) => ScopeType::Eif,
-                    Op::While { .. } => ScopeType::While,
-                    _ => unreachable!(),
-                };
                 let (environment_width, label) = (*environment_width, *label);
-                f.push_scope(scope_type, environment_width, &label);
+                f.push_scope(ScopeType::While, environment_width, &label);
                 let cond = f.pop();
                 if !cond.is_true() {
                     f.jump(&label);
@@ -480,7 +499,7 @@ pub fn moo_frame_execute(
                 // that are never used (e.g. comments).
                 // what might be better is an "optimization pass" that removes these prior to
                 // execution, but then we'd have to cache them, etc. etc.
-                match f.lookahead() {
+                match f.lookahead_ref() {
                     Some(Op::Pop) => {
                         // skip
                         f.skip();
@@ -702,8 +721,8 @@ pub fn moo_frame_execute(
                 // Explicit division by zero check to raise E_DIV.
                 // Note that LambdaMOO consider 1/0.0 to be E_DIV, but Rust permits it, creating
                 // `inf`.
-                let divargs = f.peek_range(2);
-                if divargs[1].is_zero() {
+                let (divisor, _) = f.peek2();
+                if divisor.is_zero() {
                     return ExecutionResult::PushError(E_DIV.msg("division by zero"));
                 };
                 binary_var_op!(self, f, state, div);
@@ -715,8 +734,8 @@ pub fn moo_frame_execute(
                 binary_var_op!(self, f, state, pow);
             }
             Op::Mod => {
-                let divargs = f.peek_range(2);
-                if divargs[1].is_zero() {
+                let (divisor, _) = f.peek2();
+                if divisor.is_zero() {
                     return ExecutionResult::PushError(E_DIV.msg("division by zero"));
                 };
                 binary_var_op!(self, f, state, modulus);
