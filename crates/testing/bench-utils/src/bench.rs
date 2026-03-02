@@ -360,10 +360,10 @@ impl BenchAffinityGuard {
                 };
             }
 
-            return Self {
+            Self {
                 restore_mask,
                 did_pin: true,
-            };
+            }
         }
 
         #[cfg(not(target_os = "linux"))]
