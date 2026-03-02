@@ -253,7 +253,7 @@ pub fn logical_core_count() -> usize {
 pub fn physical_core_count() -> Option<usize> {
     #[cfg(target_os = "linux")]
     {
-        return read_physical_core_metrics().ok().map(|cores| cores.len());
+        read_physical_core_metrics().ok().map(|cores| cores.len())
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -353,10 +353,10 @@ fn parse_env_usize(var_name: &str) -> Option<usize> {
 fn detect_all_logical_processor_ids() -> Vec<usize> {
     #[cfg(target_os = "linux")]
     {
-        if let Ok(logical_processor_ids) = read_logical_processor_ids() {
-            if !logical_processor_ids.is_empty() {
-                return logical_processor_ids;
-            }
+        if let Ok(logical_processor_ids) = read_logical_processor_ids()
+            && !logical_processor_ids.is_empty()
+        {
+            return logical_processor_ids;
         }
     }
 
