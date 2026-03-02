@@ -17,7 +17,6 @@ use crate::mcp_types::{Tool, ToolCallResult};
 use crate::moor_client::{MoorClient, MoorResult};
 use diffy::{Patch, apply};
 use eyre::Result;
-use moor_var::Sequence;
 use serde_json::{Value, json};
 
 use super::helpers::{format_var, parse_object_ref, var_key_eq};

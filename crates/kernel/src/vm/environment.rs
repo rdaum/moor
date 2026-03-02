@@ -191,6 +191,10 @@ impl Environment {
         self.scope_offsets.push(offset);
         self.scope_widths.push(width as u16);
 
+        if width == 0 {
+            return;
+        }
+
         let old_len = self.values.len();
         let new_len = old_len + width;
         self.values.reserve(width);
@@ -206,7 +210,10 @@ impl Environment {
     pub fn pop_scope(&mut self) {
         if let Some(offset) = self.scope_offsets.pop() {
             self.scope_widths.pop();
-            self.values.truncate(offset as usize);
+            let offset = offset as usize;
+            if offset != self.values.len() {
+                self.values.truncate(offset);
+            }
         }
     }
 

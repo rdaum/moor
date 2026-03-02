@@ -14,7 +14,7 @@
 use clap::Parser;
 use clap_derive::Parser;
 use moor_common::tasks::WorkerError;
-use moor_var::{Obj, Sequence, Symbol, Var, Variant, v_int, v_list, v_list_iter, v_str};
+use moor_var::{Obj, Symbol, Var, Variant, v_int, v_list, v_list_iter, v_str};
 use reqwest::Url;
 use rpc_async_client::worker_loop;
 use rpc_common::client_args::RpcClientArgs;
