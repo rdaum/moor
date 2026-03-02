@@ -227,9 +227,6 @@ impl Task {
 
         trace_task_start!(task.task_id);
 
-        // Try to pick a high thread priority for user tasks.
-        gdt_cpus::set_thread_priority(gdt_cpus::ThreadPriority::AboveNormal).ok();
-
         while task.vm_host.is_running() {
             // Check kill switch.
             if task.kill_switch.load(std::sync::atomic::Ordering::Relaxed) {

@@ -24,7 +24,10 @@ use crate::setup::{
 use clap::Parser;
 use clap_derive::Parser;
 use futures::{StreamExt, stream::FuturesUnordered};
-use moor_common::model::ObjectRef;
+use moor_common::{
+    model::ObjectRef,
+    threading::{ThreadClass, pin_current_thread_to_class},
+};
 use moor_schema::rpc as moor_rpc;
 use moor_var::{Obj, Symbol, Var, v_int};
 use rpc_async_client::{rpc_client::RpcClient, start_host_session};
@@ -758,7 +761,7 @@ struct Results {
     counters: BTreeMap<String, (f64, f64, isize)>,
 }
 
-#[tokio::main(flavor = "multi_thread")]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), eyre::Error> {
     color_eyre::install().expect("Unable to install color_eyre");
     let args: Args = Args::parse();
@@ -767,6 +770,15 @@ async fn main() -> Result<(), eyre::Error> {
         eprintln!("Unable to configure logging: {e}");
         std::process::exit(1);
     });
+
+    match pin_current_thread_to_class(ThreadClass::Efficient) {
+        Ok(Some(core_id)) => info!(
+            core_id,
+            "Pinned benchmark tokio current-thread executor to efficient core"
+        ),
+        Ok(None) => info!("No efficient core class available for benchmark executor pinning"),
+        Err(e) => info!(error = ?e, "Failed to pin benchmark executor thread"),
+    }
 
     let zmq_ctx = tmq::Context::new();
     let kill_switch = Arc::new(AtomicBool::new(false));

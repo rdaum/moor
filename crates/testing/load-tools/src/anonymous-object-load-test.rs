@@ -20,6 +20,7 @@
 use clap::Parser;
 use clap_derive::Parser;
 use futures::{StreamExt, stream::FuturesUnordered};
+use moor_common::threading::{ThreadClass, pin_current_thread_to_class, spawn_perf};
 use moor_common::{
     model::{
         CommitResult, ObjAttrs, ObjFlag, ObjectKind, ObjectRef, PropFlag, VerbArgsSpec, VerbFlag,
@@ -493,7 +494,7 @@ async fn load_test_workload(
     Ok(results)
 }
 
-#[tokio::main(flavor = "multi_thread")]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), eyre::Error> {
     color_eyre::install().expect("Unable to install color_eyre");
     let args: Args = Args::parse();
@@ -502,6 +503,15 @@ async fn main() -> Result<(), eyre::Error> {
         eprintln!("Unable to configure logging: {e}");
         std::process::exit(1);
     });
+
+    match pin_current_thread_to_class(ThreadClass::Efficient) {
+        Ok(Some(core_id)) => info!(
+            core_id,
+            "Pinned benchmark tokio current-thread executor to efficient core"
+        ),
+        Ok(None) => info!("No efficient core class available for benchmark executor pinning"),
+        Err(e) => info!(error = ?e, "Failed to pin benchmark executor thread"),
+    }
 
     info!("Starting anonymous object creation load test");
 
@@ -562,9 +572,9 @@ async fn main() -> Result<(), eyre::Error> {
 
     // Start scheduler in background thread
     let session_factory = Arc::new(DirectSessionFactory {});
-    let _scheduler_handle = std::thread::spawn(move || {
+    let _scheduler_handle = spawn_perf("moor-scheduler", move || {
         scheduler.run(session_factory);
-    });
+    })?;
 
     let results = if args.swamp_mode {
         swamp_mode_workload(&args, &scheduler_client, player).await?

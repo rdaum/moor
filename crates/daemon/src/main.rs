@@ -40,7 +40,12 @@ use ed25519_dalek::{
 };
 use eyre::Report;
 use mimalloc::MiMalloc;
-use moor_common::{build, model::ObjectRef, tasks::SessionFactory};
+use moor_common::{
+    build,
+    model::ObjectRef,
+    tasks::SessionFactory,
+    threading::{spawn_efficient, spawn_perf},
+};
 use moor_compiler::emit_compile_error;
 use moor_db::{Database, TxDB};
 use moor_kernel::{
@@ -480,15 +485,15 @@ fn main() -> Result<(), Report> {
         allowed_hosts::AllowedHostsRegistry::from_dir(&args.resolved_allowed_hosts_dir())?;
 
     let (phys_cores, logical_cores) = (
-        gdt_cpus::num_physical_cores()
+        moor_common::threading::physical_core_count()
             .map(|n| n.to_string())
-            .unwrap_or_else(|_| "unknown".to_string()),
-        gdt_cpus::num_logical_cores()
-            .map(|n| n.to_string())
-            .unwrap_or_else(|_| "unknown".to_string()),
+            .unwrap_or_else(|| "unknown".to_string()),
+        moor_common::threading::logical_core_count().to_string(),
     );
 
     let config = args.load_config()?;
+    let reserved_worker_perf_cores = moor_common::threading::worker_performance_core_ids();
+    let reserved_service_perf_cores = moor_common::threading::service_performance_core_ids();
 
     // Initialize tracing if trace output is specified and feature is enabled
     #[cfg(feature = "trace_events")]
@@ -512,6 +517,12 @@ fn main() -> Result<(), Report> {
     info!(
         "moor {version} (commit: {}) daemon starting. {phys_cores} physical cores; {logical_cores} logical cores. Using database at {resolved_db_path:?}",
         build::short_commit()
+    );
+    info!(
+        worker_perf_cores = ?reserved_worker_perf_cores,
+        service_perf_cores = ?reserved_service_perf_cores,
+        service_perf_env = ?std::env::var("MOOR_SERVICE_PERF_CORES").ok(),
+        "Thread core reservations initialized"
     );
     let (database, freshly_made) = TxDB::open(
         Some(&resolved_db_path),
@@ -625,14 +636,12 @@ fn main() -> Result<(), Report> {
             kill_switch.clone(),
             allowed_hosts_registry.clone(),
         );
-        std::thread::Builder::new()
-            .name("moor-zap-auth".to_string())
-            .spawn(move || {
-                if let Err(e) = zap_handler.run() {
-                    error!(error = ?e, "ZAP authentication handler failed");
-                }
-            })
-            .map_err(|e| eyre!("Failed to spawn ZAP authentication thread: {}", e))?;
+        spawn_efficient("moor-zap-auth", move || {
+            if let Err(e) = zap_handler.run() {
+                error!(error = ?e, "ZAP authentication handler failed");
+            }
+        })
+        .map_err(|e| eyre!("Failed to spawn ZAP authentication thread: {}", e))?;
 
         // Give the ZAP handler time to bind before creating CURVE sockets
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -704,14 +713,14 @@ fn main() -> Result<(), Report> {
     })?;
 
     let workers_listen_addr = args.workers_response_listen.clone();
-    std::thread::spawn(move || {
+    spawn_efficient("moor-workers-listen", move || {
         if let Err(e) = workers_server.listen(&workers_listen_addr) {
             error!(
                 "Workers server failed to listen on {}: {}",
                 workers_listen_addr, e
             );
         }
-    });
+    })?;
 
     // Enrollment server for host registration (only needed for CURVE/TCP)
     if use_curve {
@@ -723,16 +732,14 @@ fn main() -> Result<(), Report> {
             enrollment_token_path.clone(),
         );
         let enrollment_listen_addr = args.enrollment_listen.clone();
-        std::thread::Builder::new()
-            .name("moor-enrollment".to_string())
-            .spawn(move || {
-                if let Err(e) = enrollment_server.listen(&enrollment_listen_addr) {
-                    error!(
-                        "Enrollment server failed to listen on {}: {}",
-                        enrollment_listen_addr, e
-                    );
-                }
-            })?;
+        spawn_efficient("moor-enrollment", move || {
+            if let Err(e) = enrollment_server.listen(&enrollment_listen_addr) {
+                error!(
+                    "Enrollment server failed to listen on {}: {}",
+                    enrollment_listen_addr, e
+                );
+            }
+        })?;
     }
 
     // The pieces from core we're going to use:
@@ -773,43 +780,39 @@ fn main() -> Result<(), Report> {
             checkpoint_interval
         );
 
-        std::thread::Builder::new()
-            .name("moor-checkpoint".to_string())
-            .spawn(move || {
-                loop {
-                    if checkpoint_kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
-                        info!("Checkpointing thread exiting.");
-                        break;
-                    }
-                    if let Err(e) = checkpoint_scheduler_client.request_checkpoint() {
-                        error!("Failed to submit checkpoint request: {}", e);
-                    }
-                    std::thread::sleep(checkpoint_interval);
+        spawn_efficient("moor-checkpoint", move || {
+            loop {
+                if checkpoint_kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
+                    info!("Checkpointing thread exiting.");
+                    break;
                 }
-            })?;
+                if let Err(e) = checkpoint_scheduler_client.request_checkpoint() {
+                    error!("Failed to submit checkpoint request: {}", e);
+                }
+                std::thread::sleep(checkpoint_interval);
+            }
+        })?;
         Ok(())
     })()?;
 
     // The scheduler thread:
     let scheduler_rpc_server = rpc_server.clone();
-    let scheduler_loop_jh = std::thread::Builder::new()
-        .name("moor-scheduler".to_string())
-        .spawn(move || scheduler.run(scheduler_rpc_server))?;
+    let scheduler_loop_jh = spawn_perf("moor-scheduler", move || {
+        scheduler.run(scheduler_rpc_server)
+    })?;
 
     // Invoke server_started hook if it exists
     invoke_server_started_hook(&scheduler_client, &rpc_server)?;
 
     let rpc_loop_scheduler_client = scheduler_client.clone();
     let rpc_listen = args.rpc_listen.clone();
-    let rpc_loop_thread = std::thread::Builder::new()
-        .name("moor-rpc".to_string())
-        .spawn(move || {
-            if let Err(e) =
-                rpc_server.request_loop(rpc_listen.clone(), rpc_loop_scheduler_client, task_monitor)
-            {
-                error!("RPC server failed on {}: {}", rpc_listen, e);
-            }
-        })?;
+    let rpc_loop_thread = spawn_efficient("moor-rpc", move || {
+        if let Err(e) =
+            rpc_server.request_loop(rpc_listen.clone(), rpc_loop_scheduler_client, task_monitor)
+        {
+            error!("RPC server failed on {}: {}", rpc_listen, e);
+        }
+    })?;
 
     signal_hook::flag::register(signal_hook::consts::SIGTERM, kill_switch.clone())?;
     signal_hook::flag::register(signal_hook::consts::SIGINT, kill_switch.clone())?;
@@ -822,33 +825,31 @@ fn main() -> Result<(), Report> {
     let sigusr1_kill_switch = kill_switch.clone();
     let sigusr1_scheduler_client = scheduler_client.clone();
     let sigusr1_emergency_checkpoint = emergency_checkpoint.clone();
-    std::thread::Builder::new()
-        .name("moor-sigusr1".to_string())
-        .spawn(move || {
-            loop {
-                if sigusr1_kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
-                    break;
-                }
-                if sigusr1_emergency_checkpoint.swap(false, std::sync::atomic::Ordering::SeqCst) {
-                    warn!("SIGUSR1 received: Performing emergency checkpoint before shutdown...");
-                    match sigusr1_scheduler_client.request_checkpoint_blocking() {
-                        Ok(()) => {
-                            info!("Emergency checkpoint completed successfully.");
-                        }
-                        Err(e) => {
-                            error!(
-                                "Emergency checkpoint failed: {}. Proceeding with shutdown anyway.",
-                                e
-                            );
-                        }
-                    }
-                    // Now trigger the actual shutdown
-                    sigusr1_kill_switch.store(true, std::sync::atomic::Ordering::SeqCst);
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(100));
+    spawn_efficient("moor-sigusr1", move || {
+        loop {
+            if sigusr1_kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
             }
-        })?;
+            if sigusr1_emergency_checkpoint.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                warn!("SIGUSR1 received: Performing emergency checkpoint before shutdown...");
+                match sigusr1_scheduler_client.request_checkpoint_blocking() {
+                    Ok(()) => {
+                        info!("Emergency checkpoint completed successfully.");
+                    }
+                    Err(e) => {
+                        error!(
+                            "Emergency checkpoint failed: {}. Proceeding with shutdown anyway.",
+                            e
+                        );
+                    }
+                }
+                // Now trigger the actual shutdown
+                sigusr1_kill_switch.store(true, std::sync::atomic::Ordering::SeqCst);
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    })?;
 
     info!(
         version = build::PKG_VERSION,

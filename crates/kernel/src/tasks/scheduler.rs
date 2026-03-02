@@ -68,6 +68,7 @@ use moor_common::{
         },
         Session, SessionFactory, SystemControl, TaskId, WorkerError,
     },
+    threading::{set_current_thread_background_priority, spawn_perf},
     util::{PerfCounter, PerfTimerGuard},
 };
 use moor_objdef::{collect_object, collect_object_definitions, dump_object, extract_index_names};
@@ -250,7 +251,7 @@ impl Scheduler {
         // Rehydrate suspended tasks.
         self.task_q.suspended.load_tasks(bg_session_factory);
 
-        gdt_cpus::set_thread_priority(gdt_cpus::ThreadPriority::Background).ok();
+        set_current_thread_background_priority().ok();
 
         self.running = true;
         info!("Starting scheduler loop");
@@ -993,35 +994,33 @@ impl Scheduler {
                 let config = self.config.clone();
 
                 // Spawn thread to execute actions, moving transaction into the thread
-                std::thread::Builder::new()
-                    .name("ws-actions".to_string())
-                    .spawn(move || {
-                        let executor = WorldStateActionExecutor::new(tx, config);
+                spawn_perf("ws-actions", move || {
+                    let executor = WorldStateActionExecutor::new(tx, config);
 
-                        match executor.execute_batch(action_vec, rollback) {
-                            Ok(results) => {
-                                // Build responses with the original request IDs
-                                let responses: Vec<WorldStateResponse> = actions
-                                    .into_iter()
-                                    .zip(results)
-                                    .map(|(request, result)| WorldStateResponse::Success {
-                                        id: request.id,
-                                        result,
-                                    })
-                                    .collect();
+                    match executor.execute_batch(action_vec, rollback) {
+                        Ok(results) => {
+                            // Build responses with the original request IDs
+                            let responses: Vec<WorldStateResponse> = actions
+                                .into_iter()
+                                .zip(results)
+                                .map(|(request, result)| WorldStateResponse::Success {
+                                    id: request.id,
+                                    result,
+                                })
+                                .collect();
 
-                                reply
-                                    .send(Ok(responses))
-                                    .expect("Could not send batch execution reply");
-                            }
-                            Err(error) => {
-                                reply
-                                    .send(Err(error))
-                                    .expect("Could not send batch execution reply");
-                            }
+                            reply
+                                .send(Ok(responses))
+                                .expect("Could not send batch execution reply");
                         }
-                    })
-                    .expect("Could not spawn WorldStateAction execution thread");
+                        Err(error) => {
+                            reply
+                                .send(Err(error))
+                                .expect("Could not send batch execution reply");
+                        }
+                    }
+                })
+                .expect("Could not spawn WorldStateAction execution thread");
             }
         }
     }

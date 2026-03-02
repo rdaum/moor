@@ -33,6 +33,7 @@ use crate::{
     system_control::SystemControlHandle, tasks::task_monitor::TaskMonitor,
 };
 use moor_common::tasks::{Session, SessionError, SessionFactory};
+use moor_common::threading::spawn_efficient;
 use moor_kernel::{SchedulerClient, config::Config};
 use moor_var::Obj;
 use rusty_paseto::prelude::Key;
@@ -126,38 +127,40 @@ impl RpcServer {
 
         // Start up the ping-ponger timer in a background thread...
         // Also handles periodic database compaction (every 5 minutes)
-        std::thread::Builder::new()
-            .name("rpc-ping-pong".to_string())
-            .spawn(move || {
-                const COMPACT_INTERVAL: u64 = 60; // Every 60 iterations = 5 minutes (5s * 60)
-                let mut iteration: u64 = 0;
-                // Guard to prevent overlapping compaction runs if persist() stalls
-                let compaction_in_progress = Arc::new(AtomicBool::new(false));
-                loop {
-                    std::thread::sleep(Duration::from_secs(5));
-                    if let Err(e) = ping_pong_handler.ping_pong() {
-                        error!(error = ?e, "Unable to ping-pong");
-                    }
+        spawn_efficient("rpc-ping-pong", move || {
+            const COMPACT_INTERVAL: u64 = 60; // Every 60 iterations = 5 minutes (5s * 60)
+            let mut iteration: u64 = 0;
+            // Guard to prevent overlapping compaction runs if persist() stalls
+            let compaction_in_progress = Arc::new(AtomicBool::new(false));
+            loop {
+                std::thread::sleep(Duration::from_secs(5));
+                if let Err(e) = ping_pong_handler.ping_pong() {
+                    error!(error = ?e, "Unable to ping-pong");
+                }
 
-                    // Trigger compaction periodically on a separate thread
-                    // so disk I/O doesn't delay ping-pong cycles
-                    iteration += 1;
-                    if iteration.is_multiple_of(COMPACT_INTERVAL) {
-                        // Skip if previous compaction is still running
-                        if compaction_in_progress.swap(true, Ordering::SeqCst) {
-                            tracing::warn!("Skipping compaction - previous run still in progress");
-                            continue;
-                        }
-                        let handler = ping_pong_handler.clone();
-                        let guard = compaction_in_progress.clone();
-                        std::thread::spawn(move || {
-                            tracing::debug!("Triggering periodic connections database compaction");
-                            handler.compact();
-                            guard.store(false, Ordering::SeqCst);
-                        });
+                // Trigger compaction periodically on a separate thread
+                // so disk I/O doesn't delay ping-pong cycles
+                iteration += 1;
+                if iteration.is_multiple_of(COMPACT_INTERVAL) {
+                    // Skip if previous compaction is still running
+                    if compaction_in_progress.swap(true, Ordering::SeqCst) {
+                        tracing::warn!("Skipping compaction - previous run still in progress");
+                        continue;
+                    }
+                    let handler = ping_pong_handler.clone();
+                    let guard = compaction_in_progress.clone();
+                    let guard_for_thread = guard.clone();
+                    if let Err(e) = spawn_efficient("rpc-compact", move || {
+                        tracing::debug!("Triggering periodic connections database compaction");
+                        handler.compact();
+                        guard_for_thread.store(false, Ordering::SeqCst);
+                    }) {
+                        tracing::error!("Failed to spawn rpc-compact thread: {}", e);
+                        guard.store(false, Ordering::SeqCst);
                     }
                 }
-            })?;
+            }
+        })?;
 
         // Clone what we need before consuming self
         let transport = self.transport.clone();
@@ -166,24 +169,20 @@ impl RpcServer {
 
         // Start the transport in a background thread
         let transport_scheduler = scheduler_client.clone();
-        std::thread::Builder::new()
-            .name("moor-rpc-transport".to_string())
-            .spawn(move || {
-                if let Err(e) = transport.start_request_loop(
-                    rpc_endpoint,
-                    transport_scheduler,
-                    transport_message_handler,
-                ) {
-                    error!(error = ?e, "Transport layer failed");
-                }
-            })?;
+        spawn_efficient("moor-rpc-transport", move || {
+            if let Err(e) = transport.start_request_loop(
+                rpc_endpoint,
+                transport_scheduler,
+                transport_message_handler,
+            ) {
+                error!(error = ?e, "Transport layer failed");
+            }
+        })?;
 
         // Process task completions
-        std::thread::Builder::new()
-            .name("moor-tc".to_string())
-            .spawn(move || {
-                task_monitor.wait_for_completions(task_completion_kill_switch);
-            })?;
+        spawn_efficient("moor-tc", move || {
+            task_monitor.wait_for_completions(task_completion_kill_switch);
+        })?;
 
         // Main loop processes session events and monitors kill switch
         loop {

@@ -25,12 +25,13 @@ use moor_common::{
     model::{
         CommitResult, ObjAttrs, ObjFlag, ObjectKind, ObjectRef, PropFlag, VerbArgsSpec, VerbFlag,
     },
+    threading::{ThreadClass, pin_current_thread_to_class, spawn_perf},
     util::BitEnum,
 };
 use tabled::{Table, Tabled};
 
 use moor_compiler::compile;
-use moor_db::{Database, TxDB, VERB_CACHE_STATS, db_counters};
+use moor_db::{Database, TxDB, db_counters};
 use moor_kernel::{
     SchedulerClient,
     config::{Config, FeaturesConfig},
@@ -151,10 +152,6 @@ struct BenchmarkRow {
     setup_avg: String,
     #[tabled(rename = "find avg")]
     find_avg: String,
-    #[tabled(rename = "verb cache h/n/m")]
-    verb_cache_mix: String,
-    #[tabled(rename = "verb cache count")]
-    verb_cache_count: String,
     #[tabled(rename = "sched_msg avg")]
     sched_msg_avg: String,
     #[tabled(rename = "queue avg")]
@@ -653,9 +650,6 @@ async fn load_test_workload(
             .find_method_verb_on
             .cumulative_duration_nanos()
             .sum();
-        let baseline_verb_cache_hits = VERB_CACHE_STATS.hit_count();
-        let baseline_verb_cache_negative_hits = VERB_CACHE_STATS.negative_hit_count();
-        let baseline_verb_cache_misses = VERB_CACHE_STATS.miss_count();
 
         let mut workload_futures = FuturesUnordered::new();
         for _i in 0..num_concurrent_workload {
@@ -743,22 +737,6 @@ async fn load_test_workload(
         } else {
             0
         };
-        let verb_cache_hits = VERB_CACHE_STATS.hit_count() - baseline_verb_cache_hits;
-        let verb_cache_negative_hits =
-            VERB_CACHE_STATS.negative_hit_count() - baseline_verb_cache_negative_hits;
-        let verb_cache_misses = VERB_CACHE_STATS.miss_count() - baseline_verb_cache_misses;
-        let verb_cache_total = verb_cache_hits + verb_cache_negative_hits + verb_cache_misses;
-        let (verb_cache_hit_pct, verb_cache_negative_hit_pct, verb_cache_miss_pct) =
-            if verb_cache_total > 0 {
-                (
-                    (verb_cache_hits as f64 / verb_cache_total as f64) * 100.0,
-                    (verb_cache_negative_hits as f64 / verb_cache_total as f64) * 100.0,
-                    (verb_cache_misses as f64 / verb_cache_total as f64) * 100.0,
-                )
-            } else {
-                (0.0, 0.0, 0.0)
-            };
-
         let sched_msg_count =
             counters.handle_scheduler_msg.invocations().sum() - baseline_sched_msg_count;
         let sched_msg_total_nanos = counters
@@ -833,14 +811,6 @@ async fn load_test_workload(
             submit_max: format!("{:.2?}", max),
             setup_avg: format!("{}ns", setup_task_avg_nanos),
             find_avg: format!("{}ns", find_verb_avg_nanos),
-            verb_cache_mix: format!(
-                "{:.1}/{:.1}/{:.1}%",
-                verb_cache_hit_pct, verb_cache_negative_hit_pct, verb_cache_miss_pct
-            ),
-            verb_cache_count: format!(
-                "{}/{}/{}",
-                verb_cache_hits, verb_cache_negative_hits, verb_cache_misses
-            ),
             sched_msg_avg: format!("{}ns", sched_msg_avg_nanos),
             resume_queue_avg: format!("{}ns", resume_queue_avg_nanos),
             thread_handoff_avg: format!("{}ns", thread_handoff_avg_nanos),
@@ -865,7 +835,7 @@ async fn load_test_workload(
     Ok(results)
 }
 
-#[tokio::main(flavor = "multi_thread")]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), eyre::Error> {
     color_eyre::install().expect("Unable to install color_eyre");
     let args: Args = Args::parse();
@@ -874,6 +844,15 @@ async fn main() -> Result<(), eyre::Error> {
         eprintln!("Unable to configure logging: {e}");
         std::process::exit(1);
     });
+
+    match pin_current_thread_to_class(ThreadClass::Efficient) {
+        Ok(Some(core_id)) => info!(
+            core_id,
+            "Pinned benchmark tokio current-thread executor to efficient core"
+        ),
+        Ok(None) => info!("No efficient core class available for benchmark executor pinning"),
+        Err(e) => info!(error = ?e, "Failed to pin benchmark executor thread"),
+    }
 
     info!("Starting direct scheduler load test");
 
@@ -927,9 +906,9 @@ async fn main() -> Result<(), eyre::Error> {
 
     // Start scheduler in background thread
     let session_factory = Arc::new(DirectSessionFactory {});
-    let _scheduler_handle = std::thread::spawn(move || {
+    let _scheduler_handle = spawn_perf("moor-scheduler", move || {
         scheduler.run(session_factory);
-    });
+    })?;
 
     let results = if args.swamp_mode {
         swamp_mode_workload(&args, &scheduler_client, player).await?

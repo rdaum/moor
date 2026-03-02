@@ -34,7 +34,7 @@ use std::{
 };
 
 use flume::{Receiver, Sender};
-use gdt_cpus::ThreadPriority;
+use moor_common::threading::{set_current_thread_background_priority, spawn_efficient};
 use parking_lot::Mutex;
 use tracing::{error, info, warn};
 
@@ -224,13 +224,11 @@ impl BatchWriter {
         let ks = kill_switch.clone();
         let completed = completed_timestamp.clone();
 
-        let join_handle = std::thread::Builder::new()
-            .name("moor-batch-writer".to_string())
-            .spawn(move || {
-                gdt_cpus::set_thread_priority(ThreadPriority::Background).ok();
-                Self::writer_loop(db, receiver, ks, completed);
-            })
-            .expect("failed to spawn batch writer thread");
+        let join_handle = spawn_efficient("moor-batch-writer", move || {
+            set_current_thread_background_priority().ok();
+            Self::writer_loop(db, receiver, ks, completed);
+        })
+        .expect("failed to spawn batch writer thread");
 
         Self {
             sender,

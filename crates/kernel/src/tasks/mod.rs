@@ -32,6 +32,7 @@ pub mod convert_task;
 pub(crate) mod gc_thread;
 pub(crate) mod scheduler_client;
 pub(crate) mod task;
+pub(crate) mod task_pool;
 pub(crate) mod task_q;
 pub mod task_scheduler_client;
 mod tasks_db;

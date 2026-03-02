@@ -34,12 +34,12 @@ pub fn init_tracing(debug_fallback: bool) -> Result<(), eyre::Report> {
     // via the tracing-log feature, so fjall's log::error! messages will be captured.
 
     let filter = if let Ok(env_filter) = EnvFilter::try_from_default_env() {
-        // User has set RUST_LOG, respect it but still suppress gdt_cpus
-        env_filter.add_directive("gdt_cpus=off".parse().unwrap())
+        // User has set RUST_LOG, respect it.
+        env_filter
     } else {
-        // No RUST_LOG set, build filter from scratch with gdt_cpus suppressed
+        // No RUST_LOG set, build filter from debug fallback.
         let level = if debug_fallback { "debug" } else { "info" };
-        EnvFilter::new(format!("{level},gdt_cpus=off"))
+        EnvFilter::new(level)
     };
 
     tracing_subscriber::registry()
@@ -75,12 +75,12 @@ pub fn init_tracing_simple(debug_fallback: bool) -> Result<(), eyre::Report> {
     // via the tracing-log feature, so fjall's log::error! messages will be captured.
 
     let filter = if let Ok(env_filter) = EnvFilter::try_from_default_env() {
-        // User has set RUST_LOG, respect it but still suppress gdt_cpus
-        env_filter.add_directive("gdt_cpus=off".parse().unwrap())
+        // User has set RUST_LOG, respect it.
+        env_filter
     } else {
-        // No RUST_LOG set, build filter from scratch with gdt_cpus suppressed
+        // No RUST_LOG set, build filter from debug fallback.
         let level = if debug_fallback { "debug" } else { "info" };
-        EnvFilter::new(format!("{level},gdt_cpus=off"))
+        EnvFilter::new(level)
     };
 
     tracing_subscriber::registry()

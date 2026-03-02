@@ -74,7 +74,6 @@ moor-textdump = { path = "../textdump" }
 moor-var = { path = "../var" }
 
 # Core Runtime & System
-gdt-cpus.workspace = true
 libc.workspace = true
 
 # Serialization & Data Formats
@@ -85,7 +84,6 @@ xml-rs.workspace = true
 # Async Runtime & Concurrency
 flume.workspace = true
 oneshot.workspace = true
-rayon.workspace = true
 
 # Authentication & Security
 age = { workspace = true, features = ["ssh"] }

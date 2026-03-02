@@ -96,7 +96,6 @@ debug = false # No debug symbols to save memory/disk during build
 
 [workspace.dependencies]
 # Core Runtime & System
-gdt-cpus = "25.12"
 libc = "0.2"
 mimalloc = "0.1"
 minstant = { version = "0.1", features = ["fallback-coarse"] }
@@ -145,7 +144,6 @@ hierarchical_hash_wheel_timer = { version = "1.3", default-features = false, fea
 oneshot = { version = "0.1", default-features = false, features = ["std"] }
 papaya = "0.2"
 parking_lot = "0.12"
-rayon = "1.11"
 shuttle = "0.8"
 tabled = "0.20"
 tokio = { version = "1.47", features = ["full"] }
@@ -249,4 +247,3 @@ termimad = "0.34"
 # Patch to forked (maintained by me) version of ZeroMQ
 [patch.crates-io]
 zmq = { git = "https://github.com/rdaum/rust-zmq" }
-

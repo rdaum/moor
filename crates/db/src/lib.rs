@@ -15,6 +15,7 @@
 
 use moor_common::model::loader::{LoaderInterface, SnapshotInterface};
 use moor_common::model::{WorldState, WorldStateError, WorldStateSource};
+use moor_common::threading::spawn_efficient;
 use std::{path::Path, sync::Arc};
 
 mod api;
@@ -111,7 +112,7 @@ impl Database for TxDB {
 
     fn create_snapshot_async(&self, callback: SnapshotCallback) -> Result<(), WorldStateError> {
         let storage = self.storage.clone();
-        std::thread::spawn(move || {
+        spawn_efficient("moor-snapshot", move || {
             let snapshot_result = storage
                 .create_snapshot()
                 .map_err(|e| WorldStateError::DatabaseError(e.to_string()));
@@ -119,7 +120,10 @@ impl Database for TxDB {
             if let Err(e) = callback(snapshot_result) {
                 tracing::error!("Snapshot callback failed: {}", e);
             }
-        });
+        })
+        .map_err(|e| {
+            WorldStateError::DatabaseError(format!("Failed to spawn snapshot thread: {e}"))
+        })?;
         Ok(())
     }
 

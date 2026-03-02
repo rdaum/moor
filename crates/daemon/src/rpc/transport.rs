@@ -28,6 +28,7 @@ use zmq::Socket;
 
 use super::message_handler::MessageHandler;
 use moor_common::tasks::{Event, NarrativeEvent};
+use moor_common::threading::spawn_efficient;
 use moor_kernel::SchedulerClient;
 use moor_rpc::{HostToDaemonMessageRef, MessageTypeRef};
 use moor_schema::{convert::narrative_event_to_flatbuffer_struct, rpc as moor_rpc};
@@ -565,16 +566,10 @@ impl Transport for RpcTransport {
             // Start IPC proxy
             let mut ipc_control_socket = self.zmq_context.socket(zmq::REP)?;
             ipc_control_socket.bind("inproc://rpc-proxy-ipc-steer")?;
-            std::thread::Builder::new()
-                .name("moor-rpc-proxy-ipc".to_string())
-                .spawn(move || {
-                    zmq::proxy_steerable(
-                        &mut ipc_clients,
-                        &mut ipc_workers,
-                        &mut ipc_control_socket,
-                    )
+            spawn_efficient("moor-rpc-proxy-ipc", move || {
+                zmq::proxy_steerable(&mut ipc_clients, &mut ipc_workers, &mut ipc_control_socket)
                     .expect("Unable to start IPC proxy");
-                })?;
+            })?;
         }
 
         // Set up TCP ROUTER/DEALER with CURVE if we have TCP endpoints
@@ -608,16 +603,10 @@ impl Transport for RpcTransport {
             // Start TCP proxy
             let mut tcp_control_socket = self.zmq_context.socket(zmq::REP)?;
             tcp_control_socket.bind("inproc://rpc-proxy-tcp-steer")?;
-            std::thread::Builder::new()
-                .name("moor-rpc-proxy-tcp".to_string())
-                .spawn(move || {
-                    zmq::proxy_steerable(
-                        &mut tcp_clients,
-                        &mut tcp_workers,
-                        &mut tcp_control_socket,
-                    )
+            spawn_efficient("moor-rpc-proxy-tcp", move || {
+                zmq::proxy_steerable(&mut tcp_clients, &mut tcp_workers, &mut tcp_control_socket)
                     .expect("Unable to start TCP proxy");
-                })?;
+            })?;
         }
 
         // Calculate number of workers (reserve threads for proxies)
@@ -632,20 +621,18 @@ impl Transport for RpcTransport {
             let connect_ipc = has_ipc;
             let connect_tcp = has_tcp;
 
-            std::thread::Builder::new()
-                .name(format!("moor-rpc-srv{i}"))
-                .spawn(move || {
-                    if let Err(e) = Self::rpc_process_loop(
-                        zmq_context,
-                        kill_switch,
-                        sched_client,
-                        handler,
-                        connect_ipc,
-                        connect_tcp,
-                    ) {
-                        error!(error = ?e, "RPC process loop failed");
-                    }
-                })?;
+            spawn_efficient(format!("moor-rpc-srv{i}"), move || {
+                if let Err(e) = Self::rpc_process_loop(
+                    zmq_context,
+                    kill_switch,
+                    sched_client,
+                    handler,
+                    connect_ipc,
+                    connect_tcp,
+                ) {
+                    error!(error = ?e, "RPC process loop failed");
+                }
+            })?;
         }
 
         // Set up control sockets for graceful shutdown

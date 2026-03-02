@@ -51,7 +51,6 @@ moor-var = { path = "../var" }
 rpc-common = { path = "../rpc/rpc-common" }
 
 # Core Runtime & System
-gdt-cpus.workspace = true
 mimalloc.workspace = true
 signal-hook.workspace = true
 

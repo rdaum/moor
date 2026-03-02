@@ -17,6 +17,7 @@ pub mod builtins;
 pub mod matching;
 pub mod model;
 pub mod tasks;
+pub mod threading;
 pub mod tracing;
 pub mod util;
 

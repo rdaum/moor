@@ -50,7 +50,7 @@ use crate::{
 use byteview::ByteView;
 use fjall::Slice;
 use flume::Sender;
-use gdt_cpus::ThreadPriority;
+use moor_common::threading::{set_current_thread_background_priority, spawn_efficient};
 use moor_common::util::PerfTimerGuard;
 use moor_common::util::signal_fatal_db_error;
 use planus::{ReadAsRoot, WriteAsOffset};
@@ -619,29 +619,27 @@ impl SequenceWriter {
         let (ops_tx, ops_rx) = flume::unbounded::<[i64; 16]>();
 
         let ks = kill_switch.clone();
-        let jh = std::thread::Builder::new()
-            .name("moor-seq-writer".to_string())
-            .spawn(move || {
-                gdt_cpus::set_thread_priority(ThreadPriority::Background).ok();
-                loop {
-                    if ks.load(std::sync::atomic::Ordering::Relaxed) {
-                        // Drain remaining writes before exiting
-                        while let Ok(seq_values) = ops_rx.try_recv() {
-                            Self::write_sequences(&keyspace, &seq_values);
-                        }
-                        break;
+        let jh = spawn_efficient("moor-seq-writer", move || {
+            set_current_thread_background_priority().ok();
+            loop {
+                if ks.load(std::sync::atomic::Ordering::Relaxed) {
+                    // Drain remaining writes before exiting
+                    while let Ok(seq_values) = ops_rx.try_recv() {
+                        Self::write_sequences(&keyspace, &seq_values);
                     }
-
-                    match ops_rx.recv_timeout(Duration::from_millis(100)) {
-                        Ok(seq_values) => {
-                            Self::write_sequences(&keyspace, &seq_values);
-                        }
-                        Err(flume::RecvTimeoutError::Timeout) => continue,
-                        Err(flume::RecvTimeoutError::Disconnected) => break,
-                    }
+                    break;
                 }
-            })
-            .expect("failed to spawn sequence writer thread");
+
+                match ops_rx.recv_timeout(Duration::from_millis(100)) {
+                    Ok(seq_values) => {
+                        Self::write_sequences(&keyspace, &seq_values);
+                    }
+                    Err(flume::RecvTimeoutError::Timeout) => continue,
+                    Err(flume::RecvTimeoutError::Disconnected) => break,
+                }
+            }
+        })
+        .expect("failed to spawn sequence writer thread");
 
         Self {
             ops: ops_tx,

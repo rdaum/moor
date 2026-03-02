@@ -18,7 +18,6 @@ use hierarchical_hash_wheel_timer::wheels::{
     quad_wheel::{PruneDecision, QuadWheelWithOverflow},
 };
 use minstant::Instant;
-use rayon::ThreadPool;
 use std::{
     collections::{HashMap, VecDeque},
     hash::BuildHasherDefault,
@@ -28,9 +27,15 @@ use std::{
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+use moor_common::threading::{
+    DetectionResult, detect_performance_cores, worker_performance_core_ids,
+};
 use moor_var::{Obj, Var};
 
-use crate::{tasks::task::Task, vm::extract_anonymous_refs_from_vm_exec_state};
+use crate::{
+    tasks::{task::Task, task_pool::TaskThreadPool},
+    vm::extract_anonymous_refs_from_vm_exec_state,
+};
 
 /// Timer entry for the hash wheel timer
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,7 +64,7 @@ pub struct TaskQ {
     ///     Suspended tasks waiting for input from the player or a task id to complete
     pub(crate) suspended: SuspensionQ,
     /// Thread pool for task execution
-    pub(crate) thread_pool: ThreadPool,
+    pub(crate) thread_pool: TaskThreadPool,
     /// Inter-task message queues. Keyed by receiving task_id, shared across active and suspended.
     pub(crate) task_message_queues: HashMap<TaskId, VecDeque<Var>, BuildHasherDefault<AHasher>>,
 }
@@ -84,14 +89,78 @@ pub(crate) struct RunningTask {
 
 impl TaskQ {
     pub fn new(suspended: SuspensionQ) -> Self {
-        let num_threads = std::thread::available_parallelism()
+        let fallback_threads = std::thread::available_parallelism()
             .map(|p| p.get())
             .unwrap_or(8);
-        let thread_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .thread_name(|i| format!("moor-task-pool-{i}"))
-            .build()
-            .expect("Failed to create thread pool");
+
+        let pinned_core_ids = match detect_performance_cores() {
+            Ok(DetectionResult::PerformanceCores(selection)) => {
+                info!(
+                    source = selection.source,
+                    threshold = selection.threshold,
+                    min_metric = selection.min_metric,
+                    max_metric = selection.max_metric,
+                    metric_tiers = selection.metric_tiers,
+                    physical_cores = selection.physical_cores,
+                    logical_processors = selection.logical_processors,
+                    "Detected high-performance CPU tier for task pool pinning"
+                );
+                let worker_core_ids = worker_performance_core_ids();
+                if worker_core_ids.is_empty() {
+                    warn!("No worker performance cores reserved, task pool pinning disabled");
+                    None
+                } else {
+                    info!(
+                        reserved_worker_cores = ?worker_core_ids,
+                        reserved_service_cores = ?moor_common::threading::service_performance_core_ids(),
+                        "Using reserved worker/service performance-core split"
+                    );
+                    Some(worker_core_ids)
+                }
+            }
+            Ok(DetectionResult::NoSelection { reason }) => {
+                info!(
+                    reason,
+                    "No clear high-performance CPU tier detected, task pool pinning disabled"
+                );
+                None
+            }
+            Err(e) => {
+                warn!(error = ?e, "Could not detect CPU topology, using unpinned task pool");
+                None
+            }
+        };
+
+        let num_threads = pinned_core_ids
+            .as_ref()
+            .map_or(fallback_threads, |core_ids| core_ids.len());
+
+        if let Some(core_ids) = pinned_core_ids {
+            let core_ids = Arc::new(core_ids);
+            info!(
+                worker_threads = num_threads,
+                pinned_cores = ?core_ids,
+                "Pinning task pool workers to performance CPU cores"
+            );
+
+            let thread_pool = TaskThreadPool::new(num_threads, Some((*core_ids).clone()))
+                .expect("Failed to create task thread pool");
+
+            return Self {
+                active: Default::default(),
+                suspended,
+                thread_pool,
+                task_message_queues: HashMap::default(),
+            };
+        } else {
+            info!(
+                worker_threads = num_threads,
+                "Using unpinned task pool workers"
+            );
+        }
+
+        let thread_pool =
+            TaskThreadPool::new(num_threads, None).expect("Failed to create task thread pool");
 
         Self {
             active: Default::default(),

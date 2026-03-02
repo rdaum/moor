@@ -13,6 +13,9 @@
 
 use crate::{BenchmarkResult, TableFormatter, add_session_result};
 use minstant;
+use moor_common::threading::{
+    DetectionResult, detect_performance_cores, pin_current_thread_to_core,
+};
 use std::{
     hint::black_box,
     io::{self, Write},
@@ -201,7 +204,7 @@ fn warn_affinity_once(message: impl Into<String>) {
 
 #[cfg(target_os = "linux")]
 fn core_has_usable_pmu(core_id: usize) -> bool {
-    if gdt_cpus::pin_thread_to_core(core_id).is_err() {
+    if pin_current_thread_to_core(core_id).is_err() {
         return false;
     }
 
@@ -227,19 +230,18 @@ fn core_has_usable_pmu(core_id: usize) -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn choose_default_pin_core(
-    cpu_info: &gdt_cpus::CpuInfo,
-    allowed_mask: &gdt_cpus::AffinityMask,
-) -> Option<usize> {
+fn choose_default_pin_core(allowed_core_ids: &[usize]) -> Option<usize> {
     let mut candidates: Vec<usize> = Vec::new();
-    for core_id in cpu_info.performance_core_mask().iter() {
-        if allowed_mask.contains(core_id) && !candidates.contains(&core_id) {
-            candidates.push(core_id);
+    if let Ok(DetectionResult::PerformanceCores(selection)) = detect_performance_cores() {
+        for core_id in selection.logical_processor_ids {
+            if allowed_core_ids.contains(&core_id) && !candidates.contains(&core_id) {
+                candidates.push(core_id);
+            }
         }
     }
-    for core_id in cpu_info.all_cores_mask().iter() {
-        if allowed_mask.contains(core_id) && !candidates.contains(&core_id) {
-            candidates.push(core_id);
+    for core_id in allowed_core_ids {
+        if !candidates.contains(core_id) {
+            candidates.push(*core_id);
         }
     }
 
@@ -252,70 +254,142 @@ fn choose_default_pin_core(
     candidates.first().copied()
 }
 
+#[cfg(target_os = "linux")]
+fn capture_current_thread_affinity() -> io::Result<libc::cpu_set_t> {
+    // SAFETY: zeroed is valid initialization for cpu_set_t.
+    let mut cpuset: libc::cpu_set_t = unsafe { std::mem::zeroed() };
+    // SAFETY: pthread_self returns a valid handle for current thread; cpuset pointer is valid.
+    let result = unsafe {
+        libc::pthread_getaffinity_np(
+            libc::pthread_self(),
+            std::mem::size_of::<libc::cpu_set_t>(),
+            &mut cpuset,
+        )
+    };
+    if result != 0 {
+        return Err(io::Error::from_raw_os_error(result));
+    }
+    Ok(cpuset)
+}
+
+#[cfg(target_os = "linux")]
+fn restore_current_thread_affinity(mask: &libc::cpu_set_t) -> io::Result<()> {
+    // SAFETY: pthread_self returns a valid handle; mask pointer is valid.
+    let result = unsafe {
+        libc::pthread_setaffinity_np(
+            libc::pthread_self(),
+            std::mem::size_of::<libc::cpu_set_t>(),
+            mask,
+        )
+    };
+    if result != 0 {
+        return Err(io::Error::from_raw_os_error(result));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn core_ids_from_mask(mask: &libc::cpu_set_t) -> Vec<usize> {
+    let mut core_ids = Vec::new();
+    for core_id in 0..(libc::CPU_SETSIZE as usize) {
+        // SAFETY: core_id is in range and mask points to a valid cpu_set_t.
+        let is_set = unsafe { libc::CPU_ISSET(core_id, mask) };
+        if is_set {
+            core_ids.push(core_id);
+        }
+    }
+    core_ids
+}
+
 struct BenchAffinityGuard {
-    restore_mask: Option<gdt_cpus::AffinityMask>,
+    #[cfg(target_os = "linux")]
+    restore_mask: Option<libc::cpu_set_t>,
+    #[cfg(target_os = "linux")]
+    did_pin: bool,
 }
 
 impl BenchAffinityGuard {
     fn acquire() -> Self {
-        let Ok(cpu_info) = gdt_cpus::cpu_info() else {
-            warn_affinity_once(
-                "Could not read CPU topology; benchmark will run without CPU pinning",
-            );
-            return Self { restore_mask: None };
-        };
-
-        let restore_mask = cpu_info.all_cores_mask();
-        let requested_core = std::env::var("MOOR_BENCH_PIN_CORE")
-            .ok()
-            .and_then(|value| value.parse::<usize>().ok());
-        let core_to_pin = requested_core
-            .filter(|core_id| restore_mask.contains(*core_id))
-            .or_else(|| {
-                #[cfg(target_os = "linux")]
-                {
-                    choose_default_pin_core(cpu_info, &restore_mask)
+        #[cfg(target_os = "linux")]
+        {
+            let restore_mask = match capture_current_thread_affinity() {
+                Ok(mask) => Some(mask),
+                Err(error) => {
+                    warn_affinity_once(format!(
+                        "Could not capture existing benchmark thread affinity: {error}. Continuing with best effort pinning"
+                    ));
+                    None
                 }
-                #[cfg(not(target_os = "linux"))]
-                {
-                    cpu_info
-                        .performance_core_mask()
-                        .iter()
-                        .next()
-                        .or_else(|| cpu_info.all_cores_mask().iter().next())
-                }
-            });
+            };
 
-        let Some(core_id) = core_to_pin else {
-            warn_affinity_once(
-                "No logical cores detected for pinning; benchmark will run without CPU pinning",
-            );
-            return Self { restore_mask: None };
-        };
+            let allowed_core_ids = restore_mask
+                .as_ref()
+                .map(core_ids_from_mask)
+                .filter(|core_ids| !core_ids.is_empty())
+                .unwrap_or_else(|| {
+                    let count = std::thread::available_parallelism()
+                        .map(|p| p.get())
+                        .unwrap_or(1);
+                    (0..count).collect()
+                });
 
-        if let Err(error) = gdt_cpus::pin_thread_to_core(core_id) {
-            warn_affinity_once(format!(
-                "Could not pin benchmark thread to core {core_id}: {error}. Continuing without pinning"
-            ));
-            return Self { restore_mask: None };
+            let requested_core = std::env::var("MOOR_BENCH_PIN_CORE")
+                .ok()
+                .and_then(|value| value.parse::<usize>().ok());
+            let core_to_pin = requested_core
+                .filter(|core_id| allowed_core_ids.contains(core_id))
+                .or_else(|| choose_default_pin_core(&allowed_core_ids));
+
+            let Some(core_id) = core_to_pin else {
+                warn_affinity_once(
+                    "No logical cores detected for pinning; benchmark will run without CPU pinning",
+                );
+                return Self {
+                    restore_mask: None,
+                    did_pin: false,
+                };
+            };
+
+            if let Err(error) = pin_current_thread_to_core(core_id) {
+                warn_affinity_once(format!(
+                    "Could not pin benchmark thread to core {core_id}: {error}. Continuing without pinning"
+                ));
+                return Self {
+                    restore_mask: None,
+                    did_pin: false,
+                };
+            }
+
+            return Self {
+                restore_mask,
+                did_pin: true,
+            };
         }
 
-        Self {
-            restore_mask: Some(restore_mask),
+        #[cfg(not(target_os = "linux"))]
+        {
+            Self {}
         }
     }
 }
 
 impl Drop for BenchAffinityGuard {
     fn drop(&mut self) {
-        let Some(mask) = &self.restore_mask else {
-            return;
-        };
+        #[cfg(target_os = "linux")]
+        {
+            if !self.did_pin {
+                return;
+            }
 
-        if let Err(error) = gdt_cpus::set_thread_affinity(mask) {
-            warn_affinity_once(format!(
-                "Could not restore benchmark thread affinity after run: {error}"
-            ));
+            let Some(mask) = &self.restore_mask else {
+                return;
+            };
+
+            if let Err(error) = restore_current_thread_affinity(mask) {
+                warn_affinity_once(format!(
+                    "Could not restore benchmark thread affinity after run: {error}"
+                ));
+            }
         }
     }
 }

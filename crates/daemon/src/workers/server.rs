@@ -13,6 +13,7 @@
 
 //! Thin coordinator for workers server that delegates business logic to message handler
 
+use moor_common::threading::spawn_efficient;
 use moor_kernel::tasks::workers::{WorkerRequest, WorkerResponse};
 use std::{
     sync::{
@@ -78,9 +79,9 @@ impl WorkersServer {
         let message_handler = self.message_handler.clone();
         let kill_switch = self.kill_switch.clone();
 
-        let jh = std::thread::Builder::new()
-            .name("moor-workers-proc".into())
-            .spawn(move || Self::process_requests(kill_switch, recv, message_handler))?;
+        let jh = spawn_efficient("moor-workers-proc", move || {
+            Self::process_requests(kill_switch, recv, message_handler)
+        })?;
 
         self.request_processor_jh = Some(jh);
         Ok(send)
@@ -96,13 +97,11 @@ impl WorkersServer {
         let message_handler = self.message_handler.clone();
         let workers_endpoint = workers_endpoint.to_string();
 
-        let jh = std::thread::Builder::new()
-            .name("moor-workers-transport".into())
-            .spawn(move || {
-                if let Err(e) = transport.start_listen_loop(&workers_endpoint, message_handler) {
-                    error!(error = ?e, "Workers transport failed");
-                }
-            })?;
+        let jh = spawn_efficient("moor-workers-transport", move || {
+            if let Err(e) = transport.start_listen_loop(&workers_endpoint, message_handler) {
+                error!(error = ?e, "Workers transport failed");
+            }
+        })?;
 
         self.transport_jh = Some(jh);
         Ok(())
