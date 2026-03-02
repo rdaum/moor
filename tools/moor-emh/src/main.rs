@@ -34,7 +34,7 @@ use moor_kernel::{
     config::{Config, FeaturesConfig},
     tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
 };
-use moor_var::{Obj, SYSTEM_OBJECT, Sequence, Symbol, Var};
+use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
 use once_cell::sync::Lazy;
 use rustyline::ExternalPrinter;
 use rustyline::completion::{Completer, Pair};
