@@ -15,6 +15,7 @@
 
 use std::{cmp::max, sync::Arc, time::Duration};
 
+use moor_common::matching::ParsedCommand;
 use moor_common::model::{ObjFlag, WorldState};
 use moor_common::util::BitEnum;
 use moor_compiler::Program;
@@ -512,6 +513,69 @@ pub fn create_activation_for_bench(
         None, // No parent activation for top-level calls
         program,
     );
+    ActivationBenchResult { inner: activation }
+}
+
+/// Create a command activation for benchmarking purposes.
+/// Mirrors `exec_command_request` setup: args/argstr come from `ParsedCommand`.
+#[allow(clippy::too_many_arguments)]
+pub fn create_command_activation_for_bench(
+    _permissions: Obj,
+    verbdef: moor_common::model::VerbDef,
+    verb_name: Symbol,
+    this: Var,
+    player: Obj,
+    caller: Var,
+    mut command: ParsedCommand,
+    program: moor_var::program::ProgramType,
+) -> ActivationBenchResult {
+    let permissions_flags = BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer;
+    let args: List = std::mem::take(&mut command.args).into_iter().collect();
+    let argstr = moor_var::v_string(std::mem::take(&mut command.argstr));
+
+    let mut activation = crate::vm::activation::Activation::for_call(
+        verbdef,
+        permissions_flags,
+        verb_name,
+        this,
+        player,
+        args,
+        caller,
+        argstr,
+        None,
+        program,
+    );
+
+    activation.frame.set_global_variable(
+        GlobalName::dobj,
+        v_obj(command.dobj.unwrap_or(moor_var::NOTHING)),
+    );
+    activation.frame.set_global_variable(
+        GlobalName::dobjstr,
+        command
+            .dobjstr
+            .take()
+            .map_or_else(v_empty_str, moor_var::v_string),
+    );
+    activation.frame.set_global_variable(
+        GlobalName::prepstr,
+        command
+            .prepstr
+            .take()
+            .map_or_else(v_empty_str, moor_var::v_string),
+    );
+    activation.frame.set_global_variable(
+        GlobalName::iobj,
+        v_obj(command.iobj.unwrap_or(moor_var::NOTHING)),
+    );
+    activation.frame.set_global_variable(
+        GlobalName::iobjstr,
+        command
+            .iobjstr
+            .take()
+            .map_or_else(v_empty_str, moor_var::v_string),
+    );
+
     ActivationBenchResult { inner: activation }
 }
 

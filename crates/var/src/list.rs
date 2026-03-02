@@ -57,6 +57,11 @@ impl List {
         self.0.iter().cloned()
     }
 
+    #[inline]
+    pub fn into_vec(self) -> Vec<Var> {
+        (*self.0).into_iter().collect()
+    }
+
     /// Remove the first found instance of `item` from the list.
     pub fn set_remove(&self, item: &Var) -> Result<Var, Error> {
         let idx = self.0.iter().position(|v| *v == *item);

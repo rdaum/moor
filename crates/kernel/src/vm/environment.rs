@@ -15,14 +15,14 @@
 //! Uses a single Vec for all scopes to reduce allocations and improve cache locality.
 //! Uninitialized slots use v_none() (all zeros) as a sentinel, enabling fast zero-fill.
 
-use moor_var::{Var, program::names::GlobalName, v_empty_str, v_nothing};
+use moor_var::{Var, program::names::GlobalName};
 use smallvec::SmallVec;
 use std::ptr;
 
 /// Inline capacity for environment values.
-/// Covers 11 globals + ~13 local variables without heap allocation.
-/// Falls back to heap for more complex verbs.
-const INLINE_VALUES: usize = 24;
+/// Covers all 11 globals plus a small local working set without heap allocation.
+/// Falls back to heap for larger frames to keep MooStackFrame compact.
+const INLINE_VALUES: usize = 16;
 
 /// Environment storage for variables in a single MOO stack frame.
 /// All scopes are stored contiguously, with metadata tracking scope boundaries.
@@ -40,6 +40,37 @@ pub struct Environment {
 }
 
 impl Environment {
+    #[inline(always)]
+    unsafe fn write_core_call_globals(
+        ptr: *mut Var,
+        player: Var,
+        this: Var,
+        caller: Var,
+        verb: Var,
+        args: Var,
+        argstr: Var,
+    ) {
+        unsafe {
+            ptr.add(0).write(player);
+            ptr.add(1).write(this);
+            ptr.add(2).write(caller);
+            ptr.add(3).write(verb);
+            ptr.add(4).write(args);
+            ptr.add(5).write(argstr);
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn write_cloned_or_none(ptr: *mut Var, dst_index: usize, source: &Var) {
+        unsafe {
+            if source.is_none() {
+                ptr::write_bytes(ptr.add(dst_index), 0, 1);
+            } else {
+                ptr.add(dst_index).write(source.clone());
+            }
+        }
+    }
+
     /// Create a new empty environment.
     pub fn new() -> Self {
         Self {
@@ -81,23 +112,15 @@ impl Environment {
         let mut values: SmallVec<[Var; INLINE_VALUES]> = SmallVec::new();
         values.reserve(total_width);
 
-        // SAFETY: We reserved total_width, write first 11 globals then zero-fill the rest.
+        // SAFETY: We reserved total_width, write core globals then zero-fill the rest.
         unsafe {
             let ptr = values.as_mut_ptr();
-            ptr.add(0).write(player);
-            ptr.add(1).write(this);
-            ptr.add(2).write(caller);
-            ptr.add(3).write(verb);
-            ptr.add(4).write(args);
-            ptr.add(5).write(argstr);
-            ptr.add(6).write(v_nothing());
-            ptr.add(7).write(v_empty_str());
-            ptr.add(8).write(v_empty_str());
-            ptr.add(9).write(v_nothing());
-            ptr.add(10).write(v_empty_str());
+            Self::write_core_call_globals(ptr, player, this, caller, verb, args, argstr);
 
-            if total_width > 11 {
-                ptr::write_bytes(ptr.add(11), 0, total_width - 11);
+            // Parse globals (dobj/dobjstr/prepstr/iobj/iobjstr) default lazily through
+            // MooStackFrame::get_env(), so we keep these slots as v_none() by default.
+            if total_width > 6 {
+                ptr::write_bytes(ptr.add(6), 0, total_width - 6);
             }
             values.set_len(total_width);
         }
@@ -132,7 +155,7 @@ impl Environment {
         let src_iobj = src_base + GlobalName::iobj as usize;
         let src_iobjstr = src_base + GlobalName::iobjstr as usize;
 
-        // SAFETY: We reserved total_width.
+        // SAFETY: We reserved total_width, and copy parsing globals from a valid source frame.
         unsafe {
             let ptr = values.as_mut_ptr();
             ptr.add(0).write(player);
@@ -140,12 +163,12 @@ impl Environment {
             ptr.add(2).write(caller);
             ptr.add(3).write(verb);
             ptr.add(4).write(args);
-            ptr.add(5).write(source.values[src_argstr].clone());
-            ptr.add(6).write(source.values[src_dobj].clone());
-            ptr.add(7).write(source.values[src_dobjstr].clone());
-            ptr.add(8).write(source.values[src_prepstr].clone());
-            ptr.add(9).write(source.values[src_iobj].clone());
-            ptr.add(10).write(source.values[src_iobjstr].clone());
+            Self::write_cloned_or_none(ptr, 5, &source.values[src_argstr]);
+            Self::write_cloned_or_none(ptr, 6, &source.values[src_dobj]);
+            Self::write_cloned_or_none(ptr, 7, &source.values[src_dobjstr]);
+            Self::write_cloned_or_none(ptr, 8, &source.values[src_prepstr]);
+            Self::write_cloned_or_none(ptr, 9, &source.values[src_iobj]);
+            Self::write_cloned_or_none(ptr, 10, &source.values[src_iobjstr]);
 
             let filled = 11;
             if total_width > filled {

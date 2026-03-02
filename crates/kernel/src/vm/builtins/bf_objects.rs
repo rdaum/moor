@@ -2021,7 +2021,7 @@ fn bf_dispatch_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
             let parsed_command = ParsedCommand {
                 verb: verb_name,
                 argstr: argstr.clone(),
-                args: args.iter().collect(),
+                args: args.into_vec(),
                 dobj: if dobj == NOTHING { None } else { Some(dobj) },
                 dobjstr,
                 ambiguous_dobj: None,
@@ -2041,10 +2041,8 @@ fn bf_dispatch_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
                 verb_name,
                 this: v_obj(target),
                 player: bf_args.exec_state.top().player,
-                args: args.clone(),
                 // Caller needs to be the player in order for downstream caller perms checks to function correctly
                 caller: v_obj(bf_args.exec_state.top().player),
-                argstr: v_string(argstr),
                 command: parsed_command,
                 program,
             });

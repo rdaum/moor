@@ -25,8 +25,8 @@ pub use vm_test_utils::{
     ActivationAssemblyBenchState, ActivationBenchResult, EnvironmentBenchResult,
     ExecResult as VmExecResult, MooFrameBenchResult, call_eval_builtin, call_fork, call_verb,
     create_activation_assembly_state_for_bench, create_activation_for_bench,
-    create_nested_activation_for_bench, create_nested_environment_for_bench,
-    create_nested_moo_frame_for_bench, create_top_level_environment_for_bench,
-    create_top_level_moo_frame_for_bench, run_activation_assembly_cycle_for_bench,
-    run_activation_assembly_cycle_overhead_for_bench,
+    create_command_activation_for_bench, create_nested_activation_for_bench,
+    create_nested_environment_for_bench, create_nested_moo_frame_for_bench,
+    create_top_level_environment_for_bench, create_top_level_moo_frame_for_bench,
+    run_activation_assembly_cycle_for_bench, run_activation_assembly_cycle_overhead_for_bench,
 };

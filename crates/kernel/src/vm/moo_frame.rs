@@ -21,9 +21,10 @@ use moor_var::{
         labels::Offset,
         names::{GlobalName, Name},
     },
-    v_none,
+    v_empty_str, v_none, v_nothing,
 };
 use std::cmp::max;
+use std::sync::LazyLock;
 use strum::EnumCount;
 
 /// The MOO stack-frame specific portions of the activation:
@@ -115,6 +116,9 @@ pub(crate) struct Scope {
     /// True if this scope has a variable environment.
     pub(crate) environment: bool,
 }
+
+static PARSE_EMPTY_STR: LazyLock<Var> = LazyLock::new(v_empty_str);
+static PARSE_NOTHING: LazyLock<Var> = LazyLock::new(v_nothing);
 
 impl MooStackFrame {
     /// Create a new MOO stack frame with default environment.
@@ -268,8 +272,18 @@ impl MooStackFrame {
     }
 
     pub fn get_gvar(&self, gname: GlobalName) -> Option<&Var> {
-        let pos = gname as usize;
-        self.environment.get(0, pos)
+        if let Some(v) = self.environment.get(0, gname as usize) {
+            return Some(v);
+        }
+
+        match gname {
+            GlobalName::dobj | GlobalName::iobj => Some(&PARSE_NOTHING),
+            GlobalName::argstr
+            | GlobalName::dobjstr
+            | GlobalName::prepstr
+            | GlobalName::iobjstr => Some(&PARSE_EMPTY_STR),
+            _ => None,
+        }
     }
 
     pub fn set_variable(&mut self, id: &Name, v: Var) {
@@ -292,7 +306,22 @@ impl MooStackFrame {
         let scope_idx = id.1 as usize;
         let var_idx = id.0 as usize;
 
-        self.environment.get(scope_idx, var_idx)
+        if let Some(v) = self.environment.get(scope_idx, var_idx) {
+            return Some(v);
+        }
+
+        if scope_idx != 0 {
+            return None;
+        }
+
+        match GlobalName::from_repr(var_idx) {
+            Some(GlobalName::dobj) | Some(GlobalName::iobj) => Some(&PARSE_NOTHING),
+            Some(GlobalName::argstr)
+            | Some(GlobalName::dobjstr)
+            | Some(GlobalName::prepstr)
+            | Some(GlobalName::iobjstr) => Some(&PARSE_EMPTY_STR),
+            _ => None,
+        }
     }
 
     pub(crate) fn switch_to_fork_vector(&mut self, fork_vector: Offset) {

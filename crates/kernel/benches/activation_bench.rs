@@ -20,17 +20,18 @@ use moor_bench_utils::{BenchContext, black_box};
 use uuid::Uuid;
 
 use moor_common::{
-    model::{VerbArgsSpec, VerbDef, VerbFlag},
+    matching::ParsedCommand,
+    model::{PrepSpec, VerbArgsSpec, VerbDef, VerbFlag},
     util::BitEnum,
 };
 use moor_compiler::{CompileOptions, compile};
 use moor_kernel::testing::{
     ActivationAssemblyBenchState, ActivationBenchResult, MooFrameBenchResult,
     create_activation_assembly_state_for_bench, create_activation_for_bench,
-    create_nested_activation_for_bench, create_nested_environment_for_bench,
-    create_nested_moo_frame_for_bench, create_top_level_environment_for_bench,
-    create_top_level_moo_frame_for_bench, run_activation_assembly_cycle_for_bench,
-    run_activation_assembly_cycle_overhead_for_bench,
+    create_command_activation_for_bench, create_nested_activation_for_bench,
+    create_nested_environment_for_bench, create_nested_moo_frame_for_bench,
+    create_top_level_environment_for_bench, create_top_level_moo_frame_for_bench,
+    run_activation_assembly_cycle_for_bench, run_activation_assembly_cycle_overhead_for_bench,
 };
 use moor_var::{
     List, SYSTEM_OBJECT, Symbol, Var,
@@ -59,6 +60,8 @@ struct ActivationFixture {
     small_args: List,
     empty_argstr: Var,
     short_argstr: Var,
+    empty_command: ParsedCommand,
+    args_command: ParsedCommand,
     simple_program: ProgramType,
     complex_program: ProgramType,
 }
@@ -82,6 +85,32 @@ impl ActivationFixture {
             )
             .expect("complex program should compile"),
         );
+        let empty_command = ParsedCommand {
+            verb: verb_name,
+            argstr: String::new(),
+            args: Vec::new(),
+            dobjstr: None,
+            dobj: None,
+            ambiguous_dobj: None,
+            prepstr: None,
+            prep: PrepSpec::None,
+            iobjstr: None,
+            iobj: None,
+            ambiguous_iobj: None,
+        };
+        let args_command = ParsedCommand {
+            verb: verb_name,
+            argstr: "1 2 hello".to_string(),
+            args: vec![v_int(1), v_int(2), v_str("hello")],
+            dobjstr: None,
+            dobj: None,
+            ambiguous_dobj: None,
+            prepstr: None,
+            prep: PrepSpec::None,
+            iobjstr: None,
+            iobj: None,
+            ambiguous_iobj: None,
+        };
 
         Self {
             verb_name,
@@ -92,6 +121,8 @@ impl ActivationFixture {
             small_args: List::mk_list(&[v_int(1), v_int(2), v_str("hello")]),
             empty_argstr: v_empty_str(),
             short_argstr: v_str("some argument string"),
+            empty_command,
+            args_command,
             simple_program,
             complex_program,
         }
@@ -623,6 +654,46 @@ fn bench_activation_nested_simple(
     }
 }
 
+fn bench_command_activation_empty(
+    ctx: &mut ActivationBenchContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    let fixture = &ctx.fixture;
+    for _ in 0..chunk_size {
+        black_box(create_command_activation_for_bench(
+            SYSTEM_OBJECT,
+            fixture.base_verbdef.clone(),
+            fixture.verb_name,
+            fixture.this.clone(),
+            SYSTEM_OBJECT,
+            fixture.caller.clone(),
+            fixture.empty_command.clone(),
+            fixture.simple_program.clone(),
+        ));
+    }
+}
+
+fn bench_command_activation_with_args(
+    ctx: &mut ActivationBenchContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    let fixture = &ctx.fixture;
+    for _ in 0..chunk_size {
+        black_box(create_command_activation_for_bench(
+            SYSTEM_OBJECT,
+            fixture.base_verbdef.clone(),
+            fixture.verb_name,
+            fixture.this.clone(),
+            SYSTEM_OBJECT,
+            fixture.caller.clone(),
+            fixture.args_command.clone(),
+            fixture.simple_program.clone(),
+        ));
+    }
+}
+
 pub fn main() {
     use moor_bench_utils::{generate_session_summary, op_bench_with_factory_filtered};
 
@@ -651,7 +722,7 @@ pub fn main() {
     if let Some(f) = filter {
         eprintln!("Running activation benchmarks matching filter: '{f}'");
         eprintln!(
-            "Available filters: all, activation, primitives, environment, frame, assembly, inputs, for_call, or any benchmark name substring"
+            "Available filters: all, activation, primitives, environment, frame, assembly, inputs, for_call, command, or any benchmark name substring"
         );
         eprintln!();
     }
@@ -830,6 +901,20 @@ pub fn main() {
         "activation_for_call_nested_simple",
         "activation_for_call",
         bench_activation_nested_simple,
+        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
+        filter,
+    );
+    op_bench_with_factory_filtered(
+        "activation_command_request_top_level_simple",
+        "activation_command",
+        bench_command_activation_empty,
+        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
+        filter,
+    );
+    op_bench_with_factory_filtered(
+        "activation_command_request_with_args",
+        "activation_command",
+        bench_command_activation_with_args,
         &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
         filter,
     );

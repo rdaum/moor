@@ -96,12 +96,8 @@ pub struct CommandVerbExecutionRequest {
     pub this: Var,
     /// Player
     pub player: Obj,
-    /// Arguments
-    pub args: List,
     /// Caller
     pub caller: Var,
-    /// Argument string
-    pub argstr: Var,
     /// The parsed command with dobj, iobj, prep, etc.
     pub command: ParsedCommand,
     /// The decoded MOO Binary that contains the verb to be executed.
@@ -359,12 +355,13 @@ impl VMExecState {
         verb_name: Symbol,
         this: Var,
         player: Obj,
-        args: List,
         caller: Var,
-        argstr: Var,
         mut command: ParsedCommand,
         program: ProgramType,
     ) {
+        let args: List = std::mem::take(&mut command.args).into_iter().collect();
+        let argstr = v_string(std::mem::take(&mut command.argstr));
+
         // Initial command activation - no parent to inherit from
         let mut a = Activation::for_call(
             resolved_verb,
@@ -380,10 +377,6 @@ impl VMExecState {
         );
 
         // Set parsing variables from the parsed command
-        a.frame.set_global_variable(
-            GlobalName::argstr,
-            v_string(std::mem::take(&mut command.argstr)),
-        );
         a.frame
             .set_global_variable(GlobalName::dobj, v_obj(command.dobj.unwrap_or(NOTHING)));
         a.frame.set_global_variable(
@@ -519,7 +512,7 @@ impl VMExecState {
     ) -> Result<(), Error> {
         // Get current activation before borrowing self immutably
         let current_activation = self.top();
-        let a = Activation::for_lambda_call(&lambda, current_activation, args.iter().collect())?;
+        let a = Activation::for_lambda_call(&lambda, current_activation, args.into_vec())?;
         self.stack.push(a);
 
         // Emit VerbBegin trace event if this is a MOO lambda
