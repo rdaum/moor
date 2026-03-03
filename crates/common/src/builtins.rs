@@ -158,6 +158,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
         mk_builtin("reset_max_object", Q(0), Q(0), vec![], false),
+        mk_builtin("program_cache_stats", Q(0), Q(0), vec![], true),
     ]);
     // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "server/system");

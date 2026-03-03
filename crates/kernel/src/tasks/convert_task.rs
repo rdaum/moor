@@ -18,6 +18,7 @@ use crate::{
         TaskStart as KernelTaskStart,
         task::Task as KernelTask,
         task::TaskState as KernelTaskState,
+        task_program_cache::TaskProgramCache,
         task_q::{SuspendedTask as KernelSuspendedTask, WakeCondition as KernelWakeCondition},
     },
     vm::{
@@ -834,7 +835,18 @@ pub(crate) fn scope_from_ref(fb: fb::ScopeRef<'_>) -> Result<KernelScope, TaskCo
 pub(crate) fn moo_stack_frame_to_flatbuffer(
     frame: &KernelMooStackFrame,
 ) -> Result<fb::MooStackFrame, TaskConversionError> {
-    let fb_program = encode_program_to_fb(&frame.program)
+    let program = if let Some(program) = frame.program.as_ref() {
+        program
+    } else if let Some(program_ptr) = frame.program_ptr {
+        // SAFETY: program_ptr is set from task-owned program cache and is valid
+        // for the lifetime of this task while serializing.
+        unsafe { &*(program_ptr as *const moor_compiler::Program) }
+    } else {
+        return Err(TaskConversionError::ProgramError(
+            "MooStackFrame missing both materialized program and program_ptr".to_string(),
+        ));
+    };
+    let fb_program = encode_program_to_fb(program)
         .map_err(|e| TaskConversionError::ProgramError(format!("Error encoding program: {e}")))?;
 
     let fb_pc_type = pc_type_to_flatbuffer(&frame.pc_type)?;
@@ -1346,6 +1358,10 @@ pub(crate) fn vm_exec_state_from_ref(
         start_time,
         maximum_time: None, // Will be set by caller
         pending_raise_error: None,
+        program_cache_stats: Default::default(),
+        program_cache_total_slots: 0,
+        program_cache_live_slots: 0,
+        program_cache_key_count: 0,
         unsync: Default::default(),
     })
 }
@@ -1861,6 +1877,7 @@ pub(crate) fn task_from_ref(fb: fb::TaskRef<'_>) -> Result<KernelTask, TaskConve
         retry_state,
         handling_uncaught_error,
         pending_exception,
+        program_cache: TaskProgramCache::default(),
     })
 }
 
@@ -1918,4 +1935,34 @@ pub fn suspended_task_from_ref(
         session: Arc::new(NoopClientSession::new()),
         result_sender: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tasks::task_program_cache::ProgramSlot;
+    use moor_compiler::{CompileOptions, Program, compile};
+    use moor_var::{NOTHING, SYSTEM_OBJECT, v_empty_list, v_empty_str, v_obj, v_symbol_str};
+
+    #[test]
+    fn slot_backed_moo_frame_serializes_without_materialization() {
+        let program = compile("return 1;", CompileOptions::default()).unwrap();
+        let boxed_program = Box::new(program);
+        let slot = ProgramSlot {
+            program_ptr: boxed_program.as_ref() as *const Program as usize,
+            global_width: boxed_program.var_names().global_width(),
+        };
+
+        let frame = KernelMooStackFrame::new_with_all_globals_from_slot(
+            slot,
+            v_obj(SYSTEM_OBJECT),
+            v_obj(SYSTEM_OBJECT),
+            v_obj(NOTHING),
+            v_symbol_str(moor_var::Symbol::mk("test")),
+            v_empty_list(),
+            v_empty_str(),
+        );
+        let serialized = moo_stack_frame_to_flatbuffer(&frame);
+        assert!(serialized.is_ok());
+    }
 }

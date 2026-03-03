@@ -668,7 +668,10 @@ impl WorldStateTransaction {
     ) -> Result<VerbDef, WorldStateError> {
         let verbdefs = self.get_verbs(&resolved.location())?;
         let Some(verbdef) = verbdefs.find_ref(&resolved.uuid()) else {
-            return Err(WorldStateError::VerbNotFound(*receiver, verb_name.to_string()));
+            return Err(WorldStateError::VerbNotFound(
+                *receiver,
+                verb_name.to_string(),
+            ));
         };
         Ok(verbdef.clone())
     }

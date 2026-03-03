@@ -24,7 +24,7 @@ pub use crate::model::{
     world_state::{
         DispatchFlagsSource, ObjectKind, PropertyLookupHint, PropertyLookupPicOutcome,
         PropertyLookupResult, VerbDispatch, VerbDispatchResult, VerbLookup, VerbLookupHint,
-        VerbLookupPicOutcome, WorldState, WorldStateSource, command_verb_argspec,
+        VerbLookupPicOutcome, VerbProgramKey, WorldState, WorldStateSource, command_verb_argspec,
     },
 };
 use serde::Serialize;

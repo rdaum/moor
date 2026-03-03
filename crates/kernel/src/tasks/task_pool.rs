@@ -12,7 +12,9 @@
 //
 
 use flume::{Receiver, Sender};
-use moor_common::threading::pin_current_thread_to_core;
+use moor_common::threading::{
+    pin_current_thread_to_core, set_current_task_worker_index, set_task_worker_count,
+};
 use std::{io, thread::JoinHandle};
 use tracing::{error, warn};
 
@@ -44,6 +46,7 @@ impl TaskThreadPool {
     pub(crate) fn new(num_threads: usize, pinned_core_ids: Option<Vec<usize>>) -> io::Result<Self> {
         let (sender, receiver) = flume::unbounded::<WorkerMsg>();
         let pinned_core_ids = pinned_core_ids.map(std::sync::Arc::new);
+        set_task_worker_count(num_threads);
 
         let mut threads = Vec::with_capacity(num_threads);
         for index in 0..num_threads {
@@ -89,6 +92,8 @@ fn worker_loop(
     receiver: Receiver<WorkerMsg>,
     pinned_core_ids: Option<std::sync::Arc<Vec<usize>>>,
 ) {
+    set_current_task_worker_index(index);
+
     if let Some(core_ids) = pinned_core_ids {
         let core_id = core_ids[index % core_ids.len()];
         if let Err(e) = pin_current_thread_to_core(core_id) {

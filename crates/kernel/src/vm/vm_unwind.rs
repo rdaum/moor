@@ -21,10 +21,7 @@ use crate::vm::{
 
 #[cfg(feature = "trace_events")]
 use crate::{trace_builtin_end, trace_stack_unwind, trace_verb_end};
-use moor_common::{
-    model::VerbFlag,
-    tasks::Exception,
-};
+use moor_common::{model::VerbFlag, tasks::Exception};
 use moor_compiler::{BUILTINS, Label, Offset, to_literal};
 use moor_var::{
     Error, NOTHING, Var, v_arc_str, v_bool, v_err, v_error, v_int, v_list, v_none, v_obj, v_str,

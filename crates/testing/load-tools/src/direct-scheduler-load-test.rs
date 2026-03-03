@@ -725,7 +725,8 @@ async fn load_test_workload(
             0
         };
 
-        let find_verb_count = db_counters().dispatch_verb.invocations().sum() - baseline_find_verb_count;
+        let find_verb_count =
+            db_counters().dispatch_verb.invocations().sum() - baseline_find_verb_count;
         let find_verb_total_nanos = db_counters()
             .dispatch_verb
             .cumulative_duration_nanos()

@@ -596,8 +596,7 @@ mod tests {
                                         &SYSTEM_OBJECT,
                                         moor_common::model::VerbDispatch::new(
                                             moor_common::model::VerbLookup::method(
-                                                &child_obj,
-                                                verb_sym,
+                                                &child_obj, verb_sym,
                                             ),
                                             moor_common::model::DispatchFlagsSource::Permissions,
                                         ),

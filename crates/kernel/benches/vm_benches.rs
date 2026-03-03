@@ -32,6 +32,7 @@ use moor_compiler::{CompileOptions, compile};
 use moor_db::{DatabaseConfig, TxDB};
 use moor_kernel::{
     config::FeaturesConfig,
+    tasks::task_program_cache::TaskProgramCache,
     testing::vm_test_utils::setup_task_context,
     vm::{VMHostResponse, builtins::BuiltinRegistry, vm_host::VmHost},
 };
@@ -119,10 +120,17 @@ fn execute(session: Arc<dyn Session>, vm_host: &mut VmHost) -> usize {
     vm_host.reset_time();
 
     let config = FeaturesConfig::default();
+    let mut program_cache = TaskProgramCache::default();
 
     // Call repeatedly into exec until we ge either an error or Complete.
     loop {
-        match vm_host.exec_interpreter(0, session.as_ref(), &BuiltinRegistry::new(), &config) {
+        match vm_host.exec_interpreter(
+            0,
+            session.as_ref(),
+            &BuiltinRegistry::new(),
+            &config,
+            &mut program_cache,
+        ) {
             VMHostResponse::ContinueOk => {
                 continue;
             }

@@ -28,7 +28,7 @@ use strum::EnumCount;
 use crate::{
     config::FeaturesConfig,
     task_context::TaskGuard,
-    tasks::task_scheduler_client::TaskSchedulerClient,
+    tasks::{task_program_cache::TaskProgramCache, task_scheduler_client::TaskSchedulerClient},
     vm::{VMHostResponse, builtins::BuiltinRegistry, vm_host::VmHost},
 };
 
@@ -63,11 +63,17 @@ fn execute_fork(
     vm_host.start_fork(task_id, &fork_request, false);
 
     let config = Arc::new(FeaturesConfig::default());
+    let mut program_cache = TaskProgramCache::default();
 
     // Execute the forked task until completion
     loop {
-        let exec_result =
-            vm_host.exec_interpreter(task_id, session.as_ref(), builtins, config.as_ref());
+        let exec_result = vm_host.exec_interpreter(
+            task_id,
+            session.as_ref(),
+            builtins,
+            config.as_ref(),
+            &mut program_cache,
+        );
         match exec_result {
             VMHostResponse::ContinueOk => {
                 continue;
@@ -123,10 +129,17 @@ where
     fun(&mut vm_host);
 
     let config = Arc::new(FeaturesConfig::default());
+    let mut program_cache = TaskProgramCache::default();
 
     // Call repeatedly into exec until we ge either an error or Complete.
     loop {
-        let exec_result = vm_host.exec_interpreter(0, session.as_ref(), &builtins, config.as_ref());
+        let exec_result = vm_host.exec_interpreter(
+            0,
+            session.as_ref(),
+            &builtins,
+            config.as_ref(),
+            &mut program_cache,
+        );
         match exec_result {
             VMHostResponse::ContinueOk => {
                 continue;
@@ -186,7 +199,14 @@ pub fn call_verb(
         )
         .unwrap()
         .unwrap();
-    let program = verb_result.program;
+    let program = world_state
+        .retrieve_verb(
+            &SYSTEM_OBJECT,
+            &verb_result.program_key.verb_definer,
+            verb_result.program_key.verb_uuid,
+        )
+        .unwrap()
+        .0;
     let verbdef = verb_result.verbdef;
 
     // Use wizard + programmer flags for testing
@@ -520,7 +540,7 @@ pub fn create_activation_for_bench(
         caller,
         argstr,
         None, // No parent activation for top-level calls
-        program,
+        crate::vm::vm_call::CallProgram::Materialized(program),
     );
     ActivationBenchResult { inner: activation }
 }
@@ -552,7 +572,7 @@ pub fn create_command_activation_for_bench(
         caller,
         argstr,
         None,
-        program,
+        crate::vm::vm_call::CallProgram::Materialized(program),
     );
 
     activation.frame.set_global_variable(
@@ -615,7 +635,7 @@ pub fn create_nested_activation_for_bench(
         caller,
         argstr,
         Some(parent.as_ref()),
-        program,
+        crate::vm::vm_call::CallProgram::Materialized(program),
     );
     ActivationBenchResult { inner: activation }
 }

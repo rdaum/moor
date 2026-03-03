@@ -30,6 +30,7 @@ use crate::{
     PhantomUnsync,
     config::FeaturesConfig,
     task_context::with_current_transaction,
+    tasks::task_program_cache::TaskProgramCache,
     vm::{
         CommandVerbExecutionRequest, FinallyReason, Fork, TaskSuspend, VMHostResponse,
         VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend},
@@ -38,7 +39,7 @@ use crate::{
         builtins::BuiltinRegistry,
         exec_state::VMExecState,
         moo_execute::moo_frame_execute,
-        vm_call::VmExecParams,
+        vm_call::{CallProgram, VmExecParams},
     },
 };
 use moor_common::{matching::ParsedCommand, tasks::Session};
@@ -190,7 +191,7 @@ impl VmHost {
             player,
             caller,
             command,
-            program,
+            CallProgram::Materialized(program),
         );
         self.running = true;
     }
@@ -223,7 +224,7 @@ impl VmHost {
             args,
             caller,
             argstr,
-            program,
+            CallProgram::Materialized(program),
         );
         self.running = true;
     }
@@ -275,6 +276,7 @@ impl VmHost {
         session: &dyn Session,
         builtin_registry: &BuiltinRegistry,
         config: &FeaturesConfig,
+        program_cache: &mut TaskProgramCache,
     ) -> VMHostResponse {
         self.vm_exec_state.task_id = task_id;
 
@@ -343,6 +345,31 @@ impl VmHost {
                     continue;
                 }
                 ExecutionResult::DispatchVerb(exec_request) => {
+                    let resolved = match with_current_transaction(|ws| {
+                        program_cache.resolve_verb_slot(
+                            ws,
+                            &exec_request.permissions,
+                            &exec_request.program_key.verb_definer,
+                            exec_request.program_key.verb_uuid,
+                        )
+                    }) {
+                        Ok(program_slot) => program_slot,
+                        Err(moor_common::model::WorldStateError::RollbackRetry) => {
+                            return VMHostResponse::RollbackRetry;
+                        }
+                        Err(e) => {
+                            result = ExecutionResult::PushError(e.to_error());
+                            continue;
+                        }
+                    };
+                    if resolved.cache_hit {
+                        self.vm_exec_state.program_cache_stats.hits += 1;
+                    } else {
+                        self.vm_exec_state.program_cache_stats.misses += 1;
+                    }
+                    if resolved.inserted {
+                        self.vm_exec_state.program_cache_stats.inserts += 1;
+                    }
                     self.vm_exec_state.exec_call_request(
                         exec_request.permissions_flags,
                         exec_request.resolved_verb,
@@ -352,11 +379,36 @@ impl VmHost {
                         exec_request.args,
                         exec_request.caller,
                         exec_request.argstr,
-                        exec_request.program,
+                        CallProgram::TxSlot(resolved.slot),
                     );
                     return ContinueOk;
                 }
                 ExecutionResult::DispatchCommandVerb(exec_request) => {
+                    let resolved = match with_current_transaction(|ws| {
+                        program_cache.resolve_verb_slot(
+                            ws,
+                            &exec_request.permissions,
+                            &exec_request.program_key.verb_definer,
+                            exec_request.program_key.verb_uuid,
+                        )
+                    }) {
+                        Ok(program_slot) => program_slot,
+                        Err(moor_common::model::WorldStateError::RollbackRetry) => {
+                            return VMHostResponse::RollbackRetry;
+                        }
+                        Err(e) => {
+                            result = ExecutionResult::PushError(e.to_error());
+                            continue;
+                        }
+                    };
+                    if resolved.cache_hit {
+                        self.vm_exec_state.program_cache_stats.hits += 1;
+                    } else {
+                        self.vm_exec_state.program_cache_stats.misses += 1;
+                    }
+                    if resolved.inserted {
+                        self.vm_exec_state.program_cache_stats.inserts += 1;
+                    }
                     self.vm_exec_state.exec_command_request(
                         exec_request.permissions_flags,
                         exec_request.resolved_verb,
@@ -365,7 +417,7 @@ impl VmHost {
                         exec_request.player,
                         exec_request.caller,
                         exec_request.command,
-                        exec_request.program,
+                        CallProgram::TxSlot(resolved.slot),
                     );
                     return ContinueOk;
                 }
@@ -417,7 +469,10 @@ impl VmHost {
                 ExecutionResult::TaskStartFork(delay, task_id, fv_offset) => {
                     let a = self.vm_exec_state.top().clone();
                     let parent_task_id = self.vm_exec_state.task_id;
-                    let new_activation = a.clone();
+                    let mut new_activation = a.clone();
+                    if let Frame::Moo(ref mut frame) = new_activation.frame {
+                        frame.materialize_program_for_handoff();
+                    }
                     let fork_request = Box::new(Fork {
                         player: a.player,
                         progr: a.permissions,
@@ -545,12 +600,18 @@ impl VmHost {
 
     /// Get a copy of the current VM state, for later restoration.
     pub(crate) fn snapshot_state(&self) -> VMExecState {
-        self.vm_exec_state.clone()
+        let mut snapshot = self.vm_exec_state.clone();
+        snapshot.materialize_frame_programs();
+        snapshot
     }
 
     /// Get a reference to the current VM execution state for read-only access.
     pub(crate) fn vm_exec_state(&self) -> &VMExecState {
         &self.vm_exec_state
+    }
+
+    pub(crate) fn vm_exec_state_mut(&mut self) -> &mut VMExecState {
+        &mut self.vm_exec_state
     }
 
     /// Restore from a snapshot.
@@ -576,6 +637,17 @@ impl VmHost {
 
     pub fn permissions(&self) -> Obj {
         self.vm_exec_state.top().permissions
+    }
+
+    pub fn set_program_cache_sizes(
+        &mut self,
+        total_slots: usize,
+        live_slots: usize,
+        key_count: usize,
+    ) {
+        self.vm_exec_state.program_cache_total_slots = total_slots;
+        self.vm_exec_state.program_cache_live_slots = live_slots;
+        self.vm_exec_state.program_cache_key_count = key_count;
     }
 
     /// Try to get the verb name of the current activation.

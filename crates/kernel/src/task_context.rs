@@ -314,9 +314,9 @@ where
     F: FnOnce() -> Result<(Box<dyn WorldState>, R), WorldStateError>,
 {
     // Extract context before commit to preserve it
-    let preserved_context = CURRENT_CONTEXT.with(|ctx| {
-        let task_ctx = ctx.borrow();
-        let task_ctx = task_ctx.as_ref().expect("No active task context");
+    let (task_scheduler_client, task_id, player, session) = CURRENT_CONTEXT.with(|ctx| {
+        let mut task_ctx = ctx.borrow_mut();
+        let task_ctx = task_ctx.as_mut().expect("No active task context");
         (
             task_ctx.task_scheduler_client.clone(),
             task_ctx.task_id,
@@ -342,10 +342,10 @@ where
                 );
                 *current = Some(TaskContext {
                     world_state: new_world_state,
-                    task_scheduler_client: preserved_context.0,
-                    task_id: preserved_context.1,
-                    player: preserved_context.2,
-                    session: preserved_context.3,
+                    task_scheduler_client,
+                    task_id,
+                    player,
+                    session,
                 });
             });
 

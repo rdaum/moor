@@ -31,7 +31,7 @@ use moor_common::{
         ObjectRef, Perms, PropAttrs, PropDef, PropDefs, PropFlag, PropPerms, PropertyLookupHint,
         PropertyLookupPicOutcome, PropertyLookupResult, ValSet, VerbArgsSpec, VerbAttrs, VerbDef,
         VerbDefs, VerbDispatch, VerbDispatchResult, VerbFlag, VerbLookup, VerbLookupHint,
-        VerbLookupPicOutcome, WorldState, WorldStateError, WorldStatePerf,
+        VerbLookupPicOutcome, VerbProgramKey, WorldState, WorldStateError, WorldStatePerf,
     },
     util::{BitEnum, PerfTimerGuard},
 };
@@ -442,11 +442,15 @@ impl WorldState for DbWorldState {
         if let Some(hint) = hint {
             if hint.receiver != *obj || hint.property_name != pname {
                 pic_outcome = PropertyLookupPicOutcome::MissGuardMismatch;
-            } else if hint.prop_cache_version != self.get_tx().prop_resolution_cache_version() as u64
+            } else if hint.prop_cache_version
+                != self.get_tx().prop_resolution_cache_version() as u64
             {
                 pic_outcome = PropertyLookupPicOutcome::MissVersionMismatch;
             } else {
-                match self.get_tx().resolve_property_by_uuid(obj, hint.property_uuid) {
+                match self
+                    .get_tx()
+                    .resolve_property_by_uuid(obj, hint.property_uuid)
+                {
                     Ok((value, propperms, _)) => {
                         self.perms(perms)?
                             .check_property_allows(&propperms, PropFlag::Read)?;
@@ -877,7 +881,11 @@ impl WorldState for DbWorldState {
         Ok((binary, vh))
     }
 
-    fn lookup_verb(&self, perms: &Obj, lookup: VerbLookup<'_>) -> Result<Option<VerbDef>, WorldStateError> {
+    fn lookup_verb(
+        &self,
+        perms: &Obj,
+        lookup: VerbLookup<'_>,
+    ) -> Result<Option<VerbDef>, WorldStateError> {
         let _t = PerfTimerGuard::new(&db_counters().lookup_verb);
         if !self.valid(lookup.object)? {
             return Ok(None);
@@ -914,7 +922,9 @@ impl WorldState for DbWorldState {
         let mut pic_outcome = VerbLookupPicOutcome::MissNoHint;
 
         if let Some(hint) = dispatch.hint {
-            if hint.receiver != *dispatch.lookup.object || hint.verb_name != dispatch.lookup.verb_name {
+            if hint.receiver != *dispatch.lookup.object
+                || hint.verb_name != dispatch.lookup.verb_name
+            {
                 pic_outcome = VerbLookupPicOutcome::MissGuardMismatch;
             } else if hint.verb_cache_version != verb_cache_version {
                 pic_outcome = VerbLookupPicOutcome::MissVersionMismatch;
@@ -928,7 +938,6 @@ impl WorldState for DbWorldState {
                 ) {
                     Ok(vh) => {
                         perms.check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
-                        let program = tx.get_verb_program(&hint.verb_definer, hint.verb_uuid)?;
                         let permissions_flags = match dispatch.flags_source {
                             DispatchFlagsSource::Permissions => perms.flags,
                             DispatchFlagsSource::VerbOwner => {
@@ -940,7 +949,10 @@ impl WorldState for DbWorldState {
                             }
                         };
                         return Ok(Some(VerbDispatchResult {
-                            program,
+                            program_key: VerbProgramKey {
+                                verb_definer: hint.verb_definer,
+                                verb_uuid: hint.verb_uuid,
+                            },
                             verbdef: vh,
                             permissions_flags,
                             next_hint: Some(hint),
@@ -966,7 +978,6 @@ impl WorldState for DbWorldState {
         };
 
         perms.check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
-        let program = tx.get_verb_program(&vh.location(), vh.uuid())?;
         let permissions_flags = match dispatch.flags_source {
             DispatchFlagsSource::Permissions => perms.flags,
             DispatchFlagsSource::VerbOwner => {
@@ -985,7 +996,10 @@ impl WorldState for DbWorldState {
             verb_cache_version: tx.verb_resolution_cache_version() as u64,
         });
         Ok(Some(VerbDispatchResult {
-            program,
+            program_key: VerbProgramKey {
+                verb_definer: vh.location(),
+                verb_uuid: vh.uuid(),
+            },
             verbdef: vh,
             permissions_flags,
             next_hint,

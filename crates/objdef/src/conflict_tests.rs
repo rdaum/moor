@@ -335,8 +335,10 @@ mod tests {
         let ws = db.new_world_state()?;
         let target = Obj::mk_id(1);
         let argspec = command_verb_argspec(&target, &target, PrepSpec::None, &NOTHING);
-        let verb_result =
-            ws.lookup_verb(&SYSTEM_OBJECT, VerbLookup::command(&target, Symbol::mk("look"), argspec))?;
+        let verb_result = ws.lookup_verb(
+            &SYSTEM_OBJECT,
+            VerbLookup::command(&target, Symbol::mk("look"), argspec),
+        )?;
 
         if let Some(verbdef) = verb_result {
             // Should still be original owner (#1) and executable, not changed to #0 and non-executable
@@ -565,8 +567,10 @@ mod tests {
         let ws = db.new_world_state()?;
         let target = Obj::mk_id(1);
         let argspec = command_verb_argspec(&target, &target, PrepSpec::None, &NOTHING);
-        let verb_result =
-            ws.lookup_verb(&SYSTEM_OBJECT, VerbLookup::command(&target, Symbol::mk("look"), argspec))?;
+        let verb_result = ws.lookup_verb(
+            &SYSTEM_OBJECT,
+            VerbLookup::command(&target, Symbol::mk("look"), argspec),
+        )?;
 
         if let Some(verbdef) = verb_result {
             // Should be changed to new owner (#0) and non-executable (flags "rw")

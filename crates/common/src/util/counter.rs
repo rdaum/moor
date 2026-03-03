@@ -17,9 +17,11 @@
 //! Forked to allow for use of corrected-size `CachePadded` here in utils, and to allow for
 //! improvements in the future.
 
+use crate::threading::{current_task_worker_index, task_worker_count};
 use crate::util::CachePadded;
 use std::cell::Cell;
 use std::fmt;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicIsize, AtomicUsize, Ordering};
 
 static THREAD_COUNTER: AtomicUsize = AtomicUsize::new(1);
@@ -39,6 +41,7 @@ pub fn make_new_padded_counter() -> CachePadded<AtomicIsize> {
 /// ConcurrentCounter shards cacheline aligned AtomicIsizes across a vector for faster updates in
 /// a high contention scenarios.
 pub struct ConcurrentCounter {
+    worker_cells: OnceLock<Vec<CachePadded<AtomicIsize>>>,
     cells: Vec<CachePadded<AtomicIsize>>,
 }
 
@@ -46,6 +49,10 @@ impl fmt::Debug for ConcurrentCounter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ConcurrentCounter")
             .field("sum", &self.sum())
+            .field(
+                "worker_cells",
+                &self.worker_cells.get().map(Vec::len).unwrap_or(0),
+            )
             .field("cells", &self.cells.len())
             .finish()
     }
@@ -66,8 +73,25 @@ impl ConcurrentCounter {
     pub fn new(count: usize) -> Self {
         let count = count.next_power_of_two();
         Self {
+            worker_cells: OnceLock::new(),
             cells: (0..count).map(|_| make_new_padded_counter()).collect(),
         }
+    }
+
+    #[inline]
+    fn worker_cells(&self) -> Option<&[CachePadded<AtomicIsize>]> {
+        let worker_count = task_worker_count();
+        if worker_count == 0 {
+            return None;
+        }
+
+        let cells = self.worker_cells.get_or_init(|| {
+            let worker_count = worker_count.next_power_of_two();
+            (0..worker_count)
+                .map(|_| make_new_padded_counter())
+                .collect()
+        });
+        Some(cells.as_slice())
     }
 
     #[inline]
@@ -111,6 +135,16 @@ impl ConcurrentCounter {
     /// ```
     #[inline]
     pub fn add_with_ordering(&self, value: isize, ordering: Ordering) {
+        if let Some(worker_index) = current_task_worker_index()
+            && let Some(cells) = self.worker_cells()
+            && worker_index < cells.len()
+        {
+            let cell = &cells[worker_index].value;
+            let current = cell.load(ordering);
+            cell.store(current.wrapping_add(value), ordering);
+            return;
+        }
+
         let c = self
             .cells
             .safely_get(self.thread_id() & (self.cells.len() - 1));
@@ -167,7 +201,11 @@ impl ConcurrentCounter {
     /// ```
     #[inline]
     pub fn sum_with_ordering(&self, ordering: Ordering) -> isize {
-        self.cells.iter().map(|c| c.value.load(ordering)).sum()
+        let shared_sum: isize = self.cells.iter().map(|c| c.value.load(ordering)).sum();
+        let worker_sum: isize = self.worker_cells.get().map_or(0, |cells| {
+            cells.iter().map(|c| c.value.load(ordering)).sum()
+        });
+        shared_sum.wrapping_add(worker_sum)
     }
 }
 
@@ -287,7 +325,7 @@ mod tests {
 
         assert_eq!(
             format!("Counter is: {counter:?}"),
-            "Counter is: ConcurrentCounter { sum: 1000000, cells: 8 }"
+            "Counter is: ConcurrentCounter { sum: 1000000, worker_cells: 0, cells: 8 }"
         )
     }
 }

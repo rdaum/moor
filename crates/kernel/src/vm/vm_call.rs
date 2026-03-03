@@ -14,6 +14,7 @@
 use crate::{
     config::FeaturesConfig,
     task_context::with_current_transaction,
+    tasks::task_program_cache::ProgramSlot,
     vm::{
         Fork,
         activation::{Activation, Frame},
@@ -32,7 +33,8 @@ use minstant::Instant;
 use moor_common::{
     matching::ParsedCommand,
     model::{
-        DispatchFlagsSource, ObjFlag, ResolvedVerb, VerbDispatch, VerbLookup, WorldStateError,
+        DispatchFlagsSource, ObjFlag, ResolvedVerb, VerbDispatch, VerbLookup, VerbProgramKey,
+        WorldStateError,
     },
     tasks::Session,
     util::BitEnum,
@@ -79,8 +81,8 @@ pub struct VerbExecutionRequest {
     pub caller: Var,
     /// Argument string
     pub argstr: Var,
-    /// The decoded MOO Binary that contains the verb to be executed.
-    pub program: ProgramType,
+    /// Stable key for the dispatched verb program.
+    pub program_key: VerbProgramKey,
 }
 
 /// The set of parameters for a command verb dispatch with full command environment.
@@ -102,8 +104,14 @@ pub struct CommandVerbExecutionRequest {
     pub caller: Var,
     /// The parsed command with dobj, iobj, prep, etc.
     pub command: ParsedCommand,
-    /// The decoded MOO Binary that contains the verb to be executed.
-    pub program: ProgramType,
+    /// Stable key for the dispatched verb program.
+    pub program_key: VerbProgramKey,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CallProgram {
+    Materialized(ProgramType),
+    TxSlot(ProgramSlot),
 }
 
 /// The set of parameters & utilities passed to the VM for execution of a given task.
@@ -245,8 +253,8 @@ impl VMExecState {
             );
         };
 
-        let (program, resolved_verb, permissions_flags) = match verb_result {
-            Ok(Some(vi)) => (vi.program, vi.verbdef, vi.permissions_flags),
+        let (program_key, resolved_verb, permissions_flags) = match verb_result {
+            Ok(Some(vi)) => (vi.program_key, vi.verbdef, vi.permissions_flags),
             Ok(None) => {
                 return self.push_error(E_VERBNF.with_msg(|| {
                     format!(
@@ -273,8 +281,10 @@ impl VMExecState {
             }
         };
 
-        // Permissions for the activation are the verb's owner.
-        self.exec_call_request(
+        // Defer program materialization/slot resolution to VmHost so it can source programs
+        // from the task-owned cache.
+        ExecutionResult::DispatchVerb(Box::new(VerbExecutionRequest {
+            permissions: self.top().permissions,
             permissions_flags,
             resolved_verb,
             verb_name,
@@ -282,10 +292,9 @@ impl VMExecState {
             player,
             args,
             caller,
-            v_empty_str(),
-            program,
-        );
-        ExecutionResult::More
+            argstr: v_empty_str(),
+            program_key,
+        }))
     }
 
     /// Setup the VM to execute the verb of the same current name, but using the parent's
@@ -326,8 +335,8 @@ impl VMExecState {
         let Some(verb_result) = lookup else {
             return self.push_error(E_INVIND.msg("Invalid object for pass() verb dispatch"));
         };
-        let (program, resolved_verb, permissions_flags) = match verb_result {
-            Ok(Some(vi)) => (vi.program, vi.verbdef, vi.permissions_flags),
+        let (program_key, resolved_verb, permissions_flags) = match verb_result {
+            Ok(Some(vi)) => (vi.program_key, vi.verbdef, vi.permissions_flags),
             Ok(None) => return self.push_error(E_VERBNF.msg("Verb not found for pass() dispatch")),
             Err(WorldStateError::RollbackRetry) => {
                 return ExecutionResult::TaskRollbackRestart;
@@ -349,7 +358,7 @@ impl VMExecState {
             args: args_list,
             caller,
             argstr: v_empty_str(),
-            program,
+            program_key,
         }))
     }
 
@@ -365,7 +374,7 @@ impl VMExecState {
         player: Obj,
         caller: Var,
         mut command: ParsedCommand,
-        program: ProgramType,
+        program: CallProgram,
     ) {
         let args: List = std::mem::take(&mut command.args).into_iter().collect();
         let argstr = v_string(std::mem::take(&mut command.argstr));
@@ -433,7 +442,7 @@ impl VMExecState {
         args: List,
         caller: Var,
         argstr: Var,
-        program: ProgramType,
+        program: CallProgram,
     ) {
         // Get current activation to inherit global variables from, if any.
         let current_activation = self.stack.last();
@@ -613,7 +622,7 @@ impl VMExecState {
         })
         .ok()?;
         let verb_result = verb_result?;
-        let program = verb_result.program;
+        let program_key = verb_result.program_key;
         let resolved_verb = verb_result.verbdef;
         let permissions_flags = verb_result.permissions_flags;
 
@@ -632,7 +641,7 @@ impl VMExecState {
                 args: args_list,
                 caller,
                 argstr: v_empty_str(),
-                program,
+                program_key,
             },
         )))
     }

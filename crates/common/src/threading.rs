@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -111,9 +112,30 @@ impl ThreadPlacement {
 }
 
 static THREAD_PLACEMENT: OnceLock<ThreadPlacement> = OnceLock::new();
+static TASK_WORKER_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+thread_local! {
+    static TASK_WORKER_INDEX: Cell<Option<usize>> = const { Cell::new(None) };
+}
 
 fn thread_placement() -> &'static ThreadPlacement {
     THREAD_PLACEMENT.get_or_init(ThreadPlacement::build)
+}
+
+pub fn set_task_worker_count(count: usize) {
+    TASK_WORKER_COUNT.store(count, Ordering::Relaxed);
+}
+
+pub fn task_worker_count() -> usize {
+    TASK_WORKER_COUNT.load(Ordering::Relaxed)
+}
+
+pub fn set_current_task_worker_index(index: usize) {
+    TASK_WORKER_INDEX.with(|slot| slot.set(Some(index)));
+}
+
+pub fn current_task_worker_index() -> Option<usize> {
+    TASK_WORKER_INDEX.with(|slot| slot.get())
 }
 
 pub fn spawn_perf<T, F>(name: impl Into<String>, f: F) -> io::Result<std::thread::JoinHandle<T>>

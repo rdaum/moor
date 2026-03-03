@@ -29,8 +29,7 @@ use moor_common::{
     model::{
         ArgSpec, CompileContext, CompileError, HasUuid, Named, ObjFlag, ParseErrorDetails,
         VerbArgsSpec, VerbAttrs, VerbDef, VerbFlag, VerbLookup, WorldStateError,
-        parse_preposition_spec,
-        preposition_to_string, verb_perms_string,
+        parse_preposition_spec, preposition_to_string, verb_perms_string,
     },
     util::BitEnum,
 };

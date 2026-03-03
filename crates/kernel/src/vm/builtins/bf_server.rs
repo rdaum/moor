@@ -27,7 +27,10 @@ use crate::{
     task_context::{
         current_task_scheduler_client, with_current_transaction, with_current_transaction_mut,
     },
-    tasks::{sched_counters, task_scheduler_client::TaskControlMsg},
+    tasks::{
+        sched_counters, task_program_cache::program_cache_global_stats,
+        task_scheduler_client::TaskControlMsg,
+    },
     vm::{
         builtins::{
             BfCallState, BfErr,
@@ -424,32 +427,59 @@ fn bf_log_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     }
 
-    // Log cache statistics in a format similar to LambdaMOO
+    let log_moor_cache = |name: &str, stats: &moor_db::CacheStats| {
+        let hits = stats.hit_count();
+        let negative_hits = stats.negative_hit_count();
+        let misses = stats.miss_count();
+        let total = hits + negative_hits + misses;
+        let hit_rate = if total == 0 {
+            0.0
+        } else {
+            ((hits + negative_hits) as f64 * 100.0) / total as f64
+        };
+        info!(
+            "{name} cache: {hits} hits, {negative_hits} negative hits, {misses} misses, {} flushes, {} entries ({hit_rate:.1}% lookup hit rate)",
+            stats.flush_count(),
+            stats.num_entries(),
+        );
+    };
+
+    log_moor_cache("Property", &PROP_CACHE_STATS);
+    log_moor_cache("Verb", &VERB_CACHE_STATS);
+    log_moor_cache("Ancestry", &ANCESTRY_CACHE_STATS);
+
+    let global_program = program_cache_global_stats();
+    let global_total = global_program.hits + global_program.misses;
+    let global_hit_rate = if global_total == 0 {
+        0.0
+    } else {
+        (global_program.hits as f64 * 100.0) / global_total as f64
+    };
     info!(
-        "Property cache: {} hits, {} misses, {} flushes, {} entries ({:.1}% hit rate)",
-        PROP_CACHE_STATS.hit_count(),
-        PROP_CACHE_STATS.miss_count(),
-        PROP_CACHE_STATS.flush_count(),
-        PROP_CACHE_STATS.num_entries(),
-        PROP_CACHE_STATS.hit_rate()
+        "Program cache (global): {} hits, {} misses, {} inserts, {} reclaimed, {} live slots ({global_hit_rate:.1}% hit rate)",
+        global_program.hits,
+        global_program.misses,
+        global_program.inserts,
+        global_program.reclaimed,
+        global_program.live_slots,
     );
 
+    let task_program = bf_args.exec_state.program_cache_stats;
+    let task_total = task_program.hits + task_program.misses;
+    let task_hit_rate = if task_total == 0 {
+        0.0
+    } else {
+        (task_program.hits as f64 * 100.0) / task_total as f64
+    };
     info!(
-        "Verb cache: {} hits, {} misses, {} flushes, {} entries ({:.1}% hit rate)",
-        VERB_CACHE_STATS.hit_count(),
-        VERB_CACHE_STATS.miss_count(),
-        VERB_CACHE_STATS.flush_count(),
-        VERB_CACHE_STATS.num_entries(),
-        VERB_CACHE_STATS.hit_rate()
-    );
-
-    info!(
-        "Ancestry cache: {} hits, {} misses, {} flushes, {} entries ({:.1}% hit rate)",
-        ANCESTRY_CACHE_STATS.hit_count(),
-        ANCESTRY_CACHE_STATS.miss_count(),
-        ANCESTRY_CACHE_STATS.flush_count(),
-        ANCESTRY_CACHE_STATS.num_entries(),
-        ANCESTRY_CACHE_STATS.hit_rate()
+        "Program cache (task): {} hits, {} misses, {} inserts, {} reclaimed, {} total slots, {} live slots, {} keys ({task_hit_rate:.1}% hit rate)",
+        task_program.hits,
+        task_program.misses,
+        task_program.inserts,
+        task_program.reclaimed,
+        bf_args.exec_state.program_cache_total_slots,
+        bf_args.exec_state.program_cache_live_slots,
+        bf_args.exec_state.program_cache_key_count,
     );
 
     Ok(RetNil)
@@ -1130,6 +1160,67 @@ fn bf_ancestry_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
     Ok(Ret(make_cache_stats_list(&ANCESTRY_CACHE_STATS)))
 }
 
+/// Usage: `map program_cache_stats()`
+/// Returns task-local and global program-cache stats. Wizard-only.
+///
+/// Shape:
+/// - `global`: `{hits, misses, inserts, reclaimed, live_slots}`
+/// - `task`: `{hits, misses, inserts, reclaimed, total_slots, live_slots, key_count}`
+fn bf_program_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if !bf_args.args.is_empty() {
+        return Err(ErrValue(
+            E_ARGS.msg("program_cache_stats() does not take any arguments"),
+        ));
+    }
+    if !bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_is_wizard()
+        .map_err(world_state_bf_err)?
+    {
+        return Err(ErrValue(
+            E_PERM.msg("Only wizards may call program_cache_stats()"),
+        ));
+    }
+
+    let global = program_cache_global_stats();
+    let task = bf_args.exec_state.program_cache_stats;
+
+    Ok(Ret(v_map(&[
+        (
+            v_str("global"),
+            v_map(&[
+                (v_str("hits"), v_int(global.hits)),
+                (v_str("misses"), v_int(global.misses)),
+                (v_str("inserts"), v_int(global.inserts)),
+                (v_str("reclaimed"), v_int(global.reclaimed)),
+                (v_str("live_slots"), v_int(global.live_slots)),
+            ]),
+        ),
+        (
+            v_str("task"),
+            v_map(&[
+                (v_str("hits"), v_int(task.hits)),
+                (v_str("misses"), v_int(task.misses)),
+                (v_str("inserts"), v_int(task.inserts)),
+                (v_str("reclaimed"), v_int(task.reclaimed)),
+                (
+                    v_str("total_slots"),
+                    v_int(bf_args.exec_state.program_cache_total_slots as i64),
+                ),
+                (
+                    v_str("live_slots"),
+                    v_int(bf_args.exec_state.program_cache_live_slots as i64),
+                ),
+                (
+                    v_str("key_count"),
+                    v_int(bf_args.exec_state.program_cache_key_count as i64),
+                ),
+            ]),
+        ),
+    ])))
+}
+
 /// Usage: `none flush_caches()`
 /// Clears all internal caches (verb, property, and ancestry resolution). Wizard-only.
 fn bf_flush_caches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -1207,4 +1298,5 @@ pub(crate) fn register_bf_server(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("rotate_enrollment_token")] = bf_rotate_enrollment_token;
     builtins[offset_for_builtin("player_event_log_stats")] = bf_player_event_log_stats;
     builtins[offset_for_builtin("purge_player_event_log")] = bf_purge_player_event_log;
+    builtins[offset_for_builtin("program_cache_stats")] = bf_program_cache_stats;
 }

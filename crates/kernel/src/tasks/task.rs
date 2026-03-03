@@ -23,6 +23,7 @@
 //! they can also be 'forked' from other tasks.
 //!
 use std::{
+    collections::HashSet,
     sync::{Arc, atomic::AtomicBool},
     time::Duration,
 };
@@ -31,6 +32,7 @@ use crate::task_context::{
     commit_current_transaction, rollback_current_transaction, with_current_transaction,
     with_current_transaction_mut, with_new_transaction,
 };
+use ahash::AHasher;
 
 use flume::Sender;
 use lazy_static::lazy_static;
@@ -67,6 +69,7 @@ use crate::{
     config::{Config, FeaturesConfig},
     tasks::{
         ServerOptions, TaskStart, sched_counters,
+        task_program_cache::TaskProgramCache,
         task_scheduler_client::{TaskControlMsg, TaskSchedulerClient, TimeoutHandlerInfo},
     },
     vm::{
@@ -138,6 +141,8 @@ pub struct Task {
     pub(crate) handling_uncaught_error: bool,
     /// The original exception when calling handle_uncaught_error, in case it returns false.
     pub(crate) pending_exception: Option<Exception>,
+    /// Transaction-lifetime verb program cache for this task.
+    pub(crate) program_cache: TaskProgramCache,
 }
 
 impl Task {
@@ -213,6 +218,7 @@ impl Task {
             retry_state,
             handling_uncaught_error: false,
             pending_exception: None,
+            program_cache: TaskProgramCache::default(),
         })
     }
 
@@ -249,6 +255,61 @@ impl Task {
         // Transaction is automatically cleaned up by _tx_guard drop
     }
 
+    #[inline]
+    fn refresh_retry_state(&mut self) {
+        let snapshot = self.vm_host.snapshot_state();
+        self.vm_host.restore_state(&snapshot);
+        self.retry_state = snapshot;
+    }
+
+    fn collect_live_program_ptrs_from_state(
+        state: &VMExecState,
+        live_ptrs: &mut HashSet<usize, std::hash::BuildHasherDefault<AHasher>>,
+    ) {
+        for activation in &state.stack {
+            let crate::vm::activation::Frame::Moo(frame) = &activation.frame else {
+                continue;
+            };
+            if let Some(ptr) = frame.program_ptr {
+                live_ptrs.insert(ptr);
+            }
+        }
+    }
+
+    pub(crate) fn reclaim_program_cache(&mut self) {
+        let mut live_ptrs =
+            HashSet::with_hasher(std::hash::BuildHasherDefault::<AHasher>::default());
+
+        Self::collect_live_program_ptrs_from_state(self.vm_host.vm_exec_state(), &mut live_ptrs);
+        Self::collect_live_program_ptrs_from_state(&self.retry_state, &mut live_ptrs);
+
+        if let TaskStart::StartFork { fork_request, .. } = self.state.task_start()
+            && let crate::vm::activation::Frame::Moo(frame) = &fork_request.activation.frame
+            && let Some(ptr) = frame.program_ptr
+        {
+            live_ptrs.insert(ptr);
+        }
+
+        let reclaimed = self.program_cache.reclaim_unreferenced(&live_ptrs);
+        if reclaimed > 0 {
+            let reclaimed_i = reclaimed as i64;
+            self.vm_host
+                .vm_exec_state_mut()
+                .program_cache_stats
+                .reclaimed += reclaimed_i;
+            self.retry_state.program_cache_stats.reclaimed += reclaimed_i;
+        }
+
+        let total_slots = self.program_cache.total_slot_count();
+        let live_slots = self.program_cache.live_slot_count();
+        let key_count = self.program_cache.key_count();
+        self.vm_host
+            .set_program_cache_sizes(total_slots, live_slots, key_count);
+        self.retry_state.program_cache_total_slots = total_slots;
+        self.retry_state.program_cache_live_slots = live_slots;
+        self.retry_state.program_cache_key_count = key_count;
+    }
+
     /// Call out to the vm_host and ask it to execute the next instructions, and it will return
     /// back telling us next steps.
     /// Results of VM execution are looked at, and if they involve a scheduler action, we will
@@ -265,9 +326,18 @@ impl Task {
         config: &FeaturesConfig,
     ) -> Option<Box<Self>> {
         // Call the VM using transaction context
-        let vm_exec_result =
-            self.vm_host
-                .exec_interpreter(self.task_id, session, builtin_registry, config);
+        let vm_exec_result = self.vm_host.exec_interpreter(
+            self.task_id,
+            session,
+            builtin_registry,
+            config,
+            &mut self.program_cache,
+        );
+        self.vm_host.set_program_cache_sizes(
+            self.program_cache.total_slot_count(),
+            self.program_cache.live_slot_count(),
+            self.program_cache.key_count(),
+        );
 
         // Having done that, what should we now do?
         match vm_exec_result {
@@ -325,7 +395,7 @@ impl Task {
                             let messages = task_scheduler_client.task_recv();
                             let resume_value = List::from_iter(messages).into();
                             self.vm_host.resume_execution(resume_value);
-                            self.retry_state = self.vm_host.snapshot_state();
+                            self.refresh_retry_state();
                             return Some(self);
                         }
                         Ok((CommitResult::ConflictRetry { .. }, _)) => {
@@ -361,7 +431,7 @@ impl Task {
                             // Resume first (which resets start_time), then snapshot
                             // so retry_state has fresh timing if we need to restore
                             self.vm_host.resume_execution(resume_value);
-                            self.retry_state = self.vm_host.snapshot_state();
+                            self.refresh_retry_state();
                             return Some(self);
                         }
                         Ok((CommitResult::ConflictRetry { .. }, _)) => {
@@ -391,7 +461,7 @@ impl Task {
                     return None;
                 }
 
-                self.retry_state = self.vm_host.snapshot_state();
+                self.refresh_retry_state();
                 self.vm_host.stop();
 
                 trace_task_suspend_with_delay!(self.task_id, delay.as_ref());
@@ -419,7 +489,7 @@ impl Task {
                     return None;
                 }
 
-                self.retry_state = self.vm_host.snapshot_state();
+                self.refresh_retry_state();
                 self.vm_host.stop();
 
                 trace_task_suspend!(self.task_id, "Waiting for input");
@@ -606,7 +676,22 @@ impl Task {
                             v_obj(self.player),
                             v_empty_str(),
                             verb_result.permissions_flags,
-                            verb_result.program,
+                            match with_current_transaction(|ws| {
+                                ws.retrieve_verb(
+                                    &self.perms,
+                                    &verb_result.program_key.verb_definer,
+                                    verb_result.program_key.verb_uuid,
+                                )
+                            }) {
+                                Ok((program, _)) => program,
+                                Err(e) => {
+                                    error!(
+                                        task_id = ?self.task_id,
+                                        "Error resolving handler program: {e:?}"
+                                    );
+                                    return None;
+                                }
+                            },
                         );
 
                         // Continue execution - the handler will now run
@@ -843,7 +928,22 @@ impl Task {
                             caller,
                             argstr_val,
                             verb_result.permissions_flags,
-                            verb_result.program,
+                            match with_current_transaction(|ws| {
+                                ws.retrieve_verb(
+                                    &self.perms,
+                                    &verb_result.program_key.verb_definer,
+                                    verb_result.program_key.verb_uuid,
+                                )
+                            }) {
+                                Ok((program, _)) => program,
+                                Err(e) => {
+                                    error!(
+                                        task_id = ?self.task_id,
+                                        "Error resolving startup verb program: {e:?}"
+                                    );
+                                    return false;
+                                }
+                            },
                         );
                     }
                 }
@@ -852,9 +952,15 @@ impl Task {
                 fork_request,
                 suspended: _,
             } => {
+                let mut prepared_fork = (**fork_request).clone();
+                if let crate::vm::activation::Frame::Moo(ref mut frame) =
+                    prepared_fork.activation.frame
+                {
+                    frame.materialize_program_for_handoff();
+                }
                 // When setup_task_start is called, the task is being woken/started, so we always
                 // pass suspended=false to ensure vm_host.running is set to true
-                self.vm_host.start_fork(self.task_id, fork_request, false);
+                self.vm_host.start_fork(self.task_id, &prepared_fork, false);
             }
             TaskStart::StartEval {
                 player,
@@ -902,7 +1008,22 @@ impl Task {
                             v_obj(*player),
                             v_empty_str(),
                             verb_result.permissions_flags,
-                            verb_result.program,
+                            match with_current_transaction(|ws| {
+                                ws.retrieve_verb(
+                                    &self.perms,
+                                    &verb_result.program_key.verb_definer,
+                                    verb_result.program_key.verb_uuid,
+                                )
+                            }) {
+                                Ok((program, _)) => program,
+                                Err(e) => {
+                                    error!(
+                                        task_id = ?self.task_id,
+                                        "Error resolving exception-handler program: {e:?}"
+                                    );
+                                    return false;
+                                }
+                            },
                         );
                     }
                 }
@@ -961,7 +1082,14 @@ impl Task {
                     v_obj(*handler_object),
                     v_str(command),
                     verb_result.permissions_flags,
-                    verb_result.program,
+                    world_state
+                        .retrieve_verb(
+                            &self.perms,
+                            &verb_result.program_key.verb_definer,
+                            verb_result.program_key.verb_uuid,
+                        )
+                        .map_err(CommandError::DatabaseError)?
+                        .0,
                 );
                 self.state = TaskState::Prepared(TaskStart::StartDoCommand {
                     handler_object: *handler_object,
@@ -1042,13 +1170,19 @@ impl Task {
                         VerbLookup::method(&player_location, *HUH_SYM),
                         DispatchFlagsSource::VerbOwner,
                     ),
-                )
-                else {
+                ) else {
                     return Err(CommandError::NoCommandMatch);
                 };
                 (
                     (
-                        verb_result.program,
+                        world_state
+                            .retrieve_verb(
+                                player,
+                                &verb_result.program_key.verb_definer,
+                                verb_result.program_key.verb_uuid,
+                            )
+                            .map_err(CommandError::DatabaseError)?
+                            .0,
                         verb_result.verbdef,
                         verb_result.permissions_flags,
                     ),
@@ -1167,7 +1301,13 @@ fn find_verb_for_command(
         if let Some(verb_result) = match_result {
             return Ok(Some((
                 (
-                    verb_result.program,
+                    ws.retrieve_verb(
+                        player,
+                        &verb_result.program_key.verb_definer,
+                        verb_result.program_key.verb_uuid,
+                    )
+                    .map_err(CommandError::DatabaseError)?
+                    .0,
                     verb_result.verbdef,
                     verb_result.permissions_flags,
                 ),
@@ -1612,7 +1752,7 @@ mod tests {
                 fork_request.activation.frame
             );
         };
-        assert_eq!(moo_frame.program, *program);
+        assert_eq!(moo_frame.program.as_ref(), Some(program));
 
         // Reply back with the new task id.
         reply_channel.send(2).unwrap();
@@ -1627,6 +1767,84 @@ mod tests {
             panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(123));
+    }
+
+    #[test]
+    fn test_suspended_start_fork_runs_to_completion() {
+        let (_kill_switch, mut parent_task, parent_db, parent_tx, parent_scheduler, parent_ctrl_rx) =
+            setup_test_env_eval("fork (1) return 1 + 1; endfork return 123;");
+        parent_tx.commit().unwrap();
+        let scheduler_db = parent_db.clone();
+
+        let parent_jh = std::thread::spawn(move || {
+            let tx = parent_db.new_world_state().unwrap();
+            let session = Arc::new(NoopClientSession::new());
+            {
+                let _tx_guard = setup_task_context(tx);
+                parent_task.setup_task_start(parent_scheduler.control_sender());
+                Task::run_task_loop(
+                    parent_task,
+                    &parent_scheduler,
+                    session,
+                    BuiltinRegistry::new(),
+                    Arc::new(Config::default()),
+                );
+            }
+        });
+
+        let (_task_id, msg) = parent_ctrl_rx.recv().unwrap();
+        let TaskControlMsg::RequestNewTransaction(reply_channel) = msg else {
+            panic!("Expected RequestNewTransaction, got different message type");
+        };
+        let new_tx = scheduler_db.new_world_state().unwrap();
+        reply_channel.send(Ok(new_tx)).unwrap();
+
+        let (_task_id, msg) = parent_ctrl_rx.recv().unwrap();
+        let TaskControlMsg::TaskRequestFork(fork_request, reply_channel) = msg else {
+            panic!("Expected TaskRequestFork, got different message type");
+        };
+        let fork_for_child = (*fork_request).clone();
+        reply_channel.send(2).unwrap();
+
+        parent_jh.join().unwrap();
+
+        let (_task_id, msg) = parent_ctrl_rx.recv().unwrap();
+        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
+            panic!("Expected parent TaskSuccess, got different message type");
+        };
+        assert_eq!(result, v_int(123));
+
+        let child_task_start = TaskStart::StartFork {
+            fork_request: Box::new(fork_for_child),
+            suspended: true,
+        };
+        let (
+            _child_kill_switch,
+            mut child_task,
+            _child_db,
+            child_tx,
+            child_scheduler,
+            child_ctrl_rx,
+        ) = setup_test_env(child_task_start, &[]);
+
+        let child_session = Arc::new(NoopClientSession::new());
+        {
+            let _tx_guard = setup_task_context(child_tx);
+            child_task.setup_task_start(child_scheduler.control_sender());
+            Task::run_task_loop(
+                child_task,
+                &child_scheduler,
+                child_session,
+                BuiltinRegistry::new(),
+                Arc::new(Config::default()),
+            );
+        }
+
+        let (_task_id, msg) = child_ctrl_rx.recv().unwrap();
+        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
+            panic!("Expected child TaskSuccess, got different message type");
+        };
+        assert_eq!(result, v_int(2));
     }
 
     /// Verifies path through the command parser, and no match on verb

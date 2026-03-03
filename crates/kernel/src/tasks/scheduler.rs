@@ -2611,9 +2611,10 @@ impl TaskQ {
                         task.state = crate::tasks::task::TaskState::Prepared(start.clone());
                     }
 
-                    task.retry_state = task.vm_host.snapshot_state();
+                    task.retry_state = task.vm_host.vm_exec_state().clone();
                 } else {
                     // Resuming an existing task - handle the resume action
+                    task.reclaim_program_cache();
                     match resume_action {
                         ResumeAction::Return(value) => {
                             task.vm_host.resume_execution(value);
@@ -2716,6 +2717,7 @@ impl TaskQ {
         // Restore the VM state from its last snapshot, which would either be the original state of
         // the task, or its state as of the last commit.
         task.vm_host.restore_state(&task.retry_state);
+        task.reclaim_program_cache();
 
         // Reset the execution time limit - the restored state has the old start_time from when
         // the snapshot was taken, which could cause immediate timeout if enough time has passed.

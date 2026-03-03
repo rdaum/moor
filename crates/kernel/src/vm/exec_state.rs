@@ -20,6 +20,7 @@ use std::time::{Duration, SystemTime};
 use crate::{
     PhantomUnsync,
     task_context::with_current_transaction,
+    tasks::task_program_cache::ProgramCacheLocalSnapshot,
     vm::activation::{Activation, Frame},
 };
 
@@ -55,6 +56,12 @@ pub(crate) struct VMExecState {
     pub(crate) maximum_time: Option<Duration>,
     /// Pending error to raise when execution resumes
     pub(crate) pending_raise_error: Option<moor_var::Error>,
+    /// Program-cache stats for the currently running task.
+    pub(crate) program_cache_stats: ProgramCacheLocalSnapshot,
+    /// Current cache occupancy (task-local cache).
+    pub(crate) program_cache_total_slots: usize,
+    pub(crate) program_cache_live_slots: usize,
+    pub(crate) program_cache_key_count: usize,
 
     pub(crate) unsync: PhantomUnsync,
 }
@@ -70,6 +77,10 @@ impl VMExecState {
             tick_slice: 0,
             maximum_time: None,
             pending_raise_error: None,
+            program_cache_stats: ProgramCacheLocalSnapshot::default(),
+            program_cache_total_slots: 0,
+            program_cache_live_slots: 0,
+            program_cache_key_count: 0,
             unsync: Default::default(),
         }
     }
@@ -217,6 +228,14 @@ impl VMExecState {
 
         max_time.checked_sub(elapsed)
     }
+
+    pub(crate) fn materialize_frame_programs(&mut self) {
+        for activation in &mut self.stack {
+            if let Frame::Moo(frame) = &mut activation.frame {
+                frame.materialize_program_from_slot();
+            }
+        }
+    }
 }
 
 // Manual Clone implementation because we need to create a new arena
@@ -231,6 +250,10 @@ impl Clone for VMExecState {
             start_time: self.start_time,
             maximum_time: self.maximum_time,
             pending_raise_error: self.pending_raise_error.clone(),
+            program_cache_stats: self.program_cache_stats,
+            program_cache_total_slots: self.program_cache_total_slots,
+            program_cache_live_slots: self.program_cache_live_slots,
+            program_cache_key_count: self.program_cache_key_count,
             unsync: Default::default(),
         }
     }

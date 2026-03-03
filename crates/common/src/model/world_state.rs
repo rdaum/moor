@@ -87,7 +87,12 @@ impl<'a> VerbLookup<'a> {
 
 /// Command-argument matcher for lookup against a specific receiver object.
 #[must_use]
-pub fn command_verb_argspec(receiver: &Obj, dobj: &Obj, prep: PrepSpec, iobj: &Obj) -> VerbArgsSpec {
+pub fn command_verb_argspec(
+    receiver: &Obj,
+    dobj: &Obj,
+    prep: PrepSpec,
+    iobj: &Obj,
+) -> VerbArgsSpec {
     let spec_for_target = |target: &Obj| -> ArgSpec {
         if target == receiver {
             ArgSpec::This
@@ -146,6 +151,12 @@ pub struct VerbLookupHint {
     pub verb_cache_version: u64,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct VerbProgramKey {
+    pub verb_definer: Obj,
+    pub verb_uuid: Uuid,
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum VerbLookupPicOutcome {
     NotApplicable,
@@ -158,7 +169,7 @@ pub enum VerbLookupPicOutcome {
 
 #[derive(Debug, Clone)]
 pub struct VerbDispatchResult {
-    pub program: ProgramType,
+    pub program_key: VerbProgramKey,
     pub verbdef: ResolvedVerb,
     pub permissions_flags: BitEnum<ObjFlag>,
     pub next_hint: Option<VerbLookupHint>,

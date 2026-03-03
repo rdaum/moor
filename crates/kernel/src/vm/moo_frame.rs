@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::tasks::task_program_cache::ProgramSlot;
 use crate::vm::FinallyReason;
 use crate::vm::environment::Environment;
 use moor_common::model::PropertyLookupHint;
@@ -33,7 +34,8 @@ use strum::EnumCount;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct MooStackFrame {
     /// The program of the verb that is currently being executed.
-    pub(crate) program: Program,
+    pub(crate) program: Option<Program>,
+    pub(crate) program_ptr: Option<usize>,
     /// The program counter.
     pub(crate) pc: usize,
     /// Where is the PC pointing to?
@@ -126,12 +128,21 @@ static PARSE_EMPTY_STR: LazyLock<Var> = LazyLock::new(v_empty_str);
 static PARSE_NOTHING: LazyLock<Var> = LazyLock::new(v_nothing);
 
 impl MooStackFrame {
+    #[inline]
+    fn debug_assert_resolvable_program(&self) {
+        debug_assert!(
+            self.program.is_some() || self.program_ptr.is_some(),
+            "MooStackFrame missing both materialized program and program_ptr"
+        );
+    }
+
     /// Create a new MOO stack frame with default environment.
     #[allow(dead_code)]
     pub(crate) fn new(program: Program) -> Self {
         let width = max(program.var_names().global_width(), GlobalName::COUNT);
         Self {
-            program,
+            program: Some(program),
+            program_ptr: None,
             environment: Environment::with_initial_scope(width),
             pc: 0,
             pc_type: PcType::Main,
@@ -159,7 +170,8 @@ impl MooStackFrame {
     ) -> Self {
         let width = max(program.var_names().global_width(), GlobalName::COUNT);
         Self {
-            program,
+            program: Some(program),
+            program_ptr: None,
             environment: Environment::with_call_globals(
                 player, this, caller, verb, args, argstr, width,
             ),
@@ -189,7 +201,8 @@ impl MooStackFrame {
     ) -> Self {
         let width = max(program.var_names().global_width(), GlobalName::COUNT);
         Self {
-            program,
+            program: Some(program),
+            program_ptr: None,
             environment: Environment::with_call_globals_copy_parsing(
                 player,
                 this,
@@ -242,7 +255,8 @@ impl MooStackFrame {
         let valstack = Vec::new();
         let scope_stack = Vec::new();
         Self {
-            program,
+            program: Some(program),
+            program_ptr: None,
             environment: env,
             pc: 0,
             pc_type: PcType::Main,
@@ -257,23 +271,140 @@ impl MooStackFrame {
         }
     }
 
+    #[inline]
+    fn resolved_program_ptr(&self) -> *const Program {
+        if let Some(program) = &self.program {
+            return program as *const Program;
+        }
+        self.program_ptr
+            .map(|ptr| ptr as *const Program)
+            .expect("MooStackFrame missing both program and program_ptr")
+    }
+
+    #[inline]
+    fn resolved_program(&self) -> &Program {
+        // SAFETY: pointer comes either from self-owned Program or task-owned program cache.
+        // It is used only for immediate, read-only access.
+        unsafe { &*self.resolved_program_ptr() }
+    }
+
+    #[inline]
+    fn try_resolved_program(&self) -> Option<&Program> {
+        if let Some(program) = &self.program {
+            return Some(program);
+        }
+        let ptr = self.program_ptr? as *const Program;
+        // SAFETY: pointer refers to the task-owned program cache or frame-owned program.
+        Some(unsafe { &*ptr })
+    }
+
+    pub(crate) fn program_ref(&self) -> &Program {
+        self.debug_assert_resolvable_program();
+        self.resolved_program()
+    }
+
+    pub(crate) fn materialize_program_from_slot(&mut self) {
+        self.debug_assert_resolvable_program();
+        if self.program.is_some() {
+            self.program_ptr = None;
+            return;
+        }
+        let Some(ptr) = self.program_ptr else {
+            return;
+        };
+        // SAFETY: program_ptr points to a stable allocation in task-owned program cache.
+        self.program = Some(unsafe { (&*(ptr as *const Program)).clone() });
+        self.program_ptr = None;
+    }
+
+    pub(crate) fn materialize_program_for_handoff(&mut self) {
+        self.debug_assert_resolvable_program();
+        if self.program.is_none() {
+            self.program = Some(self.program_ref().clone());
+        }
+        self.program_ptr = None;
+    }
+
+    pub(crate) fn new_with_all_globals_from_slot(
+        program_slot: ProgramSlot,
+        player: Var,
+        this: Var,
+        caller: Var,
+        verb: Var,
+        args: Var,
+        argstr: Var,
+    ) -> Self {
+        let width = max(program_slot.global_width, GlobalName::COUNT);
+        Self {
+            program: None,
+            program_ptr: Some(program_slot.program_ptr),
+            environment: Environment::with_call_globals(
+                player, this, caller, verb, args, argstr, width,
+            ),
+            pc: 0,
+            pc_type: PcType::Main,
+            temp: v_none(),
+            valstack: Vec::new(),
+            scope_stack: Vec::new(),
+            catch_stack: Vec::new(),
+            finally_stack: Vec::new(),
+            capture_stack: Vec::new(),
+            property_lookup_hints_pc_type: None,
+            property_lookup_hints: Vec::new(),
+        }
+    }
+
+    pub(crate) fn new_with_globals_from_source_slot(
+        program_slot: ProgramSlot,
+        player: Var,
+        this: Var,
+        caller: Var,
+        verb: Var,
+        args: Var,
+        source_frame: &MooStackFrame,
+    ) -> Self {
+        let width = max(program_slot.global_width, GlobalName::COUNT);
+        Self {
+            program: None,
+            program_ptr: Some(program_slot.program_ptr),
+            environment: Environment::with_call_globals_copy_parsing(
+                player,
+                this,
+                caller,
+                verb,
+                args,
+                &source_frame.environment,
+                width,
+            ),
+            pc: 0,
+            pc_type: PcType::Main,
+            temp: v_none(),
+            valstack: Vec::new(),
+            scope_stack: Vec::new(),
+            catch_stack: Vec::new(),
+            finally_stack: Vec::new(),
+            capture_stack: Vec::new(),
+            property_lookup_hints_pc_type: None,
+            property_lookup_hints: Vec::new(),
+        }
+    }
+
     pub(crate) fn opcodes(&self) -> &[Op] {
+        let program = self.resolved_program();
         match self.pc_type {
-            PcType::Main => self.program.main_vector(),
-            PcType::ForkVector(fork_vector) => self.program.fork_vector(fork_vector),
-            PcType::Lambda(lambda_offset) => {
-                self.program.lambda_program(lambda_offset).main_vector()
-            }
+            PcType::Main => program.main_vector(),
+            PcType::ForkVector(fork_vector) => program.fork_vector(fork_vector),
+            PcType::Lambda(lambda_offset) => program.lambda_program(lambda_offset).main_vector(),
         }
     }
 
     pub(crate) fn find_line_no(&self, pc: usize) -> Option<usize> {
+        let program = self.try_resolved_program()?;
         match self.pc_type {
-            PcType::Main => Some(self.program.line_num_for_position(pc, 0)),
-            PcType::ForkVector(fv) => Some(self.program.fork_line_num_for_position(fv, pc)),
+            PcType::Main => Some(program.line_num_for_position(pc, 0)),
+            PcType::ForkVector(fv) => Some(program.fork_line_num_for_position(fv, pc)),
             PcType::Lambda(lambda_offset) => {
-                // For lambdas, use the lambda program's own line number spans
-                let lambda_program = self.program.lambda_program(lambda_offset);
+                let lambda_program = program.lambda_program(lambda_offset);
                 Some(lambda_program.line_num_for_position(pc, 0))
             }
         }
@@ -303,12 +434,7 @@ impl MooStackFrame {
         // This is a "trust us we know what we're doing" use of the explicit offset without check
         // into the names list like we did before. If the compiler produces garbage, it gets what
         // it deserves.
-        debug_assert_ne!(
-            v.type_code(),
-            TYPE_NONE,
-            "Setting variable {:?} to TYPE_NONE",
-            self.program.var_names().ident_for_name(id)
-        );
+        debug_assert_ne!(v.type_code(), TYPE_NONE, "Setting variable to TYPE_NONE");
         let offset = id.0 as usize;
         let scope = id.1 as usize;
         self.environment.set(scope, offset, v);
@@ -381,11 +507,11 @@ impl MooStackFrame {
     }
 
     pub fn lookahead_ref(&self) -> Option<&Op> {
+        let program = self.resolved_program();
         match self.pc_type {
-            PcType::Main => self.program.main_vector().get(self.pc),
-            PcType::ForkVector(fork_vector) => self.program.fork_vector(fork_vector).get(self.pc),
-            PcType::Lambda(lambda_offset) => self
-                .program
+            PcType::Main => program.main_vector().get(self.pc),
+            PcType::ForkVector(fork_vector) => program.fork_vector(fork_vector).get(self.pc),
+            PcType::Lambda(lambda_offset) => program
                 .lambda_program(lambda_offset)
                 .main_vector()
                 .get(self.pc),
@@ -430,9 +556,9 @@ impl MooStackFrame {
     }
 
     pub fn jump(&mut self, label_id: &Label) {
-        let label = &self.program.jump_label(*label_id);
+        let position = self.resolved_program().jump_label(*label_id).position.0 as usize;
 
-        self.pc = label.position.0 as usize;
+        self.pc = position;
         // Pop all scopes that the jump target is outside of
         while let Some(scope) = self.scope_stack.last() {
             // If jump target is within the scope range, keep the scope
@@ -447,7 +573,7 @@ impl MooStackFrame {
 
     /// Enter a new lexical scope and/or try/catch handling block.
     pub fn push_scope(&mut self, scope: ScopeType, scope_width: u16, end_label: &Label) {
-        let end_pos = self.program.jump_label(*end_label).position.0 as usize;
+        let end_pos = self.resolved_program().jump_label(*end_label).position.0 as usize;
         let start_pos = self.pc;
         self.scope_stack.push(Scope {
             scope_type: scope,
@@ -462,7 +588,7 @@ impl MooStackFrame {
     /// Enter a scope which does not restrict stack of environment size, purely for catch expressions
     /// The scope is just used for unwinding to the catch handler purposes.
     pub fn push_non_var_scope(&mut self, scope: ScopeType, end_label: &Label) {
-        let end_pos = self.program.jump_label(*end_label).position.0 as usize;
+        let end_pos = self.resolved_program().jump_label(*end_label).position.0 as usize;
         let start_pos = self.pc;
         self.scope_stack.push(Scope {
             scope_type: scope,
@@ -491,7 +617,7 @@ impl MooStackFrame {
         end_label: &Label,
         environment_width: u16,
     ) {
-        let end_pos = self.program.jump_label(*end_label).position.0 as usize;
+        let end_pos = self.resolved_program().jump_label(*end_label).position.0 as usize;
         let start_pos = self.pc;
         let scope_type = ScopeType::ForSequence {
             sequence,
@@ -531,7 +657,7 @@ impl MooStackFrame {
         end_label: &Label,
         environment_width: u16,
     ) {
-        let end_pos = self.program.jump_label(*end_label).position.0 as usize;
+        let end_pos = self.resolved_program().jump_label(*end_label).position.0 as usize;
         let start_pos = self.pc;
         let scope_type = ScopeType::ForRange {
             current_value: start_value.clone(),

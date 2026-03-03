@@ -111,7 +111,7 @@ fn create_object_with_initialize(
         args: initialize_args,
         caller: bf_args.exec_state.top().this.clone(),
         argstr: v_empty_str(),
-        program: verb_result.program,
+        program_key: verb_result.program_key,
     };
     Ok(VmInstr(DispatchVerb(Box::new(ve))))
 }
@@ -720,26 +720,28 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 // The next point in the trampoline is CALL_EXITFUNC and it will expect a list of
                 // objects to move/call :exitfunc on. So let's get the initial list of objects
                 // now
-                    let object_contents = with_current_transaction(|world_state| {
-                        world_state.contents_of(&bf_args.task_perms_who(), &obj)
-                    })
-                    .map_err(world_state_bf_err)?;
-                    // Filter contents for objects that have an :exitfunc verb.
-                    let mut contents = vec![];
-                    for o in object_contents.iter() {
-                        match with_current_transaction(|world_state| {
-                            world_state
-                                .lookup_verb(&bf_args.task_perms_who(), VerbLookup::method(&o, *EXITFUNC_SYM))
-                        }) {
-                            Ok(Some(_)) => {
-                                contents.push(v_obj(o));
-                            }
-                            Ok(None) => {}
-                            Err(e) => {
-                                error!("Error looking up exitfunc verb: {:?}", e);
-                                return Err(BfErr::ErrValue(
-                                    E_NACC.msg("recycle() error looking up exitfunc"),
-                                ));
+                let object_contents = with_current_transaction(|world_state| {
+                    world_state.contents_of(&bf_args.task_perms_who(), &obj)
+                })
+                .map_err(world_state_bf_err)?;
+                // Filter contents for objects that have an :exitfunc verb.
+                let mut contents = vec![];
+                for o in object_contents.iter() {
+                    match with_current_transaction(|world_state| {
+                        world_state.lookup_verb(
+                            &bf_args.task_perms_who(),
+                            VerbLookup::method(&o, *EXITFUNC_SYM),
+                        )
+                    }) {
+                        Ok(Some(_)) => {
+                            contents.push(v_obj(o));
+                        }
+                        Ok(None) => {}
+                        Err(e) => {
+                            error!("Error looking up exitfunc verb: {:?}", e);
+                            return Err(BfErr::ErrValue(
+                                E_NACC.msg("recycle() error looking up exitfunc"),
+                            ));
                         }
                     }
                 }
@@ -769,7 +771,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             args: List::mk_list(&[]),
                             caller: bf_args.exec_state.top().this.clone(),
                             argstr: v_empty_str(),
-                            program: verb_result.program,
+                            program_key: verb_result.program_key,
                         }))));
                     }
                     Ok(None) => {
@@ -812,17 +814,15 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     // be transactionally isolated. But we need to do resolution anyways, so we will
                     // look again anyways.
                     let permissions = bf_args.task_perms_who();
-                    let Ok(Some(verb_result)) =
-                        with_current_transaction(|world_state| {
-                            world_state.dispatch_verb(
-                                &permissions,
-                                VerbDispatch::new(
-                                    VerbLookup::method(&head_obj, *EXITFUNC_SYM),
-                                    DispatchFlagsSource::Permissions,
-                                ),
-                            )
-                        })
-                    else {
+                    let Ok(Some(verb_result)) = with_current_transaction(|world_state| {
+                        world_state.dispatch_verb(
+                            &permissions,
+                            VerbDispatch::new(
+                                VerbLookup::method(&head_obj, *EXITFUNC_SYM),
+                                DispatchFlagsSource::Permissions,
+                            ),
+                        )
+                    }) else {
                         // If there's no :exitfunc, we can just move on to the next object.
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline_arg = Some(contents);
@@ -843,7 +843,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         args: List::mk_list(&[v_obj(obj)]),
                         caller: bf_args.exec_state.top().this.clone(),
                         argstr: v_empty_str(),
-                        program: verb_result.program,
+                        program_key: verb_result.program_key,
                     }))));
                 }
             }
@@ -957,7 +957,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             args: List::mk_list(&[v_obj(what)]),
                             caller: bf_args.exec_state.top().this.clone(),
                             argstr: v_empty_str(),
-                            program: verb_result.program,
+                            program_key: verb_result.program_key,
                         }))));
                     }
                     Ok(None) => {
@@ -1035,7 +1035,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             args: List::mk_list(&[v_obj(what)]),
                             caller: bf_args.exec_state.top().this.clone(),
                             argstr: v_empty_str(),
-                            program: verb_result.program,
+                            program_key: verb_result.program_key,
                         }));
                         return Ok(VmInstr(continuation));
                     }
@@ -1084,7 +1084,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             args: List::mk_list(&[v_obj(what)]),
                             caller: bf_args.exec_state.top().this.clone(),
                             argstr: v_empty_str(),
-                            program: verb_result.program,
+                            program_key: verb_result.program_key,
                         }))));
                     }
                     Ok(None) => {
@@ -2045,7 +2045,7 @@ fn bf_dispatch_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
                 // Caller needs to be the player in order for downstream caller perms checks to function correctly
                 caller: v_obj(bf_args.exec_state.top().player),
                 command: parsed_command,
-                program: verb_result.program,
+                program_key: verb_result.program_key,
             });
 
             // Set trampoline to DONE for when the verb returns

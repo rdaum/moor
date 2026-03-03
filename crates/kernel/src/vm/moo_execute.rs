@@ -147,6 +147,11 @@ pub fn moo_frame_execute(
     f: &mut MooStackFrame,
     features_config: &FeaturesConfig,
 ) -> ExecutionResult {
+    debug_assert!(
+        f.program.is_some() || f.program_ptr.is_some(),
+        "MooStackFrame missing both materialized program and program_ptr before execute"
+    );
+
     // Unprogrammed verbs have empty opcodes - return 0/false to caller (LambdaMOO compat).
     if f.opcodes().is_empty() {
         let ret_val = if features_config.use_boolean_returns {
@@ -170,11 +175,15 @@ pub fn moo_frame_execute(
     //
     // Opcode stream is selected once for this execute call. This relies on pc_type staying
     // stable while a frame is running in this function.
+    let program_ptr = f.program_ref() as *const moor_compiler::Program;
+    // SAFETY: pointer is resolved from either the frame-owned program or a tx-local program slot.
+    // The pointer remains valid for this execute call.
+    let program = unsafe { &*program_ptr };
     let pc_type = f.pc_type;
     let opcodes: &[Op] = match pc_type {
-        PcType::Main => f.program.main_vector(),
-        PcType::ForkVector(fork_vector) => f.program.fork_vector(fork_vector),
-        PcType::Lambda(lambda_offset) => f.program.lambda_program(lambda_offset).main_vector(),
+        PcType::Main => program.main_vector(),
+        PcType::ForkVector(fork_vector) => program.fork_vector(fork_vector),
+        PcType::Lambda(lambda_offset) => program.lambda_program(lambda_offset).main_vector(),
     };
     let opcodes_ptr = opcodes.as_ptr();
     let opcodes_len = opcodes.len();
@@ -249,7 +258,7 @@ pub fn moo_frame_execute(
             }
             Op::BeginForSequence { operand } => {
                 let operand_offset = *operand;
-                let operand = f.program.for_sequence_operand(operand_offset).clone();
+                let operand = program.for_sequence_operand(operand_offset).clone();
 
                 // Pop sequence from stack
                 let sequence = f.pop();
@@ -353,7 +362,7 @@ pub fn moo_frame_execute(
             }
             Op::BeginForRange { operand } => {
                 let operand_offset = *operand;
-                let operand = f.program.for_range_operand(operand_offset).clone();
+                let operand = program.for_range_operand(operand_offset).clone();
 
                 // Pop end_value and start_value from stack (stack: [from, to])
                 let end_val = f.pop();
@@ -511,7 +520,7 @@ pub fn moo_frame_execute(
                         continue;
                     }
                     _ => {
-                        let value = f.program.find_literal(slot).expect("literal not found");
+                        let value = program.find_literal(slot).expect("literal not found");
                         f.push(value.clone());
                     }
                 }
@@ -605,7 +614,7 @@ pub fn moo_frame_execute(
                 }
             }
             Op::MakeError(offset) => {
-                let code = *f.program.error_operand(*offset);
+                let code = *program.error_operand(*offset);
 
                 // Expect an argument on stack (otherwise we would have used ImmErr)
                 let err_msg = f.pop();
@@ -814,7 +823,7 @@ pub fn moo_frame_execute(
             }
             Op::Push(ident) => {
                 let Some(v) = f.get_env(ident) else {
-                    if let Some(var_name) = f.program.var_names().ident_for_name(ident) {
+                    if let Some(var_name) = program.var_names().ident_for_name(ident) {
                         return ExecutionResult::PushError(
                             E_VARNF.with_msg(|| format!("Variable `{var_name}` not found")),
                         );
@@ -1248,7 +1257,7 @@ pub fn moo_frame_execute(
             Op::Scatter(sa) => {
                 // Get the scatter table and the values to assign
                 let sa = *sa;
-                let table = &f.program.scatter_table(sa).clone();
+                let table = &program.scatter_table(sa).clone();
                 let rhs_values = {
                     let rhs = f.peek_top();
                     let Some(rhs_values) = rhs.as_list() else {
@@ -1317,7 +1326,7 @@ pub fn moo_frame_execute(
             }
             Op::ComprehendRange(offset) => {
                 let offset = *offset;
-                let range_comprehension = f.program.range_comprehension(offset).clone();
+                let range_comprehension = program.range_comprehension(offset).clone();
                 let end_of_range = f
                     .get_env(&range_comprehension.end_of_range_register)
                     .unwrap()
@@ -1332,7 +1341,7 @@ pub fn moo_frame_execute(
             }
             Op::ComprehendList(offset) => {
                 let offset = *offset;
-                let list_comprehension = f.program.list_comprehension(offset).clone();
+                let list_comprehension = program.list_comprehension(offset).clone();
                 let list = f
                     .get_env(&list_comprehension.list_register)
                     .unwrap()
@@ -1397,10 +1406,10 @@ pub fn moo_frame_execute(
                 let (scatter_offset, program_offset, self_var, num_captured) =
                     (*scatter_offset, *program_offset, *self_var, *num_captured);
                 // Retrieve the scatter specification for lambda parameters
-                let scatter_spec = f.program.scatter_table(scatter_offset).clone();
+                let scatter_spec = program.scatter_table(scatter_offset).clone();
 
                 // Retrieve the pre-compiled Program for the lambda body
-                let lambda_program = f.program.lambda_program(program_offset).clone();
+                let lambda_program = program.lambda_program(program_offset).clone();
 
                 // Build captured environment from the capture stack
                 let captured_env = if num_captured == 0 {

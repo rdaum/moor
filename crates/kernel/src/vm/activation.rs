@@ -27,6 +27,7 @@ use moor_var::{
     v_str, v_symbol_str,
 };
 
+use crate::vm::vm_call::CallProgram;
 use crate::vm::{moo_frame::MooStackFrame, scatter_assign::scatter_assign};
 use moor_var::program::{
     ProgramType,
@@ -218,7 +219,7 @@ impl Activation {
         caller: Var,
         argstr: Var,
         current_activation: Option<&Activation>,
-        program: ProgramType,
+        program: CallProgram,
     ) -> Self {
         #[inline]
         fn args_to_global_var(args: &List) -> Var {
@@ -231,10 +232,6 @@ impl Activation {
 
         let verb_owner = resolved_verb.owner();
 
-        let ProgramType::MooR(program) = program else {
-            unimplemented!("Only MOO programs are supported")
-        };
-
         // Check if we have a Moo frame to inherit parsing globals from
         let source_frame = current_activation.and_then(|a| match &a.frame {
             Frame::Moo(frame) => Some(frame),
@@ -244,28 +241,57 @@ impl Activation {
         let verb_var = v_symbol_str(verb_name);
         let args_var = args_to_global_var(&args);
 
-        let moo_frame = if let Some(source) = source_frame {
-            // Direct construction for nested calls
-            MooStackFrame::new_with_globals_from_source(
-                program,
-                player_var,
-                this.clone(),
-                caller,
-                verb_var,
-                args_var,
-                source,
-            )
-        } else {
-            // Direct construction for top-level calls
-            MooStackFrame::new_with_all_globals(
-                program,
-                player_var,
-                this.clone(),
-                caller,
-                verb_var,
-                args_var,
-                argstr,
-            )
+        let moo_frame = match (program, source_frame) {
+            (CallProgram::Materialized(program), Some(source)) => {
+                let ProgramType::MooR(program) = program else {
+                    unimplemented!("Only MOO programs are supported")
+                };
+                MooStackFrame::new_with_globals_from_source(
+                    program,
+                    player_var,
+                    this.clone(),
+                    caller,
+                    verb_var,
+                    args_var,
+                    source,
+                )
+            }
+            (CallProgram::Materialized(program), None) => {
+                let ProgramType::MooR(program) = program else {
+                    unimplemented!("Only MOO programs are supported")
+                };
+                MooStackFrame::new_with_all_globals(
+                    program,
+                    player_var,
+                    this.clone(),
+                    caller,
+                    verb_var,
+                    args_var,
+                    argstr,
+                )
+            }
+            (CallProgram::TxSlot(program_slot), Some(source)) => {
+                MooStackFrame::new_with_globals_from_source_slot(
+                    program_slot,
+                    player_var,
+                    this.clone(),
+                    caller,
+                    verb_var,
+                    args_var,
+                    source,
+                )
+            }
+            (CallProgram::TxSlot(program_slot), None) => {
+                MooStackFrame::new_with_all_globals_from_slot(
+                    program_slot,
+                    player_var,
+                    this.clone(),
+                    caller,
+                    verb_var,
+                    args_var,
+                    argstr,
+                )
+            }
         };
         let frame = Frame::Moo(moo_frame);
 
@@ -505,7 +531,7 @@ impl Activation {
         // Apply initial environment bindings if provided
         if let Some(env) = initial_env {
             for (symbol, value) in env {
-                if let Some(name) = moo_frame.program.var_names().name_for_ident(*symbol) {
+                if let Some(name) = moo_frame.program_ref().var_names().name_for_ident(*symbol) {
                     moo_frame.set_variable(&name, value.clone());
                 }
                 // Silently ignore variables not referenced in the program
