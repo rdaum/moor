@@ -41,6 +41,20 @@ struct VerbDefInner {
     names: SmallVec<[Symbol; 1]>,
 }
 
+/// Compact verb metadata for dispatch/activation hot paths.
+///
+/// This is a by-value view of a resolved verb and intentionally excludes names.
+/// Keeping this non-refcounted avoids atomic traffic when values are moved
+/// through caches and activation records.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ResolvedVerb {
+    uuid: Uuid,
+    location: Obj,
+    owner: Obj,
+    flags: BitEnum<VerbFlag>,
+    args: VerbArgsSpec,
+}
+
 impl VerbDef {
     #[must_use]
     pub fn new(
@@ -98,6 +112,90 @@ impl VerbDef {
         }
 
         true
+    }
+
+    #[must_use]
+    pub fn as_resolved(&self) -> ResolvedVerb {
+        ResolvedVerb {
+            uuid: self.uuid(),
+            location: self.location(),
+            owner: self.owner(),
+            flags: self.flags(),
+            args: self.args(),
+        }
+    }
+}
+
+impl ResolvedVerb {
+    #[must_use]
+    pub fn new(
+        uuid: Uuid,
+        location: Obj,
+        owner: Obj,
+        flags: BitEnum<VerbFlag>,
+        args: VerbArgsSpec,
+    ) -> Self {
+        Self {
+            uuid,
+            location,
+            owner,
+            flags,
+            args,
+        }
+    }
+
+    #[must_use]
+    pub fn uuid(&self) -> Uuid {
+        self.uuid
+    }
+
+    #[must_use]
+    pub fn location(&self) -> Obj {
+        self.location
+    }
+
+    #[must_use]
+    pub fn owner(&self) -> Obj {
+        self.owner
+    }
+
+    #[must_use]
+    pub fn flags(&self) -> BitEnum<VerbFlag> {
+        self.flags
+    }
+
+    #[must_use]
+    pub fn args(&self) -> VerbArgsSpec {
+        self.args
+    }
+
+    #[must_use]
+    pub fn matches_spec(
+        &self,
+        argspec: &Option<VerbArgsSpec>,
+        flagspec: &Option<BitEnum<VerbFlag>>,
+    ) -> bool {
+        if let Some(argspec) = argspec
+            && !self.args.matches(argspec)
+        {
+            return false;
+        }
+        if let Some(flagspec) = flagspec {
+            return self.flags.contains_all(*flagspec);
+        }
+        true
+    }
+
+    #[must_use]
+    pub fn with_name(&self, name: Symbol) -> VerbDef {
+        VerbDef::new(
+            self.uuid,
+            self.location,
+            self.owner,
+            &[name],
+            self.flags,
+            self.args,
+        )
     }
 }
 

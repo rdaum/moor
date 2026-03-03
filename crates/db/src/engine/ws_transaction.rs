@@ -29,8 +29,8 @@ use minstant::Instant;
 use moor_common::{
     model::{
         CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, ObjectRef, PropDef,
-        PropDefs, PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs,
-        VerbFlag, WorldStateError,
+        PropDefs, PropFlag, PropPerms, ResolvedVerb, ValSet, VerbArgsSpec, VerbAttrs, VerbDef,
+        VerbDefs, VerbFlag, WorldStateError,
     },
     util::{BitEnum, PerfTimerGuard},
 };
@@ -660,12 +660,27 @@ impl WorldStateTransaction {
         Ok(program)
     }
 
+    fn lookup_resolved_verbdef(
+        &self,
+        receiver: &Obj,
+        verb_name: Symbol,
+        resolved: ResolvedVerb,
+    ) -> Result<VerbDef, WorldStateError> {
+        let verbdefs = self.get_verbs(&resolved.location())?;
+        let Some(verbdef) = verbdefs.find_ref(&resolved.uuid()) else {
+            return Err(WorldStateError::VerbNotFound(*receiver, verb_name.to_string()));
+        };
+        Ok(verbdef.clone())
+    }
+
     pub fn get_verb_by_name(&self, obj: &Obj, name: Symbol) -> Result<VerbDef, WorldStateError> {
         // Check verb cache first, and then if we get a hit and definer == obj, we've got one,
         // otherwise, go hunting.
         let cached_verb = self.verb_resolution_cache.borrow().lookup(obj, &name);
         match cached_verb {
-            Some(Some(verbdef)) if verbdef.location().eq(obj) => Ok(verbdef),
+            Some(Some(verbdef)) if verbdef.location().eq(obj) => {
+                self.lookup_resolved_verbdef(obj, name, verbdef)
+            }
             Some(None) => Err(WorldStateError::VerbNotFound(*obj, name.to_string())),
             Some(Some(_verbdef)) => {
                 // Found cached verb but it's not directly on this object (it's inherited).
@@ -673,8 +688,7 @@ impl WorldStateTransaction {
                 // to look directly on this object. But we should NOT record a miss since
                 // the cached entry is valid for resolve_verb inheritance lookups.
                 let verbdefs = self.get_verbs(obj)?;
-                let named = verbdefs.find_named(name);
-                let Some(verb) = named.first() else {
+                let Some(verb) = verbdefs.find_first_named_ref(name) else {
                     // Don't record miss - preserve the inherited verb cache entry
                     return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
                 };
@@ -683,14 +697,13 @@ impl WorldStateTransaction {
                 // but that's okay since this is more specific)
                 self.verb_resolution_cache
                     .borrow_mut()
-                    .fill_hit(obj, &name, verb);
+                    .fill_hit(obj, &name, verb.as_resolved());
                 Ok(verb.clone())
             }
             None => {
                 // No cache entry at all, proceed with normal lookup
                 let verbdefs = self.get_verbs(obj)?;
-                let named = verbdefs.find_named(name);
-                let Some(verb) = named.first() else {
+                let Some(verb) = verbdefs.find_first_named_ref(name) else {
                     // Don't record a miss - get_verb_by_name only looks directly on object,
                     // so not finding it here doesn't mean the verb doesn't exist via inheritance
                     return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
@@ -699,7 +712,7 @@ impl WorldStateTransaction {
                 // Fill cache
                 self.verb_resolution_cache
                     .borrow_mut()
-                    .fill_hit(obj, &name, verb);
+                    .fill_hit(obj, &name, verb.as_resolved());
                 Ok(verb.clone())
             }
         }
@@ -724,6 +737,17 @@ impl WorldStateTransaction {
         argspec: Option<VerbArgsSpec>,
         flagspec: Option<BitEnum<VerbFlag>>,
     ) -> Result<VerbDef, WorldStateError> {
+        let resolved = self.resolve_verb_handle(obj, name, argspec, flagspec)?;
+        self.lookup_resolved_verbdef(obj, name, resolved)
+    }
+
+    pub fn resolve_verb_handle(
+        &self,
+        obj: &Obj,
+        name: Symbol,
+        argspec: Option<VerbArgsSpec>,
+        flagspec: Option<BitEnum<VerbFlag>>,
+    ) -> Result<ResolvedVerb, WorldStateError> {
         // Check the cache first.
         let cache_lookup = self.verb_resolution_cache.borrow().lookup(obj, &name);
         if let Some(cache_result) = cache_lookup {
@@ -732,7 +756,7 @@ impl WorldStateTransaction {
                 return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
             };
             if verbdef.matches_spec(&argspec, &flagspec) {
-                return Ok(verbdef.clone());
+                return Ok(verbdef);
             }
         }
 
@@ -771,18 +795,15 @@ impl WorldStateTransaction {
 
                 // Find the named verb (which may be empty if the verb is not defined on this
                 // object, but is defined on an ancestor
-                let named = verbdefs.find_named(name);
-
-                // Fill the verb cache.
-                let verb = named.first();
-                if let Some(verb) = verb {
+                if let Some(verb) = verbdefs.find_first_named_ref(name) {
+                    let resolved = verb.as_resolved();
                     self.verb_resolution_cache
                         .borrow_mut()
-                        .fill_hit(obj, &name, verb);
+                        .fill_hit(obj, &name, resolved);
 
                     found = true;
-                    if verb.matches_spec(&argspec, &flagspec) {
-                        return Ok(verb.clone());
+                    if resolved.matches_spec(&argspec, &flagspec) {
+                        return Ok(resolved);
                     }
                 }
             }
@@ -817,13 +838,35 @@ impl WorldStateTransaction {
         let Some(cache_result) = cache_lookup else {
             return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
         };
-        let Some(verbdef) = cache_result else {
+        let Some(resolved) = cache_result else {
             return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
         };
-        if !verbdef.matches_spec(&argspec, &flagspec) {
+        if !resolved.matches_spec(&argspec, &flagspec) {
             return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
         }
-        Ok(verbdef)
+        self.lookup_resolved_verbdef(obj, name, resolved)
+    }
+
+    /// Resolve a verb using a pre-resolved definer object and UUID.
+    ///
+    /// This supports hint-guided dispatch lookups when call-site guards match.
+    pub fn resolve_verb_by_uuid_handle(
+        &self,
+        receiver: &Obj,
+        definer: &Obj,
+        uuid: Uuid,
+        argspec: Option<VerbArgsSpec>,
+        flagspec: Option<BitEnum<VerbFlag>>,
+    ) -> Result<ResolvedVerb, WorldStateError> {
+        let verbs = self.get_verbs(definer)?;
+        let Some(verbdef) = verbs.find_ref(&uuid) else {
+            return Err(WorldStateError::VerbNotFound(*receiver, uuid.to_string()));
+        };
+        let resolved = verbdef.as_resolved();
+        if !resolved.matches_spec(&argspec, &flagspec) {
+            return Err(WorldStateError::VerbNotFound(*receiver, uuid.to_string()));
+        }
+        Ok(resolved)
     }
 
     /// Resolve a verb using a pre-resolved definer object and UUID.
@@ -838,13 +881,13 @@ impl WorldStateTransaction {
         flagspec: Option<BitEnum<VerbFlag>>,
     ) -> Result<VerbDef, WorldStateError> {
         let verbs = self.get_verbs(definer)?;
-        let Some(verbdef) = verbs.find(&uuid) else {
+        let Some(verbdef) = verbs.find_ref(&uuid) else {
             return Err(WorldStateError::VerbNotFound(*receiver, uuid.to_string()));
         };
         if !verbdef.matches_spec(&argspec, &flagspec) {
             return Err(WorldStateError::VerbNotFound(*receiver, uuid.to_string()));
         }
-        Ok(verbdef)
+        Ok(verbdef.clone())
     }
 
     pub fn update_verb(

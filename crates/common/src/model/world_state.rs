@@ -17,12 +17,12 @@ use uuid::Uuid;
 use crate::{
     model::{
         CommitResult, ObjectRef, PropPerms, Vid,
-        r#match::{PrepSpec, VerbArgsSpec},
+        r#match::{ArgSpec, PrepSpec, VerbArgsSpec},
         objects::ObjFlag,
         objset::ObjSet,
         propdef::{PropDef, PropDefs},
         props::{PropAttrs, PropFlag},
-        verbdef::{VerbDef, VerbDefs},
+        verbdef::{ResolvedVerb, VerbDef, VerbDefs},
         verbs::{VerbAttrs, VerbFlag},
     },
     util::{BitEnum, PerfCounter},
@@ -54,14 +54,54 @@ pub enum DispatchFlagsSource {
     VerbOwner,
 }
 
-/// Parameters for looking up a command verb and preparing activation flags.
+/// Canonical verb lookup request for both method and command dispatch.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub struct CommandVerbDispatch<'a> {
-    pub command_verb: Symbol,
-    pub dobj: &'a Obj,
-    pub prep: PrepSpec,
-    pub iobj: &'a Obj,
-    pub flags_source: DispatchFlagsSource,
+pub struct VerbLookup<'a> {
+    pub object: &'a Obj,
+    pub verb_name: Symbol,
+    pub argspec: Option<VerbArgsSpec>,
+    pub flagspec: Option<BitEnum<VerbFlag>>,
+}
+
+impl<'a> VerbLookup<'a> {
+    #[must_use]
+    pub fn method(object: &'a Obj, verb_name: Symbol) -> Self {
+        Self {
+            object,
+            verb_name,
+            argspec: None,
+            flagspec: Some(BitEnum::new_with(VerbFlag::Exec)),
+        }
+    }
+
+    #[must_use]
+    pub fn command(object: &'a Obj, verb_name: Symbol, argspec: VerbArgsSpec) -> Self {
+        Self {
+            object,
+            verb_name,
+            argspec: Some(argspec),
+            flagspec: None,
+        }
+    }
+}
+
+/// Command-argument matcher for lookup against a specific receiver object.
+#[must_use]
+pub fn command_verb_argspec(receiver: &Obj, dobj: &Obj, prep: PrepSpec, iobj: &Obj) -> VerbArgsSpec {
+    let spec_for_target = |target: &Obj| -> ArgSpec {
+        if target == receiver {
+            ArgSpec::This
+        } else if target.is_nothing() {
+            ArgSpec::None
+        } else {
+            ArgSpec::Any
+        }
+    };
+    VerbArgsSpec {
+        dobj: spec_for_target(dobj),
+        prep,
+        iobj: spec_for_target(iobj),
+    }
 }
 
 /// Monomorphic property-lookup hint for call-site hint fast paths.
@@ -93,12 +133,12 @@ pub struct PropertyLookupResult {
     pub pic_outcome: PropertyLookupPicOutcome,
 }
 
-/// Monomorphic method-verb lookup hint for call-site hint fast paths.
+/// Monomorphic verb-lookup hint for call-site hint fast paths.
 ///
 /// This hint is valid only when all guard fields match, including the
 /// verb-resolution cache version captured at fill time.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct MethodVerbLookupHint {
+pub struct VerbLookupHint {
     pub receiver: Obj,
     pub verb_name: Symbol,
     pub verb_definer: Obj,
@@ -107,7 +147,7 @@ pub struct MethodVerbLookupHint {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum MethodVerbLookupPicOutcome {
+pub enum VerbLookupPicOutcome {
     NotApplicable,
     Hit,
     MissNoHint,
@@ -117,12 +157,36 @@ pub enum MethodVerbLookupPicOutcome {
 }
 
 #[derive(Debug, Clone)]
-pub struct MethodVerbLookupResult {
+pub struct VerbDispatchResult {
     pub program: ProgramType,
-    pub verbdef: VerbDef,
+    pub verbdef: ResolvedVerb,
     pub permissions_flags: BitEnum<ObjFlag>,
-    pub next_hint: Option<MethodVerbLookupHint>,
-    pub pic_outcome: MethodVerbLookupPicOutcome,
+    pub next_hint: Option<VerbLookupHint>,
+    pub pic_outcome: VerbLookupPicOutcome,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct VerbDispatch<'a> {
+    pub lookup: VerbLookup<'a>,
+    pub flags_source: DispatchFlagsSource,
+    pub hint: Option<VerbLookupHint>,
+}
+
+impl<'a> VerbDispatch<'a> {
+    #[must_use]
+    pub fn new(lookup: VerbLookup<'a>, flags_source: DispatchFlagsSource) -> Self {
+        Self {
+            lookup,
+            flags_source,
+            hint: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_hint(mut self, hint: Option<VerbLookupHint>) -> Self {
+        self.hint = hint;
+        self
+    }
 }
 
 /// Errors related to the world state and operations on it.
@@ -460,119 +524,25 @@ pub trait WorldState: Send {
         uuid: Uuid,
     ) -> Result<(ProgramType, VerbDef), WorldStateError>;
 
-    /// Retrieve a verb/method from the given object (or its parents).
-    fn find_method_verb_on(
-        &self,
-        perms: &Obj,
-        obj: &Obj,
-        vname: Symbol,
-    ) -> Result<(ProgramType, VerbDef), WorldStateError>;
-
-    /// Retrieve only verb metadata for a method lookup, without loading program binary.
-    fn find_method_verb_def_on(
-        &self,
-        perms: &Obj,
-        obj: &Obj,
-        vname: Symbol,
-    ) -> Result<VerbDef, WorldStateError> {
-        let (_, verbdef) = self.find_method_verb_on(perms, obj, vname)?;
-        Ok(verbdef)
-    }
-
-    /// Retrieve a verb/method and the precomputed activation flags used by dispatch.
-    fn find_method_verb_for_dispatch(
-        &self,
-        perms: &Obj,
-        obj: &Obj,
-        vname: Symbol,
-        flags_source: DispatchFlagsSource,
-    ) -> Result<(ProgramType, VerbDef, BitEnum<ObjFlag>), WorldStateError> {
-        let (program, verbdef) = self.find_method_verb_on(perms, obj, vname)?;
-        let permissions_flags = match flags_source {
-            DispatchFlagsSource::Permissions => self.flags_of(perms).unwrap_or_default(),
-            DispatchFlagsSource::VerbOwner => self.flags_of(&verbdef.owner()).unwrap_or_default(),
-        };
-        Ok((program, verbdef, permissions_flags))
-    }
-
-    /// Retrieve a verb/method and the precomputed activation flags using an optional
-    /// call-site hint.
+    /// Resolve verb metadata (with inheritance) for a canonical lookup request.
     ///
-    /// Implementations may use the hint to bypass full name resolution when guards
-    /// match. On success, returns dispatch payload plus an optional refreshed hint.
-    #[inline]
-    fn find_method_verb_for_dispatch_with_hint(
+    /// Returns `Ok(None)` when the verb is not found or the receiver object is invalid.
+    fn lookup_verb(
         &self,
         perms: &Obj,
-        obj: &Obj,
-        vname: Symbol,
-        flags_source: DispatchFlagsSource,
-        _hint: Option<MethodVerbLookupHint>,
-    ) -> Result<MethodVerbLookupResult, WorldStateError> {
-        let (program, verbdef, permissions_flags) =
-            self.find_method_verb_for_dispatch(perms, obj, vname, flags_source)?;
-        Ok(MethodVerbLookupResult {
-            program,
-            verbdef,
-            permissions_flags,
-            next_hint: None,
-            pic_outcome: MethodVerbLookupPicOutcome::NotApplicable,
-        })
-    }
+        lookup: VerbLookup<'_>,
+    ) -> Result<Option<VerbDef>, WorldStateError>;
 
-    /// Seek the verb referenced by the given command on the given object.
-    fn find_command_verb_on(
+    /// Resolve a dispatch-ready verb (program + resolved metadata + activation flags).
+    ///
+    /// Returns `Ok(None)` when the verb is not found or the receiver object is invalid.
+    /// Implementations may honor `dispatch.hint` for fast-path lookups and return an
+    /// updated hint/pic outcome.
+    fn dispatch_verb(
         &self,
         perms: &Obj,
-        obj: &Obj,
-        command_verb: Symbol,
-        dobj: &Obj,
-        prep: PrepSpec,
-        iobj: &Obj,
-    ) -> Result<Option<(ProgramType, VerbDef)>, WorldStateError>;
-
-    /// Retrieve only verb metadata for a command lookup, without loading program binary.
-    fn find_command_verb_def_on(
-        &self,
-        perms: &Obj,
-        obj: &Obj,
-        command_verb: Symbol,
-        dobj: &Obj,
-        prep: PrepSpec,
-        iobj: &Obj,
-    ) -> Result<Option<VerbDef>, WorldStateError> {
-        let Some((_, verbdef)) =
-            self.find_command_verb_on(perms, obj, command_verb, dobj, prep, iobj)?
-        else {
-            return Ok(None);
-        };
-        Ok(Some(verbdef))
-    }
-
-    /// Retrieve a command verb and the precomputed activation flags used by dispatch.
-    fn find_command_verb_for_dispatch(
-        &self,
-        perms: &Obj,
-        obj: &Obj,
-        lookup: CommandVerbDispatch<'_>,
-    ) -> Result<Option<(ProgramType, VerbDef, BitEnum<ObjFlag>)>, WorldStateError> {
-        let Some((program, verbdef)) = self.find_command_verb_on(
-            perms,
-            obj,
-            lookup.command_verb,
-            lookup.dobj,
-            lookup.prep,
-            lookup.iobj,
-        )?
-        else {
-            return Ok(None);
-        };
-        let permissions_flags = match lookup.flags_source {
-            DispatchFlagsSource::Permissions => self.flags_of(perms).unwrap_or_default(),
-            DispatchFlagsSource::VerbOwner => self.flags_of(&verbdef.owner()).unwrap_or_default(),
-        };
-        Ok(Some((program, verbdef, permissions_flags)))
-    }
+        dispatch: VerbDispatch<'_>,
+    ) -> Result<Option<VerbDispatchResult>, WorldStateError>;
 
     /// Get the object that is the parent of the given object.
     fn parent_of(&self, perms: &Obj, obj: &Obj) -> Result<Obj, WorldStateError>;
@@ -701,8 +671,8 @@ pub struct WorldStatePerf {
     pub get_verb: PerfCounter,
     pub get_verb_at_index: PerfCounter,
     pub retrieve_verb: PerfCounter,
-    pub find_method_verb_on: PerfCounter,
-    pub find_command_verb_on: PerfCounter,
+    pub lookup_verb: PerfCounter,
+    pub dispatch_verb: PerfCounter,
     pub change_parent: PerfCounter,
     pub children_of: PerfCounter,
     pub owned_objects: PerfCounter,
@@ -761,8 +731,8 @@ impl WorldStatePerf {
             get_verb: PerfCounter::new("get_verb"),
             get_verb_at_index: PerfCounter::new("get_verb_at_index"),
             retrieve_verb: PerfCounter::new("retrieve_verb"),
-            find_method_verb_on: PerfCounter::new("find_method_verb_on"),
-            find_command_verb_on: PerfCounter::new("find_command_verb_on"),
+            lookup_verb: PerfCounter::new("lookup_verb"),
+            dispatch_verb: PerfCounter::new("dispatch_verb"),
             change_parent: PerfCounter::new("change_parent"),
             children_of: PerfCounter::new("children_of"),
             owned_objects: PerfCounter::new("owned_objects"),
@@ -812,8 +782,8 @@ impl WorldStatePerf {
             &self.get_verb,
             &self.get_verb_at_index,
             &self.retrieve_verb,
-            &self.find_method_verb_on,
-            &self.find_command_verb_on,
+            &self.lookup_verb,
+            &self.dispatch_verb,
             &self.change_parent,
             &self.children_of,
             &self.owned_objects,

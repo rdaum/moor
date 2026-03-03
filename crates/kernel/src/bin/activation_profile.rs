@@ -22,7 +22,7 @@ use std::process::ExitCode;
 use uuid::Uuid;
 
 use moor_common::{
-    model::{VerbArgsSpec, VerbDef, VerbFlag},
+    model::{ResolvedVerb, VerbArgsSpec, VerbFlag},
     util::BitEnum,
 };
 use moor_compiler::{CompileOptions, compile};
@@ -134,12 +134,11 @@ OPTIONS:
     text.to_string()
 }
 
-fn make_verbdef(verb_name: Symbol) -> VerbDef {
-    VerbDef::new(
+fn make_verbdef(_verb_name: Symbol) -> ResolvedVerb {
+    ResolvedVerb::new(
         Uuid::new_v4(),
         SYSTEM_OBJECT,
         SYSTEM_OBJECT,
-        &[verb_name],
         BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Debug,
         VerbArgsSpec::this_none_this(),
     )
@@ -147,7 +146,7 @@ fn make_verbdef(verb_name: Symbol) -> VerbDef {
 
 struct Workload {
     verb_name: Symbol,
-    verbdef: VerbDef,
+    verbdef: ResolvedVerb,
     this: moor_var::Var,
     caller: moor_var::Var,
     empty_args: List,

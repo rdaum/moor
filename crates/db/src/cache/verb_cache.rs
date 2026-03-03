@@ -14,7 +14,7 @@
 use crate::cache::VERB_CACHE_STATS;
 use crate::cache::stats::{CacheStats, LocalCacheStats};
 use ahash::AHasher;
-use moor_common::model::VerbDef;
+use moor_common::model::ResolvedVerb;
 use moor_var::{Obj, Symbol};
 use std::{
     cell::RefCell,
@@ -30,7 +30,7 @@ fn make_cache_key(obj: &Obj, symbol: &Symbol) -> u128 {
 }
 
 fn remove_entries_for_objects(
-    entries: &mut HashMap<u128, Option<VerbDef>, BuildHasherDefault<AHasher>>,
+    entries: &mut HashMap<u128, Option<ResolvedVerb>, BuildHasherDefault<AHasher>>,
     obj_ids: &HashSet<u64>,
 ) -> usize {
     let before = entries.len();
@@ -135,13 +135,15 @@ struct Inner {
     guard_version: i64,
     flushed: bool,
 
-    entries: Arc<HashMap<u128, Option<VerbDef>, BuildHasherDefault<AHasher>>>,
+    entries: Arc<HashMap<u128, Option<ResolvedVerb>, BuildHasherDefault<AHasher>>>,
     first_parent_with_verbs_cache: Arc<HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>>>,
 }
 
 impl Inner {
     /// Get a mutable reference to entries, cloning if necessary (copy-on-write)
-    fn entries_mut(&mut self) -> &mut HashMap<u128, Option<VerbDef>, BuildHasherDefault<AHasher>> {
+    fn entries_mut(
+        &mut self,
+    ) -> &mut HashMap<u128, Option<ResolvedVerb>, BuildHasherDefault<AHasher>> {
         Arc::make_mut(&mut self.entries)
     }
 
@@ -187,7 +189,7 @@ impl VerbResolutionCache {
         self.inner.first_parent_cache_mut().insert(*obj, parent);
     }
 
-    pub fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<VerbDef>> {
+    pub fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<ResolvedVerb>> {
         let key = make_cache_key(obj, verb);
         let result = self.inner.entries.get(&key).cloned();
 
@@ -211,16 +213,16 @@ impl VerbResolutionCache {
         self.stats.remove_entries(entries_count);
     }
 
-    pub fn fill_hit(&mut self, obj: &Obj, verb: &Symbol, verbdef: &VerbDef) {
+    pub fn fill_hit(&mut self, obj: &Obj, verb: &Symbol, verbdef: ResolvedVerb) {
         let key = make_cache_key(obj, verb);
         self.inner.version += 1;
         let is_new_entry = match self.inner.entries_mut().entry(key) {
             Entry::Occupied(mut occupied) => {
-                occupied.insert(Some(verbdef.clone()));
+                occupied.insert(Some(verbdef));
                 false
             }
             Entry::Vacant(vacant) => {
-                vacant.insert(Some(verbdef.clone()));
+                vacant.insert(Some(verbdef));
                 true
             }
         };

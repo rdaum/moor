@@ -171,12 +171,13 @@ pub fn moo_frame_execute(
     // Opcode stream is selected once for this execute call. This relies on pc_type staying
     // stable while a frame is running in this function.
     let pc_type = f.pc_type;
-    let program = f.program.clone();
     let opcodes: &[Op] = match pc_type {
-        PcType::Main => program.main_vector(),
-        PcType::ForkVector(fork_vector) => program.fork_vector(fork_vector),
-        PcType::Lambda(lambda_offset) => program.lambda_program(lambda_offset).main_vector(),
+        PcType::Main => f.program.main_vector(),
+        PcType::ForkVector(fork_vector) => f.program.fork_vector(fork_vector),
+        PcType::Lambda(lambda_offset) => f.program.lambda_program(lambda_offset).main_vector(),
     };
+    let opcodes_ptr = opcodes.as_ptr();
+    let opcodes_len = opcodes.len();
 
     let tick_slice_end = (*tick_count).saturating_add(tick_slice);
     while *tick_count < tick_slice_end {
@@ -188,7 +189,10 @@ pub fn moo_frame_execute(
         debug_assert_eq!(f.pc_type, pc_type, "pc_type changed mid-frame execution");
         let pc = f.pc;
         f.pc += 1;
-        let op = &opcodes[pc];
+        debug_assert!(pc < opcodes_len, "PC out of range for opcode stream");
+        // SAFETY: `opcodes_ptr` comes from `f.program` selected above and remains valid for this
+        // execution call because we do not mutate/replace `f.program` here. `pc` is bounds-checked.
+        let op = unsafe { &*opcodes_ptr.add(pc) };
 
         match op {
             Op::If(label, environment_width) => {

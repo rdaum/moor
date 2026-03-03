@@ -17,7 +17,7 @@ mod tests {
     use moor_common::{
         model::{
             ArgSpec, CommitResult, ObjectKind, PrepSpec, PropFlag, ValSet, VerbArgsSpec, VerbFlag,
-            WorldState, WorldStateError,
+            WorldState,
         },
         util::BitEnum,
     };
@@ -227,10 +227,16 @@ mod tests {
                                 }
 
                                 // Also test method resolution which uses verb cache heavily
-                                if ws
-                                    .find_method_verb_on(&SYSTEM_OBJECT, &obj, verb_name)
-                                    .is_ok()
-                                {
+                                if matches!(
+                                    ws.dispatch_verb(
+                                        &SYSTEM_OBJECT,
+                                        moor_common::model::VerbDispatch::new(
+                                            moor_common::model::VerbLookup::method(&obj, verb_name),
+                                            moor_common::model::DispatchFlagsSource::Permissions,
+                                        ),
+                                    ),
+                                    Ok(Some(_))
+                                ) {
                                     cache_hits.fetch_add(1, Ordering::Relaxed);
                                 }
                             }
@@ -586,19 +592,24 @@ mod tests {
                                     let verb_sym = Symbol::mk(verb_name);
 
                                     // Test method resolution (heavily uses verb cache)
-                                    let result = ws.find_method_verb_on(
+                                    let result = ws.dispatch_verb(
                                         &SYSTEM_OBJECT,
-                                        &child_obj,
-                                        verb_sym,
+                                        moor_common::model::VerbDispatch::new(
+                                            moor_common::model::VerbLookup::method(
+                                                &child_obj,
+                                                verb_sym,
+                                            ),
+                                            moor_common::model::DispatchFlagsSource::Permissions,
+                                        ),
                                     );
                                     let key = format!("{verb_name}_{thread_id}");
 
                                     match result {
-                                        Ok(_) => {
+                                        Ok(Some(_)) => {
                                             *local_results.entry(key).or_insert(0) += 1;
                                             resolution_count.fetch_add(1, Ordering::Relaxed);
                                         }
-                                        Err(WorldStateError::VerbNotFound(_, _)) => {
+                                        Ok(None) => {
                                             // Expected for nonexistent_verb
                                             if verb_name == "nonexistent_verb" {
                                                 *local_results.entry(key).or_insert(0) += 1;

@@ -561,10 +561,10 @@ async fn swamp_mode_workload(
         0
     };
 
-    let find_verb_count = db_counters().find_method_verb_on.invocations().sum();
+    let find_verb_count = db_counters().dispatch_verb.invocations().sum();
     let find_verb_avg_nanos = if find_verb_count > 0 {
         db_counters()
-            .find_method_verb_on
+            .dispatch_verb
             .cumulative_duration_nanos()
             .sum()
             / find_verb_count
@@ -573,7 +573,7 @@ async fn swamp_mode_workload(
     };
 
     info!(
-        "  setup_task: {} calls, avg {}ns | find_method_verb_on: {} calls, avg {}ns",
+        "  setup_task: {} calls, avg {}ns | dispatch_verb: {} calls, avg {}ns",
         setup_task_count, setup_task_avg_nanos, find_verb_count, find_verb_avg_nanos
     );
 
@@ -645,9 +645,9 @@ async fn load_test_workload(
             .task_submit_to_first_run_latency
             .cumulative_duration_nanos()
             .sum();
-        let baseline_find_verb_count = db_counters().find_method_verb_on.invocations().sum();
+        let baseline_find_verb_count = db_counters().dispatch_verb.invocations().sum();
         let baseline_find_verb_nanos = db_counters()
-            .find_method_verb_on
+            .dispatch_verb
             .cumulative_duration_nanos()
             .sum();
 
@@ -725,10 +725,9 @@ async fn load_test_workload(
             0
         };
 
-        let find_verb_count =
-            db_counters().find_method_verb_on.invocations().sum() - baseline_find_verb_count;
+        let find_verb_count = db_counters().dispatch_verb.invocations().sum() - baseline_find_verb_count;
         let find_verb_total_nanos = db_counters()
-            .find_method_verb_on
+            .dispatch_verb
             .cumulative_duration_nanos()
             .sum()
             - baseline_find_verb_nanos;

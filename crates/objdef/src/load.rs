@@ -1359,7 +1359,9 @@ impl<'a> ObjectDefinitionLoader<'a> {
 #[cfg(test)]
 mod tests {
     use crate::{ConflictMode, ObjDefLoaderOptions, ObjdefLoaderError, ObjectDefinitionLoader};
-    use moor_common::model::{HasUuid, Named, PrepSpec, WorldStateSource};
+    use moor_common::model::{
+        HasUuid, Named, PrepSpec, VerbLookup, WorldStateSource, command_verb_argspec,
+    };
     use moor_compiler::{CompileOptions, ObjFileContext};
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_str};
@@ -1487,18 +1489,16 @@ mod tests {
         loader.commit().unwrap();
 
         let ws = db.new_world_state().unwrap();
+        let target = Obj::mk_id(2);
+        let argspec = command_verb_argspec(&target, &target, PrepSpec::None, &NOTHING);
         let v = ws
-            .find_command_verb_on(
+            .lookup_verb(
                 &SYSTEM_OBJECT,
-                &Obj::mk_id(2),
-                Symbol::mk("look"),
-                &Obj::mk_id(2),
-                PrepSpec::None,
-                &NOTHING,
+                VerbLookup::command(&target, Symbol::mk("look"), argspec),
             )
             .unwrap();
 
-        assert!(v.unwrap().1.names().contains(&Symbol::mk("look")));
+        assert!(v.unwrap().names().contains(&Symbol::mk("look")));
 
         let p = ws
             .retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(2), Symbol::mk("description"))

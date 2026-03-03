@@ -28,7 +28,8 @@ use moor_common::{
     matching::{all_prepositions, get_preposition_forms},
     model::{
         ArgSpec, CompileContext, CompileError, HasUuid, Named, ObjFlag, ParseErrorDetails,
-        VerbArgsSpec, VerbAttrs, VerbDef, VerbFlag, WorldStateError, parse_preposition_spec,
+        VerbArgsSpec, VerbAttrs, VerbDef, VerbFlag, VerbLookup, WorldStateError,
+        parse_preposition_spec,
         preposition_to_string, verb_perms_string,
     },
     util::BitEnum,
@@ -737,8 +738,8 @@ fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let name = bf_args.args[1].as_symbol().map_err(BfErr::ErrValue)?;
 
-    let Ok(vd) = with_current_transaction(|world_state| {
-        world_state.find_method_verb_def_on(&task_perms, &obj, name)
+    let Ok(Some(vd)) = with_current_transaction(|world_state| {
+        world_state.lookup_verb(&task_perms, VerbLookup::method(&obj, name))
     }) else {
         return Ok(Ret(bf_args.v_bool(false)));
     };

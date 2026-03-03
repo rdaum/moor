@@ -19,7 +19,7 @@ use std::{
 use tracing::{debug, error, warn};
 
 use moor_common::{
-    model::{ObjFlag, VerbDef},
+    model::{ObjFlag, ResolvedVerb},
     tasks::{AbortLimitReason, TaskId},
     util::BitEnum,
 };
@@ -169,7 +169,7 @@ impl VmHost {
     pub fn start_call_command_verb(
         &mut self,
         task_id: TaskId,
-        resolved_verb: VerbDef,
+        resolved_verb: ResolvedVerb,
         verb_name: Symbol,
         this: Var,
         player: Obj,
@@ -200,7 +200,7 @@ impl VmHost {
     pub fn start_call_method_verb(
         &mut self,
         task_id: TaskId,
-        resolved_verb: VerbDef,
+        resolved_verb: ResolvedVerb,
         verb_name: Symbol,
         this: Var,
         player: Obj,

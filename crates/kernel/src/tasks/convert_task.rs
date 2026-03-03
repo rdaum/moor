@@ -1197,7 +1197,8 @@ pub(crate) fn activation_to_flatbuffer(
 
     let fb_verb_name = convert_schema::symbol_to_flatbuffer_struct(&activation.verb_name);
 
-    let fb_verbdef = convert_schema::verbdef_to_flatbuffer(&activation.verbdef)
+    let serialized_verbdef = activation.verbdef.with_name(activation.verb_name);
+    let fb_verbdef = convert_schema::verbdef_to_flatbuffer(&serialized_verbdef)
         .map_err(|e| TaskConversionError::EncodingError(format!("Error encoding verbdef: {e}")))?;
 
     let fb_permissions = convert_schema::obj_to_flatbuffer_struct(&activation.permissions);
@@ -1277,7 +1278,7 @@ pub(crate) fn activation_from_ref(
         player,
         args,
         verb_name,
-        verbdef,
+        verbdef: verbdef.as_resolved(),
         permissions,
         permissions_flags,
     })

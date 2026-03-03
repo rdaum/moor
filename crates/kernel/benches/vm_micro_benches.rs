@@ -17,7 +17,8 @@
 use moor_bench_utils::{BenchContext, black_box};
 use moor_common::{
     model::{
-        CommitResult, ObjFlag, ObjectKind, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
+        CommitResult, DispatchFlagsSource, ObjFlag, ObjectKind, VerbArgsSpec, VerbDispatch,
+        VerbFlag, VerbLookup, WorldState, WorldStateSource,
     },
     tasks::{AbortLimitReason, NoopClientSession, Session},
     util::BitEnum,
@@ -60,14 +61,23 @@ fn prepare_call_verb(
     let mut vm_host = VmHost::new(0, 20, max_ticks, Duration::from_secs(1000));
 
     let verb_name = Symbol::mk(verb_name);
-    let (program, verbdef) = world_state
-        .find_method_verb_on(&SYSTEM_OBJECT, &SYSTEM_OBJECT, verb_name)
+    let verb_result = world_state
+        .dispatch_verb(
+            &SYSTEM_OBJECT,
+            VerbDispatch::new(
+                VerbLookup::method(&SYSTEM_OBJECT, verb_name),
+                DispatchFlagsSource::Permissions,
+            ),
+        )
         .unwrap();
+    let Some(verb_result) = verb_result else {
+        panic!("Could not resolve benchmark verb");
+    };
     // Use wizard + programmer flags for benchmarking
     let permissions_flags = BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer;
     vm_host.start_call_method_verb(
         0,
-        verbdef,
+        verb_result.verbdef,
         verb_name,
         v_obj(SYSTEM_OBJECT),
         SYSTEM_OBJECT,
@@ -75,7 +85,7 @@ fn prepare_call_verb(
         v_obj(SYSTEM_OBJECT),
         v_empty_str(),
         permissions_flags,
-        program,
+        verb_result.program,
     );
     vm_host
 }

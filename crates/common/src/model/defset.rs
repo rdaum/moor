@@ -117,12 +117,20 @@ impl<T: Clone + HasUuid + Named> Defs<T> {
         self.iter().find(|p| &p.uuid() == uuid)
     }
     #[must_use]
+    pub fn find_ref(&self, uuid: &Uuid) -> Option<&T> {
+        self.contents.iter().find(|p| &p.uuid() == uuid)
+    }
+    #[must_use]
     pub fn find_named(&self, name: Symbol) -> Vec<T> {
         self.iter().filter(|p| p.matches_name(name)).collect()
     }
     #[must_use]
     pub fn find_first_named(&self, name: Symbol) -> Option<T> {
         self.iter().find(|p| p.matches_name(name))
+    }
+    #[must_use]
+    pub fn find_first_named_ref(&self, name: Symbol) -> Option<&T> {
+        self.contents.iter().find(|p| p.matches_name(name))
     }
     #[must_use]
     pub fn with_removed(&self, uuid: Uuid) -> Option<Self> {

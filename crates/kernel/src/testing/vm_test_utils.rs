@@ -16,7 +16,7 @@
 use std::{cmp::max, sync::Arc, time::Duration};
 
 use moor_common::matching::ParsedCommand;
-use moor_common::model::{ObjFlag, WorldState};
+use moor_common::model::{DispatchFlagsSource, ObjFlag, VerbDispatch, VerbLookup, WorldState};
 use moor_common::util::BitEnum;
 use moor_compiler::Program;
 use moor_var::{
@@ -176,9 +176,18 @@ pub fn call_verb(
 ) -> ExecResult {
     // Set up the verb call before starting transaction context
     let verb_name = Symbol::mk(verb_name);
-    let (program, verbdef) = world_state
-        .find_method_verb_on(&SYSTEM_OBJECT, &SYSTEM_OBJECT, verb_name)
+    let verb_result = world_state
+        .dispatch_verb(
+            &SYSTEM_OBJECT,
+            VerbDispatch::new(
+                VerbLookup::method(&SYSTEM_OBJECT, verb_name),
+                DispatchFlagsSource::Permissions,
+            ),
+        )
+        .unwrap()
         .unwrap();
+    let program = verb_result.program;
+    let verbdef = verb_result.verbdef;
 
     // Use wizard + programmer flags for testing
     let permissions_flags = BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer;
@@ -262,7 +271,7 @@ pub struct ActivationAssemblyBenchState {
     frame: Option<crate::vm::moo_frame::MooStackFrame>,
     this: Option<Var>,
     args: Option<List>,
-    verbdef: Option<moor_common::model::VerbDef>,
+    verbdef: Option<moor_common::model::ResolvedVerb>,
     player: Obj,
     verb_name: Symbol,
     permissions_flags: BitEnum<ObjFlag>,
@@ -336,7 +345,7 @@ pub fn create_nested_moo_frame_for_bench(
 /// Prepare reusable state for direct activation assembly benchmarking from a prebuilt frame.
 #[allow(clippy::too_many_arguments)]
 pub fn create_activation_assembly_state_for_bench(
-    verbdef: moor_common::model::VerbDef,
+    verbdef: moor_common::model::ResolvedVerb,
     verb_name: Symbol,
     this: Var,
     player: Obj,
@@ -490,7 +499,7 @@ pub fn create_nested_environment_for_bench(
 #[allow(clippy::too_many_arguments)]
 pub fn create_activation_for_bench(
     _permissions: Obj,
-    verbdef: moor_common::model::VerbDef,
+    verbdef: moor_common::model::ResolvedVerb,
     verb_name: Symbol,
     this: Var,
     player: Obj,
@@ -521,7 +530,7 @@ pub fn create_activation_for_bench(
 #[allow(clippy::too_many_arguments)]
 pub fn create_command_activation_for_bench(
     _permissions: Obj,
-    verbdef: moor_common::model::VerbDef,
+    verbdef: moor_common::model::ResolvedVerb,
     verb_name: Symbol,
     this: Var,
     player: Obj,
@@ -584,7 +593,7 @@ pub fn create_command_activation_for_bench(
 #[allow(clippy::too_many_arguments)]
 pub fn create_nested_activation_for_bench(
     _permissions: Obj,
-    verbdef: moor_common::model::VerbDef,
+    verbdef: moor_common::model::ResolvedVerb,
     verb_name: Symbol,
     this: Var,
     player: Obj,

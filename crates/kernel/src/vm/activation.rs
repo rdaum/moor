@@ -18,7 +18,7 @@ use strum::EnumCount;
 use uuid::Uuid;
 
 use moor_common::{
-    model::{ObjFlag, VerbArgsSpec, VerbDef, VerbFlag},
+    model::{ObjFlag, ResolvedVerb, VerbArgsSpec, VerbFlag},
     util::BitEnum,
 };
 use moor_compiler::{BuiltinId, Program, ScatterLabel};
@@ -102,8 +102,8 @@ pub(crate) struct Activation {
     pub(crate) args: List,
     /// The name of the verb that is currently being executed.
     pub(crate) verb_name: Symbol,
-    /// The extended information about the verb that is currently being executed.
-    pub(crate) verbdef: VerbDef,
+    /// Compact resolved metadata for the running verb.
+    pub(crate) verbdef: ResolvedVerb,
     /// This is the "task perms" for the current activation. It is the "who" the verb is acting on
     /// behalf-of in terms of permissions in the world.
     /// Set initially to verb owner ('programmer'). It is what set_task_perms() can override,
@@ -209,7 +209,7 @@ impl Activation {
     #[allow(irrefutable_let_patterns)] // We know this is a Moo frame
     #[allow(clippy::too_many_arguments)]
     pub fn for_call(
-        resolved_verb: VerbDef,
+        resolved_verb: ResolvedVerb,
         permissions_flags: BitEnum<ObjFlag>,
         verb_name: Symbol,
         this: Var,
@@ -469,7 +469,7 @@ impl Activation {
             frame,
             this: current_activation.this.clone(),
             player: current_activation.player,
-            verbdef: current_activation.verbdef.clone(),
+            verbdef: current_activation.verbdef,
             verb_name: Symbol::mk(&lambda_name),
             args: args.iter().cloned().collect(),
             permissions: current_activation.permissions,
@@ -484,11 +484,10 @@ impl Activation {
         program: Program,
         initial_env: Option<&[(Symbol, Var)]>,
     ) -> Self {
-        let verbdef = VerbDef::new(
+        let verbdef = ResolvedVerb::new(
             Uuid::new_v4(),
             NOTHING,
             NOTHING,
-            &[*EVAL_SYMBOL],
             BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Debug,
             VerbArgsSpec::this_none_this(),
         );
@@ -537,11 +536,10 @@ impl Activation {
         // Builtin frames do not need cryptographically random UUIDs. Use a stable
         // deterministic UUID derived from the builtin id to avoid per-call RNG/syscalls.
         let builtin_uuid = Uuid::from_u128((bf_id.0 as u128) | (1u128 << 127));
-        let verbdef = VerbDef::new(
+        let verbdef = ResolvedVerb::new(
             builtin_uuid,
             NOTHING,
             NOTHING,
-            &[bf_name],
             BitEnum::new_with(VerbFlag::Exec),
             VerbArgsSpec::this_none_this(),
         );

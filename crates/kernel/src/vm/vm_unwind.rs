@@ -22,7 +22,7 @@ use crate::vm::{
 #[cfg(feature = "trace_events")]
 use crate::{trace_builtin_end, trace_stack_unwind, trace_verb_end};
 use moor_common::{
-    model::{Named, VerbFlag},
+    model::VerbFlag,
     tasks::Exception,
 };
 use moor_compiler::{BUILTINS, Label, Offset, to_literal};
@@ -59,15 +59,7 @@ impl VMExecState {
                 Frame::Moo(_) => {
                     vec![
                         a.this.clone(),
-                        v_str(
-                            a.verbdef
-                                .names()
-                                .iter()
-                                .map(|s| s.as_string())
-                                .collect::<Vec<_>>()
-                                .join(" ")
-                                .as_str(),
-                        ),
+                        v_str(&a.verb_name.as_string()),
                         v_obj(a.permissions),
                         v_obj(a.verb_definer()),
                         v_obj(a.player),

@@ -23,8 +23,8 @@ use moor_common::matching::{
 use moor_common::model::{ObjSet, PrepSpec, verb_perms_string};
 use moor_common::{
     model::{
-        CommandVerbDispatch, DispatchFlagsSource, Named, ObjFlag, ObjectKind, ValSet,
-        WorldStateError,
+        DispatchFlagsSource, Named, ObjFlag, ObjectKind, ValSet, VerbDispatch, VerbLookup,
+        WorldStateError, command_verb_argspec,
     },
     util::BitEnum,
 };
@@ -79,12 +79,13 @@ fn create_object_with_initialize(
 
     // Try to call :initialize on the new object
     let permissions = bf_args.task_perms_who();
-    let Ok((program, resolved_verb, permissions_flags)) = with_current_transaction(|world_state| {
-        world_state.find_method_verb_for_dispatch(
+    let Ok(Some(verb_result)) = with_current_transaction(|world_state| {
+        world_state.dispatch_verb(
             &permissions,
-            &new_obj,
-            *INITIALIZE_SYM,
-            DispatchFlagsSource::Permissions,
+            VerbDispatch::new(
+                VerbLookup::method(&new_obj, *INITIALIZE_SYM),
+                DispatchFlagsSource::Permissions,
+            ),
         )
     }) else {
         return Ok(Ret(v_obj(new_obj)));
@@ -102,15 +103,15 @@ fn create_object_with_initialize(
 
     let ve = VerbExecutionRequest {
         permissions,
-        permissions_flags,
-        resolved_verb,
+        permissions_flags: verb_result.permissions_flags,
+        resolved_verb: verb_result.verbdef,
         verb_name: *INITIALIZE_SYM,
         this: v_obj(new_obj),
         player: bf_args.exec_state.top().player,
         args: initialize_args,
         caller: bf_args.exec_state.top().this.clone(),
         argstr: v_empty_str(),
-        program,
+        program: verb_result.program,
     };
     Ok(VmInstr(DispatchVerb(Box::new(ve))))
 }
@@ -719,61 +720,59 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 // The next point in the trampoline is CALL_EXITFUNC and it will expect a list of
                 // objects to move/call :exitfunc on. So let's get the initial list of objects
                 // now
-                let object_contents = with_current_transaction(|world_state| {
-                    world_state.contents_of(&bf_args.task_perms_who(), &obj)
-                })
-                .map_err(world_state_bf_err)?;
-                // Filter contents for objects that have an :exitfunc verb.
-                let mut contents = vec![];
-                for o in object_contents.iter() {
-                    match with_current_transaction(|world_state| {
-                        world_state.find_method_verb_def_on(
-                            &bf_args.task_perms_who(),
-                            &o,
-                            *EXITFUNC_SYM,
-                        )
-                    }) {
-                        Ok(_) => {
-                            contents.push(v_obj(o));
-                        }
-                        Err(WorldStateError::VerbNotFound(_, _)) => {}
-                        Err(e) => {
-                            error!("Error looking up exitfunc verb: {:?}", e);
-                            return Err(BfErr::ErrValue(
-                                E_NACC.msg("recycle() error looking up exitfunc"),
-                            ));
+                    let object_contents = with_current_transaction(|world_state| {
+                        world_state.contents_of(&bf_args.task_perms_who(), &obj)
+                    })
+                    .map_err(world_state_bf_err)?;
+                    // Filter contents for objects that have an :exitfunc verb.
+                    let mut contents = vec![];
+                    for o in object_contents.iter() {
+                        match with_current_transaction(|world_state| {
+                            world_state
+                                .lookup_verb(&bf_args.task_perms_who(), VerbLookup::method(&o, *EXITFUNC_SYM))
+                        }) {
+                            Ok(Some(_)) => {
+                                contents.push(v_obj(o));
+                            }
+                            Ok(None) => {}
+                            Err(e) => {
+                                error!("Error looking up exitfunc verb: {:?}", e);
+                                return Err(BfErr::ErrValue(
+                                    E_NACC.msg("recycle() error looking up exitfunc"),
+                                ));
                         }
                     }
                 }
                 let contents = v_list(&contents);
                 let permissions = bf_args.task_perms_who();
                 match with_current_transaction(|world_state| {
-                    world_state.find_method_verb_for_dispatch(
+                    world_state.dispatch_verb(
                         &permissions,
-                        &obj,
-                        *RECYCLE_SYM,
-                        DispatchFlagsSource::Permissions,
+                        VerbDispatch::new(
+                            VerbLookup::method(&obj, *RECYCLE_SYM),
+                            DispatchFlagsSource::Permissions,
+                        ),
                     )
                 }) {
-                    Ok((program, resolved_verb, permissions_flags)) => {
+                    Ok(Some(verb_result)) => {
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline = Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC);
                         bf_frame.bf_trampoline_arg = Some(contents);
 
                         return Ok(VmInstr(DispatchVerb(Box::new(VerbExecutionRequest {
                             permissions,
-                            permissions_flags,
-                            resolved_verb,
+                            permissions_flags: verb_result.permissions_flags,
+                            resolved_verb: verb_result.verbdef,
                             verb_name: *RECYCLE_SYM,
                             this: v_obj(obj),
                             player: bf_args.exec_state.top().player,
                             args: List::mk_list(&[]),
                             caller: bf_args.exec_state.top().this.clone(),
                             argstr: v_empty_str(),
-                            program,
+                            program: verb_result.program,
                         }))));
                     }
-                    Err(WorldStateError::VerbNotFound(_, _)) => {
+                    Ok(None) => {
                         // Short-circuit fake-tramp state change.
                         let bf_frame = bf_args.bf_frame_mut();
 
@@ -813,13 +812,14 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     // be transactionally isolated. But we need to do resolution anyways, so we will
                     // look again anyways.
                     let permissions = bf_args.task_perms_who();
-                    let Ok((program, resolved_verb, permissions_flags)) =
+                    let Ok(Some(verb_result)) =
                         with_current_transaction(|world_state| {
-                            world_state.find_method_verb_for_dispatch(
+                            world_state.dispatch_verb(
                                 &permissions,
-                                &head_obj,
-                                *EXITFUNC_SYM,
-                                DispatchFlagsSource::Permissions,
+                                VerbDispatch::new(
+                                    VerbLookup::method(&head_obj, *EXITFUNC_SYM),
+                                    DispatchFlagsSource::Permissions,
+                                ),
                             )
                         })
                     else {
@@ -835,15 +835,15 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     // Call :exitfunc on the head object.
                     return Ok(VmInstr(DispatchVerb(Box::new(VerbExecutionRequest {
                         permissions,
-                        permissions_flags,
-                        resolved_verb,
+                        permissions_flags: verb_result.permissions_flags,
+                        resolved_verb: verb_result.verbdef,
                         verb_name: *EXITFUNC_SYM,
                         this: v_obj(head_obj),
                         player: bf_args.exec_state.top().player,
                         args: List::mk_list(&[v_obj(obj)]),
                         caller: bf_args.exec_state.top().this.clone(),
                         argstr: v_empty_str(),
-                        program,
+                        program: verb_result.program,
                     }))));
                 }
             }
@@ -935,31 +935,32 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 }
                 let permissions = bf_args.task_perms_who();
                 match with_current_transaction(|world_state| {
-                    world_state.find_method_verb_for_dispatch(
+                    world_state.dispatch_verb(
                         &permissions,
-                        &whereto,
-                        *ACCEPT_SYM,
-                        DispatchFlagsSource::Permissions,
+                        VerbDispatch::new(
+                            VerbLookup::method(&whereto, *ACCEPT_SYM),
+                            DispatchFlagsSource::Permissions,
+                        ),
                     )
                 }) {
-                    Ok((program, resolved_verb, permissions_flags)) => {
+                    Ok(Some(verb_result)) => {
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC);
                         bf_frame.bf_trampoline_arg = None;
                         return Ok(VmInstr(DispatchVerb(Box::new(VerbExecutionRequest {
                             permissions,
-                            permissions_flags,
-                            resolved_verb,
+                            permissions_flags: verb_result.permissions_flags,
+                            resolved_verb: verb_result.verbdef,
                             verb_name: *ACCEPT_SYM,
                             this: v_obj(whereto),
                             player: bf_args.exec_state.top().player,
                             args: List::mk_list(&[v_obj(what)]),
                             caller: bf_args.exec_state.top().this.clone(),
                             argstr: v_empty_str(),
-                            program,
+                            program: verb_result.program,
                         }))));
                     }
-                    Err(WorldStateError::VerbNotFound(_, _)) => {
+                    Ok(None) => {
                         if !perms.check_is_wizard().map_err(world_state_bf_err)? {
                             return Err(BfErr::Code(E_NACC));
                         }
@@ -1011,33 +1012,34 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 // Call exitfunc...
                 let permissions = bf_args.task_perms_who();
                 match with_current_transaction(|world_state| {
-                    world_state.find_method_verb_for_dispatch(
+                    world_state.dispatch_verb(
                         &permissions,
-                        &original_location,
-                        *EXITFUNC_SYM,
-                        DispatchFlagsSource::Permissions,
+                        VerbDispatch::new(
+                            VerbLookup::method(&original_location, *EXITFUNC_SYM),
+                            DispatchFlagsSource::Permissions,
+                        ),
                     )
                 }) {
-                    Ok((program, resolved_verb, permissions_flags)) => {
+                    Ok(Some(verb_result)) => {
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC);
                         bf_frame.bf_trampoline_arg = None;
 
                         let continuation = DispatchVerb(Box::new(VerbExecutionRequest {
                             permissions,
-                            permissions_flags,
-                            resolved_verb,
+                            permissions_flags: verb_result.permissions_flags,
+                            resolved_verb: verb_result.verbdef,
                             verb_name: *EXITFUNC_SYM,
                             this: v_obj(original_location),
                             player: bf_args.exec_state.top().player,
                             args: List::mk_list(&[v_obj(what)]),
                             caller: bf_args.exec_state.top().this.clone(),
                             argstr: v_empty_str(),
-                            program,
+                            program: verb_result.program,
                         }));
                         return Ok(VmInstr(continuation));
                     }
-                    Err(WorldStateError::VerbNotFound(_, _)) => {
+                    Ok(None) => {
                         // Short-circuit fake-tramp state change.
                         tramp = 2;
                         continue;
@@ -1059,32 +1061,33 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 // :enterfunc on the destination.
                 let permissions = bf_args.task_perms_who();
                 match with_current_transaction(|world_state| {
-                    world_state.find_method_verb_for_dispatch(
+                    world_state.dispatch_verb(
                         &permissions,
-                        &whereto,
-                        *ENTERFUNC_SYM,
-                        DispatchFlagsSource::Permissions,
+                        VerbDispatch::new(
+                            VerbLookup::method(&whereto, *ENTERFUNC_SYM),
+                            DispatchFlagsSource::Permissions,
+                        ),
                     )
                 }) {
-                    Ok((program, resolved_verb, permissions_flags)) => {
+                    Ok(Some(verb_result)) => {
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_DONE);
                         bf_frame.bf_trampoline_arg = None;
 
                         return Ok(VmInstr(DispatchVerb(Box::new(VerbExecutionRequest {
                             permissions,
-                            permissions_flags,
-                            resolved_verb,
+                            permissions_flags: verb_result.permissions_flags,
+                            resolved_verb: verb_result.verbdef,
                             verb_name: *ENTERFUNC_SYM,
                             this: v_obj(whereto),
                             player: bf_args.exec_state.top().player,
                             args: List::mk_list(&[v_obj(what)]),
                             caller: bf_args.exec_state.top().this.clone(),
                             argstr: v_empty_str(),
-                            program,
+                            program: verb_result.program,
                         }))));
                     }
-                    Err(WorldStateError::VerbNotFound(_, _)) => {
+                    Ok(None) => {
                         // Short-circuit fake-tramp state change.
                         tramp = BF_MOVE_TRAMPOLINE_DONE;
                         continue;
@@ -1800,13 +1803,13 @@ fn bf_find_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
         // Look for command verb on this target
         let match_result = with_current_transaction(|world_state| {
-            world_state.find_command_verb_def_on(
+            world_state.lookup_verb(
                 &bf_args.task_perms_who(),
-                &target,
-                verb_sym,
-                &dobj,
-                prep,
-                &iobj,
+                VerbLookup::command(
+                    &target,
+                    verb_sym,
+                    command_verb_argspec(&target, &dobj, prep, &iobj),
+                ),
             )
         });
 
@@ -1979,23 +1982,21 @@ fn bf_dispatch_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
             // Look up the command verb
             let caller_perms = bf_args.task_perms_who();
             let match_result = with_current_transaction(|world_state| {
-                world_state.find_command_verb_for_dispatch(
+                world_state.dispatch_verb(
                     &caller_perms,
-                    &target,
-                    CommandVerbDispatch {
-                        command_verb: verb_name,
-                        dobj: &dobj,
-                        prep,
-                        iobj: &iobj,
-                        flags_source: DispatchFlagsSource::VerbOwner,
-                    },
+                    VerbDispatch::new(
+                        VerbLookup::command(
+                            &target,
+                            verb_name,
+                            command_verb_argspec(&target, &dobj, prep, &iobj),
+                        ),
+                        DispatchFlagsSource::VerbOwner,
+                    ),
                 )
             });
 
-            let (program, verbdef, permissions_flags) = match match_result {
-                Ok(Some((program, verbdef, permissions_flags))) => {
-                    (program, verbdef, permissions_flags)
-                }
+            let verb_result = match match_result {
+                Ok(Some(verb_result)) => verb_result,
                 Ok(None) => {
                     return Err(BfErr::ErrValue(
                         E_VERBNF.with_msg(|| format!("Verb {verb_name} not found on {target}")),
@@ -2033,18 +2034,18 @@ fn bf_dispatch_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
             };
 
             // Build the CommandVerbExecutionRequest
-            let permissions = verbdef.owner();
+            let permissions = verb_result.verbdef.owner();
             let exec_request = Box::new(crate::vm::CommandVerbExecutionRequest {
                 permissions,
-                permissions_flags,
-                resolved_verb: verbdef,
+                permissions_flags: verb_result.permissions_flags,
+                resolved_verb: verb_result.verbdef,
                 verb_name,
                 this: v_obj(target),
                 player: bf_args.exec_state.top().player,
                 // Caller needs to be the player in order for downstream caller perms checks to function correctly
                 caller: v_obj(bf_args.exec_state.top().player),
                 command: parsed_command,
-                program,
+                program: verb_result.program,
             });
 
             // Set trampoline to DONE for when the verb returns

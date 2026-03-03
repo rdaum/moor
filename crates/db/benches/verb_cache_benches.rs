@@ -196,7 +196,7 @@ impl BenchContext for RealisticCacheContext {
                         VerbFlag::rwx(),
                         VerbArgsSpec::this_none_this(),
                     );
-                    verb_cache.fill_hit(obj, verb, &verbdef);
+                    verb_cache.fill_hit(obj, verb, verbdef.as_resolved());
                     entry_count += 1;
                 }
             }
@@ -269,7 +269,7 @@ impl BenchContext for PopulatedCacheContext {
                         VerbFlag::rwx(),
                         VerbArgsSpec::this_none_this(),
                     );
-                    verb_cache.fill_hit(obj, verb, &verbdef);
+                    verb_cache.fill_hit(obj, verb, verbdef.as_resolved());
                 } else if (i + j) % 3 == 1 {
                     // Cache miss
                     verb_cache.fill_miss(obj, verb);
@@ -389,7 +389,7 @@ fn verb_cache_fill_hits(ctx: &mut SmallCacheContext, chunk_size: usize, _chunk_n
         ctx.verb_cache.fill_hit(
             &ctx.test_objs[obj_idx],
             &ctx.test_verbs[verb_idx],
-            &ctx.test_verbdefs[verbdef_idx],
+            ctx.test_verbdefs[verbdef_idx].as_resolved(),
         );
     }
 }
@@ -417,7 +417,7 @@ fn verb_cache_flush(ctx: &mut SmallCacheContext, chunk_size: usize, _chunk_num: 
                 ctx.verb_cache.fill_hit(
                     &ctx.test_objs[obj_idx],
                     &ctx.test_verbs[verb_idx],
-                    &ctx.test_verbdefs[verbdef_idx],
+                    ctx.test_verbdefs[verbdef_idx].as_resolved(),
                 );
             }
         }
@@ -554,7 +554,7 @@ fn verb_cache_mixed_workload(ctx: &mut LargeCacheContext, chunk_size: usize, _ch
                 ctx.verb_cache.fill_hit(
                     &ctx.test_objs[obj_idx],
                     &ctx.test_verbs[verb_idx],
-                    &ctx.test_verbdefs[verbdef_idx],
+                    ctx.test_verbdefs[verbdef_idx].as_resolved(),
                 );
             }
             8 => {

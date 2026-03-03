@@ -17,7 +17,9 @@
 #[cfg(test)]
 mod tests {
     use crate::{ConflictMode, Entity, ObjDefLoaderOptions, ObjectDefinitionLoader};
-    use moor_common::model::{ObjFlag, PrepSpec, VerbFlag, WorldStateSource};
+    use moor_common::model::{
+        ObjFlag, PrepSpec, VerbFlag, VerbLookup, WorldStateSource, command_verb_argspec,
+    };
     use moor_compiler::CompileOptions;
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_int, v_str};
@@ -331,16 +333,12 @@ mod tests {
 
         // Check if original verb is unchanged
         let ws = db.new_world_state()?;
-        let verb_result = ws.find_command_verb_on(
-            &SYSTEM_OBJECT,
-            &Obj::mk_id(1),
-            Symbol::mk("look"),
-            &Obj::mk_id(1),
-            PrepSpec::None,
-            &NOTHING,
-        )?;
+        let target = Obj::mk_id(1);
+        let argspec = command_verb_argspec(&target, &target, PrepSpec::None, &NOTHING);
+        let verb_result =
+            ws.lookup_verb(&SYSTEM_OBJECT, VerbLookup::command(&target, Symbol::mk("look"), argspec))?;
 
-        if let Some((_, verbdef)) = verb_result {
+        if let Some(verbdef) = verb_result {
             // Should still be original owner (#1) and executable, not changed to #0 and non-executable
             assert_eq!(verbdef.owner(), Obj::mk_id(1));
             assert!(verbdef.flags().contains(VerbFlag::Exec));
@@ -565,16 +563,12 @@ mod tests {
 
         // Check if verb was changed due to Clobber mode
         let ws = db.new_world_state()?;
-        let verb_result = ws.find_command_verb_on(
-            &SYSTEM_OBJECT,
-            &Obj::mk_id(1),
-            Symbol::mk("look"),
-            &Obj::mk_id(1),
-            PrepSpec::None,
-            &NOTHING,
-        )?;
+        let target = Obj::mk_id(1);
+        let argspec = command_verb_argspec(&target, &target, PrepSpec::None, &NOTHING);
+        let verb_result =
+            ws.lookup_verb(&SYSTEM_OBJECT, VerbLookup::command(&target, Symbol::mk("look"), argspec))?;
 
-        if let Some((_, verbdef)) = verb_result {
+        if let Some(verbdef) = verb_result {
             // Should be changed to new owner (#0) and non-executable (flags "rw")
             assert_eq!(verbdef.owner(), SYSTEM_OBJECT);
             assert!(!verbdef.flags().contains(VerbFlag::Exec));

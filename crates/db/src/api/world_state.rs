@@ -27,12 +27,11 @@ use crate::{
 };
 use moor_common::{
     model::{
-        ArgSpec, CommandVerbDispatch, CommitResult, DispatchFlagsSource, HasUuid,
-        MethodVerbLookupHint, MethodVerbLookupPicOutcome, MethodVerbLookupResult, ObjAttrs,
-        ObjFlag, ObjSet, ObjectKind, ObjectRef, Perms, PrepSpec, PropAttrs, PropDef, PropDefs,
-        PropFlag, PropPerms, PropertyLookupHint, PropertyLookupPicOutcome, PropertyLookupResult,
-        ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag, WorldState, WorldStateError,
-        WorldStatePerf,
+        CommitResult, DispatchFlagsSource, HasUuid, ObjAttrs, ObjFlag, ObjSet, ObjectKind,
+        ObjectRef, Perms, PropAttrs, PropDef, PropDefs, PropFlag, PropPerms, PropertyLookupHint,
+        PropertyLookupPicOutcome, PropertyLookupResult, ValSet, VerbArgsSpec, VerbAttrs, VerbDef,
+        VerbDefs, VerbDispatch, VerbDispatchResult, VerbFlag, VerbLookup, VerbLookupHint,
+        VerbLookupPicOutcome, WorldState, WorldStateError, WorldStatePerf,
     },
     util::{BitEnum, PerfTimerGuard},
 };
@@ -443,15 +442,11 @@ impl WorldState for DbWorldState {
         if let Some(hint) = hint {
             if hint.receiver != *obj || hint.property_name != pname {
                 pic_outcome = PropertyLookupPicOutcome::MissGuardMismatch;
-            } else if hint.prop_cache_version
-                != self.get_tx().prop_resolution_cache_version() as u64
+            } else if hint.prop_cache_version != self.get_tx().prop_resolution_cache_version() as u64
             {
                 pic_outcome = PropertyLookupPicOutcome::MissVersionMismatch;
             } else {
-                match self
-                    .get_tx()
-                    .resolve_property_by_uuid(obj, hint.property_uuid)
-                {
+                match self.get_tx().resolve_property_by_uuid(obj, hint.property_uuid) {
                     Ok((value, propperms, _)) => {
                         self.perms(perms)?
                             .check_property_allows(&propperms, PropFlag::Read)?;
@@ -882,104 +877,59 @@ impl WorldState for DbWorldState {
         Ok((binary, vh))
     }
 
-    fn find_method_verb_on(
-        &self,
-        perms: &Obj,
-        obj: &Obj,
-        vname: Symbol,
-    ) -> Result<(ProgramType, VerbDef), WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().find_method_verb_on);
-        let vh = self.get_tx().resolve_verb(
-            obj,
-            vname,
-            None,
-            Some(BitEnum::new_with(VerbFlag::Exec)),
-        )?;
-        self.perms(perms)?
-            .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
+    fn lookup_verb(&self, perms: &Obj, lookup: VerbLookup<'_>) -> Result<Option<VerbDef>, WorldStateError> {
+        let _t = PerfTimerGuard::new(&db_counters().lookup_verb);
+        if !self.valid(lookup.object)? {
+            return Ok(None);
+        }
 
-        let binary = self.get_tx().get_verb_program(&vh.location(), vh.uuid())?;
-        Ok((binary, vh))
-    }
-
-    fn find_method_verb_def_on(
-        &self,
-        perms: &Obj,
-        obj: &Obj,
-        vname: Symbol,
-    ) -> Result<VerbDef, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().find_method_verb_on);
-        let vh = self.get_tx().resolve_verb(
-            obj,
-            vname,
-            None,
-            Some(BitEnum::new_with(VerbFlag::Exec)),
-        )?;
-        self.perms(perms)?
-            .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
-        Ok(vh)
-    }
-
-    fn find_method_verb_for_dispatch(
-        &self,
-        perms: &Obj,
-        obj: &Obj,
-        vname: Symbol,
-        flags_source: DispatchFlagsSource,
-    ) -> Result<(ProgramType, VerbDef, BitEnum<ObjFlag>), WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().find_method_verb_on);
-        let vh = self.get_tx().resolve_verb(
-            obj,
-            vname,
-            None,
-            Some(BitEnum::new_with(VerbFlag::Exec)),
-        )?;
-        let perms = self.perms(perms)?;
-        perms.check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
-        let binary = self.get_tx().get_verb_program(&vh.location(), vh.uuid())?;
-        let permissions_flags = match flags_source {
-            DispatchFlagsSource::Permissions => perms.flags,
-            DispatchFlagsSource::VerbOwner => {
-                if vh.owner() == perms.who {
-                    perms.flags
-                } else {
-                    self.flags_of(&vh.owner()).unwrap_or_default()
-                }
-            }
+        let vh = match self.get_tx().resolve_verb(
+            lookup.object,
+            lookup.verb_name,
+            lookup.argspec,
+            lookup.flagspec,
+        ) {
+            Ok(vh) => vh,
+            Err(WorldStateError::VerbNotFound(_, _)) => return Ok(None),
+            Err(e) => return Err(e),
         };
-        Ok((binary, vh, permissions_flags))
+        self.perms(perms)?
+            .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
+        Ok(Some(vh))
     }
 
-    fn find_method_verb_for_dispatch_with_hint(
+    fn dispatch_verb(
         &self,
         perms: &Obj,
-        obj: &Obj,
-        vname: Symbol,
-        flags_source: DispatchFlagsSource,
-        hint: Option<MethodVerbLookupHint>,
-    ) -> Result<MethodVerbLookupResult, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().find_method_verb_on);
+        dispatch: VerbDispatch<'_>,
+    ) -> Result<Option<VerbDispatchResult>, WorldStateError> {
+        let _t = PerfTimerGuard::new(&db_counters().dispatch_verb);
+        if !self.valid(dispatch.lookup.object)? {
+            return Ok(None);
+        }
+
         let perms = self.perms(perms)?;
         let tx = self.get_tx();
         let verb_cache_version = tx.verb_resolution_cache_version() as u64;
-        let mut pic_outcome = MethodVerbLookupPicOutcome::MissNoHint;
-        if let Some(hint) = hint {
-            if hint.receiver != *obj || hint.verb_name != vname {
-                pic_outcome = MethodVerbLookupPicOutcome::MissGuardMismatch;
+        let mut pic_outcome = VerbLookupPicOutcome::MissNoHint;
+
+        if let Some(hint) = dispatch.hint {
+            if hint.receiver != *dispatch.lookup.object || hint.verb_name != dispatch.lookup.verb_name {
+                pic_outcome = VerbLookupPicOutcome::MissGuardMismatch;
             } else if hint.verb_cache_version != verb_cache_version {
-                pic_outcome = MethodVerbLookupPicOutcome::MissVersionMismatch;
+                pic_outcome = VerbLookupPicOutcome::MissVersionMismatch;
             } else {
-                match tx.resolve_verb_by_uuid(
-                    obj,
+                match tx.resolve_verb_by_uuid_handle(
+                    dispatch.lookup.object,
                     &hint.verb_definer,
                     hint.verb_uuid,
-                    None,
-                    Some(BitEnum::new_with(VerbFlag::Exec)),
+                    dispatch.lookup.argspec,
+                    dispatch.lookup.flagspec,
                 ) {
                     Ok(vh) => {
                         perms.check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
-                        let binary = tx.get_verb_program(&hint.verb_definer, hint.verb_uuid)?;
-                        let permissions_flags = match flags_source {
+                        let program = tx.get_verb_program(&hint.verb_definer, hint.verb_uuid)?;
+                        let permissions_flags = match dispatch.flags_source {
                             DispatchFlagsSource::Permissions => perms.flags,
                             DispatchFlagsSource::VerbOwner => {
                                 if vh.owner() == perms.who {
@@ -989,25 +939,35 @@ impl WorldState for DbWorldState {
                                 }
                             }
                         };
-                        return Ok(MethodVerbLookupResult {
-                            program: binary,
+                        return Ok(Some(VerbDispatchResult {
+                            program,
                             verbdef: vh,
                             permissions_flags,
                             next_hint: Some(hint),
-                            pic_outcome: MethodVerbLookupPicOutcome::Hit,
-                        });
+                            pic_outcome: VerbLookupPicOutcome::Hit,
+                        }));
                     }
                     Err(_) => {
-                        pic_outcome = MethodVerbLookupPicOutcome::MissResolveFailed;
+                        pic_outcome = VerbLookupPicOutcome::MissResolveFailed;
                     }
                 }
             }
         }
 
-        let vh = tx.resolve_verb(obj, vname, None, Some(BitEnum::new_with(VerbFlag::Exec)))?;
+        let vh = match tx.resolve_verb_handle(
+            dispatch.lookup.object,
+            dispatch.lookup.verb_name,
+            dispatch.lookup.argspec,
+            dispatch.lookup.flagspec,
+        ) {
+            Ok(vh) => vh,
+            Err(WorldStateError::VerbNotFound(_, _)) => return Ok(None),
+            Err(e) => return Err(e),
+        };
+
         perms.check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
-        let binary = tx.get_verb_program(&vh.location(), vh.uuid())?;
-        let permissions_flags = match flags_source {
+        let program = tx.get_verb_program(&vh.location(), vh.uuid())?;
+        let permissions_flags = match dispatch.flags_source {
             DispatchFlagsSource::Permissions => perms.flags,
             DispatchFlagsSource::VerbOwner => {
                 if vh.owner() == perms.who {
@@ -1017,173 +977,24 @@ impl WorldState for DbWorldState {
                 }
             }
         };
-        let hint = MethodVerbLookupHint {
-            receiver: *obj,
-            verb_name: vname,
+        let next_hint = Some(VerbLookupHint {
+            receiver: *dispatch.lookup.object,
+            verb_name: dispatch.lookup.verb_name,
             verb_definer: vh.location(),
             verb_uuid: vh.uuid(),
             verb_cache_version: tx.verb_resolution_cache_version() as u64,
-        };
-        Ok(MethodVerbLookupResult {
-            program: binary,
+        });
+        Ok(Some(VerbDispatchResult {
+            program,
             verbdef: vh,
             permissions_flags,
-            next_hint: Some(hint),
-            pic_outcome,
-        })
-    }
-
-    fn find_command_verb_on(
-        &self,
-        perms: &Obj,
-        obj: &Obj,
-        command_verb: Symbol,
-        dobj: &Obj,
-        prep: PrepSpec,
-        iobj: &Obj,
-    ) -> Result<Option<(ProgramType, VerbDef)>, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().find_command_verb_on);
-        if !self.valid(obj)? {
-            return Ok(None);
-        }
-
-        // TODO: LambdaMOO does not enforce a readability check on the object itself before
-        //  resolving verbs on it. So this code is commented out.  However I can see an argument
-        //  for keeping this functionality as a toggle-able option.
-        // let (objflags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
-        // self.perms(perms)?
-        //     .check_object_allows(&owner, objflags, ObjFlag::Read.into())?;
-
-        let spec_for_fn = |oid, pco: &Obj| -> ArgSpec {
-            if pco == oid {
-                ArgSpec::This
-            } else if pco.is_nothing() {
-                ArgSpec::None
+            next_hint,
+            pic_outcome: if dispatch.hint.is_some() {
+                pic_outcome
             } else {
-                ArgSpec::Any
-            }
-        };
-
-        let dobj = spec_for_fn(obj, dobj);
-        let iobj = spec_for_fn(obj, iobj);
-        let argspec = VerbArgsSpec { dobj, prep, iobj };
-
-        let vh = self
-            .get_tx()
-            .resolve_verb(obj, command_verb, Some(argspec), None);
-        let vh = match vh {
-            Ok(vh) => vh,
-            Err(WorldStateError::VerbNotFound(_, _)) => {
-                return Ok(None);
-            }
-            Err(e) => {
-                return Err(e);
-            }
-        };
-
-        self.perms(perms)?
-            .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
-
-        let program = self.get_tx().get_verb_program(&vh.location(), vh.uuid())?;
-        Ok(Some((program, vh)))
-    }
-
-    fn find_command_verb_def_on(
-        &self,
-        perms: &Obj,
-        obj: &Obj,
-        command_verb: Symbol,
-        dobj: &Obj,
-        prep: PrepSpec,
-        iobj: &Obj,
-    ) -> Result<Option<VerbDef>, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().find_command_verb_on);
-        if !self.valid(obj)? {
-            return Ok(None);
-        }
-
-        let spec_for_fn = |oid, pco: &Obj| -> ArgSpec {
-            if pco == oid {
-                ArgSpec::This
-            } else if pco.is_nothing() {
-                ArgSpec::None
-            } else {
-                ArgSpec::Any
-            }
-        };
-
-        let dobj = spec_for_fn(obj, dobj);
-        let iobj = spec_for_fn(obj, iobj);
-        let argspec = VerbArgsSpec { dobj, prep, iobj };
-
-        let vh = self
-            .get_tx()
-            .resolve_verb(obj, command_verb, Some(argspec), None);
-        let vh = match vh {
-            Ok(vh) => vh,
-            Err(WorldStateError::VerbNotFound(_, _)) => {
-                return Ok(None);
-            }
-            Err(e) => {
-                return Err(e);
-            }
-        };
-
-        self.perms(perms)?
-            .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
-        Ok(Some(vh))
-    }
-
-    fn find_command_verb_for_dispatch(
-        &self,
-        perms: &Obj,
-        obj: &Obj,
-        lookup: CommandVerbDispatch<'_>,
-    ) -> Result<Option<(ProgramType, VerbDef, BitEnum<ObjFlag>)>, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().find_command_verb_on);
-        if !self.valid(obj)? {
-            return Ok(None);
-        }
-
-        let spec_for_fn = |oid, pco: &Obj| -> ArgSpec {
-            if pco == oid {
-                ArgSpec::This
-            } else if pco.is_nothing() {
-                ArgSpec::None
-            } else {
-                ArgSpec::Any
-            }
-        };
-
-        let dobj = spec_for_fn(obj, lookup.dobj);
-        let iobj = spec_for_fn(obj, lookup.iobj);
-        let argspec = VerbArgsSpec {
-            dobj,
-            prep: lookup.prep,
-            iobj,
-        };
-
-        let vh = self
-            .get_tx()
-            .resolve_verb(obj, lookup.command_verb, Some(argspec), None);
-        let vh = match vh {
-            Ok(vh) => vh,
-            Err(WorldStateError::VerbNotFound(_, _)) => {
-                return Ok(None);
-            }
-            Err(e) => {
-                return Err(e);
-            }
-        };
-
-        let perms = self.perms(perms)?;
-        perms.check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
-        let program = self.get_tx().get_verb_program(&vh.location(), vh.uuid())?;
-        let permissions_flags = match lookup.flags_source {
-            DispatchFlagsSource::Permissions => perms.flags,
-            DispatchFlagsSource::VerbOwner => self.flags_of(&vh.owner()).unwrap_or_default(),
-        };
-        Ok(Some((program, vh, permissions_flags)))
+                VerbLookupPicOutcome::NotApplicable
+            },
+        }))
     }
 
     fn parent_of(&self, _perms: &Obj, obj: &Obj) -> Result<Obj, WorldStateError> {

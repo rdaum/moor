@@ -19,12 +19,12 @@ pub use crate::model::{
     permissions::Perms,
     propdef::{PropDef, PropDefs},
     props::{PropAttr, PropAttrs, PropFlag, PropPerms, prop_flags_string},
-    verbdef::{VerbDef, VerbDefs},
+    verbdef::{ResolvedVerb, VerbDef, VerbDefs},
     verbs::{BinaryType, VerbAttr, VerbAttrs, VerbFlag, Vid, verb_perms_string},
     world_state::{
-        CommandVerbDispatch, DispatchFlagsSource, MethodVerbLookupHint, MethodVerbLookupPicOutcome,
-        MethodVerbLookupResult, ObjectKind, PropertyLookupHint, PropertyLookupPicOutcome,
-        PropertyLookupResult, WorldState, WorldStateSource,
+        DispatchFlagsSource, ObjectKind, PropertyLookupHint, PropertyLookupPicOutcome,
+        PropertyLookupResult, VerbDispatch, VerbDispatchResult, VerbLookup, VerbLookupHint,
+        VerbLookupPicOutcome, WorldState, WorldStateSource, command_verb_argspec,
     },
 };
 use serde::Serialize;

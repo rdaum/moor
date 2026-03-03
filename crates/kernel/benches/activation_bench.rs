@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use moor_common::{
     matching::ParsedCommand,
-    model::{PrepSpec, VerbArgsSpec, VerbDef, VerbFlag},
+    model::{PrepSpec, ResolvedVerb, VerbArgsSpec, VerbDef, VerbFlag},
     util::BitEnum,
 };
 use moor_compiler::{CompileOptions, compile};
@@ -54,6 +54,7 @@ fn make_verbdef(verb_name: Symbol) -> VerbDef {
 struct ActivationFixture {
     verb_name: Symbol,
     base_verbdef: VerbDef,
+    base_resolved_verb: ResolvedVerb,
     this: Var,
     caller: Var,
     empty_args: List,
@@ -69,6 +70,8 @@ struct ActivationFixture {
 impl ActivationFixture {
     fn new() -> Self {
         let verb_name = Symbol::mk("test");
+        let base_verbdef = make_verbdef(verb_name);
+        let base_resolved_verb = base_verbdef.as_resolved();
         let simple_program = ProgramType::MooR(
             compile("return 1;", CompileOptions::default()).expect("simple program should compile"),
         );
@@ -114,7 +117,8 @@ impl ActivationFixture {
 
         Self {
             verb_name,
-            base_verbdef: make_verbdef(verb_name),
+            base_verbdef,
+            base_resolved_verb,
             this: v_obj(SYSTEM_OBJECT),
             caller: v_obj(SYSTEM_OBJECT),
             empty_args: List::mk_list(&[]),
@@ -141,7 +145,7 @@ impl ActivationBenchContext {
     fn from_fixture(fixture: Arc<ActivationFixture>) -> Self {
         let parent_activation = create_activation_for_bench(
             SYSTEM_OBJECT,
-            fixture.base_verbdef.clone(),
+            fixture.base_resolved_verb,
             fixture.verb_name,
             fixture.this.clone(),
             SYSTEM_OBJECT,
@@ -170,7 +174,7 @@ impl ActivationBenchContext {
             fixture.simple_program.clone(),
         );
         let top_assembly_state = create_activation_assembly_state_for_bench(
-            fixture.base_verbdef.clone(),
+            fixture.base_resolved_verb,
             fixture.verb_name,
             fixture.this.clone(),
             SYSTEM_OBJECT,
@@ -187,7 +191,7 @@ impl ActivationBenchContext {
             fixture.simple_program.clone(),
         );
         let nested_assembly_state = create_activation_assembly_state_for_bench(
-            fixture.base_verbdef.clone(),
+            fixture.base_resolved_verb,
             fixture.verb_name,
             fixture.this.clone(),
             SYSTEM_OBJECT,
@@ -378,7 +382,7 @@ fn bench_input_clone_activation_top_simple(
         let ProgramType::MooR(program) = fixture.simple_program.clone() else {
             continue;
         };
-        let resolved_verb = fixture.base_verbdef.clone();
+        let resolved_verb = fixture.base_resolved_verb;
         let cloned = (
             resolved_verb.owner(),
             resolved_verb,
@@ -411,7 +415,7 @@ fn bench_input_clone_activation_nested_simple(
         let ProgramType::MooR(program) = fixture.simple_program.clone() else {
             continue;
         };
-        let resolved_verb = fixture.base_verbdef.clone();
+        let resolved_verb = fixture.base_resolved_verb;
         let cloned = (
             resolved_verb.owner(),
             resolved_verb,
@@ -557,7 +561,7 @@ fn bench_activation_top_level_simple(
     for _ in 0..chunk_size {
         black_box(create_activation_for_bench(
             SYSTEM_OBJECT,
-            fixture.base_verbdef.clone(),
+            fixture.base_resolved_verb,
             fixture.verb_name,
             fixture.this.clone(),
             SYSTEM_OBJECT,
@@ -578,7 +582,7 @@ fn bench_activation_top_level_complex(
     for _ in 0..chunk_size {
         black_box(create_activation_for_bench(
             SYSTEM_OBJECT,
-            fixture.base_verbdef.clone(),
+            fixture.base_resolved_verb,
             fixture.verb_name,
             fixture.this.clone(),
             SYSTEM_OBJECT,
@@ -599,7 +603,7 @@ fn bench_activation_with_args(
     for _ in 0..chunk_size {
         black_box(create_activation_for_bench(
             SYSTEM_OBJECT,
-            fixture.base_verbdef.clone(),
+            fixture.base_resolved_verb,
             fixture.verb_name,
             fixture.this.clone(),
             SYSTEM_OBJECT,
@@ -620,7 +624,7 @@ fn bench_activation_with_argstr(
     for _ in 0..chunk_size {
         black_box(create_activation_for_bench(
             SYSTEM_OBJECT,
-            fixture.base_verbdef.clone(),
+            fixture.base_resolved_verb,
             fixture.verb_name,
             fixture.this.clone(),
             SYSTEM_OBJECT,
@@ -641,7 +645,7 @@ fn bench_activation_nested_simple(
     for _ in 0..chunk_size {
         black_box(create_nested_activation_for_bench(
             SYSTEM_OBJECT,
-            fixture.base_verbdef.clone(),
+            fixture.base_resolved_verb,
             fixture.verb_name,
             fixture.this.clone(),
             SYSTEM_OBJECT,
@@ -663,7 +667,7 @@ fn bench_command_activation_empty(
     for _ in 0..chunk_size {
         black_box(create_command_activation_for_bench(
             SYSTEM_OBJECT,
-            fixture.base_verbdef.clone(),
+            fixture.base_resolved_verb,
             fixture.verb_name,
             fixture.this.clone(),
             SYSTEM_OBJECT,
@@ -683,7 +687,7 @@ fn bench_command_activation_with_args(
     for _ in 0..chunk_size {
         black_box(create_command_activation_for_bench(
             SYSTEM_OBJECT,
-            fixture.base_verbdef.clone(),
+            fixture.base_resolved_verb,
             fixture.verb_name,
             fixture.this.clone(),
             SYSTEM_OBJECT,

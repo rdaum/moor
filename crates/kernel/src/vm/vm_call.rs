@@ -31,7 +31,9 @@ use lazy_static::lazy_static;
 use minstant::Instant;
 use moor_common::{
     matching::ParsedCommand,
-    model::{DispatchFlagsSource, ObjFlag, VerbDef, WorldStateError},
+    model::{
+        DispatchFlagsSource, ObjFlag, ResolvedVerb, VerbDispatch, VerbLookup, WorldStateError,
+    },
     tasks::Session,
     util::BitEnum,
 };
@@ -64,7 +66,7 @@ pub struct VerbExecutionRequest {
     /// The precomputed flags for `permissions`.
     pub permissions_flags: BitEnum<ObjFlag>,
     /// The resolved verb.
-    pub resolved_verb: VerbDef,
+    pub resolved_verb: ResolvedVerb,
     /// Verb name
     pub verb_name: Symbol,
     /// This object
@@ -89,7 +91,7 @@ pub struct CommandVerbExecutionRequest {
     /// The precomputed flags for `permissions`.
     pub permissions_flags: BitEnum<ObjFlag>,
     /// The resolved verb.
-    pub resolved_verb: VerbDef,
+    pub resolved_verb: ResolvedVerb,
     /// Verb name
     pub verb_name: Symbol,
     /// This object
@@ -227,11 +229,12 @@ impl VMExecState {
                 return None;
             }
 
-            let verb_result = world_state.find_method_verb_for_dispatch(
+            let verb_result = world_state.dispatch_verb(
                 &self.top().permissions,
-                &location,
-                verb_name,
-                DispatchFlagsSource::VerbOwner,
+                VerbDispatch::new(
+                    VerbLookup::method(&location, verb_name),
+                    DispatchFlagsSource::VerbOwner,
+                ),
             );
             Some(verb_result)
         });
@@ -243,7 +246,16 @@ impl VMExecState {
         };
 
         let (program, resolved_verb, permissions_flags) = match verb_result {
-            Ok(vi) => vi,
+            Ok(Some(vi)) => (vi.program, vi.verbdef, vi.permissions_flags),
+            Ok(None) => {
+                return self.push_error(E_VERBNF.with_msg(|| {
+                    format!(
+                        "Verb {}:{} not found",
+                        to_literal(&v_obj(location)),
+                        verb_name,
+                    )
+                }));
+            }
             Err(WorldStateError::ObjectPermissionDenied) => {
                 return self.push_error(E_PERM.into());
             }
@@ -254,16 +266,10 @@ impl VMExecState {
                 return self.push_error(E_PERM.into());
             }
             Err(WorldStateError::VerbNotFound(_, _)) => {
-                return self.push_error(E_VERBNF.with_msg(|| {
-                    format!(
-                        "Verb {}:{} not found",
-                        to_literal(&v_obj(location)),
-                        verb_name,
-                    )
-                }));
+                panic!("dispatch_verb() should return Ok(None), not VerbNotFound");
             }
             Err(e) => {
-                panic!("Unexpected error from find_method_verb_on: {e:?}")
+                panic!("Unexpected error from dispatch_verb: {e:?}")
             }
         };
 
@@ -300,11 +306,12 @@ impl VMExecState {
                 return Ok(None);
             }
 
-            let verb_result = world_state.find_method_verb_for_dispatch(
+            let verb_result = world_state.dispatch_verb(
                 &permissions,
-                &parent,
-                verb,
-                DispatchFlagsSource::Permissions,
+                VerbDispatch::new(
+                    VerbLookup::method(&parent, verb),
+                    DispatchFlagsSource::Permissions,
+                ),
             );
             Ok(Some(verb_result))
         });
@@ -320,7 +327,8 @@ impl VMExecState {
             return self.push_error(E_INVIND.msg("Invalid object for pass() verb dispatch"));
         };
         let (program, resolved_verb, permissions_flags) = match verb_result {
-            Ok(vi) => vi,
+            Ok(Some(vi)) => (vi.program, vi.verbdef, vi.permissions_flags),
+            Ok(None) => return self.push_error(E_VERBNF.msg("Verb not found for pass() dispatch")),
             Err(WorldStateError::RollbackRetry) => {
                 return ExecutionResult::TaskRollbackRestart;
             }
@@ -351,7 +359,7 @@ impl VMExecState {
     pub fn exec_command_request(
         &mut self,
         permissions_flags: BitEnum<ObjFlag>,
-        resolved_verb: VerbDef,
+        resolved_verb: ResolvedVerb,
         verb_name: Symbol,
         this: Var,
         player: Obj,
@@ -418,7 +426,7 @@ impl VMExecState {
     pub fn exec_call_request(
         &mut self,
         permissions_flags: BitEnum<ObjFlag>,
-        resolved_verb: VerbDef,
+        resolved_verb: ResolvedVerb,
         verb_name: Symbol,
         this: Var,
         player: Obj,
@@ -594,15 +602,20 @@ impl VMExecState {
         }
 
         // Look for it...
-        let (program, resolved_verb, permissions_flags) = with_current_transaction(|world_state| {
-            world_state.find_method_verb_for_dispatch(
+        let verb_result = with_current_transaction(|world_state| {
+            world_state.dispatch_verb(
                 &self.top().permissions,
-                &SYSTEM_OBJECT,
-                bf_override_name,
-                DispatchFlagsSource::Permissions,
+                VerbDispatch::new(
+                    VerbLookup::method(&SYSTEM_OBJECT, bf_override_name),
+                    DispatchFlagsSource::Permissions,
+                ),
             )
         })
         .ok()?;
+        let verb_result = verb_result?;
+        let program = verb_result.program;
+        let resolved_verb = verb_result.verbdef;
+        let permissions_flags = verb_result.permissions_flags;
 
         let player = self.top().player;
         let caller = self.caller();

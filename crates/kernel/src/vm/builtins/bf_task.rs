@@ -19,7 +19,6 @@ use crate::vm::builtins::BfRet::{Ret, VmInstr};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use crate::vm::vm_host::ExecutionResult;
 use moor_common::builtins::offset_for_builtin;
-use moor_common::model::Named;
 use moor_common::tasks::TaskId;
 use moor_var::{
     E_ARGS, E_INVARG, E_PERM, E_TYPE, Symbol, Variant, v_arc_str, v_int, v_list, v_list_iter,
@@ -387,17 +386,7 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 let parent_task = v_int(fork_request.parent_task_id as i64);
                 let perms = v_obj(fork_request.progr);
                 let verb_loc = v_obj(fork_request.activation.verbdef.location());
-                let verb_name = v_str(
-                    fork_request
-                        .activation
-                        .verbdef
-                        .names()
-                        .iter()
-                        .map(|s| s.as_string())
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                        .as_str(),
-                );
+                let verb_name = v_str(&fork_request.activation.verb_name.as_string());
                 let args = v_list_iter(fork_request.activation.args.iter());
                 v_list(&[
                     sym_or_str(Symbol::mk("fork")),
