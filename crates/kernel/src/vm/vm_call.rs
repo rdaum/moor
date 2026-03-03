@@ -288,11 +288,11 @@ impl VMExecState {
     pub(crate) fn prepare_pass_verb(&mut self, args: &List) -> ExecutionResult {
         // get parent of verb definer object & current verb name.
         let definer = self.top().verb_definer();
-        let permissions = &self.top().permissions;
+        let permissions = self.top().permissions;
         let verb = self.top().verb_name;
 
         let lookup = with_current_transaction(|world_state| {
-            let parent = world_state.parent_of(permissions, &definer)?;
+            let parent = world_state.parent_of(&permissions, &definer)?;
             let parent_valid = world_state
                 .valid(&parent)
                 .expect("Error checking object validity");
@@ -301,7 +301,7 @@ impl VMExecState {
             }
 
             let verb_result = world_state.find_method_verb_for_dispatch(
-                permissions,
+                &permissions,
                 &parent,
                 verb,
                 DispatchFlagsSource::Permissions,
@@ -332,7 +332,7 @@ impl VMExecState {
         let player = self.top().player;
         let args_list = args.clone();
         ExecutionResult::DispatchVerb(Box::new(VerbExecutionRequest {
-            permissions: *permissions,
+            permissions,
             permissions_flags,
             resolved_verb,
             verb_name: verb,

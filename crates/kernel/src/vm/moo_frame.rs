@@ -13,6 +13,7 @@
 
 use crate::vm::FinallyReason;
 use crate::vm::environment::Environment;
+use moor_common::model::PropertyLookupHint;
 use moor_compiler::{Label, Op, Program};
 use moor_var::{
     Error, Var,
@@ -53,9 +54,13 @@ pub(crate) struct MooStackFrame {
     pub(crate) finally_stack: Vec<FinallyReason>,
     /// Stack for captured variables during lambda creation
     pub(crate) capture_stack: Vec<(Name, Var)>,
+    /// The current PC stream that `property_lookup_hints` is indexed against.
+    pub(crate) property_lookup_hints_pc_type: Option<PcType>,
+    /// Monomorphic property-lookup hints keyed directly by callsite PC for the current stream.
+    pub(crate) property_lookup_hints: Vec<Option<PropertyLookupHint>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PcType {
     Main,
     ForkVector(Offset),
@@ -136,6 +141,8 @@ impl MooStackFrame {
             catch_stack: Vec::new(),
             finally_stack: Vec::new(),
             capture_stack: Vec::new(),
+            property_lookup_hints_pc_type: None,
+            property_lookup_hints: Vec::new(),
         }
     }
 
@@ -164,6 +171,8 @@ impl MooStackFrame {
             catch_stack: Vec::new(),
             finally_stack: Vec::new(),
             capture_stack: Vec::new(),
+            property_lookup_hints_pc_type: None,
+            property_lookup_hints: Vec::new(),
         }
     }
 
@@ -198,6 +207,8 @@ impl MooStackFrame {
             catch_stack: Vec::new(),
             finally_stack: Vec::new(),
             capture_stack: Vec::new(),
+            property_lookup_hints_pc_type: None,
+            property_lookup_hints: Vec::new(),
         }
     }
 
@@ -241,6 +252,8 @@ impl MooStackFrame {
             catch_stack: Default::default(),
             finally_stack: Default::default(),
             capture_stack: Default::default(),
+            property_lookup_hints_pc_type: None,
+            property_lookup_hints: Vec::new(),
         }
     }
 
@@ -327,6 +340,44 @@ impl MooStackFrame {
     pub(crate) fn switch_to_fork_vector(&mut self, fork_vector: Offset) {
         self.pc_type = PcType::ForkVector(fork_vector);
         self.pc = 0;
+    }
+
+    #[inline]
+    pub(crate) fn property_lookup_hint(&self, pc: usize) -> Option<PropertyLookupHint> {
+        if self.property_lookup_hints_pc_type != Some(self.pc_type) {
+            return None;
+        }
+        self.property_lookup_hints.get(pc).copied().flatten()
+    }
+
+    #[inline]
+    pub(crate) fn set_property_lookup_hint(&mut self, pc: usize, hint: PropertyLookupHint) {
+        if self.property_lookup_hints_pc_type != Some(self.pc_type) {
+            self.property_lookup_hints.clear();
+            self.property_lookup_hints_pc_type = Some(self.pc_type);
+        }
+
+        if pc >= self.property_lookup_hints.len() {
+            let required_len = pc.saturating_add(1);
+            let new_len = required_len
+                .checked_next_power_of_two()
+                .unwrap_or(required_len);
+            self.property_lookup_hints.resize(new_len, None);
+        }
+
+        if let Some(slot) = self.property_lookup_hints.get_mut(pc) {
+            *slot = Some(hint);
+        }
+    }
+
+    #[inline]
+    pub(crate) fn clear_property_lookup_hint(&mut self, pc: usize) {
+        if self.property_lookup_hints_pc_type != Some(self.pc_type) {
+            return;
+        }
+        if let Some(slot) = self.property_lookup_hints.get_mut(pc) {
+            *slot = None;
+        }
     }
 
     pub fn lookahead_ref(&self) -> Option<&Op> {

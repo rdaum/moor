@@ -27,10 +27,12 @@ use crate::{
 };
 use moor_common::{
     model::{
-        ArgSpec, CommandVerbDispatch, CommitResult, DispatchFlagsSource, HasUuid, ObjAttrs,
+        ArgSpec, CommandVerbDispatch, CommitResult, DispatchFlagsSource, HasUuid,
+        MethodVerbLookupHint, MethodVerbLookupPicOutcome, MethodVerbLookupResult, ObjAttrs,
         ObjFlag, ObjSet, ObjectKind, ObjectRef, Perms, PrepSpec, PropAttrs, PropDef, PropDefs,
-        PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
-        WorldState, WorldStateError, WorldStatePerf,
+        PropFlag, PropPerms, PropertyLookupHint, PropertyLookupPicOutcome, PropertyLookupResult,
+        ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag, WorldState, WorldStateError,
+        WorldStatePerf,
     },
     util::{BitEnum, PerfTimerGuard},
 };
@@ -141,6 +143,20 @@ impl DbWorldState {
 
     fn get_last_move_property(&self, obj: &Obj) -> Result<Var, WorldStateError> {
         self.get_tx().get_last_move(obj)
+    }
+
+    #[inline]
+    fn is_builtin_property_name(pname: Symbol) -> bool {
+        pname == *NAME_SYM
+            || pname == *LOCATION_SYM
+            || pname == *CONTENTS_SYM
+            || pname == *OWNER_SYM
+            || pname == *PROGRAMMER_SYM
+            || pname == *WIZARD_SYM
+            || pname == *R_SYM
+            || pname == *W_SYM
+            || pname == *F_SYM
+            || pname == *LAST_MOVE_SYM
     }
 
     fn check_chparent_property_conflict(
@@ -400,6 +416,72 @@ impl WorldState for DbWorldState {
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Read)?;
         Ok(value)
+    }
+
+    fn retrieve_property_with_hint(
+        &self,
+        perms: &Obj,
+        obj: &Obj,
+        pname: Symbol,
+        hint: Option<PropertyLookupHint>,
+    ) -> Result<PropertyLookupResult, WorldStateError> {
+        let _t = PerfTimerGuard::new(&db_counters().retrieve_property);
+        if *obj == NOTHING || !self.valid(obj)? {
+            return Err(WorldStateError::ObjectNotFound(ObjectRef::Id(*obj)));
+        }
+
+        if Self::is_builtin_property_name(pname) {
+            let value = self.retrieve_property(perms, obj, pname)?;
+            return Ok(PropertyLookupResult {
+                value,
+                next_hint: None,
+                pic_outcome: PropertyLookupPicOutcome::NotApplicable,
+            });
+        }
+
+        let mut pic_outcome = PropertyLookupPicOutcome::MissNoHint;
+        if let Some(hint) = hint {
+            if hint.receiver != *obj || hint.property_name != pname {
+                pic_outcome = PropertyLookupPicOutcome::MissGuardMismatch;
+            } else if hint.prop_cache_version
+                != self.get_tx().prop_resolution_cache_version() as u64
+            {
+                pic_outcome = PropertyLookupPicOutcome::MissVersionMismatch;
+            } else {
+                match self
+                    .get_tx()
+                    .resolve_property_by_uuid(obj, hint.property_uuid)
+                {
+                    Ok((value, propperms, _)) => {
+                        self.perms(perms)?
+                            .check_property_allows(&propperms, PropFlag::Read)?;
+                        return Ok(PropertyLookupResult {
+                            value,
+                            next_hint: Some(hint),
+                            pic_outcome: PropertyLookupPicOutcome::Hit,
+                        });
+                    }
+                    Err(_) => {
+                        pic_outcome = PropertyLookupPicOutcome::MissResolveFailed;
+                    }
+                }
+            }
+        }
+
+        let (propdef, value, propperms, _) = self.get_tx().resolve_property(obj, pname)?;
+        self.perms(perms)?
+            .check_property_allows(&propperms, PropFlag::Read)?;
+        let hint = PropertyLookupHint {
+            receiver: *obj,
+            property_name: pname,
+            property_uuid: propdef.uuid(),
+            prop_cache_version: self.get_tx().prop_resolution_cache_version() as u64,
+        };
+        Ok(PropertyLookupResult {
+            value,
+            next_hint: Some(hint),
+            pic_outcome,
+        })
     }
 
     fn get_property_info(
@@ -857,9 +939,98 @@ impl WorldState for DbWorldState {
         let binary = self.get_tx().get_verb_program(&vh.location(), vh.uuid())?;
         let permissions_flags = match flags_source {
             DispatchFlagsSource::Permissions => perms.flags,
-            DispatchFlagsSource::VerbOwner => self.flags_of(&vh.owner()).unwrap_or_default(),
+            DispatchFlagsSource::VerbOwner => {
+                if vh.owner() == perms.who {
+                    perms.flags
+                } else {
+                    self.flags_of(&vh.owner()).unwrap_or_default()
+                }
+            }
         };
         Ok((binary, vh, permissions_flags))
+    }
+
+    fn find_method_verb_for_dispatch_with_hint(
+        &self,
+        perms: &Obj,
+        obj: &Obj,
+        vname: Symbol,
+        flags_source: DispatchFlagsSource,
+        hint: Option<MethodVerbLookupHint>,
+    ) -> Result<MethodVerbLookupResult, WorldStateError> {
+        let _t = PerfTimerGuard::new(&db_counters().find_method_verb_on);
+        let perms = self.perms(perms)?;
+        let tx = self.get_tx();
+        let verb_cache_version = tx.verb_resolution_cache_version() as u64;
+        let mut pic_outcome = MethodVerbLookupPicOutcome::MissNoHint;
+        if let Some(hint) = hint {
+            if hint.receiver != *obj || hint.verb_name != vname {
+                pic_outcome = MethodVerbLookupPicOutcome::MissGuardMismatch;
+            } else if hint.verb_cache_version != verb_cache_version {
+                pic_outcome = MethodVerbLookupPicOutcome::MissVersionMismatch;
+            } else {
+                match tx.resolve_verb_by_uuid(
+                    obj,
+                    &hint.verb_definer,
+                    hint.verb_uuid,
+                    None,
+                    Some(BitEnum::new_with(VerbFlag::Exec)),
+                ) {
+                    Ok(vh) => {
+                        perms.check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
+                        let binary = tx.get_verb_program(&hint.verb_definer, hint.verb_uuid)?;
+                        let permissions_flags = match flags_source {
+                            DispatchFlagsSource::Permissions => perms.flags,
+                            DispatchFlagsSource::VerbOwner => {
+                                if vh.owner() == perms.who {
+                                    perms.flags
+                                } else {
+                                    self.flags_of(&vh.owner()).unwrap_or_default()
+                                }
+                            }
+                        };
+                        return Ok(MethodVerbLookupResult {
+                            program: binary,
+                            verbdef: vh,
+                            permissions_flags,
+                            next_hint: Some(hint),
+                            pic_outcome: MethodVerbLookupPicOutcome::Hit,
+                        });
+                    }
+                    Err(_) => {
+                        pic_outcome = MethodVerbLookupPicOutcome::MissResolveFailed;
+                    }
+                }
+            }
+        }
+
+        let vh = tx.resolve_verb(obj, vname, None, Some(BitEnum::new_with(VerbFlag::Exec)))?;
+        perms.check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
+        let binary = tx.get_verb_program(&vh.location(), vh.uuid())?;
+        let permissions_flags = match flags_source {
+            DispatchFlagsSource::Permissions => perms.flags,
+            DispatchFlagsSource::VerbOwner => {
+                if vh.owner() == perms.who {
+                    perms.flags
+                } else {
+                    self.flags_of(&vh.owner()).unwrap_or_default()
+                }
+            }
+        };
+        let hint = MethodVerbLookupHint {
+            receiver: *obj,
+            verb_name: vname,
+            verb_definer: vh.location(),
+            verb_uuid: vh.uuid(),
+            verb_cache_version: tx.verb_resolution_cache_version() as u64,
+        };
+        Ok(MethodVerbLookupResult {
+            program: binary,
+            verbdef: vh,
+            permissions_flags,
+            next_hint: Some(hint),
+            pic_outcome,
+        })
     }
 
     fn find_command_verb_on(

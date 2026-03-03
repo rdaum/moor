@@ -22,6 +22,7 @@ use crate::{
     },
 };
 use lazy_static::lazy_static;
+use moor_common::model::PropertyLookupHint;
 use moor_compiler::{Op, to_literal};
 use moor_var::{
     E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, Error, IndexMode, Obj, Symbol,
@@ -903,7 +904,8 @@ pub fn moo_frame_execute(
                 }
             }
             Op::GetProp => {
-                let (propname, obj) = (f.pop(), f.peek_top());
+                let propname = f.pop();
+                let obj = f.peek_top().clone();
 
                 let Ok(propname) = propname.as_symbol() else {
                     return ExecutionResult::PushError(
@@ -913,7 +915,7 @@ pub fn moo_frame_execute(
                     );
                 };
 
-                let value = get_property(&permissions, obj, propname, features_config);
+                let value = get_property(f, pc, &permissions, &obj, propname, features_config);
                 match value {
                     Ok(v) => {
                         f.poke(0, v);
@@ -934,7 +936,8 @@ pub fn moo_frame_execute(
                     );
                 };
 
-                let value = get_property(&permissions, obj, propname, features_config);
+                let obj = obj.clone();
+                let value = get_property(f, pc, &permissions, &obj, propname, features_config);
                 match value {
                     Ok(v) => {
                         f.push(v);
@@ -1455,6 +1458,8 @@ pub fn moo_frame_execute(
 }
 
 fn get_property(
+    frame: &mut MooStackFrame,
+    pc: usize,
     permissions: &Obj,
     obj: &Var,
     propname: Symbol,
@@ -1462,11 +1467,21 @@ fn get_property(
 ) -> Result<Var, Error> {
     // Fast path: Obj is by far the most common case for property access
     if let Some(obj_ref) = obj.as_object() {
+        let hint: Option<PropertyLookupHint> = frame.property_lookup_hint(pc);
         let result = with_current_transaction_mut(|world_state| {
-            world_state.retrieve_property(permissions, &obj_ref, propname)
+            world_state.retrieve_property_with_hint(permissions, &obj_ref, propname, hint)
         });
         return match result {
-            Ok(v) => Ok(v),
+            Ok(outcome) => {
+                let v = outcome.value;
+                let next_hint = outcome.next_hint;
+                if let Some(next_hint) = next_hint {
+                    frame.set_property_lookup_hint(pc, next_hint);
+                } else {
+                    frame.clear_property_lookup_hint(pc);
+                }
+                Ok(v)
+            }
             Err(e) => Err(e.to_error()),
         };
     }

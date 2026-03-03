@@ -11,9 +11,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Microbenchmark for verb dispatch overhead.
-//! Measures the cost of verb-calling-verb through the VM execution loop,
-//! isolating from scheduler overhead. Uses tick exhaustion like vm_benches.
+//! Microbenchmark for property access overhead.
+//! Measures getprop/putprop-heavy loops through the VM execution loop,
+//! isolating from scheduler overhead.
 
 use std::{hint::black_box, sync::Arc, time::Duration};
 
@@ -21,7 +21,8 @@ use criterion::{Criterion, criterion_group, criterion_main};
 
 use moor_common::{
     model::{
-        CommitResult, ObjFlag, ObjectKind, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
+        CommitResult, ObjFlag, ObjectKind, PropFlag, VerbArgsSpec, VerbFlag, WorldState,
+        WorldStateSource,
     },
     tasks::{AbortLimitReason, NoopClientSession, Session},
     util::BitEnum,
@@ -33,9 +34,11 @@ use moor_kernel::{
     testing::vm_test_utils::setup_task_context,
     vm::{VMHostResponse, builtins::BuiltinRegistry, vm_host::VmHost},
 };
-use moor_var::{List, NOTHING, SYSTEM_OBJECT, Symbol, program::ProgramType, v_empty_str, v_obj};
+use moor_var::{
+    List, NOTHING, SYSTEM_OBJECT, Symbol, program::ProgramType, v_empty_str, v_int, v_obj,
+};
 
-fn create_db_with_verbs(inner_verb_code: &str, outer_verb_code: &str) -> TxDB {
+fn create_db_with_property_outer(outer_verb_code: &str) -> TxDB {
     let (ws_source, _) = TxDB::open(None, DatabaseConfig::default());
     let mut tx = ws_source.new_world_state().unwrap();
 
@@ -49,15 +52,14 @@ fn create_db_with_verbs(inner_verb_code: &str, outer_verb_code: &str) -> TxDB {
         )
         .unwrap();
 
-    let inner_program = compile(inner_verb_code, CompileOptions::default()).unwrap();
-    tx.add_verb(
+    tx.define_property(
         &SYSTEM_OBJECT,
         &SYSTEM_OBJECT,
-        vec![Symbol::mk("inner")],
         &SYSTEM_OBJECT,
-        VerbFlag::rxd(),
-        VerbArgsSpec::this_none_this(),
-        ProgramType::MooR(inner_program),
+        Symbol::mk("p"),
+        &SYSTEM_OBJECT,
+        BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
+        Some(v_int(0)),
     )
     .unwrap();
 
@@ -88,7 +90,6 @@ fn prepare_call_verb(
     let (program, verbdef) = world_state
         .find_method_verb_on(&SYSTEM_OBJECT, &SYSTEM_OBJECT, verb_name)
         .unwrap();
-    // Use wizard + programmer flags for benchmarking
     let permissions_flags = BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer;
     vm_host.start_call_method_verb(
         0,
@@ -105,23 +106,6 @@ fn prepare_call_verb(
     vm_host
 }
 
-fn build_outer_call_loop(num_calls: u64, callsites_per_iteration: u64, call_expr: &str) -> String {
-    assert!(callsites_per_iteration > 0);
-    assert_eq!(
-        num_calls % callsites_per_iteration,
-        0,
-        "num_calls must be divisible by callsites_per_iteration"
-    );
-    let outer_iterations = num_calls / callsites_per_iteration;
-    let mut body = String::new();
-    for _ in 0..callsites_per_iteration {
-        body.push_str(call_expr);
-        body.push(';');
-    }
-    format!("for i in [1..{outer_iterations}] {body} endfor")
-}
-
-/// Run the VM until completion (for fixed iteration counts)
 fn execute_to_completion(session: Arc<dyn Session>, vm_host: &mut VmHost) {
     vm_host.reset_ticks();
     vm_host.reset_time();
@@ -150,65 +134,33 @@ fn execute_to_completion(session: Arc<dyn Session>, vm_host: &mut VmHost) {
     }
 }
 
-fn verb_dispatch_benchmarks(c: &mut Criterion) {
-    let mut group = c.benchmark_group("verb_dispatch");
+fn build_outer_loop(num_ops: u64, callsites_per_iteration: u64, op_expr: &str) -> String {
+    assert!(callsites_per_iteration > 0);
+    assert_eq!(
+        num_ops % callsites_per_iteration,
+        0,
+        "num_ops must be divisible by callsites_per_iteration"
+    );
+    let outer_iterations = num_ops / callsites_per_iteration;
+    let mut body = String::new();
+    for _ in 0..callsites_per_iteration {
+        body.push_str(op_expr);
+        body.push(';');
+    }
+    format!("x = 0; for i in [1..{outer_iterations}] {body} endfor return x;")
+}
+
+fn property_dispatch_benchmarks(c: &mut Criterion) {
+    let mut group = c.benchmark_group("property_dispatch");
     group.sample_size(20);
 
-    // Number of verb calls per benchmark iteration
-    let num_calls: u64 = 10_000;
-    let max_ticks = (num_calls * 20) as usize; // plenty of headroom
+    let num_ops: u64 = 10_000;
+    let max_ticks = (num_ops * 25) as usize;
+    group.throughput(criterion::Throughput::Elements(num_ops));
 
-    // Throughput is verb calls - so we get per-call timing
-    group.throughput(criterion::Throughput::Elements(num_calls));
-
-    // Benchmark: minimal inner verb - pure dispatch overhead
-    group.bench_function("minimal_inner", |b| {
-        let db = create_db_with_verbs(
-            "return 1;",
-            &build_outer_call_loop(num_calls, 1, "this:inner()"),
-        );
-
+    group.bench_function("getprop_single_site", |b| {
+        let db = create_db_with_property_outer(&build_outer_loop(num_ops, 1, "x = this.p"));
         let session = Arc::new(NoopClientSession::new());
-
-        b.iter(|| {
-            // Fresh vm_host each iteration (verb runs to completion)
-            let mut tx = db.new_world_state().unwrap();
-            let mut vm_host = prepare_call_verb(tx.as_mut(), "outer", max_ticks);
-            let _tx_guard = setup_task_context(tx);
-            execute_to_completion(session.clone(), &mut vm_host);
-            black_box(());
-        });
-    });
-
-    // Same total number of calls, but spread across multiple static callsites.
-    // This isolates callsite-cache overhead from verb body work.
-    group.bench_function("minimal_inner_multisite_16", |b| {
-        let db = create_db_with_verbs(
-            "return 1;",
-            &build_outer_call_loop(num_calls, 16, "this:inner()"),
-        );
-
-        let session = Arc::new(NoopClientSession::new());
-
-        b.iter(|| {
-            // Fresh vm_host each iteration (verb runs to completion)
-            let mut tx = db.new_world_state().unwrap();
-            let mut vm_host = prepare_call_verb(tx.as_mut(), "outer", max_ticks);
-            let _tx_guard = setup_task_context(tx);
-            execute_to_completion(session.clone(), &mut vm_host);
-            black_box(());
-        });
-    });
-
-    // Inner verb with some local variable work
-    group.bench_function("inner_with_locals", |b| {
-        let db = create_db_with_verbs(
-            "x = 1; y = 2; return x + y;",
-            &build_outer_call_loop(num_calls, 1, "this:inner()"),
-        );
-
-        let session = Arc::new(NoopClientSession::new());
-
         b.iter(|| {
             let mut tx = db.new_world_state().unwrap();
             let mut vm_host = prepare_call_verb(tx.as_mut(), "outer", max_ticks);
@@ -218,15 +170,21 @@ fn verb_dispatch_benchmarks(c: &mut Criterion) {
         });
     });
 
-    // Passing arguments to inner verb
-    group.bench_function("inner_with_args", |b| {
-        let db = create_db_with_verbs(
-            "return args[1] + args[2];",
-            &build_outer_call_loop(num_calls, 1, "this:inner(1, 2)"),
-        );
-
+    group.bench_function("getprop_multisite_16", |b| {
+        let db = create_db_with_property_outer(&build_outer_loop(num_ops, 16, "x = this.p"));
         let session = Arc::new(NoopClientSession::new());
+        b.iter(|| {
+            let mut tx = db.new_world_state().unwrap();
+            let mut vm_host = prepare_call_verb(tx.as_mut(), "outer", max_ticks);
+            let _tx_guard = setup_task_context(tx);
+            execute_to_completion(session.clone(), &mut vm_host);
+            black_box(());
+        });
+    });
 
+    group.bench_function("putprop_single_site", |b| {
+        let db = create_db_with_property_outer(&build_outer_loop(num_ops, 1, "this.p = i"));
+        let session = Arc::new(NoopClientSession::new());
         b.iter(|| {
             let mut tx = db.new_world_state().unwrap();
             let mut vm_host = prepare_call_verb(tx.as_mut(), "outer", max_ticks);
@@ -239,26 +197,17 @@ fn verb_dispatch_benchmarks(c: &mut Criterion) {
     group.finish();
 }
 
-/// Baseline: measure for-loop overhead without verb calls for comparison
 fn baseline_benchmarks(c: &mut Criterion) {
-    let mut group = c.benchmark_group("verb_dispatch_baseline");
+    let mut group = c.benchmark_group("property_dispatch_baseline");
     group.sample_size(20);
 
-    let num_iterations: u64 = 10_000;
-    let max_ticks = (num_iterations * 10) as usize;
+    let num_ops: u64 = 10_000;
+    let max_ticks = (num_ops * 10) as usize;
+    group.throughput(criterion::Throughput::Elements(num_ops));
 
-    // Same iteration count as verb dispatch benches for fair comparison
-    group.throughput(criterion::Throughput::Elements(num_iterations));
-
-    // Pure for-loop - no verb calls
     group.bench_function("for_loop_only", |b| {
-        let db = create_db_with_verbs(
-            "return 1;",
-            &format!("for i in [1..{num_iterations}] 1; endfor"),
-        );
-
+        let db = create_db_with_property_outer(&build_outer_loop(num_ops, 1, "x = 1"));
         let session = Arc::new(NoopClientSession::new());
-
         b.iter(|| {
             let mut tx = db.new_world_state().unwrap();
             let mut vm_host = prepare_call_verb(tx.as_mut(), "outer", max_ticks);
@@ -271,5 +220,5 @@ fn baseline_benchmarks(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, verb_dispatch_benchmarks, baseline_benchmarks);
+criterion_group!(benches, property_dispatch_benchmarks, baseline_benchmarks);
 criterion_main!(benches);

@@ -117,6 +117,7 @@ impl VerbResolutionCache {
         Self {
             inner: Inner {
                 version: 0,
+                guard_version: 0,
                 orig_version: 0,
                 flushed: false,
                 entries: Arc::new(HashMap::default()),
@@ -131,6 +132,7 @@ impl VerbResolutionCache {
 struct Inner {
     orig_version: i64,
     version: i64,
+    guard_version: i64,
     flushed: bool,
 
     entries: Arc<HashMap<u128, Option<VerbDef>, BuildHasherDefault<AHasher>>>,
@@ -166,6 +168,16 @@ impl VerbResolutionCache {
         self.inner.version > self.inner.orig_version
     }
 
+    #[inline]
+    pub fn version(&self) -> i64 {
+        self.inner.version
+    }
+
+    #[inline]
+    pub fn guard_version(&self) -> i64 {
+        self.inner.guard_version
+    }
+
     pub(crate) fn lookup_first_parent_with_verbs(&self, obj: &Obj) -> Option<Option<Obj>> {
         self.inner.first_parent_with_verbs_cache.get(obj).cloned()
     }
@@ -192,6 +204,7 @@ impl VerbResolutionCache {
         let entries_count = self.inner.entries.len() as isize;
         self.inner.flushed = true;
         self.inner.version += 1;
+        self.inner.guard_version += 1;
         self.inner.entries_mut().clear();
         self.inner.first_parent_cache_mut().clear();
         self.stats.flush();
@@ -254,6 +267,7 @@ impl VerbResolutionCache {
 
         if changed {
             self.inner.version += 1;
+            self.inner.guard_version += 1;
         }
 
         if removed > 0 {

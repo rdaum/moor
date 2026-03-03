@@ -64,6 +64,67 @@ pub struct CommandVerbDispatch<'a> {
     pub flags_source: DispatchFlagsSource,
 }
 
+/// Monomorphic property-lookup hint for call-site hint fast paths.
+///
+/// This hint is valid only when all guard fields match, including the
+/// property-resolution cache version captured at fill time.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct PropertyLookupHint {
+    pub receiver: Obj,
+    pub property_name: Symbol,
+    pub property_uuid: Uuid,
+    pub prop_cache_version: u64,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum PropertyLookupPicOutcome {
+    NotApplicable,
+    Hit,
+    MissNoHint,
+    MissGuardMismatch,
+    MissVersionMismatch,
+    MissResolveFailed,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropertyLookupResult {
+    pub value: Var,
+    pub next_hint: Option<PropertyLookupHint>,
+    pub pic_outcome: PropertyLookupPicOutcome,
+}
+
+/// Monomorphic method-verb lookup hint for call-site hint fast paths.
+///
+/// This hint is valid only when all guard fields match, including the
+/// verb-resolution cache version captured at fill time.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct MethodVerbLookupHint {
+    pub receiver: Obj,
+    pub verb_name: Symbol,
+    pub verb_definer: Obj,
+    pub verb_uuid: Uuid,
+    pub verb_cache_version: u64,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum MethodVerbLookupPicOutcome {
+    NotApplicable,
+    Hit,
+    MissNoHint,
+    MissGuardMismatch,
+    MissVersionMismatch,
+    MissResolveFailed,
+}
+
+#[derive(Debug, Clone)]
+pub struct MethodVerbLookupResult {
+    pub program: ProgramType,
+    pub verbdef: VerbDef,
+    pub permissions_flags: BitEnum<ObjFlag>,
+    pub next_hint: Option<MethodVerbLookupHint>,
+    pub pic_outcome: MethodVerbLookupPicOutcome,
+}
+
 /// Errors related to the world state and operations on it.
 #[derive(Error, Debug, Eq, PartialEq, Clone)]
 pub enum WorldStateError {
@@ -251,6 +312,27 @@ pub trait WorldState: Send {
         pname: Symbol,
     ) -> Result<Var, WorldStateError>;
 
+    /// Retrieve a property value with an optional call-site hint.
+    ///
+    /// Implementations may use the hint to avoid full name resolution when
+    /// guards match. On success, returns the property value plus an optional
+    /// refreshed hint for future calls.
+    #[inline]
+    fn retrieve_property_with_hint(
+        &self,
+        perms: &Obj,
+        obj: &Obj,
+        pname: Symbol,
+        _hint: Option<PropertyLookupHint>,
+    ) -> Result<PropertyLookupResult, WorldStateError> {
+        let value = self.retrieve_property(perms, obj, pname)?;
+        Ok(PropertyLookupResult {
+            value,
+            next_hint: None,
+            pic_outcome: PropertyLookupPicOutcome::NotApplicable,
+        })
+    }
+
     /// Get information about a property, walking the inheritance tree to find the definition.
     /// Returns the PropDef as well as the owner of the property.
     fn get_property_info(
@@ -411,6 +493,31 @@ pub trait WorldState: Send {
             DispatchFlagsSource::VerbOwner => self.flags_of(&verbdef.owner()).unwrap_or_default(),
         };
         Ok((program, verbdef, permissions_flags))
+    }
+
+    /// Retrieve a verb/method and the precomputed activation flags using an optional
+    /// call-site hint.
+    ///
+    /// Implementations may use the hint to bypass full name resolution when guards
+    /// match. On success, returns dispatch payload plus an optional refreshed hint.
+    #[inline]
+    fn find_method_verb_for_dispatch_with_hint(
+        &self,
+        perms: &Obj,
+        obj: &Obj,
+        vname: Symbol,
+        flags_source: DispatchFlagsSource,
+        _hint: Option<MethodVerbLookupHint>,
+    ) -> Result<MethodVerbLookupResult, WorldStateError> {
+        let (program, verbdef, permissions_flags) =
+            self.find_method_verb_for_dispatch(perms, obj, vname, flags_source)?;
+        Ok(MethodVerbLookupResult {
+            program,
+            verbdef,
+            permissions_flags,
+            next_hint: None,
+            pic_outcome: MethodVerbLookupPicOutcome::NotApplicable,
+        })
     }
 
     /// Seek the verb referenced by the given command on the given object.

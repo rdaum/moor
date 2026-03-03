@@ -117,6 +117,7 @@ impl PropResolutionCache {
         Self {
             inner: Inner {
                 version: 0,
+                guard_version: 0,
                 orig_version: 0,
                 flushed: false,
                 entries: Arc::new(HashMap::default()),
@@ -131,6 +132,7 @@ impl PropResolutionCache {
 struct Inner {
     orig_version: i64,
     version: i64,
+    guard_version: i64,
     flushed: bool,
 
     entries: Arc<HashMap<u128, Option<PropDef>, BuildHasherDefault<AHasher>>>,
@@ -166,6 +168,16 @@ impl PropResolutionCache {
         self.inner.version > self.inner.orig_version
     }
 
+    #[inline]
+    pub fn version(&self) -> i64 {
+        self.inner.version
+    }
+
+    #[inline]
+    pub fn guard_version(&self) -> i64 {
+        self.inner.guard_version
+    }
+
     pub fn lookup(&self, obj: &Obj, prop: &Symbol) -> Option<Option<PropDef>> {
         let key = make_cache_key(obj, prop);
         let result = self.inner.entries.get(&key).cloned();
@@ -183,6 +195,7 @@ impl PropResolutionCache {
         let entries_count = self.inner.entries.len() as isize;
         self.inner.flushed = true;
         self.inner.version += 1;
+        self.inner.guard_version += 1;
         self.inner.entries_mut().clear();
         self.inner.first_parent_cache_mut().clear();
         self.stats.flush();
@@ -254,6 +267,7 @@ impl PropResolutionCache {
 
         if changed {
             self.inner.version += 1;
+            self.inner.guard_version += 1;
         }
 
         if removed > 0 {

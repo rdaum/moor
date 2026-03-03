@@ -802,6 +802,51 @@ impl WorldStateTransaction {
         Err(WorldStateError::VerbNotFound(*obj, name.to_string()))
     }
 
+    /// Resolve a verb from the in-memory verb-resolution cache only.
+    ///
+    /// This does not walk ancestry on misses; callers should fall back to `resolve_verb()`
+    /// when this returns `VerbNotFound`.
+    pub fn resolve_verb_cached(
+        &self,
+        obj: &Obj,
+        name: Symbol,
+        argspec: Option<VerbArgsSpec>,
+        flagspec: Option<BitEnum<VerbFlag>>,
+    ) -> Result<VerbDef, WorldStateError> {
+        let cache_lookup = self.verb_resolution_cache.borrow().lookup(obj, &name);
+        let Some(cache_result) = cache_lookup else {
+            return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
+        };
+        let Some(verbdef) = cache_result else {
+            return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
+        };
+        if !verbdef.matches_spec(&argspec, &flagspec) {
+            return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
+        }
+        Ok(verbdef)
+    }
+
+    /// Resolve a verb using a pre-resolved definer object and UUID.
+    ///
+    /// This supports hint-guided dispatch lookups when call-site guards match.
+    pub fn resolve_verb_by_uuid(
+        &self,
+        receiver: &Obj,
+        definer: &Obj,
+        uuid: Uuid,
+        argspec: Option<VerbArgsSpec>,
+        flagspec: Option<BitEnum<VerbFlag>>,
+    ) -> Result<VerbDef, WorldStateError> {
+        let verbs = self.get_verbs(definer)?;
+        let Some(verbdef) = verbs.find(&uuid) else {
+            return Err(WorldStateError::VerbNotFound(*receiver, uuid.to_string()));
+        };
+        if !verbdef.matches_spec(&argspec, &flagspec) {
+            return Err(WorldStateError::VerbNotFound(*receiver, uuid.to_string()));
+        }
+        Ok(verbdef)
+    }
+
     pub fn update_verb(
         &mut self,
         obj: &Obj,
@@ -1117,6 +1162,48 @@ impl WorldStateTransaction {
         let perms = self.retrieve_property_permissions(obj, uuid)?;
 
         Ok((value, perms))
+    }
+
+    #[inline]
+    pub fn prop_resolution_cache_version(&self) -> i64 {
+        self.prop_resolution_cache.borrow().guard_version()
+    }
+
+    #[inline]
+    pub fn verb_resolution_cache_version(&self) -> i64 {
+        self.verb_resolution_cache.borrow().guard_version()
+    }
+
+    /// Resolve a property value using a pre-resolved property UUID.
+    ///
+    /// This preserves clear/inheritance semantics from `resolve_property()`
+    /// while skipping name-based property-definition lookup.
+    pub fn resolve_property_by_uuid(
+        &self,
+        obj: &Obj,
+        uuid: Uuid,
+    ) -> Result<(Var, PropPerms, bool), WorldStateError> {
+        let (pvalue, perms) = self.retrieve_property(obj, uuid)?;
+        match pvalue {
+            Some(value) => Ok((value, perms, false)),
+            None => {
+                let ancestors = self.ancestors(obj, false)?;
+                for search_obj in ancestors.iter() {
+                    let value = self
+                        .object_propvalues
+                        .get(&ObjAndUUIDHolder::new(&search_obj, uuid))
+                        .map_err(|e| {
+                            WorldStateError::DatabaseError(format!(
+                                "Error getting property value: {e:?}"
+                            ))
+                        })?;
+                    if let Some(value) = value {
+                        return Ok((value, perms, true));
+                    }
+                }
+                Ok((v_none(), perms, true))
+            }
+        }
     }
 
     pub fn retrieve_property_permissions(
