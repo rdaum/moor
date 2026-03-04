@@ -316,6 +316,9 @@ pub fn moo_frame_execute(
                         E_ARGS.msg("IterateForSequence without ForSequence scope"),
                     );
                 };
+                let value_bind = *value_bind;
+                let key_bind = *key_bind;
+                let is_associative = sequence.is_associative();
 
                 // Bounds check using cached length (avoids dereferencing on loop end)
                 let len = sequence.len().expect("already validated as sequence");
@@ -325,41 +328,48 @@ pub fn moo_frame_execute(
                     continue;
                 }
 
-                // Get next element - maps need special key iteration, sequences use direct index
-                let next = if sequence.is_associative() {
+                // Get next element - maps need special key iteration, sequences use direct indexing.
+                if is_associative {
                     let TypeClass::Associative(a) = sequence.type_class() else {
                         unreachable!()
                     };
-                    match current_key {
+                    let next = match current_key {
                         Some(current_key) => a.next_after(current_key, false),
                         None => a.first(),
+                    };
+                    let (key, value) = match next {
+                        Ok(k_v) => k_v,
+                        Err(e) => return ExecutionResult::RaiseError(e),
+                    };
+
+                    // Increment index for next iteration.
+                    *current_index += 1;
+
+                    if let Some(key_bind) = key_bind {
+                        *current_key = Some(key.clone());
+                        f.set_variable(&value_bind, value);
+                        f.set_variable(&key_bind, key);
+                    } else {
+                        *current_key = Some(key);
+                        f.set_variable(&value_bind, value);
                     }
                 } else {
-                    // Sequences use optimized index path
-                    sequence
-                        .index(&v_int(*current_index as i64 + 1), IndexMode::OneBased)
-                        .map(|v| (v_int(*current_index as i64 + 1), v))
-                };
+                    let TypeClass::Sequence(s) = sequence.type_class() else {
+                        unreachable!()
+                    };
+                    let value = match s.index(*current_index) {
+                        Ok(v) => v,
+                        Err(e) => return ExecutionResult::RaiseError(e),
+                    };
 
-                let k_v = match next {
-                    Ok(k_v) => k_v,
-                    Err(e) => return ExecutionResult::RaiseError(e),
-                };
+                    // Increment index for next iteration.
+                    *current_index += 1;
+                    let key_var = key_bind.map(|key_bind| (key_bind, v_int(*current_index as i64)));
 
-                // Extract values we need for variable setting
-                let value_bind = *value_bind;
-                let key_bind = *key_bind;
-
-                // Increment index for next iteration
-                *current_index += 1;
-                if sequence.is_associative() {
-                    *current_key = Some(k_v.0.clone());
-                }
-
-                // Set loop variables (separate borrow)
-                f.set_variable(&value_bind, k_v.1);
-                if let Some(key_bind) = key_bind {
-                    f.set_variable(&key_bind, k_v.0);
+                    f.set_variable(&value_bind, value);
+                    if let Some((key_bind, key_value)) = key_var {
+                        f.set_variable(&key_bind, key_value);
+                    }
                 }
             }
             Op::BeginForRange { operand } => {
@@ -423,12 +433,11 @@ pub fn moo_frame_execute(
                 }
 
                 // Extract values we need for variable setting
-                let current_val = current_value.clone();
                 let loop_var = *loop_variable;
 
                 // Increment for next iteration with type-specific logic and overflow protection
                 // Use direct accessors to avoid variant() overhead on the hot path
-                let next_value = if let Some(i) = current_val.as_integer() {
+                let next_value = if let Some(i) = current_value.as_integer() {
                     // Integer case (most common)
                     if i == i64::MAX {
                         // Decrement end_value instead to avoid overflow
@@ -437,13 +446,13 @@ pub fn moo_frame_execute(
                         {
                             *end_value = v_int(e - 1);
                         }
-                        current_val.clone()
+                        v_int(i)
                     } else {
                         v_int(i + 1)
                     }
-                } else if let Some(f_val) = current_val.as_float() {
+                } else if let Some(f_val) = current_value.as_float() {
                     v_float(f_val + 1.0)
-                } else if let Some(o) = current_val.as_object() {
+                } else if let Some(o) = current_value.as_object() {
                     // Only numeric object IDs can be iterated - not UUIDs or anonymous
                     if !o.is_oid() {
                         return ExecutionResult::RaiseError(
@@ -459,7 +468,7 @@ pub fn moo_frame_execute(
                         {
                             *end_value = v_obj(Obj::mk_id(e.id().0 - 1));
                         }
-                        current_val.clone()
+                        v_obj(Obj::mk_id(obj_id))
                     } else {
                         v_obj(Obj::mk_id(obj_id + 1))
                     }
@@ -469,8 +478,7 @@ pub fn moo_frame_execute(
                         E_TYPE.msg("invalid type in for-range iteration"),
                     );
                 };
-                *current_value = next_value;
-
+                let current_val = std::mem::replace(current_value, next_value);
                 f.set_variable(&loop_var, current_val);
             }
             Op::Pop => {
