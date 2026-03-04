@@ -131,6 +131,30 @@ fn invalid_verb_name_error(verb: &Var) -> Error {
     E_TYPE.with_msg(|| format!("Invalid verb name: {}", to_literal(verb)))
 }
 
+#[cold]
+#[inline(never)]
+fn invalid_list_append_error() -> Error {
+    E_TYPE.msg("invalid value in list append")
+}
+
+#[cold]
+#[inline(never)]
+fn division_by_zero_error() -> Error {
+    E_DIV.msg("division by zero")
+}
+
+#[cold]
+#[inline(never)]
+fn invalid_error_message_error() -> Error {
+    E_TYPE.msg("invalid value for error message")
+}
+
+#[cold]
+#[inline(never)]
+fn invalid_list_splice_error() -> Error {
+    E_TYPE.msg("invalid value in list splice")
+}
+
 macro_rules! binary_bool_op {
     ( $f:ident, $op:tt, $bi:expr ) => {
         let rhs = $f.pop();
@@ -572,7 +596,7 @@ pub fn moo_frame_execute(
                 let list = std::mem::replace(f.peek_top_mut(), v_none());
                 if !list.is_sequence() || list.type_code() == VarType::TYPE_STR {
                     f.pop();
-                    return ExecutionResult::PushError(E_TYPE.msg("invalid value in list append"));
+                    return push_error_cold(invalid_list_append_error());
                 }
                 // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA in list add and append
                 let result = list.push_owned(&tail);
@@ -582,7 +606,7 @@ pub fn moo_frame_execute(
                     }
                     Err(e) => {
                         f.pop();
-                        return ExecutionResult::PushError(e);
+                        return push_error_cold(e);
                     }
                 }
             }
@@ -593,12 +617,12 @@ pub fn moo_frame_execute(
                 // Don't allow strings here.
                 if list.type_code() == VarType::TYPE_STR {
                     f.pop();
-                    return ExecutionResult::PushError(E_TYPE.msg("invalid value in list append"));
+                    return push_error_cold(invalid_list_append_error());
                 }
 
                 if !tail.is_sequence() || !list.is_sequence() {
                     f.pop();
-                    return ExecutionResult::PushError(E_TYPE.msg("invalid value in list append"));
+                    return push_error_cold(invalid_list_append_error());
                 }
                 let new_list = list.append_owned(&tail);
                 match new_list {
@@ -607,7 +631,7 @@ pub fn moo_frame_execute(
                     }
                     Err(e) => {
                         f.pop();
-                        return ExecutionResult::PushError(e);
+                        return push_error_cold(e);
                     }
                 }
             }
@@ -621,7 +645,7 @@ pub fn moo_frame_execute(
                     }
                     Err(e) => {
                         f.pop();
-                        return ExecutionResult::PushError(e);
+                        return push_error_cold(e);
                     }
                 }
             }
@@ -649,7 +673,7 @@ pub fn moo_frame_execute(
                             to_remove.push(len - 1);
                         }
                         remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
-                        return ExecutionResult::PushError(e);
+                        return push_error_cold(e);
                     }
                 }
             }
@@ -659,9 +683,7 @@ pub fn moo_frame_execute(
                 // Expect an argument on stack (otherwise we would have used ImmErr)
                 let err_msg = f.pop();
                 let Some(err_msg) = err_msg.as_string() else {
-                    return ExecutionResult::PushError(
-                        E_TYPE.msg("invalid value for error message"),
-                    );
+                    return push_error_cold(invalid_error_message_error());
                 };
                 f.push(v_error(code.msg(err_msg)));
             }
@@ -682,7 +704,7 @@ pub fn moo_frame_execute(
                     }
                     Err(e) => {
                         f.pop();
-                        return ExecutionResult::PushError(e);
+                        return push_error_cold(e);
                     }
                 }
             }
@@ -767,7 +789,7 @@ pub fn moo_frame_execute(
                 // `inf`.
                 let (divisor, _) = f.peek2();
                 if divisor.is_zero() {
-                    return ExecutionResult::PushError(E_DIV.msg("division by zero"));
+                    return push_error_cold(division_by_zero_error());
                 };
                 binary_var_op!(f, div);
             }
@@ -780,7 +802,7 @@ pub fn moo_frame_execute(
             Op::Mod => {
                 let (divisor, _) = f.peek2();
                 if divisor.is_zero() {
-                    return ExecutionResult::PushError(E_DIV.msg("division by zero"));
+                    return push_error_cold(division_by_zero_error());
                 };
                 binary_var_op!(f, modulus);
             }
@@ -825,7 +847,7 @@ pub fn moo_frame_execute(
                 match v.bitnot() {
                     Err(e) => {
                         f.pop();
-                        return ExecutionResult::PushError(e);
+                        return push_error_cold(e);
                     }
                     Ok(result) => {
                         f.poke(0, result);
@@ -846,7 +868,7 @@ pub fn moo_frame_execute(
                 match v.negative() {
                     Err(e) => {
                         f.pop();
-                        return ExecutionResult::PushError(e);
+                        return push_error_cold(e);
                     }
                     Ok(v) => f.poke(0, v),
                 }
@@ -875,7 +897,7 @@ pub fn moo_frame_execute(
                     Ok(v) => f.push(v),
                     Err(e) => {
                         f.pop();
-                        return ExecutionResult::PushError(e);
+                        return push_error_cold(e);
                     }
                 }
             }
@@ -887,7 +909,7 @@ pub fn moo_frame_execute(
                     Ok(v) => f.poke(0, v),
                     Err(e) => {
                         f.pop();
-                        return ExecutionResult::PushError(e);
+                        return push_error_cold(e);
                     }
                 }
             }
@@ -896,7 +918,7 @@ pub fn moo_frame_execute(
                 let result = base.range(&from, &to, IndexMode::OneBased);
                 if let Err(e) = result {
                     f.pop();
-                    return ExecutionResult::PushError(e);
+                    return push_error_cold(e);
                 }
                 f.poke(0, result.unwrap());
             }
@@ -906,7 +928,7 @@ pub fn moo_frame_execute(
                 let result = base.range_set_owned(&from, &to, &value, IndexMode::OneBased);
                 if let Err(e) = result {
                     f.pop();
-                    return ExecutionResult::PushError(e);
+                    return push_error_cold(e);
                 }
                 f.poke(0, result.unwrap());
             }
@@ -936,7 +958,7 @@ pub fn moo_frame_execute(
                             to_remove.push(len - 1);
                         }
                         remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
-                        return ExecutionResult::PushError(e);
+                        return push_error_cold(e);
                     }
                 }
             }
@@ -944,7 +966,7 @@ pub fn moo_frame_execute(
                 let v = f.peek_abs(offset.0 as usize);
                 match v.len() {
                     Ok(l) => f.push(v_int(l as i64)),
-                    Err(e) => return ExecutionResult::PushError(e),
+                    Err(e) => return push_error_cold(e),
                 }
             }
             Op::GetProp => {
@@ -1319,7 +1341,7 @@ pub fn moo_frame_execute(
                         let scatter_err = E_TYPE
                             .with_msg(|| format!("Invalid value for scatter: {}", to_literal(rhs)));
                         f.pop();
-                        return ExecutionResult::PushError(scatter_err);
+                        return push_error_cold(scatter_err);
                     };
                     rhs_values.clone()
                 };
@@ -1336,7 +1358,7 @@ pub fn moo_frame_execute(
                 match result.result {
                     Err(e) => {
                         f.pop();
-                        return ExecutionResult::PushError(e);
+                        return push_error_cold(e);
                     }
                     Ok(()) => {
                         // Jump to appropriate location based on whether defaults are needed
@@ -1348,7 +1370,7 @@ pub fn moo_frame_execute(
             Op::CheckListForSplice => {
                 if !f.peek_top().is_sequence() {
                     f.pop();
-                    return ExecutionResult::PushError(E_TYPE.msg("invalid value in list splice"));
+                    return push_error_cold(invalid_list_splice_error());
                 }
             }
 
@@ -1406,17 +1428,13 @@ pub fn moo_frame_execute(
                     .unwrap()
                     .clone();
                 let Some(position) = position.as_integer() else {
-                    return ExecutionResult::PushError(
-                        E_TYPE.msg("invalid value in list comprehension"),
-                    );
+                    return push_error_cold(E_TYPE.msg("invalid value in list comprehension"));
                 };
                 if position > list.len().unwrap() as i64 {
                     f.jump(&list_comprehension.end_label);
                 } else {
                     let Ok(item) = list.index(&v_int(position), IndexMode::OneBased) else {
-                        return ExecutionResult::PushError(
-                            E_RANGE.msg("invalid index in list comprehension"),
-                        );
+                        return push_error_cold(E_RANGE.msg("invalid index in list comprehension"));
                     };
                     f.set_variable(&list_comprehension.item_variable, item);
                 }
@@ -1430,14 +1448,10 @@ pub fn moo_frame_execute(
                     .expect("Bad range position variable in range comprehension")
                     .clone();
                 let Ok(new_position) = position.add(&v_int(1)) else {
-                    return ExecutionResult::PushError(
-                        E_TYPE.msg("invalid value in list comprehension"),
-                    );
+                    return push_error_cold(E_TYPE.msg("invalid value in list comprehension"));
                 };
                 let Ok(new_list) = list.push_owned(&result) else {
-                    return ExecutionResult::PushError(
-                        E_TYPE.msg("invalid value in list comprehension"),
-                    );
+                    return push_error_cold(E_TYPE.msg("invalid value in list comprehension"));
                 };
                 f.set_variable(&id, new_position);
                 f.push(new_list);
@@ -1473,9 +1487,7 @@ pub fn moo_frame_execute(
                     // Take the last num_captured items from the capture stack
                     let stack_len = f.capture_stack.len();
                     if stack_len < num_captured as usize {
-                        return ExecutionResult::PushError(
-                            E_ARGS.msg("insufficient captured variables on stack"),
-                        );
+                        return push_error_cold(E_ARGS.msg("insufficient captured variables on stack"));
                     }
 
                     // Extract captured variables and convert to environment format
