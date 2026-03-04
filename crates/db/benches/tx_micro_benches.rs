@@ -23,6 +23,7 @@ use std::{
 };
 
 const CHECK_CHUNK_SIZE: Option<usize> = None;
+const TX_OPS_CHUNK_SIZE: Option<usize> = None;
 const APPLY_TX_PER_CHUNK: usize = 16_384;
 const APPLY_TUPLE_OPS_PER_TX: u64 = 12;
 const BASE_TS: u64 = 10_000;
@@ -238,6 +239,44 @@ impl BenchContext for CheckConflictUnresolvableCoreContext {
     }
 }
 
+struct TxOpsContext {
+    relation: Relation<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>,
+    base_index: Box<dyn RelationIndex<Domain, PlainCodomain>>,
+    present_domain: Domain,
+    missing_domain: Domain,
+    bulk_get_domains: Vec<Domain>,
+}
+
+impl BenchContext for TxOpsContext {
+    fn prepare(_num_chunks: usize) -> Self {
+        let present_domain = Domain(1);
+        let missing_domain = Domain(2);
+
+        let mut data = HashMap::new();
+        data.insert(present_domain.clone(), PlainCodomain(10));
+        for i in 0..16 {
+            data.insert(Domain(100 + i), PlainCodomain(i));
+        }
+
+        let provider = Arc::new(InMemoryProvider::new(data));
+        let relation = Relation::new(Symbol::mk("tx-ops"), provider);
+        let base_index = relation.seeded_index().unwrap();
+        let bulk_get_domains = (0..16).map(|i| Domain(100 + i)).collect();
+
+        Self {
+            relation,
+            base_index,
+            present_domain,
+            missing_domain,
+            bulk_get_domains,
+        }
+    }
+
+    fn chunk_size() -> Option<usize> {
+        TX_OPS_CHUNK_SIZE
+    }
+}
+
 fn check_conflict_merge_rewrite(ctx: &mut CheckMergeContext, chunk_size: usize, chunk_num: usize) {
     for i in 0..chunk_size {
         let tx = Tx {
@@ -307,6 +346,67 @@ fn check_conflict_unresolvable_fail_core(
     }
 }
 
+fn tx_op_get(ctx: &mut TxOpsContext, chunk_size: usize, chunk_num: usize) {
+    for i in 0..chunk_size {
+        let tx = Tx {
+            ts: Timestamp(BASE_TS + (chunk_num as u64 * chunk_size as u64) + i as u64),
+            snapshot_version: 0,
+        };
+        let rt = ctx.relation.start_from_index(&tx, ctx.base_index.as_ref());
+        black_box(rt.get(&ctx.present_domain).unwrap());
+    }
+}
+
+fn tx_op_update(ctx: &mut TxOpsContext, chunk_size: usize, chunk_num: usize) {
+    for i in 0..chunk_size {
+        let tx = Tx {
+            ts: Timestamp(BASE_TS + (chunk_num as u64 * chunk_size as u64) + i as u64),
+            snapshot_version: 0,
+        };
+        let mut rt = ctx.relation.start_from_index(&tx, ctx.base_index.as_ref());
+        black_box(rt.update(&ctx.present_domain, PlainCodomain(100 + (i as u64))).unwrap());
+    }
+}
+
+fn tx_op_delete(ctx: &mut TxOpsContext, chunk_size: usize, chunk_num: usize) {
+    for i in 0..chunk_size {
+        let tx = Tx {
+            ts: Timestamp(BASE_TS + (chunk_num as u64 * chunk_size as u64) + i as u64),
+            snapshot_version: 0,
+        };
+        let mut rt = ctx.relation.start_from_index(&tx, ctx.base_index.as_ref());
+        black_box(rt.delete(&ctx.present_domain).unwrap());
+    }
+}
+
+fn tx_op_insert(ctx: &mut TxOpsContext, chunk_size: usize, chunk_num: usize) {
+    for i in 0..chunk_size {
+        let tx = Tx {
+            ts: Timestamp(BASE_TS + (chunk_num as u64 * chunk_size as u64) + i as u64),
+            snapshot_version: 0,
+        };
+        let mut rt = ctx.relation.start_from_index(&tx, ctx.base_index.as_ref());
+        black_box(
+            rt.insert(
+                ctx.missing_domain.clone(),
+                PlainCodomain(200 + (i as u64)),
+            )
+            .unwrap(),
+        );
+    }
+}
+
+fn tx_op_bulk_get(ctx: &mut TxOpsContext, chunk_size: usize, chunk_num: usize) {
+    for i in 0..chunk_size {
+        let tx = Tx {
+            ts: Timestamp(BASE_TS + (chunk_num as u64 * chunk_size as u64) + i as u64),
+            snapshot_version: 0,
+        };
+        let rt = ctx.relation.start_from_index(&tx, ctx.base_index.as_ref());
+        black_box(rt.bulk_get(&ctx.bulk_get_domains).unwrap());
+    }
+}
+
 pub fn main() {
     use moor_bench_utils::{BenchmarkDef, generate_session_summary, run_benchmark_group};
     use std::env;
@@ -335,7 +435,7 @@ pub fn main() {
 
     if let Some(f) = filter {
         eprintln!("Running tx micro benchmarks matching filter: '{f}'");
-        eprintln!("Available filters: all, check, apply, or benchmark name substring");
+        eprintln!("Available filters: all, check, tx_ops, apply, or benchmark name substring");
         eprintln!();
     }
 
@@ -366,6 +466,33 @@ pub fn main() {
         group: "apply",
         func: apply_mixed_batch,
     }];
+    let tx_ops_benchmarks = [
+        BenchmarkDef {
+            name: "tx_op_get",
+            group: "tx_ops",
+            func: tx_op_get,
+        },
+        BenchmarkDef {
+            name: "tx_op_update",
+            group: "tx_ops",
+            func: tx_op_update,
+        },
+        BenchmarkDef {
+            name: "tx_op_delete",
+            group: "tx_ops",
+            func: tx_op_delete,
+        },
+        BenchmarkDef {
+            name: "tx_op_insert",
+            group: "tx_ops",
+            func: tx_op_insert,
+        },
+        BenchmarkDef {
+            name: "tx_op_bulk_get",
+            group: "tx_ops",
+            func: tx_op_bulk_get,
+        },
+    ];
 
     run_benchmark_group::<CheckNoConflictCoreContext>(
         &check_no_conflict_core_benchmarks,
@@ -387,6 +514,7 @@ pub fn main() {
         "TX Check Benchmarks (Core Fail)",
         filter,
     );
+    run_benchmark_group::<TxOpsContext>(&tx_ops_benchmarks, "TX Operation Benchmarks", filter);
     run_benchmark_group::<ApplyContext>(&apply_benchmarks, "TX Apply Benchmarks", filter);
 
     if filter.is_some() {
