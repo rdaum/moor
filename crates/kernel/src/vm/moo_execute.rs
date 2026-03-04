@@ -101,6 +101,36 @@ fn build_captured_environment(
     captured_env
 }
 
+#[cold]
+#[inline(never)]
+fn push_error_cold(error: Error) -> ExecutionResult {
+    ExecutionResult::PushError(error)
+}
+
+#[cold]
+#[inline(never)]
+fn invalid_property_name_error(propname: &Var) -> Error {
+    E_TYPE.with_msg(|| format!("Invalid property name: {}", to_literal(propname)))
+}
+
+#[cold]
+#[inline(never)]
+fn invalid_property_access_error(value: &Var) -> Error {
+    E_TYPE.with_msg(|| format!("Invalid value for property access: {}", to_literal(value)))
+}
+
+#[cold]
+#[inline(never)]
+fn invalid_verb_target_error(value: &Var) -> Error {
+    E_TYPE.with_msg(|| format!("Invalid target for verb dispatch: {}", to_literal(value)))
+}
+
+#[cold]
+#[inline(never)]
+fn invalid_verb_name_error(verb: &Var) -> Error {
+    E_TYPE.with_msg(|| format!("Invalid verb name: {}", to_literal(verb)))
+}
+
 macro_rules! binary_bool_op {
     ( $f:ident, $op:tt, $bi:expr ) => {
         let rhs = $f.pop();
@@ -123,7 +153,7 @@ macro_rules! binary_var_op {
             }
             Err(err_code) => {
                 $f.pop();
-                return ExecutionResult::PushError(err_code);
+                return push_error_cold(err_code);
             }
         }
     };
@@ -922,11 +952,7 @@ pub fn moo_frame_execute(
                 let obj = std::mem::replace(f.peek_top_mut(), v_none());
 
                 let Ok(propname) = propname.as_symbol() else {
-                    return ExecutionResult::PushError(
-                        E_TYPE.with_msg(|| {
-                            format!("Invalid property name: {}", to_literal(&propname))
-                        }),
-                    );
+                    return push_error_cold(invalid_property_name_error(&propname));
                 };
 
                 let value = get_property(
@@ -945,7 +971,7 @@ pub fn moo_frame_execute(
                         f.poke(0, v);
                     }
                     Err(e) => {
-                        return ExecutionResult::PushError(e);
+                        return push_error_cold(e);
                     }
                 }
             }
@@ -953,11 +979,7 @@ pub fn moo_frame_execute(
                 let (propname, obj) = f.peek2();
 
                 let Ok(propname) = propname.as_symbol() else {
-                    return ExecutionResult::PushError(
-                        E_TYPE.with_msg(|| {
-                            format!("Invalid property name: {}", to_literal(propname))
-                        }),
-                    );
+                    return push_error_cold(invalid_property_name_error(propname));
                 };
 
                 let obj = obj.clone();
@@ -977,7 +999,7 @@ pub fn moo_frame_execute(
                         f.push(v);
                     }
                     Err(e) => {
-                        return ExecutionResult::PushError(e);
+                        return push_error_cold(e);
                     }
                 }
             }
@@ -985,16 +1007,10 @@ pub fn moo_frame_execute(
                 let (rhs, propname, obj) = (f.pop(), f.pop(), f.peek_top());
 
                 let Some(obj) = obj.as_object() else {
-                    return ExecutionResult::PushError(E_TYPE.with_msg(|| {
-                        format!("Invalid value for property access: {}", to_literal(obj))
-                    }));
+                    return push_error_cold(invalid_property_access_error(obj));
                 };
                 let Ok(propname) = propname.as_symbol() else {
-                    return ExecutionResult::PushError(
-                        E_TYPE.with_msg(|| {
-                            format!("Invalid property name: {}", to_literal(&propname))
-                        }),
-                    );
+                    return push_error_cold(invalid_property_name_error(&propname));
                 };
                 let hint = load_inline_property_hint(inline_property_ic_ptr, inline_property_ic_len, pc);
                 record_vm_property_hint_put_prop(hint.is_some());
@@ -1018,7 +1034,7 @@ pub fn moo_frame_execute(
                             inline_property_ic_len,
                             pc,
                         );
-                        return ExecutionResult::PushError(e.to_error());
+                        return push_error_cold(e.to_error());
                     }
                 }
             }
@@ -1044,11 +1060,7 @@ pub fn moo_frame_execute(
                         to_remove.push(len - 1);
                     }
                     remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
-                    return ExecutionResult::PushError(
-                        E_TYPE.with_msg(|| {
-                            format!("Invalid property name: {}", to_literal(&propname))
-                        }),
-                    );
+                    return push_error_cold(invalid_property_name_error(&propname));
                 };
 
                 let update_result = if let Some(obj) = base.as_object() {
@@ -1077,18 +1089,16 @@ pub fn moo_frame_execute(
                             to_remove.push(len - 1);
                         }
                         remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
-                        return ExecutionResult::PushError(
-                            E_TYPE.with_msg(|| format!("Invalid property name: {propname}")),
-                        );
+                        return push_error_cold(E_TYPE.with_msg(|| {
+                            format!("Invalid property name: {propname}")
+                        }));
                     }
                     let updated = flyweight.add_slot(propname, rhs);
                     clear_inline_property_hint(inline_property_ic_ptr, inline_property_ic_len, pc);
                     Ok(Var::from_flyweight(updated))
                 } else {
                     clear_inline_property_hint(inline_property_ic_ptr, inline_property_ic_len, pc);
-                    Err(E_TYPE.with_msg(|| {
-                        format!("Invalid value for property access: {}", to_literal(&base))
-                    }))
+                    Err(invalid_property_access_error(&base))
                 };
 
                 match update_result {
@@ -1111,7 +1121,7 @@ pub fn moo_frame_execute(
                             to_remove.push(len - 1);
                         }
                         remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
-                        return ExecutionResult::PushError(e);
+                        return push_error_cold(e);
                     }
                 }
             }
@@ -1142,23 +1152,17 @@ pub fn moo_frame_execute(
             Op::Pass => {
                 let args = f.pop();
                 let Some(args) = args.as_list() else {
-                    return ExecutionResult::PushError(E_TYPE.with_msg(|| {
-                        format!("Invalid target for verb dispatch: {}", to_literal(&args))
-                    }));
+                    return push_error_cold(invalid_verb_target_error(&args));
                 };
                 return ExecutionResult::DispatchVerbPass(args.clone());
             }
             Op::CallVerb => {
                 let (args, verb, obj) = (f.pop(), f.pop(), f.pop());
                 let Some(l) = args.as_list() else {
-                    return ExecutionResult::PushError(E_TYPE.with_msg(|| {
-                        format!("Invalid target for verb dispatch: {}", to_literal(&args))
-                    }));
+                    return push_error_cold(invalid_verb_target_error(&args));
                 };
                 let Ok(verb) = verb.as_symbol() else {
-                    return ExecutionResult::PushError(
-                        E_TYPE.with_msg(|| format!("Invalid verb name: {}", to_literal(&verb))),
-                    );
+                    return push_error_cold(invalid_verb_name_error(&verb));
                 };
                 return ExecutionResult::PrepareVerbDispatch {
                     this: obj,
