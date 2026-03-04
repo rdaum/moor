@@ -14,7 +14,6 @@
 use crate::tasks::task_program_cache::ProgramSlot;
 use crate::vm::FinallyReason;
 use crate::vm::environment::Environment;
-use moor_common::model::PropertyLookupHint;
 use moor_compiler::{Label, Op, Program};
 use moor_var::{
     Error, Var,
@@ -36,6 +35,7 @@ pub(crate) struct MooStackFrame {
     /// The program of the verb that is currently being executed.
     pub(crate) program: Option<Program>,
     pub(crate) program_ptr: Option<usize>,
+    pub(crate) program_ic_ptr: Option<usize>,
     /// The program counter.
     pub(crate) pc: usize,
     /// Where is the PC pointing to?
@@ -56,10 +56,6 @@ pub(crate) struct MooStackFrame {
     pub(crate) finally_stack: Vec<FinallyReason>,
     /// Stack for captured variables during lambda creation
     pub(crate) capture_stack: Vec<(Name, Var)>,
-    /// The current PC stream that `property_lookup_hints` is indexed against.
-    pub(crate) property_lookup_hints_pc_type: Option<PcType>,
-    /// Monomorphic property-lookup hints keyed directly by callsite PC for the current stream.
-    pub(crate) property_lookup_hints: Vec<Option<PropertyLookupHint>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -143,6 +139,7 @@ impl MooStackFrame {
         Self {
             program: Some(program),
             program_ptr: None,
+            program_ic_ptr: None,
             environment: Environment::with_initial_scope(width),
             pc: 0,
             pc_type: PcType::Main,
@@ -152,8 +149,6 @@ impl MooStackFrame {
             catch_stack: Vec::new(),
             finally_stack: Vec::new(),
             capture_stack: Vec::new(),
-            property_lookup_hints_pc_type: None,
-            property_lookup_hints: Vec::new(),
         }
     }
 
@@ -172,6 +167,7 @@ impl MooStackFrame {
         Self {
             program: Some(program),
             program_ptr: None,
+            program_ic_ptr: None,
             environment: Environment::with_call_globals(
                 player, this, caller, verb, args, argstr, width,
             ),
@@ -183,8 +179,6 @@ impl MooStackFrame {
             catch_stack: Vec::new(),
             finally_stack: Vec::new(),
             capture_stack: Vec::new(),
-            property_lookup_hints_pc_type: None,
-            property_lookup_hints: Vec::new(),
         }
     }
 
@@ -203,6 +197,7 @@ impl MooStackFrame {
         Self {
             program: Some(program),
             program_ptr: None,
+            program_ic_ptr: None,
             environment: Environment::with_call_globals_copy_parsing(
                 player,
                 this,
@@ -220,8 +215,6 @@ impl MooStackFrame {
             catch_stack: Vec::new(),
             finally_stack: Vec::new(),
             capture_stack: Vec::new(),
-            property_lookup_hints_pc_type: None,
-            property_lookup_hints: Vec::new(),
         }
     }
 
@@ -257,6 +250,7 @@ impl MooStackFrame {
         Self {
             program: Some(program),
             program_ptr: None,
+            program_ic_ptr: None,
             environment: env,
             pc: 0,
             pc_type: PcType::Main,
@@ -266,8 +260,6 @@ impl MooStackFrame {
             catch_stack: Default::default(),
             finally_stack: Default::default(),
             capture_stack: Default::default(),
-            property_lookup_hints_pc_type: None,
-            property_lookup_hints: Vec::new(),
         }
     }
 
@@ -307,6 +299,7 @@ impl MooStackFrame {
         self.debug_assert_resolvable_program();
         if self.program.is_some() {
             self.program_ptr = None;
+            self.program_ic_ptr = None;
             return;
         }
         let Some(ptr) = self.program_ptr else {
@@ -315,6 +308,7 @@ impl MooStackFrame {
         // SAFETY: program_ptr points to a stable allocation in task-owned program cache.
         self.program = Some(unsafe { (&*(ptr as *const Program)).clone() });
         self.program_ptr = None;
+        self.program_ic_ptr = None;
     }
 
     pub(crate) fn materialize_program_for_handoff(&mut self) {
@@ -323,6 +317,7 @@ impl MooStackFrame {
             self.program = Some(self.program_ref().clone());
         }
         self.program_ptr = None;
+        self.program_ic_ptr = None;
     }
 
     pub(crate) fn new_with_all_globals_from_slot(
@@ -338,6 +333,7 @@ impl MooStackFrame {
         Self {
             program: None,
             program_ptr: Some(program_slot.program_ptr),
+            program_ic_ptr: program_slot.program_ic_ptr,
             environment: Environment::with_call_globals(
                 player, this, caller, verb, args, argstr, width,
             ),
@@ -349,8 +345,6 @@ impl MooStackFrame {
             catch_stack: Vec::new(),
             finally_stack: Vec::new(),
             capture_stack: Vec::new(),
-            property_lookup_hints_pc_type: None,
-            property_lookup_hints: Vec::new(),
         }
     }
 
@@ -367,6 +361,7 @@ impl MooStackFrame {
         Self {
             program: None,
             program_ptr: Some(program_slot.program_ptr),
+            program_ic_ptr: program_slot.program_ic_ptr,
             environment: Environment::with_call_globals_copy_parsing(
                 player,
                 this,
@@ -384,8 +379,6 @@ impl MooStackFrame {
             catch_stack: Vec::new(),
             finally_stack: Vec::new(),
             capture_stack: Vec::new(),
-            property_lookup_hints_pc_type: None,
-            property_lookup_hints: Vec::new(),
         }
     }
 
@@ -466,44 +459,6 @@ impl MooStackFrame {
     pub(crate) fn switch_to_fork_vector(&mut self, fork_vector: Offset) {
         self.pc_type = PcType::ForkVector(fork_vector);
         self.pc = 0;
-    }
-
-    #[inline]
-    pub(crate) fn property_lookup_hint(&self, pc: usize) -> Option<PropertyLookupHint> {
-        if self.property_lookup_hints_pc_type != Some(self.pc_type) {
-            return None;
-        }
-        self.property_lookup_hints.get(pc).copied().flatten()
-    }
-
-    #[inline]
-    pub(crate) fn set_property_lookup_hint(&mut self, pc: usize, hint: PropertyLookupHint) {
-        if self.property_lookup_hints_pc_type != Some(self.pc_type) {
-            self.property_lookup_hints.clear();
-            self.property_lookup_hints_pc_type = Some(self.pc_type);
-        }
-
-        if pc >= self.property_lookup_hints.len() {
-            let required_len = pc.saturating_add(1);
-            let new_len = required_len
-                .checked_next_power_of_two()
-                .unwrap_or(required_len);
-            self.property_lookup_hints.resize(new_len, None);
-        }
-
-        if let Some(slot) = self.property_lookup_hints.get_mut(pc) {
-            *slot = Some(hint);
-        }
-    }
-
-    #[inline]
-    pub(crate) fn clear_property_lookup_hint(&mut self, pc: usize) {
-        if self.property_lookup_hints_pc_type != Some(self.pc_type) {
-            return;
-        }
-        if let Some(slot) = self.property_lookup_hints.get_mut(pc) {
-            *slot = None;
-        }
     }
 
     pub fn lookahead_ref(&self) -> Option<&Op> {

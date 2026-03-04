@@ -12,10 +12,14 @@
 //
 
 use self::stats::CacheStats;
+use self::property_pic_stats::PropertyPicStats;
+use self::verb_pic_stats::VerbPicStats;
 use lazy_static::lazy_static;
 
 pub mod ancestry_cache;
 pub mod prop_cache;
+pub mod property_pic_stats;
+pub mod verb_pic_stats;
 pub(crate) mod stats;
 pub mod verb_cache;
 
@@ -26,4 +30,8 @@ lazy_static! {
     pub static ref VERB_CACHE_STATS: CacheStats = CacheStats::new();
     /// Global cache statistics for ancestry lookups.
     pub static ref ANCESTRY_CACHE_STATS: CacheStats = CacheStats::new();
+    /// Global PIC outcome statistics for property get/set hint paths.
+    pub static ref PROPERTY_PIC_STATS: PropertyPicStats = PropertyPicStats::new();
+    /// Global PIC outcome statistics for verb dispatch hint paths.
+    pub static ref VERB_PIC_STATS: VerbPicStats = VerbPicStats::new();
 }

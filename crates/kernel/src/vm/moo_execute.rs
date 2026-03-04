@@ -13,6 +13,7 @@
 
 use crate::{
     config::FeaturesConfig,
+    tasks::task_program_cache::ProgramInlineCaches,
     task_context::with_current_transaction_mut,
     vm::{
         moo_frame::{CatchType, MooStackFrame, PcType, ScopeType},
@@ -24,6 +25,10 @@ use crate::{
 use lazy_static::lazy_static;
 use moor_common::model::PropertyLookupHint;
 use moor_compiler::{Op, to_literal};
+use moor_db::{
+    record_vm_property_hint_get_prop, record_vm_property_hint_push_get_prop,
+    record_vm_property_hint_put_prop, record_vm_property_hint_put_prop_at,
+};
 use moor_var::{
     E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, Error, IndexMode, Obj, Symbol,
     TypeClass, Var, VarType, program::names::Name, v_arc_str, v_bool, v_bool_int, v_empty_list,
@@ -187,6 +192,7 @@ pub fn moo_frame_execute(
     };
     let opcodes_ptr = opcodes.as_ptr();
     let opcodes_len = opcodes.len();
+    let (inline_property_ic_ptr, inline_property_ic_len) = select_inline_property_ic(f, pc_type);
 
     let tick_slice_end = (*tick_count).saturating_add(tick_slice);
     while *tick_count < tick_slice_end {
@@ -928,7 +934,17 @@ pub fn moo_frame_execute(
                     );
                 };
 
-                let value = get_property(f, pc, &permissions, &obj, propname, features_config);
+                let value = get_property(
+                    f,
+                    pc,
+                    PropertyReadOp::GetProp,
+                    inline_property_ic_ptr,
+                    inline_property_ic_len,
+                    &permissions,
+                    &obj,
+                    propname,
+                    features_config,
+                );
                 match value {
                     Ok(v) => {
                         f.poke(0, v);
@@ -950,7 +966,17 @@ pub fn moo_frame_execute(
                 };
 
                 let obj = obj.clone();
-                let value = get_property(f, pc, &permissions, &obj, propname, features_config);
+                let value = get_property(
+                    f,
+                    pc,
+                    PropertyReadOp::PushGetProp,
+                    inline_property_ic_ptr,
+                    inline_property_ic_len,
+                    &permissions,
+                    &obj,
+                    propname,
+                    features_config,
+                );
                 match value {
                     Ok(v) => {
                         f.push(v);
@@ -975,15 +1001,28 @@ pub fn moo_frame_execute(
                         }),
                     );
                 };
+                let hint = load_inline_property_hint(inline_property_ic_ptr, inline_property_ic_len, pc);
+                record_vm_property_hint_put_prop(hint.is_some());
                 let update_result = with_current_transaction_mut(|world_state| {
-                    world_state.update_property(&permissions, &obj, propname, &rhs.clone())
+                    world_state.update_property_with_hint(&permissions, &obj, propname, &rhs, hint)
                 });
 
                 match update_result {
-                    Ok(()) => {
+                    Ok(next_hint) => {
+                        store_inline_property_hint(
+                            inline_property_ic_ptr,
+                            inline_property_ic_len,
+                            pc,
+                            next_hint,
+                        );
                         f.poke(0, rhs);
                     }
                     Err(e) => {
+                        clear_inline_property_hint(
+                            inline_property_ic_ptr,
+                            inline_property_ic_len,
+                            pc,
+                        );
                         return ExecutionResult::PushError(e.to_error());
                     }
                 }
@@ -1017,10 +1056,22 @@ pub fn moo_frame_execute(
                 };
 
                 let update_result = if let Some(obj) = base.as_object() {
+                    let hint =
+                        load_inline_property_hint(inline_property_ic_ptr, inline_property_ic_len, pc);
+                    record_vm_property_hint_put_prop_at(hint.is_some());
                     with_current_transaction_mut(|world_state| {
-                        world_state.update_property(&permissions, &obj, propname, &rhs)
+                        world_state
+                            .update_property_with_hint(&permissions, &obj, propname, &rhs, hint)
                     })
-                    .map(|()| base.clone())
+                    .map(|next_hint| {
+                        store_inline_property_hint(
+                            inline_property_ic_ptr,
+                            inline_property_ic_len,
+                            pc,
+                            next_hint,
+                        );
+                        base.clone()
+                    })
                     .map_err(|e| e.to_error())
                 } else if let Some(flyweight) = base.as_flyweight() {
                     if propname == *DELEGATE_SYM || propname == *SLOTS_SYM {
@@ -1034,8 +1085,10 @@ pub fn moo_frame_execute(
                         );
                     }
                     let updated = flyweight.add_slot(propname, rhs.clone());
+                    clear_inline_property_hint(inline_property_ic_ptr, inline_property_ic_len, pc);
                     Ok(Var::from_flyweight(updated))
                 } else {
+                    clear_inline_property_hint(inline_property_ic_ptr, inline_property_ic_len, pc);
                     Err(E_TYPE.with_msg(|| {
                         format!("Invalid value for property access: {}", to_literal(&base))
                     }))
@@ -1052,6 +1105,11 @@ pub fn moo_frame_execute(
                         }
                     }
                     Err(e) => {
+                        clear_inline_property_hint(
+                            inline_property_ic_ptr,
+                            inline_property_ic_len,
+                            pc,
+                        );
                         let mut to_remove = vec![rhs_idx, prop_idx, base_idx];
                         if offset > 0 {
                             to_remove.push(len - 1);
@@ -1471,8 +1529,11 @@ pub fn moo_frame_execute(
 }
 
 fn get_property(
-    frame: &mut MooStackFrame,
+    _frame: &mut MooStackFrame,
     pc: usize,
+    op: PropertyReadOp,
+    inline_property_ic_ptr: *mut Option<PropertyLookupHint>,
+    inline_property_ic_len: usize,
     permissions: &Obj,
     obj: &Var,
     propname: Symbol,
@@ -1480,7 +1541,11 @@ fn get_property(
 ) -> Result<Var, Error> {
     // Fast path: Obj is by far the most common case for property access
     if let Some(obj_ref) = obj.as_object() {
-        let hint: Option<PropertyLookupHint> = frame.property_lookup_hint(pc);
+        let hint = load_inline_property_hint(inline_property_ic_ptr, inline_property_ic_len, pc);
+        match op {
+            PropertyReadOp::GetProp => record_vm_property_hint_get_prop(hint.is_some()),
+            PropertyReadOp::PushGetProp => record_vm_property_hint_push_get_prop(hint.is_some()),
+        }
         let result = with_current_transaction_mut(|world_state| {
             world_state.retrieve_property_with_hint(permissions, &obj_ref, propname, hint)
         });
@@ -1488,11 +1553,12 @@ fn get_property(
             Ok(outcome) => {
                 let v = outcome.value;
                 let next_hint = outcome.next_hint;
-                if let Some(next_hint) = next_hint {
-                    frame.set_property_lookup_hint(pc, next_hint);
-                } else {
-                    frame.clear_property_lookup_hint(pc);
-                }
+                store_inline_property_hint(
+                    inline_property_ic_ptr,
+                    inline_property_ic_len,
+                    pc,
+                    next_hint,
+                );
                 Ok(v)
             }
             Err(e) => Err(e.to_error()),
@@ -1540,4 +1606,64 @@ fn get_property(
 
     // Invalid target for property access
     Err(E_INVIND.with_msg(|| format!("Invalid value for property access: {}", to_literal(obj))))
+}
+
+#[derive(Clone, Copy)]
+enum PropertyReadOp {
+    GetProp,
+    PushGetProp,
+}
+
+#[inline]
+fn select_inline_property_ic(
+    frame: &mut MooStackFrame,
+    pc_type: PcType,
+) -> (*mut Option<PropertyLookupHint>, usize) {
+    let Some(ic_ptr) = frame.program_ic_ptr else {
+        return (std::ptr::null_mut(), 0);
+    };
+
+    let ic = unsafe { &mut *(ic_ptr as *mut ProgramInlineCaches) };
+    let slice = match pc_type {
+        PcType::Main => ic.main_property_mut(),
+        PcType::ForkVector(fork_offset) => ic.fork_property_mut(fork_offset),
+        PcType::Lambda(lambda_offset) => ic.lambda_property_mut(lambda_offset),
+    };
+    (slice.as_mut_ptr(), slice.len())
+}
+
+#[inline]
+fn load_inline_property_hint(
+    inline_property_ic_ptr: *mut Option<PropertyLookupHint>,
+    inline_property_ic_len: usize,
+    pc: usize,
+) -> Option<PropertyLookupHint> {
+    if inline_property_ic_ptr.is_null() || pc >= inline_property_ic_len {
+        return None;
+    }
+    unsafe { *inline_property_ic_ptr.add(pc) }
+}
+
+#[inline]
+fn store_inline_property_hint(
+    inline_property_ic_ptr: *mut Option<PropertyLookupHint>,
+    inline_property_ic_len: usize,
+    pc: usize,
+    hint: Option<PropertyLookupHint>,
+) {
+    if inline_property_ic_ptr.is_null() || pc >= inline_property_ic_len {
+        return;
+    }
+    unsafe {
+        *inline_property_ic_ptr.add(pc) = hint;
+    }
+}
+
+#[inline]
+fn clear_inline_property_hint(
+    inline_property_ic_ptr: *mut Option<PropertyLookupHint>,
+    inline_property_ic_len: usize,
+    pc: usize,
+) {
+    store_inline_property_hint(inline_property_ic_ptr, inline_property_ic_len, pc, None);
 }

@@ -435,6 +435,24 @@ pub trait WorldState: Send {
         value: &Var,
     ) -> Result<(), WorldStateError>;
 
+    /// Update a property value with an optional call-site hint.
+    ///
+    /// Implementations may use the hint to avoid full name resolution when
+    /// guards match. On success, returns an optional refreshed hint for
+    /// future calls.
+    #[inline]
+    fn update_property_with_hint(
+        &mut self,
+        perms: &Obj,
+        obj: &Obj,
+        pname: Symbol,
+        value: &Var,
+        _hint: Option<PropertyLookupHint>,
+    ) -> Result<Option<PropertyLookupHint>, WorldStateError> {
+        self.update_property(perms, obj, pname, value)?;
+        Ok(None)
+    }
+
     /// Check if a property is 'clear' (value is purely inherited)
     fn is_property_clear(
         &self,

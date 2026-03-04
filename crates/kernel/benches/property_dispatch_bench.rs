@@ -21,8 +21,8 @@ use criterion::{Criterion, criterion_group, criterion_main};
 
 use moor_common::{
     model::{
-        CommitResult, DispatchFlagsSource, ObjFlag, ObjectKind, PropFlag, VerbArgsSpec,
-        VerbDispatch, VerbFlag, VerbLookup, WorldState, WorldStateSource,
+        CommitResult, DispatchFlagsSource, ObjectKind, PropFlag, VerbArgsSpec, VerbDispatch,
+        VerbFlag, VerbLookup, WorldState, WorldStateSource,
     },
     tasks::{AbortLimitReason, NoopClientSession, Session},
     util::BitEnum,
@@ -31,7 +31,7 @@ use moor_compiler::{CompileOptions, compile};
 use moor_db::{DatabaseConfig, TxDB};
 use moor_kernel::{
     config::FeaturesConfig,
-    tasks::task_program_cache::TaskProgramCache,
+    tasks::TaskProgramCache,
     testing::vm_test_utils::setup_task_context,
     vm::{VMHostResponse, builtins::BuiltinRegistry, vm_host::VmHost},
 };
@@ -100,7 +100,13 @@ fn prepare_call_verb(
     let Some(verb_result) = verb_result else {
         panic!("Could not resolve benchmark verb");
     };
-    let permissions_flags = BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer;
+    let (program, _) = world_state
+        .retrieve_verb(
+            &SYSTEM_OBJECT,
+            &verb_result.program_key.verb_definer,
+            verb_result.program_key.verb_uuid,
+        )
+        .unwrap();
     vm_host.start_call_method_verb(
         0,
         verb_result.verbdef,
@@ -110,8 +116,8 @@ fn prepare_call_verb(
         List::mk_list(&[]),
         v_obj(SYSTEM_OBJECT),
         v_empty_str(),
-        permissions_flags,
-        verb_result.program,
+        verb_result.permissions_flags,
+        program,
     );
     vm_host
 }

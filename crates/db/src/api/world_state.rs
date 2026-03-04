@@ -23,6 +23,8 @@ use uuid::Uuid;
 
 use crate::{
     api::gc::{GCError, GCInterface},
+    cache::property_pic_stats::{record_property_pic_read, record_property_pic_write},
+    cache::verb_pic_stats::record_verb_pic_dispatch,
     engine::moor_db::WorldStateTransaction,
 };
 use moor_common::{
@@ -92,6 +94,175 @@ impl DbWorldState {
     fn perms(&self, who: &Obj) -> Result<Perms, WorldStateError> {
         let flags = self.flags_of(who)?;
         Ok(Perms { who: *who, flags })
+    }
+
+    fn update_property_internal(
+        &mut self,
+        perms: &Obj,
+        obj: &Obj,
+        pname: Symbol,
+        value: &Var,
+        hint: Option<PropertyLookupHint>,
+    ) -> Result<Option<PropertyLookupHint>, WorldStateError> {
+        // You have to use move/chparent for this kinda fun.
+        if pname == *LOCATION_SYM
+            || pname == *CONTENTS_SYM
+            || pname == *PARENT_SYM
+            || pname == *CHILDREN_SYM
+        {
+            record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
+            return Err(WorldStateError::PropertyPermissionDenied);
+        }
+
+        if pname == *NAME_SYM
+            || pname == *OWNER_SYM
+            || pname == *R_SYM
+            || pname == *W_SYM
+            || pname == *F_SYM
+        {
+            let (mut flags, objowner) = (self.flags_of(obj)?, self.owner_of(obj)?);
+
+            // User is either wizard or owner
+            self.perms(perms)?
+                .check_object_allows(&objowner, flags, ObjFlag::Write.into())?;
+            if pname == *NAME_SYM {
+                let Some(name) = value.as_string() else {
+                    return Err(WorldStateError::PropertyTypeMismatch);
+                };
+
+                // For player objects (objects with User flag), only wizards can set the name
+                if flags.contains(ObjFlag::User) && !self.perms(perms)?.check_is_wizard()? {
+                    return Err(WorldStateError::PropertyPermissionDenied);
+                }
+
+                self.get_tx_mut().set_object_name(obj, name.to_string())?;
+                record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
+                return Ok(None);
+            }
+
+            if pname == *OWNER_SYM {
+                let Some(owner) = value.as_object() else {
+                    return Err(WorldStateError::PropertyTypeMismatch);
+                };
+                self.perms(perms)?.check_wizard()?;
+                self.get_tx_mut().set_object_owner(obj, &owner)?;
+                record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
+                return Ok(None);
+            }
+
+            if pname == *R_SYM {
+                let Some(v) = value.as_integer() else {
+                    return Err(WorldStateError::PropertyTypeMismatch);
+                };
+                if v == 1 {
+                    flags.set(ObjFlag::Read);
+                } else {
+                    flags.clear(ObjFlag::Read);
+                }
+                self.get_tx_mut().set_object_flags(obj, flags)?;
+                record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
+                return Ok(None);
+            }
+
+            if pname == *W_SYM {
+                let Some(v) = value.as_integer() else {
+                    return Err(WorldStateError::PropertyTypeMismatch);
+                };
+                if v == 1 {
+                    flags.set(ObjFlag::Write);
+                } else {
+                    flags.clear(ObjFlag::Write);
+                }
+                self.get_tx_mut().set_object_flags(obj, flags)?;
+                record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
+                return Ok(None);
+            }
+
+            if pname == *F_SYM {
+                let Some(v) = value.as_integer() else {
+                    return Err(WorldStateError::PropertyTypeMismatch);
+                };
+                if v == 1 {
+                    flags.set(ObjFlag::Fertile);
+                } else {
+                    flags.clear(ObjFlag::Fertile);
+                }
+                self.get_tx_mut().set_object_flags(obj, flags)?;
+                record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
+                return Ok(None);
+            }
+        }
+
+        if pname == *PROGRAMMER_SYM || pname == *WIZARD_SYM {
+            // Caller *must* be a wizard for either of these.
+            self.perms(perms)?.check_wizard()?;
+
+            // Gott get and then set flags
+            let mut flags = self.flags_of(obj)?;
+            if pname == *PROGRAMMER_SYM {
+                if value.is_true() {
+                    flags.set(ObjFlag::Programmer);
+                } else {
+                    flags.clear(ObjFlag::Programmer);
+                }
+            } else if pname == *WIZARD_SYM {
+                if value.is_true() {
+                    flags.set(ObjFlag::Wizard);
+                } else {
+                    flags.clear(ObjFlag::Wizard);
+                }
+            }
+
+            self.get_tx_mut().set_object_flags(obj, flags)?;
+            record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
+            return Ok(None);
+        }
+
+        if value.is_none() {
+            record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
+            return Err(WorldStateError::PropertyTypeMismatch);
+        }
+
+        let mut pic_outcome = PropertyLookupPicOutcome::MissNoHint;
+        if let Some(hint) = hint
+        {
+            if hint.receiver != *obj || hint.property_name != pname {
+                pic_outcome = PropertyLookupPicOutcome::MissGuardMismatch;
+            } else if hint.prop_cache_version != self.get_tx().prop_resolution_cache_version() as u64 {
+                pic_outcome = PropertyLookupPicOutcome::MissVersionMismatch;
+            } else {
+                match self
+                    .get_tx()
+                    .resolve_property_by_uuid(obj, hint.property_uuid)
+                {
+                    Ok((_, propperms, _)) => {
+                        self.perms(perms)?
+                            .check_property_allows(&propperms, PropFlag::Write)?;
+                        self.get_tx_mut()
+                            .set_property(obj, hint.property_uuid, value.clone())?;
+                        record_property_pic_write(PropertyLookupPicOutcome::Hit);
+                        return Ok(Some(hint));
+                    }
+                    Err(_) => {
+                        pic_outcome = PropertyLookupPicOutcome::MissResolveFailed;
+                    }
+                }
+            }
+        }
+
+        let (pdef, _, propperms, _) = self.get_tx().resolve_property(obj, pname)?;
+        self.perms(perms)?
+            .check_property_allows(&propperms, PropFlag::Write)?;
+        self.get_tx_mut()
+            .set_property(obj, pdef.uuid(), value.clone())?;
+        record_property_pic_write(pic_outcome);
+
+        Ok(Some(PropertyLookupHint {
+            receiver: *obj,
+            property_name: pname,
+            property_uuid: pdef.uuid(),
+            prop_cache_version: self.get_tx().prop_resolution_cache_version() as u64,
+        }))
     }
 
     fn do_update_verb(
@@ -431,6 +602,7 @@ impl WorldState for DbWorldState {
 
         if Self::is_builtin_property_name(pname) {
             let value = self.retrieve_property(perms, obj, pname)?;
+            record_property_pic_read(PropertyLookupPicOutcome::NotApplicable);
             return Ok(PropertyLookupResult {
                 value,
                 next_hint: None,
@@ -454,6 +626,7 @@ impl WorldState for DbWorldState {
                     Ok((value, propperms, _)) => {
                         self.perms(perms)?
                             .check_property_allows(&propperms, PropFlag::Read)?;
+                        record_property_pic_read(PropertyLookupPicOutcome::Hit);
                         return Ok(PropertyLookupResult {
                             value,
                             next_hint: Some(hint),
@@ -470,6 +643,7 @@ impl WorldState for DbWorldState {
         let (propdef, value, propperms, _) = self.get_tx().resolve_property(obj, pname)?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Read)?;
+        record_property_pic_read(pic_outcome);
         let hint = PropertyLookupHint {
             receiver: *obj,
             property_name: pname,
@@ -540,124 +714,20 @@ impl WorldState for DbWorldState {
         value: &Var,
     ) -> Result<(), WorldStateError> {
         let _t = PerfTimerGuard::new(&db_counters().update_property);
-        // You have to use move/chparent for this kinda fun.
-        if pname == *LOCATION_SYM
-            || pname == *CONTENTS_SYM
-            || pname == *PARENT_SYM
-            || pname == *CHILDREN_SYM
-        {
-            return Err(WorldStateError::PropertyPermissionDenied);
-        }
-
-        if pname == *NAME_SYM
-            || pname == *OWNER_SYM
-            || pname == *R_SYM
-            || pname == *W_SYM
-            || pname == *F_SYM
-        {
-            let (mut flags, objowner) = (self.flags_of(obj)?, self.owner_of(obj)?);
-
-            // User is either wizard or owner
-            self.perms(perms)?
-                .check_object_allows(&objowner, flags, ObjFlag::Write.into())?;
-            if pname == *NAME_SYM {
-                let Some(name) = value.as_string() else {
-                    return Err(WorldStateError::PropertyTypeMismatch);
-                };
-
-                // For player objects (objects with User flag), only wizards can set the name
-                if flags.contains(ObjFlag::User) && !self.perms(perms)?.check_is_wizard()? {
-                    return Err(WorldStateError::PropertyPermissionDenied);
-                }
-
-                self.get_tx_mut().set_object_name(obj, name.to_string())?;
-                return Ok(());
-            }
-
-            if pname == *OWNER_SYM {
-                let Some(owner) = value.as_object() else {
-                    return Err(WorldStateError::PropertyTypeMismatch);
-                };
-                self.perms(perms)?.check_wizard()?;
-                self.get_tx_mut().set_object_owner(obj, &owner)?;
-                return Ok(());
-            }
-
-            if pname == *R_SYM {
-                let Some(v) = value.as_integer() else {
-                    return Err(WorldStateError::PropertyTypeMismatch);
-                };
-                if v == 1 {
-                    flags.set(ObjFlag::Read);
-                } else {
-                    flags.clear(ObjFlag::Read);
-                }
-                self.get_tx_mut().set_object_flags(obj, flags)?;
-                return Ok(());
-            }
-
-            if pname == *W_SYM {
-                let Some(v) = value.as_integer() else {
-                    return Err(WorldStateError::PropertyTypeMismatch);
-                };
-                if v == 1 {
-                    flags.set(ObjFlag::Write);
-                } else {
-                    flags.clear(ObjFlag::Write);
-                }
-                self.get_tx_mut().set_object_flags(obj, flags)?;
-                return Ok(());
-            }
-
-            if pname == *F_SYM {
-                let Some(v) = value.as_integer() else {
-                    return Err(WorldStateError::PropertyTypeMismatch);
-                };
-                if v == 1 {
-                    flags.set(ObjFlag::Fertile);
-                } else {
-                    flags.clear(ObjFlag::Fertile);
-                }
-                self.get_tx_mut().set_object_flags(obj, flags)?;
-                return Ok(());
-            }
-        }
-
-        if pname == *PROGRAMMER_SYM || pname == *WIZARD_SYM {
-            // Caller *must* be a wizard for either of these.
-            self.perms(perms)?.check_wizard()?;
-
-            // Gott get and then set flags
-            let mut flags = self.flags_of(obj)?;
-            if pname == *PROGRAMMER_SYM {
-                if value.is_true() {
-                    flags.set(ObjFlag::Programmer);
-                } else {
-                    flags.clear(ObjFlag::Programmer);
-                }
-            } else if pname == *WIZARD_SYM {
-                if value.is_true() {
-                    flags.set(ObjFlag::Wizard);
-                } else {
-                    flags.clear(ObjFlag::Wizard);
-                }
-            }
-
-            self.get_tx_mut().set_object_flags(obj, flags)?;
-            return Ok(());
-        }
-
-        let (pdef, _, propperms, _) = self.get_tx().resolve_property(obj, pname)?;
-        self.perms(perms)?
-            .check_property_allows(&propperms, PropFlag::Write)?;
-
-        if value.is_none() {
-            return Err(WorldStateError::PropertyTypeMismatch);
-        }
-
-        self.get_tx_mut()
-            .set_property(obj, pdef.uuid(), value.clone())?;
+        self.update_property_internal(perms, obj, pname, value, None)?;
         Ok(())
+    }
+
+    fn update_property_with_hint(
+        &mut self,
+        perms: &Obj,
+        obj: &Obj,
+        pname: Symbol,
+        value: &Var,
+        hint: Option<PropertyLookupHint>,
+    ) -> Result<Option<PropertyLookupHint>, WorldStateError> {
+        let _t = PerfTimerGuard::new(&db_counters().update_property);
+        self.update_property_internal(perms, obj, pname, value, hint)
     }
 
     fn is_property_clear(
@@ -948,6 +1018,7 @@ impl WorldState for DbWorldState {
                                 }
                             }
                         };
+                        record_verb_pic_dispatch(VerbLookupPicOutcome::Hit);
                         return Ok(Some(VerbDispatchResult {
                             program_key: VerbProgramKey {
                                 verb_definer: hint.verb_definer,
@@ -973,7 +1044,14 @@ impl WorldState for DbWorldState {
             dispatch.lookup.flagspec,
         ) {
             Ok(vh) => vh,
-            Err(WorldStateError::VerbNotFound(_, _)) => return Ok(None),
+            Err(WorldStateError::VerbNotFound(_, _)) => {
+                record_verb_pic_dispatch(if dispatch.hint.is_some() {
+                    pic_outcome
+                } else {
+                    VerbLookupPicOutcome::NotApplicable
+                });
+                return Ok(None);
+            }
             Err(e) => return Err(e),
         };
 
@@ -995,6 +1073,12 @@ impl WorldState for DbWorldState {
             verb_uuid: vh.uuid(),
             verb_cache_version: tx.verb_resolution_cache_version() as u64,
         });
+        let final_outcome = if dispatch.hint.is_some() {
+            pic_outcome
+        } else {
+            VerbLookupPicOutcome::NotApplicable
+        };
+        record_verb_pic_dispatch(final_outcome);
         Ok(Some(VerbDispatchResult {
             program_key: VerbProgramKey {
                 verb_definer: vh.location(),
@@ -1003,11 +1087,7 @@ impl WorldState for DbWorldState {
             verbdef: vh,
             permissions_flags,
             next_hint,
-            pic_outcome: if dispatch.hint.is_some() {
-                pic_outcome
-            } else {
-                VerbLookupPicOutcome::NotApplicable
-            },
+            pic_outcome: final_outcome,
         }))
     }
 

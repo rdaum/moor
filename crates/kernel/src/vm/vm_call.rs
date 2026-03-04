@@ -14,12 +14,13 @@
 use crate::{
     config::FeaturesConfig,
     task_context::with_current_transaction,
-    tasks::task_program_cache::ProgramSlot,
+    tasks::task_program_cache::{ProgramInlineCaches, ProgramSlot},
     vm::{
         Fork,
         activation::{Activation, Frame},
         builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry, bf_perf_counters},
         exec_state::VMExecState,
+        moo_frame::PcType,
         vm_host::ExecutionResult,
         vm_unwind::FinallyReason,
     },
@@ -33,13 +34,14 @@ use minstant::Instant;
 use moor_common::{
     matching::ParsedCommand,
     model::{
-        DispatchFlagsSource, ObjFlag, ResolvedVerb, VerbDispatch, VerbLookup, VerbProgramKey,
-        WorldStateError,
+        DispatchFlagsSource, ObjFlag, ResolvedVerb, VerbDispatch, VerbLookup, VerbLookupHint,
+        VerbProgramKey, WorldStateError,
     },
     tasks::Session,
     util::BitEnum,
 };
 use moor_compiler::{BUILTINS, BuiltinId, Program, to_literal};
+use moor_db::{record_vm_verb_hint_call_verb, record_vm_verb_hint_pass};
 use moor_var::{
     E_INVIND, E_PERM, E_TYPE, E_VERBNF, Error, List, NOTHING, Obj, SYSTEM_OBJECT, Sequence, Symbol,
     Var,
@@ -237,12 +239,16 @@ impl VMExecState {
                 return None;
             }
 
+            let verb_hint = self.load_current_verb_hint();
+            record_vm_verb_hint_call_verb(verb_hint.is_some());
+
             let verb_result = world_state.dispatch_verb(
                 &self.top().permissions,
                 VerbDispatch::new(
                     VerbLookup::method(&location, verb_name),
                     DispatchFlagsSource::VerbOwner,
-                ),
+                )
+                .with_hint(verb_hint),
             );
             Some(verb_result)
         });
@@ -254,8 +260,12 @@ impl VMExecState {
         };
 
         let (program_key, resolved_verb, permissions_flags) = match verb_result {
-            Ok(Some(vi)) => (vi.program_key, vi.verbdef, vi.permissions_flags),
+            Ok(Some(vi)) => {
+                self.store_current_verb_hint(vi.next_hint);
+                (vi.program_key, vi.verbdef, vi.permissions_flags)
+            }
             Ok(None) => {
+                self.clear_current_verb_hint();
                 return self.push_error(E_VERBNF.with_msg(|| {
                     format!(
                         "Verb {}:{} not found",
@@ -265,12 +275,14 @@ impl VMExecState {
                 }));
             }
             Err(WorldStateError::ObjectPermissionDenied) => {
+                self.clear_current_verb_hint();
                 return self.push_error(E_PERM.into());
             }
             Err(WorldStateError::RollbackRetry) => {
                 return ExecutionResult::TaskRollbackRestart;
             }
             Err(WorldStateError::VerbPermissionDenied) => {
+                self.clear_current_verb_hint();
                 return self.push_error(E_PERM.into());
             }
             Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -315,12 +327,16 @@ impl VMExecState {
                 return Ok(None);
             }
 
+            let verb_hint = self.load_current_verb_hint();
+            record_vm_verb_hint_pass(verb_hint.is_some());
+
             let verb_result = world_state.dispatch_verb(
                 &permissions,
                 VerbDispatch::new(
                     VerbLookup::method(&parent, verb),
                     DispatchFlagsSource::Permissions,
-                ),
+                )
+                .with_hint(verb_hint),
             );
             Ok(Some(verb_result))
         });
@@ -336,8 +352,14 @@ impl VMExecState {
             return self.push_error(E_INVIND.msg("Invalid object for pass() verb dispatch"));
         };
         let (program_key, resolved_verb, permissions_flags) = match verb_result {
-            Ok(Some(vi)) => (vi.program_key, vi.verbdef, vi.permissions_flags),
-            Ok(None) => return self.push_error(E_VERBNF.msg("Verb not found for pass() dispatch")),
+            Ok(Some(vi)) => {
+                self.store_current_verb_hint(vi.next_hint);
+                (vi.program_key, vi.verbdef, vi.permissions_flags)
+            }
+            Ok(None) => {
+                self.clear_current_verb_hint();
+                return self.push_error(E_VERBNF.msg("Verb not found for pass() dispatch"));
+            }
             Err(WorldStateError::RollbackRetry) => {
                 return ExecutionResult::TaskRollbackRestart;
             }
@@ -360,6 +382,46 @@ impl VMExecState {
             argstr: v_empty_str(),
             program_key,
         }))
+    }
+
+    fn load_current_verb_hint(&mut self) -> Option<VerbLookupHint> {
+        let Frame::Moo(frame) = &mut self.top_mut().frame else {
+            return None;
+        };
+        let pc = frame.pc.saturating_sub(1);
+        let Some(ic_ptr) = frame.program_ic_ptr else {
+            return None;
+        };
+        let ic = unsafe { &mut *(ic_ptr as *mut ProgramInlineCaches) };
+        let slot = match frame.pc_type {
+            PcType::Main => ic.main_verb_mut().get(pc),
+            PcType::ForkVector(fork_offset) => ic.fork_verb_mut(fork_offset).get(pc),
+            PcType::Lambda(lambda_offset) => ic.lambda_verb_mut(lambda_offset).get(pc),
+        };
+        slot.copied().flatten()
+    }
+
+    fn store_current_verb_hint(&mut self, hint: Option<VerbLookupHint>) {
+        let Frame::Moo(frame) = &mut self.top_mut().frame else {
+            return;
+        };
+        let pc = frame.pc.saturating_sub(1);
+        let Some(ic_ptr) = frame.program_ic_ptr else {
+            return;
+        };
+        let ic = unsafe { &mut *(ic_ptr as *mut ProgramInlineCaches) };
+        let slot = match frame.pc_type {
+            PcType::Main => ic.main_verb_mut().get_mut(pc),
+            PcType::ForkVector(fork_offset) => ic.fork_verb_mut(fork_offset).get_mut(pc),
+            PcType::Lambda(lambda_offset) => ic.lambda_verb_mut(lambda_offset).get_mut(pc),
+        };
+        if let Some(slot) = slot {
+            *slot = hint;
+        }
+    }
+
+    fn clear_current_verb_hint(&mut self) {
+        self.store_current_verb_hint(None);
     }
 
     /// Entry point from scheduler for beginning the dispatch of an initial command verb execution.

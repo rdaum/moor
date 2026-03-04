@@ -41,6 +41,8 @@ pub mod workers;
 pub(crate) mod world_state_action;
 pub(crate) mod world_state_executor;
 
+pub use task_program_cache::TaskProgramCache;
+
 pub const DEFAULT_FG_TICKS: usize = 60_000;
 pub const DEFAULT_BG_TICKS: usize = 30_000;
 pub const DEFAULT_FG_SECONDS: f64 = 5.0;

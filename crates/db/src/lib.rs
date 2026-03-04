@@ -34,7 +34,17 @@ pub use api::{
     world_state::db_counters,
 };
 pub use cache::stats::CacheStats;
-pub use cache::{ANCESTRY_CACHE_STATS, PROP_CACHE_STATS, VERB_CACHE_STATS};
+pub use cache::property_pic_stats::{
+    PropertyPicSnapshot, PropertyPicStats, record_vm_property_hint_get_prop,
+    record_vm_property_hint_push_get_prop, record_vm_property_hint_put_prop,
+    record_vm_property_hint_put_prop_at,
+};
+pub use cache::verb_pic_stats::{
+    VerbPicSnapshot, VerbPicStats, record_vm_verb_hint_call_verb, record_vm_verb_hint_pass,
+};
+pub use cache::{
+    ANCESTRY_CACHE_STATS, PROP_CACHE_STATS, PROPERTY_PIC_STATS, VERB_CACHE_STATS, VERB_PIC_STATS,
+};
 pub use cache::{
     ancestry_cache::AncestryCache, prop_cache::PropResolutionCache, verb_cache::VerbResolutionCache,
 };
