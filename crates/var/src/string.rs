@@ -14,7 +14,7 @@
 use arcstr::ArcStr;
 use num_traits::ToPrimitive;
 use std::{
-    cmp::max,
+    cmp::{Ordering, max},
     fmt::{Display, Formatter},
     hash::Hash,
 };
@@ -248,6 +248,24 @@ pub(crate) fn ascii_strsub_ci(
 
 fn needle_first_lower(needle: &str) -> Option<char> {
     needle.chars().next().and_then(|c| c.to_lowercase().next())
+}
+
+#[inline]
+fn cmp_case_insensitive(lhs: &str, rhs: &str) -> Ordering {
+    let mut lhs_iter = lhs.chars().flat_map(|c| c.to_lowercase());
+    let mut rhs_iter = rhs.chars().flat_map(|c| c.to_lowercase());
+
+    loop {
+        match (lhs_iter.next(), rhs_iter.next()) {
+            (Some(a), Some(b)) => match a.cmp(&b) {
+                Ordering::Equal => continue,
+                ord => return ord,
+            },
+            (Some(_), None) => return Ordering::Greater,
+            (None, Some(_)) => return Ordering::Less,
+            (None, None) => return Ordering::Equal,
+        }
+    }
 }
 
 /// Unicode case-insensitive find - streaming match with a first-char filter.
@@ -737,7 +755,7 @@ impl PartialEq for Str {
     // MOO strings are case-insensitive on comparison unless an explicit case sensitive comparison
     // is needed.
     fn eq(&self, other: &Self) -> bool {
-        self.as_str().to_lowercase() == other.as_str().to_lowercase()
+        cmp_case_insensitive(self.as_str(), other.as_str()) == Ordering::Equal
     }
 }
 
@@ -751,15 +769,15 @@ impl PartialOrd for Str {
 
 impl Ord for Str {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.as_str()
-            .to_lowercase()
-            .cmp(&other.as_str().to_lowercase())
+        cmp_case_insensitive(self.as_str(), other.as_str())
     }
 }
 
 impl Hash for Str {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.as_str().to_lowercase().hash(state)
+        for ch in self.as_str().chars().flat_map(|c| c.to_lowercase()) {
+            ch.hash(state);
+        }
     }
 }
 

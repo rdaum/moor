@@ -57,6 +57,10 @@ impl List {
         self.0.iter().cloned()
     }
 
+    pub fn iter_ref(&self) -> impl Iterator<Item = &Var> + '_ {
+        self.0.iter()
+    }
+
     #[inline]
     pub fn into_vec(self) -> Vec<Var> {
         (*self.0).into_iter().collect()
@@ -78,7 +82,7 @@ impl List {
     /// Add `item` to the list but only if it's not already there.
     pub fn set_add(&self, item: &Var) -> Result<Var, Error> {
         // Is the item already in the list? If so, just clone self
-        if self.iter().any(|v| v == *item) {
+        if self.iter_ref().any(|v| v == item) {
             return Ok(Var::from_list(self.clone()));
         }
         let mut l = (*self.0).clone();
@@ -111,24 +115,24 @@ impl Sequence for List {
     }
 
     fn index_in(&self, value: &Var, case_sensitive: bool) -> Result<Option<usize>, Error> {
-        for (i, v) in self.iter().enumerate() {
+        for (i, v) in self.iter_ref().enumerate() {
             if case_sensitive {
                 if v.eq_case_sensitive(value) {
                     return Ok(Some(i));
                 }
-            } else if v == *value {
+            } else if v == value {
                 return Ok(Some(i));
             }
         }
         Ok(None)
     }
     fn contains(&self, value: &Var, case_sensitive: bool) -> Result<bool, Error> {
-        for v in self.iter() {
+        for v in self.iter_ref() {
             if case_sensitive {
                 if v.eq_case_sensitive(value) {
                     return Ok(true);
                 }
-            } else if v == *value {
+            } else if v == value {
                 return Ok(true);
             }
         }
@@ -196,7 +200,7 @@ impl Sequence for List {
             }));
         }
         let (from, to) = (max(from, 0) as usize, to as usize);
-        let range_iter = self.iter().skip(from).take(to - from + 1);
+        let range_iter = self.iter_ref().skip(from).take(to - from + 1).cloned();
         Ok(Var::mk_list_iter(range_iter))
     }
 
@@ -216,7 +220,7 @@ impl Sequence for List {
         // 1..0 is a "special" MOO-ism that is short for "insert at front" and rather than trying
         // to wrangle the logic below to Do The Right Thing, we'll just handle it here.
         if from == 0 && to == -1 {
-            let new_iter = with_val.iter().chain(self.iter());
+            let new_iter = with_val.iter_ref().cloned().chain(self.iter_ref().cloned());
             return Ok(v_list_iter(new_iter));
         }
 
@@ -249,11 +253,11 @@ impl Sequence for List {
         };
 
         // Iterator taking up to `from`
-        let base_iter = self.iter().take(from);
+        let base_iter = self.iter_ref().take(from).cloned();
         // Iterator for with_val...
-        let with_iter = with_val.iter();
+        let with_iter = with_val.iter_ref().cloned();
         // Iterator from after to, up to the end
-        let end_iter = self.iter().skip(to + 1);
+        let end_iter = self.iter_ref().skip(to + 1).cloned();
         let new_iter = base_iter.chain(with_iter).chain(end_iter);
         Ok(v_list_iter(new_iter))
     }
@@ -307,10 +311,7 @@ impl PartialEq for List {
             return false;
         }
 
-        // elements comparison
-        for i in 0..self.len() {
-            let a = Sequence::index(self, i).unwrap();
-            let b = Sequence::index(other, i).unwrap();
+        for (a, b) in self.iter_ref().zip(other.iter_ref()) {
             if a != b {
                 return false;
             }
@@ -334,10 +335,7 @@ impl Ord for List {
             return self.len().cmp(&other.len());
         }
 
-        // elements comparison
-        for i in 0..self.len() {
-            let a = Sequence::index(self, i).unwrap();
-            let b = Sequence::index(other, i).unwrap();
+        for (a, b) in self.iter_ref().zip(other.iter_ref()) {
             match a.cmp(&b) {
                 std::cmp::Ordering::Equal => continue,
                 x => return x,
@@ -350,7 +348,7 @@ impl Ord for List {
 
 impl Hash for List {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        for item in self.iter() {
+        for item in self.iter_ref() {
             item.hash(state);
         }
     }
