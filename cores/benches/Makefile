@@ -47,6 +47,15 @@ bench-write-stress-perf: $(wildcard src/*.moo)
 	@echo "Perf data written to perf.data"
 	@echo "Analyze with: perf report -g"
 
+bench-combat-stress-perf: $(wildcard src/*.moo)
+	cargo build --release -p moorc
+	perf record -g --call-graph dwarf -o perf-combat.data -- \
+		../../target/release/moorc $(OPTIONS) \
+		--src-objdef-dir $(SRC_DIRECTORY) --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
+		--test-wizard=2 --run-tests true --test-filter "#668:test_combat_stress" --test-timeout $$(($(DURATION) + 60)) --test-args "{$(DURATION), $(SUBSCRIBERS), $(WORK_PER_TICK), $(FANOUT), $(CHECKS_PER_TICK), $(STATE_WRITES), $(DELAY_RATIO), $(UPDATE_HZ)}"
+	@echo "Perf data written to perf-combat.data"
+	@echo "Analyze with: perf report -i perf-combat.data -g"
+
 # Profile with scheduler tracing to see blocking/sleeping (requires root or perf_event_paranoid=-1)
 # Build first without sudo, then run perf with sudo
 # Also captures iostat for I/O analysis
