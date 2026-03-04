@@ -30,7 +30,6 @@ use crate::{
 use crate::{trace_builtin_begin, trace_builtin_end, trace_verb_begin};
 
 use lazy_static::lazy_static;
-use minstant::Instant;
 use moor_common::{
     matching::ParsedCommand,
     model::{
@@ -717,7 +716,6 @@ impl VMExecState {
         _session: &dyn Session,
     ) -> ExecutionResult {
         let bf = exec_args.builtin_registry.builtin_for(&bf_id);
-        let start = Instant::now();
         let bf_desc = BUILTINS.description_for(bf_id).expect("Builtin not found");
         let bf_name = bf_desc.name;
 
@@ -759,12 +757,10 @@ impl VMExecState {
         let bf_counters = bf_perf_counters();
         let bf_counter = bf_counters.counter_for(bf_id);
         bf_counter.invocations().add(1);
+        let sampled_start = bf_counter.sampled_start();
 
         let bf_result = bf(&mut bf_args);
-        let elapsed_nanos = start.elapsed().as_nanos();
-        bf_counter
-            .cumulative_duration_nanos()
-            .add(elapsed_nanos as isize);
+        bf_counter.add_sampled_elapsed(sampled_start);
 
         match bf_result {
             Ok(BfRet::Ret(result)) => {
@@ -790,11 +786,12 @@ impl VMExecState {
         exec_args: &VmExecParams,
         _session: &dyn Session,
     ) -> ExecutionResult {
-        let start = Instant::now();
         let bf_id = match self.top().frame {
             Frame::Bf(ref frame) => frame.bf_id,
             _ => panic!("Expected a BF frame at the top of the stack"),
         };
+        let bf_counter = bf_perf_counters().counter_for(bf_id);
+        let sampled_start = bf_counter.sampled_start();
 
         // Functions that did not set a trampoline are assumed to be complete, so we just unwind.
         // Note: If there was an error that required unwinding, we'll have already done that, so
@@ -830,12 +827,7 @@ impl VMExecState {
         };
 
         let bf_result = bf(&mut bf_args);
-        let elapsed_nanos = start.elapsed().as_nanos();
-        let bf_counters = bf_perf_counters();
-        let bf_counter = bf_counters.counter_for(bf_id);
-        bf_counter
-            .cumulative_duration_nanos()
-            .add(elapsed_nanos as isize);
+        bf_counter.add_sampled_elapsed(sampled_start);
 
         // Emit builtin end trace event
         #[cfg(feature = "trace_events")]

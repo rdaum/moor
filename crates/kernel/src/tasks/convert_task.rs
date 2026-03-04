@@ -1356,6 +1356,7 @@ pub(crate) fn vm_exec_state_from_ref(
         max_ticks: 0, // Will be set by caller
         tick_count: tick_count as usize,
         start_time,
+        start_instant: None,
         maximum_time: None, // Will be set by caller
         pending_raise_error: None,
         program_cache_stats: Default::default(),

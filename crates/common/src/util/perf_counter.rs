@@ -51,6 +51,25 @@ impl PerfCounter {
     pub fn cumulative_duration_nanos(&self) -> &ConcurrentCounter {
         &self.cumulative_duration_nanos
     }
+
+    /// Returns a sampled start instant for low-overhead timing, or `None` when this call should
+    /// be unsampled.
+    #[inline]
+    pub fn sampled_start(&self) -> Option<Instant> {
+        let _ = self;
+        should_sample_timing().then(Instant::now)
+    }
+
+    /// Record elapsed time from an optionally sampled start instant, applying the sampling weight
+    /// to preserve unbiased totals.
+    #[inline]
+    pub fn add_sampled_elapsed(&self, sampled_start: Option<Instant>) {
+        if let Some(start) = sampled_start {
+            let elapsed = start.elapsed().as_nanos();
+            self.cumulative_duration_nanos()
+                .add(scaled_elapsed_nanos(elapsed));
+        }
+    }
 }
 
 const PERF_TIMER_SAMPLE_SHIFT: u32 = 6;
@@ -84,7 +103,7 @@ pub struct PerfTimerGuard<'a> {
 
 impl<'a> PerfTimerGuard<'a> {
     pub fn new(perf: &'a PerfCounter) -> Self {
-        let sampled_start = should_sample_timing().then(Instant::now);
+        let sampled_start = perf.sampled_start();
         Self { perf, sampled_start }
     }
 
@@ -102,11 +121,6 @@ impl Drop for PerfTimerGuard<'_> {
     fn drop(&mut self) {
         // Keep call counts exact even when timing is sampled.
         self.perf.invocations().add(1);
-        if let Some(start) = self.sampled_start {
-            let elapsed = start.elapsed().as_nanos();
-            self.perf
-                .cumulative_duration_nanos()
-                .add(scaled_elapsed_nanos(elapsed));
-        }
+        self.perf.add_sampled_elapsed(self.sampled_start);
     }
 }

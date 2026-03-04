@@ -15,6 +15,7 @@ use moor_common::model::ObjFlag;
 use moor_common::tasks::TaskId;
 use moor_common::util::BitEnum;
 use moor_var::{NOTHING, Obj, Symbol, Var, v_obj};
+use minstant::Instant;
 use std::time::{Duration, SystemTime};
 
 use crate::{
@@ -52,6 +53,8 @@ pub(crate) struct VMExecState {
     pub(crate) tick_count: usize,
     /// The time at which the task was started.
     pub(crate) start_time: Option<SystemTime>,
+    /// Monotonic start time used for runtime limit checks and time_left calculations.
+    pub(crate) start_instant: Option<Instant>,
     /// The amount of time the task is allowed to run.
     pub(crate) maximum_time: Option<Duration>,
     /// Pending error to raise when execution resumes
@@ -73,6 +76,7 @@ impl VMExecState {
             stack: Vec::with_capacity(32),
             tick_count: 0,
             start_time: None,
+            start_instant: None,
             max_ticks,
             tick_slice: 0,
             maximum_time: None,
@@ -219,13 +223,25 @@ impl VMExecState {
         self.top_mut().frame.set_return_value(v);
     }
 
+    #[inline]
+    pub(crate) fn mark_started_now(&mut self) {
+        self.start_time = Some(SystemTime::now());
+        self.start_instant = Some(Instant::now());
+    }
+
+    #[inline]
+    pub(crate) fn elapsed_runtime(&self) -> Option<Duration> {
+        if let Some(start) = self.start_instant {
+            return Some(start.elapsed());
+        }
+        let start_time = self.start_time?;
+        let now = SystemTime::now();
+        now.duration_since(start_time).ok()
+    }
+
     pub(crate) fn time_left(&self) -> Option<Duration> {
         let max_time = self.maximum_time?;
-        let now = SystemTime::now();
-        let elapsed = now
-            .duration_since(self.start_time.expect("No start time for task?"))
-            .unwrap();
-
+        let elapsed = self.elapsed_runtime()?;
         max_time.checked_sub(elapsed)
     }
 
@@ -248,6 +264,7 @@ impl Clone for VMExecState {
             max_ticks: self.max_ticks,
             tick_count: self.tick_count,
             start_time: self.start_time,
+            start_instant: self.start_instant,
             maximum_time: self.maximum_time,
             pending_raise_error: self.pending_raise_error.clone(),
             program_cache_stats: self.program_cache_stats,

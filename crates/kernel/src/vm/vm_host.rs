@@ -13,7 +13,7 @@
 
 use std::{
     fmt::{Debug, Formatter},
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 use tracing::{debug, error, warn};
@@ -144,6 +144,8 @@ impl Debug for VmHost {
     }
 }
 impl VmHost {
+    const TIME_CHECK_TICK_MASK: usize = 0x3f; // Check runtime limit every 64 ticks.
+
     pub fn new(
         task_id: TaskId,
         max_stack_depth: usize,
@@ -179,7 +181,7 @@ impl VmHost {
         permissions_flags: BitEnum<ObjFlag>,
         program: ProgramType,
     ) {
-        self.vm_exec_state.start_time = Some(SystemTime::now());
+        self.vm_exec_state.mark_started_now();
         self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
@@ -211,7 +213,7 @@ impl VmHost {
         permissions_flags: BitEnum<ObjFlag>,
         program: ProgramType,
     ) {
-        self.vm_exec_state.start_time = Some(SystemTime::now());
+        self.vm_exec_state.mark_started_now();
         self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
@@ -231,7 +233,7 @@ impl VmHost {
 
     /// Start execution of a fork request in the hosted VM.
     pub fn start_fork(&mut self, task_id: TaskId, fork_request: &Fork, suspended: bool) {
-        self.vm_exec_state.start_time = Some(SystemTime::now());
+        self.vm_exec_state.mark_started_now();
         self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
@@ -260,7 +262,7 @@ impl VmHost {
             compile("return E_PERM;", CompileOptions::default()).unwrap()
         };
 
-        self.vm_exec_state.start_time = Some(SystemTime::now());
+        self.vm_exec_state.mark_started_now();
         self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
@@ -290,12 +292,12 @@ impl VmHost {
         if self.vm_exec_state.tick_count >= self.max_ticks {
             return AbortLimit(AbortLimitReason::Ticks(self.vm_exec_state.tick_count));
         }
-        if let Some(start_time) = self.vm_exec_state.start_time {
-            let elapsed = start_time.elapsed().expect("Could not get elapsed time");
-            if elapsed > self.max_time {
-                return AbortLimit(AbortLimitReason::Time(elapsed));
-            }
-        };
+        if (self.vm_exec_state.tick_count & Self::TIME_CHECK_TICK_MASK) == 0
+            && let Some(elapsed) = self.vm_exec_state.elapsed_runtime()
+            && elapsed > self.max_time
+        {
+            return AbortLimit(AbortLimitReason::Time(elapsed));
+        }
 
         // Grant the loop its next tick slice.
         self.vm_exec_state.tick_slice = self.max_ticks - self.vm_exec_state.tick_count;
@@ -569,7 +571,7 @@ impl VmHost {
 
     /// Resume what you were doing after suspension.
     pub fn resume_execution(&mut self, value: Var) {
-        self.vm_exec_state.start_time = Some(SystemTime::now());
+        self.vm_exec_state.mark_started_now();
         self.vm_exec_state.tick_count = 0;
         self.running = true;
 
@@ -585,7 +587,7 @@ impl VmHost {
 
     /// Resume execution by raising an error (for worker error conditions)
     pub fn resume_with_error(&mut self, error: moor_var::Error) {
-        self.vm_exec_state.start_time = Some(SystemTime::now());
+        self.vm_exec_state.mark_started_now();
         self.vm_exec_state.tick_count = 0;
         self.running = true;
 
@@ -697,7 +699,7 @@ impl VmHost {
         self.vm_exec_state.tick_count
     }
     pub fn reset_time(&mut self) {
-        self.vm_exec_state.start_time = Some(SystemTime::now());
+        self.vm_exec_state.mark_started_now();
     }
     pub fn args(&self) -> &List {
         &self.vm_exec_state.top().args
