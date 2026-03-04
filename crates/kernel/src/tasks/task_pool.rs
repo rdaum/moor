@@ -14,6 +14,7 @@
 use flume::{Receiver, Sender};
 use moor_common::threading::{
     pin_current_thread_to_core, set_current_task_worker_index, set_task_worker_count,
+    unpin_current_thread,
 };
 use std::{io, thread::JoinHandle};
 use tracing::{error, warn};
@@ -104,6 +105,12 @@ fn worker_loop(
                 "Failed to pin task worker to core"
             );
         }
+    } else if let Err(e) = unpin_current_thread() {
+        warn!(
+            thread_index = index,
+            error = ?e,
+            "Failed to clear inherited affinity for unpinned task worker"
+        );
     }
 
     while let Ok(msg) = receiver.recv() {

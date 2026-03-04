@@ -28,7 +28,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use moor_common::threading::{
-    DetectionResult, detect_performance_cores, worker_performance_core_ids,
+    DetectionResult, detect_performance_cores, logical_core_count, worker_performance_core_ids,
 };
 use moor_var::{Obj, Var};
 
@@ -89,9 +89,9 @@ pub(crate) struct RunningTask {
 
 impl TaskQ {
     pub fn new(suspended: SuspensionQ) -> Self {
-        let fallback_threads = std::thread::available_parallelism()
-            .map(|p| p.get())
-            .unwrap_or(8);
+        // Use topology-derived logical core count for fallback worker sizing so the
+        // scheduler pool is not accidentally limited by current-thread affinity.
+        let fallback_threads = logical_core_count().max(1);
 
         let pinned_core_ids = match detect_performance_cores() {
             Ok(DetectionResult::PerformanceCores(selection)) => {

@@ -225,6 +225,32 @@ pub fn pin_current_thread_to_core(core_id: usize) -> io::Result<()> {
     Ok(())
 }
 
+/// Reset current thread affinity to all detected logical CPUs.
+/// Useful when a parent thread is pinned and child threads should be truly unpinned.
+pub fn unpin_current_thread() -> io::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        let mut cpuset: libc::cpu_set_t = unsafe { std::mem::zeroed() };
+        unsafe {
+            libc::CPU_ZERO(&mut cpuset);
+            for core_id in detect_all_logical_processor_ids() {
+                libc::CPU_SET(core_id, &mut cpuset);
+            }
+            let thread = libc::pthread_self();
+            let result = libc::pthread_setaffinity_np(
+                thread,
+                std::mem::size_of::<libc::cpu_set_t>(),
+                &cpuset,
+            );
+            if result != 0 {
+                return Err(io::Error::from_raw_os_error(result));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub fn pin_current_thread_to_class(class: ThreadClass) -> io::Result<Option<usize>> {
     let Some(core_id) = next_core_for_class(class) else {
         return Ok(None);
