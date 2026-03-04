@@ -21,7 +21,7 @@ mod transaction;
 pub use check::{CheckRelation, PotentialConflict, ProposedOp};
 pub use indexes::RelationIndex;
 pub use relation::Relation;
-pub use resolve::{AcceptIdentical, ConflictResolver, FailOnConflict};
+pub use resolve::{AcceptIdentical, ConflictResolver, FailOnConflict, SmartMergeResolver};
 pub use transaction::{RelationTransaction, WorkingSet};
 
 use std::fmt::{Debug, Display};

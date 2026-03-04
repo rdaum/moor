@@ -12,6 +12,7 @@
 //
 
 use crate::{
+    api::world_state::db_counters,
     provider::Provider,
     tx::{ConflictInfo, ConflictType, Error, RelationCodomain, RelationDomain, Timestamp},
 };
@@ -22,7 +23,7 @@ use tracing::warn;
 
 use super::{
     indexes::RelationIndex,
-    resolve::{ConflictResolver, Resolution, SmartMergeResolver},
+    resolve::{ConflictResolver, Resolution},
     transaction::{Op, OpType, WorkingSet},
 };
 
@@ -127,7 +128,152 @@ where
     /// (no real conflict) AND attempts smart merging for supported types.
     /// For custom resolution, use `check_with_resolver`.
     pub fn check(&mut self, working_set: &mut WorkingSet<Domain, Codomain>) -> Result<(), Error> {
-        self.check_with_resolver(working_set, SmartMergeResolver)
+        self.check_with_smart_merge(working_set)
+    }
+
+    fn try_resolve_smart_merge(
+        &self,
+        conflict_type: ConflictType,
+        domain: &Domain,
+        base: Option<&Codomain>,
+        theirs: Option<&Codomain>,
+        op: &mut Op<Codomain>,
+        rewrite_op: impl FnOnce(Codomain) -> OpType<Codomain>,
+    ) -> Result<(), Error> {
+        let counters = db_counters();
+
+        let identical = match (theirs, &op.operation) {
+            (Some(theirs_val), OpType::Insert(mine_val) | OpType::Update(mine_val)) => {
+                theirs_val == mine_val
+            }
+            (None, OpType::Delete) => true,
+            _ => false,
+        };
+
+        if identical {
+            counters.crdt_resolve_success.invocations().add(1);
+            return Ok(());
+        }
+
+        if let Some(base_val) = base
+            && let Some(theirs_val) = theirs
+            && let OpType::Insert(mine_val) | OpType::Update(mine_val) = &op.operation
+            && let Some(merged) = mine_val.try_merge(base_val, theirs_val)
+        {
+            counters.crdt_resolve_success.invocations().add(1);
+            op.operation = rewrite_op(merged);
+            return Ok(());
+        }
+
+        counters.crdt_resolve_fail.invocations().add(1);
+        Err(Error::Conflict(self.make_conflict_info(domain, conflict_type)))
+    }
+
+    fn check_with_smart_merge(
+        &mut self,
+        working_set: &mut WorkingSet<Domain, Codomain>,
+    ) -> Result<(), Error> {
+        let start_time = Instant::now();
+        let mut last_check_time = start_time;
+        let total_ops = working_set.len();
+        self.dirty = !working_set.is_empty();
+
+        let (tuples, base_index) = working_set.parts_mut();
+        for (n, (domain, op)) in tuples.iter_mut().enumerate() {
+            if (n & 1023) == 0 && last_check_time.elapsed() > Duration::from_secs(5) {
+                warn!(
+                    "Long check time for {}; running for {}s; {n}/{total_ops} checked",
+                    self.relation_name,
+                    start_time.elapsed().as_secs_f32()
+                );
+                last_check_time = Instant::now();
+            }
+
+            if op.guaranteed_unique {
+                continue;
+            }
+
+            if let Some(local_entry) = self.index.index_lookup(domain) {
+                let theirs = Some(&local_entry.value);
+                if op.operation.is_insert() {
+                    self.try_resolve_smart_merge(
+                        ConflictType::InsertDuplicate,
+                        domain,
+                        base_index.index_lookup(domain).map(|entry| &entry.value),
+                        theirs,
+                        op,
+                        OpType::Insert,
+                    )?;
+                    continue;
+                }
+
+                if local_entry.ts > op.read_ts {
+                    self.try_resolve_smart_merge(
+                        ConflictType::ConcurrentWrite,
+                        domain,
+                        base_index.index_lookup(domain).map(|entry| &entry.value),
+                        theirs,
+                        op,
+                        OpType::Update,
+                    )?;
+                    continue;
+                }
+
+                if op.read_ts > op.write_ts {
+                    self.try_resolve_smart_merge(
+                        ConflictType::StaleRead,
+                        domain,
+                        base_index.index_lookup(domain).map(|entry| &entry.value),
+                        theirs,
+                        op,
+                        OpType::Update,
+                    )?;
+                    continue;
+                }
+                continue;
+            }
+
+            if let Some((ts, codomain)) = self.source.get(domain)? {
+                self.index.insert_entry(ts, domain.clone(), codomain.clone());
+                let theirs = Some(&codomain);
+
+                if op.operation.is_insert() {
+                    self.try_resolve_smart_merge(
+                        ConflictType::InsertDuplicate,
+                        domain,
+                        base_index.index_lookup(domain).map(|entry| &entry.value),
+                        theirs,
+                        op,
+                        OpType::Insert,
+                    )?;
+                    continue;
+                }
+
+                if ts > op.read_ts {
+                    self.try_resolve_smart_merge(
+                        ConflictType::ConcurrentWrite,
+                        domain,
+                        base_index.index_lookup(domain).map(|entry| &entry.value),
+                        theirs,
+                        op,
+                        OpType::Update,
+                    )?;
+                }
+                continue;
+            }
+
+            if op.operation.is_update() {
+                self.try_resolve_smart_merge(
+                    ConflictType::UpdateNonExistent,
+                    domain,
+                    base_index.index_lookup(domain).map(|entry| &entry.value),
+                    None,
+                    op,
+                    OpType::Insert,
+                )?;
+            }
+        }
+        Ok(())
     }
 
     /// Check the forked index for conflicts with the given working set, calling
@@ -161,7 +307,7 @@ where
         // We use tuples_mut() because resolution might rewrite the operation
         let (tuples, base_index) = working_set.parts_mut();
         for (n, (domain, op)) in tuples.iter_mut().enumerate() {
-            if last_check_time.elapsed() > Duration::from_secs(5) {
+            if (n & 1023) == 0 && last_check_time.elapsed() > Duration::from_secs(5) {
                 warn!(
                     "Long check time for {}; running for {}s; {n}/{total_ops} checked",
                     self.relation_name,
@@ -175,16 +321,13 @@ where
                 continue;
             }
 
-            // Look up the base value (what we saw at transaction start) for 3-way merge
-            let base = base_index.index_lookup(domain).map(|e| (e.ts, e.value.clone()));
-
             // Check local to see if we have one first, to see if there's a conflict.
             if let Some(local_entry) = self.index.index_lookup(domain) {
-                let theirs = Some((local_entry.ts, local_entry.value.clone()));
-
                 // If what we have is an insert, and there's something already there, that's a
                 // conflict.
                 if op.operation.is_insert() {
+                    let base = base_index.index_lookup(domain).map(|e| (e.ts, e.value.clone()));
+                    let theirs = Some((local_entry.ts, local_entry.value.clone()));
                     let conflict = self.make_potential_conflict(
                         domain,
                         ConflictType::InsertDuplicate,
@@ -205,6 +348,8 @@ where
                 // If the ts there is greater than the read-ts of our own op, that's a conflict
                 // Someone got to it first.
                 if ts > op.read_ts {
+                    let base = base_index.index_lookup(domain).map(|e| (e.ts, e.value.clone()));
+                    let theirs = Some((local_entry.ts, local_entry.value.clone()));
                     let conflict = self.make_potential_conflict(
                         domain,
                         ConflictType::ConcurrentWrite,
@@ -226,6 +371,8 @@ where
                 // (This only happens because we're not able to early-bail on update operations
                 // like this, so there's some waste here.)
                 if op.read_ts > op.write_ts {
+                    let base = base_index.index_lookup(domain).map(|e| (e.ts, e.value.clone()));
+                    let theirs = Some((local_entry.ts, local_entry.value.clone()));
                     let conflict = self.make_potential_conflict(
                         domain,
                         ConflictType::StaleRead,
@@ -250,11 +397,11 @@ where
                 self.index
                     .insert_entry(ts, domain.clone(), codomain.clone());
 
-                let theirs = Some((ts, codomain));
-
                 // If what we have is an insert, and there's something already there, that's also
                 // a conflict.
                 if op.operation.is_insert() {
+                    let base = base_index.index_lookup(domain).map(|e| (e.ts, e.value.clone()));
+                    let theirs = Some((ts, codomain.clone()));
                     let conflict = self.make_potential_conflict(
                         domain,
                         ConflictType::InsertDuplicate,
@@ -271,6 +418,8 @@ where
                     }
                 }
                 if ts > op.read_ts {
+                    let base = base_index.index_lookup(domain).map(|e| (e.ts, e.value.clone()));
+                    let theirs = Some((ts, codomain));
                     let conflict = self.make_potential_conflict(
                         domain,
                         ConflictType::ConcurrentWrite,
@@ -290,6 +439,7 @@ where
                 // If upstream doesn't have it, and it's not an insert or delete, that's a conflict, this
                 // should not have happened.
                 if op.operation.is_update() {
+                    let base = base_index.index_lookup(domain).map(|e| (e.ts, e.value.clone()));
                     let conflict = self.make_potential_conflict(
                         domain,
                         ConflictType::UpdateNonExistent,
@@ -343,7 +493,8 @@ mod tests {
     use super::*;
     use crate::tx::{
         indexes::HashRelationIndex,
-        transaction::{Op, OpType},
+        transaction::{Op, OpType, RelationTransaction},
+        Tx,
     };
     use moor_var::Symbol;
     use std::{
@@ -363,6 +514,16 @@ mod tests {
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     struct TestCodomain(u64);
     impl RelationCodomain for TestCodomain {}
+
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    struct MergeCodomain(u64);
+    impl RelationCodomain for MergeCodomain {
+        fn try_merge(&self, base: &Self, theirs: &Self) -> Option<Self> {
+            Some(MergeCodomain(
+                self.0.wrapping_add(theirs.0).wrapping_sub(base.0),
+            ))
+        }
+    }
 
     #[derive(Clone)]
     struct TestProvider {
@@ -445,5 +606,82 @@ mod tests {
 
         let rewritten = ws.tuples_ref().get(&domain).unwrap();
         assert_eq!(rewritten.operation, OpType::Insert(TestCodomain(901)));
+    }
+
+    #[test]
+    fn test_check_default_path_merge_rewrites_update() {
+        let mut data = HashMap::new();
+        let domain = TestDomain(7);
+        data.insert(domain.clone(), MergeCodomain(10));
+
+        #[derive(Clone)]
+        struct MergeProvider {
+            data: Arc<Mutex<HashMap<TestDomain, MergeCodomain>>>,
+        }
+
+        impl Provider<TestDomain, MergeCodomain> for MergeProvider {
+            fn get(
+                &self,
+                domain: &TestDomain,
+            ) -> Result<Option<(Timestamp, MergeCodomain)>, Error> {
+                let data = self.data.lock().unwrap();
+                Ok(data.get(domain).cloned().map(|v| (Timestamp(0), v)))
+            }
+
+            fn put(
+                &self,
+                _timestamp: Timestamp,
+                _domain: &TestDomain,
+                _codomain: &MergeCodomain,
+            ) -> Result<(), Error> {
+                Ok(())
+            }
+
+            fn del(&self, _timestamp: Timestamp, _domain: &TestDomain) -> Result<(), Error> {
+                Ok(())
+            }
+
+            fn scan<F>(
+                &self,
+                predicate: &F,
+            ) -> Result<Vec<(Timestamp, TestDomain, MergeCodomain)>, Error>
+            where
+                F: Fn(&TestDomain, &MergeCodomain) -> bool,
+            {
+                let data = self.data.lock().unwrap();
+                Ok(data
+                    .iter()
+                    .filter(|(k, v)| predicate(k, v))
+                    .map(|(k, v)| (Timestamp(0), k.clone(), v.clone()))
+                    .collect())
+            }
+
+            fn stop(&self) -> Result<(), Error> {
+                Ok(())
+            }
+        }
+
+        let provider = Arc::new(MergeProvider {
+            data: Arc::new(Mutex::new(data)),
+        });
+        let relation = crate::tx::Relation::new(Symbol::mk("merge"), provider);
+        let base_index = relation.seeded_index().unwrap();
+
+        let tx = Tx {
+            ts: Timestamp(1),
+            snapshot_version: 0,
+        };
+        let mut rt: RelationTransaction<TestDomain, MergeCodomain, _> =
+            relation.start_from_index(&tx, base_index.as_ref());
+        rt.update(&domain, MergeCodomain(11)).unwrap();
+        let mut ws = rt.working_set().unwrap();
+
+        let mut checker_index = base_index.fork();
+        checker_index.insert_entry(Timestamp(2), domain.clone(), MergeCodomain(20));
+        let mut checker = relation.begin_check_from_index(checker_index.as_ref());
+        checker.check(&mut ws).unwrap();
+
+        let rewritten = ws.tuples_ref().get(&domain).unwrap();
+        assert_eq!(rewritten.operation, OpType::Update(MergeCodomain(21)));
     }
 }
