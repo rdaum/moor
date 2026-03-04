@@ -28,7 +28,8 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use moor_common::threading::{
-    DetectionResult, detect_performance_cores, logical_core_count, worker_performance_core_ids,
+    DetectionResult, TaskPoolPinningMode, detect_performance_cores, logical_core_count,
+    task_pool_pinning_mode, worker_performance_core_ids,
 };
 use moor_var::{Obj, Var};
 
@@ -92,42 +93,59 @@ impl TaskQ {
         // Use topology-derived logical core count for fallback worker sizing so the
         // scheduler pool is not accidentally limited by current-thread affinity.
         let fallback_threads = logical_core_count().max(1);
+        let pinning_mode = task_pool_pinning_mode();
 
-        let pinned_core_ids = match detect_performance_cores() {
-            Ok(DetectionResult::PerformanceCores(selection)) => {
-                info!(
-                    source = selection.source,
-                    threshold = selection.threshold,
-                    min_metric = selection.min_metric,
-                    max_metric = selection.max_metric,
-                    metric_tiers = selection.metric_tiers,
-                    physical_cores = selection.physical_cores,
-                    logical_processors = selection.logical_processors,
-                    "Detected high-performance CPU tier for task pool pinning"
-                );
-                let worker_core_ids = worker_performance_core_ids();
-                if worker_core_ids.is_empty() {
-                    warn!("No worker performance cores reserved, task pool pinning disabled");
-                    None
-                } else {
-                    info!(
-                        reserved_worker_cores = ?worker_core_ids,
-                        reserved_service_cores = ?moor_common::threading::service_performance_core_ids(),
-                        "Using reserved worker/service performance-core split"
-                    );
-                    Some(worker_core_ids)
+        let pinned_core_ids = match pinning_mode {
+            TaskPoolPinningMode::None => {
+                info!("Task pool pinning disabled by MOOR_TASK_POOL_PINNING=none");
+                None
+            }
+            TaskPoolPinningMode::Auto | TaskPoolPinningMode::Performance => {
+                match detect_performance_cores() {
+                    Ok(DetectionResult::PerformanceCores(selection)) => {
+                        info!(
+                            source = selection.source,
+                            threshold = selection.threshold,
+                            min_metric = selection.min_metric,
+                            max_metric = selection.max_metric,
+                            metric_tiers = selection.metric_tiers,
+                            physical_cores = selection.physical_cores,
+                            logical_processors = selection.logical_processors,
+                            pinning_mode = ?pinning_mode,
+                            "Detected high-performance CPU tier for task pool pinning"
+                        );
+                        let worker_core_ids = worker_performance_core_ids();
+                        if worker_core_ids.is_empty() {
+                            warn!("No worker performance cores reserved, task pool pinning disabled");
+                            None
+                        } else {
+                            info!(
+                                reserved_worker_cores = ?worker_core_ids,
+                                reserved_service_cores = ?moor_common::threading::service_performance_core_ids(),
+                                "Using reserved worker/service performance-core split"
+                            );
+                            Some(worker_core_ids)
+                        }
+                    }
+                    Ok(DetectionResult::NoSelection { reason }) => {
+                        if pinning_mode == TaskPoolPinningMode::Performance {
+                            warn!(
+                                reason,
+                                "MOOR_TASK_POOL_PINNING=performance requested, but no high-performance tier detected; using unpinned task pool"
+                            );
+                        } else {
+                            info!(
+                                reason,
+                                "No clear high-performance CPU tier detected, task pool pinning disabled"
+                            );
+                        }
+                        None
+                    }
+                    Err(e) => {
+                        warn!(error = ?e, "Could not detect CPU topology, using unpinned task pool");
+                        None
+                    }
                 }
-            }
-            Ok(DetectionResult::NoSelection { reason }) => {
-                info!(
-                    reason,
-                    "No clear high-performance CPU tier detected, task pool pinning disabled"
-                );
-                None
-            }
-            Err(e) => {
-                warn!(error = ?e, "Could not detect CPU topology, using unpinned task pool");
-                None
             }
         };
 

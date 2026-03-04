@@ -26,6 +26,7 @@ const CPU_SYSFS_ROOT: &str = "/sys/devices/system/cpu";
 const MIN_HETEROGENEITY_RATIO: f64 = 0.10;
 const PERFORMANCE_THRESHOLD_RATIO: f64 = 0.90;
 const SERVICE_PERF_CORES_ENV: &str = "MOOR_SERVICE_PERF_CORES";
+const TASK_POOL_PINNING_ENV: &str = "MOOR_TASK_POOL_PINNING";
 
 #[derive(Debug, Clone)]
 pub struct PerformanceCoreSelection {
@@ -53,6 +54,16 @@ pub enum ThreadClass {
     Worker,
     Efficient,
     Unpinned,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum TaskPoolPinningMode {
+    /// Default behavior: use detected performance tier when available, else unpinned.
+    Auto,
+    /// Force performance-core pinning path (falls back to unpinned if no tier is detected).
+    Performance,
+    /// Disable task-pool pinning entirely.
+    None,
 }
 
 #[derive(Debug, Clone)]
@@ -356,6 +367,26 @@ fn next_round_robin(
 
     let index = next_index.fetch_add(1, Ordering::Relaxed);
     Some(secondary_core_ids[index % secondary_core_ids.len()])
+}
+
+pub fn task_pool_pinning_mode() -> TaskPoolPinningMode {
+    let Some(raw) = env::var(TASK_POOL_PINNING_ENV).ok() else {
+        return TaskPoolPinningMode::Auto;
+    };
+
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "auto" => TaskPoolPinningMode::Auto,
+        "perf" | "performance" | "p" => TaskPoolPinningMode::Performance,
+        "none" | "off" | "unpinned" => TaskPoolPinningMode::None,
+        _ => {
+            warn!(
+                env_var = TASK_POOL_PINNING_ENV,
+                value = raw,
+                "Invalid task pool pinning mode, expected one of: auto|performance|none"
+            );
+            TaskPoolPinningMode::Auto
+        }
+    }
 }
 
 fn reserved_service_perf_core_count(total_perf_cores: usize) -> usize {
