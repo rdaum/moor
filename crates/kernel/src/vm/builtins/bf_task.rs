@@ -703,7 +703,16 @@ fn bf_task_recv(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 E_INVARG.msg("task_recv() requires a non-negative number"),
             ));
         }
-        Some(Duration::from_secs_f64(seconds))
+        if seconds <= 0.0 {
+            None
+        } else {
+            let duration = Duration::from_secs_f64(seconds);
+            if duration < Duration::from_millis(1) {
+                None
+            } else {
+                Some(duration)
+            }
+        }
     };
 
     // Set default return value for task retry scenarios (empty list)
