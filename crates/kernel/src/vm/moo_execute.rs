@@ -211,30 +211,27 @@ pub fn moo_frame_execute(
 
         match op {
             Op::If(label, environment_width) => {
-                let (environment_width, label) = (*environment_width, *label);
-                f.push_scope(ScopeType::If, environment_width, &label);
+                f.push_scope(ScopeType::If, *environment_width, label);
                 let cond = f.pop();
                 if !cond.is_true() {
-                    f.jump(&label);
+                    f.jump(label);
                 }
             }
             Op::Eif(label, environment_width) => {
-                let (environment_width, label) = (*environment_width, *label);
-                f.push_scope(ScopeType::Eif, environment_width, &label);
+                f.push_scope(ScopeType::Eif, *environment_width, label);
                 let cond = f.pop();
                 if !cond.is_true() {
-                    f.jump(&label);
+                    f.jump(label);
                 }
             }
             Op::While {
                 jump_label: label,
                 environment_width,
             } => {
-                let (environment_width, label) = (*environment_width, *label);
-                f.push_scope(ScopeType::While, environment_width, &label);
+                f.push_scope(ScopeType::While, *environment_width, label);
                 let cond = f.pop();
                 if !cond.is_true() {
-                    f.jump(&label);
+                    f.jump(label);
                 }
             }
             Op::IfQues(label) => {
@@ -253,13 +250,12 @@ pub fn moo_frame_execute(
                 end_label,
                 environment_width,
             } => {
-                let (id, environment_width, end_label) = (*id, *environment_width, *end_label);
-                f.push_scope(ScopeType::While, environment_width, &end_label);
+                f.push_scope(ScopeType::While, *environment_width, end_label);
                 let v = f.pop();
                 let is_true = v.is_true();
-                f.set_variable(&id, v);
+                f.set_variable(id, v);
                 if !is_true {
-                    f.jump(&end_label);
+                    f.jump(end_label);
                 }
             }
             Op::BeginForSequence { operand } => {
@@ -1215,11 +1211,10 @@ pub fn moo_frame_execute(
                 end_label,
                 environment_width,
             } => {
-                let (environment_width, end_label) = (*environment_width, *end_label);
                 f.push_scope(
-                    ScopeType::TryFinally(end_label),
-                    environment_width,
-                    &end_label,
+                    ScopeType::TryFinally(*end_label),
+                    *environment_width,
+                    end_label,
                 );
             }
             Op::TryCatch { end_label, .. } => {
@@ -1232,9 +1227,8 @@ pub fn moo_frame_execute(
                 end_label,
                 ..
             } => {
-                let (environment_width, end_label) = (*environment_width, *end_label);
                 let catches = std::mem::take(&mut f.catch_stack);
-                f.push_scope(ScopeType::TryCatch(catches), environment_width, &end_label);
+                f.push_scope(ScopeType::TryCatch(catches), *environment_width, end_label);
             }
             Op::EndExcept(label) => {
                 let label = *label;
@@ -1284,8 +1278,7 @@ pub fn moo_frame_execute(
                 num_bindings,
                 end_label,
             } => {
-                let (num_bindings, end_label) = (*num_bindings, *end_label);
-                f.push_scope(ScopeType::Block, num_bindings, &end_label);
+                f.push_scope(ScopeType::Block, *num_bindings, end_label);
             }
             Op::EndScope { .. } => {
                 let Some(..) = f.pop_scope() else {
