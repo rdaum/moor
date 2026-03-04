@@ -27,7 +27,7 @@ use moor_compiler::{CompileOptions, compile};
 use moor_db::{DatabaseConfig, TxDB};
 use moor_kernel::{
     config::FeaturesConfig,
-    tasks::task_program_cache::TaskProgramCache,
+    tasks::TaskProgramCache,
     testing::vm_test_utils::setup_task_context,
     vm::{VMHostResponse, builtins::BuiltinRegistry, vm_host::VmHost},
 };
@@ -74,6 +74,13 @@ fn prepare_call_verb(
     let Some(verb_result) = verb_result else {
         panic!("Could not resolve benchmark verb");
     };
+    let (program, _) = world_state
+        .retrieve_verb(
+            &SYSTEM_OBJECT,
+            &verb_result.program_key.verb_definer,
+            verb_result.program_key.verb_uuid,
+        )
+        .unwrap();
     // Use wizard + programmer flags for benchmarking
     let permissions_flags = BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer;
     vm_host.start_call_method_verb(
@@ -86,7 +93,7 @@ fn prepare_call_verb(
         v_obj(SYSTEM_OBJECT),
         v_empty_str(),
         permissions_flags,
-        verb_result.program,
+        program,
     );
     vm_host
 }
@@ -113,35 +120,13 @@ fn prepare_vm_execution(
     vm_host
 }
 
-/// Execute VM until tick limit reached, return number of ticks executed
-fn execute_until_ticks(session: Arc<dyn Session>, vm_host: &mut VmHost) -> usize {
-    vm_host.reset_ticks();
-    vm_host.reset_time();
-
-    let config = FeaturesConfig::default();
-    let mut program_cache = TaskProgramCache::default();
-
-    loop {
-        match vm_host.exec_interpreter(
-            0,
-            session.as_ref(),
-            &BuiltinRegistry::new(),
-            &config,
-            &mut program_cache,
-        ) {
-            VMHostResponse::ContinueOk => continue,
-            VMHostResponse::AbortLimit(AbortLimitReason::Ticks(t)) => return t,
-            _ => panic!("Unexpected VM response"),
-        }
-    }
-}
-
 /// Benchmark context for dispatch micro-tests
 /// Pre-creates the VM and DB infrastructure once, then reuses it for each sample
 struct DispatchContext {
     db: TxDB,
     vm_host: VmHost,
     session: Arc<dyn Session>,
+    features: FeaturesConfig,
 }
 
 impl BenchContext for DispatchContext {
@@ -158,6 +143,7 @@ impl BenchContext for DispatchContext {
             db,
             vm_host,
             session,
+            features: FeaturesConfig::default(),
         }
     }
 
@@ -173,6 +159,10 @@ impl BenchContext for DispatchContext {
 impl DispatchContext {
     /// Create a context with a specific program
     fn with_program(program: &str) -> Self {
+        Self::with_program_and_features(program, FeaturesConfig::default())
+    }
+
+    fn with_program_and_features(program: &str, features: FeaturesConfig) -> Self {
         let db = create_db();
         let vm_host = prepare_vm_execution(&db, program, MAX_TICKS);
         let session = Arc::new(NoopClientSession::new());
@@ -181,6 +171,7 @@ impl DispatchContext {
             db,
             vm_host,
             session,
+            features,
         }
     }
 }
@@ -190,7 +181,11 @@ fn dispatch_constant_discard(ctx: &mut DispatchContext, _chunk_size: usize, _chu
     let tx = ctx.db.new_world_state().unwrap();
     {
         let _tx_guard = setup_task_context(tx);
-        let _ = black_box(execute_until_ticks(ctx.session.clone(), &mut ctx.vm_host));
+        let _ = black_box(execute_until_ticks_with_features(
+            ctx.session.clone(),
+            &mut ctx.vm_host,
+            &ctx.features,
+        ));
     }
 }
 
@@ -199,7 +194,11 @@ fn dispatch_push_pop(ctx: &mut DispatchContext, _chunk_size: usize, _chunk_num: 
     let tx = ctx.db.new_world_state().unwrap();
     {
         let _tx_guard = setup_task_context(tx);
-        let _ = black_box(execute_until_ticks(ctx.session.clone(), &mut ctx.vm_host));
+        let _ = black_box(execute_until_ticks_with_features(
+            ctx.session.clone(),
+            &mut ctx.vm_host,
+            &ctx.features,
+        ));
     }
 }
 
@@ -208,7 +207,11 @@ fn dispatch_simple_add(ctx: &mut DispatchContext, _chunk_size: usize, _chunk_num
     let tx = ctx.db.new_world_state().unwrap();
     {
         let _tx_guard = setup_task_context(tx);
-        let _ = black_box(execute_until_ticks(ctx.session.clone(), &mut ctx.vm_host));
+        let _ = black_box(execute_until_ticks_with_features(
+            ctx.session.clone(),
+            &mut ctx.vm_host,
+            &ctx.features,
+        ));
     }
 }
 
@@ -217,7 +220,50 @@ fn dispatch_comparison(ctx: &mut DispatchContext, _chunk_size: usize, _chunk_num
     let tx = ctx.db.new_world_state().unwrap();
     {
         let _tx_guard = setup_task_context(tx);
-        let _ = black_box(execute_until_ticks(ctx.session.clone(), &mut ctx.vm_host));
+        let _ = black_box(execute_until_ticks_with_features(
+            ctx.session.clone(),
+            &mut ctx.vm_host,
+            &ctx.features,
+        ));
+    }
+}
+
+/// Dispatch binary-op chain: dispatch + a denser sequence of arithmetic operations
+fn dispatch_binary_chain(ctx: &mut DispatchContext, _chunk_size: usize, _chunk_num: usize) {
+    let tx = ctx.db.new_world_state().unwrap();
+    {
+        let _tx_guard = setup_task_context(tx);
+        let _ = black_box(execute_until_ticks_with_features(
+            ctx.session.clone(),
+            &mut ctx.vm_host,
+            &ctx.features,
+        ));
+    }
+}
+
+/// Execute VM until tick limit reached with explicit feature configuration.
+fn execute_until_ticks_with_features(
+    session: Arc<dyn Session>,
+    vm_host: &mut VmHost,
+    features: &FeaturesConfig,
+) -> usize {
+    vm_host.reset_ticks();
+    vm_host.reset_time();
+
+    let mut program_cache = TaskProgramCache::default();
+
+    loop {
+        match vm_host.exec_interpreter(
+            0,
+            session.as_ref(),
+            &BuiltinRegistry::new(),
+            features,
+            &mut program_cache,
+        ) {
+            VMHostResponse::ContinueOk => continue,
+            VMHostResponse::AbortLimit(AbortLimitReason::Ticks(t)) => return t,
+            _ => panic!("Unexpected VM response"),
+        }
     }
 }
 
@@ -286,6 +332,45 @@ pub fn main() {
         "dispatch",
         |ctx: &mut DispatchContext, _chunk_size, _chunk_num| dispatch_comparison(ctx, 1, 0),
         &|| DispatchContext::with_program("while(1) 1 == 1; endwhile"),
+        filter,
+    );
+
+    // Benchmark 5: dispatch_comparison_int_returns
+    op_bench_with_factory_filtered(
+        "dispatch_comparison_int_returns",
+        "dispatch",
+        |ctx: &mut DispatchContext, _chunk_size, _chunk_num| dispatch_comparison(ctx, 1, 0),
+        &|| {
+            let cfg = FeaturesConfig {
+                use_boolean_returns: false,
+                ..FeaturesConfig::default()
+            };
+            DispatchContext::with_program_and_features("while(1) 1 == 1; endwhile", cfg)
+        },
+        filter,
+    );
+
+    // Benchmark 6: dispatch_comparison_bool_returns
+    op_bench_with_factory_filtered(
+        "dispatch_comparison_bool_returns",
+        "dispatch",
+        |ctx: &mut DispatchContext, _chunk_size, _chunk_num| dispatch_comparison(ctx, 1, 0),
+        &|| {
+            let cfg = FeaturesConfig {
+                use_boolean_returns: true,
+                ..FeaturesConfig::default()
+            };
+            DispatchContext::with_program_and_features("while(1) 1 == 1; endwhile", cfg)
+        },
+        filter,
+    );
+
+    // Benchmark 7: dispatch_binary_chain
+    op_bench_with_factory_filtered(
+        "dispatch_binary_chain",
+        "dispatch",
+        |ctx: &mut DispatchContext, _chunk_size, _chunk_num| dispatch_binary_chain(ctx, 1, 0),
+        &|| DispatchContext::with_program("i = 1; while(1) i + 1 + 2 + 3 + 4 + 5; endwhile"),
         filter,
     );
 
