@@ -55,7 +55,8 @@ pub use model::{
 };
 pub use provider::Provider;
 pub use tx::{
-    AcceptIdentical, ConflictResolver, Error, FailOnConflict, PotentialConflict, ProposedOp,
+    AcceptIdentical, CheckRelation, ConflictResolver, Error, FailOnConflict, PotentialConflict,
+    ProposedOp,
     Relation, RelationCodomain, RelationCodomainHashable, RelationDomain, RelationIndex,
     RelationTransaction, Timestamp, Tx, WorkingSet,
 };

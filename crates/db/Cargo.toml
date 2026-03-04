@@ -23,6 +23,10 @@ harness = false
 name = "prop_cache_benches"
 harness = false
 
+[[bench]]
+name = "tx_micro_benches"
+harness = false
+
 [dev-dependencies]
 criterion.workspace = true
 edn-format.workspace = true
