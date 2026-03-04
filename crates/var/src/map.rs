@@ -68,24 +68,23 @@ impl Map {
     }
 
     pub fn remove_owned(self, key: &Var, case_sensitive: bool) -> (Var, Option<Var>) {
+        let mut map = *self.0;
+
         if case_sensitive {
             // For case-sensitive removal, find the exact key first.
-            let found_key = self
-                .0
+            let found_key = map
                 .keys()
                 .find(|existing_key| existing_key.cmp_case_sensitive(key) == Ordering::Equal)
                 .cloned();
             if let Some(found_key) = found_key {
-                let removed_value = self.0.get(&found_key).cloned();
-                let new_map = self.0.without(&found_key);
-                return (Var::from_map(Map(Box::new(new_map))), removed_value);
+                let removed_value = map.remove(&found_key);
+                return (Var::from_map(Map(Box::new(map))), removed_value);
             }
-            return (Var::from_map(self), None);
+            return (Var::from_map(Map(Box::new(map))), None);
         }
 
-        let removed_value = self.0.get(key).cloned();
-        let new_map = self.0.without(key);
-        (Var::from_map(Map(Box::new(new_map))), removed_value)
+        let removed_value = map.remove(key);
+        (Var::from_map(Map(Box::new(map))), removed_value)
     }
 }
 
