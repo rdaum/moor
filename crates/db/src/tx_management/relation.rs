@@ -176,6 +176,8 @@ where
         &mut self,
         conflict: &PotentialConflict<Domain, Codomain>,
     ) -> Result<Resolution<Codomain>, Error> {
+        let counters = db_counters();
+
         // 1. Try AcceptIdentical logic (idempotency)
         let identical = match (&conflict.theirs, &conflict.mine) {
             (
@@ -187,6 +189,7 @@ where
         };
 
         if identical {
+            counters.crdt_resolve_success.invocations().add(1);
             return Ok(Resolution::Accept);
         }
 
@@ -197,10 +200,12 @@ where
             && let Some(mine_val) = conflict.mine.value()
             && let Some(merged) = mine_val.try_merge(base_val, theirs_val)
         {
+            counters.crdt_resolve_success.invocations().add(1);
             return Ok(Resolution::Rewrite(merged));
         }
 
         // 3. Fail
+        counters.crdt_resolve_fail.invocations().add(1);
         Err(Error::Conflict(conflict.info.clone()))
     }
 }
@@ -476,15 +481,9 @@ where
                     match resolver.resolve(&conflict)? {
                         Resolution::Accept => continue,
                         Resolution::Rewrite(new_val) => {
-                            // If we rewrite an update on non-existent, it becomes an insert?
-                            // Or we assume the resolver knows what it's doing.
-                            // If theirs is None, Update is invalid. If resolver says Rewrite, maybe they want Insert?
-                            // But OpType::Update implies we thought it existed.
-                            // Let's assume Update -> Update(new_val) is what was asked, but really this is weird.
-                            // If it doesn't exist, we can't update it. We should probably Insert it.
-                            // But OpType doesn't track this semantic well.
-                            // Let's just update the value.
-                            op.operation = OpType::Update(new_val);
+                            // The tuple does not exist in canonical state, so rewriting an
+                            // update here must materialize as an insert.
+                            op.operation = OpType::Insert(new_val);
                             continue;
                         }
                     }
@@ -809,6 +808,17 @@ mod tests {
     struct TestCodomain(u64);
     impl RelationCodomain for TestCodomain {}
 
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    struct MergeCodomain(u64);
+
+    impl RelationCodomain for MergeCodomain {
+        fn try_merge(&self, base: &Self, theirs: &Self) -> Option<Self> {
+            Some(MergeCodomain(
+                self.0.wrapping_add(theirs.0).wrapping_sub(base.0),
+            ))
+        }
+    }
+
     #[derive(Clone)]
     struct TestProvider {
         data: Arc<Mutex<HashMap<TestDomain, TestCodomain>>>,
@@ -847,6 +857,58 @@ mod tests {
         ) -> Result<Vec<(Timestamp, TestDomain, TestCodomain)>, Error>
         where
             F: Fn(&TestDomain, &TestCodomain) -> bool,
+        {
+            let data = self.data.lock().unwrap();
+            Ok(data
+                .iter()
+                .filter(|(k, v)| predicate(k, v))
+                .map(|(k, v)| (Timestamp(0), k.clone(), v.clone()))
+                .collect())
+        }
+
+        fn stop(&self) -> Result<(), Error> {
+            Ok(())
+        }
+    }
+
+    #[derive(Clone)]
+    struct MergeProvider {
+        data: Arc<Mutex<HashMap<TestDomain, MergeCodomain>>>,
+    }
+
+    impl Provider<TestDomain, MergeCodomain> for MergeProvider {
+        fn get(&self, domain: &TestDomain) -> Result<Option<(Timestamp, MergeCodomain)>, Error> {
+            let data = self.data.lock().unwrap();
+            if let Some(codomain) = data.get(domain) {
+                Ok(Some((Timestamp(0), codomain.clone())))
+            } else {
+                Ok(None)
+            }
+        }
+
+        fn put(
+            &self,
+            _timestamp: Timestamp,
+            domain: &TestDomain,
+            codomain: &MergeCodomain,
+        ) -> Result<(), Error> {
+            let mut data = self.data.lock().unwrap();
+            data.insert(domain.clone(), codomain.clone());
+            Ok(())
+        }
+
+        fn del(&self, _timestamp: Timestamp, domain: &TestDomain) -> Result<(), Error> {
+            let mut data = self.data.lock().unwrap();
+            data.remove(domain);
+            Ok(())
+        }
+
+        fn scan<F>(
+            &self,
+            predicate: &F,
+        ) -> Result<Vec<(Timestamp, TestDomain, MergeCodomain)>, Error>
+        where
+            F: Fn(&TestDomain, &MergeCodomain) -> bool,
         {
             let data = self.data.lock().unwrap();
             Ok(data
@@ -1401,5 +1463,172 @@ mod tests {
         let committed_result_b = r_tx2.get_by_codomain(&codomain_b);
         assert_eq!(committed_result_b.len(), 1);
         assert!(committed_result_b.contains(&domain3));
+    }
+
+    #[test]
+    fn test_update_nonexistent_rewrite_becomes_insert() {
+        use crate::tx_management::indexes::HashRelationIndex;
+        struct RewriteToInsert;
+        impl ConflictResolver<TestDomain, TestCodomain> for RewriteToInsert {
+            fn resolve(
+                &mut self,
+                _conflict: &PotentialConflict<TestDomain, TestCodomain>,
+            ) -> Result<Resolution<TestCodomain>, Error> {
+                Ok(Resolution::Rewrite(TestCodomain(901)))
+            }
+        }
+
+        let data = Arc::new(Mutex::new(HashMap::new()));
+        let provider = Arc::new(TestProvider { data });
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+
+        let domain = TestDomain(42);
+        let mut tuples = HashMap::default();
+        tuples.insert(
+            domain.clone(),
+            Op {
+                read_ts: Timestamp(1),
+                write_ts: Timestamp(10),
+                operation: OpType::Update(TestCodomain(900)),
+                guaranteed_unique: false,
+            },
+        );
+        let mut ws = WorkingSet::new(Box::new(tuples), Box::new(HashRelationIndex::new()));
+
+        let mut cr = relation.begin_check();
+        cr.check_with_resolver(&mut ws, RewriteToInsert)
+            .unwrap();
+
+        let rewritten = ws.tuples_ref().get(&domain).unwrap();
+        assert_eq!(rewritten.operation, OpType::Insert(TestCodomain(901)));
+    }
+
+    #[test]
+    fn test_crdt_counters_increment_on_identical_accept() {
+        let mut backing = HashMap::new();
+        backing.insert(TestDomain(1), TestCodomain(10));
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+
+        let counters = crate::api::world_state::db_counters();
+        let success_before = counters.crdt_resolve_success.invocations().sum();
+        let fail_before = counters.crdt_resolve_fail.invocations().sum();
+
+        let tx_1 = Tx {
+            ts: Timestamp(10),
+            snapshot_version: 0,
+        };
+        let tx_2 = Tx {
+            ts: Timestamp(20),
+            snapshot_version: 0,
+        };
+
+        let mut r_tx_1 = relation.clone().start(&tx_1);
+        let mut r_tx_2 = relation.clone().start(&tx_2);
+
+        r_tx_1.update(&TestDomain(1), TestCodomain(123)).unwrap();
+        r_tx_2.update(&TestDomain(1), TestCodomain(123)).unwrap();
+
+        let mut ws_1 = r_tx_1.working_set().unwrap();
+        let mut ws_2 = r_tx_2.working_set().unwrap();
+
+        {
+            let mut cr_1 = relation.begin_check();
+            cr_1.check(&mut ws_1).unwrap();
+            cr_1.apply(ws_1).unwrap();
+            cr_1.commit(relation.index());
+        }
+        {
+            let mut cr_2 = relation.begin_check();
+            cr_2.check(&mut ws_2).unwrap();
+        }
+
+        assert!(counters.crdt_resolve_success.invocations().sum() >= success_before + 1);
+        assert!(counters.crdt_resolve_fail.invocations().sum() >= fail_before);
+    }
+
+    #[test]
+    fn test_crdt_counters_increment_on_smart_merge_rewrite() {
+        let mut backing = HashMap::new();
+        backing.insert(TestDomain(1), MergeCodomain(10));
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(MergeProvider { data });
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+
+        let counters = crate::api::world_state::db_counters();
+        let success_before = counters.crdt_resolve_success.invocations().sum();
+
+        let tx_1 = Tx {
+            ts: Timestamp(10),
+            snapshot_version: 0,
+        };
+        let tx_2 = Tx {
+            ts: Timestamp(20),
+            snapshot_version: 0,
+        };
+
+        let mut r_tx_1 = relation.clone().start(&tx_1);
+        // Ensure base exists in the working set's base index for 3-way merge.
+        r_tx_1.get_all().unwrap();
+        r_tx_1.update(&TestDomain(1), MergeCodomain(11)).unwrap();
+
+        let mut r_tx_2 = relation.clone().start(&tx_2);
+        r_tx_2.update(&TestDomain(1), MergeCodomain(20)).unwrap();
+        let mut ws_2 = r_tx_2.working_set().unwrap();
+        {
+            let mut cr_2 = relation.begin_check();
+            cr_2.check(&mut ws_2).unwrap();
+            cr_2.apply(ws_2).unwrap();
+            cr_2.commit(relation.index());
+        }
+
+        let mut ws_1 = r_tx_1.working_set().unwrap();
+        let mut cr_1 = relation.begin_check();
+        cr_1.check(&mut ws_1).unwrap();
+
+        let op = ws_1.tuples_ref().get(&TestDomain(1)).unwrap();
+        assert_eq!(op.operation, OpType::Update(MergeCodomain(21)));
+        assert!(counters.crdt_resolve_success.invocations().sum() >= success_before + 1);
+    }
+
+    #[test]
+    fn test_crdt_counters_increment_on_unresolvable_conflict() {
+        let mut backing = HashMap::new();
+        backing.insert(TestDomain(1), TestCodomain(10));
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+
+        let counters = crate::api::world_state::db_counters();
+        let fail_before = counters.crdt_resolve_fail.invocations().sum();
+
+        let tx_1 = Tx {
+            ts: Timestamp(10),
+            snapshot_version: 0,
+        };
+        let tx_2 = Tx {
+            ts: Timestamp(20),
+            snapshot_version: 0,
+        };
+
+        let mut r_tx_1 = relation.clone().start(&tx_1);
+        let mut r_tx_2 = relation.clone().start(&tx_2);
+
+        r_tx_1.update(&TestDomain(1), TestCodomain(100)).unwrap();
+        r_tx_2.update(&TestDomain(1), TestCodomain(200)).unwrap();
+
+        let mut ws_2 = r_tx_2.working_set().unwrap();
+        {
+            let mut cr_2 = relation.begin_check();
+            cr_2.check(&mut ws_2).unwrap();
+            cr_2.apply(ws_2).unwrap();
+            cr_2.commit(relation.index());
+        }
+
+        let mut ws_1 = r_tx_1.working_set().unwrap();
+        let mut cr_1 = relation.begin_check();
+        assert!(matches!(cr_1.check(&mut ws_1), Err(Error::Conflict(_))));
+        assert!(counters.crdt_resolve_fail.invocations().sum() >= fail_before + 1);
     }
 }

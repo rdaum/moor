@@ -727,6 +727,8 @@ pub struct WorldStatePerf {
 
     pub provider_tuple_load: PerfCounter,
     pub provider_tuple_check: PerfCounter,
+    pub crdt_resolve_success: PerfCounter,
+    pub crdt_resolve_fail: PerfCounter,
 }
 
 impl Default for WorldStatePerf {
@@ -784,6 +786,8 @@ impl WorldStatePerf {
 
             provider_tuple_load: PerfCounter::new("provider_tuple_load"),
             provider_tuple_check: PerfCounter::new("provider_tuple_check"),
+            crdt_resolve_success: PerfCounter::new("crdt_resolve_success"),
+            crdt_resolve_fail: PerfCounter::new("crdt_resolve_fail"),
         }
     }
 
@@ -834,6 +838,8 @@ impl WorldStatePerf {
             &self.commit_process_phase,
             &self.provider_tuple_load,
             &self.provider_tuple_check,
+            &self.crdt_resolve_success,
+            &self.crdt_resolve_fail,
         ]
     }
 }
