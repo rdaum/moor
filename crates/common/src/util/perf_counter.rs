@@ -15,6 +15,7 @@ use moor_var::Symbol;
 
 use crate::util::ConcurrentCounter;
 use minstant::Instant;
+use std::cell::Cell;
 use std::{sync::OnceLock, thread};
 
 fn default_shard_count() -> usize {
@@ -52,22 +53,60 @@ impl PerfCounter {
     }
 }
 
-pub struct PerfTimerGuard<'a>(&'a PerfCounter, Instant);
+const PERF_TIMER_SAMPLE_SHIFT: u32 = 6;
+const PERF_TIMER_SAMPLE_STRIDE: u128 = 1_u128 << PERF_TIMER_SAMPLE_SHIFT; // 1/64 sampling
+const PERF_TIMER_SAMPLE_MASK: u64 = (1_u64 << PERF_TIMER_SAMPLE_SHIFT) - 1;
+
+thread_local! {
+    // Per-thread deterministic sampler tick for low-overhead timer sampling.
+    static PERF_TIMER_SAMPLE_TICK: Cell<u64> = const { Cell::new(0) };
+}
+
+#[inline]
+fn should_sample_timing() -> bool {
+    PERF_TIMER_SAMPLE_TICK.with(|tick| {
+        let next = tick.get().wrapping_add(1);
+        tick.set(next);
+        (next & PERF_TIMER_SAMPLE_MASK) == 0
+    })
+}
+
+#[inline]
+fn scaled_elapsed_nanos(elapsed_nanos: u128) -> isize {
+    let scaled = elapsed_nanos.saturating_mul(PERF_TIMER_SAMPLE_STRIDE);
+    isize::try_from(scaled).unwrap_or(isize::MAX)
+}
+
+pub struct PerfTimerGuard<'a> {
+    perf: &'a PerfCounter,
+    sampled_start: Option<Instant>,
+}
 
 impl<'a> PerfTimerGuard<'a> {
     pub fn new(perf: &'a PerfCounter) -> Self {
-        Self(perf, Instant::now())
+        let sampled_start = should_sample_timing().then(Instant::now);
+        Self { perf, sampled_start }
     }
 
     pub fn from_start(perf: &'a PerfCounter, start: Instant) -> Self {
-        Self(perf, start)
+        let sampled_start = if should_sample_timing() {
+            Some(start)
+        } else {
+            None
+        };
+        Self { perf, sampled_start }
     }
 }
 
 impl Drop for PerfTimerGuard<'_> {
     fn drop(&mut self) {
-        let elapsed = self.1.elapsed().as_nanos();
-        self.0.invocations().add(1);
-        self.0.cumulative_duration_nanos().add(elapsed as isize);
+        // Keep call counts exact even when timing is sampled.
+        self.perf.invocations().add(1);
+        if let Some(start) = self.sampled_start {
+            let elapsed = start.elapsed().as_nanos();
+            self.perf
+                .cumulative_duration_nanos()
+                .add(scaled_elapsed_nanos(elapsed));
+        }
     }
 }

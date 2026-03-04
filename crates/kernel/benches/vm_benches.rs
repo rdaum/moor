@@ -32,7 +32,7 @@ use moor_compiler::{CompileOptions, compile};
 use moor_db::{DatabaseConfig, TxDB};
 use moor_kernel::{
     config::FeaturesConfig,
-    tasks::task_program_cache::TaskProgramCache,
+    tasks::TaskProgramCache,
     testing::vm_test_utils::setup_task_context,
     vm::{VMHostResponse, builtins::BuiltinRegistry, vm_host::VmHost},
 };
@@ -75,6 +75,13 @@ pub fn prepare_call_verb(
     let Some(verb_result) = verb_result else {
         panic!("Could not resolve benchmark verb");
     };
+    let (program, _) = world_state
+        .retrieve_verb(
+            &SYSTEM_OBJECT,
+            &verb_result.program_key.verb_definer,
+            verb_result.program_key.verb_uuid,
+        )
+        .unwrap();
     // Use wizard + programmer flags for benchmarking
     let permissions_flags = BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer;
     vm_host.start_call_method_verb(
@@ -87,7 +94,7 @@ pub fn prepare_call_verb(
         v_obj(SYSTEM_OBJECT),
         v_empty_str(),
         permissions_flags,
-        verb_result.program,
+        program,
     );
     vm_host
 }

@@ -113,6 +113,100 @@ object BENCH_CONTROLLER
     return snapshot;
   endverb
 
+  verb capture_property_cache_stats (this none this) owner: ARCH_WIZARD flags: "rxd"
+    ":capture_property_cache_stats() => LIST";
+    return property_cache_stats();
+  endverb
+
+  verb capture_verb_cache_stats (this none this) owner: ARCH_WIZARD flags: "rxd"
+    ":capture_verb_cache_stats() => LIST";
+    return verb_cache_stats();
+  endverb
+
+  verb log_property_cache_delta (this none this) owner: ARCH_WIZARD flags: "rxd"
+    ":log_property_cache_delta(STR label, LIST before, LIST after) => NONE";
+    {label, before, after} = args;
+    hits = `after[1] ! E_RANGE => 0' - `before[1] ! E_RANGE => 0';
+    negative_hits = `after[2] ! E_RANGE => 0' - `before[2] ! E_RANGE => 0';
+    misses = `after[3] ! E_RANGE => 0' - `before[3] ! E_RANGE => 0';
+    flushes = `after[4] ! E_RANGE => 0' - `before[4] ! E_RANGE => 0';
+    after_hist = `after[5] ! E_RANGE => {0, 0}';
+    before_hist = `before[5] ! E_RANGE => {0, 0}';
+    entries = `after_hist[2] ! E_RANGE => 0';
+    entries_delta = entries - `before_hist[2] ! E_RANGE => 0';
+    total = hits + negative_hits + misses;
+    hit_rate = total > 0 ? (hits + negative_hits) * 100.0 / total | 0.0;
+    server_log("CACHE_SUM label=" + label + ":prop_cache hits=" + tostr(hits) + " negative_hits=" + tostr(negative_hits) + " misses=" + tostr(misses) + " flushes=" + tostr(flushes) + " entries=" + tostr(entries) + " entries_delta=" + tostr(entries_delta) + " hit_rate=" + tostr(hit_rate));
+    "Optional property PIC stats are appended as element 6.";
+    before_pic = `before[6] ! E_RANGE => []';
+    after_pic = `after[6] ! E_RANGE => []';
+    for mode in ({"read", "write"})
+      before_mode = `before_pic[mode] ! E_RANGE => []';
+      after_mode = `after_pic[mode] ! E_RANGE => []';
+      mode_hits = `after_mode["hits"] ! E_RANGE => 0' - `before_mode["hits"] ! E_RANGE => 0';
+      mode_miss_no_hint = `after_mode["miss_no_hint"] ! E_RANGE => 0' - `before_mode["miss_no_hint"] ! E_RANGE => 0';
+      mode_miss_guard_mismatch = `after_mode["miss_guard_mismatch"] ! E_RANGE => 0' - `before_mode["miss_guard_mismatch"] ! E_RANGE => 0';
+      mode_miss_version_mismatch = `after_mode["miss_version_mismatch"] ! E_RANGE => 0' - `before_mode["miss_version_mismatch"] ! E_RANGE => 0';
+      mode_miss_resolve_failed = `after_mode["miss_resolve_failed"] ! E_RANGE => 0' - `before_mode["miss_resolve_failed"] ! E_RANGE => 0';
+      mode_not_applicable = `after_mode["not_applicable"] ! E_RANGE => 0' - `before_mode["not_applicable"] ! E_RANGE => 0';
+      mode_total = mode_hits + mode_miss_no_hint + mode_miss_guard_mismatch + mode_miss_version_mismatch + mode_miss_resolve_failed + mode_not_applicable;
+      mode_hit_rate = mode_total > 0 ? mode_hits * 100.0 / mode_total | 0.0;
+      server_log("CACHE_SUM label=" + label + ":property_pic mode=" + mode + " hits=" + tostr(mode_hits) + " miss_no_hint=" + tostr(mode_miss_no_hint) + " miss_guard_mismatch=" + tostr(mode_miss_guard_mismatch) + " miss_version_mismatch=" + tostr(mode_miss_version_mismatch) + " miss_resolve_failed=" + tostr(mode_miss_resolve_failed) + " not_applicable=" + tostr(mode_not_applicable) + " total=" + tostr(mode_total) + " hit_rate=" + tostr(mode_hit_rate));
+    endfor
+    "VM hint-presence stats, if available.";
+    before_vm_hint = `before_pic["vm_hint"] ! E_RANGE => []';
+    after_vm_hint = `after_pic["vm_hint"] ! E_RANGE => []';
+    for op in ({"get_prop", "push_get_prop", "put_prop", "put_prop_at"})
+      before_op = `before_vm_hint[op] ! E_RANGE => []';
+      after_op = `after_vm_hint[op] ! E_RANGE => []';
+      with_hint = `after_op["with_hint"] ! E_RANGE => 0' - `before_op["with_hint"] ! E_RANGE => 0';
+      no_hint = `after_op["no_hint"] ! E_RANGE => 0' - `before_op["no_hint"] ! E_RANGE => 0';
+      op_total = with_hint + no_hint;
+      with_hint_rate = op_total > 0 ? with_hint * 100.0 / op_total | 0.0;
+      server_log("CACHE_SUM label=" + label + ":property_pic_vm_hint op=" + op + " with_hint=" + tostr(with_hint) + " no_hint=" + tostr(no_hint) + " total=" + tostr(op_total) + " with_hint_rate=" + tostr(with_hint_rate));
+    endfor
+  endverb
+
+  verb log_verb_cache_delta (this none this) owner: ARCH_WIZARD flags: "rxd"
+    ":log_verb_cache_delta(STR label, LIST before, LIST after) => NONE";
+    {label, before, after} = args;
+    hits = `after[1] ! E_RANGE => 0' - `before[1] ! E_RANGE => 0';
+    negative_hits = `after[2] ! E_RANGE => 0' - `before[2] ! E_RANGE => 0';
+    misses = `after[3] ! E_RANGE => 0' - `before[3] ! E_RANGE => 0';
+    flushes = `after[4] ! E_RANGE => 0' - `before[4] ! E_RANGE => 0';
+    after_hist = `after[5] ! E_RANGE => {0, 0}';
+    before_hist = `before[5] ! E_RANGE => {0, 0}';
+    entries = `after_hist[2] ! E_RANGE => 0';
+    entries_delta = entries - `before_hist[2] ! E_RANGE => 0';
+    total = hits + negative_hits + misses;
+    hit_rate = total > 0 ? (hits + negative_hits) * 100.0 / total | 0.0;
+    server_log("CACHE_SUM label=" + label + ":verb_cache hits=" + tostr(hits) + " negative_hits=" + tostr(negative_hits) + " misses=" + tostr(misses) + " flushes=" + tostr(flushes) + " entries=" + tostr(entries) + " entries_delta=" + tostr(entries_delta) + " hit_rate=" + tostr(hit_rate));
+    before_pic = `before[6] ! E_RANGE => []';
+    after_pic = `after[6] ! E_RANGE => []';
+    before_dispatch = `before_pic["dispatch"] ! E_RANGE => []';
+    after_dispatch = `after_pic["dispatch"] ! E_RANGE => []';
+    dispatch_hits = `after_dispatch["hits"] ! E_RANGE => 0' - `before_dispatch["hits"] ! E_RANGE => 0';
+    dispatch_miss_no_hint = `after_dispatch["miss_no_hint"] ! E_RANGE => 0' - `before_dispatch["miss_no_hint"] ! E_RANGE => 0';
+    dispatch_miss_guard_mismatch = `after_dispatch["miss_guard_mismatch"] ! E_RANGE => 0' - `before_dispatch["miss_guard_mismatch"] ! E_RANGE => 0';
+    dispatch_miss_version_mismatch = `after_dispatch["miss_version_mismatch"] ! E_RANGE => 0' - `before_dispatch["miss_version_mismatch"] ! E_RANGE => 0';
+    dispatch_miss_resolve_failed = `after_dispatch["miss_resolve_failed"] ! E_RANGE => 0' - `before_dispatch["miss_resolve_failed"] ! E_RANGE => 0';
+    dispatch_not_applicable = `after_dispatch["not_applicable"] ! E_RANGE => 0' - `before_dispatch["not_applicable"] ! E_RANGE => 0';
+    dispatch_total = dispatch_hits + dispatch_miss_no_hint + dispatch_miss_guard_mismatch + dispatch_miss_version_mismatch + dispatch_miss_resolve_failed + dispatch_not_applicable;
+    dispatch_hit_rate = dispatch_total > 0 ? dispatch_hits * 100.0 / dispatch_total | 0.0;
+    server_log("CACHE_SUM label=" + label + ":verb_pic mode=dispatch hits=" + tostr(dispatch_hits) + " miss_no_hint=" + tostr(dispatch_miss_no_hint) + " miss_guard_mismatch=" + tostr(dispatch_miss_guard_mismatch) + " miss_version_mismatch=" + tostr(dispatch_miss_version_mismatch) + " miss_resolve_failed=" + tostr(dispatch_miss_resolve_failed) + " not_applicable=" + tostr(dispatch_not_applicable) + " total=" + tostr(dispatch_total) + " hit_rate=" + tostr(dispatch_hit_rate));
+    before_vm_hint = `before_pic["vm_hint"] ! E_RANGE => []';
+    after_vm_hint = `after_pic["vm_hint"] ! E_RANGE => []';
+    for op in ({"call_verb", "pass"})
+      before_op = `before_vm_hint[op] ! E_RANGE => []';
+      after_op = `after_vm_hint[op] ! E_RANGE => []';
+      with_hint = `after_op["with_hint"] ! E_RANGE => 0' - `before_op["with_hint"] ! E_RANGE => 0';
+      no_hint = `after_op["no_hint"] ! E_RANGE => 0' - `before_op["no_hint"] ! E_RANGE => 0';
+      op_total = with_hint + no_hint;
+      with_hint_rate = op_total > 0 ? with_hint * 100.0 / op_total | 0.0;
+      server_log("CACHE_SUM label=" + label + ":verb_pic_vm_hint op=" + op + " with_hint=" + tostr(with_hint) + " no_hint=" + tostr(no_hint) + " total=" + tostr(op_total) + " with_hint_rate=" + tostr(with_hint_rate));
+    endfor
+  endverb
+
   verb counter_delta (this none this) owner: ARCH_WIZARD flags: "rxd"
     ":counter_delta(MAP before, MAP after) => MAP";
     {before, after} = args;
@@ -245,6 +339,8 @@ object BENCH_CONTROLLER
     commit();
     "Start the loop";
     counter_before = this:capture_perf_counters();
+    prop_cache_before = this:capture_property_cache_stats();
+    verb_cache_before = this:capture_verb_cache_stats();
     $game_update:start();
     writes_per_second = target_subscribers * work_per_tick * update_hz;
     server_log("=== WRITE STRESS TEST RUNNING ===");
@@ -258,7 +354,11 @@ object BENCH_CONTROLLER
     "Stop and cleanup";
     $game_update:stop();
     counter_after = this:capture_perf_counters();
+    prop_cache_after = this:capture_property_cache_stats();
+    verb_cache_after = this:capture_verb_cache_stats();
     this:log_perf_delta("write_stress", counter_before, counter_after);
+    this:log_property_cache_delta("write_stress", prop_cache_before, prop_cache_after);
+    this:log_verb_cache_delta("write_stress", verb_cache_before, verb_cache_after);
     this:cleanup();
     server_log("=== WRITE STRESS TEST COMPLETE ===");
   endverb
@@ -296,6 +396,8 @@ object BENCH_CONTROLLER
     endfor
     commit();
     counter_before = this:capture_perf_counters();
+    prop_cache_before = this:capture_property_cache_stats();
+    verb_cache_before = this:capture_verb_cache_stats();
     $game_update:start();
     rounds_per_second = target_subscribers * rounds_per_tick * update_hz;
     fanout_calls_per_second = rounds_per_second * fanout;
@@ -312,7 +414,11 @@ object BENCH_CONTROLLER
     suspend(run_duration);
     $game_update:stop();
     counter_after = this:capture_perf_counters();
+    prop_cache_after = this:capture_property_cache_stats();
+    verb_cache_after = this:capture_verb_cache_stats();
     this:log_perf_delta("combat_stress", counter_before, counter_after);
+    this:log_property_cache_delta("combat_stress", prop_cache_before, prop_cache_after);
+    this:log_verb_cache_delta("combat_stress", verb_cache_before, verb_cache_after);
     this:cleanup();
     server_log("=== COMBAT STRESS TEST COMPLETE ===");
   endverb
