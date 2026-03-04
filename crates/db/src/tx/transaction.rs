@@ -204,7 +204,12 @@ where
     ) -> RelationTransaction<Domain, Codomain, Source> {
         let provider_fully_loaded = canonical.is_provider_fully_loaded();
         let inner = Inner {
-            local_operations: HashMap::default(),
+            // Most transactions perform at least one mutation; reserve a tiny initial
+            // capacity to avoid first-insert allocation cost on hot paths.
+            local_operations: HashMap::with_capacity_and_hasher(
+                4,
+                BuildHasherDefault::<AHasher>::default(),
+            ),
             master_entries: canonical,
             provider_fully_loaded,
             has_local_mutations: false,
@@ -227,36 +232,70 @@ where
     }
 
     pub fn insert(&mut self, domain: Domain, value: Codomain) -> Result<(), Error> {
+        // Common fast path: this transaction has not mutated anything yet.
+        if !self.index.has_local_mutations {
+            // If we or upstream has already inserted this domain, we can't insert it again.
+            if self.index.master_entries.index_lookup(&domain).is_some() {
+                return Err(Error::Duplicate);
+            }
+
+            // If provider is fully loaded, a miss in master_entries means it does not exist.
+            if !self.index.provider_fully_loaded {
+                // Not in the index, check the backing source.
+                if let Some((read_ts, _)) = self.backing_source.get(&domain)?
+                    && read_ts < self.tx.ts
+                {
+                    return Err(Error::Duplicate);
+                }
+            }
+
+            // Not in the index, not in the backing source, we can insert freely.
+            self.index.local_operations.insert(
+                domain,
+                Op {
+                    read_ts: self.tx.ts,
+                    write_ts: self.tx.ts,
+                    operation: OpType::Insert(value),
+                    guaranteed_unique: false,
+                },
+            );
+            self.index.has_local_mutations = true;
+            return Ok(());
+        }
+
+        // Check our own local index to see if we have an entry for this domain.
+        if let Some(entry) = self.index.local_operations.get_mut(&domain) {
+            if entry.operation.is_delete() {
+                // Recreating a locally deleted entry in this transaction:
+                // - if this key existed when we read it (read_ts < tx.ts), this is an update
+                // - otherwise it's re-inserting a locally-created key
+                entry.write_ts = self.tx.ts;
+                entry.operation = if entry.read_ts < self.tx.ts {
+                    OpType::Update(value)
+                } else {
+                    entry.read_ts = self.tx.ts;
+                    OpType::Insert(value)
+                };
+                return Ok(());
+            }
+
+            // Already have an insert or update for this domain.
+            return Err(Error::Duplicate);
+        }
+
         // If we or upstream has already inserted this domain, we can't insert it again.
         if self.index.master_entries.index_lookup(&domain).is_some() {
             return Err(Error::Duplicate);
         }
 
-        // Check our own local index to see if we have an entry for this domain.
-        if self.index.has_local_mutations
-            && let Some(entry) = self.index.local_operations.get_mut(&domain)
-        {
-            match &entry.operation {
-                OpType::Delete => {
-                    // Recreating a locally deleted entry in this transaction becomes an insert.
-                    entry.read_ts = self.tx.ts;
-                    entry.write_ts = self.tx.ts;
-                    entry.operation = OpType::Insert(value);
-                    self.index.has_local_mutations = true;
-                    return Ok(());
-                }
-                OpType::Insert(_) | OpType::Update(_) => {
-                    // Already have an insert or update for this domain
-                    return Err(Error::Duplicate);
-                }
+        // If provider is fully loaded, a miss in master_entries means it does not exist.
+        if !self.index.provider_fully_loaded {
+            // Not in the index, check the backing source.
+            if let Some((read_ts, _)) = self.backing_source.get(&domain)?
+                && read_ts < self.tx.ts
+            {
+                return Err(Error::Duplicate);
             }
-        }
-
-        // Not in the index, we check the backing source.
-        if let Some((read_ts, _)) = self.backing_source.get(&domain)?
-            && read_ts < self.tx.ts
-        {
-            return Err(Error::Duplicate);
         }
 
         // Not in the index, not in the backing source, we can insert freely.
@@ -270,7 +309,6 @@ where
                 guaranteed_unique: false,
             },
         );
-        self.index.has_local_mutations = true;
 
         Ok(())
     }
@@ -308,18 +346,14 @@ where
             if entry.operation.is_delete() {
                 return Ok(None);
             }
-            // If it's an insert or update, we can update it.
             entry.write_ts = self.tx.ts;
-            let next_op = if entry.operation.is_update() {
-                OpType::Update(value)
-            } else {
-                OpType::Insert(value)
-            };
-            let old_value = match std::mem::replace(&mut entry.operation, next_op) {
-                OpType::Insert(old_value) | OpType::Update(old_value) => old_value,
+            let old_value = match &mut entry.operation {
+                // Keep an insert as insert; only the value changes.
+                OpType::Insert(current) => std::mem::replace(current, value),
+                // Keep an update as update; only the value changes.
+                OpType::Update(current) => std::mem::replace(current, value),
                 OpType::Delete => return Ok(None),
             };
-            self.index.has_local_mutations = true;
             return Ok(Some(old_value));
         }
 
@@ -565,31 +599,39 @@ where
     }
 
     pub fn get(&self, domain: &Domain) -> Result<Option<Codomain>, Error> {
-        // Check local operations first, but only if we have mutations.
-        if self.index.has_local_mutations
-            && let Some(op) = self.index.local_operations.get(domain)
-        {
+        // Fast path: no local mutations means no local-ops lookup needed.
+        if !self.index.has_local_mutations {
+            if let Some(entry) = self.index.master_entries.index_lookup(domain) {
+                return Ok(Some(entry.value.clone()));
+            }
+
+            if self.index.provider_fully_loaded {
+                return Ok(None);
+            }
+
+            return match self.backing_source.get(domain)? {
+                Some((read_ts, value)) if read_ts < self.tx.ts => Ok(Some(value)),
+                _ => Ok(None),
+            };
+        }
+
+        if let Some(op) = self.index.local_operations.get(domain) {
             match &op.operation {
-                // If it's a delete, we don't have it.
                 OpType::Delete => return Ok(None),
-                // If it's an insert or update, we have it.
                 OpType::Insert(value) | OpType::Update(value) => {
                     return Ok(Some(value.clone()));
                 }
             }
         }
 
-        // Check entries
         if let Some(entry) = self.index.master_entries.index_lookup(domain) {
             return Ok(Some(entry.value.clone()));
         }
 
-        // If provider is fully loaded into master entries, not being there means it doesn't exist
         if self.index.provider_fully_loaded {
             return Ok(None);
         }
 
-        // Provider not fully loaded - need to check backing source
         match self.backing_source.get(domain)? {
             Some((read_ts, value)) if read_ts < self.tx.ts => Ok(Some(value)),
             _ => Ok(None),
@@ -770,9 +812,7 @@ where
     /// Optimized method to get multiple specific tuples
     /// More efficient than get_all() when you only need a subset of tuples
     pub fn bulk_get(&self, domains: &[Domain]) -> Result<Vec<(Domain, Codomain)>, Error> {
-        let mut results = HashMap::new();
-
-        // Process each requested domain
+        let mut results = HashMap::with_capacity(domains.len());
         for domain in domains {
             // Check local operations first (if we have mutations)
             if self.index.has_local_mutations

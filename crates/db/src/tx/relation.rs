@@ -592,6 +592,33 @@ mod tests {
     }
 
     #[test]
+    fn test_delete_then_insert_same_tx_succeeds() {
+        let mut backing = HashMap::new();
+        backing.insert(TestDomain(1), TestCodomain(10));
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+
+        let domain = TestDomain(1);
+        let tx = Tx {
+            ts: Timestamp(10),
+            snapshot_version: 0,
+        };
+
+        let mut r_tx = relation.clone().start(&tx);
+        assert_eq!(r_tx.delete(&domain).unwrap(), Some(TestCodomain(10)));
+        r_tx.insert(domain.clone(), TestCodomain(20)).unwrap();
+
+        let mut ws = r_tx.working_set().unwrap();
+        let mut cr = relation.begin_check();
+        cr.check(&mut ws).unwrap();
+        cr.apply(ws).unwrap();
+        cr.commit(relation.index());
+
+        assert_eq!(relation.get(&domain).unwrap().unwrap().1, TestCodomain(20));
+    }
+
+    #[test]
     fn test_update_nonexistent_key() {
         // Test updating a key that doesn't exist - the update should return None but not error
         let backing = HashMap::new();
