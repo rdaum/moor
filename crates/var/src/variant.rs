@@ -701,6 +701,31 @@ impl Var {
         }
     }
 
+    #[inline]
+    fn into_list_owned(self) -> Option<List> {
+        match self.tag {
+            TAG_LIST => {
+                let data = self.data;
+                std::mem::forget(self);
+                Some(unsafe { std::mem::transmute::<u64, List>(data) })
+            }
+            TAG_EMPTY_LIST => Some(List::mk_list(&[])),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    fn into_map_owned(self) -> Option<map::Map> {
+        match self.tag {
+            TAG_MAP => {
+                let data = self.data;
+                std::mem::forget(self);
+                Some(unsafe { std::mem::transmute::<u64, map::Map>(data) })
+            }
+            _ => None,
+        }
+    }
+
     #[inline(always)]
     pub fn as_map(&self) -> Option<&map::Map> {
         if self.tag == TAG_MAP {
@@ -912,6 +937,17 @@ impl Var {
         }
     }
 
+    /// Like `set`, but can consume owned list values without cloning the base list.
+    pub fn set_owned(self, key: &Var, value: &Var, index_mode: IndexMode) -> Result<Self, Error> {
+        if matches!(self.tag, TAG_LIST | TAG_EMPTY_LIST) {
+            return self.index_set_owned(key, value, index_mode);
+        }
+        if self.tag == TAG_MAP {
+            return self.into_map_owned().unwrap().set_owned(key, value);
+        }
+        self.set(key, value, index_mode)
+    }
+
     /// Assign a new value to `index`nth element of the sequence, or to a key in an associative type.
     pub fn index_set(
         &self,
@@ -941,6 +977,36 @@ impl Var {
             }));
         };
         s.index_set(idx, value)
+    }
+
+    /// Like `index_set`, but can consume owned list values without cloning the base list.
+    pub fn index_set_owned(
+        self,
+        idx: &Self,
+        value: &Self,
+        index_mode: IndexMode,
+    ) -> Result<Self, Error> {
+        if matches!(self.tag, TAG_LIST | TAG_EMPTY_LIST) {
+            let list = self.into_list_owned().unwrap();
+            let Some(idx) = idx.as_integer() else {
+                return Err(E_INVARG.with_msg(|| {
+                    format!(
+                        "Cannot index into sequence with non-integer index {}",
+                        idx.type_code().to_literal()
+                    )
+                }));
+            };
+            let idx = {
+                let i = index_mode.adjust_i64(idx);
+                if i < 0 {
+                    return Err(E_RANGE
+                        .with_msg(|| format!("Cannot index into sequence with negative index {i}")));
+                }
+                i as usize
+            };
+            return list.index_set_owned(idx, value);
+        }
+        self.index_set(idx, value, index_mode)
     }
 
     /// Insert a new value at `index` in a sequence only.
@@ -979,6 +1045,31 @@ impl Var {
             _ => Err(E_TYPE
                 .with_msg(|| format!("Cannot insert into type {}", self.type_code().to_literal()))),
         }
+    }
+
+    /// Like `insert`, but can consume owned list values without cloning the base list.
+    pub fn insert_owned(self, index: &Var, value: &Var, index_mode: IndexMode) -> Result<Var, Error> {
+        if matches!(self.tag, TAG_LIST | TAG_EMPTY_LIST) {
+            let list = self.into_list_owned().unwrap();
+            let index = match index.variant() {
+                Variant::Int(i) => index_mode.adjust_i64(i),
+                _ => {
+                    return Err(E_INVARG.with_msg(|| {
+                        format!(
+                            "Cannot insert into sequence with non-integer index {}",
+                            index.type_code().to_literal()
+                        )
+                    }));
+                }
+            };
+            let index = if index < 0 {
+                0
+            } else {
+                min(index as usize, list.len())
+            };
+            return Ok(list.insert_owned(index, value));
+        }
+        self.insert(index, value, index_mode)
     }
 
     pub fn range(&self, from: &Var, to: &Var, index_mode: IndexMode) -> Result<Var, Error> {
@@ -1061,6 +1152,42 @@ impl Var {
         }
     }
 
+    pub fn range_set_owned(
+        self,
+        from: &Var,
+        to: &Var,
+        with: &Var,
+        index_mode: IndexMode,
+    ) -> Result<Var, Error> {
+        if matches!(self.tag, TAG_LIST | TAG_EMPTY_LIST) {
+            let list = self.into_list_owned().unwrap();
+            let from = match from.variant() {
+                Variant::Int(i) => index_mode.adjust_i64(i),
+                _ => {
+                    return Err(E_INVARG.with_msg(|| {
+                        format!(
+                            "Cannot index into sequence with non-integer index {}",
+                            from.type_code().to_literal()
+                        )
+                    }));
+                }
+            };
+            let to = match to.variant() {
+                Variant::Int(i) => index_mode.adjust_i64(i),
+                _ => {
+                    return Err(E_INVARG.with_msg(|| {
+                        format!(
+                            "Cannot index into sequence with non-integer index {}",
+                            to.type_code().to_literal()
+                        )
+                    }));
+                }
+            };
+            return list.range_set_owned(from, to, with);
+        }
+        self.range_set(from, to, with, index_mode)
+    }
+
     pub fn append(&self, other: &Var) -> Result<Var, Error> {
         match self.type_class() {
             TypeClass::Sequence(s) => s.append(other),
@@ -1069,12 +1196,30 @@ impl Var {
         }
     }
 
+    /// Like `append`, but can consume owned list values without cloning the base list.
+    pub fn append_owned(self, other: &Var) -> Result<Var, Error> {
+        if matches!(self.tag, TAG_LIST | TAG_EMPTY_LIST) {
+            let list = self.into_list_owned().unwrap();
+            return list.append_owned(other);
+        }
+        self.append(other)
+    }
+
     pub fn push(&self, value: &Var) -> Result<Var, Error> {
         match self.type_class() {
             TypeClass::Sequence(s) => s.push(value),
             _ => Err(E_TYPE
                 .with_msg(|| format!("Cannot push to type {}", self.type_code().to_literal()))),
         }
+    }
+
+    /// Like `push`, but can consume owned list values without cloning the base list.
+    pub fn push_owned(self, value: &Var) -> Result<Var, Error> {
+        if matches!(self.tag, TAG_LIST | TAG_EMPTY_LIST) {
+            let list = self.into_list_owned().unwrap();
+            return Ok(list.push_owned(value));
+        }
+        self.push(value)
     }
 
     pub fn contains(&self, value: &Var, case_sensitive: bool) -> Result<Var, Error> {
@@ -1185,12 +1330,43 @@ impl Var {
         }
     }
 
+    /// Like `remove_at`, but can consume owned list values without cloning the base list.
+    pub fn remove_at_owned(self, index: &Var, index_mode: IndexMode) -> Result<Var, Error> {
+        if matches!(self.tag, TAG_LIST | TAG_EMPTY_LIST) {
+            let list = self.into_list_owned().unwrap();
+            let index = match index.variant() {
+                Variant::Int(i) => index_mode.adjust_i64(i),
+                _ => {
+                    return Err(E_INVARG.with_msg(|| {
+                        format!(
+                            "Cannot index into sequence with non-integer index {}",
+                            index.type_code().to_literal()
+                        )
+                    }));
+                }
+            };
+            if index < 0 {
+                return Err(E_RANGE
+                    .with_msg(|| format!("Cannot index into sequence with negative index {index}")));
+            }
+            return list.remove_at_owned(index as usize);
+        }
+        self.remove_at(index, index_mode)
+    }
+
     pub fn remove(&self, value: &Var, case_sensitive: bool) -> Result<(Var, Option<Var>), Error> {
         match self.type_class() {
             TypeClass::Associative(a) => Ok(a.remove(value, case_sensitive)),
             _ => Err(E_INVARG
                 .with_msg(|| format!("Cannot remove from type {}", self.type_code().to_literal()))),
         }
+    }
+
+    pub fn remove_owned(self, value: &Var, case_sensitive: bool) -> Result<(Var, Option<Var>), Error> {
+        if self.tag == TAG_MAP {
+            return Ok(self.into_map_owned().unwrap().remove_owned(value, case_sensitive));
+        }
+        self.remove(value, case_sensitive)
     }
 
     pub fn is_empty(&self) -> Result<bool, Error> {
@@ -1845,6 +2021,40 @@ mod tests {
             size_of::<Var>() <= 16,
             "Var size exceeds 128 bits: {}",
             size_of::<Var>()
+        );
+    }
+
+    #[test]
+    fn test_list_owned_sequence_ops() {
+        let base = v_list(&[v_int(1), v_int(2), v_int(3)]);
+
+        let pushed = base.clone().push_owned(&v_int(4)).unwrap();
+        assert_eq!(pushed, v_list(&[v_int(1), v_int(2), v_int(3), v_int(4)]));
+
+        let inserted = base
+            .clone()
+            .insert_owned(&v_int(1), &v_int(99), IndexMode::ZeroBased)
+            .unwrap();
+        assert_eq!(inserted, v_list(&[v_int(1), v_int(99), v_int(2), v_int(3)]));
+
+        let set = base
+            .clone()
+            .set_owned(&v_int(1), &v_int(42), IndexMode::ZeroBased)
+            .unwrap();
+        assert_eq!(set, v_list(&[v_int(1), v_int(42), v_int(3)]));
+
+        let removed = base
+            .clone()
+            .remove_at_owned(&v_int(1), IndexMode::ZeroBased)
+            .unwrap();
+        assert_eq!(removed, v_list(&[v_int(1), v_int(3)]));
+
+        let appended = base
+            .append_owned(&v_list(&[v_int(8), v_int(9)]))
+            .unwrap();
+        assert_eq!(
+            appended,
+            v_list(&[v_int(1), v_int(2), v_int(3), v_int(8), v_int(9)])
         );
     }
 }

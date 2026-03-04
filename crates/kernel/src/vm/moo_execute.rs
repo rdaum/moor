@@ -537,13 +537,14 @@ pub fn moo_frame_execute(
             }
             Op::ImmEmptyList => f.push(v_empty_list()),
             Op::ListAddTail => {
-                let (tail, list) = (f.pop(), f.peek_top_mut());
+                let tail = f.pop();
+                let list = std::mem::replace(f.peek_top_mut(), v_none());
                 if !list.is_sequence() || list.type_code() == VarType::TYPE_STR {
                     f.pop();
                     return ExecutionResult::PushError(E_TYPE.msg("invalid value in list append"));
                 }
                 // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA in list add and append
-                let result = list.push(&tail);
+                let result = list.push_owned(&tail);
                 match result {
                     Ok(v) => {
                         f.poke(0, v);
@@ -555,7 +556,8 @@ pub fn moo_frame_execute(
                 }
             }
             Op::ListAppend => {
-                let (tail, list) = (f.pop(), f.peek_top_mut());
+                let tail = f.pop();
+                let list = std::mem::replace(f.peek_top_mut(), v_none());
 
                 // Don't allow strings here.
                 if list.type_code() == VarType::TYPE_STR {
@@ -567,7 +569,7 @@ pub fn moo_frame_execute(
                     f.pop();
                     return ExecutionResult::PushError(E_TYPE.msg("invalid value in list append"));
                 }
-                let new_list = list.append(&tail);
+                let new_list = list.append_owned(&tail);
                 match new_list {
                     Ok(v) => {
                         f.poke(0, v);
@@ -579,8 +581,9 @@ pub fn moo_frame_execute(
                 }
             }
             Op::IndexSet => {
-                let (rhs, index, lhs) = (f.pop(), f.pop(), f.peek_top_mut());
-                let result = lhs.set(&index, &rhs, IndexMode::OneBased);
+                let (rhs, index) = (f.pop(), f.pop());
+                let lhs = std::mem::replace(f.peek_top_mut(), v_none());
+                let result = lhs.set_owned(&index, &rhs, IndexMode::OneBased);
                 match result {
                     Ok(v) => {
                         f.poke(0, v);
@@ -598,11 +601,11 @@ pub fn moo_frame_execute(
                 let index_idx = stack_index(len, offset + 1, f.pc);
                 let base_idx = stack_index(len, offset + 2, f.pc);
 
-                let rhs = f.valstack[rhs_idx].clone();
-                let index = f.valstack[index_idx].clone();
-                let base = f.valstack[base_idx].clone();
+                let rhs = std::mem::replace(&mut f.valstack[rhs_idx], v_none());
+                let index = std::mem::replace(&mut f.valstack[index_idx], v_none());
+                let base = std::mem::replace(&mut f.valstack[base_idx], v_none());
 
-                let result = base.set(&index, &rhs, IndexMode::OneBased);
+                let result = base.set_owned(&index, &rhs, IndexMode::OneBased);
                 match result {
                     Ok(v) => {
                         f.valstack[base_idx] = v;
@@ -639,25 +642,16 @@ pub fn moo_frame_execute(
                 f.push(v_empty_map());
             }
             Op::MapInsert => {
-                let (value, key, map) = (f.pop(), f.pop(), f.peek_top_mut());
-                match map.type_class() {
-                    TypeClass::Associative(a) => {
-                        let result = a.set(&key, &value);
-                        match result {
-                            Ok(v) => {
-                                f.poke(0, v);
-                            }
-                            Err(e) => {
-                                f.pop();
-                                return ExecutionResult::PushError(e);
-                            }
-                        }
+                let (value, key) = (f.pop(), f.pop());
+                let map = std::mem::replace(f.peek_top_mut(), v_none());
+                let result = map.set_owned(&key, &value, IndexMode::OneBased);
+                match result {
+                    Ok(v) => {
+                        f.poke(0, v);
                     }
-                    _ => {
+                    Err(e) => {
                         f.pop();
-                        return ExecutionResult::PushError(
-                            E_TYPE.msg("invalid value in map insert"),
-                        );
+                        return ExecutionResult::PushError(e);
                     }
                 }
             }
@@ -696,9 +690,8 @@ pub fn moo_frame_execute(
                 f.temp = f.peek_top().clone();
             }
             Op::PushTemp => {
-                let tmp = f.temp.clone();
+                let tmp = std::mem::replace(&mut f.temp, v_none());
                 f.push(tmp);
-                f.temp = v_none();
             }
             Op::Eq => {
                 binary_bool_op!(f, ==, features_config.use_boolean_returns);
@@ -877,8 +870,9 @@ pub fn moo_frame_execute(
                 f.poke(0, result.unwrap());
             }
             Op::RangeSet => {
-                let (value, to, from, base) = (f.pop(), f.pop(), f.pop(), f.peek_top());
-                let result = base.range_set(&from, &to, &value, IndexMode::OneBased);
+                let (value, to, from) = (f.pop(), f.pop(), f.pop());
+                let base = std::mem::replace(f.peek_top_mut(), v_none());
+                let result = base.range_set_owned(&from, &to, &value, IndexMode::OneBased);
                 if let Err(e) = result {
                     f.pop();
                     return ExecutionResult::PushError(e);
@@ -893,12 +887,12 @@ pub fn moo_frame_execute(
                 let from_idx = stack_index(len, offset + 2, f.pc);
                 let base_idx = stack_index(len, offset + 3, f.pc);
 
-                let rhs = f.valstack[rhs_idx].clone();
-                let to = f.valstack[to_idx].clone();
-                let from = f.valstack[from_idx].clone();
-                let base = f.valstack[base_idx].clone();
+                let rhs = std::mem::replace(&mut f.valstack[rhs_idx], v_none());
+                let to = std::mem::replace(&mut f.valstack[to_idx], v_none());
+                let from = std::mem::replace(&mut f.valstack[from_idx], v_none());
+                let base = std::mem::replace(&mut f.valstack[base_idx], v_none());
 
-                let result = base.range_set(&from, &to, &rhs, IndexMode::OneBased);
+                let result = base.range_set_owned(&from, &to, &rhs, IndexMode::OneBased);
                 match result {
                     Ok(v) => {
                         f.valstack[base_idx] = v;
@@ -924,7 +918,7 @@ pub fn moo_frame_execute(
             }
             Op::GetProp => {
                 let propname = f.pop();
-                let obj = f.peek_top().clone();
+                let obj = std::mem::replace(f.peek_top_mut(), v_none());
 
                 let Ok(propname) = propname.as_symbol() else {
                     return ExecutionResult::PushError(
@@ -1038,9 +1032,10 @@ pub fn moo_frame_execute(
                 let prop_idx = stack_index(len, offset + 1, f.pc);
                 let base_idx = stack_index(len, offset + 2, f.pc);
 
-                let rhs = f.valstack[rhs_idx].clone();
-                let propname = f.valstack[prop_idx].clone();
-                let base = f.valstack[base_idx].clone();
+                let rhs = std::mem::replace(&mut f.valstack[rhs_idx], v_none());
+                let propname = std::mem::replace(&mut f.valstack[prop_idx], v_none());
+                let base = std::mem::replace(&mut f.valstack[base_idx], v_none());
+                let should_jump = base.as_object().is_some();
 
                 let Ok(propname) = propname.as_symbol() else {
                     let mut to_remove = vec![rhs_idx, prop_idx, base_idx];
@@ -1056,6 +1051,7 @@ pub fn moo_frame_execute(
                 };
 
                 let update_result = if let Some(obj) = base.as_object() {
+                    let obj = obj;
                     let hint =
                         load_inline_property_hint(inline_property_ic_ptr, inline_property_ic_len, pc);
                     record_vm_property_hint_put_prop_at(hint.is_some());
@@ -1070,7 +1066,7 @@ pub fn moo_frame_execute(
                             pc,
                             next_hint,
                         );
-                        base.clone()
+                        base
                     })
                     .map_err(|e| e.to_error())
                 } else if let Some(flyweight) = base.as_flyweight() {
@@ -1084,7 +1080,7 @@ pub fn moo_frame_execute(
                             E_TYPE.with_msg(|| format!("Invalid property name: {propname}")),
                         );
                     }
-                    let updated = flyweight.add_slot(propname, rhs.clone());
+                    let updated = flyweight.add_slot(propname, rhs);
                     clear_inline_property_hint(inline_property_ic_ptr, inline_property_ic_len, pc);
                     Ok(Var::from_flyweight(updated))
                 } else {
@@ -1096,7 +1092,6 @@ pub fn moo_frame_execute(
 
                 match update_result {
                     Ok(updated_base) => {
-                        let should_jump = base.as_object().is_some();
                         f.valstack[base_idx] = updated_base;
                         let mut to_remove = vec![rhs_idx, prop_idx];
                         remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
@@ -1197,7 +1192,7 @@ pub fn moo_frame_execute(
             Op::PushCatchLabel(label) => {
                 let label = *label;
                 // Get the error codes, which is either a list of error codes or Any.
-                let error_codes = f.pop().clone();
+                let error_codes = f.pop();
 
                 // The scope above us has to be a TryCatch, and we need to push into that scope
                 // the code list that we're going to execute.
@@ -1437,7 +1432,7 @@ pub fn moo_frame_execute(
                         E_TYPE.msg("invalid value in list comprehension"),
                     );
                 };
-                let Ok(new_list) = list.push(&result) else {
+                let Ok(new_list) = list.push_owned(&result) else {
                     return ExecutionResult::PushError(
                         E_TYPE.msg("invalid value in list comprehension"),
                     );

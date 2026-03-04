@@ -35,13 +35,57 @@ impl Map {
         Var::from_map(m)
     }
 
-    pub(crate) fn build_presorted<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Var {
-        // With OrdMap, presorted data doesn't need special handling
-        Self::build(pairs)
-    }
-
     pub fn iter(&self) -> impl Iterator<Item = (Var, Var)> + '_ {
         self.0.iter().map(|(k, v)| (k.clone(), v.clone()))
+    }
+
+    #[inline]
+    pub fn iter_ref(&self) -> impl Iterator<Item = (&Var, &Var)> + '_ {
+        self.0.iter()
+    }
+
+    pub fn set_owned(self, key: &Var, value: &Var) -> Result<Var, Error> {
+        // Toast/ToastStunt has a restriction that non-scalars cannot be keys (unless they're strings).
+        // So we enforce that here, even though it's not strictly necessary.
+        if !key.is_scalar() && !key.is_string() {
+            return Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Key must be a string or scalar, was {}",
+                    key.type_code().to_literal()
+                )
+            }));
+        }
+
+        let old_len = self.0.len();
+        let new_map = self.0.update(key.clone(), value.clone());
+        let new_len = new_map.len();
+        let hint = if new_len > old_len {
+            OP_HINT_MAP_INSERT
+        } else {
+            0
+        };
+        Ok(Var::from_map_with_hint(Map(Box::new(new_map)), hint))
+    }
+
+    pub fn remove_owned(self, key: &Var, case_sensitive: bool) -> (Var, Option<Var>) {
+        if case_sensitive {
+            // For case-sensitive removal, find the exact key first.
+            let found_key = self
+                .0
+                .keys()
+                .find(|existing_key| existing_key.cmp_case_sensitive(key) == Ordering::Equal)
+                .cloned();
+            if let Some(found_key) = found_key {
+                let removed_value = self.0.get(&found_key).cloned();
+                let new_map = self.0.without(&found_key);
+                return (Var::from_map(Map(Box::new(new_map))), removed_value);
+            }
+            return (Var::from_map(self), None);
+        }
+
+        let removed_value = self.0.get(key).cloned();
+        let new_map = self.0.without(key);
+        (Var::from_map(Map(Box::new(new_map))), removed_value)
     }
 }
 
@@ -52,8 +96,8 @@ impl PartialEq for Map {
         }
 
         // elements comparison using iterator
-        for (a, b) in self.iter().zip(other.iter()) {
-            if a != b {
+        for ((a_k, a_v), (b_k, b_v)) in self.iter_ref().zip(other.iter_ref()) {
+            if a_k != b_k || a_v != b_v {
                 return false;
             }
         }
@@ -74,11 +118,11 @@ impl Associative for Map {
     fn index_in(&self, key: &Var, case_sensitive: bool) -> Result<Option<usize>, Error> {
         // Check the common in the key-value pairs and return the index of the first match.
         // Linear O(N) operation.
-        let pos = self.iter().position(|(_, v)| {
+        let pos = self.0.iter().position(|(_, v)| {
             if case_sensitive {
                 v.cmp_case_sensitive(key) == Ordering::Equal
             } else {
-                v == *key
+                v == key
             }
         });
         Ok(pos)
@@ -119,8 +163,8 @@ impl Associative for Map {
     }
 
     fn index(&self, index: usize) -> Result<(Var, Var), Error> {
-        match self.iter().nth(index) {
-            Some((k, v)) => Ok((k, v)),
+        match self.0.iter().nth(index) {
+            Some((k, v)) => Ok((k.clone(), v.clone())),
             None => Err(E_RANGE.with_msg(|| {
                 format!(
                     "Index {} out of bounds for map of length {}",
@@ -139,14 +183,14 @@ impl Associative for Map {
         }
 
         // Use OrdMap's range functionality to get keys >= from
-        let range_pairs: Vec<(Var, Var)> = self
+        let range_map = self
             .0
             .range::<_, Var>(from..)
             .take_while(|(k, _)| (*k).cmp(to) == Ordering::Less)
             .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
+            .collect::<imbl::OrdMap<Var, Var>>();
 
-        Ok(Self::build_presorted(range_pairs.iter()))
+        Ok(Var::from_map(Map(Box::new(range_map))))
     }
 
     fn range_set(&self, _from: &Var, _to: &Var, _with: &Var) -> Result<Var, Error> {
@@ -179,25 +223,7 @@ impl Associative for Map {
     /// Return this map with the key/value pair removed.
     /// Return the new map and the value that was removed, if any
     fn remove(&self, key: &Var, case_sensitive: bool) -> (Var, Option<Var>) {
-        if case_sensitive {
-            // For case-sensitive removal, we need to find the key manually
-            for existing_key in self.0.keys() {
-                if existing_key.cmp_case_sensitive(key) == Ordering::Equal {
-                    let removed_value = self.0.get(existing_key).cloned();
-                    let new_map = self.0.without(existing_key);
-                    let m = Map(Box::new(new_map));
-                    return (Var::from_map(m), removed_value);
-                }
-            }
-            // Key not found - clone the map (cheap due to imbl's structural sharing)
-            (Var::from_map(self.clone()), None)
-        } else {
-            // Use OrdMap's efficient removal
-            let removed_value = self.0.get(key).cloned();
-            let new_map = self.0.without(key);
-            let m = Map(Box::new(new_map));
-            (Var::from_map(m), removed_value)
-        }
+        self.clone().remove_owned(key, case_sensitive)
     }
 
     fn first(&self) -> Result<(Var, Var), Error> {
@@ -251,8 +277,12 @@ impl Ord for Map {
         }
 
         // elements comparison
-        for (a, b) in self.iter().zip(other.iter()) {
-            match a.cmp(&b) {
+        for ((a_k, a_v), (b_k, b_v)) in self.iter_ref().zip(other.iter_ref()) {
+            match a_k.cmp(b_k) {
+                Ordering::Equal => {}
+                x => return x,
+            }
+            match a_v.cmp(b_v) {
                 Ordering::Equal => continue,
                 x => return x,
             }
@@ -264,9 +294,9 @@ impl Ord for Map {
 
 impl Hash for Map {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        for item in self.iter() {
-            item.0.hash(state);
-            item.1.hash(state);
+        for (k, v) in self.iter_ref() {
+            k.hash(state);
+            v.hash(state);
         }
     }
 }

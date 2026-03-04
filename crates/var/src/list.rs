@@ -66,6 +66,108 @@ impl List {
         (*self.0).into_iter().collect()
     }
 
+    #[inline]
+    pub fn push_owned(self, value: &Var) -> Var {
+        let mut v = *self.0;
+        v.push_back(value.clone());
+        Var::from_list_with_hint(List(Box::new(v)), OP_HINT_LIST_APPEND)
+    }
+
+    #[inline]
+    pub fn insert_owned(self, index: usize, value: &Var) -> Var {
+        let mut v = *self.0;
+        v.insert(index, value.clone());
+        Var::from_list(List(Box::new(v)))
+    }
+
+    pub fn index_set_owned(self, index: usize, value: &Var) -> Result<Var, Error> {
+        if index >= self.len() {
+            return Err(E_RANGE.with_msg(|| {
+                format!(
+                    "attempt to set index {} in list of length {}",
+                    index + 1,
+                    self.len()
+                )
+            }));
+        }
+
+        let mut v = *self.0;
+        v[index] = value.clone();
+        Ok(Var::from_list(List(Box::new(v))))
+    }
+
+    pub fn append_owned(self, other: &Var) -> Result<Var, Error> {
+        let Some(other) = other.as_list() else {
+            return Err(E_TYPE.msg("attempt to append non-list"));
+        };
+        let mut v = *self.0;
+        v.append(other.0.as_ref().clone());
+        Ok(Var::from_list_with_hint(
+            List(Box::new(v)),
+            OP_HINT_LIST_APPEND,
+        ))
+    }
+
+    pub fn remove_at_owned(self, index: usize) -> Result<Var, Error> {
+        if index >= self.len() {
+            return Err(E_RANGE.with_msg(|| {
+                format!(
+                    "attempt to remove index {} in list of length {}",
+                    index + 1,
+                    self.len()
+                )
+            }));
+        }
+
+        let mut v = *self.0;
+        v.remove(index);
+        Ok(Var::from_list(List(Box::new(v))))
+    }
+
+    pub fn range_set_owned(self, from: isize, to: isize, with: &Var) -> Result<Var, Error> {
+        let Some(with_val) = with.as_list() else {
+            return Err(E_TYPE.msg("attempt to set range with non-list"));
+        };
+
+        let base_len = self.len();
+        if from < 0 {
+            return Err(E_RANGE.with_msg(|| {
+                format!("attempt to set range with negative index {from}")
+            }));
+        }
+
+        // 1..0 is a "special" MOO-ism for front insertion.
+        if from == 0 && to == -1 {
+            let new_iter = with_val.iter_ref().cloned().chain(self.iter_ref().cloned());
+            return Ok(v_list_iter(new_iter));
+        }
+
+        let from = from.to_usize().unwrap_or(0);
+        let to = to.to_usize().unwrap_or(0);
+
+        if from > base_len + 1 {
+            return Err(E_RANGE.with_msg(|| {
+                format!(
+                    "attempt to set range with index {} in list of length {base_len}",
+                    from + 1
+                )
+            }));
+        }
+
+        let to = if base_len == 0 {
+            0
+        } else if to + 1 > base_len {
+            base_len - 1
+        } else {
+            to
+        };
+
+        let base_iter = self.iter_ref().take(from).cloned();
+        let with_iter = with_val.iter_ref().cloned();
+        let end_iter = self.iter_ref().skip(to + 1).cloned();
+        Ok(v_list_iter(base_iter.chain(with_iter).chain(end_iter)))
+    }
+
     /// Remove the first found instance of `item` from the list.
     pub fn set_remove(&self, item: &Var) -> Result<Var, Error> {
         let idx = self.0.iter().position(|v| *v == *item);
@@ -157,33 +259,16 @@ impl Sequence for List {
     }
 
     fn index_set(&self, index: usize, value: &Var) -> Result<Var, Error> {
-        if index >= self.len() {
-            return Err(E_RANGE.with_msg(|| {
-                format!(
-                    "attempt to set index {} in list of length {}",
-                    index + 1,
-                    self.len()
-                )
-            }));
-        }
-        let new = self.0.update(index, value.clone());
-        Ok(Var::from_list(List(Box::new(new))))
+        self.clone().index_set_owned(index, value)
     }
 
     fn push(&self, value: &Var) -> Result<Var, Error> {
-        let mut new = (*self.0).clone();
-        new.push_back(value.clone());
-        Ok(Var::from_list_with_hint(
-            List(Box::new(new)),
-            OP_HINT_LIST_APPEND,
-        ))
+        Ok(self.clone().push_owned(value))
     }
 
     fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
         let index = min(index, self.len());
-        let mut result = (*self.0).clone();
-        result.insert(index, value.clone());
-        Ok(Var::from_list(List(Box::new(result))))
+        Ok(self.clone().insert_owned(index, value))
     }
 
     fn range(&self, from: isize, to: isize) -> Result<Var, Error> {
@@ -205,90 +290,15 @@ impl Sequence for List {
     }
 
     fn range_set(&self, from: isize, to: isize, with: &Var) -> Result<Var, Error> {
-        let Some(with_val) = with.as_list() else {
-            return Err(E_TYPE.msg("attempt to set range with non-list"));
-        };
-
-        let base_len = self.len();
-
-        if from < 0 {
-            return Err(
-                E_RANGE.with_msg(|| format!("attempt to set range with negative index {from}"))
-            );
-        }
-
-        // 1..0 is a "special" MOO-ism that is short for "insert at front" and rather than trying
-        // to wrangle the logic below to Do The Right Thing, we'll just handle it here.
-        if from == 0 && to == -1 {
-            let new_iter = with_val.iter_ref().cloned().chain(self.iter_ref().cloned());
-            return Ok(v_list_iter(new_iter));
-        }
-
-        let from = from.to_usize().unwrap_or(0);
-        let to = to.to_usize().unwrap_or(0);
-
-        // E_RANGE if from is greater than the length of the list + 1
-        if from > base_len + 1 {
-            return Err(E_RANGE.with_msg(|| {
-                format!(
-                    "attempt to set range with index {} in list of length {base_len}",
-                    from + 1
-                )
-            }));
-        }
-
-        // MOO does a weird thing where it allows you to set a range where the end is out of bounds,
-        // and does not return E_RANGE (but does not do the same for single index set).
-        // So for example:
-        // foo = {}; foo[1..2] = {1, 2, 3} => {1, 2, 3}
-        // but
-        // foo = {}; foo[4..5] = {1, 2, 3} => E_RANGE
-        //
-        let to = if base_len == 0 {
-            0
-        } else if to + 1 > base_len {
-            base_len - 1
-        } else {
-            to
-        };
-
-        // Iterator taking up to `from`
-        let base_iter = self.iter_ref().take(from).cloned();
-        // Iterator for with_val...
-        let with_iter = with_val.iter_ref().cloned();
-        // Iterator from after to, up to the end
-        let end_iter = self.iter_ref().skip(to + 1).cloned();
-        let new_iter = base_iter.chain(with_iter).chain(end_iter);
-        Ok(v_list_iter(new_iter))
+        self.clone().range_set_owned(from, to, with)
     }
 
     fn append(&self, other: &Var) -> Result<Var, Error> {
-        let Some(other) = other.as_list() else {
-            return Err(E_TYPE.msg("attempt to append non-list"));
-        };
-
-        let mut result = (*self.0).clone();
-        result.append(other.0.as_ref().clone());
-        Ok(Var::from_list_with_hint(
-            List(Box::new(result)),
-            OP_HINT_LIST_APPEND,
-        ))
+        self.clone().append_owned(other)
     }
 
     fn remove_at(&self, index: usize) -> Result<Var, Error> {
-        if index >= self.len() {
-            return Err(E_RANGE.with_msg(|| {
-                format!(
-                    "attempt to remove index {} in list of length {}",
-                    index + 1,
-                    self.len()
-                )
-            }));
-        }
-
-        let mut new = (*self.0).clone();
-        new.remove(index);
-        Ok(Var::from_list(List(Box::new(new))))
+        self.clone().remove_at_owned(index)
     }
 }
 
@@ -371,7 +381,7 @@ impl std::iter::FromIterator<Var> for List {
 #[cfg(test)]
 mod tests {
     use crate::{
-        Error, IndexMode, Sequence,
+        Error, IndexMode, List, Sequence,
         error::ErrorCode::{E_RANGE, E_TYPE},
         v_bool_int,
         variant::Variant,
@@ -542,6 +552,29 @@ mod tests {
                 Var::mk_integer(3),
                 Var::mk_integer(4)
             ])
+        );
+    }
+
+    #[test]
+    fn test_owned_list_ops() {
+        let base = List::mk_list(&[v_int(1), v_int(2), v_int(3)]);
+
+        let pushed = base.clone().push_owned(&v_int(4));
+        assert_eq!(pushed, v_list(&[v_int(1), v_int(2), v_int(3), v_int(4)]));
+
+        let inserted = base.clone().insert_owned(1, &v_int(99));
+        assert_eq!(inserted, v_list(&[v_int(1), v_int(99), v_int(2), v_int(3)]));
+
+        let removed = base.clone().remove_at_owned(1).unwrap();
+        assert_eq!(removed, v_list(&[v_int(1), v_int(3)]));
+
+        let appended = base
+            .clone()
+            .append_owned(&v_list(&[v_int(8), v_int(9)]))
+            .unwrap();
+        assert_eq!(
+            appended,
+            v_list(&[v_int(1), v_int(2), v_int(3), v_int(8), v_int(9)])
         );
     }
 

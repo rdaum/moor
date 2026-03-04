@@ -246,8 +246,41 @@ pub(crate) fn ascii_strsub_ci(
     Ok(result)
 }
 
-fn needle_first_lower(needle: &str) -> Option<char> {
-    needle.chars().next().and_then(|c| c.to_lowercase().next())
+#[inline]
+fn single_folded_char(needle: &str) -> Option<char> {
+    let mut chars = needle.chars();
+    let ch = chars.next()?;
+    if chars.next().is_some() {
+        return None;
+    }
+    let mut folded = ch.to_lowercase();
+    let first = folded.next()?;
+    if folded.next().is_some() {
+        return None;
+    }
+    Some(first)
+}
+
+#[inline]
+fn folded_chars(s: &str) -> Vec<char> {
+    s.chars().flat_map(|c| c.to_lowercase()).collect()
+}
+
+#[inline]
+fn char_byte_range(subject: &str, index: usize) -> Option<(usize, usize)> {
+    let mut chars = subject.char_indices();
+    let (start_byte, _) = chars.nth(index)?;
+    let end_byte = chars.next().map(|(i, _)| i).unwrap_or(subject.len());
+    Some((start_byte, end_byte))
+}
+
+#[inline]
+fn insertion_byte_index(subject: &str, index: usize) -> usize {
+    subject
+        .char_indices()
+        .nth(index)
+        .map(|(i, _)| i)
+        .unwrap_or(subject.len())
 }
 
 #[inline]
@@ -274,10 +307,22 @@ pub(crate) fn unicode_find_ci(subject: &str, needle: &str, skip_chars: usize) ->
         return Some(skip_chars.min(subject.chars().count()));
     }
 
-    let Some(first_needle_char) = needle_first_lower(needle) else {
+    if let Some(needle_single) = single_folded_char(needle) {
+        for (char_idx, (_, subject_char)) in subject.char_indices().enumerate() {
+            if char_idx < skip_chars {
+                continue;
+            }
+            if subject_char.to_lowercase().next() == Some(needle_single) {
+                return Some(char_idx);
+            }
+        }
+        return None;
+    }
+
+    let needle_lower = folded_chars(needle);
+    let Some(&first_needle_char) = needle_lower.first() else {
         return Some(skip_chars.min(subject.chars().count()));
     };
-    let needle_lower: Vec<char> = needle.chars().flat_map(|c| c.to_lowercase()).collect();
 
     for (char_idx, (byte_pos, subject_char)) in subject.char_indices().enumerate() {
         if char_idx < skip_chars {
@@ -308,10 +353,23 @@ pub(crate) fn unicode_rfind_ci(subject: &str, needle: &str, skip_from_end: usize
         return Some(search_chars);
     }
 
-    let Some(first_needle_char) = needle_first_lower(needle) else {
+    if let Some(needle_single) = single_folded_char(needle) {
+        let mut last_match: Option<usize> = None;
+        for (char_idx, (_, subject_char)) in subject.char_indices().enumerate() {
+            if char_idx >= search_chars {
+                break;
+            }
+            if subject_char.to_lowercase().next() == Some(needle_single) {
+                last_match = Some(char_idx);
+            }
+        }
+        return last_match;
+    }
+
+    let needle_lower = folded_chars(needle);
+    let Some(&first_needle_char) = needle_lower.first() else {
         return Some(search_chars);
     };
-    let needle_lower: Vec<char> = needle.chars().flat_map(|c| c.to_lowercase()).collect();
 
     let mut last_match: Option<usize> = None;
 
@@ -340,10 +398,22 @@ pub(crate) fn unicode_strsub_ci(subject: &str, what: &str, with: &str) -> String
         return subject.to_string();
     }
 
-    let Some(first_what_char) = needle_first_lower(what) else {
+    if let Some(what_single) = single_folded_char(what) {
+        let mut result = String::with_capacity(subject.len());
+        for ch in subject.chars() {
+            if ch.to_lowercase().next() == Some(what_single) {
+                result.push_str(with);
+            } else {
+                result.push(ch);
+            }
+        }
+        return result;
+    }
+
+    let what_lower = folded_chars(what);
+    let Some(&first_what_char) = what_lower.first() else {
         return subject.to_string();
     };
-    let what_lower: Vec<char> = what.chars().flat_map(|c| c.to_lowercase()).collect();
 
     let mut result = String::with_capacity(subject.len());
     let mut cursor = 0;
@@ -538,30 +608,30 @@ impl Sequence for Str {
     }
 
     fn index(&self, index: usize) -> Result<Var, Error> {
-        if index >= self.len() {
+        let subject = self.as_str();
+        let Some((start_byte, end_byte)) = char_byte_range(subject, index) else {
             return Err(E_RANGE.with_msg(|| {
                 format!(
                     "Index {} out of range for string of length {}",
                     index,
-                    self.len()
+                    subject.chars().count()
                 )
             }));
-        }
-        let c = self.as_str().chars().nth(index).unwrap();
-        let c_str = c.to_string();
-        Ok(Var::from_str_type(Str(ArcStr::from(c_str))))
+        };
+        Ok(Var::mk_str(&subject[start_byte..end_byte]))
     }
 
     fn index_set(&self, index: usize, value: &Var) -> Result<Var, Error> {
-        if index >= self.len() {
+        let subject = self.as_str();
+        let Some((start_byte, end_byte)) = char_byte_range(subject, index) else {
             return Err(E_RANGE.with_msg(|| {
                 format!(
                     "Index {} out of range for string of length {}",
                     index,
-                    self.len()
+                    subject.chars().count()
                 )
             }));
-        }
+        };
 
         // Index set for strings requires that the `value` being set is a string, otherwise it's.
         // E_TYPE.
@@ -580,12 +650,7 @@ impl Sequence for Str {
             return Err(E_INVARG.msg("String index set value must be a single character"));
         }
 
-        // Convert character index to byte indices
-        let mut chars = self.as_str().char_indices();
-        let (start_byte, _) = chars.nth(index).unwrap();
-        let end_byte = chars.next().map(|(i, _)| i).unwrap_or(self.as_str().len());
-
-        let mut s = self.as_str().to_string();
+        let mut s = subject.to_string();
         s.replace_range(start_byte..end_byte, value.as_str());
         Ok(Var::from_str_type(Str(ArcStr::from(s))))
     }
@@ -615,18 +680,7 @@ impl Sequence for Str {
             }));
         };
 
-        // Convert character index to byte index
-        let byte_index = if index == 0 {
-            0
-        } else if index >= self.len() {
-            self.as_str().len()
-        } else {
-            self.as_str()
-                .char_indices()
-                .nth(index)
-                .map(|(i, _)| i)
-                .unwrap_or(self.as_str().len())
-        };
+        let byte_index = insertion_byte_index(self.as_str(), index);
 
         let mut new_copy = self.as_str().to_string();
         new_copy.insert_str(byte_index, value.as_str());
@@ -725,22 +779,18 @@ impl Sequence for Str {
     }
 
     fn remove_at(&self, index: usize) -> Result<Var, Error> {
-        if index >= self.len() {
+        let subject = self.as_str();
+        let Some((start_byte, end_byte)) = char_byte_range(subject, index) else {
             return Err(E_RANGE.with_msg(|| {
                 format!(
                     "Index {} out of range for string of length {}",
                     index,
-                    self.len()
+                    subject.chars().count()
                 )
             }));
-        }
+        };
 
-        // Convert character index to byte indices
-        let mut chars = self.as_str().char_indices();
-        let (start_byte, _) = chars.nth(index).unwrap();
-        let end_byte = chars.next().map(|(i, _)| i).unwrap_or(self.as_str().len());
-
-        let mut new_copy = self.as_str().to_string();
+        let mut new_copy = subject.to_string();
         new_copy.replace_range(start_byte..end_byte, "");
         Ok(Var::from_str_type(Str(ArcStr::from(new_copy))))
     }
