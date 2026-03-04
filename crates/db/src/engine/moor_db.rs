@@ -24,7 +24,7 @@ use crate::{
         verb_cache::VerbResolutionCache,
     },
     config::DatabaseConfig,
-    tx_management::{CheckRelation, Relation, RelationTransaction, Timestamp, Tx, WorkingSet},
+    tx::{CheckRelation, Relation, RelationTransaction, Timestamp, Tx, WorkingSet},
 };
 use crate::{
     engine::relation_defs::define_relations,
@@ -151,7 +151,7 @@ impl MoorDB {
     /// Create a snapshot-based SnapshotInterface for consistent read-only access
     pub fn create_snapshot(
         &self,
-    ) -> Result<Box<dyn SnapshotInterface>, crate::tx_management::Error> {
+    ) -> Result<Box<dyn SnapshotInterface>, crate::tx::Error> {
         // Wait for all write transactions up to the last completed write to finish
         // This ensures the snapshot captures all committed write data
         let last_write_timestamp = Timestamp(

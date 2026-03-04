@@ -38,7 +38,7 @@ use moor_common::threading::{set_current_thread_background_priority, spawn_effic
 use parking_lot::Mutex;
 use tracing::{error, info, warn};
 
-use crate::tx_management::{Error, Timestamp};
+use crate::tx::{Error, Timestamp};
 
 /// A single operation to be written to fjall.
 #[derive(Clone)]

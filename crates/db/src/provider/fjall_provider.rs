@@ -45,7 +45,7 @@
 use crate::{
     db_counters,
     provider::batch_writer::{BatchCollector, BatchValue},
-    tx_management::{EncodeFor, Error, RelationCodomain, RelationDomain, Timestamp},
+    tx::{EncodeFor, Error, RelationCodomain, RelationDomain, Timestamp},
 };
 use byteview::ByteView;
 use fjall::Slice;

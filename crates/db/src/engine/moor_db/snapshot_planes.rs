@@ -12,7 +12,7 @@
 //
 
 use super::{Caches, WorldStateSnapshot};
-use crate::tx_management::Tx;
+use crate::tx::Tx;
 use arc_swap::ArcSwap;
 use moor_common::util::CachePadded;
 use std::sync::Arc;

@@ -22,7 +22,7 @@ use crate::{
     api::world_state::db_counters,
     engine::moor_db::{Caches, SEQUENCE_MAX_OBJECT, WorldStateTransaction},
     provider::fjall_provider::FjallProvider,
-    tx_management::{EncodeFor, RelationTransaction},
+    tx::{EncodeFor, RelationTransaction},
 };
 use byteview::ByteView;
 use minstant::Instant;
@@ -52,7 +52,7 @@ fn upsert<Domain, Codomain>(
 ) -> Result<Option<Codomain>, Error>
 where
     Domain: Clone + Eq + Hash + Send + Sync + std::fmt::Debug + Display + 'static,
-    Codomain: crate::tx_management::RelationCodomain,
+    Codomain: crate::tx::RelationCodomain,
     FjallProvider<Domain, Codomain>:
         EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
 {
@@ -67,7 +67,7 @@ fn insert_guaranteed_unique<Domain, Codomain>(
 ) -> Result<(), Error>
 where
     Domain: Clone + Eq + Hash + Send + Sync + std::fmt::Debug + Display + 'static,
-    Codomain: crate::tx_management::RelationCodomain,
+    Codomain: crate::tx::RelationCodomain,
     FjallProvider<Domain, Codomain>:
         EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
 {

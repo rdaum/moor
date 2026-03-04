@@ -11,16 +11,18 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+mod apply;
+mod check;
 mod indexes;
 mod relation;
-mod relation_tx;
+mod resolve;
+mod transaction;
 
+pub use check::{CheckRelation, PotentialConflict, ProposedOp};
 pub use indexes::RelationIndex;
-pub use relation::{
-    AcceptIdentical, CheckRelation, ConflictResolver, FailOnConflict, PotentialConflict,
-    ProposedOp, Relation,
-};
-pub use relation_tx::{RelationTransaction, WorkingSet};
+pub use relation::Relation;
+pub use resolve::{AcceptIdentical, ConflictResolver, FailOnConflict};
+pub use transaction::{RelationTransaction, WorkingSet};
 
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
@@ -35,7 +37,7 @@ use moor_var::{Associative, Obj, Sequence, Var, program::ProgramType};
 // ============================================================================
 //
 // These traits reduce boilerplate in type parameter bounds throughout the
-// tx_management and provider modules. They use the blanket impl pattern since
+// tx and provider modules. They use the blanket impl pattern since
 // Rust stable doesn't have native trait aliases.
 
 /// Trait alias for types that can be used as a domain (key) in a relation.

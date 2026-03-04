@@ -13,9 +13,9 @@
 
 use crate::{
     provider::Provider,
-    tx_management::{
-        ConflictInfo, ConflictType, Error, RelationCodomain, RelationDomain, Timestamp, Tx,
-        indexes::RelationIndex,
+    tx::{
+        ConflictInfo, ConflictType, Error, RelationCodomain, RelationDomain, RelationIndex,
+        Timestamp, Tx,
     },
 };
 use ahash::AHasher;

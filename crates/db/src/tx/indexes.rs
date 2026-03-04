@@ -12,7 +12,7 @@
 //
 
 use crate::Timestamp;
-use crate::tx_management::{RelationCodomain, RelationCodomainHashable, RelationDomain};
+use crate::tx::{RelationCodomain, RelationCodomainHashable, RelationDomain};
 use ahash::AHasher;
 use imbl::shared_ptr::DefaultSharedPtr;
 use std::{any::Any, hash::BuildHasherDefault};

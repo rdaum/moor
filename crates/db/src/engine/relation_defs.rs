@@ -116,7 +116,7 @@ macro_rules! define_relations {
             pub(crate) struct WorldStateSnapshot {
                 pub(crate) version: u64,
                 pub(crate) caches: std::sync::Arc<crate::engine::moor_db::Caches>,
-                $( pub(crate) $field: std::sync::Arc<dyn crate::tx_management::RelationIndex<$domain, $codomain>>, )*
+                $( pub(crate) $field: std::sync::Arc<dyn crate::tx::RelationIndex<$domain, $codomain>>, )*
             }
 
             /// Trait defining the interface for processing transaction commits.
@@ -141,7 +141,7 @@ macro_rules! define_relations {
                 fn check_all(&mut self, ws: &mut RelationWorkingSets) -> Result<(), moor_common::model::ConflictInfo> {
                     $(
                         if let Err(e) = self.$field.check(&mut ws.$field) {
-                            if let crate::tx_management::Error::Conflict(info) = e {
+                            if let crate::tx::Error::Conflict(info) = e {
                                 return Err(info);
                             }
                             // For other errors, create a generic conflict info

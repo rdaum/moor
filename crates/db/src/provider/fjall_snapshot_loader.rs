@@ -18,7 +18,7 @@ use uuid::Uuid;
 use crate::{
     AnonymousObjectMetadata, ObjAndUUIDHolder, StringHolder,
     provider::fjall_provider::FjallCodec,
-    tx_management::{EncodeFor, Error, Timestamp},
+    tx::{EncodeFor, Error, Timestamp},
 };
 use moor_common::{
     model::{

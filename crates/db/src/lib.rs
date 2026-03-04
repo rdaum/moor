@@ -24,7 +24,7 @@ mod config;
 mod engine;
 mod model;
 mod provider;
-mod tx_management;
+mod tx;
 
 use crate::engine::MoorDB;
 
@@ -54,7 +54,7 @@ pub use model::{
     UUIDHolder,
 };
 pub use provider::Provider;
-pub use tx_management::{
+pub use tx::{
     AcceptIdentical, ConflictResolver, Error, FailOnConflict, PotentialConflict, ProposedOp,
     Relation, RelationCodomain, RelationCodomainHashable, RelationDomain, RelationIndex,
     RelationTransaction, Timestamp, Tx, WorkingSet,
