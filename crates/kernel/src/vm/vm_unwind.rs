@@ -42,7 +42,7 @@ impl VMExecState {
     /// Compose a list of the current stack frames, starting from `start_frame_num` and working
     /// upwards.
     pub(crate) fn make_stack_list(activations: &[Activation]) -> Vec<Var> {
-        let mut stack_list = vec![];
+        let mut stack_list = Vec::with_capacity(activations.len());
         for a in activations.iter().rev() {
             // Produce traceback line for each activation frame and append to stack_list
             // Should include line numbers (if possible), the name of the currently running verb,
@@ -52,31 +52,27 @@ impl VMExecState {
                 Some(l) => v_int(l as i64),
             };
             // TODO: abstract this a bit further, putting its construction onto the activation/frame
-            let traceback_entry = match &a.frame {
-                Frame::Moo(_) => {
-                    vec![
-                        a.this.clone(),
-                        v_str(&a.verb_name.as_string()),
-                        v_obj(a.permissions),
-                        v_obj(a.verb_definer()),
-                        v_obj(a.player),
-                        line_no,
-                    ]
-                }
+            match &a.frame {
+                Frame::Moo(_) => stack_list.push(v_list(&[
+                    a.this.clone(),
+                    v_str(&a.verb_name.as_string()),
+                    v_obj(a.permissions),
+                    v_obj(a.verb_definer()),
+                    v_obj(a.player),
+                    line_no,
+                ])),
                 Frame::Bf(bf_frame) => {
                     let bf_name = BUILTINS.name_of(bf_frame.bf_id).unwrap();
-                    vec![
+                    stack_list.push(v_list(&[
                         a.this.clone(),
                         v_arc_str(bf_name.as_arc_str()),
                         v_obj(a.permissions),
                         v_obj(NOTHING),
                         v_obj(a.player),
                         v_int(0),
-                    ]
+                    ]));
                 }
-            };
-
-            stack_list.push(v_list(&traceback_entry));
+            }
         }
         stack_list
     }
@@ -85,33 +81,32 @@ impl VMExecState {
     pub(crate) fn make_backtrace(activations: &[Activation], error: &Error) -> Vec<Var> {
         // Walk live activation frames and produce a written representation of a traceback for each
         // frame.
-        let mut backtrace_list = vec![];
+        let mut backtrace_list = Vec::with_capacity(activations.len() + 1);
         for (i, a) in activations.iter().rev().enumerate() {
-            let mut pieces = vec![];
+            let mut piece = String::new();
             if i != 0 {
-                pieces.push("... called from ".to_string());
+                piece.push_str("... called from ");
             }
             // TODO: abstract this a bit further, putting it onto the frame itself
             match &a.frame {
                 Frame::Moo(_) => {
-                    pieces.push(format!("{}:{}", a.verb_definer(), a.verb_name));
+                    piece.push_str(&format!("{}:{}", a.verb_definer(), a.verb_name));
                 }
                 Frame::Bf(bf_frame) => {
                     let bf_name = BUILTINS.name_of(bf_frame.bf_id).unwrap();
-                    pieces.push(format!("builtin {bf_name}",));
+                    piece.push_str(&format!("builtin {bf_name}"));
                 }
             }
             if v_obj(a.verb_definer()) != a.this {
-                pieces.push(format!(" (this == {})", to_literal(&a.this)));
+                piece.push_str(&format!(" (this == {})", to_literal(&a.this)));
             }
             if let Some(line_num) = a.frame.find_line_no() {
-                pieces.push(format!(" (line {line_num})"));
+                piece.push_str(&format!(" (line {line_num})"));
             }
             if i == 0 {
                 let raise_msg = format!("{} ({})", error.err_type, error.message());
-                pieces.push(format!(": {raise_msg}"));
+                piece.push_str(&format!(": {raise_msg}"));
             }
-            let piece = pieces.join("");
             backtrace_list.push(v_str(&piece))
         }
         backtrace_list.push(v_str("(End of traceback)"));
@@ -223,7 +218,7 @@ impl VMExecState {
                                 // Jump to the label pointed to by the finally label and then continue on
                                 // executing.
                                 frame.jump(&finally_label);
-                                frame.finally_stack.push(why.clone());
+                                frame.finally_stack.push(why);
                                 return ExecutionResult::More;
                             }
                             ScopeType::TryCatch(catches) => {

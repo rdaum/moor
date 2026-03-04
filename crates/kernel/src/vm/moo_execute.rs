@@ -399,8 +399,8 @@ pub fn moo_frame_execute(
 
                 // Create ForRange scope with initial state
                 f.push_for_range_scope(
-                    &start_val,
-                    &end_val,
+                    start_val,
+                    end_val,
                     operand.loop_variable,
                     &operand.end_label,
                     operand.environment_width,

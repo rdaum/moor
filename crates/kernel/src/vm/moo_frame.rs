@@ -606,8 +606,8 @@ impl MooStackFrame {
     /// Enter a ForRange scope that holds iteration state
     pub fn push_for_range_scope(
         &mut self,
-        start_value: &Var,
-        end_value: &Var,
+        start_value: Var,
+        end_value: Var,
         loop_variable: Name,
         end_label: &Label,
         environment_width: u16,
@@ -615,8 +615,8 @@ impl MooStackFrame {
         let end_pos = self.resolved_program().jump_label(*end_label).position.0 as usize;
         let start_pos = self.pc;
         let scope_type = ScopeType::ForRange {
-            current_value: start_value.clone(),
-            end_value: end_value.clone(),
+            current_value: start_value,
+            end_value,
             loop_variable,
             end_label: *end_label,
         };
