@@ -104,26 +104,23 @@ fn build_captured_environment(
 macro_rules! binary_bool_op {
     ( $f:ident, $op:tt, $bi:expr ) => {
         let rhs = $f.pop();
-        let lhs = $f.peek_top();
-        let bres : bool = *lhs $op rhs;
-        let result = {
-            if $bi {
-                Var::mk_bool(bres)
-            } else {
-                v_bool_int(bres)
-            }
+        let bres: bool = *$f.peek_top() $op rhs;
+        *$f.peek_top_mut() = if $bi {
+            Var::mk_bool(bres)
+        } else {
+            v_bool_int(bres)
         };
-        $f.poke(0, result)
     };
 }
 
 macro_rules! binary_var_op {
-    ( $vm:ident, $f:ident, $state:ident, $op:tt ) => {
+    ( $f:ident, $op:tt ) => {
         let rhs = $f.pop();
-        let lhs = $f.peek_top();
-        let result = lhs.$op(&rhs);
+        let result = $f.peek_top().$op(&rhs);
         match result {
-            Ok(result) => $f.poke(0, result),
+            Ok(result) => {
+                *$f.peek_top_mut() = result;
+            }
             Err(err_code) => {
                 $f.pop();
                 return ExecutionResult::PushError(err_code);
@@ -729,10 +726,10 @@ pub fn moo_frame_execute(
                 }
             }
             Op::Mul => {
-                binary_var_op!(self, f, state, mul);
+                binary_var_op!(f, mul);
             }
             Op::Sub => {
-                binary_var_op!(self, f, state, sub);
+                binary_var_op!(f, sub);
             }
             Op::Div => {
                 // Explicit division by zero check to raise E_DIV.
@@ -742,20 +739,20 @@ pub fn moo_frame_execute(
                 if divisor.is_zero() {
                     return ExecutionResult::PushError(E_DIV.msg("division by zero"));
                 };
-                binary_var_op!(self, f, state, div);
+                binary_var_op!(f, div);
             }
             Op::Add => {
-                binary_var_op!(self, f, state, add);
+                binary_var_op!(f, add);
             }
             Op::Exp => {
-                binary_var_op!(self, f, state, pow);
+                binary_var_op!(f, pow);
             }
             Op::Mod => {
                 let (divisor, _) = f.peek2();
                 if divisor.is_zero() {
                     return ExecutionResult::PushError(E_DIV.msg("division by zero"));
                 };
-                binary_var_op!(self, f, state, modulus);
+                binary_var_op!(f, modulus);
             }
             Op::And(label) => {
                 let label = *label;
@@ -776,22 +773,22 @@ pub fn moo_frame_execute(
                 }
             }
             Op::BitAnd => {
-                binary_var_op!(self, f, state, bitand);
+                binary_var_op!(f, bitand);
             }
             Op::BitOr => {
-                binary_var_op!(self, f, state, bitor);
+                binary_var_op!(f, bitor);
             }
             Op::BitXor => {
-                binary_var_op!(self, f, state, bitxor);
+                binary_var_op!(f, bitxor);
             }
             Op::BitShl => {
-                binary_var_op!(self, f, state, bitshl);
+                binary_var_op!(f, bitshl);
             }
             Op::BitShr => {
-                binary_var_op!(self, f, state, bitshr);
+                binary_var_op!(f, bitshr);
             }
             Op::BitLShr => {
-                binary_var_op!(self, f, state, bitlshr);
+                binary_var_op!(f, bitlshr);
             }
             Op::BitNot => {
                 let v = f.peek_top();
