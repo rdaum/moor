@@ -38,10 +38,14 @@ pub struct ScatterResult {
 ///
 /// For lambda parameter binding, this function sets variables in the environment array and
 /// the caller should handle default value assignment if `needs_defaults` is true.
-pub fn scatter_assign<F>(table: &ScatterArgs, args: &[Var], mut set_var: F) -> ScatterResult
+pub fn scatter_assign<'a, I, F>(table: &ScatterArgs, args: I, mut set_var: F) -> ScatterResult
 where
+    I: IntoIterator<Item = &'a Var>,
+    I::IntoIter: ExactSizeIterator,
     F: FnMut(&moor_var::program::names::Name, Var),
 {
+    let mut args_iter = args.into_iter();
+
     // Count parameter types - this logic is identical in both implementations
     let (nargs, rest, nreq) = {
         let mut nargs = 0;
@@ -60,7 +64,7 @@ where
 
     // Validate arguments - this logic is identical in both implementations
     let have_rest = rest > 0; // We have rest parameters if any ScatterLabel::Rest exists
-    let len = args.len();
+    let len = args_iter.len();
 
     if len < nreq || (!have_rest && len > nargs) {
         return ScatterResult {
@@ -82,14 +86,12 @@ where
     let mut needs_defaults = false;
     let mut first_default_label = None;
     let mut first_default_index = None;
-    let mut args_iter = args.iter();
-
     // Assign parameters - this logic is very similar but handles defaults differently
     for (idx, label) in table.labels.iter().enumerate() {
         match label {
             ScatterLabel::Rest(id) => {
                 // Collect remaining arguments into a list
-                let mut v = vec![];
+                let mut v = Vec::with_capacity(nrest);
                 for _ in 0..nrest {
                     if let Some(rest) = args_iter.next() {
                         v.push(rest.clone());
@@ -170,7 +172,7 @@ mod tests {
         let args = vec![v_int(42), v_str("hello")];
         let mut assignments = HashMap::new();
 
-        let result = scatter_assign(&table, &args, |name, value| {
+        let result = scatter_assign(&table, args.iter(), |name, value| {
             assignments.insert(*name, value);
         });
 
@@ -192,7 +194,7 @@ mod tests {
         let args = vec![v_str("Alice")]; // Missing optional arg
         let mut assignments = HashMap::new();
 
-        let result = scatter_assign(&table, &args, |name, value| {
+        let result = scatter_assign(&table, args.iter(), |name, value| {
             assignments.insert(*name, value);
         });
 
@@ -212,7 +214,7 @@ mod tests {
         let args = vec![v_int(1), v_int(2), v_int(3)]; // Too many!
         let mut assignments = HashMap::new();
 
-        let result = scatter_assign(&table, &args, |name, value| {
+        let result = scatter_assign(&table, args.iter(), |name, value| {
             assignments.insert(*name, value);
         });
 

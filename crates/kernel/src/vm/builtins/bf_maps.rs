@@ -60,7 +60,7 @@ fn bf_mapkeys(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     };
 
-    let keys: Vec<Var> = m.iter().map(|kv| kv.0.clone()).collect();
+    let keys: Vec<Var> = m.iter_ref().map(|(k, _)| k.clone()).collect();
 
     Ok(BfRet::Ret(v_list(&keys)))
 }
@@ -84,7 +84,7 @@ fn bf_mapvalues(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let values: Vec<Var> = if bf_args.args.len() == 1 {
         // No keys specified - return all values
-        m.iter().map(|kv| kv.1.clone()).collect()
+        m.iter_ref().map(|(_, v)| v.clone()).collect()
     } else {
         // Keys specified - return values for those keys in order
         let mut result = Vec::with_capacity(bf_args.args.len() - 1);

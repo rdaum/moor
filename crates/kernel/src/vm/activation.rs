@@ -53,7 +53,7 @@ fn lambda_scatter_assign(
     let mut assigned_params = HashSet::new();
 
     // Use the shared scatter assignment logic
-    let result = scatter_assign(scatter_args, args, |name, value| {
+    let result = scatter_assign(scatter_args, args.iter(), |name, value| {
         let name_idx = name.0 as usize;
         if name_idx < environment.len() {
             environment[name_idx] = value;

@@ -1403,8 +1403,9 @@ fn bf_sort(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let reverse = bf_args.args.len() >= 4 && bf_args.args[3].is_true();
 
     // Validate all elements in sort_by are the same type
-    let first_elem = sort_by.index(0).map_err(BfErr::ErrValue)?;
-    let sort_type = first_elem.type_code();
+    let sort_keys: Vec<&Var> = sort_by.iter_ref().collect();
+    let value_items: Vec<&Var> = values_list.iter_ref().collect();
+    let sort_type = sort_keys[0].type_code();
 
     // Check if type is sortable
     match sort_type {
@@ -1424,7 +1425,7 @@ fn bf_sort(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     // Validate all elements are the same type
-    for (idx, elem) in sort_by.iter().enumerate() {
+    for (idx, elem) in sort_keys.iter().enumerate() {
         if elem.type_code() != sort_type {
             return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
                 format!(
@@ -1442,8 +1443,8 @@ fn bf_sort(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Sort indices based on the sort_by list elements
     indices.sort_by(|&a, &b| {
-        let elem_a = sort_by.index(a).unwrap();
-        let elem_b = sort_by.index(b).unwrap();
+        let elem_a = sort_keys[a];
+        let elem_b = sort_keys[b];
 
         let ordering = match (elem_a.variant(), elem_b.variant()) {
             (Variant::Int(a), Variant::Int(b)) => a.cmp(&b),
@@ -1466,7 +1467,7 @@ fn bf_sort(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     natord::compare_ignore_case(a.as_str(), b.as_str())
                 } else {
                     // Case-insensitive comparison
-                    a.as_str().to_lowercase().cmp(&b.as_str().to_lowercase())
+                    a.cmp(b)
                 }
             }
             _ => unreachable!("Type validation should have caught this"),
@@ -1480,10 +1481,7 @@ fn bf_sort(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     });
 
     // Build result list using sorted indices from values_list
-    let result: Vec<Var> = indices
-        .iter()
-        .map(|&idx| values_list.index(idx).unwrap())
-        .collect();
+    let result: Vec<Var> = indices.into_iter().map(|idx| value_items[idx].clone()).collect();
 
     Ok(Ret(v_list(&result)))
 }

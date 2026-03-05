@@ -1343,7 +1343,7 @@ pub fn moo_frame_execute(
             Op::Scatter(sa) => {
                 // Get the scatter table and the values to assign
                 let sa = *sa;
-                let table = &program.scatter_table(sa).clone();
+                let table = program.scatter_table(sa);
                 let rhs_values = {
                     let rhs = f.peek_top();
                     let Some(rhs_values) = rhs.as_list() else {
@@ -1352,17 +1352,13 @@ pub fn moo_frame_execute(
                         f.pop();
                         return push_error_cold(scatter_err);
                     };
-                    rhs_values.clone()
+                    rhs_values.iter_ref().cloned().collect::<Vec<_>>()
                 };
 
                 // Use the shared scatter assignment logic
-                let result = scatter_assign(
-                    table,
-                    &rhs_values.iter().collect::<Vec<_>>(),
-                    |name, value| {
-                        f.set_variable(name, value);
-                    },
-                );
+                let result = scatter_assign(table, rhs_values.iter(), |name, value| {
+                    f.set_variable(name, value);
+                });
 
                 match result.result {
                     Err(e) => {
@@ -1412,40 +1408,40 @@ pub fn moo_frame_execute(
             }
             Op::ComprehendRange(offset) => {
                 let offset = *offset;
-                let range_comprehension = program.range_comprehension(offset).clone();
-                let end_of_range = f
-                    .get_env(&range_comprehension.end_of_range_register)
-                    .unwrap()
-                    .clone();
+                let range_comprehension = program.range_comprehension(offset);
+                let end_of_range_register = range_comprehension.end_of_range_register;
+                let position_register = range_comprehension.position;
+                let end_label = range_comprehension.end_label;
+                let end_of_range = f.get_env(&end_of_range_register).unwrap();
                 let position = f
-                    .get_env(&range_comprehension.position)
-                    .expect("Bad range position variable in range comprehension")
-                    .clone();
+                    .get_env(&position_register)
+                    .expect("Bad range position variable in range comprehension");
                 if !position.le(&end_of_range) {
-                    f.jump(&range_comprehension.end_label);
+                    f.jump(&end_label);
                 }
             }
             Op::ComprehendList(offset) => {
                 let offset = *offset;
-                let list_comprehension = program.list_comprehension(offset).clone();
-                let list = f
-                    .get_env(&list_comprehension.list_register)
-                    .unwrap()
-                    .clone();
+                let list_comprehension = program.list_comprehension(offset);
+                let list_register = list_comprehension.list_register;
+                let position_register = list_comprehension.position_register;
+                let item_variable = list_comprehension.item_variable;
+                let end_label = list_comprehension.end_label;
+                let list = f.get_env(&list_register).unwrap();
                 let position = f
-                    .get_env(&list_comprehension.position_register)
+                    .get_env(&position_register)
                     .unwrap()
-                    .clone();
+                    ;
                 let Some(position) = position.as_integer() else {
                     return push_error_cold(E_TYPE.msg("invalid value in list comprehension"));
                 };
                 if position > list.len().unwrap() as i64 {
-                    f.jump(&list_comprehension.end_label);
+                    f.jump(&end_label);
                 } else {
                     let Ok(item) = list.index(&v_int(position), IndexMode::OneBased) else {
                         return push_error_cold(E_RANGE.msg("invalid index in list comprehension"));
                     };
-                    f.set_variable(&list_comprehension.item_variable, item);
+                    f.set_variable(&item_variable, item);
                 }
             }
             Op::ContinueComprehension(id) => {
@@ -1454,8 +1450,7 @@ pub fn moo_frame_execute(
                 let list = f.pop();
                 let position = f
                     .get_env(&id)
-                    .expect("Bad range position variable in range comprehension")
-                    .clone();
+                    .expect("Bad range position variable in range comprehension");
                 let Ok(new_position) = position.add(&v_int(1)) else {
                     return push_error_cold(E_TYPE.msg("invalid value in list comprehension"));
                 };

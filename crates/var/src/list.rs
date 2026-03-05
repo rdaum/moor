@@ -57,7 +57,7 @@ impl List {
         self.0.iter().cloned()
     }
 
-    pub fn iter_ref(&self) -> impl Iterator<Item = &Var> + '_ {
+    pub fn iter_ref(&self) -> impl ExactSizeIterator<Item = &Var> + '_ {
         self.0.iter()
     }
 
