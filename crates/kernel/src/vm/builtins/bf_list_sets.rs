@@ -308,8 +308,20 @@ fn translate_pattern(pattern: &str) -> Option<String> {
 type Span = (isize, isize);
 type MatchSpans = (Span, Vec<Span>);
 
-fn byte_offset_to_char_index(s: &str, byte: usize) -> usize {
-    s[..byte].chars().count()
+fn build_char_index_lookup(s: &str) -> Vec<usize> {
+    let mut byte_starts = Vec::with_capacity(s.chars().count() + 1);
+    for (byte_index, _) in s.char_indices() {
+        byte_starts.push(byte_index);
+    }
+    byte_starts.push(s.len());
+    byte_starts
+}
+
+fn byte_offset_to_char_index(byte_starts: &[usize], byte: usize) -> usize {
+    match byte_starts.binary_search(&byte) {
+        Ok(i) => i,
+        Err(i) => i,
+    }
 }
 
 fn char_range_to_byte_range(s: &str, start: isize, end: isize) -> Option<(usize, usize)> {
@@ -408,14 +420,15 @@ fn perform_regex_match(
     let Some(_) = search_result else {
         return Ok(None);
     };
+    let byte_starts = build_char_index_lookup(subject);
     // Overall span
     let Some((start, end)) = region.pos(0) else {
         return Ok(None);
     };
 
     let overall = (
-        (byte_offset_to_char_index(subject, start) + 1) as isize,
-        byte_offset_to_char_index(subject, end) as isize,
+        (byte_offset_to_char_index(&byte_starts, start) + 1) as isize,
+        byte_offset_to_char_index(&byte_starts, end) as isize,
     );
     // Now we'll iterate through the captures, and build up a Vec<Span> of the captured groups.
     // MOO match() returns 9 subpatterns, no more, no less. So we start with a Vec of 9
@@ -424,8 +437,8 @@ fn perform_regex_match(
     for i in 1..=8 {
         if let Some((start, end)) = region.pos(i) {
             match_vec[i - 1] = (
-                (byte_offset_to_char_index(subject, start) + 1) as isize,
-                byte_offset_to_char_index(subject, end) as isize,
+                (byte_offset_to_char_index(&byte_starts, start) + 1) as isize,
+                byte_offset_to_char_index(&byte_starts, end) as isize,
             );
         }
     }
@@ -530,6 +543,7 @@ fn perform_pcre_match(
     let mut matches = Vec::new();
     let mut start = 0;
     let end = target.len();
+    let byte_starts = build_char_index_lookup(target);
     while match regex.search_with_param(
         target,
         start,
@@ -567,8 +581,8 @@ fn perform_pcre_match(
                     if let Some((matched, start, end)) = capture(i) {
                         (
                             v_str(matched),
-                            (byte_offset_to_char_index(target, start) + 1) as i64,
-                            byte_offset_to_char_index(target, end) as i64,
+                            (byte_offset_to_char_index(&byte_starts, start) + 1) as i64,
+                            byte_offset_to_char_index(&byte_starts, end) as i64,
                         )
                     } else {
                         (v_str(""), 0, -1)
@@ -591,8 +605,8 @@ fn perform_pcre_match(
                     if let Some((matched, start, end)) = capture(i) {
                         (
                             v_str(matched),
-                            (byte_offset_to_char_index(target, start) + 1) as i64,
-                            byte_offset_to_char_index(target, end) as i64,
+                            (byte_offset_to_char_index(&byte_starts, start) + 1) as i64,
+                            byte_offset_to_char_index(&byte_starts, end) as i64,
                         )
                     } else {
                         (v_str(""), 0, -1)

@@ -978,7 +978,6 @@ pub fn moo_frame_execute(
                 };
 
                 let value = get_property(
-                    f,
                     pc,
                     PropertyReadOp::GetProp,
                     inline_property_ic_ptr,
@@ -1004,9 +1003,7 @@ pub fn moo_frame_execute(
                     return push_error_cold(invalid_property_name_error(propname));
                 };
 
-                let obj = obj.clone();
                 let value = get_property(
-                    f,
                     pc,
                     PropertyReadOp::PushGetProp,
                     inline_property_ic_ptr,
@@ -1544,7 +1541,6 @@ pub fn moo_frame_execute(
 }
 
 fn get_property(
-    _frame: &mut MooStackFrame,
     pc: usize,
     op: PropertyReadOp,
     inline_property_ic_ptr: *mut Option<PropertyLookupHint>,

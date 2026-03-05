@@ -14,6 +14,7 @@
 //! Builtin functions for string manipulation, hashing, and encoding operations.
 
 use base64::{Engine, engine::general_purpose};
+use arrayvec::ArrayVec;
 use md5::Digest;
 use moor_compiler::offset_for_builtin;
 use moor_var::{E_ARGS, E_INVARG, E_TYPE, Variant, v_binary, v_int, v_list, v_str, v_string};
@@ -333,47 +334,51 @@ fn bf_explode(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
 /// Internal helper for character translation.
 fn strtr(source: &str, str1: &str, str2: &str, case_matters: bool) -> String {
+    type FoldedChar = ArrayVec<char, 3>;
+
+    #[inline]
+    fn fold_char(c: char) -> FoldedChar {
+        c.to_lowercase().collect()
+    }
+
     let from_chars: Vec<char> = str1.chars().collect();
     let to_chars: Vec<char> = str2.chars().collect();
 
     let mut result = String::with_capacity(source.len());
 
+    if case_matters {
+        for c in source.chars() {
+            let pos = from_chars.iter().position(|&fc| fc == c);
+            match pos {
+                Some(i) if i < to_chars.len() => result.push(to_chars[i]),
+                Some(_) => {}
+                None => result.push(c),
+            }
+        }
+        return result;
+    }
+
+    let from_folded: Vec<FoldedChar> = from_chars.iter().map(|&c| fold_char(c)).collect();
+    let to_upper: Vec<String> = to_chars.iter().map(|&c| c.to_uppercase().collect()).collect();
+    let to_lower: Vec<String> = to_chars.iter().map(|&c| c.to_lowercase().collect()).collect();
+
     for c in source.chars() {
-        let pos = if case_matters {
-            from_chars.iter().position(|&fc| fc == c)
-        } else {
-            from_chars
-                .iter()
-                .position(|&fc| fc.to_lowercase().eq(c.to_lowercase()))
-        };
+        let c_folded = fold_char(c);
+        let pos = from_folded.iter().position(|folded| *folded == c_folded);
 
         match pos {
             Some(i) if i < to_chars.len() => {
-                // Map to corresponding character in str2
                 let replacement = to_chars[i];
-                if case_matters || !c.is_alphabetic() {
-                    // Case-sensitive mode or non-letter: use replacement as-is
+                if !c.is_alphabetic() {
                     result.push(replacement);
+                } else if c.is_uppercase() {
+                    result.push_str(&to_upper[i]);
                 } else {
-                    // Case-insensitive with letter: preserve original case
-                    if c.is_uppercase() {
-                        for uc in replacement.to_uppercase() {
-                            result.push(uc);
-                        }
-                    } else {
-                        for lc in replacement.to_lowercase() {
-                            result.push(lc);
-                        }
-                    }
+                    result.push_str(&to_lower[i]);
                 }
             }
-            Some(_) => {
-                // Character found in str1 but no corresponding char in str2 - delete it
-            }
-            None => {
-                // Character not in str1 - keep it unchanged
-                result.push(c);
-            }
+            Some(_) => {}
+            None => result.push(c),
         }
     }
 
