@@ -2,6 +2,9 @@
 
 This section describes the options available for configuring and running the `moor-daemon` server binary.
 
+For a deeper discussion of mooR's threading model, database concurrency model, performance
+counters, and tuning guidance, see [Performance and Concurrency](performance-and-concurrency.md).
+
 ## Daemon, Hosts, Workers, and RPC
 
 The `moor-daemon` server binary provides the main server functionality, including hosting the database, handling verb
@@ -151,6 +154,18 @@ These options control database import and checkpoint export functionality:
 These options control latency duration sampling for internal performance counters. Invocation
 counts remain exact; these settings only affect duration collection.
 
+These counters are used to observe hot runtime paths such as scheduler wakeups, lock waits,
+database commit stages, builtin execution, and other VM execution activity. In the normal server
+configuration, the system does not record a full timestamp pair for every hot-path event. Instead,
+it samples durations and scales the totals back up. This keeps the counters cheap enough to leave
+enabled in regular use.
+
+In practice, these settings are mostly useful in three situations:
+
+- You are benchmarking and want exact latency measurements rather than sampled estimates.
+- You are chasing a performance regression and want denser timing data from hot paths.
+- You want to reduce timing overhead further and are willing to trade away duration fidelity.
+
 | Setting | Command Line | Default | Description |
 |--------|---------|---------|-------------|
 | Perf timing enabled | `--perf-timing-enabled <BOOL>` | `true` | Enable or disable latency duration collection globally |
@@ -184,9 +199,44 @@ runtime:
   perf_timing_enabled: false
 ```
 
+Guidance:
+
+- Leave the defaults alone for normal deployments. They are intended to keep timing overhead low
+  while still producing useful long-run aggregates.
+- Use `0` for both sample shifts during focused benchmarking or profiling runs where exact timing is
+  more important than hot-path overhead.
+- Set `perf_timing_enabled: false` if you only care about invocation counts and do not want
+  duration timing at all.
+- If you are only interested in slower, less frequent operations, you can leave hot-path sampling
+  alone and reduce only the medium-path shift.
+
 ## Task Pool Affinity Configuration
 
 Task worker affinity is configured under `runtime:` and can also be overridden on the command line.
+
+The daemon has two broad thread classes:
+
+- service or control-plane threads, such as the scheduler, RPC/event handling, and coordination work
+- task worker threads, which execute verbs and other task bodies in the task pool
+
+This is an important architectural difference from LambdaMOO-style servers. In LambdaMOO, task
+execution is effectively serialized through one main execution path. In moor, runnable tasks are
+dispatched onto a worker pool so independent task execution can proceed concurrently across multiple
+cores. The scheduler remains responsible for orchestration, wakeups, and queue management, while
+the task pool provides the actual parallel execution capacity.
+
+That means thread placement matters more here than in a single-threaded MOO. A poor affinity choice
+can leave the scheduler contending with task execution on the same high-performance cores, while an
+appropriate split can preserve both throughput and responsiveness.
+
+On systems with heterogeneous CPUs, especially recent x86 and ARM systems, not all cores are equal.
+Some cores are tuned for throughput and sustained performance, while others are tuned for efficiency
+or background work. The affinity settings let the daemon reserve stronger cores for task execution
+while leaving some capacity for the scheduler and other control-plane work.
+
+If the runtime can identify a distinct performance-core tier, the default `auto` mode tries to use
+that tier for task workers. If it cannot identify a meaningful split, the task pool is left
+unpinned.
 
 | Setting | Command Line | Default | Description |
 |--------|---------|---------|-------------|
@@ -220,9 +270,24 @@ runtime:
 # Force performance-core pinning for task workers
 moor-daemon --task-pool-pinning performance ...
 
+# Reserve two detected performance cores for scheduler / control-plane work
+moor-daemon --service-perf-cores 2 ...
+
 # Disable task-worker pinning
 moor-daemon --task-pool-pinning none ...
 ```
+
+Guidance:
+
+- Leave this on `auto` unless you have measured a reason to override it.
+- `performance` is useful when you know the machine has a meaningful fast-core tier and you want
+  task execution to stay there even if automatic detection would otherwise fall back.
+- `none` is useful inside containers, VMs, or unusual schedulers where explicit pinning hurts more
+  than it helps.
+- Increase `service_perf_cores` if the scheduler, RPC handling, or other daemon-side coordination
+  work becomes a bottleneck while worker threads are saturating the faster cores.
+- Decrease `service_perf_cores` if the machine has only a few performance cores and you want to
+  maximize task execution throughput.
 
 ## Example Configuration
 

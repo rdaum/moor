@@ -949,35 +949,66 @@ snapshot isolation.
 
 ### `bf_counters`
 
-**Description:** Returns performance counters related to built-in functions.
-**Arguments:**
+**Description:** Returns performance counters related to built-in function execution.
 
-- : Optional parameter to control the return format `format`
-- `reset`: Optional boolean to reset counters after reading
+**Syntax:** `map bf_counters()`
+
+**Arguments:** None
+
+**Returns:** A map of `name -> [count, nanos]`
+
+**Permission Requirements:**
+
+- Wizard only
+
+**Notes:**
+
+- `count` is the exact invocation count for the builtin
+- `nanos` is cumulative duration in nanoseconds
+- Duration totals may be sampled depending on runtime timing configuration
+- See [Performance and Concurrency](../../the-system/performance-and-concurrency.md) for guidance on interpreting the counters
 
 ### `db_counters`
 
 **Description:** Returns performance counters related to database operations.
-**Arguments:**
 
-- : Optional parameter to control the return format `format`
-- `reset`: Optional boolean to reset counters after reading
+**Syntax:** `map db_counters()`
 
-### `vm_counters`
+**Arguments:** None
 
-**Description:** Returns performance counters related to the virtual machine.
-**Arguments:**
+**Returns:** A map of `name -> [count, nanos]`
 
-- : Optional parameter to control the return format `format`
-- `reset`: Optional boolean to reset counters after reading
+**Permission Requirements:**
+
+- Wizard only
+
+**Notes:**
+
+- `count` is the exact invocation count for the operation
+- `nanos` is cumulative duration in nanoseconds
+- This includes counter families related to world-state operations, commit phases, provider lock waits, and writer backpressure
+- See [Performance and Concurrency](../../the-system/performance-and-concurrency.md) for guidance on interpreting the counters
 
 ### `sched_counters`
 
 **Description:** Returns performance counters related to the task scheduler.
-**Arguments:**
 
-- : Optional parameter to control the return format `format`
-- `reset`: Optional boolean to reset counters after reading
+**Syntax:** `map sched_counters()`
+
+**Arguments:** None
+
+**Returns:** A map of `name -> [count, nanos]`
+
+**Permission Requirements:**
+
+- Wizard only
+
+**Notes:**
+
+- `count` is the exact invocation count for the operation
+- `nanos` is cumulative duration in nanoseconds
+- This includes scheduler request latency, task lifecycle timing, wakeup and handoff latency, and GC phase counters
+- See [Performance and Concurrency](../../the-system/performance-and-concurrency.md) for guidance on interpreting the counters
 
 ## Miscellaneous
 

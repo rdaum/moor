@@ -66,7 +66,8 @@ Databases from beta7 and earlier cannot be loaded directly.
 
 `testing`:
 
-- Basic benchmarking "core" and simple bench tool for now just some example tick loops in an RPG style
+- Basic benchmarking "core" and simple bench tool for now just some example tick loops in an RPG
+  style
 
 `tools/moorc`:
 
