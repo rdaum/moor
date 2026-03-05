@@ -13,11 +13,20 @@ description = "Functions and structures for compilation and decompilation of MOO
 
 [dev-dependencies]
 chrono.workspace = true
+criterion.workspace = true
 md5 = "0.7"
 pretty_assertions.workspace = true
 proptest = "1.5"
 test-case.workspace = true
 unindent.workspace = true
+
+[[bench]]
+name = "compile_benches"
+harness = false
+
+[[bench]]
+name = "objdef_benches"
+harness = false
 
 [dependencies]
 # Internal Dependencies

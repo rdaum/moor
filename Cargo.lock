@@ -3287,6 +3287,7 @@ dependencies = [
  "base64 0.22.1",
  "byteview",
  "chrono",
+ "criterion",
  "itertools 0.14.0",
  "md5",
  "moor-common",
