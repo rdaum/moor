@@ -625,10 +625,12 @@ async fn load_test_workload(
             .handle_scheduler_msg
             .cumulative_duration_nanos()
             .sum();
-        let baseline_resume_queue_count =
-            counters.task_resume_queue_delay_latency.invocations().sum();
+        let baseline_resume_queue_count = counters
+            .task_wake_signal_to_dispatch_start_latency
+            .invocations()
+            .sum();
         let baseline_resume_queue_nanos = counters
-            .task_resume_queue_delay_latency
+            .task_wake_signal_to_dispatch_start_latency
             .cumulative_duration_nanos()
             .sum();
         let baseline_thread_handoff_count =
@@ -750,10 +752,13 @@ async fn load_test_workload(
             0
         };
 
-        let resume_queue_count = counters.task_resume_queue_delay_latency.invocations().sum()
+        let resume_queue_count = counters
+            .task_wake_signal_to_dispatch_start_latency
+            .invocations()
+            .sum()
             - baseline_resume_queue_count;
         let resume_queue_total_nanos = counters
-            .task_resume_queue_delay_latency
+            .task_wake_signal_to_dispatch_start_latency
             .cumulative_duration_nanos()
             .sum()
             - baseline_resume_queue_nanos;
