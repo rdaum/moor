@@ -13,20 +13,10 @@
 
 use moor_var::Symbol;
 
-use crate::util::ConcurrentCounter;
 use crate::util::Instant;
+use crate::util::{ConcurrentCounter, preferred_shared_shard_count};
 use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::{sync::OnceLock, thread};
-
-fn default_shard_count() -> usize {
-    static SHARD_COUNT: OnceLock<usize> = OnceLock::new();
-    *SHARD_COUNT.get_or_init(|| {
-        thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(1)
-    })
-}
 
 pub struct PerfCounter {
     pub operation: Symbol,
@@ -119,8 +109,8 @@ impl PerfCounter {
     pub fn new(name: impl Into<Symbol>) -> Self {
         Self {
             operation: name.into(),
-            invocations: ConcurrentCounter::new(default_shard_count()),
-            cumulative_duration_nanos: ConcurrentCounter::new(default_shard_count()),
+            invocations: ConcurrentCounter::new(preferred_shared_shard_count()),
+            cumulative_duration_nanos: ConcurrentCounter::new(preferred_shared_shard_count()),
         }
     }
 
@@ -198,7 +188,8 @@ impl PerfCounter {
             return;
         }
         let elapsed_nanos = started_at.elapsed().as_nanos().min(isize::MAX as u128) as isize;
-        self.cumulative_duration_nanos().add(scale_isize(elapsed_nanos, shift));
+        self.cumulative_duration_nanos()
+            .add(scale_isize(elapsed_nanos, shift));
     }
 }
 
@@ -243,10 +234,7 @@ pub struct PerfTimerGuard<'a> {
 impl<'a> PerfTimerGuard<'a> {
     pub fn new(perf: &'a PerfCounter) -> Self {
         let sampled = perf.sampled_start_with_intensity(PerfIntensity::HotPath);
-        Self {
-            perf,
-            sampled,
-        }
+        Self { perf, sampled }
     }
 
     pub fn with_intensity(perf: &'a PerfCounter, intensity: PerfIntensity) -> Self {
@@ -259,8 +247,12 @@ impl<'a> PerfTimerGuard<'a> {
         start: Instant,
         intensity: PerfIntensity,
     ) -> Self {
-        let sampled = shift_for_intensity(intensity)
-            .and_then(|shift| should_sample_timing(shift).then_some(PerfSample { started_at: start, shift }));
+        let sampled = shift_for_intensity(intensity).and_then(|shift| {
+            should_sample_timing(shift).then_some(PerfSample {
+                started_at: start,
+                shift,
+            })
+        });
         Self { perf, sampled }
     }
 }

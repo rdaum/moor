@@ -12,10 +12,10 @@
 //
 
 use crate::{BenchmarkResult, TableFormatter, add_session_result};
-use moor_common::util::Instant;
 use moor_common::threading::{
     DetectionResult, detect_performance_cores, pin_current_thread_to_core,
 };
+use moor_common::util::Instant;
 use std::{
     hint::black_box,
     io::{self, Write},
@@ -635,8 +635,7 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
             black_box(|| f(&mut prepared, preferred_chunk_size, warm_up_count))();
             warm_up_count += 1;
 
-            if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
-            {
+            if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
                 print!(".");
                 flush_stdout();
                 last_dot_time = Instant::now();
@@ -752,8 +751,7 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
             black_box(|| f(&mut prepared, preferred_chunk_size, warm_up_count))();
             warm_up_count += 1;
 
-            if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
-            {
+            if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
                 print!(".");
                 flush_stdout();
                 last_dot_time = Instant::now();
@@ -868,8 +866,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
             black_box(|| f(&mut prepared, preferred_chunk_size, warm_up_count))();
             warm_up_count += 1;
 
-            if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
-            {
+            if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
                 print!(".");
                 flush_stdout();
                 last_dot_time = Instant::now();
@@ -994,8 +991,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
             black_box(|| f(&mut prepared, preferred_chunk_size, warm_up_count))();
             warm_up_count += 1;
 
-            if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
-            {
+            if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
                 print!(".");
                 flush_stdout();
                 last_dot_time = Instant::now();

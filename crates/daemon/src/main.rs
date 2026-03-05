@@ -492,6 +492,12 @@ fn main() -> Result<(), Report> {
     );
 
     let config = args.load_config()?;
+    let mut affinity_config = moor_common::threading::TaskPoolAffinityConfig::default();
+    if let Some(pinning_mode) = config.runtime.task_pool_pinning {
+        affinity_config.pinning_mode = pinning_mode;
+    }
+    affinity_config.service_perf_cores = config.runtime.service_perf_cores;
+    moor_common::threading::set_task_pool_affinity_config(affinity_config);
     let reserved_worker_perf_cores = moor_common::threading::worker_performance_core_ids_ref();
     let reserved_service_perf_cores = moor_common::threading::service_performance_core_ids_ref();
 
@@ -521,7 +527,8 @@ fn main() -> Result<(), Report> {
     info!(
         worker_perf_cores = ?reserved_worker_perf_cores,
         service_perf_cores = ?reserved_service_perf_cores,
-        service_perf_env = ?std::env::var("MOOR_SERVICE_PERF_CORES").ok(),
+        task_pool_pinning = ?config.runtime.task_pool_pinning,
+        configured_service_perf_cores = config.runtime.service_perf_cores,
         "Thread core reservations initialized"
     );
     let (database, freshly_made) = TxDB::open(

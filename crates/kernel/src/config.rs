@@ -14,6 +14,7 @@
 //! Config is created by the host daemon, and passed through the scheduler, whereupon it is
 //! available to all components. Used to hold things typically configured by CLI flags, etc.
 
+use moor_common::threading::TaskPoolPinningMode;
 use moor_compiler::CompileOptions;
 use moor_db::DatabaseConfig;
 use serde::{Deserialize, Serialize};
@@ -145,6 +146,10 @@ pub struct RuntimeConfig {
     pub perf_timing_hot_path_shift: Option<u32>,
     /// Sampling shift for medium-path timings (0 => exact, 3 => 1/8).
     pub perf_timing_medium_path_shift: Option<u32>,
+    /// Task worker affinity policy.
+    pub task_pool_pinning: Option<TaskPoolPinningMode>,
+    /// Reserve detected performance cores for service/control-plane threads.
+    pub service_perf_cores: Option<usize>,
 }
 
 /// Format for importing databases.

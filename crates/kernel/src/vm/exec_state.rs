@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_common::util::Instant;
 use moor_common::model::ObjFlag;
 use moor_common::tasks::TaskId;
 use moor_common::util::BitEnum;
+use moor_common::util::Instant;
 use moor_var::{NOTHING, Obj, Symbol, Var, v_obj};
 use std::time::{Duration, SystemTime};
 

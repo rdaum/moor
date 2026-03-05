@@ -19,6 +19,7 @@ use figment::{
     Figment,
     providers::{Format as ProviderFormat, Serialized, Yaml},
 };
+use moor_common::threading::TaskPoolPinningMode;
 use moor_common::util::config_path;
 use moor_db::DatabaseConfig;
 use moor_kernel::config::{Config, ImportExportConfig, ImportFormat, RuntimeConfig};
@@ -34,6 +35,23 @@ static VERSION_STRING: Lazy<String> = Lazy::new(|| {
         moor_common::build::short_commit()
     )
 });
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, ValueEnum)]
+pub enum RuntimeTaskPoolPinningMode {
+    Auto,
+    Performance,
+    None,
+}
+
+impl From<RuntimeTaskPoolPinningMode> for TaskPoolPinningMode {
+    fn from(value: RuntimeTaskPoolPinningMode) -> Self {
+        match value {
+            RuntimeTaskPoolPinningMode::Auto => TaskPoolPinningMode::Auto,
+            RuntimeTaskPoolPinningMode::Performance => TaskPoolPinningMode::Performance,
+            RuntimeTaskPoolPinningMode::None => TaskPoolPinningMode::None,
+        }
+    }
+}
 
 #[allow(dead_code)]
 #[derive(Parser, Debug, Serialize, Deserialize)]
@@ -302,6 +320,20 @@ pub struct RuntimeArgs {
         help = "Medium-path perf timing sample shift (0=exact, 3=1/8)"
     )]
     pub perf_timing_medium_path_shift: Option<u32>,
+
+    #[arg(
+        long,
+        value_enum,
+        help = "Task worker pinning mode: auto, performance, or none"
+    )]
+    pub task_pool_pinning: Option<RuntimeTaskPoolPinningMode>,
+
+    #[arg(
+        long,
+        value_name = "service-perf-cores",
+        help = "Reserve detected performance cores for service/control-plane threads"
+    )]
+    pub service_perf_cores: Option<usize>,
 }
 
 impl RuntimeArgs {
@@ -321,6 +353,12 @@ impl RuntimeArgs {
         }
         if let Some(args) = self.perf_timing_medium_path_shift {
             config.perf_timing_medium_path_shift = Some(args);
+        }
+        if let Some(args) = self.task_pool_pinning {
+            config.task_pool_pinning = Some(args.into());
+        }
+        if let Some(args) = self.service_perf_cores {
+            config.service_perf_cores = Some(args);
         }
         Ok(())
     }

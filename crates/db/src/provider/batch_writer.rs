@@ -439,10 +439,9 @@ impl BatchWriter {
                     return;
                 }
                 let elapsed = start.elapsed();
-                db_counters().batch_writer_backpressure_block.record_elapsed_from_with(
-                    PerfIntensity::RarePath,
-                    start.instant(),
-                );
+                db_counters()
+                    .batch_writer_backpressure_block
+                    .record_elapsed_from_with(PerfIntensity::RarePath, start.instant());
                 if elapsed > Duration::from_secs(1) {
                     warn!(
                         "BatchWriter backpressure: blocked {} for {:?}",
@@ -468,10 +467,9 @@ impl BatchWriter {
                     warn!("Failed to send barrier: {}", e);
                     return;
                 }
-                db_counters().batch_writer_backpressure_block.record_elapsed_from_with(
-                    PerfIntensity::RarePath,
-                    start.instant(),
-                );
+                db_counters()
+                    .batch_writer_backpressure_block
+                    .record_elapsed_from_with(PerfIntensity::RarePath, start.instant());
             }
             Err(flume::TrySendError::Disconnected(_)) => {
                 warn!("Failed to send barrier: channel disconnected");

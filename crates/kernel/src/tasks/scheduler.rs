@@ -68,7 +68,10 @@ use moor_common::{
         },
         Session, SessionFactory, SystemControl, TaskId, WorkerError,
     },
-    threading::{set_current_thread_background_priority, spawn_perf},
+    threading::{
+        TaskPoolAffinityConfig, set_current_thread_background_priority,
+        set_task_pool_affinity_config, spawn_perf,
+    },
     util::{
         PerfCounter, PerfIntensity, PerfTimerGuard, perf_timing_policy, set_perf_timing_policy,
     },
@@ -200,6 +203,13 @@ impl Scheduler {
         worker_request_send: Option<Sender<WorkerRequest>>,
         worker_request_recv: Option<Receiver<WorkerResponse>>,
     ) -> Self {
+        let mut affinity_config = TaskPoolAffinityConfig::default();
+        if let Some(pinning_mode) = config.runtime.task_pool_pinning {
+            affinity_config.pinning_mode = pinning_mode;
+        }
+        affinity_config.service_perf_cores = config.runtime.service_perf_cores;
+        set_task_pool_affinity_config(affinity_config);
+
         let (task_control_sender, task_control_receiver) = flume::unbounded();
         let (scheduler_sender, scheduler_receiver) = flume::unbounded();
         let suspension_q = SuspensionQ::new(tasks_database);

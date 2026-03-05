@@ -31,7 +31,7 @@ namespace MoorTask;
 // Time Representation
 // ============================================================================
 // Use monotonic time as nanos since system boot for WakeCondition::Time
-// This matches minstant::Instant's serialization approach
+// This matches Instant's serialization approach
 
 table WakeTime {
     nanos: uint64;

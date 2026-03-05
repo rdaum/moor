@@ -17,7 +17,7 @@
 //! Forked to allow for use of corrected-size `CachePadded` here in utils, and to allow for
 //! improvements in the future.
 
-use crate::threading::{current_task_worker_index, task_worker_count};
+use crate::threading::{current_task_worker_index, logical_core_count, task_worker_count};
 use crate::util::CachePadded;
 use std::cell::Cell;
 use std::fmt;
@@ -25,9 +25,11 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicIsize, AtomicUsize, Ordering};
 
 static THREAD_COUNTER: AtomicUsize = AtomicUsize::new(1);
+const DEFAULT_FALLBACK_SHARED_SHARDS: usize = 8;
+const MAX_FALLBACK_SHARED_SHARDS: usize = 16;
 
 thread_local! {
-    static THREAD_ID: Cell<usize> = Cell::new(THREAD_COUNTER.fetch_add(1, Ordering::SeqCst));
+    static THREAD_ID: Cell<usize> = Cell::new(THREAD_COUNTER.fetch_add(1, Ordering::Relaxed));
 }
 
 pub fn make_new_padded_counter() -> CachePadded<AtomicIsize> {
@@ -36,13 +38,26 @@ pub fn make_new_padded_counter() -> CachePadded<AtomicIsize> {
     }
 }
 
+#[inline]
+pub(crate) fn preferred_shared_shard_count() -> usize {
+    let worker_count = task_worker_count();
+    if worker_count > 0 {
+        return worker_count;
+    }
+
+    logical_core_count().clamp(DEFAULT_FALLBACK_SHARED_SHARDS, MAX_FALLBACK_SHARED_SHARDS)
+}
+
 /// A sharded atomic counter
 ///
-/// ConcurrentCounter shards cacheline aligned AtomicIsizes across a vector for faster updates in
-/// a high contention scenarios.
+/// ConcurrentCounter uses two shard sets:
+/// - `worker_cells`, indexed by scheduler task-worker index for the hot worker path
+/// - `shared_cells`, indexed by TLS thread id for all other threads
+///
+/// Both shard sets are cacheline padded to reduce false sharing.
 pub struct ConcurrentCounter {
     worker_cells: OnceLock<Vec<CachePadded<AtomicIsize>>>,
-    cells: Vec<CachePadded<AtomicIsize>>,
+    shared_cells: Vec<CachePadded<AtomicIsize>>,
 }
 
 impl fmt::Debug for ConcurrentCounter {
@@ -53,7 +68,7 @@ impl fmt::Debug for ConcurrentCounter {
                 "worker_cells",
                 &self.worker_cells.get().map(Vec::len).unwrap_or(0),
             )
-            .field("cells", &self.cells.len())
+            .field("shared_cells", &self.shared_cells.len())
             .finish()
     }
 }
@@ -74,7 +89,7 @@ impl ConcurrentCounter {
         let count = count.next_power_of_two();
         Self {
             worker_cells: OnceLock::new(),
-            cells: (0..count).map(|_| make_new_padded_counter()).collect(),
+            shared_cells: (0..count).map(|_| make_new_padded_counter()).collect(),
         }
     }
 
@@ -145,8 +160,8 @@ impl ConcurrentCounter {
         }
 
         let c = self
-            .cells
-            .safely_get(self.thread_id() & (self.cells.len() - 1));
+            .shared_cells
+            .safely_get(self.thread_id() & (self.shared_cells.len() - 1));
         c.value.fetch_add(value, ordering);
     }
 
@@ -200,7 +215,11 @@ impl ConcurrentCounter {
     /// ```
     #[inline]
     pub fn sum_with_ordering(&self, ordering: Ordering) -> isize {
-        let shared_sum: isize = self.cells.iter().map(|c| c.value.load(ordering)).sum();
+        let shared_sum: isize = self
+            .shared_cells
+            .iter()
+            .map(|c| c.value.load(ordering))
+            .sum();
         let worker_sum: isize = self.worker_cells.get().map_or(0, |cells| {
             cells.iter().map(|c| c.value.load(ordering)).sum()
         });
@@ -240,7 +259,10 @@ mod tests {
         current_task_worker_index, set_current_task_worker_index, set_task_worker_count,
         task_worker_count,
     };
-    use crate::util::counter::ConcurrentCounter;
+    use crate::util::counter::{
+        ConcurrentCounter, DEFAULT_FALLBACK_SHARED_SHARDS, MAX_FALLBACK_SHARED_SHARDS,
+        preferred_shared_shard_count,
+    };
 
     struct TaskWorkerCountGuard {
         previous: usize,
@@ -346,7 +368,7 @@ mod tests {
 
         assert_eq!(
             format!("Counter is: {counter:?}"),
-            "Counter is: ConcurrentCounter { sum: 1000000, worker_cells: 0, cells: 8 }"
+            "Counter is: ConcurrentCounter { sum: 1000000, worker_cells: 0, shared_cells: 8 }"
         )
     }
 
@@ -371,5 +393,18 @@ mod tests {
         });
 
         assert_eq!(counter.sum(), THREAD_COUNT * WRITE_COUNT);
+    }
+
+    #[test]
+    fn preferred_shared_shards_follow_worker_count_when_available() {
+        let _worker_count_guard = TaskWorkerCountGuard::set(6);
+        assert_eq!(preferred_shared_shard_count(), 6);
+    }
+
+    #[test]
+    fn preferred_shared_shards_are_bounded_without_worker_pool() {
+        let _worker_count_guard = TaskWorkerCountGuard::set(0);
+        let preferred = preferred_shared_shard_count();
+        assert!((DEFAULT_FALLBACK_SHARED_SHARDS..=MAX_FALLBACK_SHARED_SHARDS).contains(&preferred));
     }
 }

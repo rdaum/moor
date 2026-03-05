@@ -13,20 +13,22 @@
 
 use std::cell::Cell;
 use std::collections::HashMap;
-use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 const CPU_SYSFS_ROOT: &str = "/sys/devices/system/cpu";
 const MIN_HETEROGENEITY_RATIO: f64 = 0.10;
 const PERFORMANCE_THRESHOLD_RATIO: f64 = 0.90;
-const SERVICE_PERF_CORES_ENV: &str = "MOOR_SERVICE_PERF_CORES";
-const TASK_POOL_PINNING_ENV: &str = "MOOR_TASK_POOL_PINNING";
+const TASK_POOL_PINNING_MODE_AUTO: usize = 0;
+const TASK_POOL_PINNING_MODE_PERFORMANCE: usize = 1;
+const TASK_POOL_PINNING_MODE_NONE: usize = 2;
+const UNSET_SERVICE_PERF_CORES: usize = usize::MAX;
 
 #[derive(Debug, Clone)]
 pub struct PerformanceCoreSelection {
@@ -56,7 +58,8 @@ pub enum ThreadClass {
     Unpinned,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum TaskPoolPinningMode {
     /// Default behavior: use detected performance tier when available, else unpinned.
     Auto,
@@ -64,6 +67,36 @@ pub enum TaskPoolPinningMode {
     Performance,
     /// Disable task-pool pinning entirely.
     None,
+}
+
+impl TaskPoolPinningMode {
+    const fn as_usize(self) -> usize {
+        match self {
+            Self::Auto => TASK_POOL_PINNING_MODE_AUTO,
+            Self::Performance => TASK_POOL_PINNING_MODE_PERFORMANCE,
+            Self::None => TASK_POOL_PINNING_MODE_NONE,
+        }
+    }
+
+    const fn from_usize(value: usize) -> Self {
+        match value {
+            TASK_POOL_PINNING_MODE_PERFORMANCE => Self::Performance,
+            TASK_POOL_PINNING_MODE_NONE => Self::None,
+            _ => Self::Auto,
+        }
+    }
+}
+
+impl Default for TaskPoolPinningMode {
+    fn default() -> Self {
+        Self::Auto
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
+pub struct TaskPoolAffinityConfig {
+    pub pinning_mode: TaskPoolPinningMode,
+    pub service_perf_cores: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -124,6 +157,8 @@ impl ThreadPlacement {
 
 static THREAD_PLACEMENT: OnceLock<ThreadPlacement> = OnceLock::new();
 static TASK_WORKER_COUNT: AtomicUsize = AtomicUsize::new(0);
+static TASK_POOL_PINNING_MODE: AtomicUsize = AtomicUsize::new(TaskPoolPinningMode::Auto.as_usize());
+static TASK_POOL_SERVICE_PERF_CORES: AtomicUsize = AtomicUsize::new(UNSET_SERVICE_PERF_CORES);
 
 thread_local! {
     static TASK_WORKER_INDEX: Cell<Option<usize>> = const { Cell::new(None) };
@@ -131,6 +166,35 @@ thread_local! {
 
 fn thread_placement() -> &'static ThreadPlacement {
     THREAD_PLACEMENT.get_or_init(ThreadPlacement::build)
+}
+
+pub fn task_pool_affinity_config() -> TaskPoolAffinityConfig {
+    let service_perf_cores = match TASK_POOL_SERVICE_PERF_CORES.load(Ordering::Relaxed) {
+        UNSET_SERVICE_PERF_CORES => None,
+        value => Some(value),
+    };
+    TaskPoolAffinityConfig {
+        pinning_mode: TaskPoolPinningMode::from_usize(
+            TASK_POOL_PINNING_MODE.load(Ordering::Relaxed),
+        ),
+        service_perf_cores,
+    }
+}
+
+pub fn set_task_pool_affinity_config(config: TaskPoolAffinityConfig) {
+    if THREAD_PLACEMENT.get().is_some() && task_pool_affinity_config() != config {
+        warn!(
+            ?config,
+            "Task pool affinity config changed after thread placement initialization; existing placement is unchanged"
+        );
+    }
+    TASK_POOL_PINNING_MODE.store(config.pinning_mode.as_usize(), Ordering::Relaxed);
+    TASK_POOL_SERVICE_PERF_CORES.store(
+        config
+            .service_perf_cores
+            .unwrap_or(UNSET_SERVICE_PERF_CORES),
+        Ordering::Relaxed,
+    );
 }
 
 pub fn set_task_worker_count(count: usize) {
@@ -378,27 +442,11 @@ fn next_round_robin(
 }
 
 pub fn task_pool_pinning_mode() -> TaskPoolPinningMode {
-    let Some(raw) = env::var(TASK_POOL_PINNING_ENV).ok() else {
-        return TaskPoolPinningMode::Auto;
-    };
-
-    match raw.trim().to_ascii_lowercase().as_str() {
-        "auto" => TaskPoolPinningMode::Auto,
-        "perf" | "performance" | "p" => TaskPoolPinningMode::Performance,
-        "none" | "off" | "unpinned" => TaskPoolPinningMode::None,
-        _ => {
-            warn!(
-                env_var = TASK_POOL_PINNING_ENV,
-                value = raw,
-                "Invalid task pool pinning mode, expected one of: auto|performance|none"
-            );
-            TaskPoolPinningMode::Auto
-        }
-    }
+    task_pool_affinity_config().pinning_mode
 }
 
 fn reserved_service_perf_core_count(total_perf_cores: usize) -> usize {
-    if let Some(requested) = parse_env_usize(SERVICE_PERF_CORES_ENV) {
+    if let Some(requested) = task_pool_affinity_config().service_perf_cores {
         return clamp_service_reservation(requested, total_perf_cores);
     }
 
@@ -416,25 +464,6 @@ fn clamp_service_reservation(requested: usize, total_perf_cores: usize) -> usize
 
     // Keep at least one performance core available for worker threads by default.
     requested.min(total_perf_cores - 1)
-}
-
-fn parse_env_usize(var_name: &str) -> Option<usize> {
-    let raw = match env::var(var_name) {
-        Ok(value) => value,
-        Err(env::VarError::NotPresent) => return None,
-        Err(e) => {
-            warn!(var_name, error = ?e, "Invalid environment variable value");
-            return None;
-        }
-    };
-
-    match raw.trim().parse::<usize>() {
-        Ok(value) => Some(value),
-        Err(e) => {
-            warn!(var_name, raw_value = raw, error = ?e, "Could not parse environment variable");
-            None
-        }
-    }
 }
 
 fn detect_all_logical_processor_ids() -> Vec<usize> {
@@ -615,7 +644,17 @@ fn cpu_path(logical_processor_id: usize) -> PathBuf {
 
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
-    use super::{PhysicalCoreMetrics, select_performance_cores_by_metric};
+    use super::{
+        PhysicalCoreMetrics, TaskPoolAffinityConfig, TaskPoolPinningMode,
+        clamp_service_reservation, select_performance_cores_by_metric,
+        set_task_pool_affinity_config, task_pool_affinity_config,
+    };
+    use std::sync::{Mutex, OnceLock};
+
+    fn config_test_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
 
     #[test]
     fn selects_high_tier_capacity_cores() {
@@ -647,5 +686,25 @@ mod tests {
                 .expect("expected high-tier selection");
 
         assert_eq!(selection.logical_processor_ids, vec![2, 3]);
+    }
+
+    #[test]
+    fn task_pool_affinity_config_roundtrips() {
+        let _g = config_test_lock();
+        let old = task_pool_affinity_config();
+        let new = TaskPoolAffinityConfig {
+            pinning_mode: TaskPoolPinningMode::Performance,
+            service_perf_cores: Some(2),
+        };
+        set_task_pool_affinity_config(new);
+        assert_eq!(task_pool_affinity_config(), new);
+        set_task_pool_affinity_config(old);
+    }
+
+    #[test]
+    fn service_core_reservation_keeps_worker_capacity() {
+        assert_eq!(clamp_service_reservation(4, 1), 0);
+        assert_eq!(clamp_service_reservation(4, 2), 1);
+        assert_eq!(clamp_service_reservation(4, 8), 4);
     }
 }

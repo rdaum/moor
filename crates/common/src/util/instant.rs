@@ -228,8 +228,8 @@ impl TscClock {
             return None;
         }
 
-        let ns_per_cycle_fp =
-            ((NANOS_PER_SEC << FIXED_SHIFT) + (cycles_per_sec / 2) as u128) / cycles_per_sec as u128;
+        let ns_per_cycle_fp = ((NANOS_PER_SEC << FIXED_SHIFT) + (cycles_per_sec / 2) as u128)
+            / cycles_per_sec as u128;
         let cycles_per_ns_fp =
             (((cycles_per_sec as u128) << FIXED_SHIFT) + (NANOS_PER_SEC / 2)) / NANOS_PER_SEC;
 

@@ -99,7 +99,7 @@ impl TaskQ {
 
         let pinned_core_ids = match pinning_mode {
             TaskPoolPinningMode::None => {
-                info!("Task pool pinning disabled by MOOR_TASK_POOL_PINNING=none");
+                info!("Task pool pinning disabled by runtime config");
                 None
             }
             TaskPoolPinningMode::Auto | TaskPoolPinningMode::Performance => {
@@ -136,7 +136,7 @@ impl TaskQ {
                         if pinning_mode == TaskPoolPinningMode::Performance {
                             warn!(
                                 reason,
-                                "MOOR_TASK_POOL_PINNING=performance requested, but no high-performance tier detected; using unpinned task pool"
+                                "Task pool pinning mode 'performance' requested, but no high-performance tier detected; using unpinned task pool"
                             );
                         } else {
                             info!(
@@ -529,12 +529,15 @@ impl SuspensionQ {
             match &task.wake_condition {
                 WakeCondition::Time(wake_time) => {
                     let now = Instant::now();
-                    let inserted = Deadline::at(*wake_time).remaining_at(now).is_some_and(|delay| {
-                        let timer_entry = TimerEntry { task_id, delay };
-                        self.timer_wheel
-                            .insert_with_delay(timer_entry, delay)
-                            .is_ok()
-                    });
+                    let inserted =
+                        Deadline::at(*wake_time)
+                            .remaining_at(now)
+                            .is_some_and(|delay| {
+                                let timer_entry = TimerEntry { task_id, delay };
+                                self.timer_wheel
+                                    .insert_with_delay(timer_entry, delay)
+                                    .is_ok()
+                            });
                     if !inserted {
                         // Past deadline or timer expired - wake immediately
                         self.enqueue_immediate_wake(task_id);
@@ -565,12 +568,15 @@ impl SuspensionQ {
                     // Retry tasks shouldn't be persisted, but handle gracefully if loaded
                     self.retry_tasks.push(task_id);
                     let now = Instant::now();
-                    let inserted = Deadline::at(*wake_time).remaining_at(now).is_some_and(|delay| {
-                        let timer_entry = TimerEntry { task_id, delay };
-                        self.timer_wheel
-                            .insert_with_delay(timer_entry, delay)
-                            .is_ok()
-                    });
+                    let inserted =
+                        Deadline::at(*wake_time)
+                            .remaining_at(now)
+                            .is_some_and(|delay| {
+                                let timer_entry = TimerEntry { task_id, delay };
+                                self.timer_wheel
+                                    .insert_with_delay(timer_entry, delay)
+                                    .is_ok()
+                            });
                     if !inserted {
                         self.enqueue_immediate_wake(task_id);
                     }
@@ -578,12 +584,15 @@ impl SuspensionQ {
                 WakeCondition::TaskMessage(wake_time) => {
                     self.message_waiting_tasks.push(task_id);
                     let now = Instant::now();
-                    let inserted = Deadline::at(*wake_time).remaining_at(now).is_some_and(|delay| {
-                        let timer_entry = TimerEntry { task_id, delay };
-                        self.timer_wheel
-                            .insert_with_delay(timer_entry, delay)
-                            .is_ok()
-                    });
+                    let inserted =
+                        Deadline::at(*wake_time)
+                            .remaining_at(now)
+                            .is_some_and(|delay| {
+                                let timer_entry = TimerEntry { task_id, delay };
+                                self.timer_wheel
+                                    .insert_with_delay(timer_entry, delay)
+                                    .is_ok()
+                            });
                     if !inserted {
                         self.enqueue_immediate_wake(task_id);
                     }
@@ -613,12 +622,14 @@ impl SuspensionQ {
         // Add to appropriate storage based on wake condition
         let should_persist = match &wake_condition {
             WakeCondition::Time(wake_time) => {
-                let inserted = Deadline::at(*wake_time).remaining_at(now).is_some_and(|delay| {
-                    let timer_entry = TimerEntry { task_id, delay };
-                    self.timer_wheel
-                        .insert_with_delay(timer_entry, delay)
-                        .is_ok()
-                });
+                let inserted = Deadline::at(*wake_time)
+                    .remaining_at(now)
+                    .is_some_and(|delay| {
+                        let timer_entry = TimerEntry { task_id, delay };
+                        self.timer_wheel
+                            .insert_with_delay(timer_entry, delay)
+                            .is_ok()
+                    });
                 if !inserted {
                     // Past deadline or timer expired - wake immediately
                     self.enqueue_immediate_wake(task_id);
@@ -650,12 +661,14 @@ impl SuspensionQ {
             WakeCondition::GCComplete => true,
             WakeCondition::Retry(wake_time) => {
                 self.retry_tasks.push(task_id);
-                let inserted = Deadline::at(*wake_time).remaining_at(now).is_some_and(|delay| {
-                    let timer_entry = TimerEntry { task_id, delay };
-                    self.timer_wheel
-                        .insert_with_delay(timer_entry, delay)
-                        .is_ok()
-                });
+                let inserted = Deadline::at(*wake_time)
+                    .remaining_at(now)
+                    .is_some_and(|delay| {
+                        let timer_entry = TimerEntry { task_id, delay };
+                        self.timer_wheel
+                            .insert_with_delay(timer_entry, delay)
+                            .is_ok()
+                    });
                 if !inserted {
                     // Past deadline - wake immediately for retry
                     self.enqueue_immediate_wake(task_id);
@@ -664,12 +677,14 @@ impl SuspensionQ {
             }
             WakeCondition::TaskMessage(wake_time) => {
                 self.message_waiting_tasks.push(task_id);
-                let inserted = Deadline::at(*wake_time).remaining_at(now).is_some_and(|delay| {
-                    let timer_entry = TimerEntry { task_id, delay };
-                    self.timer_wheel
-                        .insert_with_delay(timer_entry, delay)
-                        .is_ok()
-                });
+                let inserted = Deadline::at(*wake_time)
+                    .remaining_at(now)
+                    .is_some_and(|delay| {
+                        let timer_entry = TimerEntry { task_id, delay };
+                        self.timer_wheel
+                            .insert_with_delay(timer_entry, delay)
+                            .is_ok()
+                    });
                 if !inserted {
                     // Past deadline - wake immediately
                     self.enqueue_immediate_wake(task_id);
@@ -812,8 +827,7 @@ impl SuspensionQ {
         for (_, sr) in self.tasks.iter() {
             let start_time = match sr.wake_condition {
                 WakeCondition::Time(t) => {
-                    let distance_from_now =
-                        Deadline::at(t).remaining().unwrap_or(Duration::ZERO);
+                    let distance_from_now = Deadline::at(t).remaining().unwrap_or(Duration::ZERO);
                     Some(SystemTime::now() + distance_from_now)
                 }
                 WakeCondition::Task(task_id) => {

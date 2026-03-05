@@ -184,29 +184,25 @@ runtime:
   perf_timing_enabled: false
 ```
 
-## Task Pool Affinity Environment Variables
+## Task Pool Affinity Configuration
 
-Task worker affinity currently has two environment-variable controls. These are read from
-[`threading.rs`](/home/ryan/src/moor/crates/common/src/threading.rs) at process startup rather than from the YAML
-configuration file.
+Task worker affinity is configured under `runtime:` and can also be overridden on the command line.
 
-| Variable | Default | Description |
-|--------|---------|-------------|
-| `MOOR_TASK_POOL_PINNING` | `auto` | Controls whether task worker threads are pinned to detected performance cores |
-| `MOOR_SERVICE_PERF_CORES` | topology-based | Reserves detected performance cores for non-task service threads before assigning worker affinity |
+| Setting | Command Line | Default | Description |
+|--------|---------|---------|-------------|
+| Task pool pinning | `--task-pool-pinning <MODE>` | `auto` | Controls whether task worker threads are pinned to detected performance cores |
+| Reserved service perf cores | `--service-perf-cores <NUM>` | topology-based | Reserves detected performance cores for non-task service threads before assigning worker affinity |
 
-`MOOR_TASK_POOL_PINNING` accepts:
+`task_pool_pinning` accepts:
 
 - `auto`: Use the runtime's default policy.
-- `performance`, `perf`, or `p`: Pin task workers to detected performance cores when available.
-- `none`, `off`, or `unpinned`: Do not pin task worker threads.
+- `performance`: Pin task workers to detected performance cores when available.
+- `none`: Do not pin task worker threads.
 
-If `MOOR_TASK_POOL_PINNING` is set to an invalid value, the daemon logs a warning and falls back to `auto`.
-
-`MOOR_SERVICE_PERF_CORES` must be a non-negative integer. It reserves that many detected performance cores for service
+`service_perf_cores` must be a non-negative integer. It reserves that many detected performance cores for service
 threads. The value is clamped so that, when possible, at least one performance core remains available for task workers.
 
-When `MOOR_SERVICE_PERF_CORES` is not set, the reservation defaults are:
+When `service_perf_cores` is not set, the reservation defaults are:
 
 - `0` for systems with `0..=2` detected performance cores
 - `1` for systems with `3..=7` detected performance cores
@@ -214,15 +210,18 @@ When `MOOR_SERVICE_PERF_CORES` is not set, the reservation defaults are:
 
 Examples:
 
+```yaml
+runtime:
+  task_pool_pinning: performance
+  service_perf_cores: 2
+```
+
 ```bash
 # Force performance-core pinning for task workers
-MOOR_TASK_POOL_PINNING=performance moor-daemon ...
-
-# Leave two performance cores for service/control-plane work
-MOOR_SERVICE_PERF_CORES=2 moor-daemon ...
+moor-daemon --task-pool-pinning performance ...
 
 # Disable task-worker pinning
-MOOR_TASK_POOL_PINNING=none moor-daemon ...
+moor-daemon --task-pool-pinning none ...
 ```
 
 ## Example Configuration
@@ -261,6 +260,8 @@ runtime:
   perf_timing_enabled: true
   perf_timing_hot_path_shift: 6
   perf_timing_medium_path_shift: 3
+  task_pool_pinning: auto
+  service_perf_cores: 1
 ```
 
 ## LambdaMOO Compatibility Mode

@@ -1645,27 +1645,25 @@ impl WorldStateTransaction {
     pub fn commit(self) -> Result<CommitResult, WorldStateError> {
         let counters = db_counters();
         let commit_start = Instant::now();
-        let record_commit_result = |result: &CommitResult| {
-            match result {
-                CommitResult::Success { mutations_made, .. } => {
+        let record_commit_result = |result: &CommitResult| match result {
+            CommitResult::Success { mutations_made, .. } => {
+                counters
+                    .commit_success
+                    .record_elapsed_from_with(PerfIntensity::RarePath, commit_start);
+                if *mutations_made {
                     counters
-                        .commit_success
+                        .commit_success_write
                         .record_elapsed_from_with(PerfIntensity::RarePath, commit_start);
-                    if *mutations_made {
-                        counters
-                            .commit_success_write
-                            .record_elapsed_from_with(PerfIntensity::RarePath, commit_start);
-                    } else {
-                        counters
-                            .commit_success_readonly
-                            .record_elapsed_from_with(PerfIntensity::RarePath, commit_start);
-                    }
-                }
-                CommitResult::ConflictRetry { .. } => {
+                } else {
                     counters
-                        .commit_conflict
+                        .commit_success_readonly
                         .record_elapsed_from_with(PerfIntensity::RarePath, commit_start);
                 }
+            }
+            CommitResult::ConflictRetry { .. } => {
+                counters
+                    .commit_conflict
+                    .record_elapsed_from_with(PerfIntensity::RarePath, commit_start);
             }
         };
 
