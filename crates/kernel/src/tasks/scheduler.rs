@@ -334,7 +334,7 @@ impl Scheduler {
                 .config
                 .runtime
                 .scheduler_tick_duration
-                .unwrap_or(Duration::from_millis(50));
+                .unwrap_or(Duration::from_millis(10));
 
             // Process first message from selector (blocking with timeout)
             match selector.wait_timeout(tick_duration) {
