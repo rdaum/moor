@@ -149,9 +149,7 @@ impl TransactionContext for MoorDB {
 
 impl MoorDB {
     /// Create a snapshot-based SnapshotInterface for consistent read-only access
-    pub fn create_snapshot(
-        &self,
-    ) -> Result<Box<dyn SnapshotInterface>, crate::tx::Error> {
+    pub fn create_snapshot(&self) -> Result<Box<dyn SnapshotInterface>, crate::tx::Error> {
         // Wait for all write transactions up to the last completed write to finish
         // This ensures the snapshot captures all committed write data
         let last_write_timestamp = Timestamp(

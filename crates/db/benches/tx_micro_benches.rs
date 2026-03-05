@@ -263,7 +263,8 @@ struct TxOpsContext {
         Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
     delete_local_delete_none_txs:
         Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    insert_miss_txs: Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
+    insert_miss_txs:
+        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
     insert_duplicate_err_txs:
         Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
     insert_after_local_delete_txs:
@@ -427,7 +428,11 @@ fn check_conflict_merge_rewrite(ctx: &mut CheckMergeContext, chunk_size: usize, 
         let mut ws = rt.working_set().unwrap();
 
         let mut checker_index = ctx.check_index.fork();
-        checker_index.insert_entry(Timestamp(tx.ts.0 + 1), ctx.domain.clone(), MergeCodomain(20));
+        checker_index.insert_entry(
+            Timestamp(tx.ts.0 + 1),
+            ctx.domain.clone(),
+            MergeCodomain(20),
+        );
         let mut checker = ctx.relation.begin_check_from_index(checker_index.as_ref());
         checker.check(&mut ws).unwrap();
         black_box(ws.len());
@@ -459,7 +464,11 @@ fn apply_mixed_batch(ctx: &mut ApplyContext, chunk_size: usize, chunk_num: usize
     }
 }
 
-fn check_no_conflict_core(ctx: &mut CheckNoConflictCoreContext, chunk_size: usize, _chunk_num: usize) {
+fn check_no_conflict_core(
+    ctx: &mut CheckNoConflictCoreContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
     for _ in 0..chunk_size {
         black_box(ctx.checker.check(&mut ctx.ws).unwrap());
     }
@@ -499,13 +508,21 @@ fn tx_op_get_miss(ctx: &mut TxOpsContext, chunk_size: usize, _chunk_num: usize) 
 
 fn tx_op_get_hit_local_update(ctx: &mut TxOpsContext, chunk_size: usize, _chunk_num: usize) {
     for i in 0..chunk_size {
-        black_box(ctx.get_local_update_hit_txs[i].get(&ctx.present_domain).unwrap());
+        black_box(
+            ctx.get_local_update_hit_txs[i]
+                .get(&ctx.present_domain)
+                .unwrap(),
+        );
     }
 }
 
 fn tx_op_get_miss_local_delete(ctx: &mut TxOpsContext, chunk_size: usize, _chunk_num: usize) {
     for i in 0..chunk_size {
-        black_box(ctx.get_local_delete_miss_txs[i].get(&ctx.present_domain).unwrap());
+        black_box(
+            ctx.get_local_delete_miss_txs[i]
+                .get(&ctx.present_domain)
+                .unwrap(),
+        );
     }
 }
 
@@ -551,19 +568,31 @@ fn tx_op_update_local_delete_none(ctx: &mut TxOpsContext, chunk_size: usize, _ch
 
 fn tx_op_delete_hit_master(ctx: &mut TxOpsContext, chunk_size: usize, _chunk_num: usize) {
     for i in 0..chunk_size {
-        black_box(ctx.delete_hit_master_txs[i].delete(&ctx.present_domain).unwrap());
+        black_box(
+            ctx.delete_hit_master_txs[i]
+                .delete(&ctx.present_domain)
+                .unwrap(),
+        );
     }
 }
 
 fn tx_op_delete_miss_none(ctx: &mut TxOpsContext, chunk_size: usize, _chunk_num: usize) {
     for i in 0..chunk_size {
-        black_box(ctx.delete_miss_none_txs[i].delete(&ctx.missing_domain).unwrap());
+        black_box(
+            ctx.delete_miss_none_txs[i]
+                .delete(&ctx.missing_domain)
+                .unwrap(),
+        );
     }
 }
 
 fn tx_op_delete_local_insert(ctx: &mut TxOpsContext, chunk_size: usize, _chunk_num: usize) {
     for i in 0..chunk_size {
-        black_box(ctx.delete_local_insert_txs[i].delete(&ctx.missing_domain).unwrap());
+        black_box(
+            ctx.delete_local_insert_txs[i]
+                .delete(&ctx.missing_domain)
+                .unwrap(),
+        );
     }
 }
 
@@ -601,7 +630,10 @@ fn tx_op_insert_after_local_delete(ctx: &mut TxOpsContext, chunk_size: usize, _c
     for i in 0..chunk_size {
         black_box(
             ctx.insert_after_local_delete_txs[i]
-                .insert(ctx.resurrect_domain.clone(), PlainCodomain(700 + (i as u64)))
+                .insert(
+                    ctx.resurrect_domain.clone(),
+                    PlainCodomain(700 + (i as u64)),
+                )
                 .is_err(),
         );
     }
@@ -609,7 +641,11 @@ fn tx_op_insert_after_local_delete(ctx: &mut TxOpsContext, chunk_size: usize, _c
 
 fn tx_op_bulk_get_master(ctx: &mut TxOpsContext, chunk_size: usize, _chunk_num: usize) {
     for i in 0..chunk_size {
-        black_box(ctx.bulk_get_master_txs[i].bulk_get(&ctx.bulk_get_domains).unwrap());
+        black_box(
+            ctx.bulk_get_master_txs[i]
+                .bulk_get(&ctx.bulk_get_domains)
+                .unwrap(),
+        );
     }
 }
 

@@ -166,7 +166,9 @@ where
         }
 
         counters.crdt_resolve_fail.invocations().add(1);
-        Err(Error::Conflict(self.make_conflict_info(domain, conflict_type)))
+        Err(Error::Conflict(
+            self.make_conflict_info(domain, conflict_type),
+        ))
     }
 
     fn check_with_smart_merge(
@@ -234,7 +236,8 @@ where
             }
 
             if let Some((ts, codomain)) = self.source.get(domain)? {
-                self.index.insert_entry(ts, domain.clone(), codomain.clone());
+                self.index
+                    .insert_entry(ts, domain.clone(), codomain.clone());
                 let theirs = Some(&codomain);
 
                 if op.operation.is_insert() {
@@ -326,7 +329,9 @@ where
                 // If what we have is an insert, and there's something already there, that's a
                 // conflict.
                 if op.operation.is_insert() {
-                    let base = base_index.index_lookup(domain).map(|e| (e.ts, e.value.clone()));
+                    let base = base_index
+                        .index_lookup(domain)
+                        .map(|e| (e.ts, e.value.clone()));
                     let theirs = Some((local_entry.ts, local_entry.value.clone()));
                     let conflict = self.make_potential_conflict(
                         domain,
@@ -348,7 +353,9 @@ where
                 // If the ts there is greater than the read-ts of our own op, that's a conflict
                 // Someone got to it first.
                 if ts > op.read_ts {
-                    let base = base_index.index_lookup(domain).map(|e| (e.ts, e.value.clone()));
+                    let base = base_index
+                        .index_lookup(domain)
+                        .map(|e| (e.ts, e.value.clone()));
                     let theirs = Some((local_entry.ts, local_entry.value.clone()));
                     let conflict = self.make_potential_conflict(
                         domain,
@@ -371,7 +378,9 @@ where
                 // (This only happens because we're not able to early-bail on update operations
                 // like this, so there's some waste here.)
                 if op.read_ts > op.write_ts {
-                    let base = base_index.index_lookup(domain).map(|e| (e.ts, e.value.clone()));
+                    let base = base_index
+                        .index_lookup(domain)
+                        .map(|e| (e.ts, e.value.clone()));
                     let theirs = Some((local_entry.ts, local_entry.value.clone()));
                     let conflict = self.make_potential_conflict(
                         domain,
@@ -400,7 +409,9 @@ where
                 // If what we have is an insert, and there's something already there, that's also
                 // a conflict.
                 if op.operation.is_insert() {
-                    let base = base_index.index_lookup(domain).map(|e| (e.ts, e.value.clone()));
+                    let base = base_index
+                        .index_lookup(domain)
+                        .map(|e| (e.ts, e.value.clone()));
                     let theirs = Some((ts, codomain.clone()));
                     let conflict = self.make_potential_conflict(
                         domain,
@@ -418,7 +429,9 @@ where
                     }
                 }
                 if ts > op.read_ts {
-                    let base = base_index.index_lookup(domain).map(|e| (e.ts, e.value.clone()));
+                    let base = base_index
+                        .index_lookup(domain)
+                        .map(|e| (e.ts, e.value.clone()));
                     let theirs = Some((ts, codomain));
                     let conflict = self.make_potential_conflict(
                         domain,
@@ -439,7 +452,9 @@ where
                 // If upstream doesn't have it, and it's not an insert or delete, that's a conflict, this
                 // should not have happened.
                 if op.operation.is_update() {
-                    let base = base_index.index_lookup(domain).map(|e| (e.ts, e.value.clone()));
+                    let base = base_index
+                        .index_lookup(domain)
+                        .map(|e| (e.ts, e.value.clone()));
                     let conflict = self.make_potential_conflict(
                         domain,
                         ConflictType::UpdateNonExistent,
@@ -492,9 +507,9 @@ where
 mod tests {
     use super::*;
     use crate::tx::{
+        Tx,
         indexes::HashRelationIndex,
         transaction::{Op, OpType, RelationTransaction},
-        Tx,
     };
     use moor_var::Symbol;
     use std::{

@@ -131,9 +131,9 @@ impl List {
 
         let base_len = self.len();
         if from < 0 {
-            return Err(E_RANGE.with_msg(|| {
-                format!("attempt to set range with negative index {from}")
-            }));
+            return Err(
+                E_RANGE.with_msg(|| format!("attempt to set range with negative index {from}"))
+            );
         }
 
         // 1..0 is a "special" MOO-ism for front insertion.

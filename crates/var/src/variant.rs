@@ -999,8 +999,9 @@ impl Var {
             let idx = {
                 let i = index_mode.adjust_i64(idx);
                 if i < 0 {
-                    return Err(E_RANGE
-                        .with_msg(|| format!("Cannot index into sequence with negative index {i}")));
+                    return Err(E_RANGE.with_msg(|| {
+                        format!("Cannot index into sequence with negative index {i}")
+                    }));
                 }
                 i as usize
             };
@@ -1048,7 +1049,12 @@ impl Var {
     }
 
     /// Like `insert`, but can consume owned list values without cloning the base list.
-    pub fn insert_owned(self, index: &Var, value: &Var, index_mode: IndexMode) -> Result<Var, Error> {
+    pub fn insert_owned(
+        self,
+        index: &Var,
+        value: &Var,
+        index_mode: IndexMode,
+    ) -> Result<Var, Error> {
         if matches!(self.tag, TAG_LIST | TAG_EMPTY_LIST) {
             let list = self.into_list_owned().unwrap();
             let index = match index.variant() {
@@ -1346,8 +1352,9 @@ impl Var {
                 }
             };
             if index < 0 {
-                return Err(E_RANGE
-                    .with_msg(|| format!("Cannot index into sequence with negative index {index}")));
+                return Err(E_RANGE.with_msg(|| {
+                    format!("Cannot index into sequence with negative index {index}")
+                }));
             }
             return list.remove_at_owned(index as usize);
         }
@@ -1362,9 +1369,16 @@ impl Var {
         }
     }
 
-    pub fn remove_owned(self, value: &Var, case_sensitive: bool) -> Result<(Var, Option<Var>), Error> {
+    pub fn remove_owned(
+        self,
+        value: &Var,
+        case_sensitive: bool,
+    ) -> Result<(Var, Option<Var>), Error> {
         if self.tag == TAG_MAP {
-            return Ok(self.into_map_owned().unwrap().remove_owned(value, case_sensitive));
+            return Ok(self
+                .into_map_owned()
+                .unwrap()
+                .remove_owned(value, case_sensitive));
         }
         self.remove(value, case_sensitive)
     }
@@ -2049,9 +2063,7 @@ mod tests {
             .unwrap();
         assert_eq!(removed, v_list(&[v_int(1), v_int(3)]));
 
-        let appended = base
-            .append_owned(&v_list(&[v_int(8), v_int(9)]))
-            .unwrap();
+        let appended = base.append_owned(&v_list(&[v_int(8), v_int(9)])).unwrap();
         assert_eq!(
             appended,
             v_list(&[v_int(1), v_int(2), v_int(3), v_int(8), v_int(9)])

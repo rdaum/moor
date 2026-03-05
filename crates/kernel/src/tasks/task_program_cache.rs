@@ -15,9 +15,9 @@ use std::collections::{HashMap, HashSet};
 
 use ahash::AHasher;
 use lazy_static::lazy_static;
+use moor_common::model::{PropertyLookupHint, VerbLookupHint};
 use moor_common::model::{VerbProgramKey, WorldState, WorldStateError};
 use moor_common::util::ConcurrentCounter;
-use moor_common::model::{PropertyLookupHint, VerbLookupHint};
 use moor_compiler::Program;
 use moor_var::{
     Obj,

@@ -1111,10 +1111,7 @@ fn make_property_pic_entry(
         (v_str("hits"), v_int(hits)),
         (v_str("miss_no_hint"), v_int(miss_no_hint)),
         (v_str("miss_guard_mismatch"), v_int(miss_guard_mismatch)),
-        (
-            v_str("miss_version_mismatch"),
-            v_int(miss_version_mismatch),
-        ),
+        (v_str("miss_version_mismatch"), v_int(miss_version_mismatch)),
         (v_str("miss_resolve_failed"), v_int(miss_resolve_failed)),
         (v_str("not_applicable"), v_int(not_applicable)),
         (v_str("total"), v_int(total)),
@@ -1160,7 +1157,10 @@ fn make_property_pic_stats_map() -> Var {
     let vm_hint = v_map(&[
         (
             v_str("get_prop"),
-            make_vm_hint_entry(stats.vm_get_prop_with_hint as i64, stats.vm_get_prop_no_hint as i64),
+            make_vm_hint_entry(
+                stats.vm_get_prop_with_hint as i64,
+                stats.vm_get_prop_no_hint as i64,
+            ),
         ),
         (
             v_str("push_get_prop"),
@@ -1171,7 +1171,10 @@ fn make_property_pic_stats_map() -> Var {
         ),
         (
             v_str("put_prop"),
-            make_vm_hint_entry(stats.vm_put_prop_with_hint as i64, stats.vm_put_prop_no_hint as i64),
+            make_vm_hint_entry(
+                stats.vm_put_prop_with_hint as i64,
+                stats.vm_put_prop_no_hint as i64,
+            ),
         ),
         (
             v_str("put_prop_at"),

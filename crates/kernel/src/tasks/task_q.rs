@@ -116,7 +116,9 @@ impl TaskQ {
                         );
                         let worker_core_ids = worker_performance_core_ids();
                         if worker_core_ids.is_empty() {
-                            warn!("No worker performance cores reserved, task pool pinning disabled");
+                            warn!(
+                                "No worker performance cores reserved, task pool pinning disabled"
+                            );
                             None
                         } else {
                             info!(

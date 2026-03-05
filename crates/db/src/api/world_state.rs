@@ -224,11 +224,12 @@ impl DbWorldState {
         }
 
         let mut pic_outcome = PropertyLookupPicOutcome::MissNoHint;
-        if let Some(hint) = hint
-        {
+        if let Some(hint) = hint {
             if hint.receiver != *obj || hint.property_name != pname {
                 pic_outcome = PropertyLookupPicOutcome::MissGuardMismatch;
-            } else if hint.prop_cache_version != self.get_tx().prop_resolution_cache_version() as u64 {
+            } else if hint.prop_cache_version
+                != self.get_tx().prop_resolution_cache_version() as u64
+            {
                 pic_outcome = PropertyLookupPicOutcome::MissVersionMismatch;
             } else {
                 match self

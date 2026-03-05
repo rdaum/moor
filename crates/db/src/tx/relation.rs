@@ -15,21 +15,19 @@
 
 use crate::{
     provider::Provider,
-    tx::{
-        Error, RelationCodomain, RelationCodomainHashable, RelationDomain, Tx,
-    },
+    tx::{Error, RelationCodomain, RelationCodomainHashable, RelationDomain, Tx},
 };
 use moor_var::Symbol;
 use std::sync::Arc;
 
 #[cfg(test)]
 use crate::tx::{Canonical, Timestamp};
-#[cfg(test)]
-use arc_swap::ArcSwap;
 use crate::tx::{
     CheckRelation, RelationIndex, RelationTransaction,
     indexes::{HashRelationIndex, SecondaryIndexRelation},
 };
+#[cfg(test)]
+use arc_swap::ArcSwap;
 
 /// Represents the current "canonical" state of a relation.
 type IndexFactory<Domain, Codomain> = fn() -> Box<dyn RelationIndex<Domain, Codomain>>;
@@ -906,5 +904,4 @@ mod tests {
         assert_eq!(committed_result_b.len(), 1);
         assert!(committed_result_b.contains(&domain3));
     }
-
 }

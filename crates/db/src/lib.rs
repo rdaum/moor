@@ -33,12 +33,12 @@ pub use api::{
     gc::{GCError, GCInterface},
     world_state::db_counters,
 };
-pub use cache::stats::CacheStats;
 pub use cache::property_pic_stats::{
     PropertyPicSnapshot, PropertyPicStats, record_vm_property_hint_get_prop,
     record_vm_property_hint_push_get_prop, record_vm_property_hint_put_prop,
     record_vm_property_hint_put_prop_at,
 };
+pub use cache::stats::CacheStats;
 pub use cache::verb_pic_stats::{
     VerbPicSnapshot, VerbPicStats, record_vm_verb_hint_call_verb, record_vm_verb_hint_pass,
 };
@@ -56,9 +56,8 @@ pub use model::{
 pub use provider::Provider;
 pub use tx::{
     AcceptIdentical, CheckRelation, ConflictResolver, Error, FailOnConflict, PotentialConflict,
-    ProposedOp, SmartMergeResolver,
-    Relation, RelationCodomain, RelationCodomainHashable, RelationDomain, RelationIndex,
-    RelationTransaction, Timestamp, Tx, WorkingSet,
+    ProposedOp, Relation, RelationCodomain, RelationCodomainHashable, RelationDomain,
+    RelationIndex, RelationTransaction, SmartMergeResolver, Timestamp, Tx, WorkingSet,
 };
 
 pub type SnapshotCallback = Box<

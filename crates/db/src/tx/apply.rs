@@ -133,10 +133,7 @@ mod tests {
     impl crate::provider::Provider<TestDomain, TestCodomain> for TestProvider {
         fn get(&self, domain: &TestDomain) -> Result<Option<(Timestamp, TestCodomain)>, Error> {
             let data = self.data.lock().unwrap();
-            Ok(data
-                .get(domain)
-                .cloned()
-                .map(|v| (Timestamp(0), v)))
+            Ok(data.get(domain).cloned().map(|v| (Timestamp(0), v)))
         }
 
         fn put(

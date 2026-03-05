@@ -13,8 +13,8 @@
 
 use crate::{
     config::FeaturesConfig,
-    tasks::task_program_cache::ProgramInlineCaches,
     task_context::with_current_transaction_mut,
+    tasks::task_program_cache::ProgramInlineCaches,
     vm::{
         moo_frame::{CatchType, MooStackFrame, PcType, ScopeType},
         scatter_assign::scatter_assign,
@@ -1034,7 +1034,8 @@ pub fn moo_frame_execute(
                 let Ok(propname) = propname.as_symbol() else {
                     return push_error_cold(invalid_property_name_error(&propname));
                 };
-                let hint = load_inline_property_hint(inline_property_ic_ptr, inline_property_ic_len, pc);
+                let hint =
+                    load_inline_property_hint(inline_property_ic_ptr, inline_property_ic_len, pc);
                 record_vm_property_hint_put_prop(hint.is_some());
                 let update_result = with_current_transaction_mut(|world_state| {
                     world_state.update_property_with_hint(&permissions, &obj, propname, &rhs, hint)
@@ -1087,12 +1088,20 @@ pub fn moo_frame_execute(
 
                 let update_result = if let Some(obj) = base.as_object() {
                     let obj = obj;
-                    let hint =
-                        load_inline_property_hint(inline_property_ic_ptr, inline_property_ic_len, pc);
+                    let hint = load_inline_property_hint(
+                        inline_property_ic_ptr,
+                        inline_property_ic_len,
+                        pc,
+                    );
                     record_vm_property_hint_put_prop_at(hint.is_some());
                     with_current_transaction_mut(|world_state| {
-                        world_state
-                            .update_property_with_hint(&permissions, &obj, propname, &rhs, hint)
+                        world_state.update_property_with_hint(
+                            &permissions,
+                            &obj,
+                            propname,
+                            &rhs,
+                            hint,
+                        )
                     })
                     .map(|next_hint| {
                         store_inline_property_hint(
@@ -1111,9 +1120,9 @@ pub fn moo_frame_execute(
                             to_remove.push(len - 1);
                         }
                         remove_stack_indices(&mut f.valstack, to_remove.as_mut_slice());
-                        return push_error_cold(E_TYPE.with_msg(|| {
-                            format!("Invalid property name: {propname}")
-                        }));
+                        return push_error_cold(
+                            E_TYPE.with_msg(|| format!("Invalid property name: {propname}")),
+                        );
                     }
                     let updated = flyweight.add_slot(propname, rhs);
                     clear_inline_property_hint(inline_property_ic_ptr, inline_property_ic_len, pc);
@@ -1487,7 +1496,9 @@ pub fn moo_frame_execute(
                     // Take the last num_captured items from the capture stack
                     let stack_len = f.capture_stack.len();
                     if stack_len < num_captured as usize {
-                        return push_error_cold(E_ARGS.msg("insufficient captured variables on stack"));
+                        return push_error_cold(
+                            E_ARGS.msg("insufficient captured variables on stack"),
+                        );
                     }
 
                     // Extract captured variables and convert to environment format

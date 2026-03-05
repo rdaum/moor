@@ -104,7 +104,10 @@ pub struct PerfTimerGuard<'a> {
 impl<'a> PerfTimerGuard<'a> {
     pub fn new(perf: &'a PerfCounter) -> Self {
         let sampled_start = perf.sampled_start();
-        Self { perf, sampled_start }
+        Self {
+            perf,
+            sampled_start,
+        }
     }
 
     pub fn from_start(perf: &'a PerfCounter, start: Instant) -> Self {
@@ -113,7 +116,10 @@ impl<'a> PerfTimerGuard<'a> {
         } else {
             None
         };
-        Self { perf, sampled_start }
+        Self {
+            perf,
+            sampled_start,
+        }
     }
 }
 

@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use super::check::{PotentialConflict, ProposedOp};
 use crate::{
     api::world_state::db_counters,
     tx::{Error, RelationCodomain, RelationDomain},
 };
-use super::check::{PotentialConflict, ProposedOp};
 
 /// The result of a conflict resolution attempt.
 pub enum Resolution<Codomain> {
@@ -253,7 +253,10 @@ mod tests {
         };
 
         let mut resolver = SmartMergeResolver;
-        assert!(matches!(resolver.resolve(&conflict), Err(Error::Conflict(_))));
+        assert!(matches!(
+            resolver.resolve(&conflict),
+            Err(Error::Conflict(_))
+        ));
         assert!(counters.crdt_resolve_fail.invocations().sum() >= fail_before + 1);
     }
 }
