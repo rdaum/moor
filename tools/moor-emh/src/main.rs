@@ -35,6 +35,7 @@ use moor_kernel::{
     tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
 };
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
+use crossterm::style::Stylize;
 use rustyline::ExternalPrinter;
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
@@ -49,7 +50,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, LazyLock, Mutex},
 };
-use termimad::{MadSkin, crossterm::style::Color};
+use tabled::{Table, Tabled, settings::Style};
 use tracing::{error, info, warn};
 use tracing_subscriber::fmt::MakeWriter;
 use uuid::Uuid;
@@ -244,7 +245,7 @@ impl Session for ConsoleSession {
                     }
                 }
                 Event::Traceback(exception) => {
-                    eprintln!("** Error: {} **", exception.error);
+                    eprintln!("{} {}", "error:".red().bold(), exception.error);
                     for line in &exception.stack {
                         eprintln!("  {}", to_literal(line));
                     }
@@ -289,15 +290,15 @@ impl Session for ConsoleSession {
     }
 
     fn send_system_msg(&self, _player: Obj, msg: &str) -> Result<(), SessionError> {
-        println!("** {msg} **");
+        println!("{} {}", "system:".blue().bold(), msg);
         Ok(())
     }
 
     fn notify_shutdown(&self, msg: Option<String>) -> Result<(), SessionError> {
         if let Some(msg) = msg {
-            println!("** Server shutting down: {msg} **");
+            println!("{} Server shutting down: {msg}", "system:".blue().bold());
         } else {
-            println!("** Server shutting down **");
+            println!("{} Server shutting down", "system:".blue().bold());
         }
         Ok(())
     }
@@ -820,76 +821,39 @@ fn parse_flags(args: &str) -> ParsedFlags {
 }
 
 fn print_help() {
-    let skin = create_skin();
-    let markdown = r#"# Emergency Medical Hologram - Available Procedures
-
-## Database Operations
-
-|Command|Description|
-|---|---|
-|`;EXPR`|Evaluate MOO expression, print result|
-|`;;CODE`|Execute MOO code block, print result|
-|`get #OBJ.PROP`|Read property value|
-|`set #OBJ.PROP VALUE`|Write property value|
-|`props #OBJ`|List all properties on object|
-|`verbs #OBJ`|List all verbs on object|
-|`prog #OBJ:VERB`|Program a verb (multi-line)|
-|`list #OBJ:VERB`|Show verb code|
-|`dump #OBJ [--file PATH]`|Dump object to file or console|
-|`load [--file PATH] [options]`|Load object from file or console|
-|`reload [#OBJ] [--file PATH]`|Replace object contents from file or console|
-|`su #OBJ`|Switch to different player object|
-|`help, ?`|Show this help|
-|`quit, exit`|Save and exit|
-
-## Dump & Load
-
-**Dump command:**
-- `dump #OBJ` - Display object definition on console
-- `dump #OBJ --file filename.moo` - Save object definition to file
-
-**Load command:**
-- `load` - Paste object definition, then type `.` to finish
-- `load --file filename.moo` - Load object definition from file
-
-**Load options:**
-- `--file PATH` - Load from file instead of stdin
-- `--constants PATH` - MOO file with constant definitions
-- `--dry-run` - Validate without making changes
-- `--conflict-mode MODE` - How to handle conflicts: clobber, skip, or detect
-- `--as SPEC` - Where to load: `new`, `anonymous` (or `anon`), `uuid`, or `#OBJ`
-- `--return-conflicts` - Return detailed conflict information
-
-**Load examples:**
-- `load --file obj.moo --dry-run` - Validate without loading
-- `load --file obj.moo --as #123` - Load into specific object
-- `load --file obj.moo --as new` - Create new numbered object
-- `load --file obj.moo --as anonymous` - Create anonymous object
-- `load --file obj.moo --conflict-mode skip` - Skip conflicting properties
-- `load --file obj.moo --constants defs.moo` - Load with constants file
-
-**Reload command:**
-- `reload [#OBJ]` - Paste object definition, then type `.` to finish
-- `reload [#OBJ] --file filename.moo` - Replace object with definition from file
-- `reload [#OBJ] --constants defs.moo` - Use constants file for compilation
-
-**Reload examples:**
-- `reload --file obj.moo` - Reload object (uses objid from file)
-- `reload #123 --file obj.moo` - Force reload into #123
-- `reload $player --file player.moo` - Replace player object from file
-- `reload --file obj.moo --constants defs.moo` - Reload with constants
-
-"#;
-    println!("{}", skin.term_text(markdown));
+    println!("{}", "Emergency Medical Hologram - Available Procedures".bold());
+    println!();
+    println!("Database Operations");
+    println!("  ;EXPR                              Evaluate MOO expression, print result");
+    println!("  ;;CODE                             Execute MOO code block, print result");
+    println!("  get #OBJ.PROP                      Read property value");
+    println!("  set #OBJ.PROP VALUE                Write property value");
+    println!("  props #OBJ                         List all properties on object");
+    println!("  verbs #OBJ                         List all verbs on object");
+    println!("  prog #OBJ:VERB                     Program a verb (multi-line)");
+    println!("  list #OBJ:VERB                     Show verb code");
+    println!("  dump #OBJ [--file PATH]            Dump object to file or console");
+    println!("  load [--file PATH] [options]       Load object from file or console");
+    println!("  reload [#OBJ] [--file PATH]        Replace object contents from file or console");
+    println!("  su #OBJ                            Switch to different player object");
+    println!("  help, ?                            Show this help");
+    println!("  quit, exit                         Save and exit");
+    println!();
+    println!("Load options");
+    println!("  --file PATH                        Load from file instead of stdin");
+    println!("  --constants PATH                   MOO file with constant definitions");
+    println!("  --dry-run                          Validate without making changes");
+    println!("  --conflict-mode MODE               clobber | skip | detect");
+    println!("  --as SPEC                          new | anonymous | uuid | #OBJ");
+    println!("  --return-conflicts                 Return detailed conflict information");
 }
 
-/// Create a MadSkin for terminal output
-fn create_skin() -> MadSkin {
-    let mut skin = MadSkin::default();
-    skin.set_headers_fg(Color::Yellow);
-    skin.bold.set_fg(Color::Cyan);
-    skin.italic.set_fg(Color::Green);
-    skin
+fn print_success(message: impl AsRef<str>) {
+    println!("{} {}", "✓".green().bold(), message.as_ref());
+}
+
+fn print_warning(message: impl AsRef<str>) {
+    println!("{} {}", "!".yellow().bold(), message.as_ref());
 }
 
 /// Format a SchedulerError for user-friendly display
@@ -1026,10 +990,8 @@ fn eval_expression(
 
     match result {
         Ok(TaskNotification::Result(value)) => {
-            let skin = create_skin();
             let output = to_literal(&value);
-            let markdown = format!("**=>** `{output}`");
-            println!("{}", skin.term_text(&markdown));
+            println!("=> {output}");
         }
         Ok(TaskNotification::Suspended) => {
             bail!("Received unexpected suspension notification while waiting for eval result");
@@ -1079,14 +1041,12 @@ fn cmd_get(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Resu
         bail!("Unexpected result");
     };
 
-    let skin = create_skin();
-    let markdown = format!(
-        "**{}**.`{}` = `{}`",
+    println!(
+        "{}.{} = {}",
         obj.to_literal(),
         prop.as_string(),
         to_literal(&value)
     );
-    println!("{}", skin.term_text(&markdown));
     Ok(())
 }
 
@@ -1137,13 +1097,11 @@ fn cmd_set(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Resu
         .map_err(|_| eyre!("Task timed out"))?;
 
     let Err(e) = result else {
-        let skin = create_skin();
-        let markdown = format!(
-            "**✓** Property `{}`.`{}` set successfully",
+        print_success(format!(
+            "Property {}.{} set successfully",
             obj.to_literal(),
             prop.as_string()
-        );
-        println!("{}", skin.term_text(&markdown));
+        ));
         return Ok(());
     };
 
@@ -1162,20 +1120,20 @@ fn cmd_props(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Re
         .request_properties(wizard, wizard, &obj_ref, false)
         .map_err(|e| eyre!("Failed to get properties: {:?}", e))?;
 
-    let skin = create_skin();
-
-    // Build markdown table
-    let mut markdown = format!("# Properties on {}\n\n", obj.to_literal());
-    markdown.push_str("|Property|\n");
-    markdown.push_str("|---|\n");
-
-    for (prop, _) in props.iter() {
-        markdown.push_str(&format!("|{}|\n", prop.name().as_string()));
+    #[derive(Tabled)]
+    struct PropertyRow {
+        property: String,
     }
 
-    markdown.push_str(&format!("\n*{} properties*\n", props.len()));
-
-    println!("{}", skin.term_text(&markdown));
+    let rows: Vec<PropertyRow> = props
+        .iter()
+        .map(|(prop, _)| PropertyRow {
+            property: prop.name().as_string().to_string(),
+        })
+        .collect();
+    println!("{}", format!("Properties on {}", obj.to_literal()).bold());
+    println!("{}", Table::new(rows).with(Style::rounded()));
+    println!("{} properties", props.len());
     Ok(())
 }
 
@@ -1190,23 +1148,22 @@ fn cmd_verbs(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Re
         .request_verbs(wizard, wizard, &obj_ref, false)
         .map_err(|e| eyre!("Failed to get verbs: {:?}", e))?;
 
-    let skin = create_skin();
-
-    // Build markdown table
-    let mut markdown = format!("# Verbs on {}\n\n", obj.to_literal());
-    markdown.push_str("|Verb|\n");
-    markdown.push_str("|---|\n");
-
-    for verb in verbs.iter() {
-        // Get the first name of the verb
-        if let Some(name) = verb.names().first() {
-            markdown.push_str(&format!("|**{}**|\n", name.as_string()));
-        }
+    #[derive(Tabled)]
+    struct VerbRow {
+        verb: String,
     }
 
-    markdown.push_str(&format!("\n*{} verbs*\n", verbs.len()));
-
-    println!("{}", skin.term_text(&markdown));
+    let rows: Vec<VerbRow> = verbs
+        .iter()
+        .filter_map(|verb| {
+            verb.names().first().map(|name| VerbRow {
+                verb: name.as_string().to_string(),
+            })
+        })
+        .collect();
+    println!("{}", format!("Verbs on {}", obj.to_literal()).bold());
+    println!("{}", Table::new(rows).with(Style::rounded()));
+    println!("{} verbs", verbs.len());
     Ok(())
 }
 
@@ -1224,13 +1181,12 @@ fn cmd_prog(
         obj.to_literal()
     );
 
-    let skin = create_skin();
     let intro = format!(
-        "**Programming** `{}:{}`\n\nEnter code (type `.` on a line by itself to finish):",
+        "Programming {}:{}\n\nEnter code (type `.` on a line by itself to finish):",
         obj.to_literal(),
         verb.as_string()
     );
-    println!("{}", skin.term_text(&intro));
+    println!("{intro}");
 
     // Collect lines until we see a line with just "."
     let mut code_lines = Vec::new();
@@ -1298,13 +1254,12 @@ fn cmd_prog(
     };
 
     let Err(e) = result else {
-        let markdown = format!(
-            "**✓** Verb `{}:{}` programmed successfully ({} lines)",
+        print_success(format!(
+            "Verb {}:{} programmed successfully ({} lines)",
             obj.to_literal(),
             verb.as_string(),
             code_lines.len()
-        );
-        println!("{}", skin.term_text(&markdown));
+        ));
         return Ok(());
     };
 
@@ -1374,9 +1329,7 @@ fn cmd_su(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Resul
         );
     }
 
-    let skin = create_skin();
-    let markdown = format!("**✓** Switched to player `{}`", obj.to_literal());
-    println!("{}", skin.term_text(&markdown));
+    print_success(format!("Switched to player {}", obj.to_literal()));
     Ok(obj)
 }
 
@@ -1421,24 +1374,22 @@ fn cmd_list(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Res
         bail!("verb_code did not return a list");
     };
 
-    let skin = create_skin();
-
-    // Build markdown with code block
-    let mut markdown = format!("# Verb: {}:{}\n\n", obj.to_literal(), verb.as_string());
-    markdown.push_str("```moo\n");
+    println!(
+        "{} {}:{}",
+        "Verb".bold(),
+        obj.to_literal(),
+        verb.as_string()
+    );
+    println!();
 
     for line in lines.iter() {
         let Some(s) = line.as_string() else {
             continue;
         };
-        markdown.push_str(s);
-        markdown.push('\n');
+        println!("{s}");
     }
-
-    markdown.push_str("```\n");
-    markdown.push_str(&format!("\n*{} lines*\n", lines.len()));
-
-    println!("{}", skin.term_text(&markdown));
+    println!();
+    println!("{} lines", lines.len());
     Ok(())
 }
 
@@ -1489,8 +1440,6 @@ fn cmd_dump(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Res
         bail!("dump_object did not return a list");
     };
 
-    let skin = create_skin();
-
     // If filename provided, write to file; otherwise print to console
     if let Some(path) = filename {
         let mut file =
@@ -1504,16 +1453,15 @@ fn cmd_dump(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Res
                 .map_err(|e| eyre!("Failed to write to file {:?}: {}", path, e))?;
         }
 
-        let markdown = format!(
-            "**✓** Object `{}` dumped to `{}`\n\n*{} lines written*",
+        print_success(format!(
+            "Object {} dumped to {}",
             obj.to_literal(),
-            path.display(),
-            lines.len()
-        );
-        println!("{}", skin.term_text(&markdown));
+            path.display()
+        ));
+        println!("{} lines written", lines.len());
     } else {
-        let markdown = format!("# Object Definition: {}\n\n", obj.to_literal());
-        println!("{}", skin.term_text(&markdown));
+        println!("{}", format!("Object Definition: {}", obj.to_literal()).bold());
+        println!();
 
         // Print the definition lines
         for line in lines.iter() {
@@ -1523,8 +1471,8 @@ fn cmd_dump(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Res
             println!("{s}");
         }
 
-        let summary = format!("\n*{} lines dumped*", lines.len());
-        println!("{}", skin.term_text(&summary));
+        println!();
+        println!("{} lines dumped", lines.len());
     }
 
     Ok(())
@@ -1538,8 +1486,6 @@ fn cmd_load(
     rl: &mut Editor<MooAdminHelper, rustyline::history::DefaultHistory>,
 ) -> Result<(), Report> {
     use moor_objdef::{ConflictMode, ObjDefLoaderOptions};
-
-    let skin = create_skin();
 
     // Parse args with flag parser
     let parsed = parse_flags(args);
@@ -1555,8 +1501,8 @@ fn cmd_load(
         lines
     } else {
         // Read from stdin
-        let intro = "**Loading object definition**\n\nPaste object definition (type `.` on a line by itself to finish):";
-        println!("{}", skin.term_text(intro));
+        println!("Loading object definition");
+        println!("Paste object definition (type `.` on a line by itself to finish):");
 
         let mut lines = Vec::new();
         loop {
@@ -1658,32 +1604,23 @@ fn cmd_load(
 
     // Display results
     if return_conflicts {
-        let markdown = if result.commit {
-            format!(
-                "**✓** Load completed successfully\n\n**Loaded objects:** {}\n**Conflicts:** {}\n\n*{} lines processed*",
-                result.loaded_objects.len(),
-                result.conflicts.len(),
-                definition_lines.len()
-            )
+        if result.commit {
+            print_success("Load completed successfully");
+            println!("Loaded objects: {}", result.loaded_objects.len());
+            println!("Conflicts: {}", result.conflicts.len());
+            println!("{} lines processed", definition_lines.len());
         } else {
-            format!(
-                "**⚠** Load would have conflicts (dry-run or detect mode)\n\n**Would load:** {}\n**Conflicts:** {}\n\n*{} lines processed*",
-                result.loaded_objects.len(),
-                result.conflicts.len(),
-                definition_lines.len()
-            )
-        };
-        println!("{}", skin.term_text(&markdown));
+            print_warning("Load would have conflicts (dry-run or detect mode)");
+            println!("Would load: {}", result.loaded_objects.len());
+            println!("Conflicts: {}", result.conflicts.len());
+            println!("{} lines processed", definition_lines.len());
+        }
     } else if result.loaded_objects.is_empty() {
         bail!("No objects were loaded");
     } else {
         let obj = result.loaded_objects[0];
-        let markdown = format!(
-            "**✓** Object `{}` loaded successfully\n\n*{} lines processed*",
-            obj.to_literal(),
-            definition_lines.len()
-        );
-        println!("{}", skin.term_text(&markdown));
+        print_success(format!("Object {} loaded successfully", obj.to_literal()));
+        println!("{} lines processed", definition_lines.len());
     }
 
     Ok(())
@@ -1696,8 +1633,6 @@ fn cmd_reload(
     args: &str,
     rl: &mut Editor<MooAdminHelper, rustyline::history::DefaultHistory>,
 ) -> Result<(), Report> {
-    let skin = create_skin();
-
     // Parse args with flag parser
     let parsed = parse_flags(args);
 
@@ -1725,13 +1660,14 @@ fn cmd_reload(
         // Read from stdin
         let intro = if let Some(obj) = target_obj {
             format!(
-                "**Reloading object `{}`**\n\nPaste object definition (type `.` on a line by itself to finish):",
+                "Reloading object {}\n\nPaste object definition (type `.` on a line by itself to finish):",
                 obj.to_literal()
             )
         } else {
-            "**Reloading object**\n\nPaste object definition (type `.` on a line by itself to finish):".to_string()
+            "Reloading object\n\nPaste object definition (type `.` on a line by itself to finish):"
+                .to_string()
         };
-        println!("{}", skin.term_text(&intro));
+        println!("{intro}");
 
         let mut lines = Vec::new();
         loop {
@@ -1787,12 +1723,8 @@ fn cmd_reload(
     }
 
     let obj = result.loaded_objects[0];
-    let markdown = format!(
-        "**✓** Object `{}` reloaded successfully\n\n*{} lines processed*",
-        obj.to_literal(),
-        definition_lines.len()
-    );
-    println!("{}", skin.term_text(&markdown));
+    print_success(format!("Object {} reloaded successfully", obj.to_literal()));
+    println!("{} lines processed", definition_lines.len());
 
     Ok(())
 }
@@ -1805,21 +1737,11 @@ fn repl(
     mut rl: Editor<MooAdminHelper, rustyline::history::DefaultHistory>,
 ) -> Result<(), Report> {
     let mut current_wizard = wizard;
-    let skin = create_skin();
     let intro = format!(
-        r#"
-# Emergency Medical Hologram - Database Administration Subroutine
-
-**Please state the nature of the database emergency.**
-
-*Running as wizard: `{}`*
-
-Type `help` for available commands or `quit` to deactivate.
-"#,
+        "Emergency Medical Hologram - Database Administration Subroutine\n\nPlease state the nature of the database emergency.\n\nRunning as wizard: {}\n\nType 'help' for available commands or 'quit' to deactivate.",
         current_wizard.to_literal()
     );
-
-    println!("{}", skin.term_text(&intro));
+    println!("{intro}");
 
     loop {
         let prompt = format!("({}): ", current_wizard.to_literal());
@@ -1836,13 +1758,17 @@ Type `help` for available commands or `quit` to deactivate.
 
                 // Handle commands
                 if line == "quit" || line == "exit" {
-                    let skin = create_skin();
-                    let goodbye = "**Emergency Medical Hologram deactivated.** Database will be saved on shutdown.";
-                    println!("{}", skin.term_text(goodbye));
+                    println!("Emergency Medical Hologram deactivated.");
+                    println!("Database will be saved on shutdown.");
                     break;
-                } else if line == "help" || line == "?" {
+                }
+
+                if line == "help" || line == "?" {
                     print_help();
-                } else if line.starts_with(';') {
+                    continue;
+                }
+
+                if line.starts_with(';') {
                     // Eval expression or execute code block
                     if let Some(code) = line.strip_prefix(";;") {
                         // ;; executes code as-is without wrapping in return
@@ -1876,10 +1802,8 @@ Type `help` for available commands or `quit` to deactivate.
 
                         match result {
                             Ok((_task_id, Ok(TaskNotification::Result(value)))) => {
-                                let skin = create_skin();
                                 let output = to_literal(&value);
-                                let markdown = format!("**=>** `{output}`");
-                                println!("{}", skin.term_text(&markdown));
+                                println!("=> {output}");
                             }
                             Ok((_task_id, Err(e))) => {
                                 error!("Execution failed: {:?}", e);
@@ -1903,63 +1827,102 @@ Type `help` for available commands or `quit` to deactivate.
                             error!("Eval failed: {}", e);
                         }
                     }
-                } else if line.starts_with("get ") {
-                    let args = line.strip_prefix("get ").unwrap().trim();
-                    if let Err(e) = cmd_get(&scheduler_client, &current_wizard, args) {
-                        error!("Get failed: {}", e);
-                    }
-                } else if line.starts_with("set ") {
-                    let args = line.strip_prefix("set ").unwrap().trim();
-                    if let Err(e) = cmd_set(&scheduler_client, &current_wizard, args) {
-                        error!("Set failed: {}", e);
-                    }
-                } else if line.starts_with("props ") {
-                    let args = line.strip_prefix("props ").unwrap().trim();
-                    if let Err(e) = cmd_props(&scheduler_client, &current_wizard, args) {
-                        error!("Props failed: {}", e);
-                    }
-                } else if line.starts_with("verbs ") {
-                    let args = line.strip_prefix("verbs ").unwrap().trim();
-                    if let Err(e) = cmd_verbs(&scheduler_client, &current_wizard, args) {
-                        error!("Verbs failed: {}", e);
-                    }
-                } else if line.starts_with("prog ") {
-                    let args = line.strip_prefix("prog ").unwrap().trim();
-                    if let Err(e) = cmd_prog(&scheduler_client, &current_wizard, args, &mut rl) {
-                        error!("Prog failed: {}", e);
-                    }
-                } else if line.starts_with("list ") {
-                    let args = line.strip_prefix("list ").unwrap().trim();
-                    if let Err(e) = cmd_list(&scheduler_client, &current_wizard, args) {
-                        error!("List failed: {}", e);
-                    }
-                } else if line.starts_with("dump ") {
-                    let args = line.strip_prefix("dump ").unwrap().trim();
-                    if let Err(e) = cmd_dump(&scheduler_client, &current_wizard, args) {
-                        error!("Dump failed: {}", e);
-                    }
-                } else if line.starts_with("load") {
-                    let args = line.strip_prefix("load").unwrap_or("").trim();
-                    if let Err(e) = cmd_load(&scheduler_client, &current_wizard, args, &mut rl) {
-                        error!("Load failed: {}", e);
-                    }
-                } else if line.starts_with("reload ") {
-                    let args = line.strip_prefix("reload ").unwrap().trim();
-                    if let Err(e) = cmd_reload(&scheduler_client, &current_wizard, args, &mut rl) {
-                        error!("Reload failed: {}", e);
-                    }
-                } else if line.starts_with("su ") {
-                    let args = line.strip_prefix("su ").unwrap().trim();
-                    match cmd_su(&scheduler_client, &current_wizard, args) {
-                        Ok(new_wizard) => {
-                            current_wizard = new_wizard;
+                    continue;
+                }
+
+                let mut parts = line.splitn(2, char::is_whitespace);
+                let command = parts.next().unwrap_or_default();
+                let args = parts.next().unwrap_or_default().trim();
+
+                match command {
+                    "get" => {
+                        if args.is_empty() {
+                            error!("Usage: get #OBJ.PROP");
+                            continue;
                         }
-                        Err(e) => {
-                            error!("Su failed: {}", e);
+                        if let Err(e) = cmd_get(&scheduler_client, &current_wizard, args) {
+                            error!("Get failed: {}", e);
                         }
                     }
-                } else {
-                    error!("Unknown command. Type 'help' for available commands.");
+                    "set" => {
+                        if args.is_empty() {
+                            error!("Usage: set #OBJ.PROP VALUE");
+                            continue;
+                        }
+                        if let Err(e) = cmd_set(&scheduler_client, &current_wizard, args) {
+                            error!("Set failed: {}", e);
+                        }
+                    }
+                    "props" => {
+                        if args.is_empty() {
+                            error!("Usage: props #OBJ");
+                            continue;
+                        }
+                        if let Err(e) = cmd_props(&scheduler_client, &current_wizard, args) {
+                            error!("Props failed: {}", e);
+                        }
+                    }
+                    "verbs" => {
+                        if args.is_empty() {
+                            error!("Usage: verbs #OBJ");
+                            continue;
+                        }
+                        if let Err(e) = cmd_verbs(&scheduler_client, &current_wizard, args) {
+                            error!("Verbs failed: {}", e);
+                        }
+                    }
+                    "prog" => {
+                        if args.is_empty() {
+                            error!("Usage: prog #OBJ:VERB");
+                            continue;
+                        }
+                        if let Err(e) = cmd_prog(&scheduler_client, &current_wizard, args, &mut rl) {
+                            error!("Prog failed: {}", e);
+                        }
+                    }
+                    "list" => {
+                        if args.is_empty() {
+                            error!("Usage: list #OBJ:VERB");
+                            continue;
+                        }
+                        if let Err(e) = cmd_list(&scheduler_client, &current_wizard, args) {
+                            error!("List failed: {}", e);
+                        }
+                    }
+                    "dump" => {
+                        if args.is_empty() {
+                            error!("Usage: dump #OBJ [--file FILENAME]");
+                            continue;
+                        }
+                        if let Err(e) = cmd_dump(&scheduler_client, &current_wizard, args) {
+                            error!("Dump failed: {}", e);
+                        }
+                    }
+                    "load" => {
+                        if let Err(e) = cmd_load(&scheduler_client, &current_wizard, args, &mut rl) {
+                            error!("Load failed: {}", e);
+                        }
+                    }
+                    "reload" => {
+                        if let Err(e) = cmd_reload(&scheduler_client, &current_wizard, args, &mut rl) {
+                            error!("Reload failed: {}", e);
+                        }
+                    }
+                    "su" => {
+                        if args.is_empty() {
+                            error!("Usage: su #OBJ");
+                            continue;
+                        }
+                        match cmd_su(&scheduler_client, &current_wizard, args) {
+                            Ok(new_wizard) => {
+                                current_wizard = new_wizard;
+                            }
+                            Err(e) => {
+                                error!("Su failed: {}", e);
+                            }
+                        }
+                    }
+                    _ => error!("Unknown command. Type 'help' for available commands."),
                 }
             }
             Err(ReadlineError::Interrupted) => {

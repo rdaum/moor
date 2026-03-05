@@ -52,5 +52,6 @@ semver.workspace = true
 uuid.workspace = true
 
 # REPL support
+crossterm.workspace = true
 rustyline.workspace = true
-termimad.workspace = true
+tabled.workspace = true

@@ -231,9 +231,9 @@ unindent = "0.2"
 
 # Terminal & UI
 colored = "3.0"
+crossterm = "0.29"
 jotdown = { version = "0.9", default-features = false }
 rustyline = "17.0"
-termimad = "0.34"
 
 # Patch to forked (maintained by me) version of ZeroMQ
 [patch.crates-io]
