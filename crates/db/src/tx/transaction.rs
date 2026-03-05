@@ -562,6 +562,121 @@ where
         Ok(None)
     }
 
+    /// Upsert using a closure that derives the new value from the current visible value.
+    ///
+    /// The closure receives:
+    /// - `None` when the domain is not currently visible in this transaction.
+    /// - `Some(&Codomain)` when the domain has a visible value.
+    ///
+    /// Returning:
+    /// - `Some(new_value)` performs an upsert and returns the previous value (if any).
+    /// - `None` performs no mutation and returns the current value (if any).
+    pub fn upsert_with<F>(
+        &mut self,
+        domain: Domain,
+        f: F,
+    ) -> Result<Option<Codomain>, Error>
+    where
+        F: FnOnce(Option<&Codomain>) -> Option<Codomain>,
+    {
+        if self.index.has_local_mutations
+            && let Some(entry) = self.index.local_operations.get_mut(&domain)
+        {
+            match &mut entry.operation {
+                OpType::Delete => {
+                    if let Some(new_value) = f(None) {
+                        if entry.read_ts < self.tx.ts {
+                            entry.write_ts = self.tx.ts;
+                            entry.operation = OpType::Update(new_value);
+                        } else {
+                            entry.read_ts = self.tx.ts;
+                            entry.write_ts = self.tx.ts;
+                            entry.operation = OpType::Insert(new_value);
+                        }
+                        self.invalidate_local_codomain_index_cache();
+                        self.index.has_local_mutations = true;
+                    }
+                    return Ok(None);
+                }
+                OpType::Insert(current) | OpType::Update(current) => {
+                    let old_value = current.clone();
+                    if let Some(new_value) = f(Some(&old_value)) {
+                        entry.write_ts = self.tx.ts;
+                        *current = new_value;
+                        self.invalidate_local_codomain_index_cache();
+                        self.index.has_local_mutations = true;
+                    }
+                    return Ok(Some(old_value));
+                }
+            }
+        }
+
+        if let Some(entry) = self.index.master_entries.index_lookup(&domain) {
+            let old_value = entry.value.clone();
+            if let Some(new_value) = f(Some(&entry.value)) {
+                self.index.local_operations.insert(
+                    domain,
+                    Op {
+                        read_ts: entry.ts,
+                        write_ts: self.tx.ts,
+                        operation: OpType::Update(new_value),
+                        guaranteed_unique: false,
+                    },
+                );
+                self.invalidate_local_codomain_index_cache();
+                self.index.has_local_mutations = true;
+            }
+            return Ok(Some(old_value));
+        }
+
+        if !self.index.provider_fully_loaded
+            && let Some((read_ts, backing_value)) = self.backing_source.get(&domain)?
+            && read_ts < self.tx.ts
+        {
+            if let Some(new_value) = f(Some(&backing_value)) {
+                self.index.local_operations.insert(
+                    domain,
+                    Op {
+                        read_ts,
+                        write_ts: self.tx.ts,
+                        operation: OpType::Update(new_value),
+                        guaranteed_unique: false,
+                    },
+                );
+                self.invalidate_local_codomain_index_cache();
+                self.index.has_local_mutations = true;
+            }
+            return Ok(Some(backing_value));
+        }
+
+        if let Some(new_value) = f(None) {
+            self.index.local_operations.insert(
+                domain,
+                Op {
+                    read_ts: self.tx.ts,
+                    write_ts: self.tx.ts,
+                    operation: OpType::Insert(new_value),
+                    guaranteed_unique: false,
+                },
+            );
+            self.invalidate_local_codomain_index_cache();
+            self.index.has_local_mutations = true;
+        }
+
+        Ok(None)
+    }
+
+    /// Update using a closure that derives a new value from the current value.
+    ///
+    /// This is update-only: if the domain does not currently exist, no mutation is performed.
+    /// Returning `None` from the closure leaves the current value unchanged.
+    pub fn update_with<F>(&mut self, domain: &Domain, f: F) -> Result<Option<Codomain>, Error>
+    where
+        F: FnOnce(&Codomain) -> Option<Codomain>,
+    {
+        self.upsert_with(domain.clone(), |current| current.and_then(f))
+    }
+
     pub fn has_domain(&self, domain: &Domain) -> Result<bool, Error> {
         // Existence-only path: avoid cloning codomain values from `get()`.
         if self.index.has_local_mutations

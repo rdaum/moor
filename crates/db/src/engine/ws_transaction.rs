@@ -270,9 +270,21 @@ impl WorldStateTransaction {
     }
 
     pub fn set_object_owner(&mut self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError> {
-        self.object_owner.upsert(*obj, *owner).map_err(|e| {
-            WorldStateError::DatabaseError(format!("Error setting object owner: {e:?}"))
-        })?;
+        let mut changed = false;
+        self.object_owner
+            .upsert_with(*obj, |current| match current {
+                Some(existing) if existing == owner => None,
+                _ => {
+                    changed = true;
+                    Some(*owner)
+                }
+            })
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error setting object owner: {e:?}"))
+            })?;
+        if !changed {
+            return Ok(());
+        }
         // Chown property semantics depend on object owner.
         self.invalidate_cached_prop_perms_for_obj(obj);
         self.has_mutations = true;
@@ -284,9 +296,21 @@ impl WorldStateTransaction {
         obj: &Obj,
         flags: BitEnum<ObjFlag>,
     ) -> Result<(), WorldStateError> {
-        upsert(&mut self.object_flags, *obj, flags).map_err(|e| {
-            WorldStateError::DatabaseError(format!("Error setting object flags: {e:?}"))
-        })?;
+        let mut changed = false;
+        self.object_flags
+            .upsert_with(*obj, |current| match current {
+                Some(existing) if *existing == flags => None,
+                _ => {
+                    changed = true;
+                    Some(flags)
+                }
+            })
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error setting object flags: {e:?}"))
+            })?;
+        if !changed {
+            return Ok(());
+        }
         self.has_mutations = true;
         Ok(())
     }
@@ -302,9 +326,21 @@ impl WorldStateTransaction {
     }
 
     pub fn set_object_name(&mut self, obj: &Obj, name: String) -> Result<(), WorldStateError> {
-        upsert(&mut self.object_name, *obj, StringHolder(name)).map_err(|e| {
-            WorldStateError::DatabaseError(format!("Error setting object name: {e:?}"))
-        })?;
+        let mut changed = false;
+        self.object_name
+            .upsert_with(*obj, |current| match current {
+                Some(existing) if existing.0 == name => None,
+                _ => {
+                    changed = true;
+                    Some(StringHolder(name))
+                }
+            })
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error setting object name: {e:?}"))
+            })?;
+        if !changed {
+            return Ok(());
+        }
         self.has_mutations = true;
         Ok(())
     }
@@ -560,22 +596,28 @@ impl WorldStateTransaction {
     }
 
     pub fn set_object_parent(&mut self, o: &Obj, new_parent: &Obj) -> Result<(), WorldStateError> {
-        // Check if we're setting the same parent (no-op)
-        let old_parent = self.get_object_parent(o)?;
-        if old_parent.eq(new_parent) {
+        // Single-pass update: avoid separate read + write when parent is unchanged.
+        let mut changed = false;
+        self.object_parent
+            .upsert_with(*o, |current| match current {
+                Some(parent) if parent.eq(new_parent) => None,
+                _ => {
+                    changed = true;
+                    Some(*new_parent)
+                }
+            })
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Unable to update parent relation: {e:?}"))
+            })?;
+
+        if !changed {
             return Ok(());
-        };
+        }
 
         // Update the parent relationship and invalidate caches for the affected subtree.
         // Property and verb resolution will rebuild lazily against the new ancestry.
-
         self.has_mutations = true;
-
-        // Update the parent relationship
-        upsert(&mut self.object_parent, *o, *new_parent).expect("Unable to update parent");
-
         self.invalidate_all_caches_for_branch(o)?;
-
         Ok(())
     }
 
@@ -1026,28 +1068,39 @@ impl WorldStateTransaction {
         uuid: Uuid,
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError> {
-        let verbdefs = self.get_verbs(obj)?;
-
-        let Some(verbdefs) = verbdefs.with_updated(uuid, |ov| {
-            let names = match &verb_attrs.names {
-                None => ov.names(),
-                Some(new_names) => new_names.as_slice(),
-            };
-            VerbDef::new(
-                ov.uuid(),
-                ov.location(),
-                verb_attrs.owner.unwrap_or(ov.owner()),
-                names,
-                verb_attrs.flags.unwrap_or(ov.flags()),
-                verb_attrs.args_spec.unwrap_or(ov.args()),
-            )
-        }) else {
+        let mut found = true;
+        let updated = self
+            .object_verbdefs
+            .update_with(obj, |verbdefs| {
+                verbdefs.with_updated(uuid, |ov| {
+                    let names = match &verb_attrs.names {
+                        None => ov.names(),
+                        Some(new_names) => new_names.as_slice(),
+                    };
+                    VerbDef::new(
+                        ov.uuid(),
+                        ov.location(),
+                        verb_attrs.owner.unwrap_or(ov.owner()),
+                        names,
+                        verb_attrs.flags.unwrap_or(ov.flags()),
+                        verb_attrs.args_spec.unwrap_or(ov.args()),
+                    )
+                })
+            })
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error setting verb definition: {e:?}"))
+            })?;
+        if updated.is_none() {
             return Err(WorldStateError::VerbNotFound(*obj, format!("{uuid}")));
-        };
-
-        upsert(&mut self.object_verbdefs, *obj, verbdefs).map_err(|e| {
-            WorldStateError::DatabaseError(format!("Error setting verb definition: {e:?}"))
-        })?;
+        }
+        if let Some(verbdefs) = updated
+            && verbdefs.find_ref(&uuid).is_none()
+        {
+            found = false;
+        }
+        if !found {
+            return Err(WorldStateError::VerbNotFound(*obj, format!("{uuid}")));
+        }
         self.has_mutations = true;
 
         if let Some(program) = verb_attrs.program {
@@ -1255,17 +1308,28 @@ impl WorldStateTransaction {
 
         // We only need to update the propdef if there's a new name.
         if let Some(new_name) = new_name {
-            let props = self.get_properties(obj)?;
-
-            let Some(props) = props.with_updated(uuid, |p| {
-                PropDef::new(p.uuid(), p.definer(), p.location(), new_name)
-            }) else {
+            let mut prop_found = true;
+            let updated = self
+                .object_propdefs
+                .update_with(obj, |props| {
+                    props.with_updated(uuid, |p| {
+                        PropDef::new(p.uuid(), p.definer(), p.location(), new_name)
+                    })
+                })
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!("Error updating property: {e:?}"))
+                })?;
+            if updated.is_none() {
                 return Err(WorldStateError::PropertyNotFound(*obj, format!("{uuid}")));
-            };
-
-            upsert(&mut self.object_propdefs, *obj, props).map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error updating property: {e:?}"))
-            })?;
+            }
+            if let Some(props) = updated
+                && props.find(&uuid).is_none()
+            {
+                prop_found = false;
+            }
+            if !prop_found {
+                return Err(WorldStateError::PropertyNotFound(*obj, format!("{uuid}")));
+            }
         }
         self.has_mutations = true;
 
@@ -1315,12 +1379,11 @@ impl WorldStateTransaction {
         let descendants = self.descendants(obj, false)?;
         let locations = ObjSet::from_items(&[*obj]).with_concatenated(descendants);
         for location in locations.iter() {
-            let props: PropDefs = self.get_properties(&location)?;
-            if let Some(props) = props.with_removed(uuid) {
-                upsert(&mut self.object_propdefs, location, props).map_err(|e| {
+            self.object_propdefs
+                .update_with(&location, |props| props.with_removed(uuid))
+                .map_err(|e| {
                     WorldStateError::DatabaseError(format!("Error deleting property: {e:?}"))
                 })?;
-            }
             self.invalidate_known_propflags_for_holder(&location, uuid);
             self.invalidate_cached_prop_perms_for_holder(&location, uuid);
         }
@@ -1401,7 +1464,13 @@ impl WorldStateTransaction {
         }
 
         // First check if this object has local propflags (set via set_property or update_property_info)
-        if let Ok(Some(perms)) = self.object_propflags.get(&holder) {
+        if let Some(perms) = self
+            .object_propflags
+            .with_domain_value(&holder, |perms| perms.clone())
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error getting property flags: {e:?}"))
+            })?
+        {
             self.prop_perm_memo.cache_perms(holder, perms.clone());
             return Ok(perms);
         }
@@ -1412,16 +1481,19 @@ impl WorldStateTransaction {
         let defining_obj = propdef.definer();
 
         // Get the canonical permissions from the defining object
+        let canonical_holder = ObjAndUUIDHolder::new(&defining_obj, uuid);
         let canonical_perms = self
             .object_propflags
-            .get(&ObjAndUUIDHolder::new(&defining_obj, uuid))
+            .with_domain_value(&canonical_holder, |perms| perms.clone())
             .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error getting canonical property flags: {e:?}"))
+                WorldStateError::DatabaseError(format!(
+                    "Error getting canonical property flags: {e:?}"
+                ))
             })?
             .ok_or_else(|| {
-                WorldStateError::DatabaseError(
-                    format!("Canonical property permissions not found on definer {defining_obj} for property {uuid}")
-                )
+                WorldStateError::DatabaseError(format!(
+                    "Canonical property permissions not found on definer {defining_obj} for property {uuid}"
+                ))
             })?;
 
         // If the property has Chown flag, use the object's owner as the property owner
@@ -1840,12 +1912,11 @@ impl WorldStateTransaction {
                 WorldStateError::DatabaseError(format!("Error scanning parent relations: {e:?}"))
             })?;
         for (child, _) in parent_refs {
-            self.object_parent.delete(&child).map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error deleting parent relation: {e:?}"))
-            })?;
-            self.object_parent.upsert(child, new_obj).map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error updating parent relation: {e:?}"))
-            })?;
+            self.object_parent
+                .update_with(&child, |_old_parent| Some(new_obj))
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!("Error updating parent relation: {e:?}"))
+                })?;
         }
 
         // Update location relationships (contents pointing to old_obj as location)
@@ -1856,12 +1927,13 @@ impl WorldStateTransaction {
                 WorldStateError::DatabaseError(format!("Error scanning location relations: {e:?}"))
             })?;
         for (content, _) in location_refs {
-            self.object_location.delete(&content).map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error deleting location relation: {e:?}"))
-            })?;
-            self.object_location.upsert(content, new_obj).map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error updating location relation: {e:?}"))
-            })?;
+            self.object_location
+                .update_with(&content, |_old_location| Some(new_obj))
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!(
+                        "Error updating location relation: {e:?}"
+                    ))
+                })?;
         }
 
         // Update ownership relationships (objects owned by old_obj)
@@ -1872,12 +1944,11 @@ impl WorldStateTransaction {
                 WorldStateError::DatabaseError(format!("Error scanning owner relations: {e:?}"))
             })?;
         for (owned, _) in owner_refs {
-            self.object_owner.delete(&owned).map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error deleting owner relation: {e:?}"))
-            })?;
-            self.object_owner.upsert(owned, new_obj).map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error updating owner relation: {e:?}"))
-            })?;
+            self.object_owner
+                .update_with(&owned, |_old_owner| Some(new_obj))
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!("Error updating owner relation: {e:?}"))
+                })?;
         }
 
         // Step 2: Update relations where old_obj is the domain (source)
