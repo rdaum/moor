@@ -140,8 +140,7 @@ impl ConcurrentCounter {
             && worker_index < cells.len()
         {
             let cell = &cells[worker_index].value;
-            let current = cell.load(ordering);
-            cell.store(current.wrapping_add(value), ordering);
+            cell.fetch_add(value, ordering);
             return;
         }
 
@@ -237,7 +236,29 @@ impl<T, const C: usize> SafeGetters<T> for [T; C] {
 
 #[cfg(test)]
 mod tests {
+    use crate::threading::{
+        current_task_worker_index, set_current_task_worker_index, set_task_worker_count,
+        task_worker_count,
+    };
     use crate::util::counter::ConcurrentCounter;
+
+    struct TaskWorkerCountGuard {
+        previous: usize,
+    }
+
+    impl TaskWorkerCountGuard {
+        fn set(new_count: usize) -> Self {
+            let previous = task_worker_count();
+            set_task_worker_count(new_count);
+            Self { previous }
+        }
+    }
+
+    impl Drop for TaskWorkerCountGuard {
+        fn drop(&mut self) {
+            set_task_worker_count(self.previous);
+        }
+    }
 
     #[test]
     fn basic_test() {
@@ -327,5 +348,28 @@ mod tests {
             format!("Counter is: {counter:?}"),
             "Counter is: ConcurrentCounter { sum: 1000000, worker_cells: 0, cells: 8 }"
         )
+    }
+
+    #[test]
+    fn worker_shard_updates_are_atomic_under_contention() {
+        const WRITE_COUNT: isize = 200_000;
+        const THREAD_COUNT: isize = 4;
+
+        let _worker_count_guard = TaskWorkerCountGuard::set(1);
+        let counter = ConcurrentCounter::new(1);
+
+        std::thread::scope(|s| {
+            for _ in 0..THREAD_COUNT {
+                s.spawn(|| {
+                    set_current_task_worker_index(0);
+                    debug_assert_eq!(current_task_worker_index(), Some(0));
+                    for _ in 0..WRITE_COUNT {
+                        counter.add(1);
+                    }
+                });
+            }
+        });
+
+        assert_eq!(counter.sum(), THREAD_COUNT * WRITE_COUNT);
     }
 }
