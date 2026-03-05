@@ -18,7 +18,8 @@
 
 use super::{Caches, MoorDB, WorkingSets};
 use crate::api::world_state::db_counters;
-use minstant::Instant;
+use moor_common::util::PerfIntensity;
+use moor_common::util::Instant;
 use moor_common::model::CommitResult;
 use moor_common::util::PerfTimerGuard;
 use std::time::Duration;
@@ -34,8 +35,11 @@ impl MoorDB {
     /// Execute the serialized write-commit path for a transaction.
     pub(crate) fn commit_writes(&self, ws: Box<WorkingSets>, enqueued_at: Instant) -> CommitResult {
         let counters = db_counters();
-        let lock_wait_timer =
-            PerfTimerGuard::from_start(&counters.commit_lock_wait_phase, enqueued_at);
+        let lock_wait_timer = PerfTimerGuard::from_start_with_intensity(
+            &counters.commit_lock_wait_phase,
+            enqueued_at,
+            PerfIntensity::MediumPath,
+        );
         let _commit_guard = self.commit_apply_lock.lock();
         drop(lock_wait_timer);
 

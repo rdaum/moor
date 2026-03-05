@@ -34,7 +34,7 @@ use crate::{
         vm_host::VmHost as KernelVmHost,
     },
 };
-use moor_common::util::BitEnum;
+use moor_common::util::{BitEnum, Instant, Timestamp};
 use moor_compiler::{Label, Offset};
 use moor_schema::{
     common as fb_common, convert as convert_schema,
@@ -172,7 +172,7 @@ pub(crate) fn wake_condition_to_flatbuffer(
     wake: &KernelWakeCondition,
 ) -> Result<fb::WakeCondition, TaskConversionError> {
     use fb::{WakeConditionUnion::*, *};
-    use minstant::Instant;
+    use moor_common::util::Instant;
 
     let condition = match wake {
         KernelWakeCondition::Time(t) => {
@@ -265,7 +265,7 @@ pub(crate) fn wake_condition_from_ref(
     fb: fb::WakeConditionRef<'_>,
 ) -> Result<KernelWakeCondition, TaskConversionError> {
     use fb::WakeConditionUnionRef;
-    use minstant::Instant;
+    use moor_common::util::Instant;
 
     let condition = fb
         .condition()
@@ -1868,7 +1868,7 @@ pub(crate) fn task_from_ref(fb: fb::TaskRef<'_>) -> Result<KernelTask, TaskConve
 
     Ok(KernelTask {
         task_id: task_id as usize,
-        creation_time: minstant::Instant::now(),
+        creation_time: Instant::now(),
         player,
         state: task_state,
         vm_host,
@@ -1930,7 +1930,7 @@ pub fn suspended_task_from_ref(
     let task = Box::new(task_from_ref(task_ref)?);
 
     Ok(KernelSuspendedTask {
-        enqueued_at: minstant::Instant::now(),
+        enqueued_at: Timestamp::now(),
         wake_condition,
         task,
         session: Arc::new(NoopClientSession::new()),

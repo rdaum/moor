@@ -167,7 +167,10 @@ impl TasksDb for FjallTasksDB {
 #[cfg(test)]
 mod tests {
     use crate::tasks::tasks_db_fjall::FjallTasksDB;
-    use moor_common::tasks::NoopClientSession;
+    use moor_common::{
+        tasks::NoopClientSession,
+        util::{Deadline, Timestamp},
+    };
     use moor_kernel::tasks::{DEFAULT_MAX_TASK_MAILBOX, DEFAULT_MAX_TASK_RETRIES};
     use moor_kernel::{
         SuspendedTask, Task, WakeCondition,
@@ -235,7 +238,7 @@ mod tests {
 
         // Mock task...
         let suspended = SuspendedTask {
-            enqueued_at: minstant::Instant::now(),
+            enqueued_at: Timestamp::now(),
             wake_condition: WakeCondition::Never,
             task,
             session: Arc::new(NoopClientSession::new()),
@@ -294,7 +297,7 @@ mod tests {
 
             // Mock task...
             let suspended = SuspendedTask {
-                enqueued_at: minstant::Instant::now(),
+                enqueued_at: Timestamp::now(),
                 wake_condition: WakeCondition::Never,
                 task,
                 session: Arc::new(NoopClientSession::new()),
@@ -357,7 +360,7 @@ mod tests {
 
             // Mock task...
             let suspended = SuspendedTask {
-                enqueued_at: minstant::Instant::now(),
+                enqueued_at: Timestamp::now(),
                 wake_condition: WakeCondition::Never,
                 task,
                 session: Arc::new(NoopClientSession::new()),
@@ -419,7 +422,7 @@ mod tests {
         };
 
         // Create tasks with various time-based wake conditions
-        let now = minstant::Instant::now();
+        let now = Instant::now();
         let input_uuid = Uuid::new_v4();
 
         let mut tasks = vec![];
@@ -459,7 +462,7 @@ mod tests {
             );
 
             let suspended = SuspendedTask {
-                enqueued_at: minstant::Instant::now(),
+                enqueued_at: Timestamp::now(),
                 wake_condition,
                 task,
                 session: Arc::new(NoopClientSession::new()),
@@ -531,7 +534,7 @@ mod tests {
             max_task_mailbox: DEFAULT_MAX_TASK_MAILBOX,
         };
 
-        let now = minstant::Instant::now();
+        let now = Instant::now();
 
         // Test various edge cases
         let edge_cases = [
@@ -558,7 +561,7 @@ mod tests {
             );
 
             let suspended = SuspendedTask {
-                enqueued_at: minstant::Instant::now(),
+                enqueued_at: Timestamp::now(),
                 wake_condition: WakeCondition::Time(*wake_time),
                 task,
                 session: Arc::new(NoopClientSession::new()),
@@ -620,9 +623,9 @@ mod tests {
             Arc::new(AtomicBool::new(false)),
         );
 
-        let wake_time = minstant::Instant::now() + Duration::from_secs(30);
+        let wake_time = Deadline::from_now(Duration::from_secs(30)).instant();
         let suspended = SuspendedTask {
-            enqueued_at: minstant::Instant::now(),
+            enqueued_at: Timestamp::now(),
             wake_condition: WakeCondition::Time(wake_time),
             task,
             session: Arc::new(NoopClientSession::new()),

@@ -12,7 +12,7 @@
 //
 
 use crate::{BenchmarkResult, TableFormatter, add_session_result};
-use minstant;
+use moor_common::util::Instant;
 use moor_common::threading::{
     DetectionResult, detect_performance_cores, pin_current_thread_to_core,
 };
@@ -509,7 +509,7 @@ pub struct PerfCounters {
     pub l1i_misses: perf_event::Counter,
     pub stalled_frontend: perf_event::Counter,
     pub stalled_backend: perf_event::Counter,
-    pub start_time: Option<minstant::Instant>,
+    pub start_time: Option<Instant>,
 }
 
 #[cfg(target_os = "linux")]
@@ -540,7 +540,7 @@ impl PerfCounters {
     }
 
     pub fn start(&mut self) {
-        self.start_time = Some(minstant::Instant::now());
+        self.start_time = Some(Instant::now());
         let _ = self.instructions_counter.enable();
         let _ = self.cycles_counter.enable();
         let _ = self.branch_counter.enable();
@@ -627,19 +627,19 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
         println!(" ✅");
         println!("   Using preferred chunk size: {preferred_chunk_size} ops");
 
-        let warm_up_end = minstant::Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
+        let warm_up_end = Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
         let mut warm_up_count = 0;
-        let mut last_dot_time = minstant::Instant::now();
-        while minstant::Instant::now() < warm_up_end {
+        let mut last_dot_time = Instant::now();
+        while Instant::now() < warm_up_end {
             let mut prepared = factory();
             black_box(|| f(&mut prepared, preferred_chunk_size, warm_up_count))();
             warm_up_count += 1;
 
-            if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
+            if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
             {
                 print!(".");
                 flush_stdout();
-                last_dot_time = minstant::Instant::now();
+                last_dot_time = Instant::now();
             }
         }
 
@@ -656,7 +656,7 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
 
     for i in 0..10 {
         let mut prepared = factory();
-        let started = minstant::Instant::now();
+        let started = Instant::now();
         black_box(|| f(&mut prepared, chunk_size, 0))();
         let duration = started.elapsed();
 
@@ -688,18 +688,18 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
         }
     }
 
-    let warm_up_end = minstant::Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
+    let warm_up_end = Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
     let mut warm_up_count = 0;
-    let mut last_dot_time = minstant::Instant::now();
-    while minstant::Instant::now() < warm_up_end {
+    let mut last_dot_time = Instant::now();
+    while Instant::now() < warm_up_end {
         let mut prepared = factory();
         black_box(|| f(&mut prepared, best_chunk_size, warm_up_count))();
         warm_up_count += 1;
 
-        if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
+        if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
             print!(".");
             flush_stdout();
-            last_dot_time = minstant::Instant::now();
+            last_dot_time = Instant::now();
         }
     }
 
@@ -744,19 +744,19 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
         println!(" ✅");
         println!("   Using preferred chunk size: {preferred_chunk_size} ops");
 
-        let warm_up_end = minstant::Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
+        let warm_up_end = Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
         let mut warm_up_count = 0;
-        let mut last_dot_time = minstant::Instant::now();
-        while minstant::Instant::now() < warm_up_end {
+        let mut last_dot_time = Instant::now();
+        while Instant::now() < warm_up_end {
             let mut prepared = factory();
             black_box(|| f(&mut prepared, preferred_chunk_size, warm_up_count))();
             warm_up_count += 1;
 
-            if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
+            if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
             {
                 print!(".");
                 flush_stdout();
-                last_dot_time = minstant::Instant::now();
+                last_dot_time = Instant::now();
             }
         }
 
@@ -773,7 +773,7 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
 
     for i in 0..10 {
         let mut prepared = factory();
-        let started = minstant::Instant::now();
+        let started = Instant::now();
         black_box(|| f(&mut prepared, chunk_size, 0))();
         let duration = started.elapsed();
 
@@ -805,18 +805,18 @@ fn warm_up_and_calibrate_with_factory<T: BenchContext>(
         }
     }
 
-    let warm_up_end = minstant::Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
+    let warm_up_end = Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
     let mut warm_up_count = 0;
-    let mut last_dot_time = minstant::Instant::now();
-    while minstant::Instant::now() < warm_up_end {
+    let mut last_dot_time = Instant::now();
+    while Instant::now() < warm_up_end {
         let mut prepared = factory();
         black_box(|| f(&mut prepared, best_chunk_size, warm_up_count))();
         warm_up_count += 1;
 
-        if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
+        if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
             print!(".");
             flush_stdout();
-            last_dot_time = minstant::Instant::now();
+            last_dot_time = Instant::now();
         }
     }
 
@@ -860,19 +860,19 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
         println!("   Using preferred chunk size: {preferred_chunk_size} ops");
 
         // Do a quick warm-up with the preferred size
-        let warm_up_end = minstant::Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
+        let warm_up_end = Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
         let mut warm_up_count = 0;
-        let mut last_dot_time = minstant::Instant::now();
-        while minstant::Instant::now() < warm_up_end {
+        let mut last_dot_time = Instant::now();
+        while Instant::now() < warm_up_end {
             let mut prepared = T::prepare(preferred_chunk_size);
             black_box(|| f(&mut prepared, preferred_chunk_size, warm_up_count))();
             warm_up_count += 1;
 
-            if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
+            if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
             {
                 print!(".");
                 flush_stdout();
-                last_dot_time = minstant::Instant::now();
+                last_dot_time = Instant::now();
             }
         }
 
@@ -891,7 +891,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
     for i in 0..10 {
         // Max 10 iterations to find good chunk size
         let mut prepared = T::prepare(chunk_size);
-        let started = minstant::Instant::now();
+        let started = Instant::now();
         black_box(|| f(&mut prepared, chunk_size, 0))();
         let duration = started.elapsed();
 
@@ -929,19 +929,19 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
     }
 
     // Do additional warm-up iterations with limited dot output
-    let warm_up_end = minstant::Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
+    let warm_up_end = Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
     let mut warm_up_count = 0;
-    let mut last_dot_time = minstant::Instant::now();
-    while minstant::Instant::now() < warm_up_end {
+    let mut last_dot_time = Instant::now();
+    while Instant::now() < warm_up_end {
         let mut prepared = T::prepare(chunk_size);
         black_box(|| f(&mut prepared, best_chunk_size, warm_up_count))();
         warm_up_count += 1;
 
         // Print a dot every 100ms instead of every 5 iterations
-        if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
+        if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
             print!(".");
             flush_stdout();
-            last_dot_time = minstant::Instant::now();
+            last_dot_time = Instant::now();
         }
     }
 
@@ -986,19 +986,19 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
         println!("   Using preferred chunk size: {preferred_chunk_size} ops");
 
         // Do a quick warm-up with the preferred size
-        let warm_up_end = minstant::Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
+        let warm_up_end = Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
         let mut warm_up_count = 0;
-        let mut last_dot_time = minstant::Instant::now();
-        while minstant::Instant::now() < warm_up_end {
+        let mut last_dot_time = Instant::now();
+        while Instant::now() < warm_up_end {
             let mut prepared = T::prepare(preferred_chunk_size);
             black_box(|| f(&mut prepared, preferred_chunk_size, warm_up_count))();
             warm_up_count += 1;
 
-            if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
+            if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
             {
                 print!(".");
                 flush_stdout();
-                last_dot_time = minstant::Instant::now();
+                last_dot_time = Instant::now();
             }
         }
 
@@ -1016,7 +1016,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
     // Try different chunk sizes to find one that takes target duration
     for i in 0..10 {
         let mut prepared = T::prepare(chunk_size);
-        let started = minstant::Instant::now();
+        let started = Instant::now();
         black_box(|| f(&mut prepared, chunk_size, 0))();
         let duration = started.elapsed();
 
@@ -1049,18 +1049,18 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
     }
 
     // Additional warm-up iterations
-    let warm_up_end = minstant::Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
+    let warm_up_end = Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
     let mut warm_up_count = 0;
-    let mut last_dot_time = minstant::Instant::now();
-    while minstant::Instant::now() < warm_up_end {
+    let mut last_dot_time = Instant::now();
+    while Instant::now() < warm_up_end {
         let mut prepared = T::prepare(chunk_size);
         black_box(|| f(&mut prepared, best_chunk_size, warm_up_count))();
         warm_up_count += 1;
 
-        if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
+        if Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
             print!(".");
             flush_stdout();
-            last_dot_time = minstant::Instant::now();
+            last_dot_time = Instant::now();
         }
     }
 
@@ -1099,7 +1099,7 @@ fn execute_timing_only<T: BenchContext>(
     chunk_num: usize,
     ops: u64,
 ) -> Results {
-    let start_time = minstant::Instant::now();
+    let start_time = Instant::now();
     black_box(|| f(prepared, chunk_size, chunk_num))();
     let duration = start_time.elapsed();
 
@@ -1205,7 +1205,7 @@ fn execute_with_individual_counters<T: BenchContext>(
     enable_counter(&mut branch_misses_counter, "branch-misses");
     enable_counter(&mut cache_misses_counter, "cache-misses");
 
-    let start_time = minstant::Instant::now();
+    let start_time = Instant::now();
     black_box(|| f(prepared, chunk_size, chunk_num))();
     let duration = start_time.elapsed();
 
@@ -1272,7 +1272,7 @@ fn execute_with_perf_group<T: BenchContext>(
         return execute_with_individual_counters(f, prepared, chunk_size, chunk_num, ops);
     }
 
-    let start_time = minstant::Instant::now();
+    let start_time = Instant::now();
     black_box(|| f(prepared, chunk_size, chunk_num))();
     let duration = start_time.elapsed();
     if let Err(error) = perf.group.disable() {

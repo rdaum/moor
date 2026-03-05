@@ -138,6 +138,13 @@ pub struct RuntimeConfig {
     /// If None, defaults to 10ms.
     #[serde(deserialize_with = "parse_duration")]
     pub scheduler_tick_duration: Option<Duration>,
+    /// Enable/disable latency duration timing globally.
+    /// Invocation counters remain exact regardless of this setting.
+    pub perf_timing_enabled: Option<bool>,
+    /// Sampling shift for hot-path timings (0 => exact, 6 => 1/64, 7 => 1/128).
+    pub perf_timing_hot_path_shift: Option<u32>,
+    /// Sampling shift for medium-path timings (0 => exact, 3 => 1/8).
+    pub perf_timing_medium_path_shift: Option<u32>,
 }
 
 /// Format for importing databases.

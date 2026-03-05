@@ -37,7 +37,7 @@ use moor_common::{
         VerbProgramKey, WorldStateError,
     },
     tasks::Session,
-    util::BitEnum,
+    util::{BitEnum, PerfIntensity},
 };
 use moor_compiler::{BUILTINS, BuiltinId, Program, to_literal};
 use moor_db::{record_vm_verb_hint_call_verb, record_vm_verb_hint_pass};
@@ -757,10 +757,10 @@ impl VMExecState {
         let bf_counters = bf_perf_counters();
         let bf_counter = bf_counters.counter_for(bf_id);
         bf_counter.invocations().add(1);
-        let sampled_start = bf_counter.sampled_start();
+        let sampled_start = bf_counter.sampled_start_with_intensity(PerfIntensity::HotPath);
 
         let bf_result = bf(&mut bf_args);
-        bf_counter.add_sampled_elapsed(sampled_start);
+        bf_counter.add_elapsed_sample(sampled_start);
 
         match bf_result {
             Ok(BfRet::Ret(result)) => {
@@ -791,7 +791,7 @@ impl VMExecState {
             _ => panic!("Expected a BF frame at the top of the stack"),
         };
         let bf_counter = bf_perf_counters().counter_for(bf_id);
-        let sampled_start = bf_counter.sampled_start();
+        let sampled_start = bf_counter.sampled_start_with_intensity(PerfIntensity::HotPath);
 
         // Functions that did not set a trampoline are assumed to be complete, so we just unwind.
         // Note: If there was an error that required unwinding, we'll have already done that, so
@@ -827,7 +827,7 @@ impl VMExecState {
         };
 
         let bf_result = bf(&mut bf_args);
-        bf_counter.add_sampled_elapsed(sampled_start);
+        bf_counter.add_elapsed_sample(sampled_start);
 
         // Emit builtin end trace event
         #[cfg(feature = "trace_events")]

@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use minstant::Instant;
+use moor_common::util::Instant;
 use moor_common::model::ObjFlag;
 use moor_common::tasks::TaskId;
 use moor_common::util::BitEnum;

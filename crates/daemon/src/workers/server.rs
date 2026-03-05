@@ -14,13 +14,14 @@
 //! Thin coordinator for workers server that delegates business logic to message handler
 
 use moor_common::threading::spawn_efficient;
+use moor_common::util::Deadline;
 use moor_kernel::tasks::workers::{WorkerRequest, WorkerResponse};
 use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
 use tracing::{error, info};
 
@@ -113,7 +114,7 @@ impl WorkersServer {
         recv: flume::Receiver<WorkerRequest>,
         message_handler: Arc<WorkersMessageHandlerImpl>,
     ) {
-        let mut last_ping_out = Instant::now();
+        let mut next_ping_due = Deadline::from_now(PING_FREQUENCY);
         loop {
             if kill_switch.load(Ordering::Relaxed) {
                 info!("Workers server thread exiting.");
@@ -124,11 +125,11 @@ impl WorkersServer {
             message_handler.check_expired_workers();
 
             // If it's been a while since we sent a ping, send one out to all workers
-            if last_ping_out.elapsed() > PING_FREQUENCY {
+            if next_ping_due.is_expired() {
                 if let Err(e) = message_handler.ping_workers() {
                     error!(error = ?e, "Unable to ping workers");
                 }
-                last_ping_out = Instant::now();
+                next_ping_due = Deadline::from_now(PING_FREQUENCY);
             }
 
             // Process incoming requests with timeout

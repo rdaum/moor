@@ -98,7 +98,6 @@ debug = false # No debug symbols to save memory/disk during build
 # Core Runtime & System
 libc = "0.2"
 mimalloc = "0.1"
-minstant = { version = "0.1", features = ["fallback-coarse"] }
 signal-hook = "0.4"
 
 # Command Line & Configuration

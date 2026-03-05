@@ -16,7 +16,7 @@ use crate::{
     tx::{Error, RelationCodomain, RelationDomain},
 };
 use arc_swap::ArcSwap;
-use minstant::Instant;
+use moor_common::util::Instant;
 use std::sync::Arc;
 
 use super::{

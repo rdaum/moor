@@ -17,7 +17,7 @@ use hierarchical_hash_wheel_timer::wheels::{
     Skip, TimerEntryWithDelay,
     quad_wheel::{PruneDecision, QuadWheelWithOverflow},
 };
-use minstant::Instant;
+use moor_common::util::{Deadline, Instant, Timestamp};
 use std::{
     collections::{HashMap, VecDeque},
     hash::BuildHasherDefault,
@@ -69,7 +69,7 @@ pub struct TaskQ {
     /// Inter-task message queues. Keyed by receiving task_id, shared across active and suspended.
     /// Each message stores enqueue timestamp for mailbox-wait latency accounting.
     pub(crate) task_message_queues:
-        HashMap<TaskId, VecDeque<(Instant, Var)>, BuildHasherDefault<AHasher>>,
+        HashMap<TaskId, VecDeque<(Timestamp, Var)>, BuildHasherDefault<AHasher>>,
 }
 
 /// Scheduler-side per-task record. Lives in the scheduler thread and owned by the scheduler and
@@ -253,7 +253,7 @@ impl TaskQ {
         self.task_message_queues
             .entry(target_task_id)
             .or_default()
-            .push_back((Instant::now(), value));
+            .push_back((Timestamp::now(), value));
 
         // If the target is suspended and waiting for messages, wake it immediately
         if self
@@ -277,7 +277,7 @@ impl TaskQ {
         &mut self,
         task_id: TaskId,
     ) -> (Vec<Var>, u128, usize) {
-        let now = Instant::now();
+        let now = Timestamp::now();
         self.task_message_queues
             .remove(&task_id)
             .map(|q| {
@@ -315,7 +315,7 @@ impl TaskQ {
 /// When tasks are not running they are moved into these.
 pub struct SuspendedTask {
     /// Timestamp when this task entered the suspended queue.
-    pub enqueued_at: Instant,
+    pub enqueued_at: Timestamp,
     pub wake_condition: WakeCondition,
     pub task: Box<Task>,
     pub session: Arc<dyn Session>,
@@ -388,7 +388,7 @@ pub struct SuspensionQ {
     last_timer_advance: Option<Instant>,
 
     /// Queue for tasks that should wake immediately (O(1) push/pop)
-    immediate_wake_queue: VecDeque<(TaskId, Instant)>,
+    immediate_wake_queue: VecDeque<(TaskId, Timestamp)>,
 
     /// Tasks waiting for other tasks to complete (O(1) lookup by dependency)
     task_dependencies: HashMap<TaskId, Vec<TaskId>, BuildHasherDefault<AHasher>>,
@@ -438,12 +438,12 @@ impl SuspensionQ {
     #[inline]
     pub(crate) fn enqueue_immediate_wake(&mut self, task_id: TaskId) {
         self.immediate_wake_queue
-            .push_back((task_id, Instant::now()));
+            .push_back((task_id, Timestamp::now()));
     }
 
     /// Pop the next task queued for immediate wake.
     #[inline]
-    pub(crate) fn pop_immediate_wake(&mut self) -> Option<(TaskId, Instant)> {
+    pub(crate) fn pop_immediate_wake(&mut self) -> Option<(TaskId, Timestamp)> {
         self.immediate_wake_queue.pop_front()
     }
 
@@ -529,13 +529,12 @@ impl SuspensionQ {
             match &task.wake_condition {
                 WakeCondition::Time(wake_time) => {
                     let now = Instant::now();
-                    let inserted = *wake_time > now && {
-                        let delay = wake_time.duration_since(now);
+                    let inserted = Deadline::at(*wake_time).remaining_at(now).is_some_and(|delay| {
                         let timer_entry = TimerEntry { task_id, delay };
                         self.timer_wheel
                             .insert_with_delay(timer_entry, delay)
                             .is_ok()
-                    };
+                    });
                     if !inserted {
                         // Past deadline or timer expired - wake immediately
                         self.enqueue_immediate_wake(task_id);
@@ -566,13 +565,12 @@ impl SuspensionQ {
                     // Retry tasks shouldn't be persisted, but handle gracefully if loaded
                     self.retry_tasks.push(task_id);
                     let now = Instant::now();
-                    let inserted = *wake_time > now && {
-                        let delay = wake_time.duration_since(now);
+                    let inserted = Deadline::at(*wake_time).remaining_at(now).is_some_and(|delay| {
                         let timer_entry = TimerEntry { task_id, delay };
                         self.timer_wheel
                             .insert_with_delay(timer_entry, delay)
                             .is_ok()
-                    };
+                    });
                     if !inserted {
                         self.enqueue_immediate_wake(task_id);
                     }
@@ -580,13 +578,12 @@ impl SuspensionQ {
                 WakeCondition::TaskMessage(wake_time) => {
                     self.message_waiting_tasks.push(task_id);
                     let now = Instant::now();
-                    let inserted = *wake_time > now && {
-                        let delay = wake_time.duration_since(now);
+                    let inserted = Deadline::at(*wake_time).remaining_at(now).is_some_and(|delay| {
                         let timer_entry = TimerEntry { task_id, delay };
                         self.timer_wheel
                             .insert_with_delay(timer_entry, delay)
                             .is_ok()
-                    };
+                    });
                     if !inserted {
                         self.enqueue_immediate_wake(task_id);
                     }
@@ -616,13 +613,12 @@ impl SuspensionQ {
         // Add to appropriate storage based on wake condition
         let should_persist = match &wake_condition {
             WakeCondition::Time(wake_time) => {
-                let inserted = *wake_time > now && {
-                    let delay = wake_time.duration_since(now);
+                let inserted = Deadline::at(*wake_time).remaining_at(now).is_some_and(|delay| {
                     let timer_entry = TimerEntry { task_id, delay };
                     self.timer_wheel
                         .insert_with_delay(timer_entry, delay)
                         .is_ok()
-                };
+                });
                 if !inserted {
                     // Past deadline or timer expired - wake immediately
                     self.enqueue_immediate_wake(task_id);
@@ -654,13 +650,12 @@ impl SuspensionQ {
             WakeCondition::GCComplete => true,
             WakeCondition::Retry(wake_time) => {
                 self.retry_tasks.push(task_id);
-                let inserted = *wake_time > now && {
-                    let delay = wake_time.duration_since(now);
+                let inserted = Deadline::at(*wake_time).remaining_at(now).is_some_and(|delay| {
                     let timer_entry = TimerEntry { task_id, delay };
                     self.timer_wheel
                         .insert_with_delay(timer_entry, delay)
                         .is_ok()
-                };
+                });
                 if !inserted {
                     // Past deadline - wake immediately for retry
                     self.enqueue_immediate_wake(task_id);
@@ -669,13 +664,12 @@ impl SuspensionQ {
             }
             WakeCondition::TaskMessage(wake_time) => {
                 self.message_waiting_tasks.push(task_id);
-                let inserted = *wake_time > now && {
-                    let delay = wake_time.duration_since(now);
+                let inserted = Deadline::at(*wake_time).remaining_at(now).is_some_and(|delay| {
                     let timer_entry = TimerEntry { task_id, delay };
                     self.timer_wheel
                         .insert_with_delay(timer_entry, delay)
                         .is_ok()
-                };
+                });
                 if !inserted {
                     // Past deadline - wake immediately
                     self.enqueue_immediate_wake(task_id);
@@ -685,7 +679,7 @@ impl SuspensionQ {
         };
 
         let sr = SuspendedTask {
-            enqueued_at: now,
+            enqueued_at: Timestamp::now(),
             wake_condition,
             task,
             session,
@@ -818,7 +812,8 @@ impl SuspensionQ {
         for (_, sr) in self.tasks.iter() {
             let start_time = match sr.wake_condition {
                 WakeCondition::Time(t) => {
-                    let distance_from_now = t.duration_since(Instant::now());
+                    let distance_from_now =
+                        Deadline::at(t).remaining().unwrap_or(Duration::ZERO);
                     Some(SystemTime::now() + distance_from_now)
                 }
                 WakeCondition::Task(task_id) => {

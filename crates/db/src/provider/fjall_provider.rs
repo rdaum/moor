@@ -51,14 +51,15 @@ use byteview::ByteView;
 use fjall::Slice;
 use flume::Sender;
 use moor_common::threading::{set_current_thread_background_priority, spawn_efficient};
-use moor_common::util::PerfTimerGuard;
-use moor_common::util::signal_fatal_db_error;
+use moor_common::util::{
+    PerfIntensity, PerfTimerGuard, Timestamp as MonoTimestamp, signal_fatal_db_error,
+};
 use planus::{ReadAsRoot, WriteAsOffset};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, atomic::AtomicBool},
     thread::JoinHandle,
-    time::{Duration, Instant},
+    time::Duration,
 };
 use tracing::error;
 
@@ -205,76 +206,48 @@ where
     fn pending_ops_read(
         &self,
     ) -> Result<RwLockReadGuard<'_, PendingOperations<Domain, Codomain>>, Error> {
-        let start = Instant::now();
+        let start = MonoTimestamp::now();
         let guard = self.pending_ops.read().map_err(|_| {
             Error::StorageFailure("Failed to acquire pending ops read lock".to_string())
         })?;
-        let elapsed = start.elapsed();
-        let counters = db_counters();
-        counters
+        db_counters()
             .provider_pending_ops_read_lock_wait
-            .invocations()
-            .add(1);
-        counters
-            .provider_pending_ops_read_lock_wait
-            .cumulative_duration_nanos()
-            .add(elapsed.as_nanos() as isize);
+            .record_elapsed_from_with(PerfIntensity::HotPath, start.instant());
         Ok(guard)
     }
 
     fn pending_ops_write(
         &self,
     ) -> Result<RwLockWriteGuard<'_, PendingOperations<Domain, Codomain>>, Error> {
-        let start = Instant::now();
+        let start = MonoTimestamp::now();
         let guard = self.pending_ops.write().map_err(|_| {
             Error::StorageFailure("Failed to acquire pending ops write lock".to_string())
         })?;
-        let elapsed = start.elapsed();
-        let counters = db_counters();
-        counters
+        db_counters()
             .provider_pending_ops_write_lock_wait
-            .invocations()
-            .add(1);
-        counters
-            .provider_pending_ops_write_lock_wait
-            .cumulative_duration_nanos()
-            .add(elapsed.as_nanos() as isize);
+            .record_elapsed_from_with(PerfIntensity::HotPath, start.instant());
         Ok(guard)
     }
 
     fn tombstones_read(&self) -> Result<RwLockReadGuard<'_, HashSet<Domain>>, Error> {
-        let start = Instant::now();
+        let start = MonoTimestamp::now();
         let guard = self.tombstones.read().map_err(|_| {
             Error::StorageFailure("Failed to acquire tombstones read lock".to_string())
         })?;
-        let elapsed = start.elapsed();
-        let counters = db_counters();
-        counters
+        db_counters()
             .provider_tombstones_read_lock_wait
-            .invocations()
-            .add(1);
-        counters
-            .provider_tombstones_read_lock_wait
-            .cumulative_duration_nanos()
-            .add(elapsed.as_nanos() as isize);
+            .record_elapsed_from_with(PerfIntensity::HotPath, start.instant());
         Ok(guard)
     }
 
     fn tombstones_write(&self) -> Result<RwLockWriteGuard<'_, HashSet<Domain>>, Error> {
-        let start = Instant::now();
+        let start = MonoTimestamp::now();
         let guard = self.tombstones.write().map_err(|_| {
             Error::StorageFailure("Failed to acquire tombstones write lock".to_string())
         })?;
-        let elapsed = start.elapsed();
-        let counters = db_counters();
-        counters
+        db_counters()
             .provider_tombstones_write_lock_wait
-            .invocations()
-            .add(1);
-        counters
-            .provider_tombstones_write_lock_wait
-            .cumulative_duration_nanos()
-            .add(elapsed.as_nanos() as isize);
+            .record_elapsed_from_with(PerfIntensity::HotPath, start.instant());
         Ok(guard)
     }
 }

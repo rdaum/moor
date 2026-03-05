@@ -16,7 +16,7 @@ use crate::{
     provider::Provider,
     tx::{ConflictInfo, ConflictType, Error, RelationCodomain, RelationDomain, Timestamp},
 };
-use minstant::Instant;
+use moor_common::util::Instant;
 use moor_var::Symbol;
 use std::{sync::Arc, time::Duration};
 use tracing::warn;

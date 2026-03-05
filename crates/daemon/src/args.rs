@@ -281,6 +281,27 @@ pub struct RuntimeArgs {
         help = "Scheduler tick interval in milliseconds - controls how often the scheduler wakes to check for events. Lower values provide better latency but higher CPU usage (default: 10)"
     )]
     pub scheduler_tick_ms: Option<u16>,
+
+    #[arg(
+        long,
+        value_name = "perf-timing-enabled",
+        help = "Enable or disable perf timing duration collection globally (true/false)"
+    )]
+    pub perf_timing_enabled: Option<bool>,
+
+    #[arg(
+        long,
+        value_name = "perf-hot-shift",
+        help = "Hot-path perf timing sample shift (0=exact, 6=1/64)"
+    )]
+    pub perf_timing_hot_path_shift: Option<u32>,
+
+    #[arg(
+        long,
+        value_name = "perf-medium-shift",
+        help = "Medium-path perf timing sample shift (0=exact, 3=1/8)"
+    )]
+    pub perf_timing_medium_path_shift: Option<u32>,
 }
 
 impl RuntimeArgs {
@@ -291,6 +312,15 @@ impl RuntimeArgs {
         if let Some(args) = self.scheduler_tick_ms {
             config.scheduler_tick_duration =
                 Some(std::time::Duration::from_millis(u64::from(args)));
+        }
+        if let Some(args) = self.perf_timing_enabled {
+            config.perf_timing_enabled = Some(args);
+        }
+        if let Some(args) = self.perf_timing_hot_path_shift {
+            config.perf_timing_hot_path_shift = Some(args);
+        }
+        if let Some(args) = self.perf_timing_medium_path_shift {
+            config.perf_timing_medium_path_shift = Some(args);
         }
         Ok(())
     }

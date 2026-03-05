@@ -58,7 +58,7 @@ use moor_common::{
         WorldState, WorldStateError, command_verb_argspec,
     },
     tasks::{CommandError, CommandError::PermissionDenied, Exception, TaskId},
-    util::{BitEnum, PerfTimerGuard, parse_into_words},
+    util::{BitEnum, Instant, PerfTimerGuard, parse_into_words},
 };
 use moor_var::{
     Error, ErrorCode, List, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant, v_empty_str, v_err,
@@ -121,7 +121,7 @@ pub struct Task {
     /// My unique task id.
     pub task_id: TaskId,
     /// When I was first instantiated (not necessarily) started
-    pub creation_time: minstant::Instant,
+    pub creation_time: Instant,
     /// What I was asked to do and current lifecycle state.
     pub(crate) state: TaskState,
     /// The player on behalf of whom this task is running. Who owns this task.
@@ -205,7 +205,7 @@ impl Task {
             }
         }
 
-        let creation_time = minstant::Instant::now();
+        let creation_time = Instant::now();
         Box::new(Self {
             task_id,
             creation_time,

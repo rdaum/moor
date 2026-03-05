@@ -127,7 +127,6 @@ tracing.workspace = true
 # Utilities & Helpers
 byteview.workspace = true
 lazy_static.workspace = true
-minstant.workspace = true
 paste.workspace = true
 rand.workspace = true
 semver.workspace = true

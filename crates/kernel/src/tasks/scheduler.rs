@@ -17,7 +17,7 @@ use crate::{
 };
 use flume::{Receiver, Sender};
 use lazy_static::lazy_static;
-use minstant::Instant;
+use moor_common::util::{Deadline, Instant, Timestamp};
 use rand::Rng;
 use std::{
     sync::{
@@ -69,7 +69,9 @@ use moor_common::{
         Session, SessionFactory, SystemControl, TaskId, WorkerError,
     },
     threading::{set_current_thread_background_priority, spawn_perf},
-    util::{PerfCounter, PerfTimerGuard},
+    util::{
+        PerfCounter, PerfIntensity, PerfTimerGuard, perf_timing_policy, set_perf_timing_policy,
+    },
 };
 use moor_objdef::{collect_object, collect_object_definitions, dump_object, extract_index_names};
 use moor_var::{
@@ -242,6 +244,19 @@ impl Scheduler {
             last_compact_time: std::time::Instant::now(),
             pending_task_sends: HashMap::new(),
         };
+
+        let mut timing_policy = perf_timing_policy();
+        if let Some(enabled) = s.config.runtime.perf_timing_enabled {
+            timing_policy.enabled = enabled;
+        }
+        if let Some(shift) = s.config.runtime.perf_timing_hot_path_shift {
+            timing_policy.hot_path_shift = shift;
+        }
+        if let Some(shift) = s.config.runtime.perf_timing_medium_path_shift {
+            timing_policy.medium_path_shift = shift;
+        }
+        set_perf_timing_policy(timing_policy);
+
         s.reload_server_options();
         s
     }
@@ -1092,7 +1107,7 @@ impl Scheduler {
                 // Cap shift at 10 to prevent excessive delays (max multiplier 1024x)
                 let shift = (task.retries as u32).saturating_sub(1).min(10);
                 let delay_ms = base_delay_ms << shift;
-                let wake_time = Instant::now() + Duration::from_millis(delay_ms);
+                let wake_time = Deadline::from_now(Duration::from_millis(delay_ms)).instant();
 
                 debug!(
                     task_id,
@@ -1322,7 +1337,7 @@ impl Scheduler {
                 // And insert into the suspended list.
                 let wake_condition = match wake_condition {
                     TaskSuspend::Never => WakeCondition::Never,
-                    TaskSuspend::Timed(t) => WakeCondition::Time(Instant::now() + t),
+                    TaskSuspend::Timed(t) => WakeCondition::Time(Deadline::from_now(t).instant()),
                     TaskSuspend::WaitTask(task_id) => WakeCondition::Task(task_id),
                     TaskSuspend::Commit(return_value) => {
                         WakeCondition::Immediate(Some(return_value))
@@ -1358,7 +1373,7 @@ impl Scheduler {
                         } else {
                             // No messages — suspend with deadline, wake on message
                             // arrival or timeout
-                            WakeCondition::TaskMessage(Instant::now() + duration)
+                            WakeCondition::TaskMessage(Deadline::from_now(duration).instant())
                         }
                     }
                     TaskSuspend::RecvMessages(None) => {
@@ -1938,7 +1953,7 @@ impl Scheduler {
         }
     }
 
-    fn handle_immediate_wake(&mut self, task_id: TaskId, signaled_at: Instant) {
+    fn handle_immediate_wake(&mut self, task_id: TaskId, signaled_at: Timestamp) {
         // Handle a task queued for immediate wake
         let Some(sr) = self.task_q.suspended.remove_task(task_id) else {
             // Task was already removed (e.g., killed), ignore
@@ -1947,7 +1962,7 @@ impl Scheduler {
         let perfc = sched_counters();
         TaskQ::record_latency(
             &perfc.task_wake_signal_to_dispatch_start_latency,
-            signaled_at,
+            signaled_at.instant(),
         );
 
         // Extract the return value from the wake condition
@@ -2418,10 +2433,7 @@ enum TaskSubmission {
 impl TaskQ {
     #[inline]
     fn record_latency(counter: &PerfCounter, started_at: Instant) {
-        counter.invocations().add(1);
-        counter
-            .cumulative_duration_nanos()
-            .add(started_at.elapsed().as_nanos() as isize);
+        counter.record_elapsed_from_with(PerfIntensity::HotPath, started_at);
     }
 
     #[inline]
@@ -2509,7 +2521,7 @@ impl TaskQ {
         // Delayed tasks go into suspension
         if let Some(delay) = delay_start {
             self.suspended.add_task(
-                WakeCondition::Time(Instant::now() + delay),
+                WakeCondition::Time(Deadline::from_now(delay).instant()),
                 task,
                 session,
                 Some(sender),

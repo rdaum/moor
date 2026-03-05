@@ -17,7 +17,9 @@ mod bitset;
 mod cache_padded;
 mod counter;
 mod fatal;
+mod instant;
 mod perf_counter;
+mod time;
 mod trace_events;
 mod xdg;
 
@@ -27,7 +29,12 @@ pub use bitset::*;
 pub use cache_padded::CachePadded;
 pub use counter::ConcurrentCounter;
 pub use fatal::{is_fatal_db_error_reported, signal_fatal_db_error};
-pub use perf_counter::{PerfCounter, PerfTimerGuard};
+pub use instant::{Instant, is_tsc_available};
+pub use perf_counter::{
+    PerfCounter, PerfIntensity, PerfTimerGuard, PerfTimingPolicy, perf_timing_policy,
+    set_perf_timing_policy,
+};
+pub use time::{Deadline, Timestamp};
 pub use trace_events::*;
 pub use xdg::*;
 

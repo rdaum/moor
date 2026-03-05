@@ -93,7 +93,6 @@ ahash.workspace = true
 byteview.workspace = true
 chrono.workspace = true
 lazy_static.workspace = true
-minstant.workspace = true
 once_cell.workspace = true
 rand.workspace = true
 semver.workspace = true

@@ -37,7 +37,7 @@ use crate::{
     },
 };
 use fjall::{Database, KeyspaceCreateOptions};
-use minstant::Instant;
+use moor_common::util::Instant;
 use moor_common::model::loader::SnapshotInterface;
 use moor_common::util::CachePadded;
 use moor_common::{

@@ -540,6 +540,9 @@ async fn main() -> Result<(), eyre::Error> {
     let runtime_config = RuntimeConfig {
         gc_interval: Some(Duration::from_secs(999)), // Very long GC interval during load testing
         scheduler_tick_duration: None,               // Use default tick duration
+        perf_timing_enabled: None,
+        perf_timing_hot_path_shift: None,
+        perf_timing_medium_path_shift: None,
     };
     let features_config = FeaturesConfig {
         anonymous_objects: true, // Enable anonymous objects for this load test

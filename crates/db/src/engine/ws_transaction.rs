@@ -25,7 +25,7 @@ use crate::{
     tx::{EncodeFor, RelationTransaction},
 };
 use byteview::ByteView;
-use minstant::Instant;
+use moor_common::util::{Instant, PerfIntensity};
 use moor_common::{
     model::{
         CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, ObjectRef, PropDef,
@@ -1646,34 +1646,25 @@ impl WorldStateTransaction {
         let counters = db_counters();
         let commit_start = Instant::now();
         let record_commit_result = |result: &CommitResult| {
-            let elapsed_nanos = commit_start.elapsed().as_nanos() as isize;
             match result {
                 CommitResult::Success { mutations_made, .. } => {
-                    counters.commit_success.invocations().add(1);
                     counters
                         .commit_success
-                        .cumulative_duration_nanos()
-                        .add(elapsed_nanos);
+                        .record_elapsed_from_with(PerfIntensity::RarePath, commit_start);
                     if *mutations_made {
-                        counters.commit_success_write.invocations().add(1);
                         counters
                             .commit_success_write
-                            .cumulative_duration_nanos()
-                            .add(elapsed_nanos);
+                            .record_elapsed_from_with(PerfIntensity::RarePath, commit_start);
                     } else {
-                        counters.commit_success_readonly.invocations().add(1);
                         counters
                             .commit_success_readonly
-                            .cumulative_duration_nanos()
-                            .add(elapsed_nanos);
+                            .record_elapsed_from_with(PerfIntensity::RarePath, commit_start);
                     }
                 }
                 CommitResult::ConflictRetry { .. } => {
-                    counters.commit_conflict.invocations().add(1);
                     counters
                         .commit_conflict
-                        .cumulative_duration_nanos()
-                        .add(elapsed_nanos);
+                        .record_elapsed_from_with(PerfIntensity::RarePath, commit_start);
                 }
             }
         };

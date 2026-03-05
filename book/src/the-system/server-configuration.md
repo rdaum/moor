@@ -146,6 +146,85 @@ These options control database import and checkpoint export functionality:
 - `--import-format <FORMAT>` (default: `Textdump`): Format to import from (Textdump or Objdef)
 - `--checkpoint-interval-seconds <SECONDS>`: Interval between database checkpoints
 
+## Runtime Timing Configuration
+
+These options control latency duration sampling for internal performance counters. Invocation
+counts remain exact; these settings only affect duration collection.
+
+| Setting | Command Line | Default | Description |
+|--------|---------|---------|-------------|
+| Perf timing enabled | `--perf-timing-enabled <BOOL>` | `true` | Enable or disable latency duration collection globally |
+| Hot-path sample shift | `--perf-timing-hot-path-shift <NUM>` | `6` | Sampling shift for hot paths. `0` means exact, `6` means 1/64 |
+| Medium-path sample shift | `--perf-timing-medium-path-shift <NUM>` | `3` | Sampling shift for medium paths. `0` means exact, `3` means 1/8 |
+
+In YAML, set these under `runtime:`:
+
+```yaml
+runtime:
+  gc_interval: "30s"
+  scheduler_tick_duration: "10ms"
+  perf_timing_enabled: true
+  perf_timing_hot_path_shift: 6
+  perf_timing_medium_path_shift: 3
+```
+
+For exact timing during benchmarking or profiling runs:
+
+```yaml
+runtime:
+  perf_timing_enabled: true
+  perf_timing_hot_path_shift: 0
+  perf_timing_medium_path_shift: 0
+```
+
+To disable duration timing entirely while keeping invocation counters:
+
+```yaml
+runtime:
+  perf_timing_enabled: false
+```
+
+## Task Pool Affinity Environment Variables
+
+Task worker affinity currently has two environment-variable controls. These are read from
+[`threading.rs`](/home/ryan/src/moor/crates/common/src/threading.rs) at process startup rather than from the YAML
+configuration file.
+
+| Variable | Default | Description |
+|--------|---------|-------------|
+| `MOOR_TASK_POOL_PINNING` | `auto` | Controls whether task worker threads are pinned to detected performance cores |
+| `MOOR_SERVICE_PERF_CORES` | topology-based | Reserves detected performance cores for non-task service threads before assigning worker affinity |
+
+`MOOR_TASK_POOL_PINNING` accepts:
+
+- `auto`: Use the runtime's default policy.
+- `performance`, `perf`, or `p`: Pin task workers to detected performance cores when available.
+- `none`, `off`, or `unpinned`: Do not pin task worker threads.
+
+If `MOOR_TASK_POOL_PINNING` is set to an invalid value, the daemon logs a warning and falls back to `auto`.
+
+`MOOR_SERVICE_PERF_CORES` must be a non-negative integer. It reserves that many detected performance cores for service
+threads. The value is clamped so that, when possible, at least one performance core remains available for task workers.
+
+When `MOOR_SERVICE_PERF_CORES` is not set, the reservation defaults are:
+
+- `0` for systems with `0..=2` detected performance cores
+- `1` for systems with `3..=7` detected performance cores
+- `2` for systems with `8+` detected performance cores
+
+Examples:
+
+```bash
+# Force performance-core pinning for task workers
+MOOR_TASK_POOL_PINNING=performance moor-daemon ...
+
+# Leave two performance cores for service/control-plane work
+MOOR_SERVICE_PERF_CORES=2 moor-daemon ...
+
+# Disable task-worker pinning
+MOOR_TASK_POOL_PINNING=none moor-daemon ...
+```
+
 ## Example Configuration
 
 Here's an example configuration file:
@@ -176,6 +255,12 @@ features_config:
 # Import/export configuration
 import_export_config:
   checkpoint_interval: "60s"
+
+# Runtime timing configuration
+runtime:
+  perf_timing_enabled: true
+  perf_timing_hot_path_shift: 6
+  perf_timing_medium_path_shift: 3
 ```
 
 ## LambdaMOO Compatibility Mode

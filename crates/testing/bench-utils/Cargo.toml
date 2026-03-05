@@ -20,7 +20,6 @@ moor-common = { path = "../../common" }
 
 # Timing and measurements
 libc.workspace = true
-minstant.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

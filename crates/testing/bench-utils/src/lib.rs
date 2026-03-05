@@ -39,7 +39,7 @@ pub use session::{
 };
 
 // Re-export key types for convenience
-pub use minstant;
+pub use moor_common::util::Instant;
 pub use std::hint::black_box;
 
 #[cfg(target_os = "linux")]

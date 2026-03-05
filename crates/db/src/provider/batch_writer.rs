@@ -35,6 +35,7 @@ use std::{
 
 use flume::{Receiver, Sender};
 use moor_common::threading::{set_current_thread_background_priority, spawn_efficient};
+use moor_common::util::{Deadline, PerfIntensity, Timestamp as MonoTimestamp};
 use parking_lot::Mutex;
 use tracing::{error, info, warn};
 
@@ -432,20 +433,16 @@ impl BatchWriter {
                     "BatchWriter backpressure: queue full, blocking on commit {} ({} ops)",
                     ts.0, op_count
                 );
-                let start = Instant::now();
+                let start = MonoTimestamp::now();
                 if let Err(e) = self.sender.send(msg) {
                     error!("Failed to send batch to writer: {}", e);
                     return;
                 }
                 let elapsed = start.elapsed();
-                db_counters()
-                    .batch_writer_backpressure_block
-                    .invocations()
-                    .add(1);
-                db_counters()
-                    .batch_writer_backpressure_block
-                    .cumulative_duration_nanos()
-                    .add(elapsed.as_nanos() as isize);
+                db_counters().batch_writer_backpressure_block.record_elapsed_from_with(
+                    PerfIntensity::RarePath,
+                    start.instant(),
+                );
                 if elapsed > Duration::from_secs(1) {
                     warn!(
                         "BatchWriter backpressure: blocked {} for {:?}",
@@ -466,20 +463,15 @@ impl BatchWriter {
             Ok(()) => {}
             Err(flume::TrySendError::Full(msg)) => {
                 db_counters().batch_writer_backpressure.invocations().add(1);
-                let start = Instant::now();
+                let start = MonoTimestamp::now();
                 if let Err(e) = self.sender.send(msg) {
                     warn!("Failed to send barrier: {}", e);
                     return;
                 }
-                let elapsed = start.elapsed();
-                db_counters()
-                    .batch_writer_backpressure_block
-                    .invocations()
-                    .add(1);
-                db_counters()
-                    .batch_writer_backpressure_block
-                    .cumulative_duration_nanos()
-                    .add(elapsed.as_nanos() as isize);
+                db_counters().batch_writer_backpressure_block.record_elapsed_from_with(
+                    PerfIntensity::RarePath,
+                    start.instant(),
+                );
             }
             Err(flume::TrySendError::Disconnected(_)) => {
                 warn!("Failed to send barrier: channel disconnected");
@@ -492,8 +484,8 @@ impl BatchWriter {
     }
 
     pub fn wait_for_barrier(&self, timestamp: Timestamp, timeout: Duration) -> Result<(), String> {
-        let start = Instant::now();
-        while start.elapsed() < timeout {
+        let deadline = Deadline::from_now(timeout);
+        while !deadline.is_expired() {
             let completed = self.completed_timestamp.load(Ordering::Acquire);
             if completed >= timestamp.0 {
                 return Ok(());
