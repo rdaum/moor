@@ -1425,10 +1425,7 @@ pub fn moo_frame_execute(
                 let item_variable = list_comprehension.item_variable;
                 let end_label = list_comprehension.end_label;
                 let list = f.get_env(&list_register).unwrap();
-                let position = f
-                    .get_env(&position_register)
-                    .unwrap()
-                    ;
+                let position = f.get_env(&position_register).unwrap();
                 let Some(position) = position.as_integer() else {
                     return push_error_cold(E_TYPE.msg("invalid value in list comprehension"));
                 };

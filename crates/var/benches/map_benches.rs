@@ -164,7 +164,11 @@ fn map_remove_case_sensitive_hit_destructive(
     black_box(map);
 }
 
-fn map_remove_case_sensitive_hit_steady(ctx: &mut MapContext, chunk_size: usize, _chunk_num: usize) {
+fn map_remove_case_sensitive_hit_steady(
+    ctx: &mut MapContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
     let mut map = ctx.base_map.clone();
     for i in 0..chunk_size {
         let key = &ctx.existing_keys[i & (WORKING_KEY_SET_SIZE - 1)];

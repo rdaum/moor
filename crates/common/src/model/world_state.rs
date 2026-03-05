@@ -727,6 +727,12 @@ pub struct WorldStatePerf {
 
     pub provider_tuple_load: PerfCounter,
     pub provider_tuple_check: PerfCounter,
+    pub provider_pending_ops_read_lock_wait: PerfCounter,
+    pub provider_pending_ops_write_lock_wait: PerfCounter,
+    pub provider_tombstones_read_lock_wait: PerfCounter,
+    pub provider_tombstones_write_lock_wait: PerfCounter,
+    pub batch_writer_backpressure: PerfCounter,
+    pub batch_writer_backpressure_block: PerfCounter,
     pub crdt_resolve_success: PerfCounter,
     pub crdt_resolve_fail: PerfCounter,
 }
@@ -786,6 +792,20 @@ impl WorldStatePerf {
 
             provider_tuple_load: PerfCounter::new("provider_tuple_load"),
             provider_tuple_check: PerfCounter::new("provider_tuple_check"),
+            provider_pending_ops_read_lock_wait: PerfCounter::new(
+                "provider_pending_ops_read_lock_wait",
+            ),
+            provider_pending_ops_write_lock_wait: PerfCounter::new(
+                "provider_pending_ops_write_lock_wait",
+            ),
+            provider_tombstones_read_lock_wait: PerfCounter::new(
+                "provider_tombstones_read_lock_wait",
+            ),
+            provider_tombstones_write_lock_wait: PerfCounter::new(
+                "provider_tombstones_write_lock_wait",
+            ),
+            batch_writer_backpressure: PerfCounter::new("batch_writer_backpressure"),
+            batch_writer_backpressure_block: PerfCounter::new("batch_writer_backpressure_block"),
             crdt_resolve_success: PerfCounter::new("crdt_resolve_success"),
             crdt_resolve_fail: PerfCounter::new("crdt_resolve_fail"),
         }
@@ -838,6 +858,12 @@ impl WorldStatePerf {
             &self.commit_process_phase,
             &self.provider_tuple_load,
             &self.provider_tuple_check,
+            &self.provider_pending_ops_read_lock_wait,
+            &self.provider_pending_ops_write_lock_wait,
+            &self.provider_tombstones_read_lock_wait,
+            &self.provider_tombstones_write_lock_wait,
+            &self.batch_writer_backpressure,
+            &self.batch_writer_backpressure_block,
             &self.crdt_resolve_success,
             &self.crdt_resolve_fail,
         ]

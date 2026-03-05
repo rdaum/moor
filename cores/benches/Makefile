@@ -14,6 +14,8 @@ STATE_WRITES ?= 4
 DELAY_RATIO ?= 10
 UPDATE_HZ ?= 20
 SLOW_DB_PATH ?= /tmp/moor-slow-mount/bench.db
+PERF_STAT_OUTPUT ?= perf-combat.stat
+PERF_STAT_EVENTS ?= task-clock,cycles:u,instructions:u,branches:u,branch-misses:u,cache-references:u,cache-misses:u,context-switches,cpu-migrations,page-faults
 
 SRC_DIRECTORY = src
 TEST_DIRECTORY = tests
@@ -49,12 +51,21 @@ bench-write-stress-perf: $(wildcard src/*.moo)
 
 bench-combat-stress-perf: $(wildcard src/*.moo)
 	cargo build --release -p moorc
-	perf record -g --call-graph dwarf -o perf-combat.data -- \
+	perf record -e cycles:u -F 999 -g --call-graph dwarf -o perf-combat.data -- \
 		../../target/release/moorc $(OPTIONS) \
 		--src-objdef-dir $(SRC_DIRECTORY) --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
 		--test-wizard=2 --run-tests true --test-filter "#668:test_combat_stress" --test-timeout $$(($(DURATION) + 60)) --test-args "{$(DURATION), $(SUBSCRIBERS), $(WORK_PER_TICK), $(FANOUT), $(CHECKS_PER_TICK), $(STATE_WRITES), $(DELAY_RATIO), $(UPDATE_HZ)}"
 	@echo "Perf data written to perf-combat.data"
-	@echo "Analyze with: perf report -i perf-combat.data -g"
+	@echo "Analyze with: perf report -i perf-combat.data --stdio --sort comm,dso,symbol --no-children"
+
+bench-combat-stress-perf-stat: $(wildcard src/*.moo)
+	cargo build --release -p moorc
+	perf stat -x, -e $(PERF_STAT_EVENTS) -o $(PERF_STAT_OUTPUT) -- \
+		../../target/release/moorc $(OPTIONS) \
+		--src-objdef-dir $(SRC_DIRECTORY) --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
+		--test-wizard=2 --run-tests true --test-filter "#668:test_combat_stress" --test-timeout $$(($(DURATION) + 60)) --test-args "{$(DURATION), $(SUBSCRIBERS), $(WORK_PER_TICK), $(FANOUT), $(CHECKS_PER_TICK), $(STATE_WRITES), $(DELAY_RATIO), $(UPDATE_HZ)}"
+	@echo "Perf stat written to $(PERF_STAT_OUTPUT)"
+	@echo "View with: cat $(PERF_STAT_OUTPUT)"
 
 # Profile with scheduler tracing to see blocking/sleeping (requires root or perf_event_paranoid=-1)
 # Build first without sudo, then run perf with sudo

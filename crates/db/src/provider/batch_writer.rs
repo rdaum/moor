@@ -38,6 +38,7 @@ use moor_common::threading::{set_current_thread_background_priority, spawn_effic
 use parking_lot::Mutex;
 use tracing::{error, info, warn};
 
+use crate::db_counters;
 use crate::tx::{Error, Timestamp};
 
 /// A single operation to be written to fjall.
@@ -426,6 +427,7 @@ impl BatchWriter {
         match self.sender.try_send(msg) {
             Ok(()) => {}
             Err(flume::TrySendError::Full(msg)) => {
+                db_counters().batch_writer_backpressure.invocations().add(1);
                 warn!(
                     "BatchWriter backpressure: queue full, blocking on commit {} ({} ops)",
                     ts.0, op_count
@@ -436,6 +438,14 @@ impl BatchWriter {
                     return;
                 }
                 let elapsed = start.elapsed();
+                db_counters()
+                    .batch_writer_backpressure_block
+                    .invocations()
+                    .add(1);
+                db_counters()
+                    .batch_writer_backpressure_block
+                    .cumulative_duration_nanos()
+                    .add(elapsed.as_nanos() as isize);
                 if elapsed > Duration::from_secs(1) {
                     warn!(
                         "BatchWriter backpressure: blocked {} for {:?}",
@@ -451,8 +461,29 @@ impl BatchWriter {
 
     pub fn send_barrier(&self, timestamp: Timestamp) {
         let (send, _recv) = oneshot::channel();
-        if let Err(e) = self.sender.send(WriterMsg::Barrier(timestamp, send)) {
-            warn!("Failed to send barrier: {}", e);
+        let msg = WriterMsg::Barrier(timestamp, send);
+        match self.sender.try_send(msg) {
+            Ok(()) => {}
+            Err(flume::TrySendError::Full(msg)) => {
+                db_counters().batch_writer_backpressure.invocations().add(1);
+                let start = Instant::now();
+                if let Err(e) = self.sender.send(msg) {
+                    warn!("Failed to send barrier: {}", e);
+                    return;
+                }
+                let elapsed = start.elapsed();
+                db_counters()
+                    .batch_writer_backpressure_block
+                    .invocations()
+                    .add(1);
+                db_counters()
+                    .batch_writer_backpressure_block
+                    .cumulative_duration_nanos()
+                    .add(elapsed.as_nanos() as isize);
+            }
+            Err(flume::TrySendError::Disconnected(_)) => {
+                warn!("Failed to send barrier: channel disconnected");
+            }
         }
     }
 

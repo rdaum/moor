@@ -335,7 +335,9 @@ where
             FastMap::with_hasher(BuildHasherDefault::<AHasher>::default());
 
         for (ts, domain, codomain) in inserts {
-            let old = self.inner.insert_entry(ts, domain.clone(), codomain.clone());
+            let old = self
+                .inner
+                .insert_entry(ts, domain.clone(), codomain.clone());
             let changed_codomain = match old {
                 Some(old) => {
                     if old.value != codomain {
@@ -695,7 +697,10 @@ mod tests {
 
         index.apply_batch(
             vec![(Timestamp(2), domain2.clone(), codomain_b.clone())],
-            vec![(Timestamp(2), domain1.clone()), (Timestamp(2), domain3.clone())],
+            vec![
+                (Timestamp(2), domain1.clone()),
+                (Timestamp(2), domain3.clone()),
+            ],
         );
 
         let a_domains = index.get_by_codomain(&codomain_a);

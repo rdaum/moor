@@ -56,9 +56,9 @@ use moor_common::util::signal_fatal_db_error;
 use planus::{ReadAsRoot, WriteAsOffset};
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, Mutex, RwLock, atomic::AtomicBool},
+    sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, atomic::AtomicBool},
     thread::JoinHandle,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tracing::error;
 
@@ -201,6 +201,82 @@ where
     pub fn partition(&self) -> &fjall::Keyspace {
         &self.fjall_keyspace
     }
+
+    fn pending_ops_read(
+        &self,
+    ) -> Result<RwLockReadGuard<'_, PendingOperations<Domain, Codomain>>, Error> {
+        let start = Instant::now();
+        let guard = self.pending_ops.read().map_err(|_| {
+            Error::StorageFailure("Failed to acquire pending ops read lock".to_string())
+        })?;
+        let elapsed = start.elapsed();
+        let counters = db_counters();
+        counters
+            .provider_pending_ops_read_lock_wait
+            .invocations()
+            .add(1);
+        counters
+            .provider_pending_ops_read_lock_wait
+            .cumulative_duration_nanos()
+            .add(elapsed.as_nanos() as isize);
+        Ok(guard)
+    }
+
+    fn pending_ops_write(
+        &self,
+    ) -> Result<RwLockWriteGuard<'_, PendingOperations<Domain, Codomain>>, Error> {
+        let start = Instant::now();
+        let guard = self.pending_ops.write().map_err(|_| {
+            Error::StorageFailure("Failed to acquire pending ops write lock".to_string())
+        })?;
+        let elapsed = start.elapsed();
+        let counters = db_counters();
+        counters
+            .provider_pending_ops_write_lock_wait
+            .invocations()
+            .add(1);
+        counters
+            .provider_pending_ops_write_lock_wait
+            .cumulative_duration_nanos()
+            .add(elapsed.as_nanos() as isize);
+        Ok(guard)
+    }
+
+    fn tombstones_read(&self) -> Result<RwLockReadGuard<'_, HashSet<Domain>>, Error> {
+        let start = Instant::now();
+        let guard = self.tombstones.read().map_err(|_| {
+            Error::StorageFailure("Failed to acquire tombstones read lock".to_string())
+        })?;
+        let elapsed = start.elapsed();
+        let counters = db_counters();
+        counters
+            .provider_tombstones_read_lock_wait
+            .invocations()
+            .add(1);
+        counters
+            .provider_tombstones_read_lock_wait
+            .cumulative_duration_nanos()
+            .add(elapsed.as_nanos() as isize);
+        Ok(guard)
+    }
+
+    fn tombstones_write(&self) -> Result<RwLockWriteGuard<'_, HashSet<Domain>>, Error> {
+        let start = Instant::now();
+        let guard = self.tombstones.write().map_err(|_| {
+            Error::StorageFailure("Failed to acquire tombstones write lock".to_string())
+        })?;
+        let elapsed = start.elapsed();
+        let counters = db_counters();
+        counters
+            .provider_tombstones_write_lock_wait
+            .invocations()
+            .add(1);
+        counters
+            .provider_tombstones_write_lock_wait
+            .cumulative_duration_nanos()
+            .add(elapsed.as_nanos() as isize);
+        Ok(guard)
+    }
 }
 
 const MAX_TOMBSTONE_COUNT: usize = 100_000;
@@ -216,12 +292,8 @@ where
 
         // 1. Check both pending operations and tombstones together for consistency
         {
-            let pending = self.pending_ops.read().map_err(|_| {
-                Error::StorageFailure("Failed to acquire pending ops read lock".to_string())
-            })?;
-            let tombstones = self.tombstones.read().map_err(|_| {
-                Error::StorageFailure("Failed to acquire tombstones read lock".to_string())
-            })?;
+            let pending = self.pending_ops_read()?;
+            let tombstones = self.tombstones_read()?;
 
             // If pending delete, definitely doesn't exist
             if pending.pending_deletes.contains(domain) {
@@ -248,9 +320,7 @@ where
             .map_err(|e| Error::RetrievalFailure(e.to_string()))?
         else {
             // Database miss - add to tombstones to avoid future lookups
-            let mut tombstones = self.tombstones.write().map_err(|_| {
-                Error::StorageFailure("Failed to acquire tombstones write lock".to_string())
-            })?;
+            let mut tombstones = self.tombstones_write()?;
             tombstones.insert(domain.clone());
 
             // If tombstones set gets too large, clear it to bound memory usage
@@ -267,12 +337,8 @@ where
     fn put(&self, timestamp: Timestamp, domain: &Domain, codomain: &Codomain) -> Result<(), Error> {
         // Add to pending writes and clear from tombstones immediately
         {
-            let mut pending = self.pending_ops.write().map_err(|_| {
-                Error::StorageFailure("Failed to acquire pending ops write lock".to_string())
-            })?;
-            let mut tombstones = self.tombstones.write().map_err(|_| {
-                Error::StorageFailure("Failed to acquire tombstones write lock".to_string())
-            })?;
+            let mut pending = self.pending_ops_write()?;
+            let mut tombstones = self.tombstones_write()?;
 
             pending
                 .pending_writes
@@ -300,9 +366,7 @@ where
     fn del(&self, _timestamp: Timestamp, domain: &Domain) -> Result<(), Error> {
         // Add to pending deletes immediately
         {
-            let mut pending = self.pending_ops.write().map_err(|_| {
-                Error::StorageFailure("Failed to acquire pending ops write lock".to_string())
-            })?;
+            let mut pending = self.pending_ops_write()?;
             pending.pending_deletes.insert(domain.clone());
             // Also remove from pending writes if it was there
             pending.pending_writes.remove(domain);
@@ -324,9 +388,7 @@ where
         let mut result = Vec::new();
 
         // Get snapshot of pending operations
-        let pending = self.pending_ops.read().map_err(|_| {
-            Error::StorageFailure("Failed to acquire pending ops read lock".to_string())
-        })?;
+        let pending = self.pending_ops_read()?;
 
         // Scan backing store first
         for entry in self.fjall_keyspace.iter() {

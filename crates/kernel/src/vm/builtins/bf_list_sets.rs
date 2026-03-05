@@ -1495,7 +1495,10 @@ fn bf_sort(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     });
 
     // Build result list using sorted indices from values_list
-    let result: Vec<Var> = indices.into_iter().map(|idx| value_items[idx].clone()).collect();
+    let result: Vec<Var> = indices
+        .into_iter()
+        .map(|idx| value_items[idx].clone())
+        .collect();
 
     Ok(Ret(v_list(&result)))
 }

@@ -194,9 +194,12 @@ pub struct SchedulerPerfCounters {
     pub task_checkpoint_latency: PerfCounter,
     pub task_active_tasks_latency: PerfCounter,
     pub task_begin_transaction_latency: PerfCounter,
+    pub task_recv_immediate_resume_latency: PerfCounter,
+    pub task_message_delivery_to_recv_latency: PerfCounter,
 
     // Task lifecycle latency counters
-    pub task_resume_queue_delay_latency: PerfCounter,
+    pub task_wake_signal_to_dispatch_start_latency: PerfCounter,
+    pub task_wake_to_dispatch_latency: PerfCounter,
     pub task_thread_handoff_latency: PerfCounter,
     pub task_submit_to_first_run_latency: PerfCounter,
 }
@@ -245,8 +248,17 @@ impl SchedulerPerfCounters {
             task_checkpoint_latency: PerfCounter::new("task_checkpoint_latency"),
             task_active_tasks_latency: PerfCounter::new("task_active_tasks_latency"),
             task_begin_transaction_latency: PerfCounter::new("task_begin_transaction_latency"),
+            task_recv_immediate_resume_latency: PerfCounter::new(
+                "task_recv_immediate_resume_latency",
+            ),
+            task_message_delivery_to_recv_latency: PerfCounter::new(
+                "task_message_delivery_to_recv_latency",
+            ),
 
-            task_resume_queue_delay_latency: PerfCounter::new("task_resume_queue_delay_latency"),
+            task_wake_signal_to_dispatch_start_latency: PerfCounter::new(
+                "task_wake_signal_to_dispatch_start_latency",
+            ),
+            task_wake_to_dispatch_latency: PerfCounter::new("task_wake_to_dispatch_latency"),
             task_thread_handoff_latency: PerfCounter::new("task_thread_handoff_latency"),
             task_submit_to_first_run_latency: PerfCounter::new("task_submit_to_first_run_latency"),
         }
@@ -285,7 +297,10 @@ impl SchedulerPerfCounters {
             &self.task_checkpoint_latency,
             &self.task_active_tasks_latency,
             &self.task_begin_transaction_latency,
-            &self.task_resume_queue_delay_latency,
+            &self.task_recv_immediate_resume_latency,
+            &self.task_message_delivery_to_recv_latency,
+            &self.task_wake_signal_to_dispatch_start_latency,
+            &self.task_wake_to_dispatch_latency,
             &self.task_thread_handoff_latency,
             &self.task_submit_to_first_run_latency,
         ]

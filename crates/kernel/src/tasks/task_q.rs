@@ -116,7 +116,8 @@ impl TaskQ {
                             pinning_mode = ?pinning_mode,
                             "Detected high-performance CPU tier for task pool pinning"
                         );
-                        let worker_core_ids = moor_common::threading::worker_performance_core_ids_ref();
+                        let worker_core_ids =
+                            moor_common::threading::worker_performance_core_ids_ref();
                         if worker_core_ids.is_empty() {
                             warn!(
                                 "No worker performance cores reserved, task pool pinning disabled"
@@ -436,7 +437,8 @@ impl SuspensionQ {
     /// Queue a task for immediate wake.
     #[inline]
     pub(crate) fn enqueue_immediate_wake(&mut self, task_id: TaskId) {
-        self.immediate_wake_queue.push_back((task_id, Instant::now()));
+        self.immediate_wake_queue
+            .push_back((task_id, Instant::now()));
     }
 
     /// Pop the next task queued for immediate wake.

@@ -257,6 +257,29 @@ object BENCH_CONTROLLER
     endfor
   endverb
 
+  verb find_counter_delta (this none this) owner: ARCH_WIZARD flags: "rxd"
+    ":find_counter_delta(MAP delta, STR op_name) => LIST";
+    {delta, op_name} = args;
+    for vals, op in (delta)
+      if (tostr(op) == op_name)
+        return vals;
+      endif
+    endfor
+    return {0, 0};
+  endverb
+
+  verb log_key_counter_deltas (this none this) owner: ARCH_WIZARD flags: "rxd"
+    ":log_key_counter_deltas(STR label, MAP delta, LIST op_names) => NONE";
+    {label, delta, op_names} = args;
+    for op_name in (op_names)
+      vals = this:find_counter_delta(delta, op_name);
+      calls = vals[1];
+      nanos = vals[2];
+      avg_ns = calls > 0 ? toint(nanos / calls) | 0;
+      server_log("PERF_KEY label=" + label + " op=" + op_name + " calls=" + tostr(calls) + " nanos=" + tostr(nanos) + " avg_ns=" + tostr(avg_ns));
+    endfor
+  endverb
+
   verb log_perf_delta (this none this) owner: ARCH_WIZARD flags: "rxd"
     ":log_perf_delta(STR label, MAP before_snapshot, MAP after_snapshot) => NONE";
     {label, before_snapshot, after_snapshot} = args;
@@ -278,6 +301,11 @@ object BENCH_CONTROLLER
       category_label = label + ":" + category;
       server_log("PERF_SUM label=" + category_label + " calls=" + tostr(total_calls) + " nanos=" + tostr(total_nanos) + " avg_ns=" + tostr(avg_ns));
       this:log_top_counter_deltas(category_label, delta, 8);
+      if (category == "sched")
+        this:log_key_counter_deltas(category_label, delta, {"task_recv_immediate_resume_latency", "task_message_delivery_to_recv_latency", "task_wake_signal_to_dispatch_start_latency", "task_wake_to_dispatch_latency"});
+      elseif (category == "db")
+        this:log_key_counter_deltas(category_label, delta, {"commit_check_phase", "commit_apply_phase", "commit_process_phase", "commit_lock_wait_phase", "commit_wait_phase", "apply_index_insert", "batch_writer_backpressure", "batch_writer_backpressure_block", "provider_pending_ops_read_lock_wait", "provider_pending_ops_write_lock_wait", "provider_tombstones_read_lock_wait", "provider_tombstones_write_lock_wait"});
+      endif
     endfor
     this:log_top_counter_deltas(label + ":ops", all_delta, 20);
   endverb
@@ -399,6 +427,7 @@ object BENCH_CONTROLLER
       sub.mode = 2;
       sub.work_iterations = rounds_per_tick;
       sub.fanout = fanout;
+      sub.fanout_direct_mode = 1;
       sub.checks_per_tick = checks_per_round;
       sub.state_writes = state_writes;
       sub.delay_ratio = delay_ratio;

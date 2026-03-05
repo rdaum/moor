@@ -13,8 +13,8 @@
 
 //! Builtin functions for string manipulation, hashing, and encoding operations.
 
-use base64::{Engine, engine::general_purpose};
 use arrayvec::ArrayVec;
+use base64::{Engine, engine::general_purpose};
 use md5::Digest;
 use moor_compiler::offset_for_builtin;
 use moor_var::{E_ARGS, E_INVARG, E_TYPE, Variant, v_binary, v_int, v_list, v_str, v_string};
@@ -359,8 +359,14 @@ fn strtr(source: &str, str1: &str, str2: &str, case_matters: bool) -> String {
     }
 
     let from_folded: Vec<FoldedChar> = from_chars.iter().map(|&c| fold_char(c)).collect();
-    let to_upper: Vec<String> = to_chars.iter().map(|&c| c.to_uppercase().collect()).collect();
-    let to_lower: Vec<String> = to_chars.iter().map(|&c| c.to_lowercase().collect()).collect();
+    let to_upper: Vec<String> = to_chars
+        .iter()
+        .map(|&c| c.to_uppercase().collect())
+        .collect();
+    let to_lower: Vec<String> = to_chars
+        .iter()
+        .map(|&c| c.to_lowercase().collect())
+        .collect();
 
     for c in source.chars() {
         let c_folded = fold_char(c);

@@ -83,8 +83,11 @@ fn compile_benches(c: &mut Criterion) {
     group.throughput(Throughput::Bytes(large.len() as u64));
     group.bench_function("large_generated", |b| {
         b.iter(|| {
-            black_box(compile(black_box(large.as_str()), CompileOptions::default()))
-                .expect("large benchmark source should compile");
+            black_box(compile(
+                black_box(large.as_str()),
+                CompileOptions::default(),
+            ))
+            .expect("large benchmark source should compile");
         });
     });
 

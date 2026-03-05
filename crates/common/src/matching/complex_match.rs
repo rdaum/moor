@@ -105,34 +105,35 @@ fn classify_key_set(
     let mut best = MatchClass::None;
     let mut fuzzy = false;
 
-    let mut consider = |s: &str| {
-        match classify_match(subject_lower, s, None) {
-            MatchClass::Exact => {
-                best = MatchClass::Exact;
-                true
-            }
-            MatchClass::Prefix => {
-                if matches!(best, MatchClass::None | MatchClass::Fuzzy | MatchClass::Contains) {
-                    best = MatchClass::Prefix;
-                }
-                false
-            }
-            MatchClass::Contains => {
-                if matches!(best, MatchClass::None | MatchClass::Fuzzy) {
-                    best = MatchClass::Contains;
-                }
-                false
-            }
-            MatchClass::None => {
-                if max_distance.is_some() {
-                    if let MatchClass::Fuzzy = classify_match(subject_lower, s, max_distance) {
-                        fuzzy = true;
-                    }
-                }
-                false
-            }
-            MatchClass::Fuzzy => false,
+    let mut consider = |s: &str| match classify_match(subject_lower, s, None) {
+        MatchClass::Exact => {
+            best = MatchClass::Exact;
+            true
         }
+        MatchClass::Prefix => {
+            if matches!(
+                best,
+                MatchClass::None | MatchClass::Fuzzy | MatchClass::Contains
+            ) {
+                best = MatchClass::Prefix;
+            }
+            false
+        }
+        MatchClass::Contains => {
+            if matches!(best, MatchClass::None | MatchClass::Fuzzy) {
+                best = MatchClass::Contains;
+            }
+            false
+        }
+        MatchClass::None => {
+            if max_distance.is_some() {
+                if let MatchClass::Fuzzy = classify_match(subject_lower, s, max_distance) {
+                    fuzzy = true;
+                }
+            }
+            false
+        }
+        MatchClass::Fuzzy => false,
     };
 
     match key_set.variant() {

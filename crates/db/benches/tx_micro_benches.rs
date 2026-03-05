@@ -369,7 +369,9 @@ impl BenchContext for TxOpsContext {
             update_local_delete_none_txs.push(update_local_delete_none);
             let mut upsert_local_delete_to_update =
                 relation.start_from_index(&tx, base_index.as_ref());
-            upsert_local_delete_to_update.delete(&present_domain).unwrap();
+            upsert_local_delete_to_update
+                .delete(&present_domain)
+                .unwrap();
             upsert_local_delete_to_update_txs.push(upsert_local_delete_to_update);
             let mut upsert_local_delete_to_insert =
                 relation.start_from_index(&tx, base_index.as_ref());

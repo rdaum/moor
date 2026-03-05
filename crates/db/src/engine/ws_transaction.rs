@@ -974,8 +974,8 @@ impl WorldStateTransaction {
                     None
                 })
                 .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error getting verbs: {e:?}"))
-            })?;
+                    WorldStateError::DatabaseError(format!("Error getting verbs: {e:?}"))
+                })?;
             if let Some(Some(resolved)) = maybe_resolved {
                 return Ok(resolved);
             }
@@ -1194,13 +1194,9 @@ impl WorldStateTransaction {
         // In lazy mode, ensure we have a local propflags entry when setting a value locally.
         // If we don't have one, create it by inheriting from the canonical permissions.
         if !self.prop_perm_memo.has_known_propflags(&holder) {
-            if !self
-                .object_propflags
-                .has_domain(&holder)
-                .map_err(|e| {
-                    WorldStateError::DatabaseError(format!("Error checking property flags: {e:?}"))
-                })?
-            {
+            if !self.object_propflags.has_domain(&holder).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error checking property flags: {e:?}"))
+            })? {
                 // No local propflags entry - create one based on inherited permissions
                 let inherited_perms = self.retrieve_property_permissions(obj, uuid)?;
                 upsert(&mut self.object_propflags, holder.clone(), inherited_perms).map_err(
@@ -2153,7 +2149,8 @@ impl WorldStateTransaction {
                 })?;
             self.prop_perm_memo.invalidate_known_for_holder(&old_holder);
             self.prop_perm_memo.mark_known_propflags(new_holder);
-            self.prop_perm_memo.invalidate_cached_for_holder(&old_holder);
+            self.prop_perm_memo
+                .invalidate_cached_for_holder(&old_holder);
         }
         self.clear_cached_prop_perms();
 

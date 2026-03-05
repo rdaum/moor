@@ -641,7 +641,6 @@ impl Scheduler {
                 self.task_q.wake_task_thread(
                     task,
                     ResumeAction::Return(v_int(0)),
-                    None,
                     session,
                     result_sender,
                     &self.task_control_sender,
@@ -1728,7 +1727,19 @@ impl Scheduler {
             }
             TaskControlMsg::TaskRecv { result_sender } => {
                 // Drain all messages from the calling task's queue
-                let messages = self.task_q.drain_messages(task_id);
+                let (messages, total_wait_nanos, message_count) =
+                    self.task_q.drain_messages_with_wait_nanos(task_id);
+                if message_count > 0 {
+                    let perfc = sched_counters();
+                    perfc
+                        .task_message_delivery_to_recv_latency
+                        .invocations()
+                        .add(message_count as isize);
+                    perfc
+                        .task_message_delivery_to_recv_latency
+                        .cumulative_duration_nanos()
+                        .add(total_wait_nanos as isize);
+                }
                 if let Err(e) = result_sender.send(messages) {
                     error!(?e, "Could not send task_recv result to requester");
                 }
@@ -1922,17 +1933,22 @@ impl Scheduler {
     }
 
     fn drain_immediate_wakes(&mut self) {
-        while let Some(task_id) = self.task_q.suspended.pop_immediate_wake() {
-            self.handle_immediate_wake(task_id);
+        while let Some((task_id, signaled_at)) = self.task_q.suspended.pop_immediate_wake() {
+            self.handle_immediate_wake(task_id, signaled_at);
         }
     }
 
-    fn handle_immediate_wake(&mut self, task_id: TaskId) {
+    fn handle_immediate_wake(&mut self, task_id: TaskId, signaled_at: Instant) {
         // Handle a task queued for immediate wake
         let Some(sr) = self.task_q.suspended.remove_task(task_id) else {
             // Task was already removed (e.g., killed), ignore
             return;
         };
+        let perfc = sched_counters();
+        TaskQ::record_latency(
+            &perfc.task_wake_signal_to_dispatch_start_latency,
+            signaled_at,
+        );
 
         // Extract the return value from the wake condition
         // Note: Time-based tasks may arrive here if their timer expired before insertion
@@ -2419,7 +2435,6 @@ impl TaskQ {
         config: Arc<Config>,
     ) -> Result<(), SchedulerError> {
         let SuspendedTask {
-            enqueued_at,
             task,
             session,
             result_sender,
@@ -2428,7 +2443,6 @@ impl TaskQ {
         self.wake_task_thread(
             task,
             resume_action,
-            Some(enqueued_at),
             session,
             result_sender,
             control_sender,
@@ -2448,7 +2462,6 @@ impl TaskQ {
         config: Arc<Config>,
     ) {
         let SuspendedTask {
-            enqueued_at,
             task,
             session,
             result_sender,
@@ -2456,7 +2469,6 @@ impl TaskQ {
         } = suspended_task;
         self.wake_retry_task(
             task,
-            enqueued_at,
             session,
             result_sender,
             control_sender,
@@ -2526,7 +2538,6 @@ impl TaskQ {
         &mut self,
         mut task: Box<Task>,
         resume_action: ResumeAction,
-        queued_at: Option<Instant>,
         session: Arc<dyn Session>,
         result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
@@ -2536,10 +2547,6 @@ impl TaskQ {
     ) -> Result<(), SchedulerError> {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.resume_task);
-
-        if let Some(queued_at) = queued_at {
-            Self::record_latency(&perfc.task_resume_queue_delay_latency, queued_at);
-        }
 
         // Take a task out of a suspended state and start running it again.
         // For Created tasks, we need to call setup_task_start first.
@@ -2576,10 +2583,15 @@ impl TaskQ {
         // Check if this is a brand new task or a resuming task
         let is_created = matches!(task.state, crate::tasks::task::TaskState::Pending(_));
 
+        let wake_to_dispatch_started_at = Instant::now();
         let dispatch_started_at = Instant::now();
         self.thread_pool.spawn(move || {
             let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 let perfc = sched_counters();
+                Self::record_latency(
+                    &perfc.task_wake_to_dispatch_latency,
+                    wake_to_dispatch_started_at,
+                );
                 Self::record_latency(&perfc.task_thread_handoff_latency, dispatch_started_at);
 
                 if is_created {
@@ -2700,7 +2712,6 @@ impl TaskQ {
     fn wake_retry_task(
         &mut self,
         mut task: Box<Task>,
-        queued_at: Instant,
         session: Arc<dyn Session>,
         result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
@@ -2710,7 +2721,6 @@ impl TaskQ {
     ) {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.retry_task);
-        Self::record_latency(&perfc.task_resume_queue_delay_latency, queued_at);
 
         let task_id = task.task_id;
 
@@ -2751,10 +2761,15 @@ impl TaskQ {
         };
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
         let player = task.player;
+        let wake_to_dispatch_started_at = Instant::now();
         let dispatch_started_at = Instant::now();
         self.thread_pool.spawn(move || {
             let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 let perfc = sched_counters();
+                Self::record_latency(
+                    &perfc.task_wake_to_dispatch_latency,
+                    wake_to_dispatch_started_at,
+                );
                 Self::record_latency(&perfc.task_thread_handoff_latency, dispatch_started_at);
 
                 let _tx_guard = TaskGuard::new(

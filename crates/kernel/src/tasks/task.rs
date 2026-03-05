@@ -384,6 +384,8 @@ impl Task {
             VMHostResponse::Suspend(delay) => {
                 // Fast path for RecvMessages(None): commit, drain messages, resume immediately
                 if matches!(delay.as_ref(), TaskSuspend::RecvMessages(None)) {
+                    let perfc = sched_counters();
+                    let _t = PerfTimerGuard::new(&perfc.task_recv_immediate_resume_latency);
                     match with_new_transaction(|| {
                         let new_world_state =
                             task_scheduler_client.begin_new_transaction().map_err(|e| {

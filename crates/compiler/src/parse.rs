@@ -733,7 +733,10 @@ impl TreeTransformer {
                                 break;
                             };
                             let value_rule = inner.next().unwrap();
-                            let key = primary_self.clone().parse_expr(key_rule.into_inner()).unwrap();
+                            let key = primary_self
+                                .clone()
+                                .parse_expr(key_rule.into_inner())
+                                .unwrap();
                             let value = primary_self
                                 .clone()
                                 .parse_expr(value_rule.into_inner())
@@ -1917,7 +1920,8 @@ impl TreeTransformer {
                             error_position: context,
                             end_line_col: None,
                             context: "scattering assignment validation".to_string(),
-                            message: "More than one `@' target in scattering assignment.".to_string(),
+                            message: "More than one `@' target in scattering assignment."
+                                .to_string(),
                             details: Box::new(ParseErrorDetails::default()),
                         });
                     }
@@ -2006,7 +2010,8 @@ impl TreeTransformer {
                                     error_position: CompileContext::new((0, 0)),
                                     end_line_col: None,
                                     context: "lambda parameter validation".to_string(),
-                                    message: "More than one `@' target in scattering assignment.".to_string(),
+                                    message: "More than one `@' target in scattering assignment."
+                                        .to_string(),
                                     details: Box::new(ParseErrorDetails::default()),
                                 });
                             }

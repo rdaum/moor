@@ -10,6 +10,7 @@ object BENCH_SUBSCRIBER
   property append_mode (owner: ARCH_WIZARD, flags: "rw") = 0;
   property mode (owner: ARCH_WIZARD, flags: "rw") = 0;
   property fanout (owner: ARCH_WIZARD, flags: "rw") = 0;
+  property fanout_direct_mode (owner: ARCH_WIZARD, flags: "rw") = 0;
   property checks_per_tick (owner: ARCH_WIZARD, flags: "rw") = 1;
   property state_writes (owner: ARCH_WIZARD, flags: "rw") = 2;
   property delay_ratio (owner: ARCH_WIZARD, flags: "rw") = 0;
@@ -57,39 +58,75 @@ object BENCH_SUBSCRIBER
     defender_momentum = this.defender_momentum;
     checks_per_tick = max(1, this.checks_per_tick);
     state_writes = max(1, this.state_writes);
+    counter = this.counter;
+    cooldowns = this.cooldowns;
+    fanout = this.fanout;
+    fanout_direct_mode = this.fanout_direct_mode;
+    peers = fanout > 0 ? $bench_controller.subscribers | {};
+    peer_count = fanout > 0 ? length(peers) | 0;
+    cursor = this.fanout_cursor;
     for i in [1..iterations]
       "Approximate contested attack quality.";
       attack_bonus = 10.0 + (momentum - defender_momentum) / 10.0;
       check = attack_bonus - tofloat(random(100));
       if (check >= 0.0)
         damage = 5.0 + check / 20.0;
-        this.counter = this.counter + toint(max(0.0, damage));
+        counter = counter + toint(max(0.0, damage));
         momentum = min(100.0, momentum + 3.0);
         defender_momentum = max(0.0, defender_momentum - 2.0);
-        this.cooldowns["last_hit"] = this.counter;
+        cooldowns["last_hit"] = counter;
       else
         momentum = max(0.0, momentum - 1.0);
         defender_momentum = min(100.0, defender_momentum + 1.0);
-        this.cooldowns["last_miss"] = this.counter;
+        cooldowns["last_miss"] = counter;
       endif
       "Extra branchy state churn.";
       for j in [1..checks_per_tick]
-        scratch = (this.counter + j) % 97;
+        scratch = (counter + j) % 97;
         if (scratch % 2)
-          this.cooldowns[tostr("chk_", j)] = scratch;
+          cooldowns[tostr("chk_", j)] = scratch;
         else
-          this.cooldowns = `mapdelete(this.cooldowns, tostr("chk_", j)) ! ANY => this.cooldowns';
+          cooldowns = `mapdelete(cooldowns, tostr("chk_", j)) ! ANY => cooldowns';
         endif
       endfor
       "Write a handful of properties/maps each round.";
       for w in [1..state_writes]
         key = tostr("stat_", ((w - 1) % 4) + 1);
-        this.cooldowns[key] = this.counter + w;
+        cooldowns[key] = counter + w;
       endfor
-      this:fanout_attack(check);
+      if (fanout > 0 && peer_count > 1)
+        sent = 0;
+        while (sent < fanout)
+          if (cursor > peer_count)
+            cursor = 1;
+          endif
+          peer = peers[cursor];
+          cursor = cursor + 1;
+          if (!valid(peer) || peer == this)
+            continue;
+          endif
+          if (fanout_direct_mode)
+            peer.last_attacker = this;
+            if (check >= 0.0)
+              peer.counter = peer.counter + 1;
+            else
+              peer.counter = max(0, peer.counter - 1);
+            endif
+            if (peer.append_mode && length(peer.data) < 256)
+              peer.data = {@peer.data, counter};
+            endif
+          else
+            `peer:on_attack(this, check, counter) ! E_VERBNF => 0';
+          endif
+          sent = sent + 1;
+        endwhile
+      endif
     endfor
+    this.counter = counter;
+    this.cooldowns = cooldowns;
     this.momentum = momentum;
     this.defender_momentum = defender_momentum;
+    this.fanout_cursor = cursor;
   endverb
 
   verb fanout_attack (this none this) owner: ARCH_WIZARD flags: "rxd"

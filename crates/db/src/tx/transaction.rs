@@ -571,11 +571,7 @@ where
     /// Returning:
     /// - `Some(new_value)` performs an upsert and returns the previous value (if any).
     /// - `None` performs no mutation and returns the current value (if any).
-    pub fn upsert_with<F>(
-        &mut self,
-        domain: Domain,
-        f: F,
-    ) -> Result<Option<Codomain>, Error>
+    pub fn upsert_with<F>(&mut self, domain: Domain, f: F) -> Result<Option<Codomain>, Error>
     where
         F: FnOnce(Option<&Codomain>) -> Option<Codomain>,
     {
