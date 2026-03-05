@@ -56,6 +56,7 @@ pub struct CodegenState {
     pub(crate) ops: Vec<Op>,
     pub(crate) jumps: Vec<JumpLabel>,
     pub(crate) var_names: Names,
+    pub(crate) name_for_variable: Vec<Option<Name>>,
     pub(crate) literals: Vec<Var>,
     pub(crate) loops: Vec<Loop>,
     pub(crate) saved_stack: Option<Offset>,
@@ -80,10 +81,21 @@ pub struct CodegenState {
 
 impl CodegenState {
     pub fn new(compile_options: CompileOptions, var_names: Names) -> Self {
+        let max_variable_id = var_names
+            .decls
+            .values()
+            .map(|decl| decl.identifier.id as usize)
+            .max()
+            .unwrap_or(0);
+        let mut name_for_variable = vec![None; max_variable_id + 1];
+        for (name, decl) in &var_names.decls {
+            name_for_variable[decl.identifier.id as usize] = Some(*name);
+        }
         Self {
             ops: vec![],
             jumps: vec![],
             var_names,
+            name_for_variable,
             literals: vec![],
             loops: vec![],
             saved_stack: None,
@@ -198,13 +210,8 @@ impl CodegenState {
     }
 
     fn find_loop(&self, loop_label: &Name) -> Result<&Loop, CompileError> {
-        for l in self.loops.iter() {
-            if l.loop_name.is_none() {
-                continue;
-            }
-            if let Some(name) = &l.loop_name
-                && name.eq(loop_label)
-            {
+        for l in self.loops.iter().rev() {
+            if l.loop_name.as_ref() == Some(loop_label) {
                 return Ok(l);
             }
         }
@@ -395,8 +402,10 @@ impl CodegenState {
     }
 
     fn find_name(&self, var: &Variable) -> Name {
-        self.var_names
-            .name_for_var(var)
+        self.name_for_variable
+            .get(var.id as usize)
+            .copied()
+            .flatten()
             .expect("Variable not found")
     }
 
@@ -406,39 +415,31 @@ impl CodegenState {
         right: &Expr,
     ) -> Result<(), CompileError> {
         self.generate_expr(right)?;
-        let labels: Vec<(&ScatterItem, ScatterLabel)> = scatter
-            .iter()
-            .map(|s| {
-                let kind_label = match s.kind {
-                    ScatterKind::Required => ScatterLabel::Required(self.find_name(&s.id)),
-                    ScatterKind::Optional => ScatterLabel::Optional(
-                        self.find_name(&s.id),
-                        if s.expr.is_some() {
-                            Some(self.make_jump_label(None))
-                        } else {
-                            None
-                        },
-                    ),
-                    ScatterKind::Rest => ScatterLabel::Rest(self.find_name(&s.id)),
-                };
-                (s, kind_label)
-            })
-            .collect();
-        let done = self.make_jump_label(None);
-        let scater_offset =
-            self.add_scatter_table(labels.iter().map(|(_, l)| l.clone()).collect(), done);
-        self.emit(Op::Scatter(scater_offset));
-        for (s, label) in labels {
-            if let ScatterLabel::Optional(_, Some(label)) = label {
-                if s.expr.is_none() {
-                    continue;
+        let mut labels = Vec::with_capacity(scatter.len());
+        let mut optional_defaults = Vec::new();
+        for s in scatter {
+            let kind_label = match s.kind {
+                ScatterKind::Required => ScatterLabel::Required(self.find_name(&s.id)),
+                ScatterKind::Optional => {
+                    let default_label = s.expr.as_ref().map(|_| self.make_jump_label(None));
+                    if let Some(label) = default_label {
+                        optional_defaults.push((s, label));
+                    }
+                    ScatterLabel::Optional(self.find_name(&s.id), default_label)
                 }
-                self.commit_jump_label(label);
-                self.generate_expr(s.expr.as_ref().unwrap())?;
-                self.emit(Op::Put(self.find_name(&s.id)));
-                self.emit(Op::Pop);
-                self.pop_stack(1);
-            }
+                ScatterKind::Rest => ScatterLabel::Rest(self.find_name(&s.id)),
+            };
+            labels.push(kind_label);
+        }
+        let done = self.make_jump_label(None);
+        let scater_offset = self.add_scatter_table(labels, done);
+        self.emit(Op::Scatter(scater_offset));
+        for (s, label) in optional_defaults {
+            self.commit_jump_label(label);
+            self.generate_expr(s.expr.as_ref().unwrap())?;
+            self.emit(Op::Put(self.find_name(&s.id)));
+            self.emit(Op::Pop);
+            self.pop_stack(1);
         }
         self.commit_jump_label(done);
         Ok(())
@@ -912,7 +913,10 @@ impl CodegenState {
                         num_captured,
                     }) = self.ops.last_mut()
                     {
-                        *self.ops.last_mut().unwrap() = Op::MakeLambda {
+                        *self
+                            .ops
+                            .last_mut()
+                            .expect("expected last opcode to be MakeLambda") = Op::MakeLambda {
                             scatter_offset: *scatter_offset,
                             program_offset: *program_offset,
                             self_var: Some(self_var_name),
@@ -1363,7 +1367,7 @@ impl CodegenState {
             })
             .collect();
         let done = self.make_jump_label(None);
-        let scatter_offset = self.add_scatter_table(labels.clone(), done);
+        let scatter_offset = self.add_scatter_table(labels, done);
 
         // Stash current compilation state (following fork vector pattern)
         let stashed_ops = std::mem::take(&mut self.ops);
@@ -1398,15 +1402,11 @@ impl CodegenState {
 
         // Generate code to check optional parameters and evaluate defaults if needed
         // This is done at the start of the lambda body, not through scatter jump labels
-        for (param, label) in params.iter().zip(labels.iter()) {
+        for param in params {
             if let ScatterKind::Optional = param.kind
                 && let Some(default_expr) = &param.expr
             {
-                // Extract the already-resolved parameter name from the scatter label
-                let param_name = match label {
-                    ScatterLabel::Optional(name, _) => *name,
-                    _ => panic!("Expected Optional label for optional parameter"),
-                };
+                let param_name = self.find_name(&param.id);
 
                 // Check if this parameter is unset (equals 0)
                 self.emit(Op::Push(param_name));

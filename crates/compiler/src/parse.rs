@@ -379,10 +379,9 @@ impl TreeTransformer {
                 {
                     // This is an anonymous object: anon_FFFFFF-FFFFFFFFFF
                     let uuid_part = &ostr[5..]; // Skip "anon_" prefix
-                    let parts: Vec<&str> = uuid_part.split('-').collect();
-                    if parts.len() == 2 {
-                        let first_group = u64::from_str_radix(parts[0], 16).unwrap();
-                        let epoch_ms = u64::from_str_radix(parts[1], 16).unwrap();
+                    if let Some((first, second)) = uuid_part.split_once('-') {
+                        let first_group = u64::from_str_radix(first, 16).unwrap();
+                        let epoch_ms = u64::from_str_radix(second, 16).unwrap();
                         let autoincrement = ((first_group >> 6) & 0xFFFF) as u16;
                         let rng = (first_group & 0x3F) as u8;
                         let anonymous_id = AnonymousObjid::new(autoincrement, rng, epoch_ms);
@@ -524,7 +523,8 @@ impl TreeTransformer {
     }
 
     fn parse_exprlist(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Vec<Arg>, CompileError> {
-        let mut args = vec![];
+        let (lower, _) = pairs.size_hint();
+        let mut args = Vec::with_capacity(lower);
         for pair in pairs {
             match pair.as_rule() {
                 Rule::argument => {
@@ -725,21 +725,22 @@ impl TreeTransformer {
                         }
                     }
                     Rule::map => {
-                        let inner = primary.into_inner();
-                        // Parse each key, value as a separate expression which we will pair-up later.
-                        let mut elements = vec![];
-                        for r in inner {
-                            elements.push(primary_self.clone().parse_expr(r.into_inner()).unwrap());
+                        let mut inner = primary.into_inner();
+                        let (lower, _) = inner.size_hint();
+                        let mut map_pairs = Vec::with_capacity(lower / 2);
+                        loop {
+                            let Some(key_rule) = inner.next() else {
+                                break;
+                            };
+                            let value_rule = inner.next().unwrap();
+                            let key = primary_self.clone().parse_expr(key_rule.into_inner()).unwrap();
+                            let value = primary_self
+                                .clone()
+                                .parse_expr(value_rule.into_inner())
+                                .unwrap();
+                            map_pairs.push((key, value));
                         }
-                        let pairs = elements
-                            .chunks(2)
-                            .map(|pair| {
-                                let key = pair[0].clone();
-                                let value = pair[1].clone();
-                                (key, value)
-                            })
-                            .collect();
-                        Ok(Expr::Map(pairs))
+                        Ok(Expr::Map(map_pairs))
                     }
                     Rule::flyweight => {
                         if !self.options.flyweight_type {
@@ -1810,7 +1811,8 @@ impl TreeTransformer {
     }
 
     fn parse_statements(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Vec<Stmt>, CompileError> {
-        let mut statements = vec![];
+        let (lower, _) = pairs.size_hint();
+        let mut statements = Vec::with_capacity(lower);
         for pair in pairs {
             match pair.as_rule() {
                 Rule::statement => {
@@ -1866,7 +1868,9 @@ impl TreeTransformer {
     ) -> Result<Expr, CompileError> {
         let context = self.compile_context(&op);
         let inner = op.into_inner();
-        let mut items = vec![];
+        let (lower, _) = inner.size_hint();
+        let mut items = Vec::with_capacity(lower);
+        let mut seen_rest = false;
         for scatter_item in inner {
             match scatter_item.as_rule() {
                 Rule::scatter_optional => {
@@ -1908,6 +1912,16 @@ impl TreeTransformer {
                     });
                 }
                 Rule::scatter_rest => {
+                    if seen_rest {
+                        return Err(CompileError::ParseError {
+                            error_position: context,
+                            end_line_col: None,
+                            context: "scattering assignment validation".to_string(),
+                            message: "More than one `@' target in scattering assignment.".to_string(),
+                            details: Box::new(ParseErrorDetails::default()),
+                        });
+                    }
+                    seen_rest = true;
                     let mut inner = scatter_item.into_inner();
                     let id = inner.next().unwrap().as_str();
                     let Some(id) = self.clone().names.borrow_mut().declare(
@@ -1930,23 +1944,6 @@ impl TreeTransformer {
             }
         }
 
-        // Validate that there's at most one rest (@) target, like LambdaMOO does
-        let mut seen_rest = false;
-        for item in &items {
-            if matches!(item.kind, ScatterKind::Rest) {
-                if seen_rest {
-                    return Err(CompileError::ParseError {
-                        error_position: context,
-                        end_line_col: None,
-                        context: "scattering assignment validation".to_string(),
-                        message: "More than one `@' target in scattering assignment.".to_string(),
-                        details: Box::new(ParseErrorDetails::default()),
-                    });
-                }
-                seen_rest = true;
-            }
-        }
-
         Ok(Expr::Scatter(items, Box::new(rhs)))
     }
 
@@ -1954,7 +1951,9 @@ impl TreeTransformer {
         self: Rc<Self>,
         params: Pairs<Rule>,
     ) -> Result<Vec<ScatterItem>, CompileError> {
-        let mut items = vec![];
+        let (lower, _) = params.size_hint();
+        let mut items = Vec::with_capacity(lower);
+        let mut seen_rest = false;
         for param in params {
             match param.as_rule() {
                 Rule::lambda_param => {
@@ -2002,6 +2001,16 @@ impl TreeTransformer {
                             });
                         }
                         Rule::scatter_rest => {
+                            if seen_rest {
+                                return Err(CompileError::ParseError {
+                                    error_position: CompileContext::new((0, 0)),
+                                    end_line_col: None,
+                                    context: "lambda parameter validation".to_string(),
+                                    message: "More than one `@' target in scattering assignment.".to_string(),
+                                    details: Box::new(ParseErrorDetails::default()),
+                                });
+                            }
+                            seen_rest = true;
                             let context = self.compile_context(&inner_param);
                             let mut inner = inner_param.into_inner();
                             let id_str = inner.next().unwrap().as_str();
@@ -2028,23 +2037,6 @@ impl TreeTransformer {
                 _ => {
                     panic!("Unimplemented lambda_param: {param:?}");
                 }
-            }
-        }
-
-        // Validate that there's at most one rest (@) target, like LambdaMOO does
-        let mut seen_rest = false;
-        for item in &items {
-            if matches!(item.kind, ScatterKind::Rest) {
-                if seen_rest {
-                    return Err(CompileError::ParseError {
-                        error_position: CompileContext::new((0, 0)), // We don't have context here, but this should rarely happen
-                        end_line_col: None,
-                        context: "lambda parameter validation".to_string(),
-                        message: "More than one `@' target in scattering assignment.".to_string(),
-                        details: Box::new(ParseErrorDetails::default()),
-                    });
-                }
-                seen_rest = true;
             }
         }
 

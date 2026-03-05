@@ -314,13 +314,13 @@ impl VarScope {
     /// Turn all unbound variables into bound variables.
     /// Run at the end of compilation to produce valid offsets.
     pub fn bind(&self) -> Names {
-        let mut sorted_by_depth = self.variables.clone();
-        sorted_by_depth.sort_by(|a, b| a.depth.cmp(&b.depth));
+        let mut sorted_by_depth: Vec<&Decl> = self.variables.iter().collect();
+        sorted_by_depth.sort_by_key(|decl| decl.depth);
 
         let mut current_offset = 0;
         let mut current_scope = 0;
         let mut decls = HashMap::new();
-        for vr in sorted_by_depth.iter() {
+        for vr in sorted_by_depth {
             if vr.identifier.scope_id != current_scope {
                 // We've moved to a new scope.
                 current_scope = vr.identifier.scope_id;
