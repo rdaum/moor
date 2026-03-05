@@ -57,14 +57,15 @@ impl Map {
         }
 
         let old_len = self.0.len();
-        let new_map = self.0.update(key.clone(), value.clone());
-        let new_len = new_map.len();
+        let mut map = *self.0;
+        map.insert(key.clone(), value.clone());
+        let new_len = map.len();
         let hint = if new_len > old_len {
             OP_HINT_MAP_INSERT
         } else {
             0
         };
-        Ok(Var::from_map_with_hint(Map(Box::new(new_map)), hint))
+        Ok(Var::from_map_with_hint(Map(Box::new(map)), hint))
     }
 
     pub fn remove_owned(self, key: &Var, case_sensitive: bool) -> (Var, Option<Var>) {
