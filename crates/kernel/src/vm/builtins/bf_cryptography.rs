@@ -38,7 +38,7 @@ use std::io::Read;
 use tracing::{error, warn};
 
 use crate::vm::builtins::{
-    BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction, world_state_bf_err,
+    BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction, unix_crypt_compat, world_state_bf_err,
 };
 use moor_compiler::{offset_for_builtin, to_literal};
 use moor_var::{
@@ -635,12 +635,13 @@ fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         };
         String::from(salt)
     };
-    if let Some(text) = bf_args.args[0].as_string() {
-        let crypted = pwhash::unix::crypt(text, salt.as_str()).unwrap();
-        Ok(Ret(v_string(crypted)))
-    } else {
-        Err(BfErr::Code(E_TYPE))
-    }
+    let Some(text) = bf_args.args[0].as_string() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let crypted = unix_crypt_compat::crypt(text.as_bytes(), salt.as_str())
+        .map_err(|_| BfErr::ErrValue(E_INVARG.msg("crypt() failed for the provided text/salt")))?;
+    Ok(Ret(v_string(crypted)))
 }
 
 /// Usage: `str salt()`

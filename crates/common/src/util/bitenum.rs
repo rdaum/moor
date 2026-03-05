@@ -66,10 +66,7 @@ impl<T: BitFlag> BitEnum<T> {
     #[inline]
     fn bit(value: T) -> u16 {
         let bit = u32::from(value.bit_index());
-        debug_assert!(
-            bit < u16::BITS,
-            "BitEnum discriminant out of range: {bit}"
-        );
+        debug_assert!(bit < u16::BITS, "BitEnum discriminant out of range: {bit}");
         1u16 << bit
     }
 

@@ -71,6 +71,7 @@ mod bf_task;
 #[cfg(test)]
 #[path = "test_function_help.rs"]
 mod test_function_help;
+mod unix_crypt_compat;
 // See ADDING-BUILTINS.md in this directory for safe builtin additions.
 
 lazy_static! {
