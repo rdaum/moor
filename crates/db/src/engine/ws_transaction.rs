@@ -37,12 +37,73 @@ use moor_common::{
 use moor_var::{
     ByteSized, NOTHING, Obj, Symbol, Var, program::ProgramType, v_empty_map, v_map, v_none,
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::{collections::VecDeque, hash::Hash};
 use uuid::Uuid;
 
 type RTx<Domain, Codomain> = RelationTransaction<Domain, Codomain, FjallProvider<Domain, Codomain>>;
+
+pub(crate) struct PropertyPermMemo {
+    known_propflags: HashSet<ObjAndUUIDHolder>,
+    perms_by_holder: std::cell::RefCell<HashMap<ObjAndUUIDHolder, PropPerms>>,
+}
+
+impl PropertyPermMemo {
+    pub(crate) fn new() -> Self {
+        Self {
+            known_propflags: HashSet::new(),
+            perms_by_holder: std::cell::RefCell::new(HashMap::new()),
+        }
+    }
+
+    #[inline]
+    fn has_known_propflags(&self, holder: &ObjAndUUIDHolder) -> bool {
+        self.known_propflags.contains(holder)
+    }
+
+    #[inline]
+    fn mark_known_propflags(&mut self, holder: ObjAndUUIDHolder) {
+        self.known_propflags.insert(holder);
+    }
+
+    #[inline]
+    fn invalidate_known_for_obj(&mut self, obj: &Obj) {
+        self.known_propflags.retain(|holder| holder.obj() != *obj);
+    }
+
+    #[inline]
+    fn invalidate_known_for_holder(&mut self, holder: &ObjAndUUIDHolder) {
+        self.known_propflags.remove(holder);
+    }
+
+    #[inline]
+    fn cached_perms(&self, holder: &ObjAndUUIDHolder) -> Option<PropPerms> {
+        self.perms_by_holder.borrow().get(holder).cloned()
+    }
+
+    #[inline]
+    fn cache_perms(&self, holder: ObjAndUUIDHolder, perms: PropPerms) {
+        self.perms_by_holder.borrow_mut().insert(holder, perms);
+    }
+
+    #[inline]
+    fn invalidate_cached_for_obj(&self, obj: &Obj) {
+        self.perms_by_holder
+            .borrow_mut()
+            .retain(|holder, _| holder.obj() != *obj);
+    }
+
+    #[inline]
+    fn invalidate_cached_for_holder(&self, holder: &ObjAndUUIDHolder) {
+        self.perms_by_holder.borrow_mut().remove(holder);
+    }
+
+    #[inline]
+    fn clear_cached(&self) {
+        self.perms_by_holder.borrow_mut().clear();
+    }
+}
 
 /// Upsert helper with shared trait bounds for relation-backed fields.
 fn upsert<Domain, Codomain>(
@@ -75,9 +136,36 @@ where
 }
 
 impl WorldStateTransaction {
+    #[inline]
+    fn invalidate_known_propflags_for_obj(&mut self, obj: &Obj) {
+        self.prop_perm_memo.invalidate_known_for_obj(obj);
+    }
+
+    #[inline]
+    fn invalidate_known_propflags_for_holder(&mut self, obj: &Obj, uuid: Uuid) {
+        self.prop_perm_memo
+            .invalidate_known_for_holder(&ObjAndUUIDHolder::new(obj, uuid));
+    }
+
+    #[inline]
+    fn invalidate_cached_prop_perms_for_obj(&mut self, obj: &Obj) {
+        self.prop_perm_memo.invalidate_cached_for_obj(obj);
+    }
+
+    #[inline]
+    fn invalidate_cached_prop_perms_for_holder(&mut self, obj: &Obj, uuid: Uuid) {
+        self.prop_perm_memo
+            .invalidate_cached_for_holder(&ObjAndUUIDHolder::new(obj, uuid));
+    }
+
+    #[inline]
+    fn clear_cached_prop_perms(&mut self) {
+        self.prop_perm_memo.clear_cached();
+    }
+
     pub fn object_valid(&self, obj: &Obj) -> Result<bool, WorldStateError> {
         match self.object_flags.has_domain(obj) {
-            Ok(b) => Ok(b),
+            Ok(is_valid) => Ok(is_valid),
             Err(e) => Err(WorldStateError::DatabaseError(format!(
                 "Error getting object flags: {e:?}"
             ))),
@@ -185,6 +273,8 @@ impl WorldStateTransaction {
         self.object_owner.upsert(*obj, *owner).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting object owner: {e:?}"))
         })?;
+        // Chown property semantics depend on object owner.
+        self.invalidate_cached_prop_perms_for_obj(obj);
         self.has_mutations = true;
         Ok(())
     }
@@ -340,6 +430,8 @@ impl WorldStateTransaction {
 
         // We may or may not have propdefs yet...
         self.object_propdefs.delete(obj).ok();
+        self.invalidate_known_propflags_for_obj(obj);
+        self.invalidate_cached_prop_perms_for_obj(obj);
 
         self.invalidate_verb_cache_for_objects(&[*obj]);
         self.invalidate_prop_cache_for_objects(&[*obj]);
@@ -426,6 +518,8 @@ impl WorldStateTransaction {
 
             // We may or may not have propdefs yet...
             self.object_propdefs.delete(obj).ok();
+            self.invalidate_known_propflags_for_obj(obj);
+            self.invalidate_cached_prop_perms_for_obj(obj);
         }
 
         // Batch delete property values
@@ -507,15 +601,19 @@ impl WorldStateTransaction {
     }
 
     pub fn get_object_children(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
-        // Use object_parent secondary index to get children of a parent
-        let children_vec = self.object_parent.get_by_codomain(obj);
-        Ok(ObjSet::from_items(&children_vec))
+        // Use object_parent secondary index to get children of a parent.
+        let mut children = Vec::new();
+        self.object_parent
+            .for_each_by_codomain(obj, |child| children.push(*child));
+        Ok(ObjSet::from_iter(children))
     }
 
     pub fn get_owned_objects(&self, owner: &Obj) -> Result<ObjSet, WorldStateError> {
-        // Use object_owner secondary index to get objects owned by an owner
-        let owned_vec = self.object_owner.get_by_codomain(owner);
-        Ok(ObjSet::from_items(&owned_vec))
+        // Use object_owner secondary index to get objects owned by an owner.
+        let mut owned = Vec::new();
+        self.object_owner
+            .for_each_by_codomain(owner, |obj| owned.push(*obj));
+        Ok(ObjSet::from_iter(owned))
     }
 
     pub fn get_object_location(&self, obj: &Obj) -> Result<Obj, WorldStateError> {
@@ -526,9 +624,11 @@ impl WorldStateTransaction {
     }
 
     pub fn get_object_contents(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
-        // Use object_location secondary index to get contents of a location
-        let contents_vec = self.object_location.get_by_codomain(obj);
-        Ok(ObjSet::from_items(&contents_vec))
+        // Use object_location secondary index to get contents of a location.
+        let mut contents = Vec::new();
+        self.object_location
+            .for_each_by_codomain(obj, |content| contents.push(*content));
+        Ok(ObjSet::from_iter(contents))
     }
 
     // This is more of a guestimate.
@@ -666,14 +766,20 @@ impl WorldStateTransaction {
         verb_name: Symbol,
         resolved: ResolvedVerb,
     ) -> Result<VerbDef, WorldStateError> {
-        let verbdefs = self.get_verbs(&resolved.location())?;
-        let Some(verbdef) = verbdefs.find_ref(&resolved.uuid()) else {
+        let verbdef = self
+            .object_verbdefs
+            .with_domain_value(&resolved.location(), |verbdefs| {
+                verbdefs.find_ref(&resolved.uuid()).cloned()
+            })
+            .map_err(|e| WorldStateError::DatabaseError(format!("Error getting verbs: {e:?}")))?
+            .flatten();
+        let Some(verbdef) = verbdef else {
             return Err(WorldStateError::VerbNotFound(
                 *receiver,
                 verb_name.to_string(),
             ));
         };
-        Ok(verbdef.clone())
+        Ok(verbdef)
     }
 
     pub fn get_verb_by_name(&self, obj: &Obj, name: Symbol) -> Result<VerbDef, WorldStateError> {
@@ -690,8 +796,14 @@ impl WorldStateTransaction {
                 // get_verb_by_name only returns verbs directly on the object, so we need
                 // to look directly on this object. But we should NOT record a miss since
                 // the cached entry is valid for resolve_verb inheritance lookups.
-                let verbdefs = self.get_verbs(obj)?;
-                let Some(verb) = verbdefs.find_first_named_ref(name) else {
+                let verb = self
+                    .object_verbdefs
+                    .with_domain_value(obj, |verbdefs| verbdefs.find_first_named_ref(name).cloned())
+                    .map_err(|e| {
+                        WorldStateError::DatabaseError(format!("Error getting verbs: {e:?}"))
+                    })?
+                    .flatten();
+                let Some(verb) = verb else {
                     // Don't record miss - preserve the inherited verb cache entry
                     return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
                 };
@@ -701,12 +813,18 @@ impl WorldStateTransaction {
                 self.verb_resolution_cache
                     .borrow_mut()
                     .fill_hit(obj, &name, verb.as_resolved());
-                Ok(verb.clone())
+                Ok(verb)
             }
             None => {
                 // No cache entry at all, proceed with normal lookup
-                let verbdefs = self.get_verbs(obj)?;
-                let Some(verb) = verbdefs.find_first_named_ref(name) else {
+                let verb = self
+                    .object_verbdefs
+                    .with_domain_value(obj, |verbdefs| verbdefs.find_first_named_ref(name).cloned())
+                    .map_err(|e| {
+                        WorldStateError::DatabaseError(format!("Error getting verbs: {e:?}"))
+                    })?
+                    .flatten();
+                let Some(verb) = verb else {
                     // Don't record a miss - get_verb_by_name only looks directly on object,
                     // so not finding it here doesn't mean the verb doesn't exist via inheritance
                     return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
@@ -716,21 +834,25 @@ impl WorldStateTransaction {
                 self.verb_resolution_cache
                     .borrow_mut()
                     .fill_hit(obj, &name, verb.as_resolved());
-                Ok(verb.clone())
+                Ok(verb)
             }
         }
     }
 
     pub fn get_verb_by_index(&self, obj: &Obj, index: usize) -> Result<VerbDef, WorldStateError> {
-        let verbs = self.get_verbs(obj)?;
-        if index >= verbs.len() {
+        let len = self
+            .object_verbdefs
+            .with_domain_value(obj, |verbs| verbs.len())
+            .map_err(|e| WorldStateError::DatabaseError(format!("Error getting verbs: {e:?}")))?
+            .unwrap_or(0);
+        if index >= len {
             return Err(WorldStateError::VerbNotFound(*obj, format!("{index}")));
         }
-        let verb = verbs
-            .iter()
-            .nth(index)
-            .ok_or_else(|| WorldStateError::VerbNotFound(*obj, format!("{index}")))?;
-        Ok(verb.clone())
+        self.object_verbdefs
+            .with_domain_value(obj, |verbs| verbs.iter().nth(index))
+            .map_err(|e| WorldStateError::DatabaseError(format!("Error getting verbs: {e:?}")))?
+            .flatten()
+            .ok_or_else(|| WorldStateError::VerbNotFound(*obj, format!("{index}")))
     }
 
     pub fn resolve_verb(
@@ -785,30 +907,35 @@ impl WorldStateTransaction {
         };
         let mut found = false;
         loop {
-            let verbdefs = self.object_verbdefs.get(&search_o).map_err(|e| {
+            let maybe_resolved = self
+                .object_verbdefs
+                .with_domain_value(&search_o, |verbdefs| {
+                    if !first_parent_hit {
+                        self.verb_resolution_cache
+                            .borrow_mut()
+                            .fill_first_parent_with_verbs(obj, Some(search_o));
+                        first_parent_hit = true;
+                    }
+
+                    // Find the named verb (which may be empty if the verb is not defined on this
+                    // object, but is defined on an ancestor
+                    if let Some(verb) = verbdefs.find_first_named_ref(name) {
+                        let resolved = verb.as_resolved();
+                        self.verb_resolution_cache
+                            .borrow_mut()
+                            .fill_hit(obj, &name, resolved);
+                        found = true;
+                        if resolved.matches_spec(&argspec, &flagspec) {
+                            return Some(resolved);
+                        }
+                    }
+                    None
+                })
+                .map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error getting verbs: {e:?}"))
             })?;
-            if let Some(verbdefs) = verbdefs {
-                if !first_parent_hit {
-                    self.verb_resolution_cache
-                        .borrow_mut()
-                        .fill_first_parent_with_verbs(obj, Some(search_o));
-                    first_parent_hit = true;
-                }
-
-                // Find the named verb (which may be empty if the verb is not defined on this
-                // object, but is defined on an ancestor
-                if let Some(verb) = verbdefs.find_first_named_ref(name) {
-                    let resolved = verb.as_resolved();
-                    self.verb_resolution_cache
-                        .borrow_mut()
-                        .fill_hit(obj, &name, resolved);
-
-                    found = true;
-                    if resolved.matches_spec(&argspec, &flagspec) {
-                        return Ok(resolved);
-                    }
-                }
+            if let Some(Some(resolved)) = maybe_resolved {
+                return Ok(resolved);
             }
             search_o = self.get_object_parent(&search_o)?;
             if search_o.is_nothing() {
@@ -1004,33 +1131,35 @@ impl WorldStateTransaction {
         if value.is_none() {
             return Err(WorldStateError::PropertyTypeMismatch);
         }
+        let holder = ObjAndUUIDHolder::new(obj, uuid);
 
         // Set the property value
-        upsert(
-            &mut self.object_propvalues,
-            ObjAndUUIDHolder::new(obj, uuid),
-            value,
-        )
-        .map_err(|e| {
+        upsert(&mut self.object_propvalues, holder.clone(), value).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting property value: {e:?}"))
         })?;
 
         // In lazy mode, ensure we have a local propflags entry when setting a value locally.
         // If we don't have one, create it by inheriting from the canonical permissions.
-        let holder = ObjAndUUIDHolder::new(obj, uuid);
-        if self
-            .object_propflags
-            .get(&holder)
-            .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error checking property flags: {e:?}"))
-            })?
-            .is_none()
-        {
-            // No local propflags entry - create one based on inherited permissions
-            let inherited_perms = self.retrieve_property_permissions(obj, uuid)?;
-            upsert(&mut self.object_propflags, holder, inherited_perms).map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error setting property flags: {e:?}"))
-            })?;
+        if !self.prop_perm_memo.has_known_propflags(&holder) {
+            if !self
+                .object_propflags
+                .has_domain(&holder)
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!("Error checking property flags: {e:?}"))
+                })?
+            {
+                // No local propflags entry - create one based on inherited permissions
+                let inherited_perms = self.retrieve_property_permissions(obj, uuid)?;
+                upsert(&mut self.object_propflags, holder.clone(), inherited_perms).map_err(
+                    |e| {
+                        WorldStateError::DatabaseError(format!(
+                            "Error setting property flags: {e:?}"
+                        ))
+                    },
+                )?;
+            }
+            self.prop_perm_memo.mark_known_propflags(holder);
+            self.invalidate_cached_prop_perms_for_holder(obj, uuid);
         }
 
         self.has_mutations = true;
@@ -1098,6 +1227,9 @@ impl WorldStateTransaction {
         .map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting property owner: {e:?}"))
         })?;
+        self.prop_perm_memo
+            .mark_known_propflags(ObjAndUUIDHolder::new(location, u));
+        self.invalidate_cached_prop_perms_for_holder(location, u);
 
         // If we have an initial value, set it, but just on ourselves. Descendants start out clear.
         if let Some(value) = value {
@@ -1157,6 +1289,9 @@ impl WorldStateTransaction {
             .map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error updating property: {e:?}"))
             })?;
+            self.prop_perm_memo
+                .mark_known_propflags(ObjAndUUIDHolder::new(obj, uuid));
+            self.invalidate_cached_prop_perms_for_holder(obj, uuid);
         }
 
         self.invalidate_prop_cache_for_branch(obj)?;
@@ -1186,7 +1321,10 @@ impl WorldStateTransaction {
                     WorldStateError::DatabaseError(format!("Error deleting property: {e:?}"))
                 })?;
             }
+            self.invalidate_known_propflags_for_holder(&location, uuid);
+            self.invalidate_cached_prop_perms_for_holder(&location, uuid);
         }
+        self.clear_cached_prop_perms();
         self.has_mutations = true;
         self.invalidate_prop_cache_for_branch(obj)?;
         Ok(())
@@ -1257,8 +1395,14 @@ impl WorldStateTransaction {
         obj: &Obj,
         uuid: Uuid,
     ) -> Result<PropPerms, WorldStateError> {
+        let holder = ObjAndUUIDHolder::new(obj, uuid);
+        if let Some(perms) = self.prop_perm_memo.cached_perms(&holder) {
+            return Ok(perms);
+        }
+
         // First check if this object has local propflags (set via set_property or update_property_info)
-        if let Ok(Some(perms)) = self.object_propflags.get(&ObjAndUUIDHolder::new(obj, uuid)) {
+        if let Ok(Some(perms)) = self.object_propflags.get(&holder) {
+            self.prop_perm_memo.cache_perms(holder, perms.clone());
             return Ok(perms);
         }
 
@@ -1289,6 +1433,7 @@ impl WorldStateTransaction {
                 canonical_perms
             };
 
+        self.prop_perm_memo.cache_perms(holder, final_perms.clone());
         Ok(final_perms)
     }
 
@@ -1297,9 +1442,14 @@ impl WorldStateTransaction {
         // Walk up the ancestry chain looking for the property definition
         let ancestors = self.ancestors(obj, true)?;
         for ancestor in ancestors.iter() {
-            let props = self.get_properties(&ancestor)?;
-            if let Some(prop) = props.find(&uuid) {
-                return Ok(prop.clone());
+            let found = self
+                .object_propdefs
+                .with_domain_value(&ancestor, |props| props.find(&uuid))
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!("Error getting properties: {e:?}"))
+                })?;
+            if let Some(prop) = found.flatten() {
+                return Ok(prop);
             }
         }
         Err(WorldStateError::PropertyNotFound(
@@ -1317,42 +1467,48 @@ impl WorldStateTransaction {
 
         // Look in the cache for the first parent with non-empty propdefs. If we have no cache entry,
         // then seek upwards until we find one, record that, and then look there.
-        let (mut propdefs, mut search_o) = {
+        let mut search_o = {
             let first_parent_lookup = self
                 .prop_resolution_cache
                 .borrow()
                 .lookup_first_parent_with_props(obj);
             match first_parent_lookup {
-                Some(Some(o)) => (self.get_properties(&o).ok()?, o),
+                Some(Some(o)) => o,
                 Some(None) => {
                     // No ancestors with verbs, verbnf
                     return None;
                 }
                 None => {
                     let mut search_o = *obj;
-                    let propdefs = loop {
-                        let propdefs = self.get_properties(&search_o).ok()?;
-                        if !propdefs.is_empty() {
+                    loop {
+                        let has_props = self
+                            .object_propdefs
+                            .with_domain_value(&search_o, |propdefs| !propdefs.is_empty())
+                            .ok()?
+                            .unwrap_or(false);
+                        if has_props {
                             self.prop_resolution_cache
                                 .borrow_mut()
                                 .fill_first_parent_with_props(obj, Some(search_o));
-
-                            break propdefs;
+                            break search_o;
                         }
 
                         search_o = self.get_object_parent(&search_o).ok()?;
                         if search_o.is_nothing() {
                             return None;
                         }
-                    };
-                    (propdefs, search_o)
+                    }
                 }
             }
         };
 
         let mut found_propdef = None;
         loop {
-            let propdef = propdefs.find_first_named(name);
+            let propdef = self
+                .object_propdefs
+                .with_domain_value(&search_o, |propdefs| propdefs.find_first_named(name))
+                .ok()?
+                .flatten();
             if let Some(propdef) = propdef {
                 found_propdef = Some(propdef);
                 break;
@@ -1362,7 +1518,6 @@ impl WorldStateTransaction {
             if search_o.is_nothing() {
                 break;
             }
-            propdefs = self.get_properties(&search_o).ok()?;
         }
         let Some(propdef) = found_propdef else {
             self.prop_resolution_cache
@@ -1919,13 +2074,17 @@ impl WorldStateTransaction {
                 WorldStateError::DatabaseError(format!("Error deleting old property flags: {e:?}"))
             })?;
             self.object_propflags
-                .upsert(new_holder, flags)
+                .upsert(new_holder.clone(), flags)
                 .map_err(|e| {
                     WorldStateError::DatabaseError(format!(
                         "Error setting new property flags: {e:?}"
                     ))
                 })?;
+            self.prop_perm_memo.invalidate_known_for_holder(&old_holder);
+            self.prop_perm_memo.mark_known_propflags(new_holder);
+            self.prop_perm_memo.invalidate_cached_for_holder(&old_holder);
         }
+        self.clear_cached_prop_perms();
 
         self.has_mutations = true;
 

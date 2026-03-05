@@ -433,14 +433,15 @@ where
         {
             match &entry.operation {
                 OpType::Delete => {
-                    // Check master index to determine if this should be Insert or Update
-                    if let Some(master_entry) = self.index.master_entries.index_lookup(&domain) {
-                        // Entry exists in master index, convert to Update
-                        entry.read_ts = master_entry.ts;
+                    // Reuse delete-path provenance:
+                    // - read_ts < tx.ts means the key existed at transaction start, so this is
+                    //   an update of an existing tuple.
+                    // - read_ts == tx.ts means this key only existed locally, so this remains
+                    //   an insert.
+                    if entry.read_ts < self.tx.ts {
                         entry.write_ts = self.tx.ts;
                         entry.operation = OpType::Update(value);
                     } else {
-                        // No entry in master index, convert to Insert
                         entry.read_ts = self.tx.ts;
                         entry.write_ts = self.tx.ts;
                         entry.operation = OpType::Insert(value);
@@ -452,15 +453,9 @@ where
                 OpType::Insert(_) | OpType::Update(_) => {
                     // Update existing entry
                     entry.write_ts = self.tx.ts;
-                    let next_op = if matches!(entry.operation, OpType::Update(_)) {
-                        OpType::Update(value)
-                    } else {
-                        OpType::Insert(value)
-                    };
-                    let old_value = match std::mem::replace(&mut entry.operation, next_op) {
-                        OpType::Insert(old) | OpType::Update(old) => {
-                            // Update local secondary index
-                            old
+                    let old_value = match &mut entry.operation {
+                        OpType::Insert(current) | OpType::Update(current) => {
+                            std::mem::replace(current, value)
                         }
                         OpType::Delete => unreachable!(), // Already handled above
                     };
@@ -523,7 +518,25 @@ where
     }
 
     pub fn has_domain(&self, domain: &Domain) -> Result<bool, Error> {
-        Ok(self.get(domain)?.is_some())
+        // Existence-only path: avoid cloning codomain values from `get()`.
+        if self.index.has_local_mutations
+            && let Some(op) = self.index.local_operations.get(domain)
+        {
+            return Ok(!op.operation.is_delete());
+        }
+
+        if self.index.master_entries.index_lookup(domain).is_some() {
+            return Ok(true);
+        }
+
+        if self.index.provider_fully_loaded {
+            return Ok(false);
+        }
+
+        Ok(matches!(
+            self.backing_source.get(domain)?,
+            Some((ts, _)) if ts <= self.tx.ts
+        ))
     }
 
     /// Bulk check existence of multiple domains efficiently
@@ -571,31 +584,50 @@ where
     }
 
     pub fn get_by_codomain(&self, codomain: &Codomain) -> Vec<Domain> {
-        // Start with results from master entries
-        let mut results = self.index.master_entries.get_by_codomain(codomain);
+        let mut results = Vec::new();
+        self.for_each_by_codomain(codomain, |domain| results.push(domain.clone()));
+        results
+    }
 
-        // Process local operations to account for uncommitted changes
-        for (domain, op) in self.index.local_operations.iter() {
-            match &op.operation {
-                OpType::Insert(value) | OpType::Update(value) => {
-                    if value == codomain {
-                        // Add this domain if it maps to the requested codomain
-                        if !results.contains(domain) {
-                            results.push(domain.clone());
+    /// Visit each domain that maps to the given codomain in this transaction's view.
+    /// Applies local operation overlays over the base index without materializing
+    /// the base reverse-lookup vector.
+    pub fn for_each_by_codomain<F>(&self, codomain: &Codomain, mut f: F)
+    where
+        F: FnMut(&Domain),
+    {
+        let mut removed_or_rewritten =
+            HashSet::with_hasher(BuildHasherDefault::<AHasher>::default());
+        let mut local_matches = HashSet::with_hasher(BuildHasherDefault::<AHasher>::default());
+
+        if self.index.has_local_mutations {
+            for (domain, op) in self.index.local_operations.iter() {
+                match &op.operation {
+                    OpType::Insert(value) | OpType::Update(value) => {
+                        if value == codomain {
+                            local_matches.insert(domain.clone());
+                        } else {
+                            removed_or_rewritten.insert(domain.clone());
                         }
-                    } else {
-                        // Remove this domain if it no longer maps to the requested codomain
-                        results.retain(|d| d != domain);
                     }
-                }
-                OpType::Delete => {
-                    // Remove this domain since it's been deleted
-                    results.retain(|d| d != domain);
+                    OpType::Delete => {
+                        removed_or_rewritten.insert(domain.clone());
+                    }
                 }
             }
         }
 
-        results
+        self.index
+            .master_entries
+            .for_each_by_codomain(codomain, &mut |domain| {
+                if !removed_or_rewritten.contains(domain) && !local_matches.contains(domain) {
+                    f(domain);
+                }
+            });
+
+        for domain in local_matches.iter() {
+            f(domain);
+        }
     }
 
     pub fn get(&self, domain: &Domain) -> Result<Option<Codomain>, Error> {
@@ -634,6 +666,53 @@ where
 
         match self.backing_source.get(domain)? {
             Some((read_ts, value)) if read_ts < self.tx.ts => Ok(Some(value)),
+            _ => Ok(None),
+        }
+    }
+
+    /// Invoke `f` with the tuple value for `domain` if one is visible to this transaction.
+    ///
+    /// This mirrors `get()` visibility/precedence semantics while avoiding codomain cloning
+    /// when data is already available in local operations or the in-memory index.
+    pub fn with_domain_value<R, F>(&self, domain: &Domain, f: F) -> Result<Option<R>, Error>
+    where
+        F: FnOnce(&Codomain) -> R,
+    {
+        // Fast path: no local mutations means no local-ops lookup needed.
+        if !self.index.has_local_mutations {
+            if let Some(entry) = self.index.master_entries.index_lookup(domain) {
+                return Ok(Some(f(&entry.value)));
+            }
+
+            if self.index.provider_fully_loaded {
+                return Ok(None);
+            }
+
+            return match self.backing_source.get(domain)? {
+                Some((read_ts, value)) if read_ts < self.tx.ts => Ok(Some(f(&value))),
+                _ => Ok(None),
+            };
+        }
+
+        if let Some(op) = self.index.local_operations.get(domain) {
+            match &op.operation {
+                OpType::Delete => return Ok(None),
+                OpType::Insert(value) | OpType::Update(value) => {
+                    return Ok(Some(f(value)));
+                }
+            }
+        }
+
+        if let Some(entry) = self.index.master_entries.index_lookup(domain) {
+            return Ok(Some(f(&entry.value)));
+        }
+
+        if self.index.provider_fully_loaded {
+            return Ok(None);
+        }
+
+        match self.backing_source.get(domain)? {
+            Some((read_ts, value)) if read_ts < self.tx.ts => Ok(Some(f(&value))),
             _ => Ok(None),
         }
     }

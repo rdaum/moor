@@ -255,6 +255,14 @@ struct TxOpsContext {
         Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
     update_local_delete_none_txs:
         Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
+    upsert_hit_master_txs:
+        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
+    upsert_miss_insert_txs:
+        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
+    upsert_local_delete_to_update_txs:
+        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
+    upsert_local_delete_to_insert_txs:
+        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
     delete_hit_master_txs:
         Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
     delete_miss_none_txs:
@@ -309,6 +317,10 @@ impl BenchContext for TxOpsContext {
         let mut update_miss_none_txs = Vec::with_capacity(chunk_size);
         let mut update_local_insert_txs = Vec::with_capacity(chunk_size);
         let mut update_local_delete_none_txs = Vec::with_capacity(chunk_size);
+        let mut upsert_hit_master_txs = Vec::with_capacity(chunk_size);
+        let mut upsert_miss_insert_txs = Vec::with_capacity(chunk_size);
+        let mut upsert_local_delete_to_update_txs = Vec::with_capacity(chunk_size);
+        let mut upsert_local_delete_to_insert_txs = Vec::with_capacity(chunk_size);
         let mut delete_hit_master_txs = Vec::with_capacity(chunk_size);
         let mut delete_miss_none_txs = Vec::with_capacity(chunk_size);
         let mut delete_local_insert_txs = Vec::with_capacity(chunk_size);
@@ -343,6 +355,8 @@ impl BenchContext for TxOpsContext {
 
             update_hit_master_txs.push(relation.start_from_index(&tx, base_index.as_ref()));
             update_miss_none_txs.push(relation.start_from_index(&tx, base_index.as_ref()));
+            upsert_hit_master_txs.push(relation.start_from_index(&tx, base_index.as_ref()));
+            upsert_miss_insert_txs.push(relation.start_from_index(&tx, base_index.as_ref()));
 
             let mut update_local_insert = relation.start_from_index(&tx, base_index.as_ref());
             update_local_insert
@@ -353,6 +367,19 @@ impl BenchContext for TxOpsContext {
             let mut update_local_delete_none = relation.start_from_index(&tx, base_index.as_ref());
             update_local_delete_none.delete(&present_domain).unwrap();
             update_local_delete_none_txs.push(update_local_delete_none);
+            let mut upsert_local_delete_to_update =
+                relation.start_from_index(&tx, base_index.as_ref());
+            upsert_local_delete_to_update.delete(&present_domain).unwrap();
+            upsert_local_delete_to_update_txs.push(upsert_local_delete_to_update);
+            let mut upsert_local_delete_to_insert =
+                relation.start_from_index(&tx, base_index.as_ref());
+            upsert_local_delete_to_insert
+                .insert(missing_domain.clone(), PlainCodomain(711))
+                .unwrap();
+            upsert_local_delete_to_insert
+                .delete(&missing_domain)
+                .unwrap();
+            upsert_local_delete_to_insert_txs.push(upsert_local_delete_to_insert);
 
             delete_hit_master_txs.push(relation.start_from_index(&tx, base_index.as_ref()));
             delete_miss_none_txs.push(relation.start_from_index(&tx, base_index.as_ref()));
@@ -395,6 +422,10 @@ impl BenchContext for TxOpsContext {
             update_miss_none_txs,
             update_local_insert_txs,
             update_local_delete_none_txs,
+            upsert_hit_master_txs,
+            upsert_miss_insert_txs,
+            upsert_local_delete_to_update_txs,
+            upsert_local_delete_to_insert_txs,
             delete_hit_master_txs,
             delete_miss_none_txs,
             delete_local_insert_txs,
@@ -561,6 +592,54 @@ fn tx_op_update_local_delete_none(ctx: &mut TxOpsContext, chunk_size: usize, _ch
         black_box(
             ctx.update_local_delete_none_txs[i]
                 .update(&ctx.present_domain, PlainCodomain(400 + (i as u64)))
+                .unwrap(),
+        );
+    }
+}
+
+fn tx_op_upsert_hit_master(ctx: &mut TxOpsContext, chunk_size: usize, _chunk_num: usize) {
+    for i in 0..chunk_size {
+        black_box(
+            ctx.upsert_hit_master_txs[i]
+                .upsert(ctx.present_domain.clone(), PlainCodomain(450 + (i as u64)))
+                .unwrap(),
+        );
+    }
+}
+
+fn tx_op_upsert_miss_insert(ctx: &mut TxOpsContext, chunk_size: usize, _chunk_num: usize) {
+    for i in 0..chunk_size {
+        black_box(
+            ctx.upsert_miss_insert_txs[i]
+                .upsert(ctx.missing_domain.clone(), PlainCodomain(460 + (i as u64)))
+                .unwrap(),
+        );
+    }
+}
+
+fn tx_op_upsert_local_delete_to_update(
+    ctx: &mut TxOpsContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        black_box(
+            ctx.upsert_local_delete_to_update_txs[i]
+                .upsert(ctx.present_domain.clone(), PlainCodomain(470 + (i as u64)))
+                .unwrap(),
+        );
+    }
+}
+
+fn tx_op_upsert_local_delete_to_insert(
+    ctx: &mut TxOpsContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        black_box(
+            ctx.upsert_local_delete_to_insert_txs[i]
+                .upsert(ctx.missing_domain.clone(), PlainCodomain(480 + (i as u64)))
                 .unwrap(),
         );
     }
@@ -758,6 +837,26 @@ pub fn main() {
             name: "tx_op_update_local_delete_none",
             group: "tx_ops",
             func: tx_op_update_local_delete_none,
+        },
+        BenchmarkDef {
+            name: "tx_op_upsert_hit_master",
+            group: "tx_ops",
+            func: tx_op_upsert_hit_master,
+        },
+        BenchmarkDef {
+            name: "tx_op_upsert_miss_insert",
+            group: "tx_ops",
+            func: tx_op_upsert_miss_insert,
+        },
+        BenchmarkDef {
+            name: "tx_op_upsert_local_delete_to_update",
+            group: "tx_ops",
+            func: tx_op_upsert_local_delete_to_update,
+        },
+        BenchmarkDef {
+            name: "tx_op_upsert_local_delete_to_insert",
+            group: "tx_ops",
+            func: tx_op_upsert_local_delete_to_insert,
         },
         BenchmarkDef {
             name: "tx_op_delete_hit_master",

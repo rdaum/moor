@@ -332,6 +332,7 @@ macro_rules! define_relations {
                         verb_resolution_cache: std::cell::RefCell::new(verb_resolution_cache),
                         prop_resolution_cache: std::cell::RefCell::new(prop_resolution_cache),
                         ancestry_cache: std::cell::RefCell::new(ancestry_cache),
+                        prop_perm_memo: crate::engine::ws_transaction::PropertyPermMemo::new(),
                         has_mutations: false,
                     }
                 }
@@ -407,6 +408,8 @@ macro_rules! define_relations {
                 pub(crate) prop_resolution_cache: std::cell::RefCell<PropResolutionCache>,
                 /// Local fork of the ancestry cache
                 pub(crate) ancestry_cache: std::cell::RefCell<AncestryCache>,
+                /// Per-transaction memo state for property permission lookups.
+                pub(crate) prop_perm_memo: crate::engine::ws_transaction::PropertyPermMemo,
                 /// Whether this transaction has performed any mutations
                 pub(crate) has_mutations: bool,
             }

@@ -104,6 +104,8 @@ impl DbWorldState {
         value: &Var,
         hint: Option<PropertyLookupHint>,
     ) -> Result<Option<PropertyLookupHint>, WorldStateError> {
+        let perms_who = self.perms(perms)?;
+
         // You have to use move/chparent for this kinda fun.
         if pname == *LOCATION_SYM
             || pname == *CONTENTS_SYM
@@ -123,15 +125,14 @@ impl DbWorldState {
             let (mut flags, objowner) = (self.flags_of(obj)?, self.owner_of(obj)?);
 
             // User is either wizard or owner
-            self.perms(perms)?
-                .check_object_allows(&objowner, flags, ObjFlag::Write.into())?;
+            perms_who.check_object_allows(&objowner, flags, ObjFlag::Write.into())?;
             if pname == *NAME_SYM {
                 let Some(name) = value.as_string() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
 
                 // For player objects (objects with User flag), only wizards can set the name
-                if flags.contains(ObjFlag::User) && !self.perms(perms)?.check_is_wizard()? {
+                if flags.contains(ObjFlag::User) && !perms_who.check_is_wizard()? {
                     return Err(WorldStateError::PropertyPermissionDenied);
                 }
 
@@ -144,7 +145,7 @@ impl DbWorldState {
                 let Some(owner) = value.as_object() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                self.perms(perms)?.check_wizard()?;
+                perms_who.check_wizard()?;
                 self.get_tx_mut().set_object_owner(obj, &owner)?;
                 record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
                 return Ok(None);
@@ -195,7 +196,7 @@ impl DbWorldState {
 
         if pname == *PROGRAMMER_SYM || pname == *WIZARD_SYM {
             // Caller *must* be a wizard for either of these.
-            self.perms(perms)?.check_wizard()?;
+            perms_who.check_wizard()?;
 
             // Gott get and then set flags
             let mut flags = self.flags_of(obj)?;
@@ -237,8 +238,7 @@ impl DbWorldState {
                     .resolve_property_by_uuid(obj, hint.property_uuid)
                 {
                     Ok((_, propperms, _)) => {
-                        self.perms(perms)?
-                            .check_property_allows(&propperms, PropFlag::Write)?;
+                        perms_who.check_property_allows(&propperms, PropFlag::Write)?;
                         self.get_tx_mut()
                             .set_property(obj, hint.property_uuid, value.clone())?;
                         record_property_pic_write(PropertyLookupPicOutcome::Hit);
@@ -252,8 +252,7 @@ impl DbWorldState {
         }
 
         let (pdef, _, propperms, _) = self.get_tx().resolve_property(obj, pname)?;
-        self.perms(perms)?
-            .check_property_allows(&propperms, PropFlag::Write)?;
+        perms_who.check_property_allows(&propperms, PropFlag::Write)?;
         self.get_tx_mut()
             .set_property(obj, pdef.uuid(), value.clone())?;
         record_property_pic_write(pic_outcome);

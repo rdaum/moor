@@ -70,6 +70,14 @@ where
         Vec::new()
     }
 
+    /// Visit each domain that maps to the given codomain.
+    /// Default implementation delegates to `get_by_codomain`.
+    fn for_each_by_codomain(&self, codomain: &Codomain, f: &mut dyn FnMut(&Domain)) {
+        for domain in self.get_by_codomain(codomain) {
+            f(&domain);
+        }
+    }
+
     /// Whether this index supports secondary lookups
     fn has_secondary_index(&self) -> bool {
         false
@@ -347,6 +355,16 @@ where
         }
     }
 
+    fn for_each_by_codomain(&self, codomain: &Codomain, f: &mut dyn FnMut(&Domain)) {
+        if let Some(ref secondary) = self.inner.secondary_index
+            && let Some(set) = secondary.get(codomain)
+        {
+            for domain in set.iter() {
+                f(domain);
+            }
+        }
+    }
+
     fn has_secondary_index(&self) -> bool {
         true
     }
@@ -456,6 +474,13 @@ mod tests {
         // Test nonexistent codomain
         let result_empty = index.get_by_codomain(&TestCodomain(999));
         assert!(result_empty.is_empty());
+
+        // Test for_each_by_codomain
+        let mut visited = Vec::new();
+        index.for_each_by_codomain(&codomain_a, &mut |d| visited.push(d.clone()));
+        assert_eq!(visited.len(), 2);
+        assert!(visited.contains(&domain1));
+        assert!(visited.contains(&domain2));
     }
 
     #[test]
