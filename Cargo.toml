@@ -238,3 +238,5 @@ termimad = "0.34"
 # Patch to forked (maintained by me) version of ZeroMQ
 [patch.crates-io]
 zmq = { git = "https://github.com/rdaum/rust-zmq" }
+age = { git = "https://github.com/str4d/rage", rev = "d1912012424ccb7b63172813ee2776cc570684fa" }
+age-core = { git = "https://github.com/str4d/rage", rev = "d1912012424ccb7b63172813ee2776cc570684fa" }
