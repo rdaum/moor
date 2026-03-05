@@ -14,7 +14,6 @@ description = "LambdaMOO compatible textdump parsing and generation for mooR."
 
 [dev-dependencies]
 moor-db = { path = "../db" }
-similar-asserts.workspace = true
 
 [dependencies]
 # Internal Dependencies
