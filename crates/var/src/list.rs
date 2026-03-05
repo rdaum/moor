@@ -346,7 +346,7 @@ impl Ord for List {
         }
 
         for (a, b) in self.iter_ref().zip(other.iter_ref()) {
-            match a.cmp(&b) {
+            match a.cmp(b) {
                 std::cmp::Ordering::Equal => continue,
                 x => return x,
             }
