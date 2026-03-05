@@ -17,7 +17,6 @@ use crate::{
     v_list_iter,
     variant::OP_HINT_LIST_APPEND,
 };
-use num_traits::ToPrimitive;
 use std::{
     cmp::{max, min},
     fmt::{Debug, Formatter},
@@ -142,8 +141,8 @@ impl List {
             return Ok(v_list_iter(new_iter));
         }
 
-        let from = from.to_usize().unwrap_or(0);
-        let to = to.to_usize().unwrap_or(0);
+        let from = usize::try_from(from).unwrap_or(0);
+        let to = usize::try_from(to).unwrap_or(0);
 
         if from > base_len + 1 {
             return Err(E_RANGE.with_msg(|| {

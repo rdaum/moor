@@ -1623,17 +1623,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "enum-primitive-derive"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba7795da175654fe16979af73f81f26a8ea27638d8d9823d317016888a63dc4c"
-dependencies = [
- "num-traits",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "enum_dispatch"
 version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3221,14 +3210,12 @@ version = "1.0.0-rc1"
 dependencies = [
  "binary-layout",
  "byteview",
- "enum-primitive-derive",
  "eyre",
  "itertools 0.14.0",
  "lazy_static",
  "libc",
  "moor-bench-utils",
  "moor-var",
- "num-traits",
  "serde",
  "serde_json",
  "smallvec",
@@ -3648,7 +3635,6 @@ dependencies = [
  "imbl",
  "lazy_static",
  "moor-bench-utils",
- "num-traits",
  "once_cell",
  "papaya",
  "paste",

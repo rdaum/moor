@@ -14,9 +14,8 @@
 use binary_layout::{Field, binary_layout};
 use std::fmt::{Display, Formatter};
 
-use crate::util::BitEnum;
+use crate::util::{BitEnum, BitFlag};
 use byteview::ByteView;
-use enum_primitive_derive::Primitive;
 use moor_var::{ByteSized, NOTHING, Obj, Symbol};
 use serde::{Deserialize, Serialize};
 
@@ -97,7 +96,8 @@ impl Display for ObjectRef {
     }
 }
 
-#[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive)]
+#[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash)]
+#[repr(u8)]
 pub enum ObjFlag {
     User = 0,
     Programmer = 1,
@@ -107,6 +107,12 @@ pub enum ObjFlag {
     Write = 5,
     Obsolete2 = 6,
     Fertile = 7,
+}
+
+impl BitFlag for ObjFlag {
+    fn bit_index(self) -> u8 {
+        self as u8
+    }
 }
 
 impl ObjFlag {
@@ -172,7 +178,8 @@ pub fn obj_flags_string(flags: BitEnum<ObjFlag>) -> String {
 }
 
 // The set of built-in object attributes
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Hash, Primitive)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Hash)]
+#[repr(u8)]
 pub enum ObjAttr {
     Owner = 0,
     Name = 1,

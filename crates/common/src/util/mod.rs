@@ -21,7 +21,7 @@ mod time;
 mod trace_events;
 mod xdg;
 
-pub use bitenum::BitEnum;
+pub use bitenum::{BitEnum, BitFlag};
 pub use cache_padded::CachePadded;
 pub use counter::ConcurrentCounter;
 pub(crate) use counter::preferred_shared_shard_count;

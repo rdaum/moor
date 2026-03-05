@@ -12,7 +12,6 @@
 //
 
 use arcstr::ArcStr;
-use num_traits::ToPrimitive;
 use std::{
     cmp::{Ordering, max},
     fmt::{Display, Formatter},
@@ -751,14 +750,14 @@ impl Sequence for Str {
         };
         result_str.push_str(with_val.as_str());
 
-        match to.to_usize() {
-            Some(to) => {
+        match usize::try_from(to) {
+            Ok(to) => {
                 if to + 1 < char_len {
                     let suffix_start = char_index_to_byte_index(to + 1);
                     result_str.push_str(&base_str[suffix_start..]);
                 }
             }
-            None => {
+            Err(_) => {
                 result_str.push_str(base_str);
             }
         }

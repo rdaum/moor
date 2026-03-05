@@ -11,17 +11,23 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::util::BitEnum;
+use crate::util::{BitEnum, BitFlag};
 use binary_layout::binary_layout;
 use byteview::ByteView;
-use enum_primitive_derive::Primitive;
 use moor_var::{ByteSized, Obj, Symbol, Var};
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd, Primitive)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[repr(u8)]
 pub enum PropFlag {
     Read = 0,
     Write = 1,
     Chown = 2,
+}
+
+impl BitFlag for PropFlag {
+    fn bit_index(self) -> u8 {
+        self as u8
+    }
 }
 
 impl PropFlag {
@@ -78,7 +84,8 @@ pub fn prop_flags_string(flags: BitEnum<PropFlag>) -> String {
     s
 }
 
-#[derive(Debug, Clone, Copy, Primitive)]
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
 pub enum PropAttr {
     Value = 0,
     Location = 1,

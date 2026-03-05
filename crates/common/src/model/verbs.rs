@@ -11,22 +11,42 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::{model::r#match::VerbArgsSpec, util::BitEnum};
+use crate::{
+    model::r#match::VerbArgsSpec,
+    util::{BitEnum, BitFlag},
+};
 use binary_layout::LayoutAs;
-use enum_primitive_derive::Primitive;
 use moor_var::{
     Obj, Symbol,
     encode::{DecodingError, EncodingError},
     program::ProgramType,
 };
-use num_traits::FromPrimitive;
 
-#[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive)]
+#[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash)]
+#[repr(u8)]
 pub enum VerbFlag {
     Read = 0,
     Write = 1,
     Exec = 2,
     Debug = 3,
+}
+
+impl BitFlag for VerbFlag {
+    fn bit_index(self) -> u8 {
+        self as u8
+    }
+}
+
+impl VerbFlag {
+    fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::Read),
+            1 => Some(Self::Write),
+            2 => Some(Self::Exec),
+            3 => Some(Self::Debug),
+            _ => None,
+        }
+    }
 }
 
 impl LayoutAs<u8> for VerbFlag {
@@ -126,7 +146,8 @@ impl VerbFlag {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Vid(pub i64);
 
-#[derive(Clone, Copy, Debug, Primitive)]
+#[derive(Clone, Copy, Debug)]
+#[repr(u8)]
 pub enum VerbAttr {
     Definer = 0,
     Owner = 1,
@@ -136,13 +157,23 @@ pub enum VerbAttr {
 }
 
 /// The program type encoded for a verb.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Primitive)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum BinaryType {
     /// For builtin functions in stack frames -- or empty code blobs.
     None = 0,
     /// Opcodes match almost 1:1 with LambdaMOO 1.8.x, but is not "binary" compatible.
     LambdaMoo18X = 1,
+}
+
+impl BinaryType {
+    fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::None),
+            1 => Some(Self::LambdaMoo18X),
+            _ => None,
+        }
+    }
 }
 
 impl LayoutAs<u8> for BinaryType {

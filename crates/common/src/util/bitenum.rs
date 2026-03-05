@@ -31,19 +31,22 @@ use moor_var::ByteSized;
 ///
 /// This remains a custom type because it participates in the project's binary encodings and byte
 /// views.
-use num_traits::ToPrimitive;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
+
+pub trait BitFlag {
+    fn bit_index(self) -> u8;
+}
 
 #[derive(
     Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash, FromBytes, Immutable, IntoBytes,
 )]
 #[repr(transparent)]
-pub struct BitEnum<T: ToPrimitive> {
+pub struct BitEnum<T: BitFlag> {
     value: u16,
     phantom: PhantomData<T>,
 }
 
-impl<T: ToPrimitive> LayoutAs<u16> for BitEnum<T> {
+impl<T: BitFlag> LayoutAs<u16> for BitEnum<T> {
     type ReadError = DecodingError;
     type WriteError = EncodingError;
 
@@ -59,12 +62,12 @@ impl<T: ToPrimitive> LayoutAs<u16> for BitEnum<T> {
     }
 }
 
-impl<T: ToPrimitive> BitEnum<T> {
+impl<T: BitFlag> BitEnum<T> {
     #[inline]
     fn bit(value: T) -> u16 {
-        let bit = value.to_u64().unwrap();
+        let bit = u32::from(value.bit_index());
         debug_assert!(
-            bit < u16::BITS as u64,
+            bit < u16::BITS,
             "BitEnum discriminant out of range: {bit}"
         );
         1u16 << bit
@@ -143,7 +146,7 @@ impl<T: ToPrimitive> BitEnum<T> {
     }
 }
 
-impl<T: ToPrimitive> BitOr for BitEnum<T> {
+impl<T: BitFlag> BitOr for BitEnum<T> {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
@@ -154,19 +157,19 @@ impl<T: ToPrimitive> BitOr for BitEnum<T> {
     }
 }
 
-impl<T: ToPrimitive> Default for BitEnum<T> {
+impl<T: BitFlag> Default for BitEnum<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: ToPrimitive> BitOrAssign<T> for BitEnum<T> {
+impl<T: BitFlag> BitOrAssign<T> for BitEnum<T> {
     fn bitor_assign(&mut self, rhs: T) {
         self.set(rhs);
     }
 }
 
-impl<T: ToPrimitive> BitOr<T> for BitEnum<T> {
+impl<T: BitFlag> BitOr<T> for BitEnum<T> {
     type Output = Self;
 
     fn bitor(self, rhs: T) -> Self::Output {
@@ -176,13 +179,13 @@ impl<T: ToPrimitive> BitOr<T> for BitEnum<T> {
     }
 }
 
-impl<T: ToPrimitive> From<T> for BitEnum<T> {
+impl<T: BitFlag> From<T> for BitEnum<T> {
     fn from(value: T) -> Self {
         Self::new_with(value)
     }
 }
 
-impl<T: ToPrimitive> ByteSized for BitEnum<T> {
+impl<T: BitFlag> ByteSized for BitEnum<T> {
     fn size_bytes(&self) -> usize {
         2
     }
@@ -190,8 +193,7 @@ impl<T: ToPrimitive> ByteSized for BitEnum<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::BitEnum;
-    use num_traits::ToPrimitive;
+    use super::{BitEnum, BitFlag};
 
     #[derive(Clone, Copy)]
     enum DemoFlag {
@@ -200,13 +202,9 @@ mod tests {
         C = 2,
     }
 
-    impl ToPrimitive for DemoFlag {
-        fn to_i64(&self) -> Option<i64> {
-            Some(*self as i64)
-        }
-
-        fn to_u64(&self) -> Option<u64> {
-            Some(*self as u64)
+    impl BitFlag for DemoFlag {
+        fn bit_index(self) -> u8 {
+            self as u8
         }
     }
 
