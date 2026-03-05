@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use binary_layout::LayoutAs;
 use std::{
     marker::PhantomData,
     ops::{BitOr, BitOrAssign},
@@ -46,23 +45,18 @@ pub struct BitEnum<T: BitFlag> {
     phantom: PhantomData<T>,
 }
 
-impl<T: BitFlag> LayoutAs<u16> for BitEnum<T> {
-    type ReadError = DecodingError;
-    type WriteError = EncodingError;
-
-    fn try_read(v: u16) -> Result<Self, Self::ReadError> {
+impl<T: BitFlag> BitEnum<T> {
+    pub fn try_read(v: u16) -> Result<Self, DecodingError> {
         Ok(Self {
             value: v,
             phantom: PhantomData,
         })
     }
 
-    fn try_write(v: Self) -> Result<u16, Self::WriteError> {
+    pub fn try_write(v: Self) -> Result<u16, EncodingError> {
         Ok(v.to_u16())
     }
-}
 
-impl<T: BitFlag> BitEnum<T> {
     #[inline]
     fn bit(value: T) -> u16 {
         let bit = u32::from(value.bit_index());

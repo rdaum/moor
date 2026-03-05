@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use binary_layout::{Field, binary_layout};
 use std::fmt::{Display, Formatter};
 
 use crate::util::{BitEnum, BitFlag};
@@ -199,13 +198,31 @@ impl Display for ObjAttr {
     }
 }
 
-binary_layout!(objattrs_buf, LittleEndian, {
-    owner: Obj as u64,
-    parent: Obj as u64,
-    location: Obj as u64,
-    flags: BitEnum<ObjFlag> as u16,
-    name: [u8],
-});
+const OWNER_OFFSET: usize = 0;
+const PARENT_OFFSET: usize = OWNER_OFFSET + 8;
+const LOCATION_OFFSET: usize = PARENT_OFFSET + 8;
+const FLAGS_OFFSET: usize = LOCATION_OFFSET + 8;
+const NAME_OFFSET: usize = FLAGS_OFFSET + 2;
+
+fn read_obj_at(buf: &[u8], offset: usize) -> Obj {
+    let mut bytes = [0u8; 8];
+    bytes.copy_from_slice(&buf[offset..offset + 8]);
+    Obj::from_bytes(&bytes).expect("Failed to decode object id")
+}
+
+fn write_obj_at(buf: &mut [u8], offset: usize, value: Obj) {
+    buf[offset..offset + 8].copy_from_slice(&value.as_u64().to_le_bytes());
+}
+
+fn read_flags_at(buf: &[u8], offset: usize) -> BitEnum<ObjFlag> {
+    let mut bytes = [0u8; 2];
+    bytes.copy_from_slice(&buf[offset..offset + 2]);
+    BitEnum::from_u16(u16::from_le_bytes(bytes))
+}
+
+fn write_flags_at(buf: &mut [u8], offset: usize, value: BitEnum<ObjFlag>) {
+    buf[offset..offset + 2].copy_from_slice(&value.to_u16().to_le_bytes());
+}
 
 #[derive(Debug, Clone)]
 pub struct ObjAttrs(ByteView);
@@ -213,25 +230,11 @@ pub struct ObjAttrs(ByteView);
 impl ObjAttrs {
     #[must_use]
     pub fn empty() -> Self {
-        let mut buffer = vec![0; objattrs_buf::name::OFFSET];
-        let mut objattrs_view = objattrs_buf::View::new(&mut buffer);
-        objattrs_view
-            .owner_mut()
-            .try_write(NOTHING)
-            .expect("Failed to encode owner");
-        objattrs_view
-            .parent_mut()
-            .try_write(NOTHING)
-            .expect("Failed to encode parent");
-        objattrs_view
-            .location_mut()
-            .try_write(NOTHING)
-            .expect("Failed to encode location");
-        objattrs_view
-            .flags_mut()
-            .try_write(BitEnum::new())
-            .expect("Failed to encode flags");
-
+        let mut buffer = vec![0; NAME_OFFSET];
+        write_obj_at(&mut buffer, OWNER_OFFSET, NOTHING);
+        write_obj_at(&mut buffer, PARENT_OFFSET, NOTHING);
+        write_obj_at(&mut buffer, LOCATION_OFFSET, NOTHING);
+        write_flags_at(&mut buffer, FLAGS_OFFSET, BitEnum::new());
         Self(ByteView::from(buffer))
     }
 
@@ -242,26 +245,13 @@ impl ObjAttrs {
         flags: BitEnum<ObjFlag>,
         name: &str,
     ) -> Self {
-        let header_size = objattrs_buf::name::OFFSET;
+        let header_size = NAME_OFFSET;
         let name_bytes = name.as_bytes();
         let mut buf = vec![0; header_size + name_bytes.len()];
-        let mut objattrs_view = objattrs_buf::View::new(&mut buf);
-        objattrs_view
-            .owner_mut()
-            .try_write(owner)
-            .expect("Failed to encode owner");
-        objattrs_view
-            .parent_mut()
-            .try_write(parent)
-            .expect("Failed to encode parent");
-        objattrs_view
-            .location_mut()
-            .try_write(location)
-            .expect("Failed to encode location");
-        objattrs_view
-            .flags_mut()
-            .try_write(flags)
-            .expect("Failed to encode flags");
+        write_obj_at(&mut buf, OWNER_OFFSET, owner);
+        write_obj_at(&mut buf, PARENT_OFFSET, parent);
+        write_obj_at(&mut buf, LOCATION_OFFSET, location);
+        write_flags_at(&mut buf, FLAGS_OFFSET, flags);
 
         buf[header_size..].copy_from_slice(name_bytes);
 
@@ -269,79 +259,57 @@ impl ObjAttrs {
     }
 
     pub fn owner(&self) -> Option<Obj> {
-        let objattrs_view = objattrs_buf::View::new(self.0.as_ref());
-        let oid = objattrs_view.owner().try_read().unwrap();
+        let oid = read_obj_at(self.0.as_ref(), OWNER_OFFSET);
         if oid == NOTHING { None } else { Some(oid) }
     }
 
     pub fn set_owner(&mut self, o: Obj) -> &mut Self {
         let mut buffer_as_vec = self.0.as_ref().to_vec();
-        let mut objattrs_view = objattrs_buf::View::new(&mut buffer_as_vec);
-        objattrs_view
-            .owner_mut()
-            .try_write(o)
-            .expect("Failed to encode owner");
+        write_obj_at(&mut buffer_as_vec, OWNER_OFFSET, o);
         self.0 = ByteView::from(buffer_as_vec);
         self
     }
 
     pub fn location(&self) -> Option<Obj> {
-        let objattrs_view = objattrs_buf::View::new(self.0.as_ref());
-        let oid = objattrs_view.location().try_read().unwrap();
+        let oid = read_obj_at(self.0.as_ref(), LOCATION_OFFSET);
         if oid == NOTHING { None } else { Some(oid) }
     }
 
     pub fn set_location(&mut self, o: Obj) -> &mut Self {
         let mut buffer_as_vec = self.0.as_ref().to_vec();
-        let mut objattrs_view = objattrs_buf::View::new(&mut buffer_as_vec);
-        objattrs_view
-            .location_mut()
-            .try_write(o)
-            .expect("Failed to encode location");
+        write_obj_at(&mut buffer_as_vec, LOCATION_OFFSET, o);
         self.0 = ByteView::from(buffer_as_vec);
         self
     }
 
     pub fn parent(&self) -> Option<Obj> {
-        let objattrs_view = objattrs_buf::View::new(self.0.as_ref());
-        let oid = objattrs_view.parent().try_read().unwrap();
+        let oid = read_obj_at(self.0.as_ref(), PARENT_OFFSET);
         if oid == NOTHING { None } else { Some(oid) }
     }
 
     pub fn set_parent(&mut self, o: Obj) -> &mut Self {
         let mut buffer_as_vec = self.0.as_ref().to_vec();
-        let mut objattrs_view = objattrs_buf::View::new(&mut buffer_as_vec);
-        objattrs_view
-            .parent_mut()
-            .try_write(o)
-            .expect("Failed to encode parent");
+        write_obj_at(&mut buffer_as_vec, PARENT_OFFSET, o);
         self.0 = ByteView::from(buffer_as_vec);
         self
     }
 
     pub fn flags(&self) -> BitEnum<ObjFlag> {
-        let objattrs_view = objattrs_buf::View::new(self.0.as_ref());
-        objattrs_view.flags().try_read().unwrap()
+        read_flags_at(self.0.as_ref(), FLAGS_OFFSET)
     }
 
     pub fn set_flags(&mut self, flags: BitEnum<ObjFlag>) -> &mut Self {
         let mut buffer_as_vec = self.0.as_ref().to_vec();
-        let mut objattrs_view = objattrs_buf::View::new(&mut buffer_as_vec);
-        objattrs_view
-            .flags_mut()
-            .try_write(flags)
-            .expect("Failed to encode flags");
+        write_flags_at(&mut buffer_as_vec, FLAGS_OFFSET, flags);
         self.0 = ByteView::from(buffer_as_vec);
         self
     }
 
     pub fn name(&self) -> Option<String> {
-        if self.0.len() == objattrs_buf::name::OFFSET {
+        if self.0.len() == NAME_OFFSET {
             return None;
         }
-        let objattrs_view = objattrs_buf::View::new(self.0.as_ref());
-        objattrs_view.name().to_vec();
-        Some(String::from_utf8(objattrs_view.name().to_vec()).unwrap())
+        Some(String::from_utf8(self.0.as_ref()[NAME_OFFSET..].to_vec()).unwrap())
     }
 
     pub fn set_name(&mut self, s: &str) -> &mut Self {

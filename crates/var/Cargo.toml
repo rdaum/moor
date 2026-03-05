@@ -58,7 +58,6 @@ unicase.workspace = true
 thiserror.workspace = true
 
 # Utilities & Helpers
-binary-layout.workspace = true
 byteview.workspace = true
 paste.workspace = true
 rand.workspace = true

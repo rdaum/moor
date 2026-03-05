@@ -15,7 +15,6 @@ use crate::{
     ByteSized,
     encode::{DecodingError, EncodingError},
 };
-use binary_layout::LayoutAs;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -133,15 +132,12 @@ impl Obj {
     }
 }
 
-impl LayoutAs<u64> for Obj {
-    type ReadError = DecodingError;
-    type WriteError = EncodingError;
-
-    fn try_read(v: u64) -> Result<Self, Self::ReadError> {
+impl Obj {
+    pub fn try_read(v: u64) -> Result<Self, DecodingError> {
         Ok(Self(v))
     }
 
-    fn try_write(v: Self) -> Result<u64, Self::WriteError> {
+    pub fn try_write(v: Self) -> Result<u64, EncodingError> {
         Ok(v.0)
     }
 }

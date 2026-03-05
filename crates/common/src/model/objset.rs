@@ -12,7 +12,6 @@
 //
 
 use crate::model::ValSet;
-use binary_layout::LayoutAs;
 use byteview::ByteView;
 use itertools::Itertools;
 use moor_var::{ByteSized, Obj};

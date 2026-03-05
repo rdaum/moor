@@ -12,7 +12,6 @@
 //
 
 use crate::util::{BitEnum, BitFlag};
-use binary_layout::binary_layout;
 use byteview::ByteView;
 use moor_var::{ByteSized, Obj, Symbol, Var};
 
@@ -122,10 +121,29 @@ impl Default for PropAttrs {
     }
 }
 
-binary_layout!(prop_perms_buf, LittleEndian, {
-    owner: Obj as u64,
-    flags: BitEnum<PropFlag> as u16,
-});
+const OWNER_OFFSET: usize = 0;
+const FLAGS_OFFSET: usize = OWNER_OFFSET + 8;
+const PROP_PERMS_SIZE: usize = FLAGS_OFFSET + 2;
+
+fn read_owner(buf: &[u8]) -> Obj {
+    let mut bytes = [0u8; 8];
+    bytes.copy_from_slice(&buf[OWNER_OFFSET..OWNER_OFFSET + 8]);
+    Obj::from_bytes(&bytes).expect("Failed to decode owner")
+}
+
+fn write_owner(buf: &mut [u8], owner: Obj) {
+    buf[OWNER_OFFSET..OWNER_OFFSET + 8].copy_from_slice(&owner.as_u64().to_le_bytes());
+}
+
+fn read_flags(buf: &[u8]) -> BitEnum<PropFlag> {
+    let mut bytes = [0u8; 2];
+    bytes.copy_from_slice(&buf[FLAGS_OFFSET..FLAGS_OFFSET + 2]);
+    BitEnum::from_u16(u16::from_le_bytes(bytes))
+}
+
+fn write_flags(buf: &mut [u8], flags: BitEnum<PropFlag>) {
+    buf[FLAGS_OFFSET..FLAGS_OFFSET + 2].copy_from_slice(&flags.to_u16().to_le_bytes());
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PropPerms(ByteView);
@@ -133,27 +151,20 @@ pub struct PropPerms(ByteView);
 impl PropPerms {
     #[must_use]
     pub fn new(owner: Obj, flags: BitEnum<PropFlag>) -> Self {
-        let mut buf = vec![0; prop_perms_buf::SIZE.unwrap()];
-        let mut view = prop_perms_buf::View::new(&mut buf);
-        view.owner_mut()
-            .try_write(owner)
-            .expect("Failed to encode owner");
-        view.flags_mut()
-            .try_write(flags)
-            .expect("Failed to encode flags");
+        let mut buf = vec![0; PROP_PERMS_SIZE];
+        write_owner(&mut buf, owner);
+        write_flags(&mut buf, flags);
         Self(ByteView::from(buf))
     }
 
     #[must_use]
     pub fn owner(&self) -> Obj {
-        let view = prop_perms_buf::View::new(self.0.as_ref());
-        view.owner().try_read().expect("Failed to decode owner")
+        read_owner(self.0.as_ref())
     }
 
     #[must_use]
     pub fn flags(&self) -> BitEnum<PropFlag> {
-        let view = prop_perms_buf::View::new(self.0.as_ref());
-        view.flags().try_read().expect("Failed to decode flags")
+        read_flags(self.0.as_ref())
     }
 
     pub fn with_owner(self, owner: Obj) -> Self {

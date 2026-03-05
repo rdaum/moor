@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use binary_layout::LayoutAs;
 use strum::FromRepr;
 
 use crate::{
@@ -28,20 +27,15 @@ pub enum ArgSpec {
     This = 2,
 }
 
-impl LayoutAs<u8> for ArgSpec {
-    type ReadError = DecodingError;
-    type WriteError = EncodingError;
-
-    fn try_read(v: u8) -> Result<Self, Self::ReadError> {
+impl ArgSpec {
+    pub fn try_read(v: u8) -> Result<Self, DecodingError> {
         Self::from_repr(v).ok_or(DecodingError::InvalidArgSpecValue(v))
     }
 
-    fn try_write(v: Self) -> Result<u8, Self::WriteError> {
+    pub fn try_write(v: Self) -> Result<u8, EncodingError> {
         Ok(v as u8)
     }
-}
 
-impl ArgSpec {
     #[must_use]
     pub fn to_string(&self) -> &str {
         match self {
@@ -99,11 +93,8 @@ impl PrepSpec {
         }
     }
 }
-impl LayoutAs<i16> for PrepSpec {
-    type ReadError = DecodingError;
-    type WriteError = EncodingError;
-
-    fn try_read(v: i16) -> Result<Self, Self::ReadError> {
+impl PrepSpec {
+    pub fn try_read(v: i16) -> Result<Self, DecodingError> {
         match v {
             -2 => Ok(Self::Any),
             -1 => Ok(Self::None),
@@ -113,7 +104,7 @@ impl LayoutAs<i16> for PrepSpec {
         }
     }
 
-    fn try_write(v: Self) -> Result<i16, Self::WriteError> {
+    pub fn try_write(v: Self) -> Result<i16, EncodingError> {
         Ok(match v {
             Self::Any => -2,
             Self::None => -1,
@@ -155,11 +146,8 @@ impl VerbArgsSpec {
     }
 }
 
-impl LayoutAs<u32> for VerbArgsSpec {
-    type ReadError = DecodingError;
-    type WriteError = EncodingError;
-
-    fn try_read(v: u32) -> Result<Self, Self::ReadError> {
+impl VerbArgsSpec {
+    pub fn try_read(v: u32) -> Result<Self, DecodingError> {
         let dobj_value = v & 0x0000_00ff;
         let prep_value = ((v >> 8) & 0x0000_ffff) as i16;
         let iobj_value = (v >> 24) & 0x0000_00ff;
@@ -169,7 +157,7 @@ impl LayoutAs<u32> for VerbArgsSpec {
         Ok(Self { dobj, prep, iobj })
     }
 
-    fn try_write(v: Self) -> Result<u32, Self::WriteError> {
+    pub fn try_write(v: Self) -> Result<u32, EncodingError> {
         let mut r: u32 = 0;
         let dobj_value = ArgSpec::try_write(v.dobj)?;
         r |= u32::from(dobj_value);
@@ -183,8 +171,6 @@ impl LayoutAs<u32> for VerbArgsSpec {
 
 #[cfg(test)]
 mod tests {
-    use binary_layout::LayoutAs;
-
     #[test]
     fn verbargs_spec_to_from_u32() {
         use super::{ArgSpec, PrepSpec, VerbArgsSpec};

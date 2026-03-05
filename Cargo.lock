@@ -474,17 +474,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "binary-layout"
-version = "4.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66c7e8da2156abef3421f6226ef339ade8c0d157ec50932d5e624f1c6a5127b4"
-dependencies = [
- "doc-comment",
- "paste",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1418,12 +1407,6 @@ dependencies = [
  "quote",
  "syn",
 ]
-
-[[package]]
-name = "doc-comment"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "780955b8b195a21ab8e4ac6b60dd1dbdcec1dc6c51c0617964b08c81785e12c9"
 
 [[package]]
 name = "document-features"
@@ -3138,7 +3121,6 @@ dependencies = [
 name = "moor-common"
 version = "1.0.0-rc1"
 dependencies = [
- "binary-layout",
  "byteview",
  "eyre",
  "itertools 0.14.0",
@@ -3550,7 +3532,6 @@ version = "1.0.0-rc1"
 dependencies = [
  "ahash",
  "arcstr",
- "binary-layout",
  "boxcar",
  "byteview",
  "imbl",

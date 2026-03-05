@@ -15,7 +15,6 @@ use crate::{
     model::r#match::VerbArgsSpec,
     util::{BitEnum, BitFlag},
 };
-use binary_layout::LayoutAs;
 use moor_var::{
     Obj, Symbol,
     encode::{DecodingError, EncodingError},
@@ -49,15 +48,12 @@ impl VerbFlag {
     }
 }
 
-impl LayoutAs<u8> for VerbFlag {
-    type ReadError = DecodingError;
-    type WriteError = EncodingError;
-
-    fn try_read(v: u8) -> Result<Self, Self::ReadError> {
+impl VerbFlag {
+    pub fn try_read(v: u8) -> Result<Self, DecodingError> {
         Self::from_u8(v).ok_or(DecodingError::InvalidVerbFlagValue(v))
     }
 
-    fn try_write(v: Self) -> Result<u8, Self::WriteError> {
+    pub fn try_write(v: Self) -> Result<u8, EncodingError> {
         Ok(v as u8)
     }
 }
@@ -176,15 +172,12 @@ impl BinaryType {
     }
 }
 
-impl LayoutAs<u8> for BinaryType {
-    type ReadError = DecodingError;
-    type WriteError = EncodingError;
-
-    fn try_read(v: u8) -> Result<Self, Self::ReadError> {
+impl BinaryType {
+    pub fn try_read(v: u8) -> Result<Self, DecodingError> {
         Self::from_u8(v).ok_or(DecodingError::InvalidBinaryTypeValue(v))
     }
 
-    fn try_write(v: Self) -> Result<u8, Self::WriteError> {
+    pub fn try_write(v: Self) -> Result<u8, EncodingError> {
         Ok(v as u8)
     }
 }
