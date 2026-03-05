@@ -46,7 +46,7 @@ fn create_db_with_verbs(inner_verb_code: &str, outer_verb_code: &str) -> TxDB {
             &SYSTEM_OBJECT,
             &NOTHING,
             &SYSTEM_OBJECT,
-            BitEnum::all(),
+            ObjFlag::all_flags(),
             ObjectKind::NextObjid,
         )
         .unwrap();

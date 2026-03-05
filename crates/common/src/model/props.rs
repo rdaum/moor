@@ -25,6 +25,11 @@ pub enum PropFlag {
 }
 
 impl PropFlag {
+    #[must_use]
+    pub fn all_flags() -> BitEnum<PropFlag> {
+        BitEnum::new_with(PropFlag::Read) | PropFlag::Write | PropFlag::Chown
+    }
+
     pub fn parse_str(s: &str) -> Option<BitEnum<PropFlag>> {
         let mut flags: u8 = 0;
         for c in s.chars() {

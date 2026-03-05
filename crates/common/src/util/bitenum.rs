@@ -20,7 +20,17 @@ use std::{
 use moor_var::encode::{DecodingError, EncodingError};
 
 use moor_var::ByteSized;
-/// A barebones minimal custom bitset enum, to replace use of `EnumSet` crate which was not rkyv'able.
+/// Compact flag storage for small enum-based bitsets.
+///
+/// `BitEnum` stores up to 16 flag bits in a `u16`. It is intended for dense flag enums whose
+/// discriminants are in the range `0..16`.
+///
+/// Callers should use flag-type-specific constructors for "all valid flags" semantics. The
+/// representation-level `all_bits()` constructor sets every storage bit, including bits that may
+/// not correspond to real enum variants.
+///
+/// This remains a custom type because it participates in the project's binary encodings and byte
+/// views.
 use num_traits::ToPrimitive;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
@@ -50,6 +60,17 @@ impl<T: ToPrimitive> LayoutAs<u16> for BitEnum<T> {
 }
 
 impl<T: ToPrimitive> BitEnum<T> {
+    #[inline]
+    fn bit(value: T) -> u16 {
+        let bit = value.to_u64().unwrap();
+        debug_assert!(
+            bit < u16::BITS as u64,
+            "BitEnum discriminant out of range: {bit}"
+        );
+        1u16 << bit
+    }
+
+    #[inline]
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -57,11 +78,13 @@ impl<T: ToPrimitive> BitEnum<T> {
             phantom: PhantomData,
         }
     }
+    #[inline]
     #[must_use]
     pub fn to_u16(&self) -> u16 {
         self.value
     }
 
+    #[inline]
     #[must_use]
     pub fn from_u8(value: u8) -> Self {
         Self {
@@ -70,6 +93,7 @@ impl<T: ToPrimitive> BitEnum<T> {
         }
     }
 
+    #[inline]
     #[must_use]
     pub fn from_u16(value: u16) -> Self {
         Self {
@@ -78,6 +102,7 @@ impl<T: ToPrimitive> BitEnum<T> {
         }
     }
 
+    #[inline]
     pub fn new_with(value: T) -> Self {
         let mut s = Self {
             value: 0,
@@ -87,26 +112,31 @@ impl<T: ToPrimitive> BitEnum<T> {
         s
     }
 
+    #[inline]
     #[must_use]
-    pub fn all() -> Self {
+    pub fn all_bits() -> Self {
         Self {
             value: u16::MAX,
             phantom: PhantomData,
         }
     }
 
+    #[inline]
     pub fn set(&mut self, value: T) {
-        self.value |= 1 << value.to_u64().unwrap();
+        self.value |= Self::bit(value);
     }
 
+    #[inline]
     pub fn clear(&mut self, value: T) {
-        self.value &= !(1 << value.to_u64().unwrap());
+        self.value &= !Self::bit(value);
     }
 
+    #[inline]
     pub fn contains(&self, value: T) -> bool {
-        self.value & (1 << value.to_u64().unwrap()) != 0
+        self.value & Self::bit(value) != 0
     }
 
+    #[inline]
     pub fn contains_all(&self, values: BitEnum<T>) -> bool {
         // Verify that all bits from common are in self.value
         values.value & self.value == values.value
@@ -155,5 +185,55 @@ impl<T: ToPrimitive> From<T> for BitEnum<T> {
 impl<T: ToPrimitive> ByteSized for BitEnum<T> {
     fn size_bytes(&self) -> usize {
         2
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BitEnum;
+    use num_traits::ToPrimitive;
+
+    #[derive(Clone, Copy)]
+    enum DemoFlag {
+        A = 0,
+        B = 1,
+        C = 2,
+    }
+
+    impl ToPrimitive for DemoFlag {
+        fn to_i64(&self) -> Option<i64> {
+            Some(*self as i64)
+        }
+
+        fn to_u64(&self) -> Option<u64> {
+            Some(*self as u64)
+        }
+    }
+
+    #[test]
+    fn stores_and_queries_flags() {
+        let flags = BitEnum::new_with(DemoFlag::A) | DemoFlag::C;
+        assert!(flags.contains(DemoFlag::A));
+        assert!(!flags.contains(DemoFlag::B));
+        assert!(flags.contains(DemoFlag::C));
+    }
+
+    #[test]
+    fn contains_all_requires_all_requested_bits() {
+        let flags = BitEnum::new_with(DemoFlag::A) | DemoFlag::B;
+        assert!(flags.contains_all(BitEnum::new_with(DemoFlag::A)));
+        assert!(flags.contains_all(BitEnum::new_with(DemoFlag::A) | DemoFlag::B));
+        assert!(!flags.contains_all(BitEnum::new_with(DemoFlag::C)));
+    }
+
+    #[test]
+    fn raw_constructors_round_trip() {
+        assert_eq!(BitEnum::<DemoFlag>::from_u8(0b101).to_u16(), 0b101);
+        assert_eq!(BitEnum::<DemoFlag>::from_u16(0x00ff).to_u16(), 0x00ff);
+    }
+
+    #[test]
+    fn all_bits_sets_storage_mask() {
+        assert_eq!(BitEnum::<DemoFlag>::all_bits().to_u16(), u16::MAX);
     }
 }

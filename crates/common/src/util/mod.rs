@@ -11,9 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-mod bitarray;
 mod bitenum;
-mod bitset;
 mod cache_padded;
 mod counter;
 mod fatal;
@@ -23,9 +21,7 @@ mod time;
 mod trace_events;
 mod xdg;
 
-pub use bitarray::BitArray;
 pub use bitenum::BitEnum;
-pub use bitset::*;
 pub use cache_padded::CachePadded;
 pub use counter::ConcurrentCounter;
 pub(crate) use counter::preferred_shared_shard_count;

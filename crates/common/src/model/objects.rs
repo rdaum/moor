@@ -110,6 +110,18 @@ pub enum ObjFlag {
 }
 
 impl ObjFlag {
+    #[must_use]
+    pub fn all_flags() -> BitEnum<Self> {
+        BitEnum::new_with(Self::User)
+            | Self::Programmer
+            | Self::Wizard
+            | Self::Obsolete1
+            | Self::Read
+            | Self::Write
+            | Self::Obsolete2
+            | Self::Fertile
+    }
+
     pub fn parse_str(s: &str) -> Option<BitEnum<Self>> {
         let mut flags: u8 = 0;
         for c in s.chars() {

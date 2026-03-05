@@ -1331,7 +1331,8 @@ mod tests {
 
     use moor_common::{
         model::{
-            ArgSpec, ObjectKind, PrepSpec, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
+            ArgSpec, ObjFlag, ObjectKind, PrepSpec, VerbArgsSpec, VerbFlag, WorldState,
+            WorldStateSource,
         },
         tasks::{CommandError, Event, TaskId},
         util::BitEnum,
@@ -1402,7 +1403,7 @@ mod tests {
                 &SYSTEM_OBJECT,
                 &NOTHING,
                 &SYSTEM_OBJECT,
-                BitEnum::all(),
+                ObjFlag::all_flags(),
                 ObjectKind::NextObjid,
             )
             .unwrap();

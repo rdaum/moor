@@ -508,7 +508,7 @@ mod tests {
             &obj,
             Symbol::mk("test_prop"),
             &SYSTEM_OBJECT,
-            BitEnum::all(),
+            ObjFlag::all_flags(),
             Some(v_int(0)),
         )
         .unwrap();
@@ -1755,13 +1755,13 @@ mod tests {
         let a = tx
             .create_object(
                 ObjectKind::NextObjid,
-                ObjAttrs::new(Obj::mk_id(1), NOTHING, NOTHING, BitEnum::all(), "a"),
+                ObjAttrs::new(Obj::mk_id(1), NOTHING, NOTHING, ObjFlag::all_flags(), "a"),
             )
             .unwrap();
         let b = tx
             .create_object(
                 ObjectKind::NextObjid,
-                ObjAttrs::new(Obj::mk_id(1), a, NOTHING, BitEnum::all(), "b"),
+                ObjAttrs::new(Obj::mk_id(1), a, NOTHING, ObjFlag::all_flags(), "b"),
             )
             .unwrap();
         tx.define_property(

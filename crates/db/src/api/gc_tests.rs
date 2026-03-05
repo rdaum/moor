@@ -31,7 +31,7 @@ mod tests {
         loader
             .create_object(
                 ObjectKind::Objid(wizard),
-                &ObjAttrs::new(WIZARD, NOTHING, NOTHING, BitEnum::all(), "Wizard"),
+                &ObjAttrs::new(WIZARD, NOTHING, NOTHING, ObjFlag::all_flags(), "Wizard"),
             )
             .unwrap();
         loader.commit().unwrap();

@@ -61,6 +61,11 @@ pub fn verb_perms_string(perms: BitEnum<VerbFlag>) -> String {
 }
 
 impl VerbFlag {
+    #[must_use]
+    pub fn all_flags() -> BitEnum<Self> {
+        BitEnum::new_with(Self::Read) | Self::Write | Self::Exec | Self::Debug
+    }
+
     pub fn parse_str(s: &str) -> Option<BitEnum<Self>> {
         let mut flags: u8 = 0;
         for c in s.chars() {

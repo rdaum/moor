@@ -19,9 +19,10 @@ mod tests {
     use std::sync::Arc;
 
     use moor_common::model::CompileError;
-    use moor_common::model::{ObjectKind, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource};
+    use moor_common::model::{
+        ObjFlag, ObjectKind, PropFlag, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
+    };
     use moor_common::tasks::NoopClientSession;
-    use moor_common::util::BitEnum;
     use moor_compiler::{CompileOptions, Program, compile};
     use moor_db::{DatabaseConfig, TxDB};
     use moor_var::program::ProgramType;
@@ -44,7 +45,7 @@ mod tests {
                 &SYSTEM_OBJECT,
                 &NOTHING,
                 &SYSTEM_OBJECT,
-                BitEnum::all(),
+                ObjFlag::all_flags(),
                 ObjectKind::NextObjid,
             )
             .unwrap();
@@ -66,7 +67,7 @@ mod tests {
             &sysobj,
             Symbol::mk("test"),
             &SYSTEM_OBJECT,
-            BitEnum::all(),
+            PropFlag::all_flags(),
             Some(v_int(1)),
         )
         .unwrap();
@@ -2338,7 +2339,7 @@ mod tests {
                 &SYSTEM_OBJECT,
                 &NOTHING,
                 &SYSTEM_OBJECT,
-                BitEnum::all(),
+                ObjFlag::all_flags(),
                 ObjectKind::NextObjid,
             )
             .unwrap();
@@ -2379,7 +2380,7 @@ mod tests {
                 &SYSTEM_OBJECT,
                 &NOTHING,
                 &SYSTEM_OBJECT,
-                BitEnum::all(),
+                ObjFlag::all_flags(),
                 ObjectKind::NextObjid,
             )
             .unwrap();
@@ -2421,7 +2422,7 @@ mod tests {
                 &SYSTEM_OBJECT,
                 &NOTHING,
                 &SYSTEM_OBJECT,
-                BitEnum::all(),
+                ObjFlag::all_flags(),
                 ObjectKind::NextObjid,
             )
             .unwrap();
@@ -2462,7 +2463,7 @@ mod tests {
                 &SYSTEM_OBJECT,
                 &NOTHING,
                 &SYSTEM_OBJECT,
-                BitEnum::all(),
+                ObjFlag::all_flags(),
                 ObjectKind::NextObjid,
             )
             .unwrap();

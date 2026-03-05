@@ -20,7 +20,7 @@ mod tests {
     use triomphe::Arc as TArc;
 
     use moor_common::{
-        model::{ObjectKind, PropFlag, VerbArgsSpec, VerbFlag, WorldStateSource},
+        model::{ObjFlag, ObjectKind, PropFlag, VerbArgsSpec, VerbFlag, WorldStateSource},
         util::BitEnum,
     };
     use moor_var::{List, Symbol, Var, v_bool, v_int, v_list, v_objid, v_str};
@@ -60,7 +60,7 @@ mod tests {
                 &SYSTEM_OBJECT,
                 &NOTHING,
                 &SYSTEM_OBJECT,
-                BitEnum::all(),
+                ObjFlag::all_flags(),
                 ObjectKind::NextObjid,
             )
             .unwrap();
@@ -82,7 +82,7 @@ mod tests {
             &sysobj,
             Symbol::mk("test"),
             &SYSTEM_OBJECT,
-            BitEnum::all(),
+            PropFlag::all_flags(),
             Some(v_int(1)),
         )
         .unwrap();

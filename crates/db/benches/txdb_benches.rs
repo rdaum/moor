@@ -14,10 +14,7 @@
 #![recursion_limit = "256"]
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use moor_common::{
-    model::{CommitResult, ObjectKind, PropFlag, WorldStateSource},
-    util::BitEnum,
-};
+use moor_common::model::{CommitResult, ObjFlag, ObjectKind, PropFlag, WorldStateSource};
 use moor_db::{DatabaseConfig, TxDB};
 use moor_var::{NOTHING, SYSTEM_OBJECT, Symbol, v_int, v_list_iter};
 use rand::Rng;
@@ -32,7 +29,7 @@ fn create_db() -> TxDB {
             &SYSTEM_OBJECT,
             &NOTHING,
             &SYSTEM_OBJECT,
-            BitEnum::all(),
+            ObjFlag::all_flags(),
             ObjectKind::NextObjid,
         )
         .unwrap();
