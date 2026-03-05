@@ -492,8 +492,8 @@ fn main() -> Result<(), Report> {
     );
 
     let config = args.load_config()?;
-    let reserved_worker_perf_cores = moor_common::threading::worker_performance_core_ids();
-    let reserved_service_perf_cores = moor_common::threading::service_performance_core_ids();
+    let reserved_worker_perf_cores = moor_common::threading::worker_performance_core_ids_ref();
+    let reserved_service_perf_cores = moor_common::threading::service_performance_core_ids_ref();
 
     // Initialize tracing if trace output is specified and feature is enabled
     #[cfg(feature = "trace_events")]

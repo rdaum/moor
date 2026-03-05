@@ -329,6 +329,14 @@ pub fn service_performance_core_ids() -> Vec<usize> {
     thread_placement().service_performance_core_ids.clone()
 }
 
+pub fn worker_performance_core_ids_ref() -> &'static [usize] {
+    &thread_placement().worker_performance_core_ids
+}
+
+pub fn service_performance_core_ids_ref() -> &'static [usize] {
+    &thread_placement().service_performance_core_ids
+}
+
 fn next_core_for_class(class: ThreadClass) -> Option<usize> {
     let placement = thread_placement();
     match class {

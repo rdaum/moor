@@ -66,6 +66,101 @@ pub enum ComplexMatchResult<T> {
     Multiple(Vec<T>),
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum MatchClass {
+    Exact,
+    Prefix,
+    Contains,
+    Fuzzy,
+    None,
+}
+
+#[inline]
+fn classify_match(subject_lower: &str, candidate: &str, max_distance: Option<usize>) -> MatchClass {
+    let candidate_lower = candidate.to_lowercase();
+
+    if candidate_lower == subject_lower {
+        return MatchClass::Exact;
+    }
+    if candidate_lower.starts_with(subject_lower) {
+        return MatchClass::Prefix;
+    }
+    if candidate_lower.contains(subject_lower) {
+        return MatchClass::Contains;
+    }
+    if let Some(max_distance) = max_distance {
+        let distance = damerau_levenshtein(subject_lower, &candidate_lower);
+        if distance <= max_distance {
+            return MatchClass::Fuzzy;
+        }
+    }
+    MatchClass::None
+}
+
+fn classify_key_set(
+    key_set: &Var,
+    subject_lower: &str,
+    max_distance: Option<usize>,
+) -> Option<MatchClass> {
+    let mut best = MatchClass::None;
+    let mut fuzzy = false;
+
+    let mut consider = |s: &str| {
+        match classify_match(subject_lower, s, None) {
+            MatchClass::Exact => {
+                best = MatchClass::Exact;
+                true
+            }
+            MatchClass::Prefix => {
+                if matches!(best, MatchClass::None | MatchClass::Fuzzy | MatchClass::Contains) {
+                    best = MatchClass::Prefix;
+                }
+                false
+            }
+            MatchClass::Contains => {
+                if matches!(best, MatchClass::None | MatchClass::Fuzzy) {
+                    best = MatchClass::Contains;
+                }
+                false
+            }
+            MatchClass::None => {
+                if max_distance.is_some() {
+                    if let MatchClass::Fuzzy = classify_match(subject_lower, s, max_distance) {
+                        fuzzy = true;
+                    }
+                }
+                false
+            }
+            MatchClass::Fuzzy => false,
+        }
+    };
+
+    match key_set.variant() {
+        moor_var::Variant::List(key_list) => {
+            for k in key_list.iter() {
+                let Some(s) = k.as_string() else {
+                    continue;
+                };
+                if consider(s) {
+                    break;
+                }
+            }
+        }
+        moor_var::Variant::Str(s) => {
+            consider(s.as_str());
+        }
+        _ => return None,
+    }
+
+    if !matches!(best, MatchClass::None) {
+        Some(best)
+    } else if fuzzy {
+        Some(MatchClass::Fuzzy)
+    } else {
+        None
+    }
+}
+
 /// Parse an ordinal from a word, supporting various formats
 pub fn parse_ordinal(word: &str) -> Result<i64, OrdinalParseError> {
     // Split on hyphens for compound ordinals like "twenty-first"
@@ -203,6 +298,8 @@ pub fn complex_match_strings_with_fuzzy_threshold(
     let mut fuzzy_matches = Vec::new();
 
     let subject_lower = subject.to_lowercase();
+    let max_distance = (fuzzy_threshold > 0.0)
+        .then(|| (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize);
 
     // Match against strings directly
     for string_var in strings.iter() {
@@ -210,27 +307,12 @@ pub fn complex_match_strings_with_fuzzy_threshold(
             continue;
         };
 
-        let string_lower = string_val.to_lowercase();
-
-        // Exact match
-        if string_lower == subject_lower {
-            exact_matches.push(string_var.clone());
-        }
-        // Prefix match
-        else if string_lower.starts_with(&subject_lower) {
-            start_matches.push(string_var.clone());
-        }
-        // Substring match
-        else if string_lower.contains(&subject_lower) {
-            contain_matches.push(string_var.clone());
-        }
-        // Fuzzy match using Damerau-Levenshtein distance
-        else if fuzzy_threshold > 0.0 {
-            let distance = damerau_levenshtein(&subject_lower, &string_lower);
-            let max_distance = (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize;
-            if distance <= max_distance {
-                fuzzy_matches.push(string_var.clone());
-            }
+        match classify_match(&subject_lower, string_val, max_distance) {
+            MatchClass::Exact => exact_matches.push(string_var.clone()),
+            MatchClass::Prefix => start_matches.push(string_var.clone()),
+            MatchClass::Contains => contain_matches.push(string_var.clone()),
+            MatchClass::Fuzzy => fuzzy_matches.push(string_var.clone()),
+            MatchClass::None => {}
         }
     }
 
@@ -299,26 +381,20 @@ pub fn complex_match_strings_all(token: &str, strings: &[Var], fuzzy_threshold: 
     let mut fuzzy_matches = Vec::new();
 
     let subject_lower = subject.to_lowercase();
+    let max_distance = (fuzzy_threshold > 0.0)
+        .then(|| (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize);
 
     for string_var in strings.iter() {
         let Some(string_val) = string_var.as_string() else {
             continue;
         };
 
-        let string_lower = string_val.to_lowercase();
-
-        if string_lower == subject_lower {
-            exact_matches.push(string_var.clone());
-        } else if string_lower.starts_with(&subject_lower) {
-            start_matches.push(string_var.clone());
-        } else if string_lower.contains(&subject_lower) {
-            contain_matches.push(string_var.clone());
-        } else if fuzzy_threshold > 0.0 {
-            let distance = damerau_levenshtein(&subject_lower, &string_lower);
-            let max_distance = (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize;
-            if distance <= max_distance {
-                fuzzy_matches.push(string_var.clone());
-            }
+        match classify_match(&subject_lower, string_val, max_distance) {
+            MatchClass::Exact => exact_matches.push(string_var.clone()),
+            MatchClass::Prefix => start_matches.push(string_var.clone()),
+            MatchClass::Contains => contain_matches.push(string_var.clone()),
+            MatchClass::Fuzzy => fuzzy_matches.push(string_var.clone()),
+            MatchClass::None => {}
         }
     }
 
@@ -369,26 +445,20 @@ pub fn complex_match_strings_all_tiers(
     let mut fuzzy_matches = Vec::new();
 
     let subject_lower = subject.to_lowercase();
+    let max_distance = (fuzzy_threshold > 0.0)
+        .then(|| (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize);
 
     for string_var in strings.iter() {
         let Some(string_val) = string_var.as_string() else {
             continue;
         };
 
-        let string_lower = string_val.to_lowercase();
-
-        if string_lower == subject_lower {
-            exact_matches.push(string_var.clone());
-        } else if string_lower.starts_with(&subject_lower) {
-            start_matches.push(string_var.clone());
-        } else if string_lower.contains(&subject_lower) {
-            contain_matches.push(string_var.clone());
-        } else if fuzzy_threshold > 0.0 {
-            let distance = damerau_levenshtein(&subject_lower, &string_lower);
-            let max_distance = (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize;
-            if distance <= max_distance {
-                fuzzy_matches.push(string_var.clone());
-            }
+        match classify_match(&subject_lower, string_val, max_distance) {
+            MatchClass::Exact => exact_matches.push(string_var.clone()),
+            MatchClass::Prefix => start_matches.push(string_var.clone()),
+            MatchClass::Contains => contain_matches.push(string_var.clone()),
+            MatchClass::Fuzzy => fuzzy_matches.push(string_var.clone()),
+            MatchClass::None => {}
         }
     }
 
@@ -444,6 +514,8 @@ pub fn complex_match_objects_keys_with_fuzzy_threshold(
     let mut fuzzy_matches = Vec::new();
 
     let subject_lower = subject.to_lowercase();
+    let max_distance = (fuzzy_threshold > 0.0)
+        .then(|| (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize);
 
     // Match against keys, return corresponding objects
     for (idx, key_set) in keys.iter().enumerate() {
@@ -453,61 +525,16 @@ pub fn complex_match_objects_keys_with_fuzzy_threshold(
 
         let obj_val = &objects[idx];
 
-        // Handle both list of strings and single string for keys
-        let key_strings: Vec<String> = match key_set.variant() {
-            moor_var::Variant::List(key_list) => {
-                let mut strings = Vec::new();
-                for k in key_list.iter() {
-                    if let Some(s) = k.as_string() {
-                        strings.push(s.to_string());
-                    }
-                }
-                strings
-            }
-            moor_var::Variant::Str(s) => vec![s.as_str().to_string()],
-            _ => continue,
+        let Some(classification) = classify_key_set(key_set, &subject_lower, max_distance) else {
+            continue;
         };
 
-        // Find the best match type across ALL keys for this object
-        // Priority: exact (0) > prefix (1) > substring (2) > none (3)
-        let mut best_match: u8 = 3; // none
-
-        for key_str in &key_strings {
-            let key_lower = key_str.to_lowercase();
-
-            if key_lower == subject_lower {
-                best_match = 0; // exact - can't do better, stop checking
-                break;
-            } else if key_lower.starts_with(&subject_lower) {
-                best_match = best_match.min(1); // prefix
-            } else if key_lower.contains(&subject_lower) {
-                best_match = best_match.min(2); // substring
-            }
-        }
-
-        // Add object to the appropriate category based on best match found
-        match best_match {
-            0 => exact_matches.push(obj_val.clone()),
-            1 => start_matches.push(obj_val.clone()),
-            2 => contain_matches.push(obj_val.clone()),
-            _ => {}
-        }
-
-        // If no exact/prefix/substring match found, try fuzzy matching
-        if fuzzy_threshold > 0.0
-            && !exact_matches.iter().any(|v| v == obj_val)
-            && !start_matches.iter().any(|v| v == obj_val)
-            && !contain_matches.iter().any(|v| v == obj_val)
-        {
-            for key_str in &key_strings {
-                let key_lower = key_str.to_lowercase();
-                let distance = damerau_levenshtein(&subject_lower, &key_lower);
-                let max_distance = (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize;
-                if distance <= max_distance {
-                    fuzzy_matches.push(obj_val.clone());
-                    break;
-                }
-            }
+        match classification {
+            MatchClass::Exact => exact_matches.push(obj_val.clone()),
+            MatchClass::Prefix => start_matches.push(obj_val.clone()),
+            MatchClass::Contains => contain_matches.push(obj_val.clone()),
+            MatchClass::Fuzzy => fuzzy_matches.push(obj_val.clone()),
+            MatchClass::None => {}
         }
     }
 
@@ -582,6 +609,8 @@ pub fn complex_match_objects_keys_all(
     let mut fuzzy_matches = Vec::new();
 
     let subject_lower = subject.to_lowercase();
+    let max_distance = (fuzzy_threshold > 0.0)
+        .then(|| (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize);
 
     // Match against keys, return corresponding objects
     for (idx, key_set) in keys.iter().enumerate() {
@@ -591,61 +620,16 @@ pub fn complex_match_objects_keys_all(
 
         let obj_val = &objects[idx];
 
-        // Handle both list of strings and single string for keys
-        let key_strings: Vec<String> = match key_set.variant() {
-            moor_var::Variant::List(key_list) => {
-                let mut strings = Vec::new();
-                for k in key_list.iter() {
-                    if let Some(s) = k.as_string() {
-                        strings.push(s.to_string());
-                    }
-                }
-                strings
-            }
-            moor_var::Variant::Str(s) => vec![s.as_str().to_string()],
-            _ => continue,
+        let Some(classification) = classify_key_set(key_set, &subject_lower, max_distance) else {
+            continue;
         };
 
-        // Find the best match type across ALL keys for this object
-        // Priority: exact (0) > prefix (1) > substring (2) > none (3)
-        let mut best_match: u8 = 3; // none
-
-        for key_str in &key_strings {
-            let key_lower = key_str.to_lowercase();
-
-            if key_lower == subject_lower {
-                best_match = 0; // exact - can't do better, stop checking
-                break;
-            } else if key_lower.starts_with(&subject_lower) {
-                best_match = best_match.min(1); // prefix
-            } else if key_lower.contains(&subject_lower) {
-                best_match = best_match.min(2); // substring
-            }
-        }
-
-        // Add object to the appropriate category based on best match found
-        match best_match {
-            0 => exact_matches.push(obj_val.clone()),
-            1 => start_matches.push(obj_val.clone()),
-            2 => contain_matches.push(obj_val.clone()),
-            _ => {}
-        }
-
-        // If no exact/prefix/substring match found, try fuzzy matching
-        if fuzzy_threshold > 0.0
-            && !exact_matches.iter().any(|v| v == obj_val)
-            && !start_matches.iter().any(|v| v == obj_val)
-            && !contain_matches.iter().any(|v| v == obj_val)
-        {
-            for key_str in &key_strings {
-                let key_lower = key_str.to_lowercase();
-                let distance = damerau_levenshtein(&subject_lower, &key_lower);
-                let max_distance = (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize;
-                if distance <= max_distance {
-                    fuzzy_matches.push(obj_val.clone());
-                    break;
-                }
-            }
+        match classification {
+            MatchClass::Exact => exact_matches.push(obj_val.clone()),
+            MatchClass::Prefix => start_matches.push(obj_val.clone()),
+            MatchClass::Contains => contain_matches.push(obj_val.clone()),
+            MatchClass::Fuzzy => fuzzy_matches.push(obj_val.clone()),
+            MatchClass::None => {}
         }
     }
 
@@ -696,6 +680,8 @@ pub fn complex_match_objects_keys_all_tiers(
     let mut fuzzy_matches = Vec::new();
 
     let subject_lower = subject.to_lowercase();
+    let max_distance = (fuzzy_threshold > 0.0)
+        .then(|| (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize);
 
     // Match against keys, return corresponding objects
     for (idx, key_set) in keys.iter().enumerate() {
@@ -705,61 +691,16 @@ pub fn complex_match_objects_keys_all_tiers(
 
         let obj_val = &objects[idx];
 
-        // Handle both list of strings and single string for keys
-        let key_strings: Vec<String> = match key_set.variant() {
-            moor_var::Variant::List(key_list) => {
-                let mut strings = Vec::new();
-                for k in key_list.iter() {
-                    if let Some(s) = k.as_string() {
-                        strings.push(s.to_string());
-                    }
-                }
-                strings
-            }
-            moor_var::Variant::Str(s) => vec![s.as_str().to_string()],
-            _ => continue,
+        let Some(classification) = classify_key_set(key_set, &subject_lower, max_distance) else {
+            continue;
         };
 
-        // Find the best match type across ALL keys for this object
-        // Priority: exact (0) > prefix (1) > substring (2) > none (3)
-        let mut best_match: u8 = 3; // none
-
-        for key_str in &key_strings {
-            let key_lower = key_str.to_lowercase();
-
-            if key_lower == subject_lower {
-                best_match = 0; // exact - can't do better, stop checking
-                break;
-            } else if key_lower.starts_with(&subject_lower) {
-                best_match = best_match.min(1); // prefix
-            } else if key_lower.contains(&subject_lower) {
-                best_match = best_match.min(2); // substring
-            }
-        }
-
-        // Add object to the appropriate category based on best match found
-        match best_match {
-            0 => exact_matches.push(obj_val.clone()),
-            1 => start_matches.push(obj_val.clone()),
-            2 => contain_matches.push(obj_val.clone()),
-            _ => {}
-        }
-
-        // If no exact/prefix/substring match found, try fuzzy matching
-        if fuzzy_threshold > 0.0
-            && !exact_matches.iter().any(|v| v == obj_val)
-            && !start_matches.iter().any(|v| v == obj_val)
-            && !contain_matches.iter().any(|v| v == obj_val)
-        {
-            for key_str in &key_strings {
-                let key_lower = key_str.to_lowercase();
-                let distance = damerau_levenshtein(&subject_lower, &key_lower);
-                let max_distance = (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize;
-                if distance <= max_distance {
-                    fuzzy_matches.push(obj_val.clone());
-                    break;
-                }
-            }
+        match classification {
+            MatchClass::Exact => exact_matches.push(obj_val.clone()),
+            MatchClass::Prefix => start_matches.push(obj_val.clone()),
+            MatchClass::Contains => contain_matches.push(obj_val.clone()),
+            MatchClass::Fuzzy => fuzzy_matches.push(obj_val.clone()),
+            MatchClass::None => {}
         }
     }
 

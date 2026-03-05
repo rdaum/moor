@@ -32,13 +32,13 @@ fn do_match_object_names(
     names: Vec<String>,
     match_name: &str,
 ) {
-    let match_name = match_name.to_lowercase();
+    let match_name_lower = match_name.to_lowercase();
 
     for object_name in names {
-        let object_name = object_name.to_lowercase();
-        if object_name.starts_with(&match_name.clone()) {
+        let object_name_lower = object_name.to_lowercase();
+        if object_name_lower.starts_with(&match_name_lower) {
             // exact match
-            if match_name == object_name {
+            if match_name_lower == object_name_lower {
                 if !match_data.exact.contains(&oid) {
                     match_data.exact.push(oid);
                 }

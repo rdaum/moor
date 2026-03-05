@@ -29,7 +29,7 @@ use uuid::Uuid;
 
 use moor_common::threading::{
     DetectionResult, TaskPoolPinningMode, detect_performance_cores, logical_core_count,
-    task_pool_pinning_mode, worker_performance_core_ids,
+    task_pool_pinning_mode,
 };
 use moor_var::{Obj, Var};
 
@@ -67,7 +67,9 @@ pub struct TaskQ {
     /// Thread pool for task execution
     pub(crate) thread_pool: TaskThreadPool,
     /// Inter-task message queues. Keyed by receiving task_id, shared across active and suspended.
-    pub(crate) task_message_queues: HashMap<TaskId, VecDeque<Var>, BuildHasherDefault<AHasher>>,
+    /// Each message stores enqueue timestamp for mailbox-wait latency accounting.
+    pub(crate) task_message_queues:
+        HashMap<TaskId, VecDeque<(Instant, Var)>, BuildHasherDefault<AHasher>>,
 }
 
 /// Scheduler-side per-task record. Lives in the scheduler thread and owned by the scheduler and
@@ -114,7 +116,7 @@ impl TaskQ {
                             pinning_mode = ?pinning_mode,
                             "Detected high-performance CPU tier for task pool pinning"
                         );
-                        let worker_core_ids = worker_performance_core_ids();
+                        let worker_core_ids = moor_common::threading::worker_performance_core_ids_ref();
                         if worker_core_ids.is_empty() {
                             warn!(
                                 "No worker performance cores reserved, task pool pinning disabled"
@@ -123,10 +125,10 @@ impl TaskQ {
                         } else {
                             info!(
                                 reserved_worker_cores = ?worker_core_ids,
-                                reserved_service_cores = ?moor_common::threading::service_performance_core_ids(),
+                                reserved_service_cores = ?moor_common::threading::service_performance_core_ids_ref(),
                                 "Using reserved worker/service performance-core split"
                             );
-                            Some(worker_core_ids)
+                            Some(worker_core_ids.to_vec())
                         }
                     }
                     Ok(DetectionResult::NoSelection { reason }) => {
@@ -250,7 +252,7 @@ impl TaskQ {
         self.task_message_queues
             .entry(target_task_id)
             .or_default()
-            .push_back(value);
+            .push_back((Instant::now(), value));
 
         // If the target is suspended and waiting for messages, wake it immediately
         if self
@@ -264,10 +266,30 @@ impl TaskQ {
 
     /// Drain all messages from a task's queue, returning them.
     pub(crate) fn drain_messages(&mut self, task_id: TaskId) -> Vec<Var> {
+        let (messages, _, _) = self.drain_messages_with_wait_nanos(task_id);
+        messages
+    }
+
+    /// Drain all messages from a task's queue and include aggregate wait-time accounting.
+    /// Returns `(messages, total_wait_nanos, message_count)`.
+    pub(crate) fn drain_messages_with_wait_nanos(
+        &mut self,
+        task_id: TaskId,
+    ) -> (Vec<Var>, u128, usize) {
+        let now = Instant::now();
         self.task_message_queues
             .remove(&task_id)
-            .map(|q| q.into_iter().collect())
-            .unwrap_or_default()
+            .map(|q| {
+                let mut total_wait_nanos = 0u128;
+                let mut messages = Vec::with_capacity(q.len());
+                let message_count = q.len();
+                for (enqueued_at, value) in q {
+                    total_wait_nanos += now.duration_since(enqueued_at).as_nanos();
+                    messages.push(value);
+                }
+                (messages, total_wait_nanos, message_count)
+            })
+            .unwrap_or((Vec::new(), 0, 0))
     }
 
     /// Return the current number of messages in a task's mailbox.
@@ -365,7 +387,7 @@ pub struct SuspensionQ {
     last_timer_advance: Option<Instant>,
 
     /// Queue for tasks that should wake immediately (O(1) push/pop)
-    immediate_wake_queue: VecDeque<TaskId>,
+    immediate_wake_queue: VecDeque<(TaskId, Instant)>,
 
     /// Tasks waiting for other tasks to complete (O(1) lookup by dependency)
     task_dependencies: HashMap<TaskId, Vec<TaskId>, BuildHasherDefault<AHasher>>,
@@ -414,12 +436,12 @@ impl SuspensionQ {
     /// Queue a task for immediate wake.
     #[inline]
     pub(crate) fn enqueue_immediate_wake(&mut self, task_id: TaskId) {
-        self.immediate_wake_queue.push_back(task_id);
+        self.immediate_wake_queue.push_back((task_id, Instant::now()));
     }
 
     /// Pop the next task queued for immediate wake.
     #[inline]
-    pub(crate) fn pop_immediate_wake(&mut self) -> Option<TaskId> {
+    pub(crate) fn pop_immediate_wake(&mut self) -> Option<(TaskId, Instant)> {
         self.immediate_wake_queue.pop_front()
     }
 
