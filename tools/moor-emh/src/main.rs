@@ -133,9 +133,9 @@ struct Args {
     #[arg(
         long,
         value_name = "wizard",
-        help = "Object ID to use as wizard for commands (defaults to first valid wizard)"
+        help = "Object reference to use as wizard for commands (defaults to deterministic wizard scan)"
     )]
-    wizard: Option<i32>,
+    wizard: Option<String>,
 
     #[arg(long, help = "Enable debug logging")]
     debug: bool,
@@ -186,29 +186,49 @@ fn acquire_data_directory_lock(data_dir: &PathBuf) -> Result<File, Report> {
 }
 
 /// Find a wizard object to use for admin commands
-fn find_wizard(database: &dyn Database, requested_wizard: Option<i32>) -> Result<Obj, Report> {
+fn find_wizard(database: &dyn Database, requested_wizard: Option<&str>) -> Result<Obj, Report> {
     let tx = database.new_world_state()?;
 
-    if let Some(wiz_id) = requested_wizard {
-        let wizard = Obj::mk_id(wiz_id);
+    if let Some(wiz_ref) = requested_wizard {
+        let wizard = Obj::try_from(wiz_ref)
+            .map_err(|e| eyre!("Invalid wizard object reference '{wiz_ref}': {e}"))?;
         if tx.valid(&wizard)? && tx.flags_of(&wizard)?.contains(ObjFlag::Wizard) {
             return Ok(wizard);
         }
-        warn!("Requested wizard #{} is not valid or not a wizard", wiz_id);
+        warn!(
+            "Requested wizard {} is not valid or not a wizard",
+            wizard.to_literal()
+        );
     }
 
-    // Find first wizard by scanning all objects
+    // Find all wizard objects and choose deterministically.
     let all_objects = tx.all_objects()?;
     info!("Scanning {} objects for wizard", all_objects.len());
 
+    let mut wizard_candidates = Vec::new();
     for obj in all_objects.iter() {
         if tx.flags_of(&obj)?.contains(ObjFlag::Wizard) {
-            info!("Using wizard object: {}", obj.to_literal());
-            return Ok(obj);
+            wizard_candidates.push(obj);
         }
     }
 
-    bail!("No wizard objects found in database");
+    if wizard_candidates.is_empty() {
+        bail!("No wizard objects found in database");
+    }
+
+    wizard_candidates.sort_unstable();
+    let wizard = wizard_candidates[0];
+    if wizard_candidates.len() > 1 {
+        warn!(
+            "Multiple wizard objects found ({}); selecting deterministic wizard {}",
+            wizard_candidates.len(),
+            wizard.to_literal()
+        );
+    } else {
+        info!("Using wizard object: {}", wizard.to_literal());
+    }
+
+    Ok(wizard)
 }
 
 /// A session that outputs to the console (stdout).
@@ -754,6 +774,8 @@ impl ParsedFlags {
 /// Parse command arguments into flags and positional args
 /// Supports: --flag, --flag value, --flag=value
 fn parse_flags(args: &str) -> ParsedFlags {
+    const VALUE_FLAGS: &[&str] = &["file", "constants", "conflict-mode", "as"];
+
     let mut result = ParsedFlags::default();
     let mut tokens: Vec<String> = Vec::new();
 
@@ -799,9 +821,10 @@ fn parse_flags(args: &str) -> ParsedFlags {
                 result.flags.insert(flag_name, Some(flag_value));
                 i += 1;
             } else {
-                // Check if next token is a value or another flag
+                // Only known flags consume a separate value token.
                 let flag_name = flag_part.to_string();
-                if i + 1 < tokens.len() && !tokens[i + 1].starts_with("--") {
+                let takes_value = VALUE_FLAGS.contains(&flag_name.as_str());
+                if takes_value && i + 1 < tokens.len() && !tokens[i + 1].starts_with("--") {
                     result.flags.insert(flag_name, Some(tokens[i + 1].clone()));
                     i += 2;
                 } else {
@@ -854,6 +877,66 @@ fn print_success(message: impl AsRef<str>) {
 
 fn print_warning(message: impl AsRef<str>) {
     println!("{} {}", "!".yellow().bold(), message.as_ref());
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ReplCommand {
+    Quit,
+    Help,
+    EvalExpr(String),
+    ExecCode(String),
+    Get(String),
+    Set(String),
+    Props(String),
+    Verbs(String),
+    Prog(String),
+    List(String),
+    Dump(String),
+    Load(String),
+    Reload(String),
+    Su(String),
+    Unknown,
+}
+
+fn parse_repl_command(line: &str) -> ReplCommand {
+    if line == "quit" || line == "exit" {
+        return ReplCommand::Quit;
+    }
+    if line == "help" || line == "?" {
+        return ReplCommand::Help;
+    }
+    if let Some(code) = line.strip_prefix(";;") {
+        return ReplCommand::ExecCode(code.trim().to_string());
+    }
+    if let Some(expr) = line.strip_prefix(';') {
+        return ReplCommand::EvalExpr(expr.trim().to_string());
+    }
+
+    let mut parts = line.splitn(2, char::is_whitespace);
+    let command = parts.next().unwrap_or_default();
+    let args = parts.next().unwrap_or_default().trim().to_string();
+
+    match command {
+        "get" => ReplCommand::Get(args),
+        "set" => ReplCommand::Set(args),
+        "props" => ReplCommand::Props(args),
+        "verbs" => ReplCommand::Verbs(args),
+        "prog" => ReplCommand::Prog(args),
+        "list" => ReplCommand::List(args),
+        "dump" => ReplCommand::Dump(args),
+        "load" => ReplCommand::Load(args),
+        "reload" => ReplCommand::Reload(args),
+        "su" => ReplCommand::Su(args),
+        _ => ReplCommand::Unknown,
+    }
+}
+
+fn ensure_args(args: &str, usage: &str) -> bool {
+    if !args.is_empty() {
+        return true;
+    }
+    error!("Usage: {usage}");
+    false
 }
 
 /// Format a SchedulerError for user-friendly display
@@ -919,14 +1002,12 @@ fn parse_objref_with_scheduler(
         return Ok(obj);
     }
 
-    if !s.starts_with('#') {
-        bail!("Object reference must start with '#' or '$'");
-    }
-    let num_str = &s[1..];
-    let num: i32 = num_str
-        .parse()
-        .map_err(|_| eyre!("Invalid object number: {}", num_str))?;
-    Ok(Obj::mk_id(num))
+    Obj::try_from(s).map_err(|_| {
+        eyre!(
+            "Invalid object reference: {} (expected #N, #UUID, UUID, or $property)",
+            s
+        )
+    })
 }
 
 /// Parse "#OBJ.PROP" or "$obj.PROP" into (object, property_name)
@@ -959,6 +1040,47 @@ fn parse_verbref(
     Ok((obj, verb))
 }
 
+fn exec_code_block(
+    scheduler_client: &SchedulerClient,
+    session_factory: &Arc<AdminSessionFactory>,
+    features: Arc<FeaturesConfig>,
+    wizard: &Obj,
+    code: &str,
+) -> Result<(), Report> {
+    let session = session_factory
+        .clone()
+        .mk_background_session(wizard)
+        .map_err(|e| eyre!("Failed to create session: {:?}", e))?;
+
+    let handle = scheduler_client
+        .submit_eval_task(
+            wizard,
+            wizard,
+            code.trim().to_string(),
+            None,
+            session,
+            features,
+        )
+        .map_err(|e| eyre!("Failed to submit eval task: {:?}", e))?;
+
+    let result = loop {
+        match handle.receiver().recv_timeout(Duration::from_secs(30)) {
+            Ok((_task_id, Ok(TaskNotification::Suspended))) => continue,
+            other => break other,
+        }
+    };
+
+    match result {
+        Ok((_task_id, Ok(TaskNotification::Result(value)))) => {
+            println!("=> {}", to_literal(&value));
+            Ok(())
+        }
+        Ok((_task_id, Err(e))) => bail!("Execution failed: {}", format_scheduler_error(&e)),
+        Err(_) => bail!("Task timed out after 30 seconds"),
+        _ => bail!("Task was replaced by scheduler"),
+    }
+}
+
 fn eval_expression(
     scheduler_client: &SchedulerClient,
     session_factory: &Arc<AdminSessionFactory>,
@@ -966,46 +1088,33 @@ fn eval_expression(
     wizard: &Obj,
     expr: &str,
 ) -> Result<(), Report> {
-    let session = session_factory
-        .clone()
-        .mk_background_session(wizard)
-        .map_err(|e| eyre!("Failed to create session: {:?}", e))?;
-
     let code = format!("return {expr};");
-
-    let handle = scheduler_client
-        .submit_eval_task(wizard, wizard, code, None, session, features)
-        .map_err(|e| eyre!("Failed to submit eval task: {:?}", e))?;
-
-    let result = loop {
-        let (_task_id, result) = handle
-            .receiver()
-            .recv_timeout(std::time::Duration::from_secs(30))
-            .map_err(|_| eyre!("Task timed out after 30 seconds"))?;
-        match result {
-            Ok(TaskNotification::Suspended) => continue,
-            other => break other,
-        }
-    };
-
-    match result {
-        Ok(TaskNotification::Result(value)) => {
-            let output = to_literal(&value);
-            println!("=> {output}");
-        }
-        Ok(TaskNotification::Suspended) => {
-            bail!("Received unexpected suspension notification while waiting for eval result");
-        }
-        Err(e) => {
-            error!("Task failed: {:?}", e);
-            bail!("Execution failed");
-        }
-    }
-    Ok(())
+    exec_code_block(scheduler_client, session_factory, features, wizard, &code)
 }
 
 /// Get a property value directly from the database
 fn cmd_get(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Result<(), Report> {
+    let args = args.trim();
+
+    if args.starts_with('$') && !args.contains('.') {
+        let prop_name = &args[1..];
+        if prop_name.is_empty() {
+            bail!("Usage: get $property or get #OBJ.PROP");
+        }
+
+        let prop = Symbol::mk(prop_name);
+        let value = scheduler_client
+            .request_system_property(
+                wizard,
+                &moor_common::model::ObjectRef::Id(Obj::mk_id(0)),
+                prop,
+            )
+            .map_err(|e| eyre!("Failed to retrieve ${}: {:?}", prop_name, e))?;
+
+        println!("${} = {}", prop_name, to_literal(&value));
+        return Ok(());
+    }
+
     let (obj, prop) = parse_propref(args, Some(scheduler_client), Some(wizard))?;
 
     info!(
@@ -1756,173 +1865,116 @@ fn repl(
 
                 rl.add_history_entry(line)?;
 
-                // Handle commands
-                if line == "quit" || line == "exit" {
-                    println!("Emergency Medical Hologram deactivated.");
-                    println!("Database will be saved on shutdown.");
-                    break;
-                }
-
-                if line == "help" || line == "?" {
-                    print_help();
-                    continue;
-                }
-
-                if line.starts_with(';') {
-                    // Eval expression or execute code block
-                    if let Some(code) = line.strip_prefix(";;") {
-                        // ;; executes code as-is without wrapping in return
-                        let session_result = session_factory
-                            .clone()
-                            .mk_background_session(&current_wizard);
-
-                        let Ok(session) =
-                            session_result.map_err(|e| eyre!("Failed to create session: {:?}", e))
-                        else {
-                            continue;
-                        };
-
-                        let Ok(handle) = scheduler_client.submit_eval_task(
-                            &current_wizard,
-                            &current_wizard,
-                            code.trim().to_string(),
-                            None,
-                            session,
-                            features.clone(),
-                        ) else {
-                            continue;
-                        };
-
-                        let result = loop {
-                            match handle.receiver().recv_timeout(Duration::from_secs(30)) {
-                                Ok((_task_id, Ok(TaskNotification::Suspended))) => continue,
-                                other => break other,
-                            }
-                        };
-
-                        match result {
-                            Ok((_task_id, Ok(TaskNotification::Result(value)))) => {
-                                let output = to_literal(&value);
-                                println!("=> {output}");
-                            }
-                            Ok((_task_id, Err(e))) => {
-                                error!("Execution failed: {:?}", e);
-                            }
-                            Err(_) => {
-                                error!("Task timed out after 30 seconds");
-                            }
-                            _ => {
-                                warn!("Task was replaced by scheduler");
-                            }
-                        }
-                    } else if let Some(expr) = line.strip_prefix(';') {
-                        // ; wraps expression in return
+                match parse_repl_command(line) {
+                    ReplCommand::Quit => {
+                        println!("Emergency Medical Hologram deactivated.");
+                        println!("Database will be saved on shutdown.");
+                        break;
+                    }
+                    ReplCommand::Help => print_help(),
+                    ReplCommand::EvalExpr(expr) => {
                         if let Err(e) = eval_expression(
                             &scheduler_client,
                             &session_factory,
                             features.clone(),
                             &current_wizard,
-                            expr.trim(),
+                            &expr,
                         ) {
                             error!("Eval failed: {}", e);
                         }
                     }
-                    continue;
-                }
-
-                let mut parts = line.splitn(2, char::is_whitespace);
-                let command = parts.next().unwrap_or_default();
-                let args = parts.next().unwrap_or_default().trim();
-
-                match command {
-                    "get" => {
-                        if args.is_empty() {
-                            error!("Usage: get #OBJ.PROP");
+                    ReplCommand::ExecCode(code) => {
+                        if let Err(e) = exec_code_block(
+                            &scheduler_client,
+                            &session_factory,
+                            features.clone(),
+                            &current_wizard,
+                            &code,
+                        ) {
+                            error!("{e}");
+                        }
+                    }
+                    ReplCommand::Get(args) => {
+                        if !ensure_args(&args, "get $property or get #OBJ.PROP") {
                             continue;
                         }
-                        if let Err(e) = cmd_get(&scheduler_client, &current_wizard, args) {
+                        if let Err(e) = cmd_get(&scheduler_client, &current_wizard, &args) {
                             error!("Get failed: {}", e);
                         }
                     }
-                    "set" => {
-                        if args.is_empty() {
-                            error!("Usage: set #OBJ.PROP VALUE");
+                    ReplCommand::Set(args) => {
+                        if !ensure_args(&args, "set #OBJ.PROP VALUE") {
                             continue;
                         }
-                        if let Err(e) = cmd_set(&scheduler_client, &current_wizard, args) {
+                        if let Err(e) = cmd_set(&scheduler_client, &current_wizard, &args) {
                             error!("Set failed: {}", e);
                         }
                     }
-                    "props" => {
-                        if args.is_empty() {
-                            error!("Usage: props #OBJ");
+                    ReplCommand::Props(args) => {
+                        if !ensure_args(&args, "props #OBJ") {
                             continue;
                         }
-                        if let Err(e) = cmd_props(&scheduler_client, &current_wizard, args) {
+                        if let Err(e) = cmd_props(&scheduler_client, &current_wizard, &args) {
                             error!("Props failed: {}", e);
                         }
                     }
-                    "verbs" => {
-                        if args.is_empty() {
-                            error!("Usage: verbs #OBJ");
+                    ReplCommand::Verbs(args) => {
+                        if !ensure_args(&args, "verbs #OBJ") {
                             continue;
                         }
-                        if let Err(e) = cmd_verbs(&scheduler_client, &current_wizard, args) {
+                        if let Err(e) = cmd_verbs(&scheduler_client, &current_wizard, &args) {
                             error!("Verbs failed: {}", e);
                         }
                     }
-                    "prog" => {
-                        if args.is_empty() {
-                            error!("Usage: prog #OBJ:VERB");
+                    ReplCommand::Prog(args) => {
+                        if !ensure_args(&args, "prog #OBJ:VERB") {
                             continue;
                         }
-                        if let Err(e) = cmd_prog(&scheduler_client, &current_wizard, args, &mut rl) {
+                        if let Err(e) = cmd_prog(&scheduler_client, &current_wizard, &args, &mut rl)
+                        {
                             error!("Prog failed: {}", e);
                         }
                     }
-                    "list" => {
-                        if args.is_empty() {
-                            error!("Usage: list #OBJ:VERB");
+                    ReplCommand::List(args) => {
+                        if !ensure_args(&args, "list #OBJ:VERB") {
                             continue;
                         }
-                        if let Err(e) = cmd_list(&scheduler_client, &current_wizard, args) {
+                        if let Err(e) = cmd_list(&scheduler_client, &current_wizard, &args) {
                             error!("List failed: {}", e);
                         }
                     }
-                    "dump" => {
-                        if args.is_empty() {
-                            error!("Usage: dump #OBJ [--file FILENAME]");
+                    ReplCommand::Dump(args) => {
+                        if !ensure_args(&args, "dump #OBJ [--file FILENAME]") {
                             continue;
                         }
-                        if let Err(e) = cmd_dump(&scheduler_client, &current_wizard, args) {
+                        if let Err(e) = cmd_dump(&scheduler_client, &current_wizard, &args) {
                             error!("Dump failed: {}", e);
                         }
                     }
-                    "load" => {
-                        if let Err(e) = cmd_load(&scheduler_client, &current_wizard, args, &mut rl) {
+                    ReplCommand::Load(args) => {
+                        if let Err(e) = cmd_load(&scheduler_client, &current_wizard, &args, &mut rl) {
                             error!("Load failed: {}", e);
                         }
                     }
-                    "reload" => {
-                        if let Err(e) = cmd_reload(&scheduler_client, &current_wizard, args, &mut rl) {
+                    ReplCommand::Reload(args) => {
+                        if let Err(e) =
+                            cmd_reload(&scheduler_client, &current_wizard, &args, &mut rl)
+                        {
                             error!("Reload failed: {}", e);
                         }
                     }
-                    "su" => {
-                        if args.is_empty() {
-                            error!("Usage: su #OBJ");
+                    ReplCommand::Su(args) => {
+                        if !ensure_args(&args, "su #OBJ") {
                             continue;
                         }
-                        match cmd_su(&scheduler_client, &current_wizard, args) {
-                            Ok(new_wizard) => {
-                                current_wizard = new_wizard;
-                            }
-                            Err(e) => {
-                                error!("Su failed: {}", e);
-                            }
+                        match cmd_su(&scheduler_client, &current_wizard, &args) {
+                            Ok(new_wizard) => current_wizard = new_wizard,
+                            Err(e) => error!("Su failed: {}", e),
                         }
                     }
-                    _ => error!("Unknown command. Type 'help' for available commands."),
+                    ReplCommand::Unknown => {
+                        error!("Unknown command. Type 'help' for available commands.");
+                    }
                 }
             }
             Err(ReadlineError::Interrupted) => {
@@ -1940,6 +1992,50 @@ fn repl(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ReplCommand, parse_flags, parse_repl_command};
+
+    #[test]
+    fn parse_flags_supports_quoted_values() {
+        let parsed = parse_flags(r#"--file "path with spaces.moo" --dry-run #42"#);
+        assert_eq!(parsed.get_string("file"), Some("path with spaces.moo"));
+        assert!(parsed.get_bool("dry-run"));
+        assert_eq!(parsed.first_positional(), Some("#42"));
+    }
+
+    #[test]
+    fn parse_repl_command_handles_eval_forms() {
+        assert_eq!(
+            parse_repl_command(";; return 1 + 1;"),
+            ReplCommand::ExecCode("return 1 + 1;".to_string())
+        );
+        assert_eq!(
+            parse_repl_command("; 1 + 1"),
+            ReplCommand::EvalExpr("1 + 1".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_repl_command_handles_verb_commands() {
+        assert_eq!(
+            parse_repl_command("prog #10:foo"),
+            ReplCommand::Prog("#10:foo".to_string())
+        );
+        assert_eq!(
+            parse_repl_command("load --file object.moo"),
+            ReplCommand::Load("--file object.moo".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_objref_supports_uuid_with_hash() {
+        let obj =
+            super::parse_objref_with_scheduler("#0001F7-9C5EB40302", None, None).unwrap();
+        assert_eq!(obj.to_literal(), "0001F7-9C5EB40302");
+    }
 }
 
 fn main() -> Result<(), Report> {
@@ -1994,7 +2090,7 @@ fn main() -> Result<(), Report> {
     let database = Box::new(database);
 
     // Find wizard before handing database to scheduler
-    let wizard = find_wizard(database.as_ref(), args.wizard)?;
+    let wizard = find_wizard(database.as_ref(), args.wizard.as_deref())?;
 
     // Create scheduler with the database
     let tasks_db = Box::new(NoopTasksDb {});
