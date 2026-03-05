@@ -21,6 +21,7 @@ use crate::{
 use ahash::AHasher;
 use moor_common::model::WorldStateError;
 use moor_var::Symbol;
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::{collections::HashMap, hash::BuildHasherDefault, sync::Arc};
 
@@ -48,6 +49,9 @@ where
     Codomain: RelationCodomain,
 {
     local_operations: HashMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>,
+    // Lazily-built codomain -> domains overlay for local operations.
+    // Invalidated on mutation, used to accelerate repeated codomain lookups.
+    local_codomain_index_cache: RefCell<Option<Vec<(Codomain, Vec<Domain>)>>>,
     master_entries: Box<dyn RelationIndex<Domain, Codomain>>,
     provider_fully_loaded: bool,
     has_local_mutations: bool,
@@ -210,6 +214,7 @@ where
                 4,
                 BuildHasherDefault::<AHasher>::default(),
             ),
+            local_codomain_index_cache: RefCell::new(None),
             master_entries: canonical,
             provider_fully_loaded,
             has_local_mutations: false,
@@ -220,6 +225,35 @@ where
             index: inner,
             backing_source: backing_source.into(),
         }
+    }
+
+    #[inline]
+    fn invalidate_local_codomain_index_cache(&self) {
+        self.index.local_codomain_index_cache.borrow_mut().take();
+    }
+
+    fn ensure_local_codomain_index_cache(&self) {
+        if self.index.local_codomain_index_cache.borrow().is_some() {
+            return;
+        }
+
+        let mut buckets: Vec<(Codomain, Vec<Domain>)> = Vec::new();
+        for (domain, op) in self.index.local_operations.iter() {
+            match &op.operation {
+                OpType::Insert(value) | OpType::Update(value) => {
+                    if let Some((_, domains)) =
+                        buckets.iter_mut().find(|(codomain, _)| codomain == value)
+                    {
+                        domains.push(domain.clone());
+                    } else {
+                        buckets.push((value.clone(), vec![domain.clone()]));
+                    }
+                }
+                OpType::Delete => {}
+            }
+        }
+
+        *self.index.local_codomain_index_cache.borrow_mut() = Some(buckets);
     }
 
     /// Helper to create a ConflictInfo for this relation.
@@ -259,6 +293,7 @@ where
                     guaranteed_unique: false,
                 },
             );
+            self.invalidate_local_codomain_index_cache();
             self.index.has_local_mutations = true;
             return Ok(());
         }
@@ -309,6 +344,7 @@ where
                 guaranteed_unique: false,
             },
         );
+        self.invalidate_local_codomain_index_cache();
 
         Ok(())
     }
@@ -331,6 +367,7 @@ where
                 guaranteed_unique: true,
             },
         );
+        self.invalidate_local_codomain_index_cache();
         self.index.has_local_mutations = true;
 
         Ok(())
@@ -354,6 +391,7 @@ where
                 OpType::Update(current) => std::mem::replace(current, value),
                 OpType::Delete => return Ok(None),
             };
+            self.invalidate_local_codomain_index_cache();
             return Ok(Some(old_value));
         }
 
@@ -377,6 +415,7 @@ where
                     guaranteed_unique: false,
                 },
             );
+            self.invalidate_local_codomain_index_cache();
             self.index.has_local_mutations = true;
 
             // Update local secondary index
@@ -419,6 +458,7 @@ where
                 guaranteed_unique: false,
             },
         );
+        self.invalidate_local_codomain_index_cache();
         self.index.has_local_mutations = true;
 
         // Update local secondary index
@@ -446,6 +486,7 @@ where
                         entry.write_ts = self.tx.ts;
                         entry.operation = OpType::Insert(value);
                     }
+                    self.invalidate_local_codomain_index_cache();
                     self.index.has_local_mutations = true;
                     // Update local secondary index
                     return Ok(None);
@@ -459,6 +500,7 @@ where
                         }
                         OpType::Delete => unreachable!(), // Already handled above
                     };
+                    self.invalidate_local_codomain_index_cache();
                     self.index.has_local_mutations = true;
                     return Ok(Some(old_value));
                 }
@@ -478,6 +520,7 @@ where
                     guaranteed_unique: false,
                 },
             );
+            self.invalidate_local_codomain_index_cache();
             self.index.has_local_mutations = true;
             // Update local secondary index
             return Ok(Some(old_value));
@@ -498,6 +541,7 @@ where
                     guaranteed_unique: false,
                 },
             );
+            self.invalidate_local_codomain_index_cache();
             self.index.has_local_mutations = true;
             // Update local secondary index
             return Ok(Some(backing_value));
@@ -513,6 +557,7 @@ where
                 guaranteed_unique: false,
             },
         );
+        self.invalidate_local_codomain_index_cache();
         self.index.has_local_mutations = true;
         Ok(None)
     }
@@ -596,37 +641,28 @@ where
     where
         F: FnMut(&Domain),
     {
-        let mut removed_or_rewritten =
-            HashSet::with_hasher(BuildHasherDefault::<AHasher>::default());
-        let mut local_matches = HashSet::with_hasher(BuildHasherDefault::<AHasher>::default());
-
-        if self.index.has_local_mutations {
-            for (domain, op) in self.index.local_operations.iter() {
-                match &op.operation {
-                    OpType::Insert(value) | OpType::Update(value) => {
-                        if value == codomain {
-                            local_matches.insert(domain.clone());
-                        } else {
-                            removed_or_rewritten.insert(domain.clone());
-                        }
-                    }
-                    OpType::Delete => {
-                        removed_or_rewritten.insert(domain.clone());
-                    }
-                }
-            }
-        }
-
         self.index
             .master_entries
             .for_each_by_codomain(codomain, &mut |domain| {
-                if !removed_or_rewritten.contains(domain) && !local_matches.contains(domain) {
+                // Any local op shadows base state for this domain.
+                if !self.index.local_operations.contains_key(domain) {
                     f(domain);
                 }
             });
 
-        for domain in local_matches.iter() {
-            f(domain);
+        if !self.index.has_local_mutations {
+            return;
+        }
+
+        self.ensure_local_codomain_index_cache();
+        let cache = self.index.local_codomain_index_cache.borrow();
+        let Some(cache) = cache.as_ref() else {
+            return;
+        };
+        if let Some((_, domains)) = cache.iter().find(|(c, _)| c == codomain) {
+            for domain in domains {
+                f(domain);
+            }
         }
     }
 
@@ -737,6 +773,7 @@ where
                 }
                 OpType::Delete => return Ok(None),
             };
+            self.invalidate_local_codomain_index_cache();
             self.index.has_local_mutations = true;
             return Ok(Some(old_value));
         }
@@ -754,6 +791,7 @@ where
                     guaranteed_unique: false,
                 },
             );
+            self.invalidate_local_codomain_index_cache();
             self.index.has_local_mutations = true;
             return Ok(Some(old_value));
         }
@@ -789,6 +827,7 @@ where
                 guaranteed_unique: false,
             },
         );
+        self.invalidate_local_codomain_index_cache();
         self.index.has_local_mutations = true;
 
         // Update local secondary index (remove from old codomain)

@@ -15,7 +15,7 @@ use crate::Timestamp;
 use crate::tx::{RelationCodomain, RelationCodomainHashable, RelationDomain};
 use ahash::AHasher;
 use imbl::shared_ptr::DefaultSharedPtr;
-use std::{any::Any, hash::BuildHasherDefault};
+use std::{any::Any, collections::HashMap, hash::BuildHasherDefault};
 
 /// Type alias for imbl HashMap with AHasher
 type ImblHashMap<K, V> = imbl::GenericHashMap<K, V, BuildHasherDefault<AHasher>, DefaultSharedPtr>;
@@ -326,11 +326,57 @@ where
         inserts: Vec<(Timestamp, Domain, Codomain)>,
         tombstones: Vec<(Timestamp, Domain)>,
     ) {
+        type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
+
+        // Group net secondary-index changes by codomain to reduce repeated map churn.
+        let mut removals: FastMap<Codomain, Vec<Domain>> =
+            FastMap::with_hasher(BuildHasherDefault::<AHasher>::default());
+        let mut additions: FastMap<Codomain, Vec<Domain>> =
+            FastMap::with_hasher(BuildHasherDefault::<AHasher>::default());
+
         for (ts, domain, codomain) in inserts {
-            self.insert_entry(ts, domain, codomain);
+            let old = self.inner.insert_entry(ts, domain.clone(), codomain.clone());
+            let changed_codomain = match old {
+                Some(old) => {
+                    if old.value != codomain {
+                        removals.entry(old.value).or_default().push(domain.clone());
+                        true
+                    } else {
+                        false
+                    }
+                }
+                None => true,
+            };
+
+            // Insert/update to same codomain needs no secondary change.
+            if changed_codomain {
+                additions.entry(codomain).or_default().push(domain);
+            }
         }
         for (ts, domain) in tombstones {
-            self.insert_tombstone(ts, domain);
+            if let Some(old) = self.inner.insert_tombstone(ts, domain.clone()) {
+                removals.entry(old.value).or_default().push(domain);
+            }
+        }
+
+        if let Some(ref mut secondary) = self.inner.secondary_index {
+            for (codomain, domains) in removals {
+                if let Some(mut set) = secondary.remove(&codomain) {
+                    for domain in domains {
+                        set.remove(&domain);
+                    }
+                    if !set.is_empty() {
+                        secondary.insert(codomain, set);
+                    }
+                }
+            }
+            for (codomain, domains) in additions {
+                let mut set = secondary.remove(&codomain).unwrap_or_default();
+                for domain in domains {
+                    set.insert(domain);
+                }
+                secondary.insert(codomain, set);
+            }
         }
     }
 
@@ -627,5 +673,43 @@ mod tests {
         let result = index.get_by_codomain(&codomain);
         assert_eq!(result.len(), 1);
         assert!(result.contains(&domain2));
+    }
+
+    #[test]
+    fn test_secondary_index_apply_batch_consistency() {
+        let mut index = SecondaryIndexRelation::new();
+
+        let codomain_a = TestCodomain(10);
+        let codomain_b = TestCodomain(20);
+        let domain1 = TestDomain(1);
+        let domain2 = TestDomain(2);
+        let domain3 = TestDomain(3);
+
+        index.apply_batch(
+            vec![
+                (Timestamp(1), domain1.clone(), codomain_a.clone()),
+                (Timestamp(1), domain2.clone(), codomain_a.clone()),
+            ],
+            vec![],
+        );
+
+        index.apply_batch(
+            vec![(Timestamp(2), domain2.clone(), codomain_b.clone())],
+            vec![(Timestamp(2), domain1.clone()), (Timestamp(2), domain3.clone())],
+        );
+
+        let a_domains = index.get_by_codomain(&codomain_a);
+        assert!(a_domains.is_empty());
+
+        let b_domains = index.get_by_codomain(&codomain_b);
+        assert_eq!(b_domains.len(), 1);
+        assert!(b_domains.contains(&domain2));
+
+        assert!(index.index_lookup(&domain1).is_none());
+        assert!(index.index_lookup(&domain3).is_none());
+        assert_eq!(
+            index.index_lookup(&domain2).map(|e| e.value.clone()),
+            Some(codomain_b)
+        );
     }
 }
