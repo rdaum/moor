@@ -30,7 +30,6 @@ reqwest.workspace = true
 tokio.workspace = true
 
 ## Utilities
-once_cell.workspace = true
 
 ## Logging & tracing
 tracing.workspace = true

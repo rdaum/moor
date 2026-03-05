@@ -27,12 +27,11 @@ use crate::{
     map, string,
     string::Str,
 };
-use once_cell::sync::Lazy;
 use std::{
     cmp::{Ordering, min},
     fmt::{Debug, Formatter},
     hash::{Hash, Hasher},
-    sync::Arc,
+    sync::{Arc, LazyLock},
 };
 
 // Type tags - simple types have low values, complex types have COMPLEX_FLAG set
@@ -66,19 +65,19 @@ pub const OP_HINT_FLYWEIGHT_APPEND_CONTENTS: u8 = 4;
 pub const OP_HINT_STR_APPEND: u8 = 5;
 
 /// Borrowed empty string storage for TAG_EMPTY_STR accessors.
-static EMPTY_STR: Lazy<Str> = Lazy::new(|| Str::mk_str(""));
+static EMPTY_STR: LazyLock<Str> = LazyLock::new(|| Str::mk_str(""));
 
 /// Borrowed empty list storage for TAG_EMPTY_LIST accessors.
-static EMPTY_LIST: Lazy<List> = Lazy::new(|| List::mk_list(&[]));
+static EMPTY_LIST: LazyLock<List> = LazyLock::new(|| List::mk_list(&[]));
 
 /// Cached empty string Var.
-static EMPTY_STR_VAR: Lazy<Var> = Lazy::new(Var::mk_empty_str);
+static EMPTY_STR_VAR: LazyLock<Var> = LazyLock::new(Var::mk_empty_str);
 
 /// Cached empty list Var.
-static EMPTY_LIST_VAR: Lazy<Var> = Lazy::new(Var::mk_empty_list);
+static EMPTY_LIST_VAR: LazyLock<Var> = LazyLock::new(Var::mk_empty_list);
 
 /// Cached NOTHING object Var.
-static NOTHING_VAR: Lazy<Var> = Lazy::new(|| Var::mk_object(NOTHING));
+static NOTHING_VAR: LazyLock<Var> = LazyLock::new(|| Var::mk_object(NOTHING));
 
 /// MOO variable - C-like representation optimized for fast clone.
 /// 16 bytes total - tag + metadata + data pointer/value.

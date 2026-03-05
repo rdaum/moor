@@ -35,8 +35,8 @@ use crate::task_context::{
 use ahash::AHasher;
 
 use flume::Sender;
-use lazy_static::lazy_static;
 use moor_compiler::to_literal;
+use std::sync::LazyLock;
 use tracing::{error, warn};
 
 use crate::{
@@ -86,12 +86,10 @@ use moor_common::{
 };
 use moor_var::program::ProgramType;
 
-lazy_static! {
-    static ref HUH_SYM: Symbol = Symbol::mk("huh");
-    static ref HANDLE_UNCAUGHT_ERROR_SYM: Symbol = Symbol::mk("handle_uncaught_error");
-    static ref HANDLE_TASK_TIMEOUT_SYM: Symbol = Symbol::mk("handle_task_timeout");
-    static ref DO_COMMAND_SYM: Symbol = Symbol::mk("do_command");
-}
+static HUH_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("huh"));
+static HANDLE_UNCAUGHT_ERROR_SYM: LazyLock<Symbol> =
+    LazyLock::new(|| Symbol::mk("handle_uncaught_error"));
+static DO_COMMAND_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("do_command"));
 
 /// Tracks the lifecycle state of a task
 #[derive(Debug, Clone)]

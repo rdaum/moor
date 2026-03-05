@@ -35,7 +35,6 @@ use moor_kernel::{
     tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
 };
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
-use once_cell::sync::Lazy;
 use rustyline::ExternalPrinter;
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
@@ -48,7 +47,7 @@ use std::{
     fs::{File, OpenOptions},
     io::Write,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
 };
 use termimad::{MadSkin, crossterm::style::Color};
 use tracing::{error, info, warn};
@@ -104,7 +103,7 @@ impl<'a> MakeWriter<'a> for ExternalPrinterMakeWriter {
     }
 }
 
-static VERSION_STRING: Lazy<String> = Lazy::new(|| {
+static VERSION_STRING: LazyLock<String> = LazyLock::new(|| {
     format!(
         "{} (commit: {})",
         env!("CARGO_PKG_VERSION"),

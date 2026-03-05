@@ -16,12 +16,12 @@ use crate::{
     tasks::checkpoint::{CheckpointMode, start_checkpoint},
 };
 use flume::{Receiver, Sender};
-use lazy_static::lazy_static;
 use moor_common::util::{Deadline, Instant, Timestamp};
 use rand::Rng;
 use std::{
     sync::{
         Arc,
+        LazyLock,
         atomic::{AtomicBool, Ordering},
     },
     thread::yield_now,
@@ -92,19 +92,20 @@ pub enum ResumeAction {
     Raise(Error),
 }
 
-lazy_static! {
-    static ref SERVER_OPTIONS: Symbol = Symbol::mk("server_options");
-    static ref BG_SECONDS: Symbol = Symbol::mk("bg_seconds");
-    static ref BG_TICKS: Symbol = Symbol::mk("bg_ticks");
-    static ref FG_SECONDS: Symbol = Symbol::mk("fg_seconds");
-    static ref FG_TICKS: Symbol = Symbol::mk("fg_ticks");
-    static ref MAX_STACK_DEPTH: Symbol = Symbol::mk("max_stack_depth");
-    static ref DUMP_INTERVAL: Symbol = Symbol::mk("dump_interval");
-    static ref GC_INTERVAL: Symbol = Symbol::mk("gc_interval");
-    static ref MAX_TASK_RETRIES: Symbol = Symbol::mk("max_task_retries");
-    static ref MAX_TASK_MAILBOX: Symbol = Symbol::mk("max_task_mailbox");
-    static ref DO_OUT_OF_BAND_COMMAND: Symbol = Symbol::mk("do_out_of_band_command");
-}
+static SERVER_OPTIONS: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("server_options"));
+static BG_SECONDS: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("bg_seconds"));
+static BG_TICKS: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("bg_ticks"));
+static FG_SECONDS: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("fg_seconds"));
+static FG_TICKS: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("fg_ticks"));
+static MAX_STACK_DEPTH: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("max_stack_depth"));
+static DUMP_INTERVAL: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("dump_interval"));
+static GC_INTERVAL: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("gc_interval"));
+static MAX_TASK_RETRIES: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("max_task_retries"));
+static MAX_TASK_MAILBOX: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("max_task_mailbox"));
+static DO_OUT_OF_BAND_COMMAND: LazyLock<Symbol> =
+    LazyLock::new(|| Symbol::mk("do_out_of_band_command"));
+static HANDLE_TASK_TIMEOUT_SYM: LazyLock<Symbol> =
+    LazyLock::new(|| Symbol::mk("handle_task_timeout"));
 /// Responsible for the dispatching, control, and accounting of tasks in the system.
 /// There should be only one scheduler per server.
 pub struct Scheduler {
@@ -1240,7 +1241,7 @@ impl Scheduler {
                 let handler_task_start = TaskStart::StartVerb {
                     player,
                     vloc: v_obj(SYSTEM_OBJECT),
-                    verb: Symbol::mk("handle_task_timeout"),
+                    verb: *HANDLE_TASK_TIMEOUT_SYM,
                     args: handler_args,
                     argstr: v_empty_str(),
                 };

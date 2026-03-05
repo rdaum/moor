@@ -14,7 +14,7 @@
 //! Syntax highlighting for MOO code using regex-based tokenization and ANSI colors.
 
 use colored::{Color, Colorize};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 /// Token types for MOO syntax
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,7 +56,7 @@ struct MooPatterns {
     boolean: regex::Regex,
 }
 
-static PATTERNS: Lazy<MooPatterns> = Lazy::new(|| {
+static PATTERNS: LazyLock<MooPatterns> = LazyLock::new(|| {
     MooPatterns {
     comment_line: regex::Regex::new(r"^//.*").unwrap(),
     comment_block_start: regex::Regex::new(r"^/\*").unwrap(),

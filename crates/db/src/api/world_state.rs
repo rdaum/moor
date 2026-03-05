@@ -17,8 +17,8 @@
 //! reads and writes to `WorldStateTransaction`, applies permission checks and
 //! semantic rules, and records operation-level performance counters.
 
-use lazy_static::lazy_static;
 use std::collections::HashSet;
+use std::sync::LazyLock;
 use uuid::Uuid;
 
 use crate::{
@@ -42,22 +42,20 @@ use moor_var::{
     v_obj,
 };
 
-lazy_static! {
-    static ref NAME_SYM: Symbol = Symbol::mk("name");
-    static ref LOCATION_SYM: Symbol = Symbol::mk("location");
-    static ref CONTENTS_SYM: Symbol = Symbol::mk("contents");
-    static ref OWNER_SYM: Symbol = Symbol::mk("owner");
-    static ref CHILDREN_SYM: Symbol = Symbol::mk("children");
-    static ref PARENT_SYM: Symbol = Symbol::mk("parent");
-    static ref PROGRAMMER_SYM: Symbol = Symbol::mk("programmer");
-    static ref WIZARD_SYM: Symbol = Symbol::mk("wizard");
-    static ref R_SYM: Symbol = Symbol::mk("r");
-    static ref W_SYM: Symbol = Symbol::mk("w");
-    static ref F_SYM: Symbol = Symbol::mk("f");
-    static ref ALIASES_SYM: Symbol = Symbol::mk("aliases");
-    static ref LAST_MOVE_SYM: Symbol = Symbol::mk("last_move");
-    static ref WORLD_STATE_PERF: WorldStatePerf = WorldStatePerf::new();
-}
+static NAME_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("name"));
+static LOCATION_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("location"));
+static CONTENTS_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("contents"));
+static OWNER_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("owner"));
+static CHILDREN_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("children"));
+static PARENT_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("parent"));
+static PROGRAMMER_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("programmer"));
+static WIZARD_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("wizard"));
+static R_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("r"));
+static W_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("w"));
+static F_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("f"));
+static ALIASES_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("aliases"));
+static LAST_MOVE_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("last_move"));
+static WORLD_STATE_PERF: LazyLock<WorldStatePerf> = LazyLock::new(WorldStatePerf::new);
 
 thread_local! {
     static WORLD_STATE_PERF_TLS: &'static WorldStatePerf = &WORLD_STATE_PERF;

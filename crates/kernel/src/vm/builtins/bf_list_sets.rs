@@ -14,7 +14,6 @@
 //! Builtin functions for list manipulation, set operations, and regular expression matching.
 
 use ahash::HashMap;
-use lazy_static::lazy_static;
 use moor_common::matching::{
     ComplexMatchResult, complex_match_objects_keys_all, complex_match_objects_keys_all_tiers,
     complex_match_objects_keys_with_fuzzy_threshold, complex_match_strings_all,
@@ -30,7 +29,7 @@ use moor_var::{
 use onig::{MatchParam, Region, SearchOptions, SyntaxBehavior, SyntaxOperator};
 use std::{
     ops::BitOr,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
 };
 
 use crate::{
@@ -350,9 +349,7 @@ type RegexCacheKey = (String, bool);
 type RegexCacheValue = Result<Arc<onig::Regex>, onig::Error>;
 type RegexCache = Mutex<HashMap<RegexCacheKey, RegexCacheValue>>;
 
-lazy_static! {
-    static ref MOO_REGEX_CACHE: RegexCache = Default::default();
-}
+static MOO_REGEX_CACHE: LazyLock<RegexCache> = LazyLock::new(Default::default);
 
 /// Perform regex match using LambdaMOO's "legacy" regular expression support, which is based on
 /// pre-POSIX regexes.
@@ -499,9 +496,7 @@ fn bf_rmatch(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     do_re_match(bf_args, true)
 }
 
-lazy_static! {
-    static ref PCRE_PATTERN_CACHE: RegexCache = Default::default();
-}
+static PCRE_PATTERN_CACHE: LazyLock<RegexCache> = LazyLock::new(Default::default);
 
 /// Perform a PCRE match using oniguruma.
 /// If `map_support` is true, the return value is a list of maps, where each map contains the

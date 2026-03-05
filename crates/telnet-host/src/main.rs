@@ -30,6 +30,7 @@ use std::{
     path::PathBuf,
     sync::{
         Arc,
+        LazyLock,
         atomic::{AtomicBool, AtomicU64},
     },
 };
@@ -47,9 +48,7 @@ mod djot_formatter;
 mod listen;
 mod moo_highlighter;
 
-use once_cell::sync::Lazy;
-
-static VERSION_STRING: Lazy<String> = Lazy::new(|| {
+static VERSION_STRING: LazyLock<String> = LazyLock::new(|| {
     format!(
         "{} (commit: {})",
         env!("CARGO_PKG_VERSION"),

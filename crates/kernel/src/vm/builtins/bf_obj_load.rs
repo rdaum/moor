@@ -19,7 +19,6 @@ use crate::vm::builtins::{
     BfCallState, BfErr, BfRet, BuiltinFunction, DiagnosticOutput, parse_diagnostic_options,
     world_state_bf_err,
 };
-use lazy_static::lazy_static;
 use moor_common::builtins::offset_for_builtin;
 use moor_common::model::{ObjectKind, obj_flags_string, prop_flags_string};
 use moor_compiler::{
@@ -32,34 +31,26 @@ use moor_var::{
     E_ARGS, E_INVARG, E_TYPE, Sequence, Symbol, Var, Variant, v_empty_map, v_list, v_map, v_obj,
     v_str, v_sym,
 };
+use std::sync::LazyLock;
 
-lazy_static! {
-    // Entity type symbols
-    static ref OBJECT_FLAGS_SYM: Symbol = Symbol::mk("object_flags");
-    static ref BUILTIN_PROPS_SYM: Symbol = Symbol::mk("builtin_props");
-    static ref PARENTAGE_SYM: Symbol = Symbol::mk("parentage");
-    static ref PROPERTY_DEF_SYM: Symbol = Symbol::mk("property_def");
-    static ref PROPERTY_VALUE_SYM: Symbol = Symbol::mk("property_value");
-    static ref PROPERTY_FLAG_SYM: Symbol = Symbol::mk("property_flag");
-    static ref VERB_DEF_SYM: Symbol = Symbol::mk("verb_def");
-    static ref VERB_PROGRAM_SYM: Symbol = Symbol::mk("verb_program");
-
-    // Options symbols
-    static ref DRY_RUN_SYM: Symbol = Symbol::mk("dry_run");
-    static ref CONFLICT_MODE_SYM: Symbol = Symbol::mk("conflict_mode");
-    static ref TARGET_OBJECT_SYM: Symbol = Symbol::mk("target_object");
-    static ref CREATE_NEW_SYM: Symbol = Symbol::mk("create_new");
-    static ref CONSTANTS_SYM: Symbol = Symbol::mk("constants");
-    static ref OVERRIDES_SYM: Symbol = Symbol::mk("overrides");
-    static ref REMOVALS_SYM: Symbol = Symbol::mk("removals");
-    static ref RETURN_CONFLICTS_SYM: Symbol = Symbol::mk("return_conflicts");
-    static ref DIAGNOSTICS_SYM: Symbol = Symbol::mk("diagnostics");
-
-    // Conflict mode symbols
-    static ref CLOBBER_SYM: Symbol = Symbol::mk("clobber");
-    static ref SKIP_SYM: Symbol = Symbol::mk("skip");
-    static ref DETECT_SYM: Symbol = Symbol::mk("detect");
-}
+static OBJECT_FLAGS_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("object_flags"));
+static BUILTIN_PROPS_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("builtin_props"));
+static PARENTAGE_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("parentage"));
+static PROPERTY_DEF_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("property_def"));
+static PROPERTY_VALUE_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("property_value"));
+static PROPERTY_FLAG_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("property_flag"));
+static VERB_DEF_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("verb_def"));
+static VERB_PROGRAM_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("verb_program"));
+static DRY_RUN_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("dry_run"));
+static CONFLICT_MODE_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("conflict_mode"));
+static CONSTANTS_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("constants"));
+static OVERRIDES_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("overrides"));
+static RETURN_CONFLICTS_SYM: LazyLock<Symbol> =
+    LazyLock::new(|| Symbol::mk("return_conflicts"));
+static DIAGNOSTICS_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("diagnostics"));
+static CLOBBER_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("clobber"));
+static SKIP_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("skip"));
+static DETECT_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("detect"));
 
 /// Usage: `list dump_object(obj object [, map options])`
 /// Returns the object definition as a list of strings in objdef format.

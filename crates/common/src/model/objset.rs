@@ -15,18 +15,16 @@ use crate::model::ValSet;
 use binary_layout::LayoutAs;
 use byteview::ByteView;
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use moor_var::{ByteSized, Obj};
 use std::{
     collections::HashSet,
     fmt::{Debug, Display, Formatter},
+    sync::LazyLock,
 };
 use zerocopy::IntoBytes;
 // TODO: this won't work for non-objid objects
 
-lazy_static! {
-    static ref EMPTY_OBJSET: ObjSet = ObjSet(ByteView::new(&[]));
-}
+static EMPTY_OBJSET: LazyLock<ObjSet> = LazyLock::new(|| ObjSet(ByteView::new(&[])));
 
 /// When we want to refer to a set of object ids, use this type.
 /// Note that equality is defined as "same bytes" buffer for efficiency reasons.

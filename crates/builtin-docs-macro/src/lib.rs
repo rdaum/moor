@@ -58,13 +58,12 @@ pub fn generate_builtin_docs(_input: TokenStream) -> TokenStream {
     });
 
     let expanded = quote! {
-        lazy_static::lazy_static! {
-            pub static ref BUILTIN_DOCS: std::collections::HashMap<&'static str, Vec<String>> = {
+        pub static BUILTIN_DOCS: std::sync::LazyLock<std::collections::HashMap<&'static str, Vec<String>>> =
+            std::sync::LazyLock::new(|| {
                 let mut m = std::collections::HashMap::new();
                 #(#entries)*
                 m
-            };
-        }
+            });
     };
 
     TokenStream::from(expanded)

@@ -39,7 +39,10 @@ use rpc_common::{HostType, client_args::RpcClientArgs};
 use serde_derive::{Deserialize, Serialize};
 use std::{
     net::{IpAddr, SocketAddr},
-    sync::atomic::{AtomicBool, AtomicU64},
+    sync::{
+        LazyLock,
+        atomic::{AtomicBool, AtomicU64},
+    },
 };
 use tokio::{
     net::TcpListener,
@@ -51,9 +54,7 @@ use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use once_cell::sync::Lazy;
-
-static VERSION_STRING: Lazy<String> = Lazy::new(|| {
+static VERSION_STRING: LazyLock<String> = LazyLock::new(|| {
     format!(
         "{} (commit: {})",
         env!("CARGO_PKG_VERSION"),

@@ -23,7 +23,6 @@
 use ahash::AHasher;
 use arcstr::ArcStr;
 use boxcar::Vec as BoxcarVec;
-use once_cell::sync::Lazy;
 use papaya::HashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{
@@ -33,6 +32,7 @@ use std::{
     sync::{
         Mutex,
         atomic::{AtomicU32, Ordering},
+        LazyLock,
     },
 };
 use unicase::UniCase;
@@ -291,7 +291,7 @@ impl GlobalInternerState {
     }
 }
 
-static GLOBAL_INTERNER: Lazy<GlobalInternerState> = Lazy::new(GlobalInternerState::new);
+static GLOBAL_INTERNER: LazyLock<GlobalInternerState> = LazyLock::new(GlobalInternerState::new);
 
 // ============================================================================
 // Symbol Type

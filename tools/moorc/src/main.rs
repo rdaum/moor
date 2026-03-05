@@ -36,17 +36,16 @@ use moor_moot::MootOptions;
 use moor_objdef::{ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions};
 use moor_textdump::{TextdumpImportOptions, textdump_load};
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, v_float, v_int};
-use once_cell::sync::Lazy;
 use std::{
     fs,
     io::{self, IsTerminal},
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, LazyLock},
     time::Duration,
 };
 use tracing::{error, info, warn};
 
-static VERSION_STRING: Lazy<String> = Lazy::new(|| {
+static VERSION_STRING: LazyLock<String> = LazyLock::new(|| {
     format!(
         "{} (commit: {})",
         env!("CARGO_PKG_VERSION"),

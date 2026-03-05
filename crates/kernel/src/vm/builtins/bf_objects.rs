@@ -13,8 +13,8 @@
 
 //! Built-in functions for object manipulation and hierarchy management.
 
-use lazy_static::lazy_static;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 use tracing::{debug, error, trace};
 
 use moor_common::matching::{
@@ -48,14 +48,11 @@ use crate::{
     },
 };
 
-lazy_static! {
-    static ref INITIALIZE_SYM: Symbol = Symbol::mk("initialize");
-    static ref EXITFUNC_SYM: Symbol = Symbol::mk("exitfunc");
-    static ref ENTERFUNC_SYM: Symbol = Symbol::mk("enterfunc");
-    static ref CREATE_SYM: Symbol = Symbol::mk("create");
-    static ref RECYCLE_SYM: Symbol = Symbol::mk("recycle");
-    static ref ACCEPT_SYM: Symbol = Symbol::mk("accept");
-}
+static INITIALIZE_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("initialize"));
+static EXITFUNC_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("exitfunc"));
+static ENTERFUNC_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("enterfunc"));
+static RECYCLE_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("recycle"));
+static ACCEPT_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("accept"));
 
 /// Helper function to create an object and call its :initialize verb if it exists.
 /// Used by both `create` and `create_at` functions.

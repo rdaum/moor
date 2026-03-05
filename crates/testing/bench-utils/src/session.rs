@@ -12,13 +12,12 @@
 //
 
 use crate::TableFormatter;
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs::{self, File},
     path::PathBuf,
-    sync::Mutex,
+    sync::{LazyLock, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -50,10 +49,9 @@ pub struct BenchmarkSession {
     pub results: Vec<BenchmarkResult>,
 }
 
-lazy_static! {
-    /// Global storage for all benchmark results in this session
-    static ref SESSION_RESULTS: Mutex<Vec<BenchmarkResult>> = Mutex::new(Vec::new());
-}
+/// Global storage for all benchmark results in this session
+static SESSION_RESULTS: LazyLock<Mutex<Vec<BenchmarkResult>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
 
 /// Add a benchmark result to the session collection
 pub fn add_session_result(result: BenchmarkResult) {

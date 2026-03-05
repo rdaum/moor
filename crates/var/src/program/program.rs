@@ -21,13 +21,13 @@ use crate::{
         },
     },
 };
-use lazy_static::lazy_static;
-use std::fmt::{Display, Formatter};
+use std::{
+    fmt::{Display, Formatter},
+    sync::LazyLock,
+};
 use triomphe::Arc;
 
-lazy_static! {
-    pub static ref EMPTY_PROGRAM: Program = Program::new();
-}
+pub static EMPTY_PROGRAM: LazyLock<Program> = LazyLock::new(Program::new);
 
 /// The result of compilation. The set of instructions, fork vectors, variable offsets, literals.
 #[derive(Clone, Debug, PartialEq)]

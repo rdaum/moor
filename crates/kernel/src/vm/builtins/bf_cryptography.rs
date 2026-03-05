@@ -26,7 +26,6 @@ use base32::Alphabet;
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use chrono::Utc;
 use hmac::{Hmac, Mac};
-use lazy_static::lazy_static;
 use rand::Rng;
 use rand::distr::Alphanumeric;
 use rusty_paseto::core::{Key, Local, Paseto, PasetoNonce, PasetoSymmetricKey, Payload, V4};
@@ -34,7 +33,7 @@ use serde_json::Value as JsonValue;
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 use ssh_key::public::PublicKey;
-use std::io::Read;
+use std::{io::Read, sync::LazyLock};
 use tracing::{error, warn};
 
 use crate::vm::builtins::{
@@ -46,11 +45,9 @@ use moor_var::{
     v_map, v_obj, v_str, v_string, v_sym,
 };
 
-lazy_static! {
-    static ref SHA1_SYM: Symbol = Symbol::mk("sha1");
-    static ref SHA256_SYM: Symbol = Symbol::mk("sha256");
-    static ref SHA512_SYM: Symbol = Symbol::mk("sha512");
-}
+static SHA1_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("sha1"));
+static SHA256_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("sha256"));
+static SHA512_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("sha512"));
 
 /// Usage: `list age_generate_keypair([bool as_bytes])`
 /// Generates an X25519 keypair for age encryption. Returns `{public_key, private_key}`.

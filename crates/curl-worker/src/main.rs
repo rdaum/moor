@@ -36,9 +36,9 @@ use tracing::{debug, error, info};
 use uuid::Uuid;
 
 // TODO: timeouts, and generally more error handling
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
-static VERSION_STRING: Lazy<String> = Lazy::new(|| {
+static VERSION_STRING: LazyLock<String> = LazyLock::new(|| {
     format!(
         "{} (commit: {})",
         env!("CARGO_PKG_VERSION"),

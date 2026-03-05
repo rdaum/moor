@@ -27,24 +27,24 @@ pub const DATA_LAYOUT_VERSION: u8 = 1;
 
 /// Build-time version and git information module
 pub mod build {
+    use std::sync::LazyLock;
+
     /// Package version from Cargo.toml
     pub const PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 
     /// Short git commit hash (first 7 characters of SHA)
     pub fn short_commit() -> &'static str {
-        lazy_static::lazy_static! {
-            static ref SHORT: String = {
-                option_env!("VERGEN_GIT_SHA")
-                    .map(|s| {
-                        if s.len() >= 7 {
-                            s[..7].to_string()
-                        } else {
-                            s.to_string()
-                        }
-                    })
-                    .unwrap_or_else(|| "unknown".to_string())
-            };
-        }
+        static SHORT: LazyLock<String> = LazyLock::new(|| {
+            option_env!("VERGEN_GIT_SHA")
+                .map(|s| {
+                    if s.len() >= 7 {
+                        s[..7].to_string()
+                    } else {
+                        s.to_string()
+                    }
+                })
+                .unwrap_or_else(|| "unknown".to_string())
+        });
         &SHORT
     }
 }

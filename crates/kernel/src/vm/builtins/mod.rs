@@ -11,8 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use lazy_static::lazy_static;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use thiserror::Error;
 
 use crate::vm::builtins::bf_connection::register_bf_connection;
@@ -74,9 +73,7 @@ mod test_function_help;
 mod unix_crypt_compat;
 // See ADDING-BUILTINS.md in this directory for safe builtin additions.
 
-lazy_static! {
-    static ref BF_COUNTERS: BfCounters = BfCounters::new();
-}
+static BF_COUNTERS: LazyLock<BfCounters> = LazyLock::new(BfCounters::new);
 
 thread_local! {
     static BF_COUNTERS_TLS: &'static BfCounters = &BF_COUNTERS;

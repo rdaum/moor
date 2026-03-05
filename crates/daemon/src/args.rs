@@ -26,9 +26,9 @@ use moor_kernel::config::{Config, ImportExportConfig, ImportFormat, RuntimeConfi
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc};
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
-static VERSION_STRING: Lazy<String> = Lazy::new(|| {
+static VERSION_STRING: LazyLock<String> = LazyLock::new(|| {
     format!(
         "{} (commit: {})",
         env!("CARGO_PKG_VERSION"),

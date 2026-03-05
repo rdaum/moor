@@ -29,7 +29,6 @@ use crate::{
 #[cfg(feature = "trace_events")]
 use crate::{trace_builtin_begin, trace_builtin_end, trace_verb_begin};
 
-use lazy_static::lazy_static;
 use moor_common::{
     matching::ParsedCommand,
     model::{
@@ -49,17 +48,16 @@ use moor_var::{
     program::{ProgramType, names::GlobalName},
     v_empty_str, v_int, v_obj, v_string,
 };
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref LIST_PROTO_SYM: Symbol = Symbol::mk("list_proto");
-    static ref MAP_PROTO_SYM: Symbol = Symbol::mk("map_proto");
-    static ref STRING_PROTO_SYM: Symbol = Symbol::mk("str_proto");
-    static ref INTEGER_PROTO_SYM: Symbol = Symbol::mk("int_proto");
-    static ref FLOAT_PROTO_SYM: Symbol = Symbol::mk("float_proto");
-    static ref ERROR_PROTO_SYM: Symbol = Symbol::mk("err_proto");
-    static ref BOOL_PROTO_SYM: Symbol = Symbol::mk("bool_proto");
-    static ref SYM_PROTO_SYM: Symbol = Symbol::mk("sym_proto");
-}
+static LIST_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("list_proto"));
+static MAP_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("map_proto"));
+static STRING_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("str_proto"));
+static INTEGER_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("int_proto"));
+static FLOAT_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("float_proto"));
+static ERROR_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("err_proto"));
+static BOOL_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("bool_proto"));
+static SYM_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("sym_proto"));
 
 /// The set of parameters for a scheduler-requested *resolved* verb method dispatch.
 #[derive(Debug, Clone, PartialEq)]

@@ -22,7 +22,6 @@ use crate::{
         vm_unwind::FinallyReason,
     },
 };
-use lazy_static::lazy_static;
 use moor_common::model::PropertyLookupHint;
 use moor_compiler::{Op, to_literal};
 use moor_db::{
@@ -34,12 +33,10 @@ use moor_var::{
     TypeClass, Var, VarType, program::names::Name, v_arc_str, v_bool, v_bool_int, v_empty_list,
     v_empty_map, v_err, v_error, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_sym,
 };
-use std::time::Duration;
+use std::{sync::LazyLock, time::Duration};
 
-lazy_static! {
-    static ref DELEGATE_SYM: Symbol = Symbol::mk("delegate");
-    static ref SLOTS_SYM: Symbol = Symbol::mk("slots");
-}
+static DELEGATE_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("delegate"));
+static SLOTS_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("slots"));
 
 /// Build a captured environment from a list of captured variables
 /// This recreates the environment structure needed by lambda execution

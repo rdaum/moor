@@ -60,8 +60,6 @@ thiserror.workspace = true
 # Utilities & Helpers
 binary-layout.workspace = true
 byteview.workspace = true
-lazy_static.workspace = true
-once_cell.workspace = true
 paste.workspace = true
 rand.workspace = true
 strum.workspace = true

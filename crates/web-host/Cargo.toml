@@ -74,7 +74,6 @@ thiserror.workspace = true
 tracing.workspace = true
 
 # Utilities & Helpers
-once_cell.workspace = true
 planus.workspace = true
 url.workspace = true
 urlencoding.workspace = true

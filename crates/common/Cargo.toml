@@ -31,7 +31,6 @@ triomphe.workspace = true
 # Utilities & Helpers
 binary-layout.workspace = true
 byteview.workspace = true
-lazy_static.workspace = true
 strum.workspace = true
 uuid.workspace = true
 zerocopy.workspace = true

@@ -16,7 +16,6 @@
 use ahash::AHasher;
 use eyre::Error;
 use flume::Sender;
-use lazy_static::lazy_static;
 use moor_rpc::{
     ClientEvent, ClientEventUnion, DaemonToClientReply, DaemonToClientReplyUnion,
     DaemonToHostReply, DaemonToHostReplyUnion, HistoryResponseReply, HostClientToDaemonMessageRef,
@@ -31,7 +30,7 @@ use papaya::HashMap as PapayaHashMap;
 use std::{
     hash::BuildHasherDefault,
     net::SocketAddr,
-    sync::{Arc, RwLock},
+    sync::{Arc, LazyLock, RwLock},
     time::{Duration, Instant, SystemTime},
 };
 use uuid::Uuid;
@@ -76,16 +75,19 @@ use rpc_common::{
 use rusty_paseto::prelude::Key;
 use tracing::{debug, error, info, warn};
 
-lazy_static! {
-    pub(crate) static ref USER_CONNECTED_SYM: Symbol = Symbol::mk("user_connected");
-    pub(crate) static ref USER_DISCONNECTED_SYM: Symbol = Symbol::mk("user_disconnected");
-    pub(crate) static ref USER_RECONNECTED_SYM: Symbol = Symbol::mk("user_reconnected");
-    pub(crate) static ref USER_CREATED_SYM: Symbol = Symbol::mk("user_created");
-    pub(crate) static ref DO_LOGIN_COMMAND: Symbol = Symbol::mk("do_login_command");
-    pub(crate) static ref SCHED_SYM: Symbol = Symbol::mk("sched");
-    pub(crate) static ref DB_SYM: Symbol = Symbol::mk("db");
-    pub(crate) static ref BF_SYM: Symbol = Symbol::mk("bf");
-}
+pub(crate) static USER_CONNECTED_SYM: LazyLock<Symbol> =
+    LazyLock::new(|| Symbol::mk("user_connected"));
+pub(crate) static USER_DISCONNECTED_SYM: LazyLock<Symbol> =
+    LazyLock::new(|| Symbol::mk("user_disconnected"));
+pub(crate) static USER_RECONNECTED_SYM: LazyLock<Symbol> =
+    LazyLock::new(|| Symbol::mk("user_reconnected"));
+pub(crate) static USER_CREATED_SYM: LazyLock<Symbol> =
+    LazyLock::new(|| Symbol::mk("user_created"));
+pub(crate) static DO_LOGIN_COMMAND: LazyLock<Symbol> =
+    LazyLock::new(|| Symbol::mk("do_login_command"));
+pub(crate) static SCHED_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("sched"));
+pub(crate) static DB_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("db"));
+pub(crate) static BF_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("bf"));
 
 /// If we don't hear from a host in this time, we consider it dead and its listeners gone.
 pub const HOST_TIMEOUT: Duration = Duration::from_secs(10);

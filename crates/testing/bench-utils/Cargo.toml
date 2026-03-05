@@ -24,7 +24,6 @@ serde.workspace = true
 serde_json.workspace = true
 
 # Other utilities
-lazy_static.workspace = true
 
 # Linux-specific performance counters (dev-only is fine here)
 [target.'cfg(all(target_os = "linux"))'.dependencies]

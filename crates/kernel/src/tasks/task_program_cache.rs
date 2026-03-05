@@ -12,9 +12,9 @@
 //
 
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 
 use ahash::AHasher;
-use lazy_static::lazy_static;
 use moor_common::model::{PropertyLookupHint, VerbLookupHint};
 use moor_common::model::{VerbProgramKey, WorldState, WorldStateError};
 use moor_common::util::ConcurrentCounter;
@@ -174,10 +174,8 @@ impl ProgramCacheGlobalStats {
     }
 }
 
-lazy_static! {
-    pub static ref PROGRAM_CACHE_GLOBAL_STATS: ProgramCacheGlobalStats =
-        ProgramCacheGlobalStats::new();
-}
+pub static PROGRAM_CACHE_GLOBAL_STATS: LazyLock<ProgramCacheGlobalStats> =
+    LazyLock::new(ProgramCacheGlobalStats::new);
 
 pub fn program_cache_global_stats() -> ProgramCacheGlobalSnapshot {
     PROGRAM_CACHE_GLOBAL_STATS.snapshot()

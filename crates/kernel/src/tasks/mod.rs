@@ -11,10 +11,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::{fmt::Debug, time::SystemTime};
+use std::{fmt::Debug, sync::LazyLock, time::SystemTime};
 
 use flume::Receiver;
-use lazy_static::lazy_static;
 use moor_compiler::{Program, to_literal};
 use moor_var::{List, Obj, Symbol, Var};
 
@@ -54,9 +53,8 @@ pub const DEFAULT_MAX_TASK_MAILBOX: usize = 1000;
 /// Interval for tasks DB compaction (independent of GC)
 pub const DEFAULT_COMPACT_INTERVAL_SECONDS: u64 = 300;
 
-lazy_static! {
-    static ref SCHED_COUNTERS: SchedulerPerfCounters = SchedulerPerfCounters::new();
-}
+static SCHED_COUNTERS: LazyLock<SchedulerPerfCounters> =
+    LazyLock::new(SchedulerPerfCounters::new);
 
 thread_local! {
     static SCHED_COUNTERS_TLS: &'static SchedulerPerfCounters = &SCHED_COUNTERS;

@@ -11,9 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use lazy_static::lazy_static;
 use moor_compiler::BUILTINS;
-use std::cmp::max;
+use std::{cmp::max, sync::LazyLock};
 use strum::EnumCount;
 use uuid::Uuid;
 
@@ -34,9 +33,7 @@ use moor_var::program::{
     names::{GlobalName, Name},
 };
 
-lazy_static! {
-    static ref EVAL_SYMBOL: Symbol = Symbol::mk("eval");
-}
+static EVAL_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("eval"));
 
 /// Helper function to perform scatter assignment for lambda parameter binding.
 /// Uses the shared scatter assignment logic and handles lambda-specific defaults.

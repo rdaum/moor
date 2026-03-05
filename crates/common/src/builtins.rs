@@ -14,24 +14,21 @@
 use ArgCount::{Q, U};
 use ArgType::{Any, AnyNum, Typed};
 use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
-use lazy_static::lazy_static;
 use moor_var::{
     Symbol, VarType,
     VarType::{TYPE_BINARY, TYPE_BOOL, TYPE_ERR, TYPE_FLYWEIGHT, TYPE_MAP, TYPE_SYMBOL},
 };
 /// Global registry of built-in function names.
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::LazyLock};
 
-lazy_static! {
-    /// The global builtins table which describes the set of builtins available to the mooR runtime.
-    /// Used by:
-    ///   * the compiler to identify which builtins are available at compile time and
-    ///     their static ID / offsets
-    ///   * the VM to access information about the builtin at dispatch time (overrides, names, etc)
-    ///   * the `call_function` and `function_info` builtins
-    pub static ref BUILTINS: Builtins = Builtins::new();
-    static ref BUILTIN_DESCRIPTORS: Vec<Builtin> = mk_builtin_table();
-}
+/// The global builtins table which describes the set of builtins available to the mooR runtime.
+/// Used by:
+///   * the compiler to identify which builtins are available at compile time and
+///     their static ID / offsets
+///   * the VM to access information about the builtin at dispatch time (overrides, names, etc)
+///   * the `call_function` and `function_info` builtins
+pub static BUILTINS: LazyLock<Builtins> = LazyLock::new(Builtins::new);
+static BUILTIN_DESCRIPTORS: LazyLock<Vec<Builtin>> = LazyLock::new(mk_builtin_table);
 pub enum ArgCount {
     Q(usize),
     U,
