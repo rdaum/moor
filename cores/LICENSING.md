@@ -62,8 +62,8 @@ SOFTWARE.
 ### minimal-core/
 
 - **Source**: Minimal MOO core for testing
-- **License**: GPL-3.0 (same as main mooR project)
-- **Notes**: This is the only core database covered by mooR's GPL-3.0 license
+- **License**: AGPL-3.0-only (same as main mooR project)
+- **Notes**: This is the only core database covered by mooR's AGPL license
 
 ## Important Licensing Notes
 
@@ -120,7 +120,7 @@ possible copyright on the core.
 
 - **JHCore**: Has explicit permission from Ken Fox for use, modification, and distribution
 - **lambda-moor**: Use at your own risk with understanding of complex licensing
-- **minimal-core**: Covered by mooR's GPL-3.0 license - safe for GPL-compatible use
+- **minimal-core**: Covered by mooR's AGPL license
 
 - These core databases are provided "as-is" for compatibility testing and reference
 - The mooR project maintainers are not responsible for licensing compliance of third-party databases

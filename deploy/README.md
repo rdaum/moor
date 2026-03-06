@@ -608,7 +608,7 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for more details.
 
 ## License
 
-mooR is free software licensed under GPL-3.0. See [../LICENSE](../LICENSE) for details.
+mooR is free software licensed under AGPL-3.0-only. See [../LICENSE](../LICENSE) for details.
 
 Note: Core databases in `../cores/` have separate licensing. See
 [../cores/LICENSING.md](../cores/LICENSING.md).

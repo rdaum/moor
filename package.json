@@ -25,7 +25,7 @@
     "full:build": "cd ${MEADOW_PATH:-./clients/meadow} && npm run build && cd - && npm run web-host:build"
   },
   "author": "Ryan Daum <ryan.daum@gmail.com>",
-  "license": "GPL-3.0",
+  "license": "AGPL-3.0-only",
   "devDependencies": {
     "concurrently": "^9.2.1"
   }

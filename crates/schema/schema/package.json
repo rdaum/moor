@@ -17,9 +17,11 @@
   "publishConfig": {
     "@moor:registry": "https://codeberg.org/api/packages/timbran/npm/"
   },
+  "license": "LGPL-3.0-or-later",
   "files": [
     "generated",
-    "*.fbs"
+    "*.fbs",
+    "LICENSE"
   ],
   "scripts": {
     "generate": "rm -rf generated && mkdir -p generated && flatc --ts --gen-all -o generated all_schemas.fbs"

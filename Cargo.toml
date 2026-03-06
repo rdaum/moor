@@ -51,8 +51,6 @@ default-members = [
 [workspace.package]
 authors = [
     "Ryan Daum <ryan.daum@gmail.com>",
-    "Norman Nunley <nnunley@gmail.com>",
-    "Zoltán Nagy <abesto0@gmail.com>",
 ]
 categories = [
     "game",
@@ -69,7 +67,7 @@ keywords = [
     "game",
     "virtual-machine",
 ]
-license = "GPL-3"
+license = "AGPL-3.0-only"
 readme = "README.md"
 repository = "https://github.com/rdaum/moor.git"
 rust-version = "1.92.0"

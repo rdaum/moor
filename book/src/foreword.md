@@ -35,6 +35,11 @@ back to the forefront the promise of the earlier internet, a type of interaction
 era Internet was, but designed to take advantage of the power of modern hardware and support the strengths of social
 media as we know it today.
 
+Because mooR is intended to be run as network-accessible software, the project is released under
+the GNU Affero General Public License v3.0. If a particular deployment or commercial use requires
+different terms, alternative licensing arrangements with Ryan Daum, operating as Timbran
+Consulting, may be possible on a case-by-case basis.
+
 But I felt that to make that happen I couldn't just start with a fork of the original LambdaMOO (as e.g. ToastStunt had
 done), but with a brand new implementation which fulfilled the following requirements:
 

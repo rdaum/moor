@@ -12,6 +12,7 @@ rust-version.workspace = true
 description = "The actual moor binary that runs as an RPC-accessible daemon that various frontends can connect to."
 
 [package.metadata.deb]
+maintainer = "Ryan Daum, operating as Timbran Consulting <ryan.daum@gmail.com>"
 depends = "$auto, systemd, openssl"
 extended-description = "Daemon for the Moor virtual machine. This is the main process that runs the Moor VM and provides an RPC interface for clients to connect to."
 section = "net"

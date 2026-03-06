@@ -39,8 +39,8 @@ info:
     governed by the `.fbs` files, not JSON Schema.
 
   license:
-    name: GPL-3.0-only
-    url: https://www.gnu.org/licenses/gpl-3.0.html
+    name: AGPL-3.0-only
+    url: https://www.gnu.org/licenses/agpl-3.0.html
 
 servers:
   - url: http://localhost:8080
