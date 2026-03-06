@@ -13,6 +13,8 @@
 
 //! Proptest strategies for generating MOO AST nodes.
 
+use std::collections::HashSet;
+
 use crate::ast::{
     Arg, BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem,
     ScatterKind, Stmt, StmtNode, UnaryOp,
@@ -731,8 +733,41 @@ pub fn arb_stmt_scope_with_decls<S: Strategy<Value = Expr> + Clone + 'static>(
     max_decls: usize,
     max_body_len: usize,
 ) -> impl Strategy<Value = Stmt> {
-    let decl_strategy =
-        proptest::collection::vec(arb_stmt_decl(expr_strategy.clone()), 1..=max_decls);
+    let decl_expr_strategy = expr_strategy.clone();
+    let decl_strategy = proptest::collection::vec(arb_identifier_string(), 1..=max_decls)
+        .prop_filter("scope declarations must have unique identifiers", |names| {
+            let unique = names.iter().collect::<HashSet<_>>();
+            unique.len() == names.len()
+        })
+        .prop_flat_map(move |names| {
+            let len = names.len();
+            (
+                Just(names),
+                proptest::collection::vec(any::<bool>(), len),
+                proptest::collection::vec(proptest::option::of(decl_expr_strategy.clone()), len),
+                proptest::collection::vec(decl_expr_strategy.clone(), len),
+            )
+                .prop_map(|(names, is_consts, let_inits, const_inits)| {
+                    names.into_iter()
+                        .zip(is_consts)
+                        .zip(let_inits)
+                        .zip(const_inits)
+                        .map(|(((name, is_const), let_init), const_init)| {
+                            let id = Variable {
+                                id: 0,
+                                scope_id: 0,
+                                nr: VarName::Named(Symbol::mk(&name)),
+                            };
+                            let expr = if is_const {
+                                Some(Box::new(const_init))
+                            } else {
+                                let_init.map(Box::new)
+                            };
+                            make_stmt(StmtNode::Expr(Expr::Decl { id, is_const, expr }))
+                        })
+                        .collect::<Vec<_>>()
+                })
+        });
     let body_strategy = proptest::collection::vec(arb_stmt_expr(expr_strategy), 1..=max_body_len);
 
     (decl_strategy, body_strategy).prop_map(|(decls, body)| {
@@ -1306,6 +1341,30 @@ mod tests {
         }
         assert!(found_list, "Layer 2 should generate lists");
         assert!(found_map, "Layer 2 should generate maps");
+    }
+
+    #[test]
+    fn test_scope_with_decls_generates_unique_bindings() {
+        let mut runner = TestRunner::default();
+        let strategy = arb_stmt_scope_with_decls(arb_expr_layer2_complete(1), 3, 2);
+
+        for _ in 0..100 {
+            let stmt = strategy.new_tree(&mut runner).unwrap().current();
+            let StmtNode::Scope { body, .. } = &stmt.node else {
+                panic!("expected scope statement");
+            };
+
+            let names = body
+                .iter()
+                .filter_map(|stmt| match &stmt.node {
+                    StmtNode::Expr(Expr::Decl { id, .. }) => Some(id.to_symbol().to_string()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+
+            let unique = names.iter().collect::<HashSet<_>>();
+            assert_eq!(unique.len(), names.len(), "duplicate declaration names: {names:?}");
+        }
     }
 
     #[test]
