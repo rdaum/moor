@@ -126,10 +126,10 @@ fn classify_key_set(
             false
         }
         MatchClass::None => {
-            if max_distance.is_some() {
-                if let MatchClass::Fuzzy = classify_match(subject_lower, s, max_distance) {
-                    fuzzy = true;
-                }
+            if max_distance.is_some()
+                && let MatchClass::Fuzzy = classify_match(subject_lower, s, max_distance)
+            {
+                fuzzy = true;
             }
             false
         }

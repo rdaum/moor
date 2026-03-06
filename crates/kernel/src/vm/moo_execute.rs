@@ -1006,7 +1006,7 @@ pub fn moo_frame_execute(
                     inline_property_ic_ptr,
                     inline_property_ic_len,
                     &permissions,
-                    &obj,
+                    obj,
                     propname,
                     features_config,
                 );
@@ -1081,7 +1081,6 @@ pub fn moo_frame_execute(
                 };
 
                 let update_result = if let Some(obj) = base.as_object() {
-                    let obj = obj;
                     let hint = load_inline_property_hint(
                         inline_property_ic_ptr,
                         inline_property_ic_len,
@@ -1410,7 +1409,7 @@ pub fn moo_frame_execute(
                 let position = f
                     .get_env(&position_register)
                     .expect("Bad range position variable in range comprehension");
-                if !position.le(&end_of_range) {
+                if !position.le(end_of_range) {
                     f.jump(&end_label);
                 }
             }
@@ -1534,6 +1533,7 @@ pub fn moo_frame_execute(
     ExecutionResult::More
 }
 
+#[allow(clippy::too_many_arguments)]
 fn get_property(
     pc: usize,
     op: PropertyReadOp,

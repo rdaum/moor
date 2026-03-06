@@ -25,6 +25,8 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::{collections::HashMap, hash::BuildHasherDefault, sync::Arc};
 
+type LocalCodomainIndexCache<Domain, Codomain> = RefCell<Option<Vec<(Codomain, Vec<Domain>)>>>;
+
 /// A key-value caching store that is scoped for the lifetime of a transaction.
 /// When the transaction is completed, it collapses into a WorkingSet which can be applied to the
 /// global transactional cache.
@@ -51,7 +53,7 @@ where
     local_operations: HashMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>,
     // Lazily-built codomain -> domains overlay for local operations.
     // Invalidated on mutation, used to accelerate repeated codomain lookups.
-    local_codomain_index_cache: RefCell<Option<Vec<(Codomain, Vec<Domain>)>>>,
+    local_codomain_index_cache: LocalCodomainIndexCache<Domain, Codomain>,
     master_entries: Box<dyn RelationIndex<Domain, Codomain>>,
     provider_fully_loaded: bool,
     has_local_mutations: bool,

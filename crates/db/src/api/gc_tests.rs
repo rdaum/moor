@@ -17,7 +17,7 @@
 mod tests {
     use crate::{Database, DatabaseConfig, TxDB};
     use moor_common::{
-        model::{CommitResult, ObjAttrs, ObjectKind, WorldStateSource},
+        model::{CommitResult, ObjAttrs, ObjFlag, ObjectKind, WorldStateSource},
         util::BitEnum,
     };
     use moor_var::{NOTHING, Obj, Symbol, v_int, v_list, v_map, v_obj, v_str};

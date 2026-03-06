@@ -292,3 +292,9 @@ impl PropertyPicStats {
         }
     }
 }
+
+impl Default for PropertyPicStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}

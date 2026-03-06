@@ -377,7 +377,7 @@ mod tests {
         assert!(cache.program_for_slot(0).is_some());
         assert!(cache.program_for_slot(1).is_none());
         assert_eq!(cache.cache.get(&key1).copied(), Some(0));
-        assert!(cache.cache.get(&key2).is_none());
+        assert!(!cache.cache.contains_key(&key2));
         assert_ne!(p1_ptr, p2_ptr);
     }
 }

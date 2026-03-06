@@ -503,7 +503,8 @@ fn check_no_conflict_core(
     _chunk_num: usize,
 ) {
     for _ in 0..chunk_size {
-        black_box(ctx.checker.check(&mut ctx.ws).unwrap());
+        ctx.checker.check(&mut ctx.ws).unwrap();
+        black_box(());
     }
 }
 
@@ -513,7 +514,8 @@ fn check_conflict_identical_accept_core(
     _chunk_num: usize,
 ) {
     for _ in 0..chunk_size {
-        black_box(ctx.checker.check(&mut ctx.ws).unwrap());
+        ctx.checker.check(&mut ctx.ws).unwrap();
+        black_box(());
     }
 }
 
@@ -689,11 +691,10 @@ fn tx_op_delete_local_delete_none(ctx: &mut TxOpsContext, chunk_size: usize, _ch
 
 fn tx_op_insert_miss(ctx: &mut TxOpsContext, chunk_size: usize, _chunk_num: usize) {
     for i in 0..chunk_size {
-        black_box(
-            ctx.insert_miss_txs[i]
-                .insert(ctx.missing_domain.clone(), PlainCodomain(500 + (i as u64)))
-                .unwrap(),
-        );
+        ctx.insert_miss_txs[i]
+            .insert(ctx.missing_domain.clone(), PlainCodomain(500 + (i as u64)))
+            .unwrap();
+        black_box(());
     }
 }
 

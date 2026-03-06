@@ -73,7 +73,7 @@ const CRYPT_HASH64_ENC_MAP: &[u8] = b"\x40\x40\x40\x40\x40\x40\x40\x40\x40\x40\x
                                       \x35\x36\x37\x38\x39\x3a\x3b\x3c\x3d\x3e\x3f\x40\x40\x40\x40\x40";
 
 fn crypt_hash64_encode(bs: &[u8]) -> String {
-    let ngroups = (bs.len() + 2) / 3;
+    let ngroups = bs.len().div_ceil(3);
     let mut out = String::with_capacity(ngroups * 4);
     for g in 0..ngroups {
         let mut g_idx = g * 3;
@@ -486,7 +486,7 @@ pub fn des_cipher(input: u64, keyword: u64, salt: u32, mut num_iter: u32) -> u64
         let mut out = 0u64;
         let mut i = 3;
         while i >= 0 {
-            let t = (c & 0xFF) as u32;
+            let t = c & 0xFF;
             c >>= 8;
             let tp = p[(i << 1) as usize][(t & 0xF) as usize];
             out |= tp;
@@ -556,9 +556,7 @@ pub fn des_cipher(input: u64, keyword: u64, salt: u32, mut num_iter: u32) -> u64
                 ^ SPE[6][((b >> 10) & 0x3F) as usize]
                 ^ SPE[7][((b >> 2) & 0x3F) as usize];
         }
-        l ^= r;
-        r ^= l;
-        l ^= r;
+        std::mem::swap(&mut l, &mut r);
     }
     l = (((l >> 35) & 0x0F0F0F0F) | (((l & 0xFFFFFFFF) << 1) & 0xF0F0F0F0)) << 32
         | (((r >> 35) & 0x0F0F0F0F) | (((r & 0xFFFFFFFF) << 1) & 0xF0F0F0F0));

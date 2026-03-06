@@ -169,7 +169,7 @@ mod tests {
             ScatterLabel::Required(Name(1, 0, 0)),
         ]);
 
-        let args = vec![v_int(42), v_str("hello")];
+        let args = [v_int(42), v_str("hello")];
         let mut assignments = HashMap::new();
 
         let result = scatter_assign(&table, args.iter(), |name, value| {
@@ -191,7 +191,7 @@ mod tests {
             ScatterLabel::Optional(Name(1, 0, 0), Some(unsafe { std::mem::zeroed() })),
         ]);
 
-        let args = vec![v_str("Alice")]; // Missing optional arg
+        let args = [v_str("Alice")]; // Missing optional arg
         let mut assignments = HashMap::new();
 
         let result = scatter_assign(&table, args.iter(), |name, value| {
@@ -211,7 +211,7 @@ mod tests {
     fn test_too_many_args_without_rest() {
         let table = create_test_scatter_args(vec![ScatterLabel::Required(Name(0, 0, 0))]);
 
-        let args = vec![v_int(1), v_int(2), v_int(3)]; // Too many!
+        let args = [v_int(1), v_int(2), v_int(3)]; // Too many!
         let mut assignments = HashMap::new();
 
         let result = scatter_assign(&table, args.iter(), |name, value| {

@@ -508,7 +508,7 @@ mod tests {
             &obj,
             Symbol::mk("test_prop"),
             &SYSTEM_OBJECT,
-            ObjFlag::all_flags(),
+            PropFlag::all_flags(),
             Some(v_int(0)),
         )
         .unwrap();

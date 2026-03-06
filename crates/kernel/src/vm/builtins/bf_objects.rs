@@ -1278,7 +1278,7 @@ fn bf_owned_objects(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// - 0: renumber to next available numbered ID
 /// - 2: renumber to a new UUID
 fn bf_renumber(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() < 1 || bf_args.args.len() > 2 {
+    if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(BfErr::ErrValue(
             E_ARGS.msg("renumber() takes 1 or 2 arguments"),
         ));

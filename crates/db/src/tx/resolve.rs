@@ -230,7 +230,7 @@ mod tests {
         let mut resolver = SmartMergeResolver;
         let resolution = resolver.resolve(&conflict).unwrap();
         assert!(matches!(resolution, Resolution::Rewrite(MergeCodomain(21))));
-        assert!(counters.crdt_resolve_success.invocations().sum() >= success_before + 1);
+        assert!(counters.crdt_resolve_success.invocations().sum() > success_before);
     }
 
     #[test]
@@ -257,6 +257,6 @@ mod tests {
             resolver.resolve(&conflict),
             Err(Error::Conflict(_))
         ));
-        assert!(counters.crdt_resolve_fail.invocations().sum() >= fail_before + 1);
+        assert!(counters.crdt_resolve_fail.invocations().sum() > fail_before);
     }
 }

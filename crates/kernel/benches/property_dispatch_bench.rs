@@ -21,8 +21,8 @@ use criterion::{Criterion, criterion_group, criterion_main};
 
 use moor_common::{
     model::{
-        CommitResult, DispatchFlagsSource, ObjectKind, PropFlag, VerbArgsSpec, VerbDispatch,
-        VerbFlag, VerbLookup, WorldState, WorldStateSource,
+        CommitResult, DispatchFlagsSource, ObjFlag, ObjectKind, PropFlag, VerbArgsSpec,
+        VerbDispatch, VerbFlag, VerbLookup, WorldState, WorldStateSource,
     },
     tasks::{AbortLimitReason, NoopClientSession, Session},
     util::BitEnum,

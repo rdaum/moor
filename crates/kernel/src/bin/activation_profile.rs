@@ -211,7 +211,7 @@ impl Workload {
     ) -> moor_kernel::testing::ActivationBenchResult {
         create_activation_for_bench(
             SYSTEM_OBJECT,
-            self.verbdef.clone(),
+            self.verbdef,
             self.verb_name,
             self.this.clone(),
             SYSTEM_OBJECT,
@@ -281,7 +281,7 @@ impl Workload {
     fn cycle_nested_simple(&self, parent: &moor_kernel::testing::ActivationBenchResult) {
         let activation = create_nested_activation_for_bench(
             SYSTEM_OBJECT,
-            self.verbdef.clone(),
+            self.verbdef,
             self.verb_name,
             self.this.clone(),
             SYSTEM_OBJECT,

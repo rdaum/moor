@@ -208,3 +208,9 @@ impl VerbPicStats {
         }
     }
 }
+
+impl Default for VerbPicStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}

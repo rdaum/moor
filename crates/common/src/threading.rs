@@ -58,10 +58,11 @@ pub enum ThreadClass {
     Unpinned,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum TaskPoolPinningMode {
     /// Default behavior: use detected performance tier when available, else unpinned.
+    #[default]
     Auto,
     /// Force performance-core pinning path (falls back to unpinned if no tier is detected).
     Performance,
@@ -84,12 +85,6 @@ impl TaskPoolPinningMode {
             TASK_POOL_PINNING_MODE_NONE => Self::None,
             _ => Self::Auto,
         }
-    }
-}
-
-impl Default for TaskPoolPinningMode {
-    fn default() -> Self {
-        Self::Auto
     }
 }
 

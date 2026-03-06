@@ -386,9 +386,7 @@ impl VMExecState {
             return None;
         };
         let pc = frame.pc.saturating_sub(1);
-        let Some(ic_ptr) = frame.program_ic_ptr else {
-            return None;
-        };
+        let ic_ptr = frame.program_ic_ptr?;
         let ic = unsafe { &mut *(ic_ptr as *mut ProgramInlineCaches) };
         let slot = match frame.pc_type {
             PcType::Main => ic.main_verb_mut().get(pc),

@@ -952,7 +952,7 @@ fn parse_optional_timestamp(arg: &Var, label: &str) -> Result<Option<SystemTime>
 /// Returns `{total_events, earliest_time, latest_time}` for a player's event log.
 /// Caller must own the player or be a wizard.
 fn bf_player_event_log_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() < 1 || bf_args.args.len() > 3 {
+    if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(ErrValue(
             E_ARGS.msg("player_event_log_stats() takes 1 to 3 arguments"),
         ));
@@ -1019,7 +1019,7 @@ fn bf_player_event_log_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfE
 /// Deletes events before timestamp (or all if omitted). Returns `{deleted_count, pubkey_deleted}`.
 /// If drop_pubkey is true, also removes the player's stored public key.
 fn bf_purge_player_event_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() < 1 || bf_args.args.len() > 3 {
+    if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(ErrValue(
             E_ARGS.msg("purge_player_event_log() takes 1 to 3 arguments"),
         ));

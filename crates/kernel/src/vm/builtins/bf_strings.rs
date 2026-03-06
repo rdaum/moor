@@ -208,7 +208,7 @@ fn bf_encode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// Decodes Base64-encoded string to binary data.
 /// - url_safe: If true, uses URL-safe Base64 alphabet (- and _ instead of + and /). Defaults to false.
 fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() < 1 || bf_args.args.len() > 2 {
+    if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -238,7 +238,7 @@ fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// If allow_lossy is false (default), returns E_INVARG on invalid UTF-8.
 /// If allow_lossy is true, uses replacement character for invalid sequences.
 fn bf_binary_to_str(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() < 1 || bf_args.args.len() > 2 {
+    if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(BfErr::Code(E_ARGS));
     }
 
