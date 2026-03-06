@@ -169,7 +169,7 @@ mod tests {
     use crate::tasks::tasks_db_fjall::FjallTasksDB;
     use moor_common::{
         tasks::NoopClientSession,
-        util::{Deadline, Timestamp},
+        util::{Deadline, Instant, Timestamp},
     };
     use moor_kernel::tasks::{DEFAULT_MAX_TASK_MAILBOX, DEFAULT_MAX_TASK_RETRIES};
     use moor_kernel::{
