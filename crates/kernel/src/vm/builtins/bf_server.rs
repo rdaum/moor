@@ -52,10 +52,7 @@ use moor_compiler::{
     ArgCount, ArgType, BUILTINS, Builtin, compile, compile_error_to_map, format_compile_error,
     offset_for_builtin,
 };
-use moor_db::{
-    ANCESTRY_CACHE_STATS, PROP_CACHE_STATS, PROPERTY_PIC_STATS, VERB_CACHE_STATS, VERB_PIC_STATS,
-    db_counters,
-};
+use moor_db::{ANCESTRY_CACHE_STATS, PROP_CACHE_STATS, VERB_CACHE_STATS, db_counters};
 use moor_var::{
     Associative, E_ARGS, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Var,
     VarType::TYPE_NONE, v_arc_str, v_float, v_int, v_list, v_list_iter, v_map, v_obj, v_str,
@@ -1091,133 +1088,6 @@ fn make_cache_stats_list(cache_stats: &moor_db::CacheStats) -> Var {
     ])
 }
 
-fn make_property_pic_entry(
-    hits: i64,
-    miss_no_hint: i64,
-    miss_guard_mismatch: i64,
-    miss_version_mismatch: i64,
-    miss_resolve_failed: i64,
-    not_applicable: i64,
-    hit_rate: f64,
-) -> Var {
-    let total = hits
-        + miss_no_hint
-        + miss_guard_mismatch
-        + miss_version_mismatch
-        + miss_resolve_failed
-        + not_applicable;
-
-    v_map(&[
-        (v_str("hits"), v_int(hits)),
-        (v_str("miss_no_hint"), v_int(miss_no_hint)),
-        (v_str("miss_guard_mismatch"), v_int(miss_guard_mismatch)),
-        (v_str("miss_version_mismatch"), v_int(miss_version_mismatch)),
-        (v_str("miss_resolve_failed"), v_int(miss_resolve_failed)),
-        (v_str("not_applicable"), v_int(not_applicable)),
-        (v_str("total"), v_int(total)),
-        (v_str("hit_rate"), v_float(hit_rate)),
-    ])
-}
-
-fn make_vm_hint_entry(with_hint: i64, no_hint: i64) -> Var {
-    let total = with_hint + no_hint;
-    let with_hint_rate = if total > 0 {
-        (with_hint as f64 / total as f64) * 100.0
-    } else {
-        0.0
-    };
-    v_map(&[
-        (v_str("with_hint"), v_int(with_hint)),
-        (v_str("no_hint"), v_int(no_hint)),
-        (v_str("total"), v_int(total)),
-        (v_str("with_hint_rate"), v_float(with_hint_rate)),
-    ])
-}
-
-fn make_property_pic_stats_map() -> Var {
-    let stats = PROPERTY_PIC_STATS.snapshot();
-    let read = make_property_pic_entry(
-        stats.read_hits as i64,
-        stats.read_miss_no_hint as i64,
-        stats.read_miss_guard_mismatch as i64,
-        stats.read_miss_version_mismatch as i64,
-        stats.read_miss_resolve_failed as i64,
-        stats.read_not_applicable as i64,
-        stats.read_hit_rate(),
-    );
-    let write = make_property_pic_entry(
-        stats.write_hits as i64,
-        stats.write_miss_no_hint as i64,
-        stats.write_miss_guard_mismatch as i64,
-        stats.write_miss_version_mismatch as i64,
-        stats.write_miss_resolve_failed as i64,
-        stats.write_not_applicable as i64,
-        stats.write_hit_rate(),
-    );
-    let vm_hint = v_map(&[
-        (
-            v_str("get_prop"),
-            make_vm_hint_entry(
-                stats.vm_get_prop_with_hint as i64,
-                stats.vm_get_prop_no_hint as i64,
-            ),
-        ),
-        (
-            v_str("push_get_prop"),
-            make_vm_hint_entry(
-                stats.vm_push_get_prop_with_hint as i64,
-                stats.vm_push_get_prop_no_hint as i64,
-            ),
-        ),
-        (
-            v_str("put_prop"),
-            make_vm_hint_entry(
-                stats.vm_put_prop_with_hint as i64,
-                stats.vm_put_prop_no_hint as i64,
-            ),
-        ),
-        (
-            v_str("put_prop_at"),
-            make_vm_hint_entry(
-                stats.vm_put_prop_at_with_hint as i64,
-                stats.vm_put_prop_at_no_hint as i64,
-            ),
-        ),
-    ]);
-    v_map(&[
-        (v_str("read"), read),
-        (v_str("write"), write),
-        (v_str("vm_hint"), vm_hint),
-    ])
-}
-
-fn make_verb_pic_stats_map() -> Var {
-    let stats = VERB_PIC_STATS.snapshot();
-    let dispatch = make_property_pic_entry(
-        stats.dispatch_hits as i64,
-        stats.dispatch_miss_no_hint as i64,
-        stats.dispatch_miss_guard_mismatch as i64,
-        stats.dispatch_miss_version_mismatch as i64,
-        stats.dispatch_miss_resolve_failed as i64,
-        stats.dispatch_not_applicable as i64,
-        stats.dispatch_hit_rate(),
-    );
-    let vm_hint = v_map(&[
-        (
-            v_str("call_verb"),
-            make_vm_hint_entry(
-                stats.vm_call_verb_with_hint as i64,
-                stats.vm_call_verb_no_hint as i64,
-            ),
-        ),
-        (
-            v_str("pass"),
-            make_vm_hint_entry(stats.vm_pass_with_hint as i64, stats.vm_pass_no_hint as i64),
-        ),
-    ]);
-    v_map(&[(v_str("dispatch"), dispatch), (v_str("vm_hint"), vm_hint)])
-}
-
 /// Usage: `list verb_cache_stats()`
 /// Returns `{hits, negative_hits, misses, flushes, histogram}` for the verb cache. Wizard-only.
 /// `histogram` is a simplified `{0, entries}` list and `flushes` is the closest
@@ -1239,12 +1109,7 @@ fn bf_verb_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     }
 
-    let base = make_cache_stats_list(&VERB_CACHE_STATS);
-    let Some(base_list) = base.as_list() else {
-        return Ok(Ret(base));
-    };
-    let extended = v_list_iter(base_list.iter().chain([make_verb_pic_stats_map()]));
-    Ok(Ret(extended))
+    Ok(Ret(make_cache_stats_list(&VERB_CACHE_STATS)))
 }
 
 /// Usage: `list property_cache_stats()`
@@ -1268,12 +1133,7 @@ fn bf_property_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
         ));
     }
 
-    let base = make_cache_stats_list(&PROP_CACHE_STATS);
-    let Some(base_list) = base.as_list() else {
-        return Ok(Ret(base));
-    };
-    let extended = v_list_iter(base_list.iter().chain([make_property_pic_stats_map()]));
-    Ok(Ret(extended))
+    Ok(Ret(make_cache_stats_list(&PROP_CACHE_STATS)))
 }
 
 /// Usage: `list ancestry_cache_stats()`

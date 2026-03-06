@@ -23,17 +23,14 @@ use uuid::Uuid;
 
 use crate::{
     api::gc::{GCError, GCInterface},
-    cache::property_pic_stats::{record_property_pic_read, record_property_pic_write},
-    cache::verb_pic_stats::record_verb_pic_dispatch,
     engine::moor_db::WorldStateTransaction,
 };
 use moor_common::{
     model::{
         CommitResult, DispatchFlagsSource, HasUuid, ObjAttrs, ObjFlag, ObjSet, ObjectKind,
-        ObjectRef, Perms, PropAttrs, PropDef, PropDefs, PropFlag, PropPerms, PropertyLookupHint,
-        PropertyLookupPicOutcome, PropertyLookupResult, ValSet, VerbArgsSpec, VerbAttrs, VerbDef,
-        VerbDefs, VerbDispatch, VerbDispatchResult, VerbFlag, VerbLookup, VerbLookupHint,
-        VerbLookupPicOutcome, VerbProgramKey, WorldState, WorldStateError, WorldStatePerf,
+        ObjectRef, Perms, PropAttrs, PropDef, PropDefs, PropFlag, PropPerms, ValSet,
+        VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbDispatch, VerbDispatchResult, VerbFlag,
+        VerbLookup, VerbProgramKey, WorldState, WorldStateError, WorldStatePerf,
     },
     util::{BitEnum, PerfTimerGuard},
 };
@@ -100,8 +97,7 @@ impl DbWorldState {
         obj: &Obj,
         pname: Symbol,
         value: &Var,
-        hint: Option<PropertyLookupHint>,
-    ) -> Result<Option<PropertyLookupHint>, WorldStateError> {
+    ) -> Result<(), WorldStateError> {
         let perms_who = self.perms(perms)?;
 
         // You have to use move/chparent for this kinda fun.
@@ -110,7 +106,6 @@ impl DbWorldState {
             || pname == *PARENT_SYM
             || pname == *CHILDREN_SYM
         {
-            record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
             return Err(WorldStateError::PropertyPermissionDenied);
         }
 
@@ -135,8 +130,7 @@ impl DbWorldState {
                 }
 
                 self.get_tx_mut().set_object_name(obj, name.to_string())?;
-                record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
-                return Ok(None);
+                return Ok(());
             }
 
             if pname == *OWNER_SYM {
@@ -145,8 +139,7 @@ impl DbWorldState {
                 };
                 perms_who.check_wizard()?;
                 self.get_tx_mut().set_object_owner(obj, &owner)?;
-                record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
-                return Ok(None);
+                return Ok(());
             }
 
             if pname == *R_SYM {
@@ -159,8 +152,7 @@ impl DbWorldState {
                     flags.clear(ObjFlag::Read);
                 }
                 self.get_tx_mut().set_object_flags(obj, flags)?;
-                record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
-                return Ok(None);
+                return Ok(());
             }
 
             if pname == *W_SYM {
@@ -173,8 +165,7 @@ impl DbWorldState {
                     flags.clear(ObjFlag::Write);
                 }
                 self.get_tx_mut().set_object_flags(obj, flags)?;
-                record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
-                return Ok(None);
+                return Ok(());
             }
 
             if pname == *F_SYM {
@@ -187,8 +178,7 @@ impl DbWorldState {
                     flags.clear(ObjFlag::Fertile);
                 }
                 self.get_tx_mut().set_object_flags(obj, flags)?;
-                record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
-                return Ok(None);
+                return Ok(());
             }
         }
 
@@ -213,54 +203,18 @@ impl DbWorldState {
             }
 
             self.get_tx_mut().set_object_flags(obj, flags)?;
-            record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
-            return Ok(None);
+            return Ok(());
         }
 
         if value.is_none() {
-            record_property_pic_write(PropertyLookupPicOutcome::NotApplicable);
             return Err(WorldStateError::PropertyTypeMismatch);
-        }
-
-        let mut pic_outcome = PropertyLookupPicOutcome::MissNoHint;
-        if let Some(hint) = hint {
-            if hint.receiver != *obj || hint.property_name != pname {
-                pic_outcome = PropertyLookupPicOutcome::MissGuardMismatch;
-            } else if hint.prop_cache_version
-                != self.get_tx().prop_resolution_cache_version() as u64
-            {
-                pic_outcome = PropertyLookupPicOutcome::MissVersionMismatch;
-            } else {
-                match self
-                    .get_tx()
-                    .resolve_property_by_uuid(obj, hint.property_uuid)
-                {
-                    Ok((_, propperms, _)) => {
-                        perms_who.check_property_allows(&propperms, PropFlag::Write)?;
-                        self.get_tx_mut()
-                            .set_property(obj, hint.property_uuid, value.clone())?;
-                        record_property_pic_write(PropertyLookupPicOutcome::Hit);
-                        return Ok(Some(hint));
-                    }
-                    Err(_) => {
-                        pic_outcome = PropertyLookupPicOutcome::MissResolveFailed;
-                    }
-                }
-            }
         }
 
         let (pdef, _, propperms, _) = self.get_tx().resolve_property(obj, pname)?;
         perms_who.check_property_allows(&propperms, PropFlag::Write)?;
         self.get_tx_mut()
             .set_property(obj, pdef.uuid(), value.clone())?;
-        record_property_pic_write(pic_outcome);
-
-        Ok(Some(PropertyLookupHint {
-            receiver: *obj,
-            property_name: pname,
-            property_uuid: pdef.uuid(),
-            prop_cache_version: self.get_tx().prop_resolution_cache_version() as u64,
-        }))
+        Ok(())
     }
 
     fn do_update_verb(
@@ -311,20 +265,6 @@ impl DbWorldState {
 
     fn get_last_move_property(&self, obj: &Obj) -> Result<Var, WorldStateError> {
         self.get_tx().get_last_move(obj)
-    }
-
-    #[inline]
-    fn is_builtin_property_name(pname: Symbol) -> bool {
-        pname == *NAME_SYM
-            || pname == *LOCATION_SYM
-            || pname == *CONTENTS_SYM
-            || pname == *OWNER_SYM
-            || pname == *PROGRAMMER_SYM
-            || pname == *WIZARD_SYM
-            || pname == *R_SYM
-            || pname == *W_SYM
-            || pname == *F_SYM
-            || pname == *LAST_MOVE_SYM
     }
 
     fn check_chparent_property_conflict(
@@ -586,75 +526,6 @@ impl WorldState for DbWorldState {
         Ok(value)
     }
 
-    fn retrieve_property_with_hint(
-        &self,
-        perms: &Obj,
-        obj: &Obj,
-        pname: Symbol,
-        hint: Option<PropertyLookupHint>,
-    ) -> Result<PropertyLookupResult, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().retrieve_property);
-        if *obj == NOTHING || !self.valid(obj)? {
-            return Err(WorldStateError::ObjectNotFound(ObjectRef::Id(*obj)));
-        }
-
-        if Self::is_builtin_property_name(pname) {
-            let value = self.retrieve_property(perms, obj, pname)?;
-            record_property_pic_read(PropertyLookupPicOutcome::NotApplicable);
-            return Ok(PropertyLookupResult {
-                value,
-                next_hint: None,
-                pic_outcome: PropertyLookupPicOutcome::NotApplicable,
-            });
-        }
-
-        let mut pic_outcome = PropertyLookupPicOutcome::MissNoHint;
-        if let Some(hint) = hint {
-            if hint.receiver != *obj || hint.property_name != pname {
-                pic_outcome = PropertyLookupPicOutcome::MissGuardMismatch;
-            } else if hint.prop_cache_version
-                != self.get_tx().prop_resolution_cache_version() as u64
-            {
-                pic_outcome = PropertyLookupPicOutcome::MissVersionMismatch;
-            } else {
-                match self
-                    .get_tx()
-                    .resolve_property_by_uuid(obj, hint.property_uuid)
-                {
-                    Ok((value, propperms, _)) => {
-                        self.perms(perms)?
-                            .check_property_allows(&propperms, PropFlag::Read)?;
-                        record_property_pic_read(PropertyLookupPicOutcome::Hit);
-                        return Ok(PropertyLookupResult {
-                            value,
-                            next_hint: Some(hint),
-                            pic_outcome: PropertyLookupPicOutcome::Hit,
-                        });
-                    }
-                    Err(_) => {
-                        pic_outcome = PropertyLookupPicOutcome::MissResolveFailed;
-                    }
-                }
-            }
-        }
-
-        let (propdef, value, propperms, _) = self.get_tx().resolve_property(obj, pname)?;
-        self.perms(perms)?
-            .check_property_allows(&propperms, PropFlag::Read)?;
-        record_property_pic_read(pic_outcome);
-        let hint = PropertyLookupHint {
-            receiver: *obj,
-            property_name: pname,
-            property_uuid: propdef.uuid(),
-            prop_cache_version: self.get_tx().prop_resolution_cache_version() as u64,
-        };
-        Ok(PropertyLookupResult {
-            value,
-            next_hint: Some(hint),
-            pic_outcome,
-        })
-    }
-
     fn get_property_info(
         &self,
         perms: &Obj,
@@ -712,20 +583,7 @@ impl WorldState for DbWorldState {
         value: &Var,
     ) -> Result<(), WorldStateError> {
         let _t = PerfTimerGuard::new(&db_counters().update_property);
-        self.update_property_internal(perms, obj, pname, value, None)?;
-        Ok(())
-    }
-
-    fn update_property_with_hint(
-        &mut self,
-        perms: &Obj,
-        obj: &Obj,
-        pname: Symbol,
-        value: &Var,
-        hint: Option<PropertyLookupHint>,
-    ) -> Result<Option<PropertyLookupHint>, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().update_property);
-        self.update_property_internal(perms, obj, pname, value, hint)
+        self.update_property_internal(perms, obj, pname, value)
     }
 
     fn is_property_clear(
@@ -986,54 +844,6 @@ impl WorldState for DbWorldState {
 
         let perms = self.perms(perms)?;
         let tx = self.get_tx();
-        let verb_cache_version = tx.verb_resolution_cache_version() as u64;
-        let mut pic_outcome = VerbLookupPicOutcome::MissNoHint;
-
-        if let Some(hint) = dispatch.hint {
-            if hint.receiver != *dispatch.lookup.object
-                || hint.verb_name != dispatch.lookup.verb_name
-            {
-                pic_outcome = VerbLookupPicOutcome::MissGuardMismatch;
-            } else if hint.verb_cache_version != verb_cache_version {
-                pic_outcome = VerbLookupPicOutcome::MissVersionMismatch;
-            } else {
-                match tx.resolve_verb_by_uuid_handle(
-                    dispatch.lookup.object,
-                    &hint.verb_definer,
-                    hint.verb_uuid,
-                    dispatch.lookup.argspec,
-                    dispatch.lookup.flagspec,
-                ) {
-                    Ok(vh) => {
-                        perms.check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
-                        let permissions_flags = match dispatch.flags_source {
-                            DispatchFlagsSource::Permissions => perms.flags,
-                            DispatchFlagsSource::VerbOwner => {
-                                if vh.owner() == perms.who {
-                                    perms.flags
-                                } else {
-                                    self.flags_of(&vh.owner()).unwrap_or_default()
-                                }
-                            }
-                        };
-                        record_verb_pic_dispatch(VerbLookupPicOutcome::Hit);
-                        return Ok(Some(VerbDispatchResult {
-                            program_key: VerbProgramKey {
-                                verb_definer: hint.verb_definer,
-                                verb_uuid: hint.verb_uuid,
-                            },
-                            verbdef: vh,
-                            permissions_flags,
-                            next_hint: Some(hint),
-                            pic_outcome: VerbLookupPicOutcome::Hit,
-                        }));
-                    }
-                    Err(_) => {
-                        pic_outcome = VerbLookupPicOutcome::MissResolveFailed;
-                    }
-                }
-            }
-        }
 
         let vh = match tx.resolve_verb_handle(
             dispatch.lookup.object,
@@ -1042,14 +852,7 @@ impl WorldState for DbWorldState {
             dispatch.lookup.flagspec,
         ) {
             Ok(vh) => vh,
-            Err(WorldStateError::VerbNotFound(_, _)) => {
-                record_verb_pic_dispatch(if dispatch.hint.is_some() {
-                    pic_outcome
-                } else {
-                    VerbLookupPicOutcome::NotApplicable
-                });
-                return Ok(None);
-            }
+            Err(WorldStateError::VerbNotFound(_, _)) => return Ok(None),
             Err(e) => return Err(e),
         };
 
@@ -1064,19 +867,6 @@ impl WorldState for DbWorldState {
                 }
             }
         };
-        let next_hint = Some(VerbLookupHint {
-            receiver: *dispatch.lookup.object,
-            verb_name: dispatch.lookup.verb_name,
-            verb_definer: vh.location(),
-            verb_uuid: vh.uuid(),
-            verb_cache_version: tx.verb_resolution_cache_version() as u64,
-        });
-        let final_outcome = if dispatch.hint.is_some() {
-            pic_outcome
-        } else {
-            VerbLookupPicOutcome::NotApplicable
-        };
-        record_verb_pic_dispatch(final_outcome);
         Ok(Some(VerbDispatchResult {
             program_key: VerbProgramKey {
                 verb_definer: vh.location(),
@@ -1084,8 +874,6 @@ impl WorldState for DbWorldState {
             },
             verbdef: vh,
             permissions_flags,
-            next_hint,
-            pic_outcome: final_outcome,
         }))
     }
 

@@ -15,102 +15,23 @@ use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use ahash::AHasher;
-use moor_common::model::{PropertyLookupHint, VerbLookupHint};
 use moor_common::model::{VerbProgramKey, WorldState, WorldStateError};
 use moor_common::util::ConcurrentCounter;
 use moor_compiler::Program;
 use moor_var::{
     Obj,
-    program::{ProgramType, labels::Offset},
+    program::ProgramType,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProgramSlot {
     pub program_ptr: usize,
-    pub program_ic_ptr: Option<usize>,
     pub global_width: usize,
-}
-
-#[derive(Debug)]
-pub struct ProgramInlineCaches {
-    main_property: Vec<Option<PropertyLookupHint>>,
-    fork_property: Vec<Vec<Option<PropertyLookupHint>>>,
-    lambda_property: Vec<Vec<Option<PropertyLookupHint>>>,
-    main_verb: Vec<Option<VerbLookupHint>>,
-    fork_verb: Vec<Vec<Option<VerbLookupHint>>>,
-    lambda_verb: Vec<Vec<Option<VerbLookupHint>>>,
-}
-
-impl ProgramInlineCaches {
-    fn new(program: &Program) -> Self {
-        let main_property = vec![None; program.main_vector().len()];
-        let main_verb = vec![None; program.main_vector().len()];
-        let fork_property = program
-            .0
-            .fork_vectors
-            .iter()
-            .map(|fv| vec![None; fv.1.len()])
-            .collect();
-        let fork_verb = program
-            .0
-            .fork_vectors
-            .iter()
-            .map(|fv| vec![None; fv.1.len()])
-            .collect();
-        let lambda_property = program
-            .0
-            .lambda_programs
-            .iter()
-            .map(|lp| vec![None; lp.main_vector().len()])
-            .collect();
-        let lambda_verb = program
-            .0
-            .lambda_programs
-            .iter()
-            .map(|lp| vec![None; lp.main_vector().len()])
-            .collect();
-        Self {
-            main_property,
-            fork_property,
-            lambda_property,
-            main_verb,
-            fork_verb,
-            lambda_verb,
-        }
-    }
-
-    pub fn main_property_mut(&mut self) -> &mut [Option<PropertyLookupHint>] {
-        &mut self.main_property
-    }
-
-    pub fn fork_property_mut(&mut self, fork_offset: Offset) -> &mut [Option<PropertyLookupHint>] {
-        &mut self.fork_property[fork_offset.0 as usize]
-    }
-
-    pub fn lambda_property_mut(
-        &mut self,
-        lambda_offset: Offset,
-    ) -> &mut [Option<PropertyLookupHint>] {
-        &mut self.lambda_property[lambda_offset.0 as usize]
-    }
-
-    pub fn main_verb_mut(&mut self) -> &mut [Option<VerbLookupHint>] {
-        &mut self.main_verb
-    }
-
-    pub fn fork_verb_mut(&mut self, fork_offset: Offset) -> &mut [Option<VerbLookupHint>] {
-        &mut self.fork_verb[fork_offset.0 as usize]
-    }
-
-    pub fn lambda_verb_mut(&mut self, lambda_offset: Offset) -> &mut [Option<VerbLookupHint>] {
-        &mut self.lambda_verb[lambda_offset.0 as usize]
-    }
 }
 
 #[derive(Debug)]
 struct CachedProgramSlot {
     program: Program,
-    inline_caches: ProgramInlineCaches,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -220,11 +141,7 @@ impl TaskProgramCache {
 
         let (program, _) = world_state.retrieve_verb(perms, verb_definer, verb_uuid)?;
         let ProgramType::MooR(program) = program;
-        let inline_caches = ProgramInlineCaches::new(&program);
-        let entry = CachedProgramSlot {
-            program,
-            inline_caches,
-        };
+        let entry = CachedProgramSlot { program };
 
         let slot = if let Some(reuse_slot) = self.slots.iter().position(|entry| entry.is_none()) {
             self.slots[reuse_slot] = Some(Box::new(entry));
@@ -316,11 +233,6 @@ impl TaskProgramCache {
             .expect("Invalid program slot in task program cache");
         ProgramSlot {
             program_ptr: program as *const Program as usize,
-            program_ic_ptr: self
-                .slots
-                .get(slot)
-                .and_then(Option::as_deref)
-                .map(|entry| &entry.inline_caches as *const ProgramInlineCaches as usize),
             global_width: program.var_names().global_width(),
         }
     }
@@ -338,14 +250,8 @@ mod tests {
     fn reclaim_unreferenced_drops_dead_slots_and_cache_entries() {
         let p1 = compile("return 1;", CompileOptions::default()).unwrap();
         let p2 = compile("return 2;", CompileOptions::default()).unwrap();
-        let p1_slot = Box::new(CachedProgramSlot {
-            inline_caches: ProgramInlineCaches::new(&p1),
-            program: p1,
-        });
-        let p2_slot = Box::new(CachedProgramSlot {
-            inline_caches: ProgramInlineCaches::new(&p2),
-            program: p2,
-        });
+        let p1_slot = Box::new(CachedProgramSlot { program: p1 });
+        let p2_slot = Box::new(CachedProgramSlot { program: p2 });
         let p1_ptr = &p1_slot.as_ref().program as *const Program as usize;
         let p2_ptr = &p2_slot.as_ref().program as *const Program as usize;
 

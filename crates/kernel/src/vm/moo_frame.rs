@@ -35,7 +35,6 @@ pub(crate) struct MooStackFrame {
     /// The program of the verb that is currently being executed.
     pub(crate) program: Option<Program>,
     pub(crate) program_ptr: Option<usize>,
-    pub(crate) program_ic_ptr: Option<usize>,
     /// The program counter.
     pub(crate) pc: usize,
     /// Where is the PC pointing to?
@@ -139,7 +138,6 @@ impl MooStackFrame {
         Self {
             program: Some(program),
             program_ptr: None,
-            program_ic_ptr: None,
             environment: Environment::with_initial_scope(width),
             pc: 0,
             pc_type: PcType::Main,
@@ -167,7 +165,6 @@ impl MooStackFrame {
         Self {
             program: Some(program),
             program_ptr: None,
-            program_ic_ptr: None,
             environment: Environment::with_call_globals(
                 player, this, caller, verb, args, argstr, width,
             ),
@@ -197,7 +194,6 @@ impl MooStackFrame {
         Self {
             program: Some(program),
             program_ptr: None,
-            program_ic_ptr: None,
             environment: Environment::with_call_globals_copy_parsing(
                 player,
                 this,
@@ -250,7 +246,6 @@ impl MooStackFrame {
         Self {
             program: Some(program),
             program_ptr: None,
-            program_ic_ptr: None,
             environment: env,
             pc: 0,
             pc_type: PcType::Main,
@@ -299,7 +294,6 @@ impl MooStackFrame {
         self.debug_assert_resolvable_program();
         if self.program.is_some() {
             self.program_ptr = None;
-            self.program_ic_ptr = None;
             return;
         }
         let Some(ptr) = self.program_ptr else {
@@ -308,7 +302,6 @@ impl MooStackFrame {
         // SAFETY: program_ptr points to a stable allocation in task-owned program cache.
         self.program = Some(unsafe { (&*(ptr as *const Program)).clone() });
         self.program_ptr = None;
-        self.program_ic_ptr = None;
     }
 
     pub(crate) fn materialize_program_for_handoff(&mut self) {
@@ -317,7 +310,6 @@ impl MooStackFrame {
             self.program = Some(self.program_ref().clone());
         }
         self.program_ptr = None;
-        self.program_ic_ptr = None;
     }
 
     pub(crate) fn new_with_all_globals_from_slot(
@@ -333,7 +325,6 @@ impl MooStackFrame {
         Self {
             program: None,
             program_ptr: Some(program_slot.program_ptr),
-            program_ic_ptr: program_slot.program_ic_ptr,
             environment: Environment::with_call_globals(
                 player, this, caller, verb, args, argstr, width,
             ),
@@ -361,7 +352,6 @@ impl MooStackFrame {
         Self {
             program: None,
             program_ptr: Some(program_slot.program_ptr),
-            program_ic_ptr: program_slot.program_ic_ptr,
             environment: Environment::with_call_globals_copy_parsing(
                 player,
                 this,

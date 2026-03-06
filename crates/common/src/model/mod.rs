@@ -22,9 +22,8 @@ pub use crate::model::{
     verbdef::{ResolvedVerb, VerbDef, VerbDefs},
     verbs::{BinaryType, VerbAttr, VerbAttrs, VerbFlag, Vid, verb_perms_string},
     world_state::{
-        DispatchFlagsSource, ObjectKind, PropertyLookupHint, PropertyLookupPicOutcome,
-        PropertyLookupResult, VerbDispatch, VerbDispatchResult, VerbLookup, VerbLookupHint,
-        VerbLookupPicOutcome, VerbProgramKey, WorldState, WorldStateSource, command_verb_argspec,
+        DispatchFlagsSource, ObjectKind, VerbDispatch, VerbDispatchResult, VerbLookup,
+        VerbProgramKey, WorldState, WorldStateSource, command_verb_argspec,
     },
 };
 use serde::Serialize;

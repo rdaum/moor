@@ -1951,7 +1951,6 @@ mod tests {
         let boxed_program = Box::new(program);
         let slot = ProgramSlot {
             program_ptr: boxed_program.as_ref() as *const Program as usize,
-            program_ic_ptr: None,
             global_width: boxed_program.var_names().global_width(),
         };
 
