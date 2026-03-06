@@ -15,6 +15,7 @@ description = "A tool for importing, compiling, and exporting mooR cores without
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
 
 [package.metadata.deb]
+maintainer = "Ryan Daum, operating as Timbran Consulting <ryan.daum@gmail.com>"
 depends = "$auto"
 extended-description = "Command-line compiler and core management tool for mooR. Allows importing, compiling, and exporting MOO cores without running the full daemon."
 section = "devel"

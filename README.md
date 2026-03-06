@@ -299,6 +299,27 @@ When reporting bugs, please include:
 
 ## License
 
-mooR is licensed under the GNU General Public License v3.0. See [LICENSE](./LICENSE) for details.
+mooR is licensed under the GNU Affero General Public License v3.0. See
+[LICENSE](./LICENSE) for details.
 
-This ensures the software remains open and free, in keeping with the the original LambdaMOO project.
+mooR is intended to be run as a networked multi-user system, not only as a local program. For that
+reason, the project uses the AGPL rather than the GPL: if someone modifies mooR and runs that
+modified version as a service, the corresponding source for those modifications should remain
+available under the same terms.
+
+Running your own database, world, MUD, or MOO on top of mooR does not transfer ownership of that
+database or its contents to the mooR project or its author. The relevant copyleft obligation is
+about modifications to mooR itself, or reuse of mooR code in another project, not about ownership
+of the world data or creative content you host with it.
+
+This applies to the main mooR software in this repository. Documentation in `book/`, core database
+content in `cores/`, and separately published client and schema libraries in `clients/` and
+`crates/schema/schema/` have separate licensing terms; see those directories for details.
+
+If your intended use of mooR requires different licensing terms, contact Ryan Daum, operating as
+Timbran Consulting. Alternative licensing arrangements may be possible on a case-by-case basis.
+
+Contributions are accepted subject to the contributor license agreement in [CLA.md](./CLA.md). The
+CLA does not change the project's open source license; it is there so contributions can be included
+in mooR while still allowing case-by-case alternative licensing arrangements where agreed. See
+[CONTRIBUTING.md](./CONTRIBUTING.md) for details.

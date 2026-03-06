@@ -15,6 +15,7 @@ description = "Emergency Medical Hologram for mooR databases - direct DB access 
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
 
 [package.metadata.deb]
+maintainer = "Ryan Daum, operating as Timbran Consulting <ryan.daum@gmail.com>"
 depends = "$auto"
 extended-description = "Emergency database administration tool for mooR. Provides direct database access and management when normal login methods are unavailable."
 section = "admin"

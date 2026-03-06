@@ -2,6 +2,15 @@
 
 by Pavel Curtis et al
 
+This manual is licensed separately from the mooR software.
+
+The mooR software is licensed under the GNU Affero General Public License v3.0; see the repository
+`LICENSE` file for that license text.
+
+The manual contains a mixture of original mooR documentation and adapted material from earlier MOO
+documentation. Because of that mixed provenance, the governing notice for the manual content is the
+notice reproduced below.
+
 Copyright © 1991, 1992, 1993, 1995, 1996 by Pavel Curtis.
 
 Copyright © 1996, 1997 by Ken Fox

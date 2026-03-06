@@ -11,7 +11,8 @@ mooR is a collaborative project where contributors work together as colleagues. 
 - **Technical Honesty**: Speaking up when unsure or when approaches seem problematic
 - **Code Quality**: Readability and maintainability as primary concerns
 - **Performance Focus**: Especially in core runtime components (`kernel`, `db`)
-- **Free Software Ethic**: All contributions are licensed under GPL-3.0, preserving user freedom
+- **Free Software Ethic**: mooR is released under AGPL-3.0, preserving reciprocal access to
+  networked deployments
 
 In general, we aim to learn and work together interactively - talking through concepts, features and
 bugs; which is in keeping with the social form and history of MOO itself.
@@ -652,13 +653,16 @@ All contributors are recognized in the project's:
 
 ## License
 
-By contributing to mooR, you agree that your contributions will be licensed under the same
-[GPL-3.0 license](LICENSE) that covers the project.
+mooR is released under the [GNU Affero General Public License v3.0](LICENSE).
+
+By contributing to mooR, you agree to the terms of the contributor license agreement in
+[CLA.md](CLA.md). The CLA allows contributions to remain part of the AGPL project while also
+allowing the project maintainer to negotiate alternative licensing terms on a case-by-case basis.
 
 ### Important Licensing Notes
 
 - **Core Database Files**: The files in the `cores/` directory (including JHCore and other MOO
-  databases) have complex licensing situations and are NOT covered by the project's GPL-3.0 license.
+  databases) have complex licensing situations and are NOT covered by the project's AGPL license.
   See the `cores/LICENSING.md` file for detailed information about the historical licensing
   complexities.
 
