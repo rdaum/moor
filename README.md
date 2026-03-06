@@ -14,10 +14,10 @@ enhancements.
 
 📖 **For comprehensive documentation, see our [mooR Book](https://timbran.org/book/html/).**
 
-> **⚠️ 1.0-Beta Release:** mooR is in the 1.0-beta series, with stable database formats and APIs. If
-> you are reading `main`, you're looking at pre-release/next-version work; stable releases live on
-> the `1.0` release branch (with beta tags cut from it) and in the Releases tab / published images.
-> See the [Status](#status) section below for details.
+> **⚠️ Release Status:** `main` now tracks `1.1.0-dev` work. The `v1.0-release` branch is in code
+> freeze ahead of the imminent `1.0.0-rc1` release; use that branch, the Releases tab, or published
+> images if you want the stabilized release line. See the [Status](#status) section below for
+> details.
 >
 > See the
 > [full announcement blog post for more...](https://timbran.org/announcing-moor-1-0-beta1.html)
@@ -276,7 +276,7 @@ mooR offers several opportunities for contribution. For detailed contribution gu
 
 Found a bug or have a feature request? Please file an issue on our
 [Codeberg issue tracker](https://codeberg.org/timbran/moor/issues). Bug reports from `main` are
-welcome, but if you're looking for stability, use the `1.0` release branch.
+welcome, but if you're looking for stability, use the `v1.0-release` branch.
 
 When reporting bugs, please include:
 
