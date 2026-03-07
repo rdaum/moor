@@ -71,6 +71,9 @@ struct Args {
         default_value = "100000"
     )]
     loop_iterations: usize,
+
+    #[arg(long, help = "CSV output file for benchmark data")]
+    output_file: Option<PathBuf>,
 }
 
 #[derive(Tabled)]
@@ -89,6 +92,47 @@ struct BenchmarkRow {
     total_throughput: String,
     #[tabled(rename = "Per-Thread Thru")]
     per_thread_throughput: String,
+}
+
+struct CsvBenchmarkRow {
+    concurrency: usize,
+    total_invocations: usize,
+    total_verb_calls: usize,
+    wall_time: Duration,
+    per_verb_call: Duration,
+    throughput: f64,
+}
+
+fn write_csv_results(
+    output_file: &PathBuf,
+    results: &[CsvBenchmarkRow],
+) -> Result<(), Box<dyn std::error::Error>> {
+    let num_records = results.len();
+    let mut writer = csv::Writer::from_path(output_file)?;
+
+    writer.write_record([
+        "concurrency",
+        "total_invocations",
+        "total_verb_calls",
+        "wall_time_ns",
+        "per_verb_ns",
+        "throughput_per_sec",
+    ])?;
+
+    for result in results {
+        writer.write_record([
+            result.concurrency.to_string(),
+            result.total_invocations.to_string(),
+            result.total_verb_calls.to_string(),
+            result.wall_time.as_nanos().to_string(),
+            result.per_verb_call.as_nanos().to_string(),
+            format!("{:.0}", result.throughput),
+        ])?;
+    }
+
+    writer.flush()?;
+    info!("Wrote {num_records} to {}", output_file.display());
+    Ok(())
 }
 
 // LambdaMOO constants
@@ -695,6 +739,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let mut table_rows = vec![];
+        let mut csv_rows = vec![];
 
         let mut concurrency = args.min_concurrency as f32;
         loop {
@@ -753,6 +798,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 iter_throughput: format!("{:.1}M/s", iter_throughput / 1_000_000.0),
             });
 
+            csv_rows.push(CsvBenchmarkRow {
+                concurrency: num_concurrent,
+                total_invocations,
+                total_verb_calls: total_loop_iterations,
+                wall_time: total_time,
+                per_verb_call: per_iteration,
+                throughput: iter_throughput,
+            });
+
             eprint!("\x1B[2J\x1B[1;1H");
             eprintln!("{}", Table::new(&table_rows));
 
@@ -766,6 +820,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\nLambdaMOO Opcode Throughput Test Complete");
         println!("Note: Measures raw interpreter loop speed without verb dispatch overhead.");
         println!("Bytecode column shows actual bytecode bytes from compiled program.");
+
+        if let Some(output_file) = &args.output_file {
+            write_csv_results(output_file, &csv_rows)?;
+        }
     } else {
         // Verb dispatch mode (original behavior)
         let (_test_objects, all_player_ids) = setup_test_environment(
@@ -795,6 +853,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let mut table_rows = vec![];
+        let mut csv_rows = vec![];
 
         let mut concurrency = args.min_concurrency as f32;
         loop {
@@ -839,6 +898,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 per_thread_throughput: format!("{:.2}M/s", per_thread_throughput / 1_000_000.0),
             });
 
+            csv_rows.push(CsvBenchmarkRow {
+                concurrency: num_concurrent,
+                total_invocations,
+                total_verb_calls,
+                wall_time: total_time,
+                per_verb_call,
+                throughput,
+            });
+
             eprint!("\x1B[2J\x1B[1;1H");
             eprintln!("{}", Table::new(&table_rows));
 
@@ -853,6 +921,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!(
             "Note: LambdaMOO is single-threaded - all tasks serialize regardless of 'concurrency'"
         );
+
+        if let Some(output_file) = &args.output_file {
+            write_csv_results(output_file, &csv_rows)?;
+        }
     }
 
     Ok(())
