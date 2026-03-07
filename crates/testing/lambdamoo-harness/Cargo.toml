@@ -25,6 +25,7 @@ cc = "1.2"
 [dependencies]
 clap.workspace = true
 clap_derive.workspace = true
+csv.workspace = true
 libc.workspace = true
 tabled.workspace = true
 thiserror.workspace = true
