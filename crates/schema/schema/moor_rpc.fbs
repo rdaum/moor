@@ -491,6 +491,165 @@ table HostBroadcastEvent {
 }
 
 // ============================================================================
+// Batch World State Actions
+// ============================================================================
+
+// Action tables — each mirrors a WorldStateAction variant.
+// player/perms are derived from the auth_token on BatchWorldState.
+
+table WsRequestProperty {
+    object: MoorCommon.ObjectRef (required);
+    property: MoorCommon.Symbol (required);
+}
+
+table WsRequestProperties {
+    object: MoorCommon.ObjectRef (required);
+    inherited: bool;
+}
+
+table WsRequestSystemProperty {
+    object: MoorCommon.ObjectRef (required);
+    property: MoorCommon.Symbol (required);
+}
+
+table WsRequestVerbs {
+    object: MoorCommon.ObjectRef (required);
+    inherited: bool;
+}
+
+table WsRequestVerbCode {
+    object: MoorCommon.ObjectRef (required);
+    verb: MoorCommon.Symbol (required);
+}
+
+table WsResolveObject {
+    objref: MoorCommon.ObjectRef (required);
+}
+
+table WsListObjects {
+}
+
+table WsRequestAllObjects {
+}
+
+table WsUpdateProperty {
+    object: MoorCommon.ObjectRef (required);
+    property: MoorCommon.Symbol (required);
+    value: MoorVar.Var (required);
+}
+
+table WsProgramVerb {
+    object: MoorCommon.ObjectRef (required);
+    verb_name: MoorCommon.Symbol (required);
+    code: [string] (required);
+}
+
+table WsGetObjectFlags {
+    obj: MoorCommon.Obj (required);
+}
+
+union WorldStateActionUnion {
+    WsRequestProperty,
+    WsRequestProperties,
+    WsRequestSystemProperty,
+    WsRequestVerbs,
+    WsRequestVerbCode,
+    WsResolveObject,
+    WsListObjects,
+    WsRequestAllObjects,
+    WsUpdateProperty,
+    WsProgramVerb,
+    WsGetObjectFlags
+}
+
+table WorldStateActionEntry {
+    id: string (required);      // correlation ID
+    action: WorldStateActionUnion (required);
+}
+
+table BatchWorldState {
+    auth_token: AuthToken (required);
+    actions: [WorldStateActionEntry] (required);
+    rollback: bool = false;     // true = read-only snapshot, don't commit
+}
+
+// Result tables — each mirrors a WorldStateResult variant.
+
+table WsPropertyResult {
+    prop_info: MoorCommon.PropInfo (required);
+    value: MoorVar.Var (required);
+}
+
+table WsPropertiesResult {
+    properties: [MoorCommon.PropInfo] (required);
+}
+
+table WsSystemPropertyResult {
+    value: MoorVar.Var (required);
+}
+
+table WsVerbsResult {
+    verbs: [MoorCommon.VerbInfo] (required);
+}
+
+table WsVerbCodeResult {
+    verb_info: MoorCommon.VerbInfo (required);
+    code: [string] (required);
+}
+
+table WsResolveResult {
+    result: MoorVar.Var (required);
+}
+
+table WsObjectsListResult {
+    objects: [ObjectInfo] (required);
+}
+
+table WsAllObjectsResult {
+    objects: [MoorCommon.Obj] (required);
+}
+
+table WsPropertyUpdatedResult {
+}
+
+table WsVerbProgrammedResult {
+    obj: MoorCommon.Obj (required);
+    verb_name: MoorCommon.Symbol (required);
+}
+
+table WsObjectFlagsResult {
+    flags: uint16;
+}
+
+table WsActionError {
+    error: RpcMessageError (required);
+}
+
+union WorldStateResultUnion {
+    WsPropertyResult,
+    WsPropertiesResult,
+    WsSystemPropertyResult,
+    WsVerbsResult,
+    WsVerbCodeResult,
+    WsResolveResult,
+    WsObjectsListResult,
+    WsAllObjectsResult,
+    WsPropertyUpdatedResult,
+    WsVerbProgrammedResult,
+    WsObjectFlagsResult,
+    WsActionError
+}
+
+table WorldStateResultEntry {
+    id: string (required);      // correlation ID from request
+    result: WorldStateResultUnion (required);
+}
+
+table BatchWorldStateReply {
+    results: [WorldStateResultEntry] (required);
+}
+
+// ============================================================================
 // Client-to-Daemon Messages (via Host)
 // ============================================================================
 
@@ -522,7 +681,8 @@ union HostClientToDaemonMessageUnion {
     ListObjects,
     UpdateProperty,
     InvokeSystemHandler,
-    CallSystemVerb
+    CallSystemVerb,
+    BatchWorldState
 }
 
 table ConnectionEstablish {
@@ -742,7 +902,8 @@ union DaemonToClientReplyUnion {
     ListObjectsReply,
     PropertyUpdated,
     SystemHandlerResponseReply,
-    VerbCallResponse
+    VerbCallResponse,
+    BatchWorldStateReply
 }
 
 table NewConnection {
