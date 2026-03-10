@@ -32,22 +32,16 @@ use moor_common::model::ObjectRef;
 use moor_common::tasks::NarrativeEvent;
 use moor_schema::{
     common as moor_common_fb,
-    convert::{
-        narrative_event_from_ref, narrative_event_to_flatbuffer_struct, var_from_flatbuffer_ref,
-        var_to_flatbuffer,
-    },
+    convert::{narrative_event_to_flatbuffer_struct, var_from_flatbuffer_ref, var_to_flatbuffer},
     rpc as moor_rpc, var as moor_var_schema,
 };
 use moor_var::Symbol;
 use planus::ReadAsRoot;
-use rpc_async_client::pubsub_client::events_recv;
+use rpc_async_client::task_client::{SessionEvent, TaskClient, TaskResult};
 use rpc_common::{
-    mk_invoke_verb_msg, mk_program_msg, mk_retrieve_msg, mk_verbs_msg, read_reply_result,
-    scheduler_error_from_ref, scheduler_error_to_flatbuffer_struct,
+    mk_program_msg, mk_retrieve_msg, mk_verbs_msg, scheduler_error_to_flatbuffer_struct,
 };
 use serde::Deserialize;
-use std::time::Duration;
-use tokio::time::timeout;
 use tracing::{debug, error};
 
 #[derive(Deserialize)]
@@ -136,145 +130,8 @@ pub async fn verbs_handler(
     }
 }
 
-/// Extract task_id from a TaskSubmitted response
-fn extract_task_id(reply_bytes: &[u8]) -> Result<u64, StatusCode> {
-    let reply_result = read_reply_result(reply_bytes).map_err(|e| {
-        error!("Failed to parse ReplyResult: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    let result_union = reply_result.result().map_err(|e| {
-        error!("Failed to parse result union: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    let moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) = result_union else {
-        error!("Expected ClientSuccess from verb invocation");
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    };
-
-    let daemon_reply = client_success.reply().map_err(|e| {
-        error!("Failed to parse daemon reply: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    let Ok(moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(task_submitted)) =
-        daemon_reply.reply()
-    else {
-        error!("Expected TaskSubmitted from verb invocation");
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    };
-
-    task_submitted.task_id().map_err(|e| {
-        error!("Failed to parse task_id: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })
-}
-
-/// Result of waiting for task completion
-enum TaskCompletionResult {
-    /// Task succeeded with a result Var and collected narrative events
-    Success(moor_var::Var, Vec<NarrativeEvent>),
-    /// Task failed with an error (using moor_common error type for processing)
-    Error(moor_common::tasks::SchedulerError),
-}
-
-/// Wait for a task completion event matching the given task_id, collecting narrative events
-async fn wait_for_task_completion(
-    client_id: uuid::Uuid,
-    mut narrative_sub: tmq::subscribe::Subscribe,
-    task_id: u64,
-) -> Result<TaskCompletionResult, StatusCode> {
-    let mut collected_events: Vec<NarrativeEvent> = Vec::new();
-
-    loop {
-        let event_msg = events_recv(client_id, &mut narrative_sub)
-            .await
-            .map_err(|e| {
-                error!("Error receiving event: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
-
-        let event = event_msg.event().map_err(|e| {
-            error!("Failed to parse event: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-        let event_ref = event.event().map_err(|e| {
-            error!("Failed to parse event union: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-        match event_ref {
-            moor_rpc::ClientEventUnionRef::NarrativeEventMessage(narrative_msg) => {
-                // Collect narrative events during execution
-                let Ok(event_ref) = narrative_msg.event() else {
-                    continue;
-                };
-                match narrative_event_from_ref(event_ref) {
-                    Ok(narrative_event) => {
-                        debug!("Collected narrative event during verb execution");
-                        collected_events.push(narrative_event);
-                    }
-                    Err(e) => {
-                        error!("Failed to parse narrative event: {}", e);
-                    }
-                }
-            }
-            moor_rpc::ClientEventUnionRef::TaskSuccessEvent(success) => {
-                let Ok(event_task_id) = success.task_id() else {
-                    continue;
-                };
-
-                if event_task_id == task_id {
-                    let Ok(result_ref) = success.result() else {
-                        error!("Failed to get result from TaskSuccessEvent");
-                        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-                    };
-                    let result_var = var_from_flatbuffer_ref(result_ref).map_err(|e| {
-                        error!("Failed to parse result Var: {}", e);
-                        StatusCode::INTERNAL_SERVER_ERROR
-                    })?;
-                    debug!(
-                        "Task {} completed successfully with {} collected events",
-                        task_id,
-                        collected_events.len()
-                    );
-                    return Ok(TaskCompletionResult::Success(result_var, collected_events));
-                }
-            }
-            moor_rpc::ClientEventUnionRef::TaskErrorEvent(error_event) => {
-                let Ok(event_task_id) = error_event.task_id() else {
-                    continue;
-                };
-
-                if event_task_id == task_id {
-                    let Ok(error_ref) = error_event.error() else {
-                        error!("Failed to get error from TaskErrorEvent");
-                        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-                    };
-                    let scheduler_error = scheduler_error_from_ref(error_ref).map_err(|e| {
-                        error!("Failed to parse scheduler error: {}", e);
-                        StatusCode::INTERNAL_SERVER_ERROR
-                    })?;
-                    debug!("Task {} failed with error", task_id);
-                    return Ok(TaskCompletionResult::Error(scheduler_error));
-                }
-            }
-            _ => continue,
-        }
-    }
-}
-
 pub async fn invoke_verb_handler(
     State(host): State<WebHost>,
-    EphemeralAuth {
-        auth_token,
-        client_id,
-        client_token,
-        rpc_client,
-        ..
-    }: EphemeralAuth,
     header_map: HeaderMap,
     Path((object_path, verb_name)): Path<(String, String)>,
     body: Bytes,
@@ -294,7 +151,13 @@ pub async fn invoke_verb_handler(
         Ok(f) => f,
         Err(status) => return status.into_response(),
     };
-    tracing::debug!(
+
+    let auth_token = match crate::host::auth::extract_auth_token_header(&header_map) {
+        Ok(t) => t,
+        Err(status) => return status.into_response(),
+    };
+
+    debug!(
         "Invoke verb handler: object={}, verb={}, body_len={}",
         object_path,
         verb_name,
@@ -314,95 +177,55 @@ pub async fn invoke_verb_handler(
     // Parse the FlatBuffer request body containing args as a Var (list)
     let args_var = match moor_var_schema::VarRef::read_as_root(&body) {
         Ok(var_ref) => match var_from_flatbuffer_ref(var_ref) {
-            Ok(v) => {
-                tracing::debug!("Successfully parsed args var: {:?}", v);
-                v
-            }
+            Ok(v) => v,
             Err(e) => {
                 error!("Failed to parse args var: {}", e);
                 return StatusCode::BAD_REQUEST.into_response();
             }
         },
         Err(e) => {
-            error!(
-                "Failed to parse FlatBuffer args (VarRef::read_as_root): {}",
-                e
-            );
+            error!("Failed to parse FlatBuffer args: {}", e);
             return StatusCode::BAD_REQUEST.into_response();
         }
     };
 
-    // Extract args from the Var (should be a list)
-    let moo_args = match args_var.variant() {
-        moor_var::Variant::List(l) => l.iter().collect::<Vec<_>>(),
+    let moo_args: Vec<moor_var::Var> = match args_var.variant() {
+        moor_var::Variant::List(l) => l.iter().collect(),
         _ => {
             error!("Args must be a list");
             return StatusCode::BAD_REQUEST.into_response();
         }
     };
 
-    // Subscribe to events BEFORE submitting the task to avoid race condition
-    let narrative_sub = match host.events_sub(client_id).await {
-        Ok(sub) => sub,
+    // Create a per-request TaskClient (session cache optimization can come later)
+    let task_client = match TaskClient::connect(host.task_client_config(auth_token)).await {
+        Ok(tc) => tc,
         Err(e) => {
-            error!("Failed to subscribe to events: {}", e);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            error!("Failed to create TaskClient: {}", e);
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
         }
     };
 
-    // Give ZMQ subscription time to establish (slow joiner problem)
-    tokio::time::sleep(Duration::from_millis(10)).await;
+    // Subscribe to session events to collect narrative output
+    let mut session_rx = task_client.session_events();
 
     let args_refs: Vec<&moor_var::Var> = moo_args.iter().collect();
-    let Some(invoke_msg) = mk_invoke_verb_msg(
-        &client_token,
-        &auth_token,
-        &object_ref,
-        &verb_symbol,
-        args_refs,
-    ) else {
-        error!("Failed to create invoke_verb message");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
+    let task_result = task_client
+        .invoke_verb(&object_ref, &verb_symbol, args_refs)
+        .await;
 
-    let reply_bytes = match web_host::rpc_call(client_id, &rpc_client, invoke_msg).await {
-        Ok(bytes) => bytes,
-        Err(status) => return status.into_response(),
-    };
-
-    // Extract task_id from the reply
-    let task_id = match extract_task_id(&reply_bytes) {
-        Ok(id) => {
-            tracing::debug!("Extracted task_id: {} for verb {}", id, verb_name);
-            id
+    // Drain any narrative events that arrived during execution
+    let mut collected_events: Vec<NarrativeEvent> = Vec::new();
+    while let Ok(event) = session_rx.try_recv() {
+        if let SessionEvent::Narrative(_, narrative_event) = event {
+            collected_events.push(narrative_event);
         }
-        Err(status) => return status.into_response(),
-    };
+    }
 
-    // Wait for task completion with 60 second timeout
-    let completion_result = match timeout(
-        Duration::from_secs(60),
-        wait_for_task_completion(client_id, narrative_sub, task_id),
-    )
-    .await
-    {
-        Ok(Ok(result)) => result,
-        Ok(Err(status)) => return status.into_response(),
-        Err(_) => {
-            error!(
-                "Task {} for verb {} timed out after 60 seconds - no completion event received",
-                task_id, verb_name
-            );
-            return StatusCode::GATEWAY_TIMEOUT.into_response();
-        }
-    };
+    task_client.shutdown().await;
 
-    // DetachGuard in EphemeralAuth handles cleanup automatically
-
-    // Build VerbCallResponse based on the completion result
-    let response = match completion_result {
-        TaskCompletionResult::Success(result_var, collected_events) => {
-            // Convert result Var to FlatBuffer
+    let response = match task_result {
+        Ok(TaskResult::Success(result_var)) => {
             let result_fb = match var_to_flatbuffer(&result_var) {
                 Ok(fb) => fb,
                 Err(e) => {
@@ -411,22 +234,22 @@ pub async fn invoke_verb_handler(
                 }
             };
 
-            // Convert collected events to FlatBuffer format
             let output_fb: Vec<moor_common_fb::NarrativeEvent> = collected_events
                 .iter()
                 .filter_map(|event| match narrative_event_to_flatbuffer_struct(event) {
                     Ok(fb_event) => Some(fb_event),
                     Err(e) => {
-                        error!("Failed to convert narrative event to FlatBuffer: {e}");
+                        error!("Failed to convert narrative event: {e}");
                         None
                     }
                 })
                 .collect();
 
             debug!(
-                "Building VerbCallResponse with {} events for task {}",
+                "VerbCallResponse with {} events for {}:{}",
                 output_fb.len(),
-                task_id
+                object_path,
+                verb_name
             );
 
             moor_rpc::VerbCallResponse {
@@ -438,7 +261,7 @@ pub async fn invoke_verb_handler(
                 )),
             }
         }
-        TaskCompletionResult::Error(scheduler_error) => {
+        Ok(TaskResult::Error(scheduler_error)) => {
             let scheduler_error_fb = match scheduler_error_to_flatbuffer_struct(&scheduler_error) {
                 Ok(fb) => fb,
                 Err(e) => {
@@ -453,6 +276,28 @@ pub async fn invoke_verb_handler(
                     },
                 )),
             }
+        }
+        Ok(TaskResult::Suspended(_)) => {
+            // Task went to background — return empty success
+            let result_fb = match var_to_flatbuffer(&moor_var::v_none()) {
+                Ok(fb) => fb,
+                Err(e) => {
+                    error!("Failed to encode result: {}", e);
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            };
+            moor_rpc::VerbCallResponse {
+                response: moor_rpc::VerbCallResponseUnion::VerbCallSuccess(Box::new(
+                    moor_rpc::VerbCallSuccess {
+                        result: Box::new(result_fb),
+                        output: vec![],
+                    },
+                )),
+            }
+        }
+        Err(e) => {
+            error!("TaskClient error: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 
