@@ -23,14 +23,17 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use moor_common::model::ObjectRef;
-use moor_common::tasks::SchedulerError;
-use moor_schema::{convert::var_from_flatbuffer_ref, rpc as moor_rpc};
+use moor_common::tasks::{NarrativeEvent, SchedulerError};
+use moor_schema::{
+    convert::{narrative_event_from_ref, obj_from_ref, uuid_from_ref, var_from_flatbuffer_ref},
+    rpc as moor_rpc,
+};
 use moor_var::{Obj, Symbol, Var};
 use rpc_common::{
     AuthToken, ClientToken, RpcError, mk_attach_msg, mk_detach_msg, mk_invoke_verb_msg,
     read_reply_result, scheduler_error_from_ref,
 };
-use tokio::sync::oneshot;
+use tokio::sync::{broadcast, oneshot};
 use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
@@ -46,7 +49,40 @@ pub enum TaskResult {
     Success(Var),
     /// Task failed with a scheduler error.
     Error(SchedulerError),
+    /// Task suspended (went to background). The task_id is included for reference.
+    Suspended(u64),
 }
+
+/// Session-level events from the daemon that are not correlated to a specific task.
+///
+/// These arrive on the PubSub channel alongside task completion events but are
+/// player/session-scoped rather than task-scoped.
+#[derive(Debug, Clone)]
+pub enum SessionEvent {
+    /// Narrative output from `notify()`, `tell()`, etc.
+    Narrative(Obj, NarrativeEvent),
+    /// System message (server announcements, etc.)
+    SystemMessage(Obj, String),
+    /// The daemon is requesting input (MOO `read()` builtin).
+    RequestInput(Uuid),
+    /// Server is disconnecting this session.
+    Disconnect,
+    /// Player identity changed (e.g. after login verb).
+    PlayerSwitched { player: Obj, auth_token: AuthToken },
+    /// MOO code set a connection option.
+    SetConnectionOption {
+        connection_obj: Obj,
+        option: Symbol,
+        value: Var,
+    },
+    /// Credentials were refreshed (e.g. after reattach).
+    CredentialsUpdated {
+        client_id: Uuid,
+        client_token: ClientToken,
+    },
+}
+
+const SESSION_EVENT_CHANNEL_CAPACITY: usize = 256;
 
 /// Errors from TaskClient operations (transport/protocol level, not task-level).
 #[derive(Debug, thiserror::Error)]
@@ -93,6 +129,7 @@ pub struct TaskClient {
     client_token: ClientToken,
     auth_token: AuthToken,
     waiters: Arc<WaiterMap>,
+    session_events_tx: broadcast::Sender<SessionEvent>,
     dispatcher_handle: tokio::task::JoinHandle<()>,
     default_timeout: Duration,
 }
@@ -180,11 +217,14 @@ impl TaskClient {
         tokio::time::sleep(Duration::from_millis(10)).await;
 
         let waiters = Arc::new(Mutex::new(HashMap::new()));
+        let (session_events_tx, _) =
+            broadcast::channel(SESSION_EVENT_CHANNEL_CAPACITY);
 
         let dispatcher_handle = tokio::spawn(dispatcher_loop(
             client_id,
             subscribe,
             waiters.clone(),
+            session_events_tx.clone(),
         ));
 
         debug!("TaskClient connected: client_id={}", client_id);
@@ -195,6 +235,7 @@ impl TaskClient {
             client_token,
             auth_token: config.auth_token,
             waiters,
+            session_events_tx,
             dispatcher_handle,
             default_timeout: config.default_timeout,
         })
@@ -222,11 +263,14 @@ impl TaskClient {
         tokio::time::sleep(Duration::from_millis(10)).await;
 
         let waiters = Arc::new(WaiterMap::new(HashMap::new()));
+        let (session_events_tx, _) =
+            broadcast::channel(SESSION_EVENT_CHANNEL_CAPACITY);
 
         let dispatcher_handle = tokio::spawn(dispatcher_loop(
             client_id,
             subscribe,
             waiters.clone(),
+            session_events_tx.clone(),
         ));
 
         Ok(Self {
@@ -235,6 +279,7 @@ impl TaskClient {
             client_token,
             auth_token,
             waiters,
+            session_events_tx,
             dispatcher_handle,
             default_timeout,
         })
@@ -308,6 +353,15 @@ impl TaskClient {
         self.client_id
     }
 
+    /// Subscribe to session-level events (narrative, system messages, input
+    /// requests, disconnect, etc.).
+    ///
+    /// Returns a broadcast receiver. Multiple subscribers are supported.
+    /// Events that arrive before any subscriber is created are dropped.
+    pub fn session_events(&self) -> broadcast::Receiver<SessionEvent> {
+        self.session_events_tx.subscribe()
+    }
+
     /// Get the number of currently in-flight (waiting) tasks.
     pub fn pending_tasks(&self) -> usize {
         self.waiters.lock().unwrap().len()
@@ -348,14 +402,13 @@ async fn dispatcher_loop(
     client_id: Uuid,
     mut subscribe: tmq::subscribe::Subscribe,
     waiters: Arc<WaiterMap>,
+    session_tx: broadcast::Sender<SessionEvent>,
 ) {
     loop {
         let event_msg = match events_recv(client_id, &mut subscribe).await {
             Ok(msg) => msg,
             Err(e) => {
                 error!("TaskClient PubSub error, dispatcher exiting: {}", e);
-                // All pending waiters will get DispatcherGone when their
-                // oneshot senders are dropped.
                 break;
             }
         };
@@ -368,11 +421,11 @@ async fn dispatcher_loop(
         };
 
         match event_union {
+            // ----- Task-correlated events → resolve waiters -----
             moor_rpc::ClientEventUnionRef::TaskSuccessEvent(success) => {
                 let Ok(task_id) = success.task_id() else {
                     continue;
                 };
-
                 let sender = waiters.lock().unwrap().remove(&task_id);
                 if let Some(sender) = sender {
                     let result = match success.result() {
@@ -395,7 +448,6 @@ async fn dispatcher_loop(
                 let Ok(task_id) = error_event.task_id() else {
                     continue;
                 };
-
                 let sender = waiters.lock().unwrap().remove(&task_id);
                 if let Some(sender) = sender {
                     let result = match error_event.error() {
@@ -414,10 +466,97 @@ async fn dispatcher_loop(
                     let _ = sender.send(result);
                 }
             }
-            // Narrative events, pings, etc. — silently ignore.
-            // Callers that need narrative events should use the lower-level
-            // PubSub client directly.
-            _ => {}
+            moor_rpc::ClientEventUnionRef::TaskSuspendedEvent(suspended) => {
+                let Ok(task_id) = suspended.task_id() else {
+                    continue;
+                };
+                let sender = waiters.lock().unwrap().remove(&task_id);
+                if let Some(sender) = sender {
+                    let _ = sender.send(TaskResult::Suspended(task_id));
+                }
+            }
+
+            // ----- Session-level events → broadcast channel -----
+            moor_rpc::ClientEventUnionRef::NarrativeEventMessage(narrative) => {
+                let session_event = (|| {
+                    let player_obj = obj_from_ref(narrative.player().ok()?).ok()?;
+                    let event_ref = narrative.event().ok()?;
+                    let event = narrative_event_from_ref(event_ref).ok()?;
+                    Some(SessionEvent::Narrative(player_obj, event))
+                })();
+                if let Some(evt) = session_event {
+                    let _ = session_tx.send(evt);
+                }
+            }
+            moor_rpc::ClientEventUnionRef::SystemMessageEvent(sys_msg) => {
+                let session_event = (|| {
+                    let player_obj = obj_from_ref(sys_msg.player().ok()?).ok()?;
+                    let message = sys_msg.message().ok()?.to_string();
+                    Some(SessionEvent::SystemMessage(player_obj, message))
+                })();
+                if let Some(evt) = session_event {
+                    let _ = session_tx.send(evt);
+                }
+            }
+            moor_rpc::ClientEventUnionRef::RequestInputEvent(input_request) => {
+                let session_event = (|| {
+                    let request_id_ref = input_request.request_id().ok()?;
+                    let request_id = uuid_from_ref(request_id_ref).ok()?;
+                    Some(SessionEvent::RequestInput(request_id))
+                })();
+                if let Some(evt) = session_event {
+                    let _ = session_tx.send(evt);
+                }
+            }
+            moor_rpc::ClientEventUnionRef::DisconnectEvent(_) => {
+                let _ = session_tx.send(SessionEvent::Disconnect);
+            }
+            moor_rpc::ClientEventUnionRef::PlayerSwitchedEvent(switch) => {
+                let session_event = (|| {
+                    let player_obj = obj_from_ref(switch.new_player().ok()?).ok()?;
+                    let auth_ref = switch.new_auth_token().ok()?;
+                    let token = auth_ref.token().ok()?.to_string();
+                    Some(SessionEvent::PlayerSwitched {
+                        player: player_obj,
+                        auth_token: AuthToken(token),
+                    })
+                })();
+                if let Some(evt) = session_event {
+                    let _ = session_tx.send(evt);
+                }
+            }
+            moor_rpc::ClientEventUnionRef::SetConnectionOptionEvent(opt) => {
+                let session_event = (|| {
+                    let conn_obj = obj_from_ref(opt.connection_obj().ok()?).ok()?;
+                    let option_ref = opt.option_name().ok()?;
+                    let option = Symbol::mk(option_ref.value().ok()?);
+                    let value_ref = opt.value().ok()?;
+                    let value = var_from_flatbuffer_ref(value_ref).ok()?;
+                    Some(SessionEvent::SetConnectionOption {
+                        connection_obj: conn_obj,
+                        option,
+                        value,
+                    })
+                })();
+                if let Some(evt) = session_event {
+                    let _ = session_tx.send(evt);
+                }
+            }
+            moor_rpc::ClientEventUnionRef::CredentialsUpdatedEvent(creds) => {
+                let session_event = (|| {
+                    let client_id_ref = creds.client_id().ok()?;
+                    let cid = uuid_from_ref(client_id_ref).ok()?;
+                    let token_ref = creds.client_token().ok()?;
+                    let token = token_ref.token().ok()?.to_string();
+                    Some(SessionEvent::CredentialsUpdated {
+                        client_id: cid,
+                        client_token: ClientToken(token),
+                    })
+                })();
+                if let Some(evt) = session_event {
+                    let _ = session_tx.send(evt);
+                }
+            }
         }
     }
 }
@@ -681,10 +820,13 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(20)).await;
 
         let waiters = Arc::new(WaiterMap::new(HashMap::new()));
+        let (session_tx, _) = broadcast::channel(16);
         let (tx, rx) = oneshot::channel();
         waiters.lock().unwrap().insert(task_id, tx);
 
-        let handle = tokio::spawn(dispatcher_loop(client_id, sub, waiters.clone()));
+        let handle = tokio::spawn(dispatcher_loop(
+            client_id, sub, waiters.clone(), session_tx,
+        ));
 
         // Publish a TaskSuccessEvent
         let value_fb = var_to_flatbuffer(&v_int(42)).unwrap();
@@ -713,7 +855,7 @@ mod tests {
 
         match result {
             TaskResult::Success(v) => assert_eq!(v, v_int(42)),
-            TaskResult::Error(e) => panic!("expected success, got error: {:?}", e),
+            other => panic!("expected success, got: {:?}", other),
         }
 
         handle.abort();
@@ -740,10 +882,13 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(20)).await;
 
         let waiters = Arc::new(WaiterMap::new(HashMap::new()));
+        let (session_tx, _) = broadcast::channel(16);
         let (tx, rx) = oneshot::channel();
         waiters.lock().unwrap().insert(task_id, tx);
 
-        let handle = tokio::spawn(dispatcher_loop(client_id, sub, waiters.clone()));
+        let handle = tokio::spawn(dispatcher_loop(
+            client_id, sub, waiters.clone(), session_tx,
+        ));
 
         // Publish a TaskErrorEvent
         let sched_err = SchedulerError::TaskAbortedError;
@@ -779,7 +924,7 @@ mod tests {
                     e
                 );
             }
-            TaskResult::Success(v) => panic!("expected error, got success: {:?}", v),
+            other => panic!("expected error, got: {:?}", other),
         }
 
         handle.abort();
@@ -807,10 +952,13 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(20)).await;
 
         let waiters = Arc::new(WaiterMap::new(HashMap::new()));
+        let (session_tx, _) = broadcast::channel(16);
         let (tx, rx) = oneshot::channel();
         waiters.lock().unwrap().insert(task_id_registered, tx);
 
-        let handle = tokio::spawn(dispatcher_loop(client_id, sub, waiters.clone()));
+        let handle = tokio::spawn(dispatcher_loop(
+            client_id, sub, waiters.clone(), session_tx,
+        ));
 
         // First: publish event for a different task_id — should be ignored
         let value_fb = var_to_flatbuffer(&v_int(0)).unwrap();
@@ -871,8 +1019,64 @@ mod tests {
 
         match result {
             TaskResult::Success(v) => assert_eq!(v, v_int(7)),
-            TaskResult::Error(e) => panic!("expected success, got error: {:?}", e),
+            other => panic!("expected success, got: {:?}", other),
         }
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_dispatcher_loop_session_events() {
+        let client_id = Uuid::new_v4();
+
+        let zmq_ctx = tmq::Context::new();
+        let addr = format!("inproc://test-dispatcher-session-{}", Uuid::new_v4());
+        let publisher = tmq::publish(&zmq_ctx)
+            .bind(&addr)
+            .expect("bind PUB");
+
+        let sub = tmq::subscribe(&zmq_ctx)
+            .connect(&addr)
+            .expect("connect SUB");
+        let sub = sub
+            .subscribe(&client_id.as_bytes()[..])
+            .expect("subscribe");
+
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        let waiters = Arc::new(WaiterMap::new(HashMap::new()));
+        let (session_tx, mut session_rx) = broadcast::channel(16);
+
+        let handle = tokio::spawn(dispatcher_loop(
+            client_id, sub, waiters.clone(), session_tx,
+        ));
+
+        // Publish a DisconnectEvent (simplest session event to construct)
+        let event = moor_rpc::ClientEvent {
+            event: moor_rpc::ClientEventUnion::DisconnectEvent(Box::new(
+                moor_rpc::DisconnectEvent {},
+            )),
+        };
+        let event_bytes = build_client_event(event);
+
+        use futures_util::SinkExt;
+        let mut publisher = publisher;
+        publisher
+            .send(
+                vec![client_id.as_bytes().to_vec(), event_bytes]
+                    .into_iter()
+                    .map(zmq::Message::from)
+                    .collect::<Vec<_>>(),
+            )
+            .await
+            .expect("publish");
+
+        let session_event = tokio::time::timeout(Duration::from_secs(5), session_rx.recv())
+            .await
+            .expect("timeout")
+            .expect("recv");
+
+        assert!(matches!(session_event, SessionEvent::Disconnect));
 
         handle.abort();
     }
