@@ -748,7 +748,8 @@ pub fn arb_stmt_scope_with_decls<S: Strategy<Value = Expr> + Clone + 'static>(
                 proptest::collection::vec(decl_expr_strategy.clone(), len),
             )
                 .prop_map(|(names, is_consts, let_inits, const_inits)| {
-                    names.into_iter()
+                    names
+                        .into_iter()
                         .zip(is_consts)
                         .zip(let_inits)
                         .zip(const_inits)
@@ -1363,7 +1364,11 @@ mod tests {
                 .collect::<Vec<_>>();
 
             let unique = names.iter().collect::<HashSet<_>>();
-            assert_eq!(unique.len(), names.len(), "duplicate declaration names: {names:?}");
+            assert_eq!(
+                unique.len(),
+                names.len(),
+                "duplicate declaration names: {names:?}"
+            );
         }
     }
 

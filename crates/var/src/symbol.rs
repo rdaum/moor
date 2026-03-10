@@ -30,9 +30,8 @@ use std::{
     fmt::{Debug, Display},
     hash::{BuildHasherDefault, Hash, Hasher},
     sync::{
-        Mutex,
+        LazyLock, Mutex,
         atomic::{AtomicU32, Ordering},
-        LazyLock,
     },
 };
 use unicase::UniCase;

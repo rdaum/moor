@@ -966,12 +966,7 @@ pub fn moo_frame_execute(
                     return push_error_cold(invalid_property_name_error(&propname));
                 };
 
-                let value = get_property(
-                    &permissions,
-                    &obj,
-                    propname,
-                    features_config,
-                );
+                let value = get_property(&permissions, &obj, propname, features_config);
                 match value {
                     Ok(v) => {
                         f.poke(0, v);
@@ -988,12 +983,7 @@ pub fn moo_frame_execute(
                     return push_error_cold(invalid_property_name_error(propname));
                 };
 
-                let value = get_property(
-                    &permissions,
-                    obj,
-                    propname,
-                    features_config,
-                );
+                let value = get_property(&permissions, obj, propname, features_config);
                 match value {
                     Ok(v) => {
                         f.push(v);

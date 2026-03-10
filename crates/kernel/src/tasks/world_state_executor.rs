@@ -472,11 +472,8 @@ fn execute_single_action(
                     _ => VerbProgramFailed(VerbProgramError::NoVerbToProgram),
                 })?;
 
-            let program = compile(
-                code.join("\n").as_str(),
-                config.features.compile_options(),
-            )
-            .map_err(|e| VerbProgramFailed(VerbProgramError::CompilationError(e)))?;
+            let program = compile(code.join("\n").as_str(), config.features.compile_options())
+                .map_err(|e| VerbProgramFailed(VerbProgramError::CompilationError(e)))?;
 
             let update_attrs = VerbAttrs {
                 definer: None,
@@ -681,8 +678,7 @@ fn execute_single_action(
 
             let mut object_list = Vec::new();
             for obj in objects.iter() {
-                let Ok((attrs, verbs_count, props_count)) =
-                    get_object_info(tx, &player, &obj)
+                let Ok((attrs, verbs_count, props_count)) = get_object_info(tx, &player, &obj)
                 else {
                     continue;
                 };
@@ -728,9 +724,7 @@ fn get_object_info(
         .owner_of(obj)
         .map_err(SchedulerError::PropertyRetrievalFailed)?;
     let parent = tx.parent_of(player, obj).unwrap_or(moor_var::NOTHING);
-    let location = tx
-        .location_of(player, obj)
-        .unwrap_or(moor_var::NOTHING);
+    let location = tx.location_of(player, obj).unwrap_or(moor_var::NOTHING);
     let flags = tx
         .flags_of(obj)
         .map_err(SchedulerError::PropertyRetrievalFailed)?;
@@ -878,9 +872,7 @@ mod tests {
                 player: SYSTEM_OBJECT,
                 obj: ObjectRef::Id(SYSTEM_OBJECT),
             },
-            WorldStateAction::GetObjectFlags {
-                obj: SYSTEM_OBJECT,
-            },
+            WorldStateAction::GetObjectFlags { obj: SYSTEM_OBJECT },
         ];
         let results = execute_world_state_actions(&mut *tx, &config, actions).unwrap();
         assert_eq!(results.len(), 3);

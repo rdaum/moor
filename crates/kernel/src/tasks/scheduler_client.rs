@@ -505,8 +505,9 @@ impl SchedulerClient {
         ),
         SchedulerError,
     > {
-        let result_sink: Arc<std::sync::Mutex<Option<Result<Vec<WorldStateResult>, SchedulerError>>>> =
-            Arc::new(std::sync::Mutex::new(None));
+        let result_sink: Arc<
+            std::sync::Mutex<Option<Result<Vec<WorldStateResult>, SchedulerError>>>,
+        > = Arc::new(std::sync::Mutex::new(None));
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitBatchWorldStateTask {
