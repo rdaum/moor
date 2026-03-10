@@ -585,8 +585,10 @@ fn mk_routes(
             post(host::update_property_handler),
         )
         .route("/v1/objects", get(host::list_objects_handler))
+        .route("/v1/objects/query", get(host::query_objects_handler))
         .route("/v1/objects/{object}", get(host::resolve_objref_handler))
         .route("/v1/history", get(host::history_handler))
+        .route("/v1/batch", post(host::batch_handler))
         .route("/v1/presentations", get(host::presentations_handler))
         .route(
             "/v1/presentations/{presentation_id}",
