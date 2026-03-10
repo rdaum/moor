@@ -40,8 +40,11 @@ mod tests {
     use moor_schema::rpc as moor_rpc;
     use moor_textdump::{TextdumpImportOptions, textdump_load};
     use moor_var::{Obj, SYSTEM_OBJECT};
+    use moor_common::model::ObjectRef;
     use rpc_common::{
-        AuthToken, ClientToken, mk_command_msg, mk_connection_establish_msg, mk_login_command_msg,
+        AuthToken, BatchAction, ClientToken, mk_batch_world_state_msg, mk_command_msg,
+        mk_connection_establish_msg, mk_login_command_msg, ws_list_objects,
+        ws_request_system_property, ws_resolve_object,
     };
     use rusty_paseto::prelude::Key;
     use semver::Version;
@@ -1181,5 +1184,312 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                 // TODO: Add proper traceback inspection and E_PERM filtering
             }
         }
+    }
+
+    /// Helper: establish connection, login as wizard, return (client_id, client_token, auth_token, player_obj).
+    fn login_as_wizard(env: &TestEnvironment) -> (Uuid, ClientToken, AuthToken, Obj) {
+        let client_id = Uuid::new_v4();
+
+        let establish_message = mk_connection_establish_msg(
+            "127.0.0.1:8080".to_string(),
+            7777,
+            8080,
+            Some(vec![moor_rpc::Symbol {
+                value: "text/plain".to_string(),
+            }]),
+            None,
+        );
+
+        let establish_result = env
+            .transport
+            .process_client_message(
+                env.message_handler.as_ref(),
+                env.scheduler_client.clone(),
+                client_id,
+                establish_message,
+            )
+            .expect("Connection establishment should succeed");
+
+        let client_token = match establish_result.reply {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+                ClientToken(new_conn.client_token.token.clone())
+            }
+            other => panic!("Expected NewConnection, got {other:?}"),
+        };
+
+        // Welcome message
+        let welcome_message =
+            mk_login_command_msg(&client_token, &SYSTEM_OBJECT, vec![], false, None, None);
+        env.transport
+            .process_client_message(
+                env.message_handler.as_ref(),
+                env.scheduler_client.clone(),
+                client_id,
+                welcome_message,
+            )
+            .expect("Welcome message should succeed");
+        assert!(
+            env.transport.wait_for_narrative_events(1, 2000),
+            "Should receive welcome message events"
+        );
+
+        // Login as wizard
+        let login_message = mk_login_command_msg(
+            &client_token,
+            &SYSTEM_OBJECT,
+            vec!["connect".to_string(), "wizard".to_string()],
+            true,
+            None,
+            None,
+        );
+
+        let login_result = env
+            .transport
+            .process_client_message(
+                env.message_handler.as_ref(),
+                env.scheduler_client.clone(),
+                client_id,
+                login_message,
+            )
+            .expect("Login should succeed");
+
+        let moor_rpc::DaemonToClientReplyUnion::LoginResult(login_res) = login_result.reply else {
+            panic!("Expected LoginResult");
+        };
+        assert!(login_res.success, "Login should be successful");
+
+        let auth_token = AuthToken(
+            login_res
+                .auth_token
+                .as_ref()
+                .expect("Should have auth token")
+                .token
+                .clone(),
+        );
+        let player_obj = match &login_res.player.as_ref().unwrap().obj {
+            moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+            _ => panic!("Unexpected obj variant"),
+        };
+
+        // Wait for connection events to settle
+        wait_for_event_content(
+            &env.transport,
+            player_obj,
+            |event| {
+                if let Event::Notify {
+                    value: content, ..
+                } = event
+                {
+                    content
+                        .as_string()
+                        .is_some_and(|s| s == "This is all there is right now.")
+                } else {
+                    false
+                }
+            },
+            5,
+            "connection events",
+        );
+
+        (client_id, client_token, auth_token, player_obj)
+    }
+
+    #[test]
+    fn test_batch_world_state_empty() {
+        let env = setup_test_environment_with_real_scheduler();
+        wait_for_scheduler_ready(&env.scheduler_client);
+        let (_client_id, _client_token, auth_token, _player_obj) = login_as_wizard(&env);
+
+        // Submit an empty batch
+        let message = mk_batch_world_state_msg(&auth_token, vec![], false);
+        let result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            Uuid::new_v4(),
+            message,
+        );
+
+        let reply = result.expect("Empty batch should succeed");
+        let moor_rpc::DaemonToClientReplyUnion::BatchWorldStateReply(batch_reply) = reply.reply
+        else {
+            panic!("Expected BatchWorldStateReply, got {:?}", reply.reply);
+        };
+        assert!(
+            batch_reply.results.is_empty(),
+            "Empty batch should return empty results"
+        );
+    }
+
+    #[test]
+    fn test_batch_world_state_read_system_property() {
+        let env = setup_test_environment_with_real_scheduler();
+        wait_for_scheduler_ready(&env.scheduler_client);
+        let (_client_id, _client_token, auth_token, _player_obj) = login_as_wizard(&env);
+
+        // Read system_object.name via batch
+        let actions = vec![BatchAction {
+            id: "req-1".to_string(),
+            action: ws_request_system_property(
+                &ObjectRef::Id(SYSTEM_OBJECT),
+                &moor_var::Symbol::mk("name"),
+            ),
+        }];
+
+        let message = mk_batch_world_state_msg(&auth_token, actions, false);
+        let result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            Uuid::new_v4(),
+            message,
+        );
+
+        let reply = result.expect("Batch system property read should succeed");
+        let moor_rpc::DaemonToClientReplyUnion::BatchWorldStateReply(batch_reply) = reply.reply
+        else {
+            panic!("Expected BatchWorldStateReply");
+        };
+        assert_eq!(batch_reply.results.len(), 1);
+        assert_eq!(batch_reply.results[0].id, "req-1");
+        // The result should be a WsSystemPropertyResult
+        assert!(
+            matches!(
+                batch_reply.results[0].result,
+                moor_rpc::WorldStateResultUnion::WsSystemPropertyResult(_)
+            ),
+            "Expected WsSystemPropertyResult, got {:?}",
+            batch_reply.results[0].result
+        );
+    }
+
+    #[test]
+    fn test_batch_world_state_resolve_object() {
+        let env = setup_test_environment_with_real_scheduler();
+        wait_for_scheduler_ready(&env.scheduler_client);
+        let (_client_id, _client_token, auth_token, _player_obj) = login_as_wizard(&env);
+
+        // Resolve $room (should be a well-known object in JHCore)
+        let actions = vec![BatchAction {
+            id: "resolve-1".to_string(),
+            action: ws_resolve_object(&ObjectRef::SysObj(vec![moor_var::Symbol::mk("room")])),
+        }];
+
+        let message = mk_batch_world_state_msg(&auth_token, actions, false);
+        let result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            Uuid::new_v4(),
+            message,
+        );
+
+        let reply = result.expect("Batch resolve should succeed");
+        let moor_rpc::DaemonToClientReplyUnion::BatchWorldStateReply(batch_reply) = reply.reply
+        else {
+            panic!("Expected BatchWorldStateReply");
+        };
+        assert_eq!(batch_reply.results.len(), 1);
+        assert_eq!(batch_reply.results[0].id, "resolve-1");
+        assert!(
+            matches!(
+                batch_reply.results[0].result,
+                moor_rpc::WorldStateResultUnion::WsResolveResult(_)
+            ),
+            "Expected WsResolveResult, got {:?}",
+            batch_reply.results[0].result
+        );
+    }
+
+    #[test]
+    fn test_batch_world_state_multiple_actions() {
+        let env = setup_test_environment_with_real_scheduler();
+        wait_for_scheduler_ready(&env.scheduler_client);
+        let (_client_id, _client_token, auth_token, _player_obj) = login_as_wizard(&env);
+
+        // Submit multiple heterogeneous actions in one batch
+        let actions = vec![
+            BatchAction {
+                id: "name".to_string(),
+                action: ws_request_system_property(
+                    &ObjectRef::Id(SYSTEM_OBJECT),
+                    &moor_var::Symbol::mk("name"),
+                ),
+            },
+            BatchAction {
+                id: "resolve".to_string(),
+                action: ws_resolve_object(&ObjectRef::SysObj(vec![moor_var::Symbol::mk("room")])),
+            },
+            BatchAction {
+                id: "list".to_string(),
+                action: ws_list_objects(),
+            },
+        ];
+
+        let message = mk_batch_world_state_msg(&auth_token, actions, false);
+        let result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            Uuid::new_v4(),
+            message,
+        );
+
+        let reply = result.expect("Multi-action batch should succeed");
+        let moor_rpc::DaemonToClientReplyUnion::BatchWorldStateReply(batch_reply) = reply.reply
+        else {
+            panic!("Expected BatchWorldStateReply");
+        };
+
+        assert_eq!(batch_reply.results.len(), 3);
+        // Verify correlation IDs are preserved in order
+        assert_eq!(batch_reply.results[0].id, "name");
+        assert_eq!(batch_reply.results[1].id, "resolve");
+        assert_eq!(batch_reply.results[2].id, "list");
+
+        // Verify each result has the expected type
+        assert!(matches!(
+            batch_reply.results[0].result,
+            moor_rpc::WorldStateResultUnion::WsSystemPropertyResult(_)
+        ));
+        assert!(matches!(
+            batch_reply.results[1].result,
+            moor_rpc::WorldStateResultUnion::WsResolveResult(_)
+        ));
+        assert!(matches!(
+            batch_reply.results[2].result,
+            moor_rpc::WorldStateResultUnion::WsObjectsListResult(_)
+        ));
+    }
+
+    #[test]
+    fn test_batch_world_state_rollback_mode() {
+        let env = setup_test_environment_with_real_scheduler();
+        wait_for_scheduler_ready(&env.scheduler_client);
+        let (_client_id, _client_token, auth_token, _player_obj) = login_as_wizard(&env);
+
+        // Read-only batch with rollback=true should still succeed
+        let actions = vec![BatchAction {
+            id: "sys-name".to_string(),
+            action: ws_request_system_property(
+                &ObjectRef::Id(SYSTEM_OBJECT),
+                &moor_var::Symbol::mk("name"),
+            ),
+        }];
+
+        let message = mk_batch_world_state_msg(&auth_token, actions, true);
+        let result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            Uuid::new_v4(),
+            message,
+        );
+
+        let reply = result.expect("Rollback batch should succeed");
+        let moor_rpc::DaemonToClientReplyUnion::BatchWorldStateReply(batch_reply) = reply.reply
+        else {
+            panic!("Expected BatchWorldStateReply");
+        };
+        assert_eq!(batch_reply.results.len(), 1);
+        assert!(matches!(
+            batch_reply.results[0].result,
+            moor_rpc::WorldStateResultUnion::WsSystemPropertyResult(_)
+        ));
     }
 }
