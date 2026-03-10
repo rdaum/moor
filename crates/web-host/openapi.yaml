@@ -819,6 +819,53 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /v1/objects/query:
+    get:
+      operationId: queryObjects
+      tags: [Objects]
+      summary: Query objects with filters
+      description: |
+        Returns a list of objects matching the provided filters.
+        Internally uses BatchWorldState with a WsQueryObjects action.
+      security:
+        - MoorAuthToken: []
+      parameters:
+        - name: parent
+          in: query
+          schema: { type: string }
+          description: Filter by direct parent (CURIE)
+        - name: location
+          in: query
+          schema: { type: string }
+          description: Filter by container (CURIE)
+        - name: owner
+          in: query
+          schema: { type: string }
+          description: Filter by owner (CURIE)
+        - name: flags_all
+          in: query
+          schema: { type: integer, format: uint16 }
+          description: Require all of these flags (bitmask)
+        - name: flags_any
+          in: query
+          schema: { type: integer, format: uint16 }
+          description: Require any of these flags (bitmask)
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /v1/objects/{object}:
     get:
       operationId: resolveObject
@@ -890,6 +937,56 @@ paths:
                 type: object
         "400":
           description: Invalid UUID or missing query parameter
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/batch:
+    post:
+      operationId: batchWorldState
+      tags: [Objects]
+      summary: Execute multiple world state operations atomically
+      description: |
+        Submits a list of world state actions to be executed in a single
+        transaction.  Supports both FlatBuffers (`BatchWorldState` table)
+        and JSON payloads.
+      security:
+        - MoorAuthToken: []
+      requestBody:
+        required: true
+        content:
+          application/x-flatbuffers:
+            schema: { type: string, format: binary }
+          application/json:
+            schema:
+              type: object
+              properties:
+                actions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      action: { type: object }
+                    required: [id, action]
+                rollback:
+                  type: boolean
+                  default: false
+              required: [actions]
+      responses:
+        "200":
+          description: Batch execution results
+          content:
+            application/x-flatbuffers:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid request body
         "401":
           $ref: "#/components/responses/Unauthorized"
         "406":
