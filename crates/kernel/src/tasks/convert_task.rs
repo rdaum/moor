@@ -1528,6 +1528,10 @@ pub(crate) fn task_start_to_flatbuffer(
             // Exception handlers don't get suspended, so they shouldn't be serialized
             panic!("Attempted to serialize StartExceptionHandler task state");
         }
+        KernelTaskStart::StartBatchWorldState { .. } => {
+            // Batch world state tasks execute synchronously in setup_task_start and never suspend
+            panic!("Attempted to serialize StartBatchWorldState task state");
+        }
     };
 
     Ok(fb::TaskStart { start: start_union })
