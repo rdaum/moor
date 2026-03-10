@@ -385,6 +385,15 @@ impl WorldStateActionExecutor {
 
                 Ok(WorldStateResult::ObjectFlags(flags.to_u16()))
             }
+
+            WorldStateAction::QueryObjects { player: _, query } => {
+                let objects = self
+                    .tx
+                    .query_objects(&query)
+                    .map_err(|e| CommandExecutionError(CommandError::DatabaseError(e)))?;
+
+                Ok(WorldStateResult::QueriedObjects(objects.iter().collect()))
+            }
         }
     }
 
@@ -712,6 +721,14 @@ fn execute_single_action(
 
             Ok(WorldStateResult::ObjectFlags(flags.to_u16()))
         }
+
+        WorldStateAction::QueryObjects { player: _, query } => {
+            let objects = tx
+                .query_objects(&query)
+                .map_err(|e| CommandExecutionError(CommandError::DatabaseError(e)))?;
+
+            Ok(WorldStateResult::QueriedObjects(objects.iter().collect()))
+        }
     }
 }
 
@@ -801,9 +818,10 @@ pub fn match_object_ref(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use moor_common::model::{ObjFlag, ObjectKind, WorldStateSource};
+    use moor_common::model::{ObjFlag, ObjectKind, ObjectQuery, WorldStateSource};
+    use moor_common::util::BitEnum;
     use moor_db::{DatabaseConfig, TxDB};
-    use moor_var::{NOTHING, SYSTEM_OBJECT, Symbol, v_int, v_str};
+    use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_int, v_str};
 
     fn setup_test_db() -> (TxDB, Box<dyn WorldState>) {
         let (db, _) = TxDB::open(None, DatabaseConfig::default());
@@ -1010,6 +1028,139 @@ mod tests {
             Err(_) => {
                 // Also acceptable — the batch may fail on bad object match
             }
+        }
+    }
+
+    /// Helper to create additional objects for query tests.
+    fn setup_query_test_objects(tx: &mut dyn moor_common::model::WorldState) -> (Obj, Obj) {
+        // Create a child of SYSTEM_OBJECT with User+Programmer flags
+        let child = tx
+            .create_object(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                BitEnum::new_with(ObjFlag::User) | ObjFlag::Programmer,
+                ObjectKind::NextObjid,
+            )
+            .unwrap();
+        tx.update_property(&SYSTEM_OBJECT, &child, Symbol::mk("name"), &v_str("child"))
+            .unwrap();
+
+        // Create another object parented to child, no flags
+        let grandchild = tx
+            .create_object(
+                &SYSTEM_OBJECT,
+                &child,
+                &SYSTEM_OBJECT,
+                BitEnum::new(),
+                ObjectKind::NextObjid,
+            )
+            .unwrap();
+        tx.update_property(
+            &SYSTEM_OBJECT,
+            &grandchild,
+            Symbol::mk("name"),
+            &v_str("grandchild"),
+        )
+        .unwrap();
+
+        (child, grandchild)
+    }
+
+    #[test]
+    fn test_execute_query_objects_by_parent() {
+        let (_db, mut tx) = setup_test_db();
+        let (child, grandchild) = setup_query_test_objects(&mut *tx);
+        let config = Config::default();
+
+        let actions = vec![WorldStateAction::QueryObjects {
+            player: SYSTEM_OBJECT,
+            query: ObjectQuery {
+                parent: Some(SYSTEM_OBJECT),
+                ..Default::default()
+            },
+        }];
+        let results = execute_world_state_actions(&mut *tx, &config, actions).unwrap();
+        assert_eq!(results.len(), 1);
+        match &results[0] {
+            WorldStateResult::QueriedObjects(objs) => {
+                assert!(objs.contains(&child), "Expected child in results");
+                assert!(!objs.contains(&grandchild), "Grandchild has different parent");
+            }
+            other => panic!("Expected QueriedObjects, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_execute_query_objects_by_flags() {
+        let (_db, mut tx) = setup_test_db();
+        let (child, grandchild) = setup_query_test_objects(&mut *tx);
+        let config = Config::default();
+
+        let actions = vec![WorldStateAction::QueryObjects {
+            player: SYSTEM_OBJECT,
+            query: ObjectQuery {
+                flags_any: Some(BitEnum::new_with(ObjFlag::User)),
+                ..Default::default()
+            },
+        }];
+        let results = execute_world_state_actions(&mut *tx, &config, actions).unwrap();
+        assert_eq!(results.len(), 1);
+        match &results[0] {
+            WorldStateResult::QueriedObjects(objs) => {
+                // SYSTEM_OBJECT has all flags, child has User+Programmer
+                assert!(objs.contains(&SYSTEM_OBJECT));
+                assert!(objs.contains(&child));
+                // grandchild has no flags
+                assert!(!objs.contains(&grandchild));
+            }
+            other => panic!("Expected QueriedObjects, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_execute_query_objects_empty_query() {
+        let (_db, mut tx) = setup_test_db();
+        let (child, grandchild) = setup_query_test_objects(&mut *tx);
+        let config = Config::default();
+
+        let actions = vec![WorldStateAction::QueryObjects {
+            player: SYSTEM_OBJECT,
+            query: ObjectQuery::default(),
+        }];
+        let results = execute_world_state_actions(&mut *tx, &config, actions).unwrap();
+        assert_eq!(results.len(), 1);
+        match &results[0] {
+            WorldStateResult::QueriedObjects(objs) => {
+                assert!(objs.contains(&SYSTEM_OBJECT));
+                assert!(objs.contains(&child));
+                assert!(objs.contains(&grandchild));
+            }
+            other => panic!("Expected QueriedObjects, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_execute_query_objects_no_match() {
+        let (_db, mut tx) = setup_test_db();
+        let _ = setup_query_test_objects(&mut *tx);
+        let config = Config::default();
+
+        let fake = Obj::mk_id(999);
+        let actions = vec![WorldStateAction::QueryObjects {
+            player: SYSTEM_OBJECT,
+            query: ObjectQuery {
+                parent: Some(fake),
+                ..Default::default()
+            },
+        }];
+        let results = execute_world_state_actions(&mut *tx, &config, actions).unwrap();
+        assert_eq!(results.len(), 1);
+        match &results[0] {
+            WorldStateResult::QueriedObjects(objs) => {
+                assert!(objs.is_empty());
+            }
+            other => panic!("Expected QueriedObjects, got {other:?}"),
         }
     }
 }

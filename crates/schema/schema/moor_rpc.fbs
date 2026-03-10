@@ -548,6 +548,14 @@ table WsGetObjectFlags {
     obj: MoorCommon.Obj (required);
 }
 
+table WsQueryObjects {
+    parent: MoorCommon.Obj;       // optional filter: direct parent
+    location: MoorCommon.Obj;     // optional filter: contained in
+    owner: MoorCommon.Obj;        // optional filter: owned by
+    flags_all: uint16 = 0;       // require all of these flags (0 = no filter)
+    flags_any: uint16 = 0;       // require any of these flags (0 = no filter)
+}
+
 union WorldStateActionUnion {
     WsRequestProperty,
     WsRequestProperties,
@@ -559,7 +567,8 @@ union WorldStateActionUnion {
     WsRequestAllObjects,
     WsUpdateProperty,
     WsProgramVerb,
-    WsGetObjectFlags
+    WsGetObjectFlags,
+    WsQueryObjects
 }
 
 table WorldStateActionEntry {
@@ -621,6 +630,10 @@ table WsObjectFlagsResult {
     flags: uint16;
 }
 
+table WsQueryObjectsResult {
+    objects: [MoorCommon.Obj] (required);
+}
+
 table WsActionError {
     error: RpcMessageError (required);
 }
@@ -637,6 +650,7 @@ union WorldStateResultUnion {
     WsPropertyUpdatedResult,
     WsVerbProgrammedResult,
     WsObjectFlagsResult,
+    WsQueryObjectsResult,
     WsActionError
 }
 

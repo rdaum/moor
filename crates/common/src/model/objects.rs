@@ -332,3 +332,22 @@ impl ByteSized for ObjAttrs {
         self.0.len()
     }
 }
+
+/// Query filter for finding objects matching multiple criteria.
+///
+/// All specified filters are ANDed together. `None` fields are not filtered on.
+/// The implementation picks the most selective indexed filter as the starting
+/// candidate set, then applies remaining filters via point lookups.
+#[derive(Debug, Clone, Default)]
+pub struct ObjectQuery {
+    /// Filter by direct parent object.
+    pub parent: Option<Obj>,
+    /// Filter by location (contained in).
+    pub location: Option<Obj>,
+    /// Filter by owner.
+    pub owner: Option<Obj>,
+    /// Require all of these flags to be set.
+    pub flags_all: Option<BitEnum<ObjFlag>>,
+    /// Require any of these flags to be set.
+    pub flags_any: Option<BitEnum<ObjFlag>>,
+}

@@ -667,6 +667,23 @@ pub fn ws_request_all_objects() -> rpc::WorldStateActionUnion {
     rpc::WorldStateActionUnion::WsRequestAllObjects(Box::new(rpc::WsRequestAllObjects {}))
 }
 
+/// Helper to build a WsQueryObjects action
+pub fn ws_query_objects(
+    parent: Option<&Obj>,
+    location: Option<&Obj>,
+    owner: Option<&Obj>,
+    flags_all: u16,
+    flags_any: u16,
+) -> rpc::WorldStateActionUnion {
+    rpc::WorldStateActionUnion::WsQueryObjects(Box::new(rpc::WsQueryObjects {
+        parent: parent.map(obj_fb),
+        location: location.map(obj_fb),
+        owner: owner.map(obj_fb),
+        flags_all,
+        flags_any,
+    }))
+}
+
 /// Helper to build a WsListObjects action
 pub fn ws_list_objects() -> rpc::WorldStateActionUnion {
     rpc::WorldStateActionUnion::WsListObjects(Box::new(rpc::WsListObjects {}))

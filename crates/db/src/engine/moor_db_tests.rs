@@ -19,8 +19,9 @@ mod tests {
     use crate::engine::moor_db::MoorDB;
     use moor_common::{
         model::{
-            CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, ObjectRef,
-            PropAttrs, PropFlag, ValSet, VerbArgsSpec, VerbAttrs, VerbFlag, WorldStateError,
+            CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, ObjectQuery,
+            ObjectRef, PropAttrs, PropFlag, ValSet, VerbArgsSpec, VerbAttrs, VerbFlag,
+            WorldStateError,
         },
         util::BitEnum,
     };
@@ -4894,5 +4895,225 @@ mod tests {
             "Expected DuplicatePropertyDefinition error for child object, got: {:?}",
             result
         );
+    }
+
+    // =========================================================================
+    // query_objects tests
+    // =========================================================================
+
+    /// Helper macro: create a small object graph for query tests.
+    /// Creates (parent_a, parent_b, child_a1, child_a2, child_b1) with varied flags/parents/locations.
+    macro_rules! setup_query_objects {
+        ($tx:expr) => {{
+            let wizard_flags =
+                BitEnum::new_with(ObjFlag::User) | ObjFlag::Programmer | ObjFlag::Wizard;
+            let player_flags = BitEnum::new_with(ObjFlag::User) | ObjFlag::Programmer;
+            let plain_flags = BitEnum::new();
+
+            let parent_a = $tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, wizard_flags, "parent_a"),
+                )
+                .unwrap();
+            let parent_b = $tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, player_flags, "parent_b"),
+                )
+                .unwrap();
+            let child_a1 = $tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(parent_a, parent_a, parent_b, plain_flags, "child_a1"),
+                )
+                .unwrap();
+            let child_a2 = $tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(parent_a, parent_a, parent_b, player_flags, "child_a2"),
+                )
+                .unwrap();
+            let child_b1 = $tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(parent_b, parent_b, parent_a, wizard_flags, "child_b1"),
+                )
+                .unwrap();
+
+            (parent_a, parent_b, child_a1, child_a2, child_b1)
+        }};
+    }
+
+    #[test]
+    fn test_query_objects_empty_query_returns_all() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+        let (parent_a, parent_b, child_a1, child_a2, child_b1) = setup_query_objects!(tx);
+
+        let results: Vec<Obj> = tx
+            .query_objects(&ObjectQuery::default())
+            .unwrap()
+            .iter()
+            .collect();
+        assert!(results.contains(&parent_a));
+        assert!(results.contains(&parent_b));
+        assert!(results.contains(&child_a1));
+        assert!(results.contains(&child_a2));
+        assert!(results.contains(&child_b1));
+    }
+
+    #[test]
+    fn test_query_objects_by_parent() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+        let (parent_a, _parent_b, child_a1, child_a2, _child_b1) = setup_query_objects!(tx);
+
+        let results: Vec<Obj> = tx
+            .query_objects(&ObjectQuery {
+                parent: Some(parent_a),
+                ..Default::default()
+            })
+            .unwrap()
+            .iter()
+            .collect();
+        assert!(results.contains(&child_a1));
+        assert!(results.contains(&child_a2));
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn test_query_objects_by_location() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+        let (parent_a, parent_b, child_a1, child_a2, child_b1) = setup_query_objects!(tx);
+
+        // Objects located in parent_b: child_a1, child_a2
+        let results: Vec<Obj> = tx
+            .query_objects(&ObjectQuery {
+                location: Some(parent_b),
+                ..Default::default()
+            })
+            .unwrap()
+            .iter()
+            .collect();
+        assert!(results.contains(&child_a1));
+        assert!(results.contains(&child_a2));
+        assert_eq!(results.len(), 2);
+
+        // Objects located in parent_a: child_b1
+        let results: Vec<Obj> = tx
+            .query_objects(&ObjectQuery {
+                location: Some(parent_a),
+                ..Default::default()
+            })
+            .unwrap()
+            .iter()
+            .collect();
+        assert!(results.contains(&child_b1));
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_query_objects_by_owner() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+        let (parent_a, _parent_b, child_a1, child_a2, _child_b1) = setup_query_objects!(tx);
+
+        let results: Vec<Obj> = tx
+            .query_objects(&ObjectQuery {
+                owner: Some(parent_a),
+                ..Default::default()
+            })
+            .unwrap()
+            .iter()
+            .collect();
+        // parent_a owns itself + child_a1 + child_a2
+        assert!(results.contains(&parent_a));
+        assert!(results.contains(&child_a1));
+        assert!(results.contains(&child_a2));
+        assert_eq!(results.len(), 3);
+    }
+
+    #[test]
+    fn test_query_objects_by_flags_all() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+        let (parent_a, _parent_b, _child_a1, _child_a2, child_b1) = setup_query_objects!(tx);
+
+        // Objects with both User and Wizard flags
+        let required = BitEnum::new_with(ObjFlag::User) | ObjFlag::Wizard;
+        let results: Vec<Obj> = tx
+            .query_objects(&ObjectQuery {
+                flags_all: Some(required),
+                ..Default::default()
+            })
+            .unwrap()
+            .iter()
+            .collect();
+        assert!(results.contains(&parent_a));
+        assert!(results.contains(&child_b1));
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn test_query_objects_by_flags_any() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+        let (parent_a, _parent_b, _child_a1, _child_a2, child_b1) = setup_query_objects!(tx);
+
+        // Objects with Wizard flag
+        let any_of = BitEnum::new_with(ObjFlag::Wizard);
+        let results: Vec<Obj> = tx
+            .query_objects(&ObjectQuery {
+                flags_any: Some(any_of),
+                ..Default::default()
+            })
+            .unwrap()
+            .iter()
+            .collect();
+        assert!(results.contains(&parent_a));
+        assert!(results.contains(&child_b1));
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn test_query_objects_combined_filters() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+        let (parent_a, _parent_b, _child_a1, child_a2, _child_b1) = setup_query_objects!(tx);
+
+        // Children of parent_a that have the Programmer flag
+        let results: Vec<Obj> = tx
+            .query_objects(&ObjectQuery {
+                parent: Some(parent_a),
+                flags_any: Some(BitEnum::new_with(ObjFlag::Programmer)),
+                ..Default::default()
+            })
+            .unwrap()
+            .iter()
+            .collect();
+        // child_a2 has Programmer, child_a1 does not
+        assert!(results.contains(&child_a2));
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_query_objects_no_match() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+        let _ = setup_query_objects!(tx);
+
+        // Query for a non-existent parent
+        let fake_parent = Obj::mk_id(999);
+        let results: Vec<Obj> = tx
+            .query_objects(&ObjectQuery {
+                parent: Some(fake_parent),
+                ..Default::default()
+            })
+            .unwrap()
+            .iter()
+            .collect();
+        assert!(results.is_empty());
     }
 }

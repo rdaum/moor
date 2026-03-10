@@ -135,6 +135,11 @@ impl<T: BitFlag> BitEnum<T> {
         // Verify that all bits from common are in self.value
         values.value & self.value == values.value
     }
+
+    #[inline]
+    pub fn contains_any(&self, values: BitEnum<T>) -> bool {
+        self.value & values.value != 0
+    }
 }
 
 impl<T: BitFlag> BitOr for BitEnum<T> {

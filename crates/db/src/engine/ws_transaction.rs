@@ -28,7 +28,7 @@ use byteview::ByteView;
 use moor_common::util::{Instant, PerfIntensity};
 use moor_common::{
     model::{
-        CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, ObjectRef, PropDef,
+        CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, ObjectQuery, ObjectRef, PropDef,
         PropDefs, PropFlag, PropPerms, ResolvedVerb, ValSet, VerbArgsSpec, VerbAttrs, VerbDef,
         VerbDefs, VerbFlag, WorldStateError,
     },
@@ -656,6 +656,98 @@ impl WorldStateTransaction {
         self.object_owner
             .for_each_by_codomain(owner, |obj| owned.push(*obj));
         Ok(ObjSet::from_iter(owned))
+    }
+
+    pub fn query_objects(
+        &self,
+        query: &ObjectQuery,
+    ) -> Result<ObjSet, WorldStateError> {
+        // Strategy: pick the most selective indexed filter as the starting candidate
+        // set, then apply remaining filters via point lookups.
+
+        // Collect candidates from the best indexed starting set.
+        let candidates: Vec<Obj> = if let Some(ref location) = query.location {
+            let mut v = Vec::new();
+            self.object_location
+                .for_each_by_codomain(location, |obj| v.push(*obj));
+            v
+        } else if let Some(ref parent) = query.parent {
+            let mut v = Vec::new();
+            self.object_parent
+                .for_each_by_codomain(parent, |obj| v.push(*obj));
+            v
+        } else if let Some(ref owner) = query.owner {
+            let mut v = Vec::new();
+            self.object_owner
+                .for_each_by_codomain(owner, |obj| v.push(*obj));
+            v
+        } else {
+            // No indexed filter — fall back to all objects.
+            let objects = self
+                .object_flags
+                .scan(&|_, _| true)
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!("Error scanning objects: {e:?}"))
+                })?;
+            objects.into_iter().map(|(obj, _)| obj).collect()
+        };
+
+        // Apply remaining filters via point lookups.
+        let mut results = Vec::new();
+        for obj in candidates {
+            // Check parent filter (if not already the starting set)
+            if query.location.is_some() || query.owner.is_some() {
+                if let Some(ref parent) = query.parent {
+                    let obj_parent = self.get_object_parent(&obj).unwrap_or(NOTHING);
+                    if obj_parent != *parent {
+                        continue;
+                    }
+                }
+            }
+
+            // Check location filter (if not already the starting set)
+            if query.parent.is_some() || query.owner.is_some() {
+                if let Some(ref location) = query.location {
+                    let obj_location = self.get_object_location(&obj).unwrap_or(NOTHING);
+                    if obj_location != *location {
+                        continue;
+                    }
+                }
+            }
+
+            // Check owner filter (if not already the starting set)
+            if query.location.is_some() || query.parent.is_some() {
+                if let Some(ref owner) = query.owner {
+                    let obj_owner = self.get_object_owner(&obj).unwrap_or(NOTHING);
+                    if obj_owner != *owner {
+                        continue;
+                    }
+                }
+            }
+
+            // Check flags filters
+            if query.flags_all.is_some() || query.flags_any.is_some() {
+                let flags = match self.get_object_flags(&obj) {
+                    Ok(f) => f,
+                    Err(_) => continue,
+                };
+
+                if let Some(ref required) = query.flags_all {
+                    if !flags.contains_all(*required) {
+                        continue;
+                    }
+                }
+                if let Some(ref any_of) = query.flags_any {
+                    if !flags.contains_any(*any_of) {
+                        continue;
+                    }
+                }
+            }
+
+            results.push(obj);
+        }
+
+        Ok(ObjSet::from_iter(results))
     }
 
     pub fn get_object_location(&self, obj: &Obj) -> Result<Obj, WorldStateError> {

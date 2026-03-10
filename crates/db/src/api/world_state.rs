@@ -28,7 +28,7 @@ use crate::{
 use moor_common::{
     model::{
         CommitResult, DispatchFlagsSource, HasUuid, ObjAttrs, ObjFlag, ObjSet, ObjectKind,
-        ObjectRef, Perms, PropAttrs, PropDef, PropDefs, PropFlag, PropPerms, ValSet, VerbArgsSpec,
+        ObjectQuery, ObjectRef, Perms, PropAttrs, PropDef, PropDefs, PropFlag, PropPerms, ValSet, VerbArgsSpec,
         VerbAttrs, VerbDef, VerbDefs, VerbDispatch, VerbDispatchResult, VerbFlag, VerbLookup,
         VerbProgramKey, WorldState, WorldStateError, WorldStatePerf,
     },
@@ -916,6 +916,10 @@ impl WorldState for DbWorldState {
     fn owned_objects(&self, _perms: &Obj, owner: &Obj) -> Result<ObjSet, WorldStateError> {
         let _t = PerfTimerGuard::new(&db_counters().owned_objects);
         self.get_tx().get_owned_objects(owner)
+    }
+
+    fn query_objects(&self, query: &ObjectQuery) -> Result<ObjSet, WorldStateError> {
+        self.get_tx().query_objects(query)
     }
 
     fn descendants_of(
