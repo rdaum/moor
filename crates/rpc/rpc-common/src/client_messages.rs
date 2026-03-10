@@ -539,3 +539,100 @@ pub fn mk_call_system_verb_msg(
         )),
     })
 }
+
+/// A single action entry for a batch world state request.
+pub struct BatchAction {
+    pub id: String,
+    pub action: rpc::WorldStateActionUnion,
+}
+
+/// Build a BatchWorldState message
+pub fn mk_batch_world_state_msg(
+    auth_token: &AuthToken,
+    actions: Vec<BatchAction>,
+    rollback: bool,
+) -> rpc::HostClientToDaemonMessage {
+    let entries = actions
+        .into_iter()
+        .map(|a| rpc::WorldStateActionEntry {
+            id: a.id,
+            action: a.action,
+        })
+        .collect();
+
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::BatchWorldState(Box::new(
+            rpc::BatchWorldState {
+                auth_token: auth_token_fb(auth_token),
+                actions: entries,
+                rollback,
+            },
+        )),
+    }
+}
+
+/// Helper to build a WsRequestSystemProperty action
+pub fn ws_request_system_property(
+    object: &ObjectRef,
+    property: &Symbol,
+) -> rpc::WorldStateActionUnion {
+    rpc::WorldStateActionUnion::WsRequestSystemProperty(Box::new(rpc::WsRequestSystemProperty {
+        object: objectref_fb(object),
+        property: symbol_fb(property),
+    }))
+}
+
+/// Helper to build a WsResolveObject action
+pub fn ws_resolve_object(objref: &ObjectRef) -> rpc::WorldStateActionUnion {
+    rpc::WorldStateActionUnion::WsResolveObject(Box::new(rpc::WsResolveObject {
+        objref: objectref_fb(objref),
+    }))
+}
+
+/// Helper to build a WsGetObjectFlags action
+pub fn ws_get_object_flags(obj: &Obj) -> rpc::WorldStateActionUnion {
+    rpc::WorldStateActionUnion::WsGetObjectFlags(Box::new(rpc::WsGetObjectFlags {
+        obj: obj_fb(obj),
+    }))
+}
+
+/// Helper to build a WsRequestProperties action
+pub fn ws_request_properties(object: &ObjectRef, inherited: bool) -> rpc::WorldStateActionUnion {
+    rpc::WorldStateActionUnion::WsRequestProperties(Box::new(rpc::WsRequestProperties {
+        object: objectref_fb(object),
+        inherited,
+    }))
+}
+
+/// Helper to build a WsRequestVerbs action
+pub fn ws_request_verbs(object: &ObjectRef, inherited: bool) -> rpc::WorldStateActionUnion {
+    rpc::WorldStateActionUnion::WsRequestVerbs(Box::new(rpc::WsRequestVerbs {
+        object: objectref_fb(object),
+        inherited,
+    }))
+}
+
+/// Helper to build a WsUpdateProperty action
+pub fn ws_update_property(
+    object: &ObjectRef,
+    property: &Symbol,
+    value: &Var,
+) -> Option<rpc::WorldStateActionUnion> {
+    Some(rpc::WorldStateActionUnion::WsUpdateProperty(Box::new(
+        rpc::WsUpdateProperty {
+            object: objectref_fb(object),
+            property: symbol_fb(property),
+            value: var_fb(value)?,
+        },
+    )))
+}
+
+/// Helper to build a WsRequestAllObjects action
+pub fn ws_request_all_objects() -> rpc::WorldStateActionUnion {
+    rpc::WorldStateActionUnion::WsRequestAllObjects(Box::new(rpc::WsRequestAllObjects {}))
+}
+
+/// Helper to build a WsListObjects action
+pub fn ws_list_objects() -> rpc::WorldStateActionUnion {
+    rpc::WorldStateActionUnion::WsListObjects(Box::new(rpc::WsListObjects {}))
+}
