@@ -29,8 +29,7 @@ use std::{
     net::SocketAddr,
     path::PathBuf,
     sync::{
-        Arc,
-        LazyLock,
+        Arc, LazyLock,
         atomic::{AtomicBool, AtomicU64},
     },
 };

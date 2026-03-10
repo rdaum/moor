@@ -45,8 +45,7 @@ static DRY_RUN_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("dry_run"));
 static CONFLICT_MODE_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("conflict_mode"));
 static CONSTANTS_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("constants"));
 static OVERRIDES_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("overrides"));
-static RETURN_CONFLICTS_SYM: LazyLock<Symbol> =
-    LazyLock::new(|| Symbol::mk("return_conflicts"));
+static RETURN_CONFLICTS_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("return_conflicts"));
 static DIAGNOSTICS_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("diagnostics"));
 static CLOBBER_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("clobber"));
 static SKIP_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("skip"));

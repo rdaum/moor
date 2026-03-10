@@ -82,8 +82,7 @@ pub(crate) static USER_DISCONNECTED_SYM: LazyLock<Symbol> =
     LazyLock::new(|| Symbol::mk("user_disconnected"));
 pub(crate) static USER_RECONNECTED_SYM: LazyLock<Symbol> =
     LazyLock::new(|| Symbol::mk("user_reconnected"));
-pub(crate) static USER_CREATED_SYM: LazyLock<Symbol> =
-    LazyLock::new(|| Symbol::mk("user_created"));
+pub(crate) static USER_CREATED_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("user_created"));
 pub(crate) static DO_LOGIN_COMMAND: LazyLock<Symbol> =
     LazyLock::new(|| Symbol::mk("do_login_command"));
 pub(crate) static SCHED_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("sched"));
@@ -2531,19 +2530,21 @@ impl RpcMessageHandler {
                 WorldStateResult::ObjectsList(objects) => {
                     let object_infos: Vec<_> = objects
                         .iter()
-                        .map(|(obj, attrs, verbs_count, props_count)| moor_rpc::ObjectInfo {
-                            obj: obj_fb(obj),
-                            name: attrs
-                                .name()
-                                .map(|n| Box::new(moor_rpc::Symbol { value: n })),
-                            parent: attrs.parent().map(|p| obj_fb(&p)),
-                            owner: obj_fb(&attrs.owner().unwrap_or(*obj)),
-                            flags: attrs.flags().to_u16(),
-                            location: attrs.location().map(|l| obj_fb(&l)),
-                            contents_count: 0,
-                            verbs_count: *verbs_count as u32,
-                            properties_count: *props_count as u32,
-                        })
+                        .map(
+                            |(obj, attrs, verbs_count, props_count)| moor_rpc::ObjectInfo {
+                                obj: obj_fb(obj),
+                                name: attrs
+                                    .name()
+                                    .map(|n| Box::new(moor_rpc::Symbol { value: n })),
+                                parent: attrs.parent().map(|p| obj_fb(&p)),
+                                owner: obj_fb(&attrs.owner().unwrap_or(*obj)),
+                                flags: attrs.flags().to_u16(),
+                                location: attrs.location().map(|l| obj_fb(&l)),
+                                contents_count: 0,
+                                verbs_count: *verbs_count as u32,
+                                properties_count: *props_count as u32,
+                            },
+                        )
                         .collect();
                     moor_rpc::WorldStateResultUnion::WsObjectsListResult(Box::new(
                         moor_rpc::WsObjectsListResult {
@@ -2552,8 +2553,10 @@ impl RpcMessageHandler {
                     ))
                 }
                 WorldStateResult::AllObjects(objects) => {
-                    let obj_fbs =
-                        objects.iter().map(|o| obj_to_flatbuffer_struct(o)).collect();
+                    let obj_fbs = objects
+                        .iter()
+                        .map(|o| obj_to_flatbuffer_struct(o))
+                        .collect();
                     moor_rpc::WorldStateResultUnion::WsAllObjectsResult(Box::new(
                         moor_rpc::WsAllObjectsResult { objects: obj_fbs },
                     ))

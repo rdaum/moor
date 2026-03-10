@@ -21,6 +21,7 @@ mod wizard;
 
 use clap::Parser;
 use clap_derive::Parser as DeriveParser;
+use crossterm::style::Stylize;
 use eyre::{Report, bail, eyre};
 use fs2::FileExt;
 use moor_common::{
@@ -39,7 +40,6 @@ use moor_kernel::{
     tasks::{NoopTasksDb, scheduler::Scheduler},
 };
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
-use crossterm::style::Stylize;
 use repl::repl;
 use rustyline::ExternalPrinter;
 use rustyline::completion::{Completer, Pair};

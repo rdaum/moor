@@ -131,7 +131,10 @@ pub struct VerbDispatch<'a> {
 impl<'a> VerbDispatch<'a> {
     #[must_use]
     pub fn new(lookup: VerbLookup<'a>, flags_source: DispatchFlagsSource) -> Self {
-        Self { lookup, flags_source }
+        Self {
+            lookup,
+            flags_source,
+        }
     }
 }
 

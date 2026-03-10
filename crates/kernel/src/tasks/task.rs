@@ -2158,10 +2158,27 @@ mod tests {
         Box<dyn WorldState>,
         TaskSchedulerClient,
         Receiver<(TaskId, TaskControlMsg)>,
-        Arc<std::sync::Mutex<Option<Result<Vec<crate::tasks::world_state_action::WorldStateResult>, moor_common::tasks::SchedulerError>>>>,
+        Arc<
+            std::sync::Mutex<
+                Option<
+                    Result<
+                        Vec<crate::tasks::world_state_action::WorldStateResult>,
+                        moor_common::tasks::SchedulerError,
+                    >,
+                >,
+            >,
+        >,
     ) {
-        let result_sink: Arc<std::sync::Mutex<Option<Result<Vec<crate::tasks::world_state_action::WorldStateResult>, moor_common::tasks::SchedulerError>>>> =
-            Arc::new(std::sync::Mutex::new(None));
+        let result_sink: Arc<
+            std::sync::Mutex<
+                Option<
+                    Result<
+                        Vec<crate::tasks::world_state_action::WorldStateResult>,
+                        moor_common::tasks::SchedulerError,
+                    >,
+                >,
+            >,
+        > = Arc::new(std::sync::Mutex::new(None));
         let task_start = TaskStart::StartBatchWorldState {
             player: SYSTEM_OBJECT,
             perms: SYSTEM_OBJECT,
@@ -2318,9 +2335,7 @@ mod tests {
                 obj: ObjectRef::Id(SYSTEM_OBJECT),
                 property: Symbol::mk("name"),
             },
-            WorldStateAction::GetObjectFlags {
-                obj: SYSTEM_OBJECT,
-            },
+            WorldStateAction::GetObjectFlags { obj: SYSTEM_OBJECT },
             WorldStateAction::RequestAllObjects {
                 player: SYSTEM_OBJECT,
             },
@@ -2376,8 +2391,15 @@ mod tests {
             property: Symbol::mk("name"),
         }];
 
-        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver, _result_sink) =
-            setup_test_env_batch(actions, false);
+        let (
+            _kill_switch,
+            mut task,
+            _db,
+            tx,
+            task_scheduler_client,
+            control_receiver,
+            _result_sink,
+        ) = setup_test_env_batch(actions, false);
 
         {
             let _tx_guard = setup_task_context(tx);
