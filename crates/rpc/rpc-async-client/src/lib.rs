@@ -26,6 +26,7 @@ mod host;
 mod listeners;
 pub mod pubsub_client;
 pub mod rpc_client;
+pub mod task_client;
 mod worker;
 mod worker_loop;
 mod worker_rpc_client;
