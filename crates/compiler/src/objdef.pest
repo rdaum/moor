@@ -51,7 +51,9 @@ flags_attr = {"flags" ~ ":" ~ "\"" ~ flagchars ~ "\"" }
 
 literal = { literal_atom | literal_map | literal_lambda | literal_list | literal_flyweight | variable }
 variable = { ident }
-literal_atom = { integer | float | string | object | err | boolean | symbol | literal_binary | ident  }
+include_text_macro = { "include!" ~ "(" ~ string ~ ")" }
+include_bin_macro  = { "include_bin!" ~ "(" ~ string ~ ")" }
+literal_atom = { integer | float | string | object | err | boolean | symbol | literal_binary | include_text_macro | include_bin_macro | ident  }
 literal_map =  { ("[" ~ (literal ~ "->" ~ literal) ~ ("," ~ literal ~ "->" ~ literal)* ~ "]") | ( "[" ~ "]") }
 literal_list     = { ("{" ~ literal ~ ("," ~ literal)* ~ "}" ~ !"=>") | "{}" }
 literal_flyweight = { "<" ~ literal ~ ("," ~ literal_flyweight_slot)* ~ ("," ~ literal_flyweight_contents)? ~ ">" }

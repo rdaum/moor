@@ -37,8 +37,16 @@ use pest::{
     iterators::{Pair, Pairs},
 };
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
-pub struct ObjFileContext(HashMap<Symbol, Var>);
+pub struct ObjFileContext {
+    constants: HashMap<Symbol, Var>,
+    base_path: Option<PathBuf>,
+    /// Root directory used as the security boundary for `include!` / `include_bin!`.
+    /// Paths that escape this directory are rejected. Falls back to `base_path` if unset.
+    root_path: Option<PathBuf>,
+}
+
 impl Default for ObjFileContext {
     fn default() -> Self {
         Self::new()
@@ -47,15 +55,40 @@ impl Default for ObjFileContext {
 
 impl ObjFileContext {
     pub fn new() -> Self {
-        Self(HashMap::new())
+        Self {
+            constants: HashMap::new(),
+            base_path: None,
+            root_path: None,
+        }
     }
 
     pub fn add_constant(&mut self, name: Symbol, value: Var) {
-        self.0.insert(name, value);
+        self.constants.insert(name, value);
     }
 
     pub fn constants(&self) -> &HashMap<Symbol, Var> {
-        &self.0
+        &self.constants
+    }
+
+    /// Set the base directory for resolving `include!` / `include_bin!` paths.
+    /// Typically the parent directory of the `.moo` source file being compiled.
+    pub fn set_base_path(&mut self, source_file: &Path) {
+        self.base_path = source_file.parent().map(|p| p.to_path_buf());
+    }
+
+    pub fn base_path(&self) -> Option<&Path> {
+        self.base_path.as_deref()
+    }
+
+    /// Set the root directory that serves as the security boundary for includes.
+    pub fn set_root_path(&mut self, root: &Path) {
+        self.root_path = Some(root.to_path_buf());
+    }
+
+    /// The security boundary for include path validation.
+    /// Falls back to `base_path` if no explicit root was set.
+    pub fn root_path(&self) -> Option<&Path> {
+        self.root_path.as_deref().or(self.base_path.as_deref())
     }
 }
 
@@ -558,7 +591,7 @@ fn parse_literal_atom(
         }
         Rule::ident | Rule::variable => {
             let sym = Symbol::mk(pair.as_str());
-            let Some(value) = context.0.get(&sym) else {
+            let Some(value) = context.constants.get(&sym) else {
                 return Err(ObjDefParseError::ConstantNotFound(sym.to_string()));
             };
             Ok(value.clone())
@@ -608,10 +641,56 @@ fn parse_literal_atom(
 
             Ok(v_binary(decoded))
         }
+        Rule::include_text_macro => {
+            let inner = pair.into_inner().next().unwrap();
+            let rel_path = parse_string_literal(inner)?;
+            let resolved = resolve_include_path(context, &rel_path)?;
+            let contents = std::fs::read_to_string(&resolved).map_err(|e| {
+                ObjDefParseError::IncludeError(resolved.display().to_string(), e.to_string())
+            })?;
+            Ok(v_str(&contents))
+        }
+        Rule::include_bin_macro => {
+            let inner = pair.into_inner().next().unwrap();
+            let rel_path = parse_string_literal(inner)?;
+            let resolved = resolve_include_path(context, &rel_path)?;
+            let bytes = std::fs::read(&resolved).map_err(|e| {
+                ObjDefParseError::IncludeError(resolved.display().to_string(), e.to_string())
+            })?;
+            Ok(v_binary(bytes))
+        }
         _ => {
             panic!("Unimplemented atom: {pair:?}");
         }
     }
+}
+
+/// Resolve a relative include path against the context's base path.
+fn resolve_include_path(
+    context: &ObjFileContext,
+    rel_path: &str,
+) -> Result<PathBuf, ObjDefParseError> {
+    let base = context.base_path().ok_or_else(|| {
+        ObjDefParseError::IncludeError(
+            rel_path.to_string(),
+            "include! macros require a file-based compilation context".to_string(),
+        )
+    })?;
+    let resolved = base.join(rel_path);
+    // Reject paths that escape the root directory (security boundary).
+    // The root defaults to base_path if no explicit root was set.
+    let root = context.root_path().unwrap_or(base);
+    if let (Ok(canonical_root), Ok(canonical_resolved)) =
+        (root.canonicalize(), resolved.canonicalize())
+    {
+        if !canonical_resolved.starts_with(&canonical_root) {
+            return Err(ObjDefParseError::IncludeError(
+                rel_path.to_string(),
+                "path escapes the source directory".to_string(),
+            ));
+        }
+    }
+    Ok(resolved)
 }
 
 /// Parse a single MOO literal value from a string
@@ -716,14 +795,14 @@ pub fn compile_object_definitions(
                 let value = parse_literal(context, value)?;
                 let sym = Symbol::mk(constant);
                 // Check for duplicate constant name.
-                if let Some(existing) = context.0.get(&sym) {
+                if let Some(existing) = context.constants.get(&sym) {
                     return Err(ObjDefParseError::DuplicateConstant(
                         constant.to_string(),
                         format!("{existing:?}"),
                     ));
                 }
                 // Check for duplicate constant value (different name, same value).
-                for (existing_name, existing_val) in context.0.iter() {
+                for (existing_name, existing_val) in context.constants.iter() {
                     if *existing_val == value {
                         return Err(ObjDefParseError::DuplicateConstant(
                             format!("{constant} = {value:?}"),
@@ -731,7 +810,7 @@ pub fn compile_object_definitions(
                         ));
                     }
                 }
-                context.0.insert(sym, value);
+                context.constants.insert(sym, value);
             }
             Rule::EOI => {
                 break;
@@ -1571,5 +1650,233 @@ mod tests {
 
         // Verify the decoded content is correct (this is a tiny 1x1 PNG)
         assert!(!binary_data.is_empty(), "Binary data should not be empty");
+    }
+
+    /// Test include! macro reads a text file and produces a String value.
+    #[test]
+    fn test_include_text_macro() {
+        let dir = tempfile::tempdir().unwrap();
+        let text_file = dir.path().join("greeting.txt");
+        std::fs::write(&text_file, "Hello, world!").unwrap();
+
+        // set_base_path takes a file path (uses .parent()), so give it a fake .moo path
+        let fake_moo = dir.path().join("test.moo");
+
+        let spec = r#"object #1
+                    parent: #1
+                    name: "Test"
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: false
+                    readable: true
+
+                    property greeting (owner: #1, flags: "") = include!("greeting.txt");
+                endobject"#;
+
+        let mut context = ObjFileContext::new();
+        context.set_base_path(&fake_moo);
+        let objs =
+            compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
+        let obj = &objs[0];
+
+        assert_eq!(obj.property_definitions.len(), 1);
+        let value = obj.property_definitions[0].value.as_ref().unwrap();
+        assert_eq!(value.as_string().unwrap(), "Hello, world!");
+    }
+
+    /// Test include_bin! macro reads a binary file and produces a Binary value.
+    #[test]
+    fn test_include_bin_macro() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin_file = dir.path().join("data.bin");
+        let raw_bytes: Vec<u8> = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]; // PNG header
+        std::fs::write(&bin_file, &raw_bytes).unwrap();
+
+        let fake_moo = dir.path().join("test.moo");
+
+        let spec = r#"object #1
+                    parent: #1
+                    name: "Test"
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: false
+                    readable: true
+
+                    property sprite_data (owner: #1, flags: "") = include_bin!("data.bin");
+                endobject"#;
+
+        let mut context = ObjFileContext::new();
+        context.set_base_path(&fake_moo);
+        let objs =
+            compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
+        let obj = &objs[0];
+
+        assert_eq!(obj.property_definitions.len(), 1);
+        let value = obj.property_definitions[0].value.as_ref().unwrap();
+        let binary_data = value.as_binary().expect("Expected binary value");
+        assert_eq!(binary_data.as_bytes(), &raw_bytes[..]);
+    }
+
+    /// Test that include! fails without a base path (no file context).
+    #[test]
+    fn test_include_without_base_path_fails() {
+        let spec = r#"object #1
+                    parent: #1
+                    name: "Test"
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: false
+                    readable: true
+
+                    property data (owner: #1, flags: "") = include!("some_file.txt");
+                endobject"#;
+
+        let mut context = ObjFileContext::new();
+        let result = compile_object_definitions(spec, &CompileOptions::default(), &mut context);
+        let err = result.err().expect("expected an error");
+        assert!(
+            err.to_string().contains("file-based compilation context"),
+            "Expected context error, got: {err}"
+        );
+    }
+
+    /// Test that include! rejects paths escaping the source directory.
+    #[test]
+    fn test_include_directory_traversal_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        // Create a file outside the base dir to attempt traversal to
+        let parent_file = dir.path().join("secret.txt");
+        std::fs::write(&parent_file, "secret").unwrap();
+
+        // Base path is a subdirectory
+        let sub_dir = dir.path().join("src");
+        std::fs::create_dir(&sub_dir).unwrap();
+        let fake_moo = sub_dir.join("test.moo");
+
+        let spec = r#"object #1
+                    parent: #1
+                    name: "Test"
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: false
+                    readable: true
+
+                    property data (owner: #1, flags: "") = include!("../secret.txt");
+                endobject"#;
+
+        let mut context = ObjFileContext::new();
+        context.set_base_path(&fake_moo);
+        let result = compile_object_definitions(spec, &CompileOptions::default(), &mut context);
+        let err = result.err().expect("expected an error");
+        assert!(
+            err.to_string().contains("escapes the source directory"),
+            "Expected traversal error, got: {err}"
+        );
+    }
+
+    /// Test that include! with a nonexistent file gives a clear error.
+    #[test]
+    fn test_include_missing_file_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake_moo = dir.path().join("test.moo");
+
+        let spec = r#"object #1
+                    parent: #1
+                    name: "Test"
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: false
+                    readable: true
+
+                    property data (owner: #1, flags: "") = include!("nonexistent.txt");
+                endobject"#;
+
+        let mut context = ObjFileContext::new();
+        context.set_base_path(&fake_moo);
+        let result = compile_object_definitions(spec, &CompileOptions::default(), &mut context);
+        let err = result.err().expect("expected an error");
+        assert!(
+            err.to_string().contains("No such file")
+                || err.to_string().contains("not found")
+                || err.to_string().contains("IncludeError"),
+            "Expected file-not-found error, got: {err}"
+        );
+    }
+
+    /// Test include! in a subdirectory path (e.g. "assets/sprite.png").
+    #[test]
+    fn test_include_bin_subdirectory() {
+        let dir = tempfile::tempdir().unwrap();
+        let assets_dir = dir.path().join("assets");
+        std::fs::create_dir(&assets_dir).unwrap();
+        let sprite_file = assets_dir.join("sprite.png");
+        let png_bytes = vec![0x89, 0x50, 0x4E, 0x47]; // partial PNG header
+        std::fs::write(&sprite_file, &png_bytes).unwrap();
+
+        let fake_moo = dir.path().join("test.moo");
+
+        let spec = r#"object #1
+                    parent: #1
+                    name: "Test"
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: false
+                    readable: true
+
+                    property sprite (owner: #1, flags: "") = include_bin!("assets/sprite.png");
+                endobject"#;
+
+        let mut context = ObjFileContext::new();
+        context.set_base_path(&fake_moo);
+        let objs =
+            compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
+        let obj = &objs[0];
+
+        let value = obj.property_definitions[0].value.as_ref().unwrap();
+        let binary_data = value.as_binary().expect("Expected binary value");
+        assert_eq!(binary_data.as_bytes(), &png_bytes[..]);
+    }
+
+    /// Test include_bin! inside a list literal, e.g. {"image/png", include_bin!("...")}.
+    #[test]
+    fn test_include_bin_in_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin_file = dir.path().join("tile.png");
+        let png_bytes = vec![0x89, 0x50, 0x4E, 0x47];
+        std::fs::write(&bin_file, &png_bytes).unwrap();
+
+        let fake_moo = dir.path().join("test.moo");
+
+        let spec = r#"object #1
+                    parent: #1
+                    name: "Test"
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: false
+                    readable: true
+
+                    property sprite (owner: #1, flags: "") = {"image/png", include_bin!("tile.png")};
+                endobject"#;
+
+        let mut context = ObjFileContext::new();
+        context.set_base_path(&fake_moo);
+        let objs =
+            compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
+        let obj = &objs[0];
+
+        let value = obj.property_definitions[0].value.as_ref().unwrap();
+        // Should be a list: {"image/png", <binary>}
+        let items = value.as_list().expect("Expected list value");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].as_string().unwrap(), "image/png");
+        let binary_data = items[1].as_binary().expect("Expected binary in list");
+        assert_eq!(binary_data.as_bytes(), &png_bytes[..]);
     }
 }

@@ -3054,6 +3054,7 @@ dependencies = [
  "pretty_assertions",
  "proptest",
  "strum",
+ "tempfile",
  "test-case",
  "thiserror 2.0.18",
  "tracing",
