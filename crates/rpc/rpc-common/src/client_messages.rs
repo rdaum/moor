@@ -571,6 +571,17 @@ pub fn mk_batch_world_state_msg(
     }
 }
 
+/// Helper to build a WsRequestProperty action
+pub fn ws_request_property(
+    object: &ObjectRef,
+    property: &Symbol,
+) -> rpc::WorldStateActionUnion {
+    rpc::WorldStateActionUnion::WsRequestProperty(Box::new(rpc::WsRequestProperty {
+        object: objectref_fb(object),
+        property: symbol_fb(property),
+    }))
+}
+
 /// Helper to build a WsRequestSystemProperty action
 pub fn ws_request_system_property(
     object: &ObjectRef,
@@ -609,6 +620,30 @@ pub fn ws_request_verbs(object: &ObjectRef, inherited: bool) -> rpc::WorldStateA
     rpc::WorldStateActionUnion::WsRequestVerbs(Box::new(rpc::WsRequestVerbs {
         object: objectref_fb(object),
         inherited,
+    }))
+}
+
+/// Helper to build a WsRequestVerbCode action
+pub fn ws_request_verb_code(
+    object: &ObjectRef,
+    verb: &Symbol,
+) -> rpc::WorldStateActionUnion {
+    rpc::WorldStateActionUnion::WsRequestVerbCode(Box::new(rpc::WsRequestVerbCode {
+        object: objectref_fb(object),
+        verb: symbol_fb(verb),
+    }))
+}
+
+/// Helper to build a WsProgramVerb action
+pub fn ws_program_verb(
+    object: &ObjectRef,
+    verb_name: &Symbol,
+    code: Vec<String>,
+) -> rpc::WorldStateActionUnion {
+    rpc::WorldStateActionUnion::WsProgramVerb(Box::new(rpc::WsProgramVerb {
+        object: objectref_fb(object),
+        verb_name: symbol_fb(verb_name),
+        code,
     }))
 }
 
