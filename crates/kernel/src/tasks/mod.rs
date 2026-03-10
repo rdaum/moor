@@ -37,7 +37,7 @@ pub(crate) mod task_q;
 pub mod task_scheduler_client;
 mod tasks_db;
 pub mod workers;
-pub(crate) mod world_state_action;
+pub mod world_state_action;
 pub(crate) mod world_state_executor;
 
 pub use task_program_cache::TaskProgramCache;
@@ -358,6 +358,25 @@ pub enum TaskStart {
         args: List,
         original_exception: Box<Exception>,
     },
+    /// Execute a batch of world state actions within a single transaction.
+    /// This is the high-performance path for bulk reads/writes that doesn't go through the VM.
+    /// Results are written to `result_sink` before the task reports success.
+    StartBatchWorldState {
+        player: Obj,
+        perms: Obj,
+        actions: Vec<world_state_action::WorldStateAction>,
+        rollback: bool,
+        result_sink: std::sync::Arc<
+            std::sync::Mutex<
+                Option<
+                    Result<
+                        Vec<world_state_action::WorldStateResult>,
+                        moor_common::tasks::SchedulerError,
+                    >,
+                >,
+            >,
+        >,
+    },
 }
 
 impl TaskStart {
@@ -406,6 +425,14 @@ impl TaskStart {
             }
             TaskStart::StartExceptionHandler { player, .. } => {
                 format!("ExceptionHandler(player: {player})")
+            }
+            TaskStart::StartBatchWorldState {
+                player, actions, ..
+            } => {
+                format!(
+                    "BatchWorldState(player: {player}, actions: {})",
+                    actions.len()
+                )
             }
         }
     }

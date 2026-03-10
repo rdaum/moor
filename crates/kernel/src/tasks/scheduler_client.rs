@@ -486,6 +486,47 @@ impl SchedulerClient {
             .map_err(|_| SchedulerError::SchedulerNotResponding)?
     }
 
+    /// Submit a batch of WorldStateActions as a tracked task.
+    /// Returns a `TaskHandle` and a shared sink where the batch results will be
+    /// deposited before the task reports success.
+    /// Unlike `execute_world_state_actions`, this creates a proper task visible
+    /// to `queued_tasks()` and subject to task limits.
+    pub fn submit_batch_world_state_task(
+        &self,
+        player: &Obj,
+        perms: &Obj,
+        actions: Vec<WorldStateAction>,
+        rollback: bool,
+        session: Arc<dyn Session>,
+    ) -> Result<
+        (
+            TaskHandle,
+            Arc<std::sync::Mutex<Option<Result<Vec<WorldStateResult>, SchedulerError>>>>,
+        ),
+        SchedulerError,
+    > {
+        let result_sink: Arc<std::sync::Mutex<Option<Result<Vec<WorldStateResult>, SchedulerError>>>> =
+            Arc::new(std::sync::Mutex::new(None));
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send(SchedulerClientMsg::SubmitBatchWorldStateTask {
+                player: *player,
+                perms: *perms,
+                actions,
+                rollback,
+                result_sink: result_sink.clone(),
+                session,
+                reply,
+            })
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+
+        let handle = receive
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)??;
+
+        Ok((handle, result_sink))
+    }
+
     /// Load an object from objdef text.
     pub fn load_object(
         &self,
@@ -727,6 +768,16 @@ pub enum SchedulerClientMsg {
         player: Obj,
         handler_type: String,
         args: Vec<Var>,
+        session: Arc<dyn Session>,
+        reply: oneshot::Sender<Result<TaskHandle, SchedulerError>>,
+    },
+    /// Submit a batch of WorldStateActions as a tracked task.
+    SubmitBatchWorldStateTask {
+        player: Obj,
+        perms: Obj,
+        actions: Vec<WorldStateAction>,
+        rollback: bool,
+        result_sink: Arc<std::sync::Mutex<Option<Result<Vec<WorldStateResult>, SchedulerError>>>>,
         session: Arc<dyn Session>,
         reply: oneshot::Sender<Result<TaskHandle, SchedulerError>>,
     },

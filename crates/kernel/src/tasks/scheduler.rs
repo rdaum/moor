@@ -1047,6 +1047,32 @@ impl Scheduler {
                 })
                 .expect("Could not spawn WorldStateAction execution thread");
             }
+            SchedulerClientMsg::SubmitBatchWorldStateTask {
+                player,
+                perms,
+                actions,
+                rollback,
+                result_sink,
+                session,
+                reply,
+            } => {
+                let task_id = self.next_task_id;
+                self.next_task_id += 1;
+
+                let task_start = TaskStart::StartBatchWorldState {
+                    player,
+                    perms,
+                    actions,
+                    rollback,
+                    result_sink,
+                };
+
+                let result =
+                    self.submit_task(task_id, &player, &perms, task_start, None, session);
+                reply
+                    .send(result)
+                    .expect("Could not send batch task handle reply");
+            }
         }
     }
 
@@ -2635,7 +2661,7 @@ impl TaskQ {
 
                 if is_created {
                     // Brand new task - call setup_task_start and transition to Running
-                    let setup_success = task.setup_task_start(&control_sender);
+                    let setup_success = task.setup_task_start(&control_sender, &config);
                     if !setup_success {
                         // Setup failed (e.g., verb not found)
                         return;

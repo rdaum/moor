@@ -200,6 +200,9 @@ impl Task {
                 TaskStart::StartExceptionHandler { .. } => {
                     trace_task_create_exception_handler!(task_id, &player);
                 }
+                TaskStart::StartBatchWorldState { .. } => {
+                    // No specific trace event for batch world state tasks yet
+                }
             }
         }
 
@@ -841,6 +844,7 @@ impl Task {
     pub(crate) fn setup_task_start(
         &mut self,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
+        config: &Config,
     ) -> bool {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.setup_task);
@@ -976,6 +980,109 @@ impl Task {
             }
             TaskStart::StartDoCommand { .. } => {
                 panic!("StartDoCommand invocation should not happen on initial setup_task_start");
+            }
+            TaskStart::StartBatchWorldState {
+                actions,
+                rollback,
+                result_sink,
+                ..
+            } => {
+                let actions = actions.clone();
+                let rollback = *rollback;
+                let result_sink = result_sink.clone();
+
+                // Execute the batch directly against the task's transaction.
+                let batch_result = with_current_transaction_mut(|world_state| {
+                    crate::tasks::world_state_executor::execute_world_state_actions(
+                        world_state,
+                        config,
+                        actions,
+                    )
+                });
+
+                // Store the result in the shared sink for the caller to retrieve.
+                *result_sink.lock().unwrap() = Some(batch_result.clone());
+
+                // Handle commit/rollback and notify the scheduler.
+                match batch_result {
+                    Ok(_) => {
+                        if rollback {
+                            let _ = rollback_current_transaction();
+                        } else {
+                            match commit_current_transaction() {
+                                Ok(CommitResult::Success { .. }) => {}
+                                Ok(CommitResult::ConflictRetry { conflict_info }) => {
+                                    let msg = match conflict_info {
+                                        Some(info) => format!("Transaction conflict: {info}"),
+                                        None => "Transaction conflict".to_string(),
+                                    };
+                                    *result_sink.lock().unwrap() = Some(Err(
+                                        moor_common::tasks::SchedulerError::CommandExecutionError(
+                                            CommandError::DatabaseError(
+                                                moor_common::model::WorldStateError::DatabaseError(
+                                                    msg,
+                                                ),
+                                            ),
+                                        ),
+                                    ));
+                                    control_sender
+                                        .send((
+                                            self.task_id,
+                                            TaskControlMsg::TaskCommandError(
+                                                CommandError::DatabaseError(
+                                                    moor_common::model::WorldStateError::DatabaseError(
+                                                        "Transaction conflict".to_string(),
+                                                    ),
+                                                ),
+                                            ),
+                                        ))
+                                        .expect("Could not send batch error");
+                                    return false;
+                                }
+                                Err(e) => {
+                                    *result_sink.lock().unwrap() = Some(Err(
+                                        moor_common::tasks::SchedulerError::CommandExecutionError(
+                                            CommandError::DatabaseError(e),
+                                        ),
+                                    ));
+                                    control_sender
+                                        .send((
+                                            self.task_id,
+                                            TaskControlMsg::TaskCommandError(
+                                                CommandError::DatabaseError(
+                                                    moor_common::model::WorldStateError::DatabaseError(
+                                                        "Commit failed".to_string(),
+                                                    ),
+                                                ),
+                                            ),
+                                        ))
+                                        .expect("Could not send batch error");
+                                    return false;
+                                }
+                            }
+                        }
+                        control_sender
+                            .send((
+                                self.task_id,
+                                TaskControlMsg::TaskSuccess(v_int(0), !rollback, 0),
+                            ))
+                            .expect("Could not send batch success");
+                        return false; // No VM loop needed
+                    }
+                    Err(ref e) => {
+                        control_sender
+                            .send((
+                                self.task_id,
+                                TaskControlMsg::TaskCommandError(CommandError::DatabaseError(
+                                    moor_common::model::WorldStateError::DatabaseError(
+                                        e.to_string(),
+                                    ),
+                                )),
+                            ))
+                            .expect("Could not send batch error");
+                        return false;
+                    }
+                }
             }
             TaskStart::StartExceptionHandler { player, args, .. } => {
                 // Start $handle_uncaught_error on the system object with the exception args
@@ -1496,13 +1603,14 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         {
             let _tx_guard = setup_task_context(tx);
-            task.setup_task_start(task_scheduler_client.control_sender());
+            let config = Arc::new(Config::default());
+            task.setup_task_start(task_scheduler_client.control_sender(), &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
                 session,
                 BuiltinRegistry::new(),
-                Arc::new(Config::default()),
+                config,
             );
         }
 
@@ -1524,13 +1632,14 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         {
             let _tx_guard = setup_task_context(tx);
-            task.setup_task_start(task_scheduler_client.control_sender());
+            let config = Arc::new(Config::default());
+            task.setup_task_start(task_scheduler_client.control_sender(), &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
                 session,
                 BuiltinRegistry::new(),
-                Arc::new(Config::default()),
+                config,
             );
         }
 
@@ -1558,13 +1667,14 @@ mod tests {
                 task.player,
                 session.clone(),
             );
-            task.setup_task_start(task_scheduler_client.control_sender());
+            let config = Arc::new(Config::default());
+            task.setup_task_start(task_scheduler_client.control_sender(), &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
                 session,
                 BuiltinRegistry::new(),
-                Arc::new(Config::default()),
+                config,
             );
         }
 
@@ -1605,13 +1715,14 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         {
             let _tx_guard = setup_task_context(tx);
-            task.setup_task_start(task_scheduler_client.control_sender());
+            let config = Arc::new(Config::default());
+            task.setup_task_start(task_scheduler_client.control_sender(), &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
                 session.clone(),
                 BuiltinRegistry::new(),
-                Arc::new(Config::default()),
+                config,
             );
         }
 
@@ -1654,13 +1765,14 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         {
             let _tx_guard = setup_task_context(tx);
-            task.setup_task_start(task_scheduler_client.control_sender());
+            let config = Arc::new(Config::default());
+            task.setup_task_start(task_scheduler_client.control_sender(), &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
                 session.clone(),
                 BuiltinRegistry::new(),
-                Arc::new(Config::default()),
+                config,
             );
         }
 
@@ -1718,13 +1830,14 @@ mod tests {
             let session = Arc::new(NoopClientSession::new());
             {
                 let _tx_guard = setup_task_context(tx);
-                task.setup_task_start(task_scheduler_client.control_sender());
+                let config = Arc::new(Config::default());
+                task.setup_task_start(task_scheduler_client.control_sender(), &config);
                 Task::run_task_loop(
                     task,
                     &task_scheduler_client,
                     session,
                     BuiltinRegistry::new(),
-                    Arc::new(Config::default()),
+                    config,
                 );
             }
         });
@@ -1782,13 +1895,14 @@ mod tests {
             let session = Arc::new(NoopClientSession::new());
             {
                 let _tx_guard = setup_task_context(tx);
-                parent_task.setup_task_start(parent_scheduler.control_sender());
+                let config = Arc::new(Config::default());
+                parent_task.setup_task_start(parent_scheduler.control_sender(), &config);
                 Task::run_task_loop(
                     parent_task,
                     &parent_scheduler,
                     session,
                     BuiltinRegistry::new(),
-                    Arc::new(Config::default()),
+                    config,
                 );
             }
         });
@@ -1831,13 +1945,14 @@ mod tests {
         let child_session = Arc::new(NoopClientSession::new());
         {
             let _tx_guard = setup_task_context(child_tx);
-            child_task.setup_task_start(child_scheduler.control_sender());
+            let config = Arc::new(Config::default());
+            child_task.setup_task_start(child_scheduler.control_sender(), &config);
             Task::run_task_loop(
                 child_task,
                 &child_scheduler,
                 child_session,
                 BuiltinRegistry::new(),
-                Arc::new(Config::default()),
+                config,
             );
         }
 
@@ -1857,13 +1972,14 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         {
             let _tx_guard = setup_task_context(tx);
-            task.setup_task_start(task_scheduler_client.control_sender());
+            let config = Arc::new(Config::default());
+            task.setup_task_start(task_scheduler_client.control_sender(), &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
                 session,
                 BuiltinRegistry::new(),
-                Arc::new(Config::default()),
+                config,
             );
         }
 
@@ -1893,13 +2009,14 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         {
             let _tx_guard = setup_task_context(tx);
-            task.setup_task_start(task_scheduler_client.control_sender());
+            let config = Arc::new(Config::default());
+            task.setup_task_start(task_scheduler_client.control_sender(), &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
                 session,
                 BuiltinRegistry::new(),
-                Arc::new(Config::default()),
+                config,
             );
         }
 
@@ -1927,13 +2044,14 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         {
             let _tx_guard = setup_task_context(tx);
-            task.setup_task_start(task_scheduler_client.control_sender());
+            let config = Arc::new(Config::default());
+            task.setup_task_start(task_scheduler_client.control_sender(), &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
                 session,
                 BuiltinRegistry::new(),
-                Arc::new(Config::default()),
+                config,
             );
         }
 
@@ -1962,13 +2080,14 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         {
             let _tx_guard = setup_task_context(tx);
-            task.setup_task_start(task_scheduler_client.control_sender());
+            let config = Arc::new(Config::default());
+            task.setup_task_start(task_scheduler_client.control_sender(), &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
                 session,
                 BuiltinRegistry::new(),
-                Arc::new(Config::default()),
+                config,
             );
         }
 
@@ -2005,13 +2124,14 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         {
             let _tx_guard = setup_task_context(tx);
-            task.setup_task_start(task_scheduler_client.control_sender());
+            let config = Arc::new(Config::default());
+            task.setup_task_start(task_scheduler_client.control_sender(), &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
                 session,
                 BuiltinRegistry::new(),
-                Arc::new(Config::default()),
+                config,
             );
         }
 
@@ -2022,5 +2142,253 @@ mod tests {
             panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(1));
+    }
+
+    // =========================================================================
+    // Batch World State Task Tests
+    // =========================================================================
+
+    fn setup_test_env_batch(
+        actions: Vec<crate::tasks::world_state_action::WorldStateAction>,
+        rollback: bool,
+    ) -> (
+        Arc<AtomicBool>,
+        Box<Task>,
+        TxDB,
+        Box<dyn WorldState>,
+        TaskSchedulerClient,
+        Receiver<(TaskId, TaskControlMsg)>,
+        Arc<std::sync::Mutex<Option<Result<Vec<crate::tasks::world_state_action::WorldStateResult>, moor_common::tasks::SchedulerError>>>>,
+    ) {
+        let result_sink: Arc<std::sync::Mutex<Option<Result<Vec<crate::tasks::world_state_action::WorldStateResult>, moor_common::tasks::SchedulerError>>>> =
+            Arc::new(std::sync::Mutex::new(None));
+        let task_start = TaskStart::StartBatchWorldState {
+            player: SYSTEM_OBJECT,
+            perms: SYSTEM_OBJECT,
+            actions,
+            rollback,
+            result_sink: result_sink.clone(),
+        };
+        let (kill_switch, task, db, tx, tsc, cr) = setup_test_env(task_start, &[]);
+        (kill_switch, task, db, tx, tsc, cr, result_sink)
+    }
+
+    #[test]
+    fn test_batch_world_state_empty() {
+        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver, result_sink) =
+            setup_test_env_batch(vec![], false);
+
+        let session = Arc::new(NoopClientSession::new());
+        {
+            let _tx_guard = setup_task_context(tx);
+            let config = Arc::new(Config::default());
+            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session,
+                BuiltinRegistry::new(),
+                config,
+            );
+        }
+
+        let (task_id, msg) = control_receiver.recv().unwrap();
+        assert_eq!(task_id, 1);
+        let TaskControlMsg::TaskSuccess(result, committed, _) = msg else {
+            panic!("Expected TaskSuccess");
+        };
+        assert_eq!(result, v_int(0));
+        assert!(committed, "empty non-rollback batch should commit");
+
+        let sink = result_sink.lock().unwrap();
+        let results = sink.as_ref().unwrap().as_ref().unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_batch_world_state_read_property() {
+        use crate::tasks::world_state_action::{WorldStateAction, WorldStateResult};
+        use moor_common::model::ObjectRef;
+
+        let actions = vec![WorldStateAction::RequestSystemProperty {
+            player: SYSTEM_OBJECT,
+            obj: ObjectRef::Id(SYSTEM_OBJECT),
+            property: Symbol::mk("name"),
+        }];
+
+        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver, result_sink) =
+            setup_test_env_batch(actions, false);
+
+        let session = Arc::new(NoopClientSession::new());
+        {
+            let _tx_guard = setup_task_context(tx);
+            let config = Arc::new(Config::default());
+            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session,
+                BuiltinRegistry::new(),
+                config,
+            );
+        }
+
+        let (task_id, msg) = control_receiver.recv().unwrap();
+        assert_eq!(task_id, 1);
+        let TaskControlMsg::TaskSuccess(..) = msg else {
+            panic!("Expected TaskSuccess");
+        };
+
+        let sink = result_sink.lock().unwrap();
+        let results = sink.as_ref().unwrap().as_ref().unwrap();
+        assert_eq!(results.len(), 1);
+        match &results[0] {
+            WorldStateResult::SystemProperty(v) => assert_eq!(*v, v_str("system")),
+            other => panic!("Expected SystemProperty, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_batch_world_state_rollback() {
+        use crate::tasks::world_state_action::{WorldStateAction, WorldStateResult};
+        use moor_common::model::ObjectRef;
+
+        let actions = vec![
+            WorldStateAction::UpdateProperty {
+                player: SYSTEM_OBJECT,
+                perms: SYSTEM_OBJECT,
+                obj: ObjectRef::Id(SYSTEM_OBJECT),
+                property: Symbol::mk("name"),
+                value: v_str("modified"),
+            },
+            WorldStateAction::RequestSystemProperty {
+                player: SYSTEM_OBJECT,
+                obj: ObjectRef::Id(SYSTEM_OBJECT),
+                property: Symbol::mk("name"),
+            },
+        ];
+
+        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver, result_sink) =
+            setup_test_env_batch(actions, true); // rollback=true
+
+        let session = Arc::new(NoopClientSession::new());
+        {
+            let _tx_guard = setup_task_context(tx);
+            let config = Arc::new(Config::default());
+            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session,
+                BuiltinRegistry::new(),
+                config,
+            );
+        }
+
+        let (task_id, msg) = control_receiver.recv().unwrap();
+        assert_eq!(task_id, 1);
+        let TaskControlMsg::TaskSuccess(_, committed, _) = msg else {
+            panic!("Expected TaskSuccess");
+        };
+        assert!(!committed, "rollback batch should not commit");
+
+        // Results should still be available even after rollback
+        let sink = result_sink.lock().unwrap();
+        let results = sink.as_ref().unwrap().as_ref().unwrap();
+        assert_eq!(results.len(), 2);
+        match &results[0] {
+            WorldStateResult::PropertyUpdated => {}
+            other => panic!("Expected PropertyUpdated, got {other:?}"),
+        }
+        // Within the transaction, the property was updated
+        match &results[1] {
+            WorldStateResult::SystemProperty(v) => assert_eq!(*v, v_str("modified")),
+            other => panic!("Expected SystemProperty, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_batch_world_state_multiple_reads() {
+        use crate::tasks::world_state_action::{WorldStateAction, WorldStateResult};
+        use moor_common::model::ObjectRef;
+
+        let actions = vec![
+            WorldStateAction::RequestSystemProperty {
+                player: SYSTEM_OBJECT,
+                obj: ObjectRef::Id(SYSTEM_OBJECT),
+                property: Symbol::mk("name"),
+            },
+            WorldStateAction::GetObjectFlags {
+                obj: SYSTEM_OBJECT,
+            },
+            WorldStateAction::RequestAllObjects {
+                player: SYSTEM_OBJECT,
+            },
+            WorldStateAction::ResolveObject {
+                player: SYSTEM_OBJECT,
+                obj: ObjectRef::Id(SYSTEM_OBJECT),
+            },
+        ];
+
+        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver, result_sink) =
+            setup_test_env_batch(actions, false);
+
+        let session = Arc::new(NoopClientSession::new());
+        {
+            let _tx_guard = setup_task_context(tx);
+            let config = Arc::new(Config::default());
+            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session,
+                BuiltinRegistry::new(),
+                config,
+            );
+        }
+
+        let (task_id, msg) = control_receiver.recv().unwrap();
+        assert_eq!(task_id, 1);
+        let TaskControlMsg::TaskSuccess(..) = msg else {
+            panic!("Expected TaskSuccess");
+        };
+
+        let sink = result_sink.lock().unwrap();
+        let results = sink.as_ref().unwrap().as_ref().unwrap();
+        assert_eq!(results.len(), 4);
+
+        assert!(matches!(&results[0], WorldStateResult::SystemProperty(_)));
+        assert!(matches!(&results[1], WorldStateResult::ObjectFlags(_)));
+        assert!(matches!(&results[2], WorldStateResult::AllObjects(_)));
+        assert!(matches!(&results[3], WorldStateResult::ResolvedObject(_)));
+    }
+
+    #[test]
+    fn test_batch_world_state_skips_vm_loop() {
+        use crate::tasks::world_state_action::WorldStateAction;
+        use moor_common::model::ObjectRef;
+
+        // Batch tasks should return false from setup_task_start (skip VM loop)
+        // and go straight to completion via control_sender
+        let actions = vec![WorldStateAction::RequestSystemProperty {
+            player: SYSTEM_OBJECT,
+            obj: ObjectRef::Id(SYSTEM_OBJECT),
+            property: Symbol::mk("name"),
+        }];
+
+        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver, _result_sink) =
+            setup_test_env_batch(actions, false);
+
+        {
+            let _tx_guard = setup_task_context(tx);
+            let config = Arc::new(Config::default());
+            let needs_vm = task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            assert!(!needs_vm, "Batch task should not need VM loop");
+        }
+
+        // Should have sent a TaskSuccess without running the VM loop
+        let (task_id, msg) = control_receiver.recv().unwrap();
+        assert_eq!(task_id, 1);
+        assert!(matches!(msg, TaskControlMsg::TaskSuccess(..)));
     }
 }

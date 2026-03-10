@@ -60,7 +60,8 @@ use moor_kernel::{
 };
 
 use moor_schema::convert::{
-    narrative_event_to_flatbuffer_struct, obj_from_ref, var_from_ref, var_to_flatbuffer,
+    narrative_event_to_flatbuffer_struct, obj_from_ref, obj_to_flatbuffer_struct,
+    objectref_from_ref, var_from_ref, var_to_flatbuffer,
 };
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, VarType::TYPE_NONE, v_empty_str, v_sym};
 use rpc_common::{
@@ -431,6 +432,9 @@ impl MessageHandler for RpcMessageHandler {
             }
             HostClientToDaemonMessageUnionRef::CallSystemVerb(call) => {
                 self.handle_call_system_verb(scheduler_client, client_id, call)
+            }
+            HostClientToDaemonMessageUnionRef::BatchWorldState(batch) => {
+                self.handle_batch_world_state(scheduler_client, client_id, batch)
             }
         }
     }
@@ -2201,6 +2205,387 @@ impl RpcMessageHandler {
                 }
             }
         }
+    }
+
+    fn handle_batch_world_state(
+        &self,
+        scheduler_client: SchedulerClient,
+        _client_id: Uuid,
+        batch: moor_rpc::BatchWorldStateRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let player = self.extract_auth_token(&batch, |b| b.auth_token())?;
+        let rollback = batch.rollback().unwrap_or(false);
+
+        // Parse all actions from the FlatBuffer message
+        let fb_actions = batch.actions().rpc_err()?;
+        let mut actions = Vec::with_capacity(fb_actions.len());
+        let mut correlation_ids = Vec::with_capacity(fb_actions.len());
+
+        for entry_result in fb_actions.iter() {
+            let entry = entry_result.rpc_err()?;
+            let id = entry.id().rpc_err()?.to_string();
+            correlation_ids.push(id);
+
+            let action_union = entry.action().rpc_err()?;
+            let action = self.convert_ws_action(&player, action_union)?;
+            actions.push(action);
+        }
+
+        // Create a lightweight session for the batch task
+        let session = Arc::new(OutputCaptureSession::new(_client_id, player));
+
+        // Submit the batch as a proper tracked task
+        let (task_handle, result_sink) = scheduler_client
+            .submit_batch_world_state_task(&player, &player, actions, rollback, session)
+            .map_err(|e| {
+                error!(error = ?e, "Error submitting batch world state task");
+                RpcMessageError::TaskError(e)
+            })?;
+
+        // Wait for the task to complete
+        let receiver = task_handle.into_receiver();
+        loop {
+            match receiver.recv() {
+                Ok((_, Ok(TaskNotification::Result(_)))) => {
+                    // Task completed — read results from the shared sink
+                    let results = result_sink
+                        .lock()
+                        .unwrap()
+                        .take()
+                        .unwrap_or_else(|| Err(SchedulerError::SchedulerNotResponding));
+
+                    match results {
+                        Ok(ws_results) => {
+                            let result_entries =
+                                self.convert_ws_results(&correlation_ids, ws_results)?;
+                            break Ok(DaemonToClientReply {
+                                reply: DaemonToClientReplyUnion::BatchWorldStateReply(Box::new(
+                                    moor_rpc::BatchWorldStateReply {
+                                        results: result_entries,
+                                    },
+                                )),
+                            });
+                        }
+                        Err(e) => break Err(RpcMessageError::TaskError(e)),
+                    }
+                }
+                Ok((_, Ok(TaskNotification::Suspended))) => continue,
+                Ok((_, Err(e))) => break Err(RpcMessageError::TaskError(e)),
+                Err(e) => {
+                    error!(error = ?e, "Error processing batch world state task");
+                    break Err(RpcMessageError::InternalError(e.to_string()));
+                }
+            }
+        }
+    }
+
+    /// Convert a FlatBuffer WorldStateActionUnion to a kernel WorldStateAction.
+    fn convert_ws_action(
+        &self,
+        player: &Obj,
+        action: moor_rpc::WorldStateActionUnionRef<'_>,
+    ) -> Result<moor_kernel::tasks::world_state_action::WorldStateAction, RpcMessageError> {
+        use moor_kernel::tasks::world_state_action::WorldStateAction;
+
+        match action {
+            moor_rpc::WorldStateActionUnionRef::WsRequestProperty(req) => {
+                let obj = objectref_from_ref(req.object().rpc_err()?).rpc_err()?;
+                let property = Symbol::mk(req.property().rpc_err()?.value().rpc_err()?);
+                Ok(WorldStateAction::RequestProperty {
+                    player: *player,
+                    perms: *player,
+                    obj,
+                    property,
+                })
+            }
+            moor_rpc::WorldStateActionUnionRef::WsRequestProperties(req) => {
+                let obj = objectref_from_ref(req.object().rpc_err()?).rpc_err()?;
+                let inherited = req.inherited().unwrap_or(false);
+                Ok(WorldStateAction::RequestProperties {
+                    player: *player,
+                    perms: *player,
+                    obj,
+                    inherited,
+                })
+            }
+            moor_rpc::WorldStateActionUnionRef::WsRequestSystemProperty(req) => {
+                let obj = objectref_from_ref(req.object().rpc_err()?).rpc_err()?;
+                let property = Symbol::mk(req.property().rpc_err()?.value().rpc_err()?);
+                Ok(WorldStateAction::RequestSystemProperty {
+                    player: *player,
+                    obj,
+                    property,
+                })
+            }
+            moor_rpc::WorldStateActionUnionRef::WsRequestVerbs(req) => {
+                let obj = objectref_from_ref(req.object().rpc_err()?).rpc_err()?;
+                let inherited = req.inherited().unwrap_or(false);
+                Ok(WorldStateAction::RequestVerbs {
+                    player: *player,
+                    perms: *player,
+                    obj,
+                    inherited,
+                })
+            }
+            moor_rpc::WorldStateActionUnionRef::WsRequestVerbCode(req) => {
+                let obj = objectref_from_ref(req.object().rpc_err()?).rpc_err()?;
+                let verb = Symbol::mk(req.verb().rpc_err()?.value().rpc_err()?);
+                Ok(WorldStateAction::RequestVerbCode {
+                    player: *player,
+                    perms: *player,
+                    obj,
+                    verb,
+                })
+            }
+            moor_rpc::WorldStateActionUnionRef::WsResolveObject(req) => {
+                let obj = objectref_from_ref(req.objref().rpc_err()?).rpc_err()?;
+                Ok(WorldStateAction::ResolveObject {
+                    player: *player,
+                    obj,
+                })
+            }
+            moor_rpc::WorldStateActionUnionRef::WsListObjects(_) => {
+                Ok(WorldStateAction::ListObjects { player: *player })
+            }
+            moor_rpc::WorldStateActionUnionRef::WsRequestAllObjects(_) => {
+                Ok(WorldStateAction::RequestAllObjects { player: *player })
+            }
+            moor_rpc::WorldStateActionUnionRef::WsUpdateProperty(req) => {
+                let obj = objectref_from_ref(req.object().rpc_err()?).rpc_err()?;
+                let property = Symbol::mk(req.property().rpc_err()?.value().rpc_err()?);
+                let value = var_from_ref(req.value().rpc_err()?).rpc_err()?;
+                Ok(WorldStateAction::UpdateProperty {
+                    player: *player,
+                    perms: *player,
+                    obj,
+                    property,
+                    value,
+                })
+            }
+            moor_rpc::WorldStateActionUnionRef::WsProgramVerb(req) => {
+                let obj = objectref_from_ref(req.object().rpc_err()?).rpc_err()?;
+                let verb_name = Symbol::mk(req.verb_name().rpc_err()?.value().rpc_err()?);
+                let code_vec = req.code().rpc_err()?;
+                let code: Vec<String> = code_vec
+                    .iter()
+                    .filter_map(|s| s.ok().map(|s| s.to_string()))
+                    .collect();
+                Ok(WorldStateAction::ProgramVerb {
+                    player: *player,
+                    perms: *player,
+                    obj,
+                    verb_name,
+                    code,
+                })
+            }
+            moor_rpc::WorldStateActionUnionRef::WsGetObjectFlags(req) => {
+                let obj = obj_from_ref(req.obj().rpc_err()?).rpc_err()?;
+                Ok(WorldStateAction::GetObjectFlags { obj })
+            }
+        }
+    }
+
+    /// Convert kernel WorldStateResults to FlatBuffer WorldStateResultEntry list.
+    fn convert_ws_results(
+        &self,
+        correlation_ids: &[String],
+        results: Vec<moor_kernel::tasks::world_state_action::WorldStateResult>,
+    ) -> Result<Vec<moor_rpc::WorldStateResultEntry>, RpcMessageError> {
+        use moor_kernel::tasks::world_state_action::WorldStateResult;
+
+        let mut entries = Vec::with_capacity(results.len());
+        for (i, result) in results.into_iter().enumerate() {
+            let id = correlation_ids
+                .get(i)
+                .cloned()
+                .unwrap_or_else(|| i.to_string());
+
+            let result_union = match result {
+                WorldStateResult::Property(propdef, propperms, value) => {
+                    let value_fb = var_to_flatbuffer_rpc(&value)?;
+                    moor_rpc::WorldStateResultUnion::WsPropertyResult(Box::new(
+                        moor_rpc::WsPropertyResult {
+                            prop_info: Box::new(common::PropInfo {
+                                definer: obj_fb(&propdef.definer()),
+                                location: obj_fb(&propdef.location()),
+                                name: Box::new(moor_rpc::Symbol {
+                                    value: propdef.name().as_string(),
+                                }),
+                                owner: obj_fb(&propperms.owner()),
+                                r: propperms.flags().contains(PropFlag::Read),
+                                w: propperms.flags().contains(PropFlag::Write),
+                                chown: propperms.flags().contains(PropFlag::Chown),
+                            }),
+                            value: Box::new(value_fb),
+                        },
+                    ))
+                }
+                WorldStateResult::Properties(prop_list) => {
+                    let props = prop_list
+                        .iter()
+                        .map(|(propdef, propperms)| common::PropInfo {
+                            definer: obj_fb(&propdef.definer()),
+                            location: obj_fb(&propdef.location()),
+                            name: Box::new(moor_rpc::Symbol {
+                                value: propdef.name().as_string(),
+                            }),
+                            owner: obj_fb(&propperms.owner()),
+                            r: propperms.flags().contains(PropFlag::Read),
+                            w: propperms.flags().contains(PropFlag::Write),
+                            chown: propperms.flags().contains(PropFlag::Chown),
+                        })
+                        .collect();
+                    moor_rpc::WorldStateResultUnion::WsPropertiesResult(Box::new(
+                        moor_rpc::WsPropertiesResult { properties: props },
+                    ))
+                }
+                WorldStateResult::SystemProperty(value) => {
+                    let value_fb = var_to_flatbuffer_rpc(&value)?;
+                    moor_rpc::WorldStateResultUnion::WsSystemPropertyResult(Box::new(
+                        moor_rpc::WsSystemPropertyResult {
+                            value: Box::new(value_fb),
+                        },
+                    ))
+                }
+                WorldStateResult::Verbs(verb_defs) => {
+                    let verbs = verb_defs
+                        .iter()
+                        .map(|v| {
+                            let names = v
+                                .names()
+                                .iter()
+                                .map(|n| moor_rpc::Symbol {
+                                    value: n.as_string(),
+                                })
+                                .collect();
+                            let arg_spec = vec![
+                                moor_rpc::Symbol {
+                                    value: v.args().dobj.to_string().to_string(),
+                                },
+                                moor_rpc::Symbol {
+                                    value: preposition_to_string(&v.args().prep).to_string(),
+                                },
+                                moor_rpc::Symbol {
+                                    value: v.args().iobj.to_string().to_string(),
+                                },
+                            ];
+                            common::VerbInfo {
+                                location: obj_fb(&v.location()),
+                                owner: obj_fb(&v.owner()),
+                                names,
+                                r: v.flags().contains(VerbFlag::Read),
+                                w: v.flags().contains(VerbFlag::Write),
+                                x: v.flags().contains(VerbFlag::Exec),
+                                d: v.flags().contains(VerbFlag::Debug),
+                                arg_spec,
+                            }
+                        })
+                        .collect();
+                    moor_rpc::WorldStateResultUnion::WsVerbsResult(Box::new(
+                        moor_rpc::WsVerbsResult { verbs },
+                    ))
+                }
+                WorldStateResult::VerbCode(verbdef, code) => {
+                    let names = verbdef
+                        .names()
+                        .iter()
+                        .map(|n| moor_rpc::Symbol {
+                            value: n.as_string(),
+                        })
+                        .collect();
+                    let arg_spec = vec![
+                        moor_rpc::Symbol {
+                            value: verbdef.args().dobj.to_string().to_string(),
+                        },
+                        moor_rpc::Symbol {
+                            value: preposition_to_string(&verbdef.args().prep).to_string(),
+                        },
+                        moor_rpc::Symbol {
+                            value: verbdef.args().iobj.to_string().to_string(),
+                        },
+                    ];
+                    moor_rpc::WorldStateResultUnion::WsVerbCodeResult(Box::new(
+                        moor_rpc::WsVerbCodeResult {
+                            verb_info: Box::new(common::VerbInfo {
+                                location: obj_fb(&verbdef.location()),
+                                owner: obj_fb(&verbdef.owner()),
+                                names,
+                                r: verbdef.flags().contains(VerbFlag::Read),
+                                w: verbdef.flags().contains(VerbFlag::Write),
+                                x: verbdef.flags().contains(VerbFlag::Exec),
+                                d: verbdef.flags().contains(VerbFlag::Debug),
+                                arg_spec,
+                            }),
+                            code,
+                        },
+                    ))
+                }
+                WorldStateResult::ResolvedObject(value) => {
+                    let value_fb = var_to_flatbuffer_rpc(&value)?;
+                    moor_rpc::WorldStateResultUnion::WsResolveResult(Box::new(
+                        moor_rpc::WsResolveResult {
+                            result: Box::new(value_fb),
+                        },
+                    ))
+                }
+                WorldStateResult::ObjectsList(objects) => {
+                    let object_infos: Vec<_> = objects
+                        .iter()
+                        .map(|(obj, attrs, verbs_count, props_count)| moor_rpc::ObjectInfo {
+                            obj: obj_fb(obj),
+                            name: attrs
+                                .name()
+                                .map(|n| Box::new(moor_rpc::Symbol { value: n })),
+                            parent: attrs.parent().map(|p| obj_fb(&p)),
+                            owner: obj_fb(&attrs.owner().unwrap_or(*obj)),
+                            flags: attrs.flags().to_u16(),
+                            location: attrs.location().map(|l| obj_fb(&l)),
+                            contents_count: 0,
+                            verbs_count: *verbs_count as u32,
+                            properties_count: *props_count as u32,
+                        })
+                        .collect();
+                    moor_rpc::WorldStateResultUnion::WsObjectsListResult(Box::new(
+                        moor_rpc::WsObjectsListResult {
+                            objects: object_infos,
+                        },
+                    ))
+                }
+                WorldStateResult::AllObjects(objects) => {
+                    let obj_fbs =
+                        objects.iter().map(|o| obj_to_flatbuffer_struct(o)).collect();
+                    moor_rpc::WorldStateResultUnion::WsAllObjectsResult(Box::new(
+                        moor_rpc::WsAllObjectsResult { objects: obj_fbs },
+                    ))
+                }
+                WorldStateResult::PropertyUpdated => {
+                    moor_rpc::WorldStateResultUnion::WsPropertyUpdatedResult(Box::new(
+                        moor_rpc::WsPropertyUpdatedResult {},
+                    ))
+                }
+                WorldStateResult::VerbProgrammed { object, verb } => {
+                    moor_rpc::WorldStateResultUnion::WsVerbProgrammedResult(Box::new(
+                        moor_rpc::WsVerbProgrammedResult {
+                            obj: Box::new(obj_to_flatbuffer_struct(&object)),
+                            verb_name: Box::new(moor_rpc::Symbol {
+                                value: verb.as_string(),
+                            }),
+                        },
+                    ))
+                }
+                WorldStateResult::ObjectFlags(flags) => {
+                    moor_rpc::WorldStateResultUnion::WsObjectFlagsResult(Box::new(
+                        moor_rpc::WsObjectFlagsResult { flags },
+                    ))
+                }
+            };
+
+            entries.push(moor_rpc::WorldStateResultEntry {
+                id,
+                result: result_union,
+            });
+        }
+        Ok(entries)
     }
 }
 

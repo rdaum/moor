@@ -405,6 +405,13 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 // Exception handlers run inline, so they never appear in tasks() output
                 panic!("Exception handler should not appear in tasks() listing");
             }
+            TaskStart::StartBatchWorldState {
+                player, actions, ..
+            } => v_list(&[
+                sym_or_str(Symbol::mk("batch_world_state")),
+                v_obj(*player),
+                v_int(actions.len() as i64),
+            ]),
         };
         let entry = v_list(&[task_id, player_id, task_start]);
         output.push(entry);
