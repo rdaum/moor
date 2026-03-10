@@ -53,8 +53,7 @@ pub const DEFAULT_MAX_TASK_MAILBOX: usize = 1000;
 /// Interval for tasks DB compaction (independent of GC)
 pub const DEFAULT_COMPACT_INTERVAL_SECONDS: u64 = 300;
 
-static SCHED_COUNTERS: LazyLock<SchedulerPerfCounters> =
-    LazyLock::new(SchedulerPerfCounters::new);
+static SCHED_COUNTERS: LazyLock<SchedulerPerfCounters> = LazyLock::new(SchedulerPerfCounters::new);
 
 thread_local! {
     static SCHED_COUNTERS_TLS: &'static SchedulerPerfCounters = &SCHED_COUNTERS;

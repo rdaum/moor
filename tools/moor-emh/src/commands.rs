@@ -18,13 +18,9 @@ use crate::{
 use crossterm::style::Stylize;
 use eyre::{Report, bail, eyre};
 use moor_common::model::{Named, ObjectKind, ValSet};
-use moor_compiler::to_literal;
 use moor_common::tasks::{SchedulerError, SessionFactory};
-use moor_kernel::{
-    SchedulerClient,
-    config::FeaturesConfig,
-    tasks::TaskNotification,
-};
+use moor_compiler::to_literal;
+use moor_kernel::{SchedulerClient, config::FeaturesConfig, tasks::TaskNotification};
 use moor_var::{Obj, Symbol};
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
@@ -36,7 +32,10 @@ use tabled::{Table, Tabled, settings::Style};
 use tracing::info;
 
 pub(crate) fn print_help() {
-    println!("{}", "Emergency Medical Hologram - Available Procedures".bold());
+    println!(
+        "{}",
+        "Emergency Medical Hologram - Available Procedures".bold()
+    );
     println!();
     println!("Database Operations");
     println!("  ;EXPR                              Evaluate MOO expression, print result");
@@ -629,8 +628,8 @@ pub(crate) fn cmd_dump(
 
     // If filename provided, write to file; otherwise print to console
     if let Some(path) = filename {
-        let mut file =
-            std::fs::File::create(&path).map_err(|e| eyre!("Failed to create file {:?}: {}", path, e))?;
+        let mut file = std::fs::File::create(&path)
+            .map_err(|e| eyre!("Failed to create file {:?}: {}", path, e))?;
 
         for line in lines.iter() {
             let Some(s) = line.as_string() else {
@@ -647,7 +646,10 @@ pub(crate) fn cmd_dump(
         ));
         println!("{} lines written", lines.len());
     } else {
-        println!("{}", format!("Object Definition: {}", obj.to_literal()).bold());
+        println!(
+            "{}",
+            format!("Object Definition: {}", obj.to_literal()).bold()
+        );
         println!();
 
         // Print the definition lines
