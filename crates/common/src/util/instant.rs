@@ -15,15 +15,22 @@ use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant as StdInstant};
 
-#[cfg(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
+#[cfg(any(
+    all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")),
+    target_arch = "aarch64",
+))]
 const FIXED_SHIFT: u32 = 32;
-#[cfg(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
+#[cfg(any(
+    all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")),
+    target_arch = "aarch64",
+))]
 const NANOS_PER_SEC: u128 = 1_000_000_000;
 
 /// Monotonic instant type tuned for low overhead.
 ///
 /// On Linux x86/x86_64 this uses invariant TSC when available and calibrated.
-/// Elsewhere it falls back to monotonic elapsed nanoseconds from `std::time::Instant`.
+/// On aarch64 this uses the generic timer counter (`cntvct_el0`).
+/// "Elsewhere" it falls back to monotonic elapsed nanoseconds from `std::time::Instant`.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct Instant(u64);
@@ -67,6 +74,12 @@ impl Instant {
     pub fn checked_sub(&self, duration: Duration) -> Option<Instant> {
         let ticks = clock().duration_to_ticks(duration);
         self.0.checked_sub(ticks).map(Instant)
+    }
+
+    /// Convert this instant's tick value to nanoseconds since the clock base.
+    #[inline]
+    pub fn as_nanos(&self) -> u64 {
+        clock().ticks_to_nanos(self.0)
     }
 }
 
@@ -119,19 +132,6 @@ impl std::fmt::Debug for Instant {
     }
 }
 
-#[inline]
-pub fn is_tsc_available() -> bool {
-    #[cfg(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
-    {
-        return matches!(clock(), Clock::Tsc(_));
-    }
-
-    #[cfg(not(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64"))))]
-    {
-        false
-    }
-}
-
 static CLOCK: OnceLock<Clock> = OnceLock::new();
 
 #[inline]
@@ -142,6 +142,8 @@ fn clock() -> &'static Clock {
 enum Clock {
     #[cfg(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
     Tsc(TscClock),
+    #[cfg(target_arch = "aarch64")]
+    Arm(ArmClock),
     Monotonic(MonotonicClock),
 }
 
@@ -154,6 +156,13 @@ impl Clock {
             }
         }
 
+        #[cfg(target_arch = "aarch64")]
+        {
+            if let Some(arm) = ArmClock::try_new() {
+                return Clock::Arm(arm);
+            }
+        }
+
         Clock::Monotonic(MonotonicClock::new())
     }
 
@@ -162,6 +171,8 @@ impl Clock {
         match self {
             #[cfg(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
             Clock::Tsc(tsc) => tsc.now_ticks(),
+            #[cfg(target_arch = "aarch64")]
+            Clock::Arm(arm) => arm.now_ticks(),
             Clock::Monotonic(mono) => mono.now_ticks(),
         }
     }
@@ -176,6 +187,8 @@ impl Clock {
         match self {
             #[cfg(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
             Clock::Tsc(tsc) => tsc.cycles_to_nanos(ticks),
+            #[cfg(target_arch = "aarch64")]
+            Clock::Arm(arm) => arm.ticks_to_nanos(ticks),
             Clock::Monotonic(_) => ticks,
         }
     }
@@ -186,10 +199,16 @@ impl Clock {
         match self {
             #[cfg(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
             Clock::Tsc(tsc) => tsc.nanos_to_cycles(nanos),
+            #[cfg(target_arch = "aarch64")]
+            Clock::Arm(arm) => arm.nanos_to_ticks(nanos),
             Clock::Monotonic(_) => nanos,
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Monotonic fallback (all platforms)
+// ---------------------------------------------------------------------------
 
 struct MonotonicClock {
     base: StdInstant,
@@ -208,6 +227,78 @@ impl MonotonicClock {
         self.base.elapsed().as_nanos().min(u64::MAX as u128) as u64
     }
 }
+
+// ---------------------------------------------------------------------------
+// ARM64 generic timer (cntvct_el0 / cntfrq_el0)
+// ---------------------------------------------------------------------------
+
+#[cfg(target_arch = "aarch64")]
+struct ArmClock {
+    base_tick: u64,
+    ns_per_tick_fp: u128,
+    ticks_per_ns_fp: u128,
+}
+
+#[cfg(target_arch = "aarch64")]
+impl ArmClock {
+    fn try_new() -> Option<Self> {
+        let freq = read_cntfrq();
+        if freq == 0 {
+            return None;
+        }
+
+        let ns_per_tick_fp = ((NANOS_PER_SEC << FIXED_SHIFT) + (freq / 2) as u128) / freq as u128;
+        let ticks_per_ns_fp =
+            (((freq as u128) << FIXED_SHIFT) + (NANOS_PER_SEC / 2)) / NANOS_PER_SEC;
+
+        Some(Self {
+            base_tick: read_cntvct(),
+            ns_per_tick_fp,
+            ticks_per_ns_fp,
+        })
+    }
+
+    #[inline]
+    fn now_ticks(&self) -> u64 {
+        read_cntvct().wrapping_sub(self.base_tick)
+    }
+
+    #[inline]
+    fn ticks_to_nanos(&self, ticks: u64) -> u64 {
+        let nanos = ((ticks as u128) * self.ns_per_tick_fp) >> FIXED_SHIFT;
+        nanos.min(u64::MAX as u128) as u64
+    }
+
+    #[inline]
+    fn nanos_to_ticks(&self, nanos: u64) -> u64 {
+        let ticks = ((nanos as u128) * self.ticks_per_ns_fp) >> FIXED_SHIFT;
+        ticks.min(u64::MAX as u128) as u64
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+fn read_cntvct() -> u64 {
+    let val: u64;
+    unsafe {
+        core::arch::asm!("mrs {}, cntvct_el0", out(reg) val, options(nostack, nomem, preserves_flags))
+    };
+    val
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+fn read_cntfrq() -> u64 {
+    let val: u64;
+    unsafe {
+        core::arch::asm!("mrs {}, cntfrq_el0", out(reg) val, options(nostack, nomem, preserves_flags))
+    };
+    val
+}
+
+// ---------------------------------------------------------------------------
+// x86/x86_64 TSC
+// ---------------------------------------------------------------------------
 
 #[cfg(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
 struct TscClock {
@@ -355,5 +446,16 @@ mod tests {
 
         let delta = later.duration_since(now);
         assert!(delta >= Duration::from_millis(49));
+    }
+
+    #[test]
+    fn as_nanos_consistent() {
+        let a = Instant::now();
+        std::thread::sleep(Duration::from_millis(10));
+        let b = Instant::now();
+        let delta_nanos = b.as_nanos() - a.as_nanos();
+        // Should be roughly 10ms — allow 5-50ms range.
+        assert!(delta_nanos > 5_000_000, "delta too small: {delta_nanos}ns");
+        assert!(delta_nanos < 50_000_000, "delta too large: {delta_nanos}ns");
     }
 }

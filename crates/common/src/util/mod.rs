@@ -26,7 +26,7 @@ pub use cache_padded::CachePadded;
 pub use counter::ConcurrentCounter;
 pub(crate) use counter::preferred_shared_shard_count;
 pub use fatal::{is_fatal_db_error_reported, signal_fatal_db_error};
-pub use instant::{Instant, is_tsc_available};
+pub use instant::Instant;
 pub use perf_counter::{
     PerfCounter, PerfIntensity, PerfTimerGuard, PerfTimingPolicy, perf_timing_policy,
     set_perf_timing_policy,
