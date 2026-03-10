@@ -24,14 +24,24 @@ use crate::host::{
 };
 use axum::{
     body::Bytes,
-    extract::Path,
+    extract::{Path, Query},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use moor_common::model::ObjectRef;
 use moor_var::Symbol;
-use rpc_common::{mk_list_objects_msg, mk_update_property_msg};
+use rpc_common::{mk_batch_world_state_msg, mk_list_objects_msg, mk_update_property_msg, ws_query_objects, BatchAction};
+use serde::Deserialize;
 use tracing::error;
+
+#[derive(Deserialize)]
+pub struct QueryObjectsQuery {
+    parent: Option<String>,
+    location: Option<String>,
+    owner: Option<String>,
+    flags_all: Option<u16>,
+    flags_any: Option<u16>,
+}
 
 pub async fn list_objects_handler(
     StatelessAuth {
@@ -53,6 +63,80 @@ pub async fn list_objects_handler(
     let list_msg = mk_list_objects_msg(&auth_token);
 
     let reply_bytes = match web_host::rpc_call(client_id, &rpc_client, list_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
+        ResponseFormat::Json => match reply_result_to_json(&reply_bytes) {
+            Ok(resp) => resp,
+            Err(status) => status.into_response(),
+        },
+    }
+}
+
+pub async fn query_objects_handler(
+    StatelessAuth {
+        auth_token,
+        client_id,
+        rpc_client,
+    }: StatelessAuth,
+    header_map: HeaderMap,
+    Query(query): Query<QueryObjectsQuery>,
+) -> Response {
+    let format = match negotiate_response_format(
+        header_map.get(header::ACCEPT),
+        BOTH_FORMATS,
+        ResponseFormat::FlatBuffers,
+    ) {
+        Ok(f) => f,
+        Err(status) => return status.into_response(),
+    };
+
+    let parent = query
+        .parent
+        .as_deref()
+        .and_then(ObjectRef::parse_curie)
+        .and_then(|r| match r {
+            ObjectRef::Id(obj) => Some(obj),
+            _ => None,
+        });
+    let location = query
+        .location
+        .as_deref()
+        .and_then(ObjectRef::parse_curie)
+        .and_then(|r| match r {
+            ObjectRef::Id(obj) => Some(obj),
+            _ => None,
+        });
+    let owner = query
+        .owner
+        .as_deref()
+        .and_then(ObjectRef::parse_curie)
+        .and_then(|r| match r {
+            ObjectRef::Id(obj) => Some(obj),
+            _ => None,
+        });
+
+    let action = ws_query_objects(
+        parent.as_ref(),
+        location.as_ref(),
+        owner.as_ref(),
+        query.flags_all.unwrap_or(0),
+        query.flags_any.unwrap_or(0),
+    );
+
+    let batch_msg = mk_batch_world_state_msg(
+        &auth_token,
+        vec![BatchAction {
+            id: "query".to_string(),
+            action,
+        }],
+        true, // Read-only
+    );
+
+    let reply_bytes = match web_host::rpc_call(client_id, &rpc_client, batch_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
