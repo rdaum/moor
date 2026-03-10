@@ -2381,6 +2381,47 @@ impl RpcMessageHandler {
                 let obj = obj_from_ref(req.obj().rpc_err()?).rpc_err()?;
                 Ok(WorldStateAction::GetObjectFlags { obj })
             }
+            moor_rpc::WorldStateActionUnionRef::WsQueryObjects(req) => {
+                use moor_common::model::ObjectQuery;
+                use moor_common::util::BitEnum;
+
+                let parent = req
+                    .parent()
+                    .ok()
+                    .flatten()
+                    .and_then(|r| obj_from_ref(r).ok());
+                let location = req
+                    .location()
+                    .ok()
+                    .flatten()
+                    .and_then(|r| obj_from_ref(r).ok());
+                let owner = req
+                    .owner()
+                    .ok()
+                    .flatten()
+                    .and_then(|r| obj_from_ref(r).ok());
+                let flags_all_raw = req.flags_all().unwrap_or(0);
+                let flags_any_raw = req.flags_any().unwrap_or(0);
+
+                Ok(WorldStateAction::QueryObjects {
+                    player: *player,
+                    query: ObjectQuery {
+                        parent,
+                        location,
+                        owner,
+                        flags_all: if flags_all_raw != 0 {
+                            Some(BitEnum::from_u16(flags_all_raw))
+                        } else {
+                            None
+                        },
+                        flags_any: if flags_any_raw != 0 {
+                            Some(BitEnum::from_u16(flags_any_raw))
+                        } else {
+                            None
+                        },
+                    },
+                })
+            }
         }
     }
 
@@ -2579,6 +2620,15 @@ impl RpcMessageHandler {
                 WorldStateResult::ObjectFlags(flags) => {
                     moor_rpc::WorldStateResultUnion::WsObjectFlagsResult(Box::new(
                         moor_rpc::WsObjectFlagsResult { flags },
+                    ))
+                }
+                WorldStateResult::QueriedObjects(objects) => {
+                    let obj_fbs = objects
+                        .iter()
+                        .map(|o| obj_to_flatbuffer_struct(o))
+                        .collect();
+                    moor_rpc::WorldStateResultUnion::WsQueryObjectsResult(Box::new(
+                        moor_rpc::WsQueryObjectsResult { objects: obj_fbs },
                     ))
                 }
             };

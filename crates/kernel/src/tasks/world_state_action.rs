@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use moor_common::model::{ObjAttrs, ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
+use moor_common::model::{ObjAttrs, ObjectQuery, ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
 use moor_var::{Obj, Symbol, Var};
 use uuid::Uuid;
 
@@ -87,6 +87,9 @@ pub enum WorldStateAction {
 
     /// Get flags for a specific object
     GetObjectFlags { obj: Obj },
+
+    /// Query objects matching filter criteria
+    QueryObjects { player: Obj, query: ObjectQuery },
 }
 
 /// A request wrapper that includes a correlation ID for tracking
@@ -144,6 +147,9 @@ pub enum WorldStateResult {
 
     /// Result of GetObjectFlags
     ObjectFlags(u16),
+
+    /// Result of QueryObjects
+    QueriedObjects(Vec<Obj>),
 }
 
 impl WorldStateRequest {

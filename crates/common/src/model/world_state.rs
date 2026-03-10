@@ -18,7 +18,7 @@ use crate::{
     model::{
         CommitResult, ObjectRef, PropPerms, Vid,
         r#match::{ArgSpec, PrepSpec, VerbArgsSpec},
-        objects::ObjFlag,
+        objects::{ObjFlag, ObjectQuery},
         objset::ObjSet,
         propdef::{PropDef, PropDefs},
         props::{PropAttrs, PropFlag},
@@ -505,6 +505,10 @@ pub trait WorldState: Send {
         obj: &Obj,
         include_self: bool,
     ) -> Result<ObjSet, WorldStateError>;
+
+    /// Query objects matching the given filter criteria.
+    /// Returns all objects satisfying all specified filters (ANDed).
+    fn query_objects(&self, query: &ObjectQuery) -> Result<ObjSet, WorldStateError>;
 
     /// Check the validity of an object.
     fn valid(&self, obj: &Obj) -> Result<bool, WorldStateError>;

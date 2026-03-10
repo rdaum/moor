@@ -14,7 +14,7 @@
 pub use crate::model::{
     defset::{Defs, DefsIter, HasUuid, Named},
     r#match::{ArgSpec, PrepSpec, VerbArgsSpec, parse_preposition_spec, preposition_to_string},
-    objects::{ObjAttr, ObjAttrs, ObjFlag, ObjectRef, obj_flags_string},
+    objects::{ObjAttr, ObjAttrs, ObjFlag, ObjectQuery, ObjectRef, obj_flags_string},
     objset::{ObjSet, ObjSetIter},
     permissions::Perms,
     propdef::{PropDef, PropDefs},
