@@ -234,6 +234,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
         // Constant variables will go here.
         let mut context = ObjFileContext::new();
+        context.set_root_path(dirpath);
 
         // Verb compilation options
         let mut compile_options = compile_options.clone();
@@ -331,6 +332,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
         object_file_contents: &str,
         compile_options: &CompileOptions,
     ) -> Result<(), ObjdefLoaderError> {
+        context.set_base_path(path);
         let compiled_defs = compile_object_definitions(
             object_file_contents,
             compile_options,
