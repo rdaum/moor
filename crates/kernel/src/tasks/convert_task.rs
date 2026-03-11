@@ -1935,6 +1935,7 @@ pub fn suspended_task_from_ref(
         task,
         session: Arc::new(NoopClientSession::new()),
         result_sender: None,
+        timer_generation: 0,
     })
 }
 

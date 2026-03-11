@@ -243,6 +243,7 @@ mod tests {
             task,
             session: Arc::new(NoopClientSession::new()),
             result_sender: None,
+            timer_generation: 0,
         };
         let tmpdir = tempfile::tempdir().expect("Unable to create temporary directory");
         let path = tmpdir.path();
@@ -302,6 +303,7 @@ mod tests {
                 task,
                 session: Arc::new(NoopClientSession::new()),
                 result_sender: None,
+                timer_generation: 0,
             };
             tasks.push(suspended);
         }
@@ -365,6 +367,7 @@ mod tests {
                 task,
                 session: Arc::new(NoopClientSession::new()),
                 result_sender: None,
+                timer_generation: 0,
             };
             tasks.push(suspended);
         }
@@ -467,6 +470,7 @@ mod tests {
                 task,
                 session: Arc::new(NoopClientSession::new()),
                 result_sender: None,
+                timer_generation: 0,
             };
             tasks.push((*name, suspended));
         }
@@ -566,6 +570,7 @@ mod tests {
                 task,
                 session: Arc::new(NoopClientSession::new()),
                 result_sender: None,
+                timer_generation: 0,
             };
 
             // Test save/load cycle for this edge case
@@ -630,6 +635,7 @@ mod tests {
             task,
             session: Arc::new(NoopClientSession::new()),
             result_sender: None,
+            timer_generation: 0,
         };
 
         // Save the task
