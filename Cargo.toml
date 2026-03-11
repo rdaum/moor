@@ -119,6 +119,7 @@ fs2 = "0.4"
 
 # Networking & Communication
 axum = { version = "0.8", features = ["ws"] }
+webrtc = "0.12"
 hickory-resolver = "0.25"
 ipnet = "2.11"
 reqwest = { version = "0.12", default-features = false }

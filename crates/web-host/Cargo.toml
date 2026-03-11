@@ -56,6 +56,7 @@ sha2.workspace = true
 
 # Networking & Communication
 axum.workspace = true
+webrtc.workspace = true
 hickory-resolver.workspace = true
 ipnet.workspace = true
 reqwest = { workspace = true, features = ["json"] }
@@ -75,6 +76,7 @@ thiserror.workspace = true
 tracing.workspace = true
 
 # Utilities & Helpers
+bytes.workspace = true
 planus.workspace = true
 url.workspace = true
 urlencoding.workspace = true
