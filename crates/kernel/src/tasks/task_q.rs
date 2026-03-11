@@ -43,6 +43,10 @@ use crate::{
 struct TimerEntry {
     task_id: TaskId,
     delay: Duration,
+    /// Monotonic generation stamp assigned when the entry is created.
+    /// Compared against the current `SuspendedTask::timer_generation` to
+    /// detect stale entries left behind by earlier suspensions of the same task.
+    generation: u64,
 }
 
 impl TimerEntryWithDelay for TimerEntry {
@@ -213,9 +217,18 @@ impl TaskQ {
         // 1. Advance timer wheel based on elapsed time and collect expired timers
         // (Always advance the timer wheel to maintain accurate timing, even when no tasks are suspended)
         if let Some(expired_timers) = self.suspended.advance_timer_wheel() {
-            to_wake
-                .get_or_insert_with(Vec::new)
-                .extend(expired_timers.into_iter().map(|e| e.task_id));
+            to_wake.get_or_insert_with(Vec::new).extend(
+                expired_timers
+                    .into_iter()
+                    .filter(|e| {
+                        // Ignore stale timer entries from prior suspensions of the same task.
+                        self.suspended
+                            .tasks
+                            .get(&e.task_id)
+                            .is_some_and(|st| st.timer_generation == e.generation)
+                    })
+                    .map(|e| e.task_id),
+            );
         }
 
         if self.suspended.tasks.is_empty() {
@@ -320,6 +333,9 @@ pub struct SuspendedTask {
     pub task: Box<Task>,
     pub session: Arc<dyn Session>,
     pub result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
+    /// Generation stamp matching the `TimerEntry` that belongs to this suspension.
+    /// Stale timer entries from prior suspensions will carry a different value.
+    pub timer_generation: u64,
 }
 
 /// Possible conditions in which a suspended task can wake from suspension.
@@ -408,6 +424,9 @@ pub struct SuspensionQ {
     /// Tasks waiting for inter-task messages (via task_recv with timeout)
     message_waiting_tasks: Vec<TaskId>,
 
+    /// Monotonic counter for timer entry generation stamps.
+    next_generation: u64,
+
     tasks_database: Box<dyn TasksDb>,
 }
 
@@ -425,6 +444,7 @@ impl SuspensionQ {
             gc_waiting_tasks: Vec::new(),
             retry_tasks: Vec::new(),
             message_waiting_tasks: Vec::new(),
+            next_generation: 0,
             tasks_database,
         }
     }
@@ -526,6 +546,9 @@ impl SuspensionQ {
                 .expect("Unable to create new background session for suspended task");
 
             let task_id = task.task.task_id;
+            self.next_generation += 1;
+            let generation = self.next_generation;
+            task.timer_generation = generation;
             match &task.wake_condition {
                 WakeCondition::Time(wake_time) => {
                     let now = Instant::now();
@@ -533,7 +556,11 @@ impl SuspensionQ {
                         Deadline::at(*wake_time)
                             .remaining_at(now)
                             .is_some_and(|delay| {
-                                let timer_entry = TimerEntry { task_id, delay };
+                                let timer_entry = TimerEntry {
+                                    task_id,
+                                    delay,
+                                    generation,
+                                };
                                 self.timer_wheel
                                     .insert_with_delay(timer_entry, delay)
                                     .is_ok()
@@ -572,7 +599,11 @@ impl SuspensionQ {
                         Deadline::at(*wake_time)
                             .remaining_at(now)
                             .is_some_and(|delay| {
-                                let timer_entry = TimerEntry { task_id, delay };
+                                let timer_entry = TimerEntry {
+                                    task_id,
+                                    delay,
+                                    generation,
+                                };
                                 self.timer_wheel
                                     .insert_with_delay(timer_entry, delay)
                                     .is_ok()
@@ -588,7 +619,11 @@ impl SuspensionQ {
                         Deadline::at(*wake_time)
                             .remaining_at(now)
                             .is_some_and(|delay| {
-                                let timer_entry = TimerEntry { task_id, delay };
+                                let timer_entry = TimerEntry {
+                                    task_id,
+                                    delay,
+                                    generation,
+                                };
                                 self.timer_wheel
                                     .insert_with_delay(timer_entry, delay)
                                     .is_ok()
@@ -619,13 +654,21 @@ impl SuspensionQ {
         let task_id = task.task_id;
         let now = Instant::now();
 
+        // Assign a generation stamp for timer-based wake conditions.
+        self.next_generation += 1;
+        let generation = self.next_generation;
+
         // Add to appropriate storage based on wake condition
         let should_persist = match &wake_condition {
             WakeCondition::Time(wake_time) => {
                 let inserted = Deadline::at(*wake_time)
                     .remaining_at(now)
                     .is_some_and(|delay| {
-                        let timer_entry = TimerEntry { task_id, delay };
+                        let timer_entry = TimerEntry {
+                            task_id,
+                            delay,
+                            generation,
+                        };
                         self.timer_wheel
                             .insert_with_delay(timer_entry, delay)
                             .is_ok()
@@ -664,7 +707,11 @@ impl SuspensionQ {
                 let inserted = Deadline::at(*wake_time)
                     .remaining_at(now)
                     .is_some_and(|delay| {
-                        let timer_entry = TimerEntry { task_id, delay };
+                        let timer_entry = TimerEntry {
+                            task_id,
+                            delay,
+                            generation,
+                        };
                         self.timer_wheel
                             .insert_with_delay(timer_entry, delay)
                             .is_ok()
@@ -680,7 +727,11 @@ impl SuspensionQ {
                 let inserted = Deadline::at(*wake_time)
                     .remaining_at(now)
                     .is_some_and(|delay| {
-                        let timer_entry = TimerEntry { task_id, delay };
+                        let timer_entry = TimerEntry {
+                            task_id,
+                            delay,
+                            generation,
+                        };
                         self.timer_wheel
                             .insert_with_delay(timer_entry, delay)
                             .is_ok()
@@ -696,6 +747,7 @@ impl SuspensionQ {
         let sr = SuspendedTask {
             enqueued_at: Timestamp::now(),
             wake_condition,
+            timer_generation: generation,
             task,
             session,
             result_sender,
@@ -959,5 +1011,132 @@ impl SuspensionQ {
     /// Trigger database compaction to reclaim space and reduce journal size.
     pub(crate) fn compact(&self) {
         self.tasks_database.compact();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tasks::{NoopTasksDb, ServerOptions, TaskStart, DEFAULT_MAX_TASK_MAILBOX, DEFAULT_MAX_TASK_RETRIES};
+    use moor_common::tasks::NoopClientSession;
+    use moor_var::SYSTEM_OBJECT;
+
+    fn test_server_options() -> ServerOptions {
+        ServerOptions {
+            bg_seconds: 0.0,
+            bg_ticks: 0,
+            fg_seconds: 0.0,
+            fg_ticks: 0,
+            max_stack_depth: 0,
+            dump_interval: None,
+            gc_interval: None,
+            max_task_retries: DEFAULT_MAX_TASK_RETRIES,
+            max_task_mailbox: DEFAULT_MAX_TASK_MAILBOX,
+        }
+    }
+
+    fn mock_task(task_id: TaskId) -> Box<Task> {
+        Task::new(
+            task_id,
+            SYSTEM_OBJECT,
+            SYSTEM_OBJECT,
+            TaskStart::StartEval {
+                player: SYSTEM_OBJECT,
+                program: Default::default(),
+                initial_env: None,
+            },
+            &test_server_options(),
+            Arc::new(AtomicBool::new(false)),
+        )
+    }
+
+    fn mock_session() -> Arc<dyn Session> {
+        Arc::new(NoopClientSession::new())
+    }
+
+    /// Verify that stale timer entries from prior suspensions of the same task
+    /// are filtered out and do not cause spurious wakes.
+    ///
+    /// Scenario: a task calls `task_recv(0.05)` which inserts a 50ms timer.
+    /// A message arrives early, waking the task via `enqueue_immediate_wake`.
+    /// The task re-suspends with a new `task_recv(0.05)`, inserting a second
+    /// timer entry. The old entry still sits in the wheel. When it fires, the
+    /// generation mismatch should cause it to be discarded.
+    #[test]
+    fn stale_timer_entry_filtered_by_generation() {
+        let task_id: TaskId = 42;
+        let mut sq = SuspensionQ::new(Box::new(NoopTasksDb {}));
+
+        // First suspension: task_recv with 50ms timeout.
+        let deadline1 = Deadline::from_now(Duration::from_millis(50)).instant();
+        sq.add_task(
+            WakeCondition::TaskMessage(deadline1),
+            mock_task(task_id),
+            mock_session(),
+            None,
+        );
+        let gen1 = sq.tasks.get(&task_id).unwrap().timer_generation;
+
+        // Simulate early wake from message delivery: remove the task from
+        // the suspended map (the timer entry remains in the wheel).
+        let removed = sq.remove_task(task_id);
+        assert!(removed.is_some());
+
+        // Re-suspend the same task with a new 100ms timeout.
+        // This gets a fresh generation, while the stale 50ms entry lingers.
+        let deadline2 = Deadline::from_now(Duration::from_millis(100)).instant();
+        sq.add_task(
+            WakeCondition::TaskMessage(deadline2),
+            mock_task(task_id),
+            mock_session(),
+            None,
+        );
+        let gen2 = sq.tasks.get(&task_id).unwrap().timer_generation;
+        assert_ne!(gen1, gen2, "second suspension must have a different generation");
+
+        // Sleep past the first timer's deadline (50ms) but not the second (100ms).
+        std::thread::sleep(Duration::from_millis(60));
+
+        // Advance the timer wheel — the stale 50ms entry should fire.
+        let expired = sq.advance_timer_wheel();
+        // There may be expired entries, but after filtering by generation,
+        // none should match the current task.
+        if let Some(entries) = &expired {
+            let matching: Vec<_> = entries
+                .iter()
+                .filter(|e| {
+                    sq.tasks
+                        .get(&e.task_id)
+                        .is_some_and(|st| st.timer_generation == e.generation)
+                })
+                .collect();
+            assert!(
+                matching.is_empty(),
+                "stale timer entry should not match current generation"
+            );
+        }
+
+        // Now sleep past the second timer's deadline.
+        std::thread::sleep(Duration::from_millis(50));
+
+        // Advance again — the valid 100ms entry should fire.
+        let expired2 = sq.advance_timer_wheel();
+        assert!(expired2.is_some(), "second timer entry should have expired");
+        let entries2 = expired2.unwrap();
+        let matching2: Vec<_> = entries2
+            .iter()
+            .filter(|e| {
+                sq.tasks
+                    .get(&e.task_id)
+                    .is_some_and(|st| st.timer_generation == e.generation)
+            })
+            .collect();
+        assert_eq!(
+            matching2.len(),
+            1,
+            "exactly one valid timer entry should match"
+        );
+        assert_eq!(matching2[0].task_id, task_id);
+        assert_eq!(matching2[0].generation, gen2);
     }
 }
