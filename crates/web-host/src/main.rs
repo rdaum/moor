@@ -13,6 +13,7 @@
 
 mod host;
 
+use crate::host::webrtc::WebRtcConfig;
 use crate::host::{OAuth2Config, OAuth2Manager, OAuth2State, PendingOAuth2Store, WebHost};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -204,6 +205,18 @@ struct Args {
     #[serde(default)]
     #[arg(skip)]
     pub trusted_proxy_cidrs: Vec<String>,
+
+    #[serde(default)]
+    #[arg(skip)]
+    pub webrtc: WebRtcConfig,
+
+    /// Enable WebRTC data channel for realtime event delivery.
+    #[arg(long, help = "Enable WebRTC data channel")]
+    pub webrtc_enabled: Option<bool>,
+
+    /// Domains eligible for WebRTC data channel delivery (comma-separated).
+    #[arg(long, help = "Comma-separated realtime domains for WebRTC", value_delimiter = ',')]
+    pub webrtc_realtime_domains: Option<Vec<String>>,
 }
 
 struct Listeners {
@@ -220,6 +233,7 @@ struct Listeners {
     cors_config: CorsConfig,
     rate_limit_config: RateLimitConfig,
     trusted_proxy_cidrs: Arc<Vec<IpNet>>,
+    webrtc_config: Arc<WebRtcConfig>,
 }
 
 impl Listeners {
@@ -237,6 +251,7 @@ impl Listeners {
         cors_config: CorsConfig,
         rate_limit_config: RateLimitConfig,
         trusted_proxy_cidrs: Arc<Vec<IpNet>>,
+        webrtc_config: Arc<WebRtcConfig>,
     ) -> (
         Self,
         tokio::sync::mpsc::Receiver<ListenersMessage>,
@@ -257,6 +272,7 @@ impl Listeners {
             cors_config,
             rate_limit_config,
             trusted_proxy_cidrs,
+            webrtc_config,
         };
         let listeners_client = ListenersClient::new(tx);
         (listeners, rx, listeners_client)
@@ -311,6 +327,7 @@ impl Listeners {
                         self.host_id,
                         self.last_daemon_ping.clone(),
                         self.trusted_proxy_cidrs.clone(),
+                        self.webrtc_config.clone(),
                     );
 
                     // Create OAuth2State if OAuth2 is enabled
@@ -675,13 +692,21 @@ async fn main() -> Result<(), eyre::Error> {
     if let Some(config_file) = config_file {
         args_figment = args_figment.merge(Yaml::file(config_file));
     }
-    let args = match args_figment.extract::<Args>() {
+    let mut args = match args_figment.extract::<Args>() {
         Ok(args) => args,
         Err(e) => {
             eprintln!("Unable to parse arguments/configuration: {e}");
             std::process::exit(1);
         }
     };
+
+    // Apply CLI overrides for WebRTC config.
+    if let Some(enabled) = args.webrtc_enabled {
+        args.webrtc.enabled = enabled;
+    }
+    if let Some(domains) = args.webrtc_realtime_domains.take() {
+        args.webrtc.realtime_domains = domains;
+    }
 
     moor_common::tracing::init_tracing(args.debug).unwrap_or_else(|e| {
         eprintln!("Unable to configure logging: {e}");
@@ -781,6 +806,7 @@ async fn main() -> Result<(), eyre::Error> {
         args.cors.clone(),
         args.rate_limit.clone(),
         trusted_proxy_cidrs,
+        Arc::new(args.webrtc.clone()),
     );
     info!("Starting up listener thread...");
     let listeners_thread = tokio::spawn(async move {

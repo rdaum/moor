@@ -22,6 +22,7 @@ mod props;
 mod verbs;
 pub mod web_host;
 mod webhooks;
+pub(crate) mod webrtc;
 mod ws_connection;
 
 pub use auth::{connect_auth_handler, create_auth_handler, logout_handler, validate_auth_handler};

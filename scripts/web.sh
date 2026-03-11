@@ -49,4 +49,7 @@ if [[ -n "$RELEASE" ]]; then
     CARGO_ARGS+=("$RELEASE")
 fi
 
-cargo run "${CARGO_ARGS[@]}" -p moor-web-host -- --listen-address "$LISTEN_ADDRESS"
+cargo run "${CARGO_ARGS[@]}" -p moor-web-host -- \
+    --listen-address "$LISTEN_ADDRESS" \
+    --webrtc-enabled true \
+    --webrtc-realtime-domains realtime
