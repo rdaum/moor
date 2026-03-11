@@ -110,6 +110,10 @@ pub enum ObjDefParseError {
     BadAttributeType(VarType),
     #[error("Invalid object ID: {0}")]
     InvalidObjectId(String),
+    #[error("Include error for '{0}': {1}")]
+    IncludeError(String, String),
+    #[error("Duplicate constant '{0}': already defined as {1}")]
+    DuplicateConstant(String, String),
 }
 
 impl ObjDefParseError {
@@ -710,7 +714,24 @@ pub fn compile_object_definitions(
                 let constant = pairs.next().unwrap().as_str();
                 let value = pairs.next().unwrap();
                 let value = parse_literal(context, value)?;
-                context.0.insert(Symbol::mk(constant), value);
+                let sym = Symbol::mk(constant);
+                // Check for duplicate constant name.
+                if let Some(existing) = context.0.get(&sym) {
+                    return Err(ObjDefParseError::DuplicateConstant(
+                        constant.to_string(),
+                        format!("{existing:?}"),
+                    ));
+                }
+                // Check for duplicate constant value (different name, same value).
+                for (existing_name, existing_val) in context.0.iter() {
+                    if *existing_val == value {
+                        return Err(ObjDefParseError::DuplicateConstant(
+                            format!("{constant} = {value:?}"),
+                            format!("conflicts with {existing_name} = {existing_val:?}"),
+                        ));
+                    }
+                }
+                context.0.insert(sym, value);
             }
             Rule::EOI => {
                 break;
