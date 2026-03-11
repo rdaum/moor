@@ -363,6 +363,7 @@ pub struct WebHost {
     pub(crate) trusted_proxy_cidrs: Arc<Vec<IpNet>>,
     /// Cached server features response (features don't change at runtime).
     features_cache: Arc<tokio::sync::OnceCell<Vec<u8>>>,
+    pub(crate) webrtc_config: Arc<super::webrtc::WebRtcConfig>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -383,6 +384,7 @@ impl WebHost {
         host_id: Uuid,
         last_daemon_ping: Arc<AtomicU64>,
         trusted_proxy_cidrs: Arc<Vec<IpNet>>,
+        webrtc_config: Arc<super::webrtc::WebRtcConfig>,
     ) -> Self {
         let tmq_context = tmq::Context::new();
         Self {
@@ -396,6 +398,7 @@ impl WebHost {
             last_daemon_ping,
             trusted_proxy_cidrs,
             features_cache: Arc::new(tokio::sync::OnceCell::new()),
+            webrtc_config,
         }
     }
 }
@@ -763,6 +766,12 @@ impl WebHost {
             client_id, self.pubsub_addr
         );
 
+        let realtime_domains: std::collections::HashSet<String> = self
+            .webrtc_config
+            .realtime_domains
+            .iter()
+            .cloned()
+            .collect();
         Ok(WebSocketConnection {
             handler_object: *handler_object,
             player: *player,
@@ -776,6 +785,9 @@ impl WebHost {
             pending_task: None,
             close_code: None,
             is_logout: false,
+            webrtc_config: self.webrtc_config.clone(),
+            realtime_domains,
+            webrtc_peer: None,
         })
     }
 
