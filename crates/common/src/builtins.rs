@@ -999,6 +999,29 @@ fn mk_builtin_table() -> Vec<Builtin> {
     // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "cryptography");
 
+    // Spatial/tile-map builtins (crates/kernel/src/vm/builtins/bf_spatial.rs).
+    let start = builtins.len();
+    builtins.extend([
+        mk_builtin(
+            "astar",
+            Q(8),
+            Q(8),
+            vec![
+                Typed(TYPE_INT),  // width
+                Typed(TYPE_INT),  // height
+                Typed(TYPE_INT),  // start_x
+                Typed(TYPE_INT),  // start_y
+                Typed(TYPE_INT),  // goal_x
+                Typed(TYPE_INT),  // goal_y
+                Typed(TYPE_LIST), // tile_map
+                Typed(TYPE_LIST), // solid_tiles
+            ],
+            true,
+        ),
+    ]);
+    // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
+    pad_group(&mut builtins, start, "spatial");
+
     builtins
 }
 // BuiltinId is now defined in moor_var::program::opcode and re-exported
