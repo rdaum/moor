@@ -3,18 +3,18 @@
   "version": "1.1.0-dev",
   "description": "Shared Web/API SDK for mooR clients",
   "type": "module",
-  "main": "./dist/clients/web-sdk/src/index.js",
-  "types": "./dist/clients/web-sdk/src/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/clients/web-sdk/src/index.d.ts",
-      "import": "./dist/clients/web-sdk/src/index.js",
-      "default": "./dist/clients/web-sdk/src/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./*": {
-      "types": "./dist/clients/web-sdk/src/*.d.ts",
-      "import": "./dist/clients/web-sdk/src/*.js",
-      "default": "./dist/clients/web-sdk/src/*.js"
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js",
+      "default": "./dist/*.js"
     }
   },
   "repository": {
