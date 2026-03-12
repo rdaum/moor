@@ -445,9 +445,21 @@ impl Scheduler {
             let _ = sender.send((task_id, Ok(TaskNotification::Suspended)));
         }
 
+        let needs_timer_wake = matches!(
+            wake_condition,
+            WakeCondition::Time(_) | WakeCondition::Retry(_) | WakeCondition::TaskMessage(_)
+        );
+
         lc.task_q
             .suspended
             .add_task(wake_condition, task, tc.session, tc.result_sender);
+
+        // Wake the timer thread so it can recompute its sleep duration for the
+        // newly-inserted deadline.
+        if needs_timer_wake {
+            drop(lc);
+            self.wake_timer_thread();
+        }
     }
 
     pub fn handle_task_request_input(
@@ -764,8 +776,11 @@ impl Scheduler {
                 "GC force requested but anonymous objects are disabled, ignoring request"
             );
         } else {
-            let mut lc = self.lifecycle.lock().unwrap();
-            lc.gc_force_collect = true;
+            {
+                let mut lc = self.lifecycle.lock().unwrap();
+                lc.gc_force_collect = true;
+            }
+            self.wake_timer_thread();
         }
     }
 
