@@ -401,6 +401,7 @@ fn generate_constants_file(
     let constants_file = directory_path.join("constants.moo");
     let mut constants_file = std::fs::File::create(constants_file)?;
     constants_file.write_all(constants.as_bytes())?;
+    constants_file.write_all(b"\n")?;
     Ok(())
 }
 
@@ -466,6 +467,7 @@ pub fn dump_object_definitions(
         let lines = dump_object(&index_names, o)?;
         let objstr = lines.join("\n");
         file.write_all(objstr.as_bytes())?;
+        file.write_all(b"\n")?;
     }
 
     // Dump anonymous objects - group by hierarchy
@@ -504,6 +506,7 @@ pub fn dump_object_definitions(
 
             let anon_objstr = all_anon_lines.join("\n");
             anon_file.write_all(anon_objstr.as_bytes())?;
+            anon_file.write_all(b"\n")?;
         }
     }
 
