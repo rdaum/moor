@@ -33,6 +33,10 @@ jobs:
         working-directory: clients/web-sdk
         run: npm run typecheck
 
+      - name: Build
+        working-directory: clients/web-sdk
+        run: npm run build
+
       - name: Publish to Codeberg Package Registry
         working-directory: clients/web-sdk
         run: |
