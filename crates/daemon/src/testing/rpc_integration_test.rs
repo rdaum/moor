@@ -11,21 +11,37 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-//! Integration tests for RPC message handler using mock components
+//! Integration tests for RPC message handler using real Scheduler with JHCore
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, RwLock};
+    use std::{
+        net::SocketAddr,
+        path::PathBuf,
+        sync::{
+            Arc,
+            atomic::AtomicBool,
+        },
+        time::{SystemTime, UNIX_EPOCH},
+    };
+    use tempfile::TempDir;
     use uuid::Uuid;
 
-    use moor_kernel::{config::Config, testing::MockScheduler};
+    use moor_common::model::CommitResult;
+    use moor_db::{Database, DatabaseConfig, TxDB};
+    use moor_kernel::{
+        SchedulerClient,
+        config::Config,
+        tasks::{NoopTasksDb, scheduler::Scheduler},
+    };
+    use moor_textdump::{TextdumpImportOptions, textdump_load};
     use rusty_paseto::prelude::Key;
+    use semver::Version;
 
     use crate::{
         connections::ConnectionRegistryFactory,
         event_log::{EventLogOps, logged_narrative_event_to_flatbuffer},
-        rpc::{MessageHandler, hosts::Hosts, message_handler::RpcMessageHandler},
-        tasks::task_monitor::TaskMonitor,
+        rpc::{MessageHandler, RpcServer},
         testing::{MockEventLog, MockTransport},
     };
     use moor_schema::{convert::obj_from_flatbuffer_struct, rpc as moor_rpc};
@@ -36,10 +52,6 @@ mod tests {
         mk_detach_host_msg, mk_detach_msg, mk_host_pong_msg, mk_login_command_msg,
         mk_properties_msg, mk_register_host_msg, mk_request_performance_counters_msg,
         mk_request_sys_prop_msg, mk_requested_input_msg, mk_verbs_msg, obj_fb,
-    };
-    use std::{
-        net::SocketAddr,
-        time::{SystemTime, UNIX_EPOCH},
     };
 
     fn systemtime_to_nanos(time: SystemTime) -> u64 {
@@ -56,8 +68,6 @@ mod tests {
     }
 
     fn create_test_keys() -> (Key<32>, Key<64>) {
-        // Use the fixed test keys instead of random generation to avoid Ed25519 validation issues
-        // These are the same keys used in the telnet-host integration tests
         const SIGNING_KEY: &str = r#"-----BEGIN PRIVATE KEY-----
 MC4CAQAwBQYDK2VwBCIEILrkKmddHFUDZqRCnbQsPoW/Wsp0fLqhnv5KNYbcQXtk
 -----END PRIVATE KEY-----
@@ -73,52 +83,266 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         (public_key, private_key)
     }
 
-    fn setup_test_environment() -> (
-        Arc<RpcMessageHandler>,
-        Arc<MockTransport>,
-        Arc<MockEventLog>,
-        Arc<MockScheduler>,
-    ) {
+    /// Create a temporary database with JHCore loaded
+    fn setup_test_db_with_core() -> (Box<dyn Database>, TempDir) {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test.db");
+
+        let (db, _) = TxDB::open(Some(&db_path), DatabaseConfig::default());
+        let db = Box::new(db) as Box<dyn Database>;
+
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let jhcore = manifest_dir.join("../../cores/JHCore-DEV-2.db");
+
+        let mut loader = db.loader_client().unwrap();
+        let config = Config::default();
+        textdump_load(
+            loader.as_mut(),
+            jhcore,
+            Version::new(0, 1, 0),
+            config.features.compile_options(),
+            TextdumpImportOptions::default(),
+        )
+        .expect("Failed to load textdump");
+        assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
+
+        (db, temp_dir)
+    }
+
+    /// Wait for the scheduler to be ready by polling status
+    fn wait_for_scheduler_ready(scheduler_client: &SchedulerClient) {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(10);
+
+        while start.elapsed() < timeout {
+            if scheduler_client.check_status().is_ok() {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+
+        panic!("Scheduler failed to become ready within timeout");
+    }
+
+    struct TestEnvironment {
+        message_handler: Arc<dyn MessageHandler>,
+        transport: Arc<MockTransport>,
+        event_log: Arc<MockEventLog>,
+        scheduler_client: SchedulerClient,
+        kill_switch: Arc<AtomicBool>,
+        _temp_dir: TempDir,
+        scheduler_thread: Option<std::thread::JoinHandle<()>>,
+        rpc_thread: Option<std::thread::JoinHandle<()>>,
+    }
+
+    impl Drop for TestEnvironment {
+        fn drop(&mut self) {
+            // Signal shutdown
+            self.kill_switch
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+
+            // Send shutdown message to scheduler
+            let _ = self.scheduler_client.submit_shutdown("Test complete");
+
+            // Wait for scheduler thread to finish
+            if let Some(thread) = self.scheduler_thread.take() {
+                let _ = thread.join();
+            }
+
+            // Wait for RPC thread to finish
+            if let Some(thread) = self.rpc_thread.take() {
+                let _ = thread.join();
+            }
+        }
+    }
+
+    fn setup_test_environment() -> TestEnvironment {
+        let _ = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .with_test_writer()
+            .try_init();
+
         let (public_key, private_key) = create_test_keys();
         let config = Arc::new(Config::default());
 
+        // Create real database with JHCore
+        let (db, temp_dir) = setup_test_db_with_core();
+
+        // Create kill switch
+        let kill_switch = Arc::new(AtomicBool::new(false));
+
         // Create mock components
         let connections = ConnectionRegistryFactory::in_memory_only().unwrap();
-        let hosts = Arc::new(RwLock::new(Hosts::default()));
-        let (mailbox_sender, _mailbox_receiver) = flume::unbounded();
-        let event_log = Arc::new(MockEventLog::new());
-        let task_monitor = TaskMonitor::new(mailbox_sender.clone());
         let transport = Arc::new(MockTransport::new());
+        let event_log = Arc::new(MockEventLog::new());
 
-        // Create scheduler and start it in background
-        let scheduler = Arc::new(MockScheduler::new());
-        let scheduler_clone = scheduler.clone();
-        std::thread::spawn(move || {
-            let start = std::time::Instant::now();
-            while start.elapsed() < std::time::Duration::from_secs(30) {
-                if scheduler_clone
-                    .run_with_timeout(std::time::Duration::from_millis(50))
-                    .is_err()
-                {
-                    break;
-                }
-            }
-        });
-
-        // Create message handler
-        let message_handler = Arc::new(RpcMessageHandler::new(
-            config,
+        // Create RpcServer with MockTransport
+        let (rpc_server, task_monitor, system_control) = RpcServer::new(
+            kill_switch.clone(),
             public_key,
             private_key,
             connections,
-            hosts,
-            mailbox_sender,
-            event_log.clone() as Arc<dyn EventLogOps>,
-            task_monitor,
+            event_log.clone(),
             transport.clone(),
-        ));
+            config.clone(),
+            None,
+        );
 
-        (message_handler, transport, event_log, scheduler)
+        // Get the message handler from the RpcServer
+        let message_handler = rpc_server.message_handler().clone();
+
+        // Create real scheduler with our test database
+        let tasks_db = Box::new(NoopTasksDb {});
+        let scheduler = Scheduler::new(
+            Version::new(0, 1, 0),
+            db,
+            tasks_db,
+            config,
+            Arc::new(system_control),
+            None,
+            None,
+        );
+
+        // Get scheduler client before starting scheduler
+        let scheduler_client = scheduler.client().expect("Failed to get scheduler client");
+
+        let rpc_server_arc = Arc::new(rpc_server);
+
+        // Start the RPC server's request loop (handles SessionActions messages)
+        let rpc_server_for_loop = rpc_server_arc.clone();
+        let scheduler_client_for_rpc = scheduler_client.clone();
+        let rpc_thread = std::thread::Builder::new()
+            .name("test-rpc-server".to_string())
+            .spawn(move || {
+                if let Err(e) = rpc_server_for_loop.request_loop(
+                    "mock://test".to_string(),
+                    scheduler_client_for_rpc,
+                    task_monitor,
+                ) {
+                    eprintln!("RPC server request loop error: {e:?}");
+                }
+            })
+            .expect("Failed to spawn RPC server thread");
+
+        // Start scheduler (spawns timer + worker threads internally)
+        let scheduler_thread = scheduler.start(rpc_server_arc);
+
+        wait_for_scheduler_ready(&scheduler_client);
+
+        TestEnvironment {
+            message_handler,
+            transport,
+            event_log,
+            scheduler_client,
+            kill_switch,
+            _temp_dir: temp_dir,
+            scheduler_thread: Some(scheduler_thread),
+            rpc_thread: Some(rpc_thread),
+        }
+    }
+
+    /// Helper: establish a connection and return the client token and connection object
+    fn establish_connection(
+        env: &TestEnvironment,
+        client_id: Uuid,
+        peer_addr: &str,
+        port: u16,
+    ) -> (rpc_common::ClientToken, Obj) {
+        let establish_message = mk_connection_establish_msg(
+            peer_addr.to_string(),
+            7777,
+            port,
+            Some(vec![moor_rpc::Symbol {
+                value: "text/plain".to_string(),
+            }]),
+            None,
+        );
+
+        let result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            client_id,
+            establish_message,
+        );
+
+        assert!(result.is_ok(), "Connection establishment should succeed");
+        match result.unwrap().reply {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
+                let obj = match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                };
+                (token, obj)
+            }
+            other => panic!("Expected NewConnection, got {other:?}"),
+        }
+    }
+
+    /// Helper: perform wizard login on an established connection
+    /// Returns the auth token for the wizard player.
+    fn login_wizard(
+        env: &TestEnvironment,
+        client_id: Uuid,
+        client_token: &rpc_common::ClientToken,
+    ) -> rpc_common::AuthToken {
+        // Step 1: Welcome message call (empty args, do_attach: false)
+        let welcome_message =
+            mk_login_command_msg(client_token, &SYSTEM_OBJECT, vec![], false, None, None);
+
+        let welcome_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            client_id,
+            welcome_message,
+        );
+
+        assert!(
+            welcome_result.is_ok(),
+            "Welcome message call should succeed: {welcome_result:?}"
+        );
+
+        // Wait for welcome events to be delivered
+        assert!(
+            env.transport.wait_for_narrative_events(1, 2000),
+            "Should receive welcome message events within 2 seconds"
+        );
+
+        // Step 2: Actual login as wizard
+        let login_message = mk_login_command_msg(
+            client_token,
+            &SYSTEM_OBJECT,
+            vec!["connect".to_string(), "wizard".to_string()],
+            true,
+            None,
+            None,
+        );
+
+        let login_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            client_id,
+            login_message,
+        );
+
+        assert!(
+            login_result.is_ok(),
+            "Wizard login should succeed: {login_result:?}"
+        );
+
+        // Wait for login task processing
+        let _ = env.transport.wait_for_condition(
+            |transport| {
+                let narrative_events = transport.get_narrative_events();
+                let client_events = transport.get_client_events();
+                !narrative_events.is_empty() || !client_events.is_empty()
+            },
+            5000,
+        );
+
+        // Extract auth token from login result
+        let client_replies = env.transport.get_client_replies();
+        successful_login_auth_token(&client_replies)
     }
 
     fn has_successful_login_result(
@@ -170,7 +394,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
     #[test]
     fn test_host_registration_message() {
-        let (message_handler, transport, _event_log, _scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let host_id = Uuid::new_v4();
         let listeners: Vec<moor_rpc::Listener> = Vec::new();
@@ -181,7 +405,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             listeners,
         );
 
-        let result = transport.process_host_message(message_handler.as_ref(), host_id, message);
+        let result =
+            env.transport
+                .process_host_message(env.message_handler.as_ref(), host_id, message);
 
         assert!(result.is_ok(), "Host registration should succeed");
         match result.unwrap().reply {
@@ -194,11 +420,10 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
     #[test]
     fn test_host_attach_detach_lifecycle() {
-        let (message_handler, transport, _event_log, _scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let host_id = Uuid::new_v4();
 
-        // Create some test listeners for the host
         let listener1_addr = "127.0.0.1:8080".parse::<SocketAddr>().unwrap();
         let listener2_addr = "127.0.0.1:8081".parse::<SocketAddr>().unwrap();
         let listeners = vec![
@@ -214,27 +439,24 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             listeners.clone(),
         );
 
-        let result =
-            transport.process_host_message(message_handler.as_ref(), host_id, register_message);
+        let result = env
+            .transport
+            .process_host_message(env.message_handler.as_ref(), host_id, register_message);
 
         assert!(result.is_ok(), "Host registration should succeed");
         match result.unwrap().reply {
-            moor_rpc::DaemonToHostReplyUnion::DaemonToHostAck(_) => {
-                // Expected response for registration
-            }
+            moor_rpc::DaemonToHostReplyUnion::DaemonToHostAck(_) => {}
             other => panic!("Expected Ack for registration, got {other:?}"),
         }
 
         // Step 2: Verify host is registered by checking listeners
-        // Access the hosts data structure through the message handler
-        let hosts_listeners = message_handler.get_listeners();
+        let hosts_listeners = env.message_handler.get_listeners();
         assert_eq!(
             hosts_listeners.len(),
             2,
             "Should have 2 listeners after registration"
         );
 
-        // Verify the specific listeners are present
         let listener_ports: Vec<u16> = hosts_listeners
             .iter()
             .map(|(_, _, port, _)| *port)
@@ -248,7 +470,6 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             "Should contain second listener port"
         );
 
-        // Verify the object IDs are correct
         let listener_objs: Vec<Obj> = hosts_listeners.iter().map(|(obj, _, _, _)| *obj).collect();
         assert!(
             listener_objs.contains(&Obj::mk_id(100)),
@@ -261,35 +482,32 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Step 3: Detach the host and verify reply
         let detach_message = mk_detach_host_msg(host_id);
-        let result =
-            transport.process_host_message(message_handler.as_ref(), host_id, detach_message);
+        let result = env
+            .transport
+            .process_host_message(env.message_handler.as_ref(), host_id, detach_message);
 
         assert!(result.is_ok(), "Host detach should succeed");
         match result.unwrap().reply {
-            moor_rpc::DaemonToHostReplyUnion::DaemonToHostAck(_) => {
-                // Expected response for detach
-            }
+            moor_rpc::DaemonToHostReplyUnion::DaemonToHostAck(_) => {}
             other => panic!("Expected Ack for detach, got {other:?}"),
         }
 
         // Step 3a: Verify reply was captured by mock transport
-        let last_host_reply = transport.get_last_host_reply();
+        let last_host_reply = env.transport.get_last_host_reply();
         assert!(
             last_host_reply.is_some(),
             "Should have captured a host reply"
         );
         match last_host_reply.unwrap() {
             Ok(reply) => match reply.reply {
-                moor_rpc::DaemonToHostReplyUnion::DaemonToHostAck(_) => {
-                    // Expected Ack reply captured correctly
-                }
+                moor_rpc::DaemonToHostReplyUnion::DaemonToHostAck(_) => {}
                 other => panic!("Transport captured wrong host reply: {other:?}"),
             },
             Err(e) => panic!("Transport captured error: {e:?}"),
         }
 
         // Step 4: Verify host is no longer registered (no listeners)
-        let hosts_listeners_after_detach = message_handler.get_listeners();
+        let hosts_listeners_after_detach = env.message_handler.get_listeners();
         assert_eq!(
             hosts_listeners_after_detach.len(),
             0,
@@ -299,7 +517,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
     #[test]
     fn test_host_detach_with_client_connections() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let host_id = Uuid::new_v4();
 
@@ -314,33 +532,18 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             listeners,
         );
 
-        let result =
-            transport.process_host_message(message_handler.as_ref(), host_id, register_message);
+        let result = env
+            .transport
+            .process_host_message(env.message_handler.as_ref(), host_id, register_message);
         assert!(result.is_ok(), "Host registration should succeed");
 
         // Step 2: Establish a client connection
         let client_id = Uuid::new_v4();
-        let connect_message = mk_connection_establish_msg(
-            "127.0.0.1:8080".to_string(),
-            7777,
-            8080,
-            Some(vec![moor_rpc::Symbol {
-                value: "text/plain".to_string(),
-            }]),
-            None,
-        );
-
-        let result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            connect_message,
-        );
-
-        assert!(result.is_ok(), "Connection establishment should succeed");
+        let (_client_token, _connection_obj) =
+            establish_connection(&env, client_id, "127.0.0.1:8080", 8080);
 
         // Verify connection is in the registry
-        let connections_before = message_handler.get_connections();
+        let connections_before = env.message_handler.get_connections();
         assert!(
             !connections_before.is_empty(),
             "Should have connections before detach"
@@ -348,14 +551,14 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Step 3: Detach the host
         let detach_message = mk_detach_host_msg(host_id);
-        let result =
-            transport.process_host_message(message_handler.as_ref(), host_id, detach_message);
+        let result = env
+            .transport
+            .process_host_message(env.message_handler.as_ref(), host_id, detach_message);
 
         assert!(result.is_ok(), "Host detach should succeed");
 
-        // Step 4: Verify host listeners are gone but connections might still exist
-        // (connections are usually cleaned up separately from host detach)
-        let hosts_listeners_after_detach = message_handler.get_listeners();
+        // Step 4: Verify host listeners are gone
+        let hosts_listeners_after_detach = env.message_handler.get_listeners();
         assert_eq!(
             hosts_listeners_after_detach.len(),
             0,
@@ -365,12 +568,14 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
     #[test]
     fn test_performance_counters_request() {
-        let (message_handler, transport, _event_log, _scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let host_id = Uuid::new_v4();
         let message = mk_request_performance_counters_msg();
 
-        let result = transport.process_host_message(message_handler.as_ref(), host_id, message);
+        let result =
+            env.transport
+                .process_host_message(env.message_handler.as_ref(), host_id, message);
 
         assert!(
             result.is_ok(),
@@ -382,8 +587,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                     !perf.counters.is_empty(),
                     "Should have performance counters"
                 );
-                // Verify timestamp is recent
-                use std::time::{Duration, SystemTime};
+                use std::time::Duration;
                 let now = SystemTime::now();
                 let timestamp_nanos = Duration::from_nanos(perf.timestamp);
                 let timestamp = UNIX_EPOCH + timestamp_nanos;
@@ -396,53 +600,27 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
     #[test]
     fn test_connection_establishment_lifecycle() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let client_id = Uuid::new_v4();
 
         // Step 1: Verify no connections initially
-        let connections_before = message_handler.get_connections();
+        let connections_before = env.message_handler.get_connections();
         let initial_count = connections_before.len();
 
         // Step 2: Establish connection
-        let establish_message = mk_connection_establish_msg(
-            "127.0.0.1:8080".to_string(),
-            7777,
-            8080,
-            Some(vec![moor_rpc::Symbol {
-                value: "text/plain".to_string(),
-            }]),
-            None,
-        );
+        let (client_token, connection_obj) =
+            establish_connection(&env, client_id, "127.0.0.1:8080", 8080);
 
-        let result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            establish_message,
+        assert!(!client_token.0.is_empty(), "Should receive a client token");
+        assert!(
+            connection_obj.id().0 != 0,
+            "Should receive a valid connection object (got ID: {})",
+            connection_obj.id().0
         );
-
-        assert!(result.is_ok(), "Connection establishment should succeed");
-        let (client_token, connection_obj) = match result.unwrap().reply {
-            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
-                let obj = match &new_conn.connection_obj.obj {
-                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                    _ => panic!("Unexpected obj variant"),
-                };
-                assert!(!token.0.is_empty(), "Should receive a client token");
-                assert!(
-                    obj.id().0 != 0,
-                    "Should receive a valid connection object (got ID: {})",
-                    obj.id().0
-                );
-                (token, obj)
-            }
-            other => panic!("Expected NewConnection, got {other:?}"),
-        };
 
         // Step 3: Verify connection is tracked in database
-        let connections_after_establish = message_handler.get_connections();
+        let connections_after_establish = env.message_handler.get_connections();
         assert_eq!(
             connections_after_establish.len(),
             initial_count + 1,
@@ -462,9 +640,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             "127.0.0.1:8080".to_string(),
         );
 
-        let ping_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
+        let ping_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
             client_id,
             ping_message,
         );
@@ -474,34 +652,29 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Step 5: Test detachment and verify reply
         let detach_message = mk_detach_msg(&client_token, true);
 
-        let detach_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
+        let detach_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
             client_id,
             detach_message,
         );
 
         assert!(detach_result.is_ok(), "Client detach should succeed");
 
-        // Step 5a: Verify the correct reply was sent
         match detach_result.unwrap().reply {
-            moor_rpc::DaemonToClientReplyUnion::Disconnected(_) => {
-                // This is the expected reply for detach
-            }
+            moor_rpc::DaemonToClientReplyUnion::Disconnected(_) => {}
             other => panic!("Expected Disconnected reply, got {other:?}"),
         }
 
-        // Step 5b: Verify reply was captured by mock transport
-        let last_client_reply = transport.get_last_client_reply();
+        // Verify reply was captured by mock transport
+        let last_client_reply = env.transport.get_last_client_reply();
         assert!(
             last_client_reply.is_some(),
             "Should have captured a client reply"
         );
         match last_client_reply.unwrap() {
             Ok(reply) => match reply.reply {
-                moor_rpc::DaemonToClientReplyUnion::Disconnected(_) => {
-                    // Expected reply captured correctly
-                }
+                moor_rpc::DaemonToClientReplyUnion::Disconnected(_) => {}
                 other => panic!("Transport captured wrong reply: {other:?}"),
             },
             Err(e) => panic!("Transport captured error: {e:?}"),
@@ -510,81 +683,21 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
     #[test]
     fn test_multiple_client_connections() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let client_id_1 = Uuid::new_v4();
         let client_id_2 = Uuid::new_v4();
 
         // Establish first connection
-        let establish_message_1 = mk_connection_establish_msg(
-            "127.0.0.1:8080".to_string(),
-            7777,
-            8080,
-            Some(vec![moor_rpc::Symbol {
-                value: "text/plain".to_string(),
-            }]),
-            None,
-        );
-
-        let result_1 = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id_1,
-            establish_message_1,
-        );
-
-        assert!(
-            result_1.is_ok(),
-            "First connection establishment should succeed"
-        );
-        let (_token_1, connection_obj_1) = match result_1.unwrap().reply {
-            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
-                let obj = match &new_conn.connection_obj.obj {
-                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                    _ => panic!("Unexpected obj variant"),
-                };
-                (token, obj)
-            }
-            other => panic!("Expected NewConnection, got {other:?}"),
-        };
+        let (_token_1, connection_obj_1) =
+            establish_connection(&env, client_id_1, "127.0.0.1:8080", 8080);
 
         // Establish second connection
-        let establish_message_2 = mk_connection_establish_msg(
-            "127.0.0.1:8081".to_string(),
-            7777,
-            8081,
-            Some(vec![moor_rpc::Symbol {
-                value: "text/html".to_string(),
-            }]),
-            None,
-        );
-
-        let result_2 = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id_2,
-            establish_message_2,
-        );
-
-        assert!(
-            result_2.is_ok(),
-            "Second connection establishment should succeed"
-        );
-        let (token_2, connection_obj_2) = match result_2.unwrap().reply {
-            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
-                let obj = match &new_conn.connection_obj.obj {
-                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                    _ => panic!("Unexpected obj variant"),
-                };
-                (token, obj)
-            }
-            other => panic!("Expected NewConnection, got {other:?}"),
-        };
+        let (token_2, connection_obj_2) =
+            establish_connection(&env, client_id_2, "127.0.0.1:8081", 8081);
 
         // Verify both connections exist and are different
-        let connections = message_handler.get_connections();
+        let connections = env.message_handler.get_connections();
         assert_eq!(connections.len(), 2, "Should have 2 connections");
         assert!(
             connections.contains(&connection_obj_1),
@@ -599,20 +712,20 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             "Connection objects should be different"
         );
 
-        // Detach first connection
-        let detach_message_1 = mk_detach_msg(&token_2, true);
+        // Detach second connection
+        let detach_message_2 = mk_detach_msg(&token_2, true);
 
-        let detach_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
+        let detach_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
             client_id_2,
-            detach_message_1,
+            detach_message_2,
         );
 
         assert!(detach_result.is_ok(), "Second client detach should succeed");
 
         // Verify only one connection remains
-        let connections_after_one_detach = message_handler.get_connections();
+        let connections_after_one_detach = env.message_handler.get_connections();
         assert_eq!(
             connections_after_one_detach.len(),
             1,
@@ -630,7 +743,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
     #[test]
     fn test_message_reply_flows() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let host_id = Uuid::new_v4();
         let client_id = Uuid::new_v4();
@@ -646,8 +759,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             )],
         );
 
-        let register_result =
-            transport.process_host_message(message_handler.as_ref(), host_id, register_message);
+        let register_result = env
+            .transport
+            .process_host_message(env.message_handler.as_ref(), host_id, register_message);
 
         assert!(register_result.is_ok(), "Host registration should succeed");
         assert!(matches!(
@@ -656,7 +770,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         ));
 
         // Verify captured reply
-        let host_replies = transport.get_host_replies();
+        let host_replies = env.transport.get_host_replies();
         assert_eq!(host_replies.len(), 1, "Should have captured 1 host reply");
         let (_, _, reply) = &host_replies[0];
         assert!(
@@ -666,8 +780,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Test 2: Performance counters request should reply with PerfCounters
         let perf_message = mk_request_performance_counters_msg();
 
-        let perf_result =
-            transport.process_host_message(message_handler.as_ref(), host_id, perf_message);
+        let perf_result = env
+            .transport
+            .process_host_message(env.message_handler.as_ref(), host_id, perf_message);
 
         assert!(
             perf_result.is_ok(),
@@ -684,43 +799,11 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         }
 
         // Test 3: Client connection establishment should reply with NewConnection
-        let establish_message = mk_connection_establish_msg(
-            "127.0.0.1:8080".to_string(),
-            7777,
-            8080,
-            Some(vec![moor_rpc::Symbol {
-                value: "text/plain".to_string(),
-            }]),
-            None,
-        );
-
-        let establish_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            establish_message,
-        );
-
-        assert!(
-            establish_result.is_ok(),
-            "Connection establishment should succeed"
-        );
-        let (client_token, connection_obj) = match establish_result.unwrap().reply {
-            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
-
-                let obj = match &new_conn.connection_obj.obj {
-                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                    _ => panic!("Unexpected obj variant"),
-                };
-
-                (token, obj)
-            }
-            other => panic!("Expected NewConnection reply, got {other:?}"),
-        };
+        let (client_token, connection_obj) =
+            establish_connection(&env, client_id, "127.0.0.1:8080", 8080);
 
         // Verify captured client reply
-        let client_replies = transport.get_client_replies();
+        let client_replies = env.transport.get_client_replies();
         assert_eq!(
             client_replies.len(),
             1,
@@ -736,7 +819,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             Ok(r) if matches!(r.reply, moor_rpc::DaemonToClientReplyUnion::NewConnection(_))
         ));
 
-        // Test 4: Client ping should reply with Ack (or similar)
+        // Test 4: Client ping should reply with ThanksPong
         let ping_message = mk_client_pong_msg(
             &client_token,
             systemtime_to_nanos(SystemTime::now()),
@@ -745,9 +828,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             "127.0.0.1:8080".to_string(),
         );
 
-        let ping_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
+        let ping_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
             client_id,
             ping_message,
         );
@@ -757,9 +840,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Test 5: Client detach should reply with Disconnected
         let detach_message = mk_detach_msg(&client_token, true);
 
-        let detach_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
+        let detach_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
             client_id,
             detach_message,
         );
@@ -771,7 +854,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         ));
 
         // Verify all client replies were captured correctly
-        let final_client_replies = transport.get_client_replies();
+        let final_client_replies = env.transport.get_client_replies();
         assert_eq!(
             final_client_replies.len(),
             3,
@@ -794,11 +877,11 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
     #[test]
     fn test_error_reply_flows() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let client_id = Uuid::new_v4();
 
-        // Test 1: Invalid client token should generate error reply
+        // Test: Invalid client token should generate error reply
         let invalid_token = rpc_common::ClientToken("invalid_token".to_string());
         let invalid_ping_message = mk_client_pong_msg(
             &invalid_token,
@@ -808,9 +891,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             "127.0.0.1:8080".to_string(),
         );
 
-        let invalid_ping_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
+        let invalid_ping_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
             client_id,
             invalid_ping_message,
         );
@@ -822,7 +905,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Verify the error was captured
-        let client_replies = transport.get_client_replies();
+        let client_replies = env.transport.get_client_replies();
         assert_eq!(
             client_replies.len(),
             1,
@@ -831,16 +914,14 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let (_, _, reply) = &client_replies[0];
         assert!(reply.is_err(), "Captured reply should be an error");
         match reply {
-            Err(rpc_common::RpcMessageError::NoConnection) => {
-                // Expected error for invalid token
-            }
+            Err(rpc_common::RpcMessageError::NoConnection) => {}
             other => panic!("Expected NoConnection error, got {other:?}"),
         }
     }
 
     #[test]
     fn test_client_pong_without_valid_token() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let client_id = Uuid::new_v4();
         let invalid_token = rpc_common::ClientToken("invalid_token".to_string());
@@ -852,9 +933,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             "127.0.0.1:8080".to_string(),
         );
 
-        let result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
+        let result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
             client_id,
             message,
         );
@@ -864,16 +945,14 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             "Client pong with invalid token should fail"
         );
         match result.unwrap_err() {
-            rpc_common::RpcMessageError::NoConnection => {
-                // Expected error - no connection for this client
-            }
+            rpc_common::RpcMessageError::NoConnection => {}
             other => panic!("Expected NoConnection error, got {other:?}"),
         }
     }
 
     #[test]
     fn test_event_log_integration() {
-        let (_message_handler, _transport, event_log, _scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let player = Obj::mk_id(42);
         let test_event = Box::new(moor_common::tasks::NarrativeEvent {
@@ -895,16 +974,14 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let logged_event = logged_narrative_event_to_flatbuffer(player, test_event, pubkey)
             .unwrap()
             .0;
-        let event_id = event_log.append(logged_event, None);
+        let event_id = env.event_log.append(logged_event, None);
         assert!(!event_id.is_nil(), "Should return valid event ID");
 
         // Test event retrieval
-        let events = event_log.events_for_player_since(player, None);
+        let events = env.event_log.events_for_player_since(player, None);
         assert_eq!(events.len(), 1, "Should have one event");
-        // Events are now FlatBuffer types, so convert for comparison
         let event_player = obj_from_flatbuffer_struct(&events[0].player).unwrap();
         assert_eq!(event_player, player, "Event should be for correct player");
-        // event_id is now a field, not a method, and is a FlatBuffer UUID
         let event_uuid_bytes = events[0].event_id.data.as_slice();
         let mut uuid_bytes = [0u8; 16];
         uuid_bytes.copy_from_slice(event_uuid_bytes);
@@ -914,7 +991,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
     #[test]
     fn test_presentation_management() {
-        let (_message_handler, _transport, event_log, _scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let player = Obj::mk_id(42);
         let presentation = moor_common::tasks::Presentation {
@@ -938,10 +1015,10 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let pubkey = identity.to_public().to_string();
         let (logged_event, presentation_action) =
             logged_narrative_event_to_flatbuffer(player, present_event, pubkey).unwrap();
-        event_log.append(logged_event, presentation_action);
+        env.event_log.append(logged_event, presentation_action);
 
-        // Check current presentations - stored content is encrypted/serialized bytes.
-        let presentations = event_log.current_presentations(player);
+        // Check current presentations
+        let presentations = env.event_log.current_presentations(player);
         assert_eq!(presentations.len(), 1, "Should have one presentation");
         let test_widget = presentations.iter().find(|p| p.id == "test_widget");
         assert!(test_widget.is_some(), "Should contain test widget");
@@ -953,8 +1030,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         assert_eq!(presentation_ref.content().unwrap(), "Hello World");
 
         // Test presentation dismissal
-        event_log.dismiss_presentation(player, "test_widget".to_string());
-        let presentations = event_log.current_presentations(player);
+        env.event_log
+            .dismiss_presentation(player, "test_widget".to_string());
+        let presentations = env.event_log.current_presentations(player);
         assert!(
             presentations.is_empty(),
             "Should have no presentations after dismissal"
@@ -963,38 +1041,16 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
     #[test]
     fn test_narrative_event_propagation() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         // Step 1: Set up a client connection to receive narrative events
         let client_id = Uuid::new_v4();
-        let establish_message =
-            mk_connection_establish_msg("127.0.0.1:12345".to_string(), 7777, 12345, None, None);
-
-        let establish_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            establish_message,
-        );
-
-        let (_client_token, connection_obj) = match establish_result.unwrap().reply {
-            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
-
-                let obj = match &new_conn.connection_obj.obj {
-                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                    _ => panic!("Unexpected obj variant"),
-                };
-
-                (token, obj)
-            }
-            other => panic!("Expected NewConnection, got {other:?}"),
-        };
+        let (_client_token, connection_obj) =
+            establish_connection(&env, client_id, "127.0.0.1:12345", 12345);
 
         // Step 2: Simulate narrative events being sent to the client
         use moor_common::tasks::NarrativeEvent;
 
-        // Create various types of narrative events
         let narrative_events = vec![
             NarrativeEvent::notify(
                 moor_var::v_obj(SYSTEM_OBJECT),
@@ -1024,18 +1080,18 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Manually send narrative events through the transport
         for event in &narrative_events {
-            transport.send_narrative_event(connection_obj, event.clone());
+            env.transport
+                .send_narrative_event(connection_obj, event.clone());
         }
 
         // Step 3: Verify events were captured
-        let captured_narrative_events = transport.get_narrative_events();
+        let captured_narrative_events = env.transport.get_narrative_events();
         assert_eq!(
             captured_narrative_events.len(),
             narrative_events.len(),
             "Should have captured all narrative events"
         );
 
-        // Verify events are for the correct object
         for (obj, _event) in &captured_narrative_events {
             assert_eq!(
                 *obj, connection_obj,
@@ -1043,7 +1099,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             );
         }
 
-        // Step 4: Test client event capture (like system messages, disconnect, etc.)
+        // Step 4: Test client event capture
         let system_message_event = moor_rpc::ClientEvent {
             event: moor_rpc::ClientEventUnion::SystemMessageEvent(Box::new(
                 moor_rpc::SystemMessageEvent {
@@ -1058,17 +1114,18 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             )),
         };
 
-        transport.capture_client_event(client_id, system_message_event);
-        transport.capture_client_event(client_id, disconnect_event);
+        env.transport
+            .capture_client_event(client_id, system_message_event);
+        env.transport
+            .capture_client_event(client_id, disconnect_event);
 
-        let captured_client_events = transport.get_client_events();
+        let captured_client_events = env.transport.get_client_events();
         assert_eq!(
             captured_client_events.len(),
             2,
             "Should have captured 2 client events"
         );
 
-        // Verify client events are for the correct client
         for (captured_client_id, _event) in &captured_client_events {
             assert_eq!(
                 *captured_client_id, client_id,
@@ -1096,10 +1153,10 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             )),
         };
 
-        transport.send_host_event(listen_event.clone());
-        transport.send_host_event(unlisten_event);
+        env.transport.send_host_event(listen_event.clone());
+        env.transport.send_host_event(unlisten_event);
 
-        let captured_host_events = transport.get_host_events();
+        let captured_host_events = env.transport.get_host_events();
         assert_eq!(
             captured_host_events.len(),
             2,
@@ -1115,9 +1172,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             )),
         };
 
-        transport.send_client_broadcast_event(ping_pong_event);
+        env.transport.send_client_broadcast_event(ping_pong_event);
 
-        let captured_client_broadcast_events = transport.get_client_broadcast_events();
+        let captured_client_broadcast_events = env.transport.get_client_broadcast_events();
         assert_eq!(
             captured_client_broadcast_events.len(),
             1,
@@ -1126,324 +1183,105 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Step 7: Verify all counting methods work correctly
         assert!(
-            transport.has_narrative_events(),
+            env.transport.has_narrative_events(),
             "Should have narrative events"
         );
-        assert!(transport.has_client_events(), "Should have client events");
-        assert!(transport.has_host_events(), "Should have host events");
         assert!(
-            transport.has_client_broadcast_events(),
+            env.transport.has_client_events(),
+            "Should have client events"
+        );
+        assert!(env.transport.has_host_events(), "Should have host events");
+        assert!(
+            env.transport.has_client_broadcast_events(),
             "Should have client broadcast events"
         );
 
-        assert_eq!(transport.narrative_event_count(), narrative_events.len());
-        assert_eq!(transport.client_event_count(), 2);
-        assert_eq!(transport.host_event_count(), 2);
-        assert_eq!(transport.client_broadcast_event_count(), 1);
+        assert_eq!(
+            env.transport.narrative_event_count(),
+            narrative_events.len()
+        );
+        assert_eq!(env.transport.client_event_count(), 2);
+        assert_eq!(env.transport.host_event_count(), 2);
+        assert_eq!(env.transport.client_broadcast_event_count(), 1);
 
         // Step 8: Test event clearing
-        transport.clear_events();
+        env.transport.clear_events();
         assert!(
-            !transport.has_narrative_events(),
+            !env.transport.has_narrative_events(),
             "Events should be cleared"
         );
-        assert!(!transport.has_client_events(), "Events should be cleared");
-        assert!(!transport.has_host_events(), "Events should be cleared");
         assert!(
-            !transport.has_client_broadcast_events(),
+            !env.transport.has_client_events(),
+            "Events should be cleared"
+        );
+        assert!(
+            !env.transport.has_host_events(),
+            "Events should be cleared"
+        );
+        assert!(
+            !env.transport.has_client_broadcast_events(),
             "Events should be cleared"
         );
     }
 
     #[test]
     fn test_login_command_flow() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let client_id = Uuid::new_v4();
 
         // Step 1: Establish connection
-        let establish_message = mk_connection_establish_msg(
-            "127.0.0.1:8080".to_string(),
-            7777,
-            8080,
-            Some(vec![moor_rpc::Symbol {
-                value: "text/plain".to_string(),
-            }]),
-            None,
-        );
+        let (client_token, _connection_obj) =
+            establish_connection(&env, client_id, "127.0.0.1:8080", 8080);
 
-        let establish_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            establish_message,
-        );
+        // Step 2: Login as wizard (uses real JHCore "connect wizard")
+        let _auth_token = login_wizard(&env, client_id, &client_token);
 
-        assert!(
-            establish_result.is_ok(),
-            "Connection establishment should succeed"
-        );
-        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
-            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
-
-                let obj = match &new_conn.connection_obj.obj {
-                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                    _ => panic!("Unexpected obj variant"),
-                };
-
-                (token, obj)
-            }
-            other => panic!("Expected NewConnection, got {other:?}"),
-        };
-
-        // Step 2: Attempt login command
-        let login_message = mk_login_command_msg(
-            &client_token,
-            &SYSTEM_OBJECT,
-            vec!["create".to_string(), "TestPlayer".to_string()],
-            true,
-            None,
-            None,
-        );
-
-        let login_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            login_message,
-        );
-
-        // With NormalOperation scenario, login should succeed
-        assert!(
-            login_result.is_ok(),
-            "Login should succeed with NormalOperation scenario: {login_result:?}"
-        );
-
-        // Verify the reply was captured
-        let client_replies = transport.get_client_replies();
-        assert_eq!(
-            client_replies.len(),
-            2,
-            "Should have captured 2 client replies"
-        );
-
+        // Verify the reply was captured and login was successful
+        let client_replies = env.transport.get_client_replies();
         assert!(
             has_successful_login_result(&client_replies),
-            "Should have successful LoginResult with NormalOperation scenario: {client_replies:?}"
-        );
-    }
-
-    #[test]
-    fn test_login_failure_scenario() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
-
-        // Configure scheduler for login failures
-        scheduler.set_scenario(moor_kernel::testing::MockScenario::LoginFailures);
-
-        let client_id = Uuid::new_v4();
-
-        // Step 1: Establish connection
-        let establish_message =
-            mk_connection_establish_msg("127.0.0.1:12345".to_string(), 7777, 12345, None, None);
-
-        let establish_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            establish_message,
-        );
-
-        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
-            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
-
-                let obj = match &new_conn.connection_obj.obj {
-                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                    _ => panic!("Unexpected obj variant"),
-                };
-
-                (token, obj)
-            }
-            other => panic!("Expected NewConnection, got {other:?}"),
-        };
-
-        // Step 2: Attempt login command - should fail due to LoginFailures scenario
-        let login_message = mk_login_command_msg(
-            &client_token,
-            &SYSTEM_OBJECT,
-            vec!["connect".to_string(), "TestPlayer".to_string()],
-            true,
-            None,
-            None,
-        );
-
-        let login_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            login_message,
-        );
-
-        // With LoginFailures scenario (20% success rate), login should mostly fail
-        let login_failed = match &login_result {
-            Ok(reply) => {
-                if let moor_rpc::DaemonToClientReplyUnion::LoginResult(lr) = &reply.reply {
-                    !lr.success // Failed login
-                } else {
-                    false
-                }
-            }
-            Err(rpc_common::RpcMessageError::LoginTaskFailed(_)) => true,
-            _ => false,
-        };
-        // Note: Due to 20% success rate, we might occasionally get success, but failure is expected
-        if !login_failed && login_result.is_err() {
-            panic!("Unexpected login result with LoginFailures scenario: {login_result:?}");
-        }
-
-        // Verify scheduler scenario is working as expected
-        assert_eq!(
-            scheduler.get_current_scenario(),
-            moor_kernel::testing::MockScenario::LoginFailures,
-            "Scheduler should be in LoginFailures scenario"
+            "Should have successful LoginResult: {client_replies:?}"
         );
     }
 
     #[test]
     fn test_system_property_request() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let client_id = Uuid::new_v4();
 
-        // Step 1: Establish connection
-        let establish_message = mk_connection_establish_msg(
-            "127.0.0.1:8080".to_string(),
-            7777,
-            8080,
-            Some(vec![moor_rpc::Symbol {
-                value: "text/plain".to_string(),
-            }]),
-            None,
-        );
+        // Establish connection and login to get a real auth token
+        let (client_token, _connection_obj) =
+            establish_connection(&env, client_id, "127.0.0.1:8080", 8080);
+        let auth_token = login_wizard(&env, client_id, &client_token);
 
-        let establish_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            establish_message,
-        );
-
-        let (_, _connection_obj) = match establish_result.unwrap().reply {
-            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
-
-                let obj = match &new_conn.connection_obj.obj {
-                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                    _ => panic!("Unexpected obj variant"),
-                };
-
-                (token, obj)
-            }
-            other => panic!("Expected NewConnection, got {other:?}"),
-        };
-
-        // Step 2: Request a system property
-        let auth_token = message_handler.make_auth_token(&SYSTEM_OBJECT);
+        // Request a system property
         let sysprop_message = mk_request_sys_prop_msg(
             Some(&auth_token),
             &moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
             &moor_var::Symbol::mk("name"),
         );
 
-        let sysprop_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
+        let sysprop_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
             client_id,
             sysprop_message,
         );
 
-        // With NormalOperation scenario, property request should succeed
         assert!(
             sysprop_result.is_ok(),
-            "System property request should succeed with NormalOperation scenario: {sysprop_result:?}"
-        );
-    }
-
-    #[test]
-    fn test_system_property_database_issues() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
-
-        // Configure scheduler for database issues that affect property lookups
-        scheduler.set_scenario(moor_kernel::testing::MockScenario::DatabaseIssues);
-
-        let client_id = Uuid::new_v4();
-
-        // Establish connection first
-        let establish_message =
-            mk_connection_establish_msg("127.0.0.1:12345".to_string(), 7777, 12345, None, None);
-
-        let establish_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            establish_message,
-        );
-
-        let (_, _connection_obj) = match establish_result.unwrap().reply {
-            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
-
-                let obj = match &new_conn.connection_obj.obj {
-                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                    _ => panic!("Unexpected obj variant"),
-                };
-
-                (token, obj)
-            }
-            other => panic!("Expected NewConnection, got {other:?}"),
-        };
-
-        // Request a system property - should fail due to DatabaseIssues scenario
-        let auth_token = message_handler.make_auth_token(&SYSTEM_OBJECT);
-        let sysprop_message = mk_request_sys_prop_msg(
-            Some(&auth_token),
-            &moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
-            &moor_var::Symbol::mk("welcome_message"),
-        );
-
-        let sysprop_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            sysprop_message,
-        );
-
-        // With DatabaseIssues scenario, property requests have 40% success rate
-        // Accept either success or property lookup failure
-        let is_valid_result = matches!(
-            &sysprop_result,
-            Ok(_) | Err(rpc_common::RpcMessageError::ErrorCouldNotRetrieveSysProp(_))
-        );
-        assert!(
-            is_valid_result,
-            "Property request should succeed or fail with property error in DatabaseIssues scenario: {sysprop_result:?}"
-        );
-
-        // Verify scenario is set correctly
-        assert_eq!(
-            scheduler.get_current_scenario(),
-            moor_kernel::testing::MockScenario::DatabaseIssues,
-            "Scheduler should be in DatabaseIssues scenario"
+            "System property request should succeed: {sysprop_result:?}"
         );
     }
 
     #[test]
     fn test_broadcast_listen_unlisten() {
-        let (message_handler, _transport, _event_log, _scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         // Test broadcast_listen
-        let listen_result = message_handler.broadcast_listen(
+        let listen_result = env.message_handler.broadcast_listen(
             Obj::mk_id(100),
             rpc_common::HostType::WebSocket,
             8080,
@@ -1454,14 +1292,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Test broadcast_unlisten
         let unlisten_result =
-            message_handler.broadcast_unlisten(rpc_common::HostType::WebSocket, 8080);
+            env.message_handler
+                .broadcast_unlisten(rpc_common::HostType::WebSocket, 8080);
 
         assert!(unlisten_result.is_ok(), "Broadcast unlisten should succeed");
     }
 
     #[test]
     fn test_ping_pong_protocol() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         // Step 1: Register a host first
         let host_id = Uuid::new_v4();
@@ -1476,8 +1315,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             listeners.clone(),
         );
 
-        let register_result =
-            transport.process_host_message(message_handler.as_ref(), host_id, register_message);
+        let register_result = env
+            .transport
+            .process_host_message(env.message_handler.as_ref(), host_id, register_message);
         assert!(register_result.is_ok(), "Host registration should succeed");
 
         // Step 2: Send a HostPong message (response to daemon's ping)
@@ -1489,42 +1329,20 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             listeners,
         );
 
-        let pong_result =
-            transport.process_host_message(message_handler.as_ref(), host_id, pong_message);
+        let pong_result = env
+            .transport
+            .process_host_message(env.message_handler.as_ref(), host_id, pong_message);
 
-        // With NormalOperation scenario, pong should be acknowledged
         assert!(
             matches!(&pong_result, Ok(reply) if matches!(reply.reply, moor_rpc::DaemonToHostReplyUnion::DaemonToHostAck(_))),
-            "Host pong should be acknowledged with NormalOperation scenario: {pong_result:?}"
+            "Host pong should be acknowledged: {pong_result:?}"
         );
 
         // Step 3: Test client ping-pong cycle
         let client_id = Uuid::new_v4();
 
-        // Establish client connection first
-        let establish_message =
-            mk_connection_establish_msg("127.0.0.1:12345".to_string(), 7777, 12345, None, None);
-
-        let establish_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            establish_message,
-        );
-
-        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
-            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
-
-                let obj = match &new_conn.connection_obj.obj {
-                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                    _ => panic!("Unexpected obj variant"),
-                };
-
-                (token, obj)
-            }
-            other => panic!("Expected NewConnection, got {other:?}"),
-        };
+        let (client_token, _connection_obj) =
+            establish_connection(&env, client_id, "127.0.0.1:12345", 12345);
 
         // Send ClientPong message
         let client_pong_time = SystemTime::now();
@@ -1536,14 +1354,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             "127.0.0.1:12345".to_string(),
         );
 
-        let client_pong_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
+        let client_pong_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
             client_id,
             client_pong_message,
         );
 
-        // With NormalOperation scenario and established connection, pong should succeed
         assert!(
             matches!(
                 &client_pong_result,
@@ -1553,13 +1370,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Step 4: Verify replies were captured correctly
-        let host_replies = transport.get_host_replies();
+        let host_replies = env.transport.get_host_replies();
         assert!(
             host_replies.len() >= 2,
             "Should have captured at least 2 host replies"
         );
 
-        let client_replies = transport.get_client_replies();
+        let client_replies = env.transport.get_client_replies();
         assert!(
             client_replies.len() >= 2,
             "Should have captured at least 2 client replies"
@@ -1599,113 +1416,67 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
     #[test]
     fn test_client_token_validation() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let client_id = Uuid::new_v4();
 
-        // Test client token validation with a real token
-        let establish_message = mk_connection_establish_msg(
+        // Establish a real connection to get a valid token
+        let (client_token, connection_obj) =
+            establish_connection(&env, client_id, "127.0.0.1:8080", 8080);
+
+        // Test valid client token by sending a ping (which requires a valid token)
+        let ping_message = mk_client_pong_msg(
+            &client_token,
+            systemtime_to_nanos(SystemTime::now()),
+            &connection_obj,
+            moor_rpc::HostType::WebSocket,
             "127.0.0.1:8080".to_string(),
-            7777,
-            8080,
-            Some(vec![moor_rpc::Symbol {
-                value: "text/plain".to_string(),
-            }]),
-            None,
         );
 
-        let establish_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
+        let ping_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
             client_id,
-            establish_message,
+            ping_message,
+        );
+        assert!(
+            ping_result.is_ok(),
+            "Valid client token should work for ping"
         );
 
-        if let Ok(reply) = establish_result
-            && let moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) = reply.reply
-        {
-            let client_token = rpc_common::ClientToken(new_conn.client_token.token.clone());
-            let client_validation =
-                message_handler.validate_client_token_impl(client_token, client_id);
-            assert!(
-                client_validation.is_ok(),
-                "Valid client token should validate successfully"
-            );
-        }
-
-        // Test invalid client token
+        // Test invalid client token by sending a ping with bad token
         let invalid_token = rpc_common::ClientToken("invalid".to_string());
-        let invalid_validation =
-            message_handler.validate_client_token_impl(invalid_token, client_id);
+        let invalid_ping_message = mk_client_pong_msg(
+            &invalid_token,
+            systemtime_to_nanos(SystemTime::now()),
+            &connection_obj,
+            moor_rpc::HostType::WebSocket,
+            "127.0.0.1:8080".to_string(),
+        );
+
+        let invalid_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            client_id,
+            invalid_ping_message,
+        );
         assert!(
-            invalid_validation.is_err(),
-            "Invalid client token should fail validation"
+            invalid_result.is_err(),
+            "Invalid client token should fail"
         );
     }
 
     #[test]
     fn test_verb_and_property_introspection() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let client_id = Uuid::new_v4();
 
-        // Setup: Establish connection and login
-        let establish_message = mk_connection_establish_msg(
-            "127.0.0.1:8080".to_string(),
-            7777,
-            8080,
-            Some(vec![moor_rpc::Symbol {
-                value: "text/plain".to_string(),
-            }]),
-            None,
-        );
+        // Setup: Establish connection and login as wizard
+        let (client_token, _connection_obj) =
+            establish_connection(&env, client_id, "127.0.0.1:8080", 8080);
 
-        let establish_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            establish_message,
-        );
-
-        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
-            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
-
-                let obj = match &new_conn.connection_obj.obj {
-                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                    _ => panic!("Unexpected obj variant"),
-                };
-
-                (token, obj)
-            }
-            other => panic!("Expected NewConnection, got {other:?}"),
-        };
-
-        // Step 2: Perform login to get auth token
-        let login_message = mk_login_command_msg(
-            &client_token,
-            &SYSTEM_OBJECT,
-            vec!["create".to_string(), "TestPlayer".to_string()],
-            true,
-            None,
-            None,
-        );
-
-        let login_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            login_message,
-        );
-
-        assert!(
-            login_result.is_ok(),
-            "Login should succeed for authenticated operations: {login_result:?}"
-        );
-
-        // Extract auth token from login result
-        let client_replies = transport.get_client_replies();
-        let auth_token = successful_login_auth_token(&client_replies);
+        let auth_token = login_wizard(&env, client_id, &client_token);
 
         // Test verb introspection
         let verbs_message = mk_verbs_msg(
@@ -1714,14 +1485,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             false,
         );
 
-        let verbs_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
+        let verbs_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
             client_id,
             verbs_message,
         );
 
-        // With NormalOperation scenario, verbs request should succeed or fail gracefully
         let verbs_processed = matches!(
             verbs_result,
             Ok(_) | Err(rpc_common::RpcMessageError::EntityRetrievalError(_))
@@ -1738,14 +1508,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             false,
         );
 
-        let props_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
+        let props_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
             client_id,
             props_message,
         );
 
-        // With NormalOperation scenario, properties request should succeed or fail gracefully
         let props_processed = matches!(
             props_result,
             Ok(_) | Err(rpc_common::RpcMessageError::EntityRetrievalError(_))
@@ -1758,67 +1527,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
     #[test]
     fn test_command_execution() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         let client_id = Uuid::new_v4();
 
-        // Setup: Establish connection
-        let establish_message = mk_connection_establish_msg(
-            "127.0.0.1:8080".to_string(),
-            7777,
-            8080,
-            Some(vec![moor_rpc::Symbol {
-                value: "text/plain".to_string(),
-            }]),
-            None,
-        );
+        // Setup: Establish connection and login as wizard
+        let (client_token, _connection_obj) =
+            establish_connection(&env, client_id, "127.0.0.1:8080", 8080);
 
-        let establish_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            establish_message,
-        );
-
-        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
-            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
-
-                let obj = match &new_conn.connection_obj.obj {
-                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                    _ => panic!("Unexpected obj variant"),
-                };
-
-                (token, obj)
-            }
-            other => panic!("Expected NewConnection, got {other:?}"),
-        };
-
-        // Step 2: Perform login to get auth token
-        let login_message = mk_login_command_msg(
-            &client_token,
-            &SYSTEM_OBJECT,
-            vec!["create".to_string(), "TestPlayer".to_string()],
-            true,
-            None,
-            None,
-        );
-
-        let login_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            login_message,
-        );
-
-        assert!(
-            login_result.is_ok(),
-            "Login should succeed for authenticated operations: {login_result:?}"
-        );
-
-        // Extract auth token from login result
-        let client_replies = transport.get_client_replies();
-        let auth_token = successful_login_auth_token(&client_replies);
+        let auth_token = login_wizard(&env, client_id, &client_token);
 
         // Test command execution
         let command_message = mk_command_msg(
@@ -1828,84 +1545,37 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             "look".to_string(),
         );
 
-        let command_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
+        let command_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
             client_id,
             command_message,
         );
 
-        // With NormalOperation scenario, command should be submitted successfully
         assert!(
             matches!(
                 &command_result,
                 Ok(reply) if matches!(reply.reply, moor_rpc::DaemonToClientReplyUnion::TaskSubmitted(_))
             ),
-            "Command should be submitted successfully with NormalOperation scenario: {command_result:?}"
+            "Command should be submitted successfully: {command_result:?}"
         );
     }
 
     #[test]
     fn test_request_input_round_trip() {
-        let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
+        let env = setup_test_environment();
 
         // Step 1: Establish a client connection
         let client_id = Uuid::new_v4();
-        let establish_message =
-            mk_connection_establish_msg("127.0.0.1:12345".to_string(), 7777, 12345, None, None);
+        let (client_token, _connection_obj) =
+            establish_connection(&env, client_id, "127.0.0.1:12345", 12345);
 
-        let establish_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            establish_message,
-        );
+        // Step 1.5: Login as wizard to get auth token
+        let auth_token = login_wizard(&env, client_id, &client_token);
 
-        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
-            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
-
-                let obj = match &new_conn.connection_obj.obj {
-                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                    _ => panic!("Unexpected obj variant"),
-                };
-
-                (token, obj)
-            }
-            other => panic!("Expected NewConnection, got {other:?}"),
-        };
-
-        // Step 1.5: Perform login to get auth token
-        let login_message = mk_login_command_msg(
-            &client_token,
-            &SYSTEM_OBJECT,
-            vec!["create".to_string(), "TestPlayer".to_string()],
-            true,
-            None,
-            None,
-        );
-
-        let login_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
-            client_id,
-            login_message,
-        );
-
-        assert!(
-            login_result.is_ok(),
-            "Login should succeed for authenticated operations: {login_result:?}"
-        );
-
-        // Extract auth token from login result
-        let client_replies = transport.get_client_replies();
-        let auth_token = successful_login_auth_token(&client_replies);
-
-        // Step 2: Create a scenario where the daemon would request input
-        // We'll simulate this by triggering a client event that requests input
+        // Step 2: Simulate the daemon sending a RequestInput event to the client
         let request_id = Uuid::new_v4();
 
-        // Simulate the daemon sending a RequestInput event to the client
         let request_input_event = moor_rpc::ClientEvent {
             event: moor_rpc::ClientEventUnion::RequestInputEvent(Box::new(
                 moor_rpc::RequestInputEvent {
@@ -1917,9 +1587,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             )),
         };
 
-        // In a real scenario, this would be sent through the transport to the client
-        // For testing, we'll simulate the client receiving this and responding
-        transport.capture_client_event(client_id, request_input_event);
+        env.transport
+            .capture_client_event(client_id, request_input_event);
 
         // Step 3: Simulate client responding with RequestedInput message
         let input_response = "user typed response".to_string();
@@ -1931,16 +1600,16 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         )
         .expect("Failed to create requested_input message");
 
-        let response_result = transport.process_client_message(
-            message_handler.as_ref(),
-            scheduler.client(),
+        let response_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
             client_id,
             response_message,
         );
 
         // Step 4: Verify the response was processed
-        // The daemon should acknowledge the input
-        // Input response should be processed (MockScheduler may not fully support this feature)
+        // With a real scheduler, this may succeed with InputThanks or fail with InternalError
+        // if there is no pending read() request
         let input_processed = matches!(
             &response_result,
             Ok(reply) if matches!(reply.reply, moor_rpc::DaemonToClientReplyUnion::InputThanks(_))
@@ -1954,7 +1623,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Step 5: Verify the transport captured the events correctly
-        let client_events = transport.get_client_events();
+        let client_events = env.transport.get_client_events();
         assert_eq!(
             client_events.len(),
             1,
@@ -1975,10 +1644,11 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         }
 
         // Step 6: Verify replies were captured
-        let client_replies = transport.get_client_replies();
+        let client_replies = env.transport.get_client_replies();
+        // We expect at least: NewConnection, welcome LoginResult, login LoginResult, RequestedInput reply
         assert!(
-            client_replies.len() >= 2,
-            "Should have at least 2 client replies (NewConnection + InputThanks/Error)"
+            client_replies.len() >= 3,
+            "Should have at least 3 client replies"
         );
 
         // Find the input response reply
@@ -1994,11 +1664,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         });
         assert!(input_reply_found, "Should have found input response reply");
 
-        // Step 7: Test complete round-trip timing and event flow
-        // Verify the request ID is consistent throughout the flow
+        // Step 7: Verify request ID consistency
         let mut request_ids_seen = std::collections::HashSet::new();
 
-        // Check client event
         for (_, event) in &client_events {
             if let moor_rpc::ClientEventUnion::RequestInputEvent(req) = &event.event {
                 let id = Uuid::from_slice(&req.request_id.data).unwrap();
@@ -2006,7 +1674,6 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             }
         }
 
-        // Check client replies
         for (_, msg_bytes, _) in &client_replies {
             if let Ok(msg_ref) = moor_rpc::HostClientToDaemonMessageRef::read_as_root(msg_bytes)
                 && let Ok(moor_rpc::HostClientToDaemonMessageUnionRef::RequestedInput(req)) =
