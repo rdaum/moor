@@ -570,7 +570,7 @@ pub trait WorldState: Send {
     }
 }
 
-pub trait WorldStateSource: Send {
+pub trait WorldStateSource: Send + Sync {
     /// Create a new world state for the given player.
     /// Returns the world state, and a permissions context for the player.
     fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError>;

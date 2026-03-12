@@ -25,7 +25,7 @@ use moor_common::{
     model::{
         CommitResult, ObjAttrs, ObjFlag, ObjectKind, ObjectRef, PropFlag, VerbArgsSpec, VerbFlag,
     },
-    threading::{ThreadClass, pin_current_thread_to_class, spawn_perf},
+    threading::{ThreadClass, pin_current_thread_to_class},
     util::BitEnum,
 };
 use tabled::{Table, Tabled};
@@ -909,11 +909,9 @@ async fn main() -> Result<(), eyre::Error> {
 
     let scheduler_client = scheduler.client()?;
 
-    // Start scheduler in background thread
+    // Start scheduler
     let session_factory = Arc::new(DirectSessionFactory {});
-    let _scheduler_handle = spawn_perf("moor-scheduler", move || {
-        scheduler.run(session_factory);
-    })?;
+    let _scheduler_handle = scheduler.start(session_factory);
 
     let results = if args.swamp_mode {
         swamp_mode_workload(&args, &scheduler_client, player).await?

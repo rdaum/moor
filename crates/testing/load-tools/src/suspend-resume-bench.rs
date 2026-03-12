@@ -21,7 +21,7 @@ use clap_derive::Parser;
 use futures::{StreamExt, stream::FuturesUnordered};
 use moor_common::{
     model::{CommitResult, ObjAttrs, ObjFlag, ObjectKind, ObjectRef, VerbArgsSpec, VerbFlag},
-    threading::{ThreadClass, pin_current_thread_to_class, spawn_perf},
+    threading::{ThreadClass, pin_current_thread_to_class},
     util::BitEnum,
 };
 use moor_compiler::compile;
@@ -166,9 +166,7 @@ async fn main() -> Result<(), eyre::Error> {
     let scheduler_client = scheduler.client()?;
     let session_factory = Arc::new(DirectSessionFactory {});
 
-    let _scheduler_handle = spawn_perf("moor-scheduler", move || {
-        scheduler.run(session_factory);
-    })?;
+    let _scheduler_handle = scheduler.start(session_factory);
 
     // Wait a bit for scheduler to be ready
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
