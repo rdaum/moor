@@ -997,18 +997,24 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             "Scheduler should remain responsive after GC"
         );
 
-        // Verify GC counter incremented
-        let final_stats = env
-            .scheduler_client
-            .get_gc_stats()
-            .expect("Should be able to get GC stats after GC");
-        assert_eq!(
-            final_stats.cycle_count,
-            initial_count + 1,
-            "GC cycle count should increment from {} to {}",
-            initial_count,
-            final_stats.cycle_count
-        );
+        // Wait for the GC cycle to complete (it runs asynchronously in the timer thread)
+        let gc_start = Instant::now();
+        loop {
+            let stats = env
+                .scheduler_client
+                .get_gc_stats()
+                .expect("Should be able to get GC stats after GC");
+            if stats.cycle_count >= initial_count + 1 {
+                break;
+            }
+            if gc_start.elapsed() > Duration::from_secs(10) {
+                panic!(
+                    "GC cycle count should have incremented: was {}, now {}",
+                    initial_count, stats.cycle_count
+                );
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
 
         // Test that non-wizard cannot call gc_collect()
         // First create a regular player by connecting as a different user
@@ -1136,41 +1142,65 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         }
 
         // Test direct GC calls via scheduler client to verify counter increments properly
-        let current_count = final_stats.cycle_count;
+        let current_count = env
+            .scheduler_client
+            .get_gc_stats()
+            .expect("Should be able to get GC stats")
+            .cycle_count;
 
         // Request another GC cycle directly via scheduler client
         env.scheduler_client
             .request_gc()
             .expect("Direct GC request should succeed");
 
-        // Verify counter incremented again
-        let direct_gc_stats = env
+        // Wait for GC cycle to complete
+        let gc_start = Instant::now();
+        loop {
+            let stats = env
+                .scheduler_client
+                .get_gc_stats()
+                .expect("Should be able to get GC stats after direct GC");
+            if stats.cycle_count >= current_count + 1 {
+                break;
+            }
+            if gc_start.elapsed() > Duration::from_secs(10) {
+                panic!(
+                    "GC cycle count should have incremented after direct GC request: was {}, now {}",
+                    current_count, stats.cycle_count
+                );
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+
+        let count_after_direct = env
             .scheduler_client
             .get_gc_stats()
-            .expect("Should be able to get GC stats after direct GC");
-        assert_eq!(
-            direct_gc_stats.cycle_count,
-            current_count + 1,
-            "GC cycle count should increment from {} to {} after direct GC request",
-            current_count,
-            direct_gc_stats.cycle_count
-        );
+            .expect("stats")
+            .cycle_count;
 
         // Request one more GC to verify it keeps working
         env.scheduler_client
             .request_gc()
             .expect("Second direct GC request should succeed");
 
-        let final_direct_stats = env
-            .scheduler_client
-            .get_gc_stats()
-            .expect("Should be able to get final GC stats");
-        assert_eq!(
-            final_direct_stats.cycle_count,
-            current_count + 2,
-            "GC cycle count should increment to {} after multiple direct requests",
-            current_count + 2
-        );
+        // Wait for second GC cycle
+        let gc_start = Instant::now();
+        loop {
+            let stats = env
+                .scheduler_client
+                .get_gc_stats()
+                .expect("Should be able to get final GC stats");
+            if stats.cycle_count >= count_after_direct + 1 {
+                break;
+            }
+            if gc_start.elapsed() > Duration::from_secs(10) {
+                panic!(
+                    "GC cycle count should have incremented after second GC request: was {}, now {}",
+                    count_after_direct, stats.cycle_count
+                );
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
 
         // Verify no unexpected tracebacks in the transport events (which are unencrypted)
         let events = env.transport.get_narrative_events();

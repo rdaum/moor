@@ -324,41 +324,6 @@ impl Scheduler {
         )
     }
 
-    /// Process a fork request. Called from handle_task_msg which already holds the lifecycle lock.
-    #[allow(dead_code)]
-    pub(crate) fn process_fork_request(
-        &self,
-        lc: &mut TaskLifecycle,
-        fork_request: Box<Fork>,
-        reply: oneshot::Sender<TaskId>,
-        session: Arc<dyn Session>,
-    ) {
-        // Fork the session.
-        let forked_session = session.fork().unwrap();
-
-        let suspended = fork_request.delay.is_some();
-        let player = fork_request.player;
-        let delay = fork_request.delay;
-        let progr = fork_request.progr;
-
-        let task_start = TaskStart::StartFork {
-            fork_request,
-            suspended,
-        };
-        let task_id = lc.next_task_id;
-        lc.next_task_id += 1;
-        if let Err(e) =
-            self.submit_task(lc, task_id, &player, &progr, task_start, delay, forked_session)
-        {
-            error!(?e, "Could not fork task");
-            return;
-        }
-
-        if let Err(e) = reply.send(task_id) {
-            error!(task = task_id, error = ?e, "Could not send fork reply. Parent task gone?");
-        }
-    }
-
     /// Stop the scheduler run loop.
     pub(crate) fn stop(&self, msg: Option<String>) -> Result<(), SchedulerError> {
         // Send shutdown notification and kill all active tasks while holding the lock.

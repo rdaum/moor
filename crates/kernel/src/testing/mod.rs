@@ -14,12 +14,10 @@
 //! Testing utilities and mocks for the kernel crate
 
 pub mod language_test;
-pub mod mock_scheduler;
 pub mod scheduler_test_utils;
 pub mod vm_test;
 pub mod vm_test_utils;
 
-pub use mock_scheduler::{MockScenario, MockScheduler};
 pub use scheduler_test_utils::{ExecResult as SchedulerExecResult, call_command, call_eval};
 pub use vm_test_utils::{
     ActivationAssemblyBenchState, ActivationBenchResult, EnvironmentBenchResult,
