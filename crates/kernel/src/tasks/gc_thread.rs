@@ -15,13 +15,12 @@
 
 use std::{collections::HashSet, sync::Arc, thread, time::Instant};
 
-use flume::{self, Sender};
 use moor_var::Obj;
 use tracing::{debug, error, info};
 
 use crate::{
     config::Config,
-    tasks::{sched_counters, scheduler_client::SchedulerClientMsg},
+    tasks::{sched_counters, scheduler::Scheduler},
 };
 use moor_common::{
     tasks::SchedulerError, tasks::SchedulerError::GarbageCollectionFailed, util::PerfTimerGuard,
@@ -31,7 +30,7 @@ use moor_common::{
 pub fn spawn_gc_mark_phase(
     gc_tx: Box<dyn moor_db::GCInterface>,
     _config: Arc<Config>,
-    scheduler_sender: Sender<SchedulerClientMsg>,
+    scheduler: Scheduler,
     vm_refs: HashSet<Obj>,
     mutation_timestamp_before_mark: Option<u64>,
     gc_cycle_count: u64,
@@ -41,28 +40,18 @@ pub fn spawn_gc_mark_phase(
 
         match result {
             Ok(unreachable_objects) => {
-                if scheduler_sender
-                    .send(SchedulerClientMsg::GCMarkPhaseComplete {
-                        unreachable_objects,
-                        mutation_timestamp_before_mark,
-                    })
-                    .is_err()
-                {
-                    error!("Failed to send GC mark phase results to scheduler");
-                }
+                scheduler.handle_gc_mark_complete(
+                    unreachable_objects,
+                    mutation_timestamp_before_mark,
+                );
             }
             Err(e) => {
                 error!("GC mark phase failed: {e}");
                 // Send empty results to indicate failure
-                if scheduler_sender
-                    .send(SchedulerClientMsg::GCMarkPhaseComplete {
-                        unreachable_objects: HashSet::new(),
-                        mutation_timestamp_before_mark,
-                    })
-                    .is_err()
-                {
-                    error!("Failed to send GC mark phase failure to scheduler");
-                }
+                scheduler.handle_gc_mark_complete(
+                    HashSet::new(),
+                    mutation_timestamp_before_mark,
+                );
             }
         }
     })

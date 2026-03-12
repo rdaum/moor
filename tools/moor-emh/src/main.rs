@@ -786,12 +786,8 @@ fn main() -> Result<(), Report> {
 
     let session_factory = Arc::new(AdminSessionFactory);
 
-    // Start scheduler thread
-    let scheduler_session_factory = session_factory.clone();
-    let scheduler_thread = std::thread::Builder::new()
-        .name("moor-emh-scheduler".to_string())
-        .spawn(move || scheduler.run(scheduler_session_factory))
-        .map_err(|e| eyre!("Failed to spawn scheduler thread: {}", e))?;
+    // Start scheduler (spawns timer + worker threads internally)
+    let scheduler_thread = scheduler.start(session_factory.clone());
 
     // Sleep a little to let the scheduler finish its start-up jobs.
     std::thread::sleep(Duration::from_secs(1));

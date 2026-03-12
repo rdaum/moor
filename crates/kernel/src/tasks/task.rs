@@ -34,7 +34,6 @@ use crate::task_context::{
 };
 use ahash::AHasher;
 
-use flume::Sender;
 use moor_compiler::to_literal;
 use std::sync::LazyLock;
 use tracing::{error, warn};
@@ -70,7 +69,7 @@ use crate::{
     tasks::{
         ServerOptions, TaskStart, sched_counters,
         task_program_cache::TaskProgramCache,
-        task_scheduler_client::{TaskControlMsg, TaskSchedulerClient, TimeoutHandlerInfo},
+        task_scheduler_client::{TaskSchedulerClient, TimeoutHandlerInfo},
     },
     vm::{
         TaskSuspend, VMHostResponse, builtins::BuiltinRegistry, exec_state::VMExecState,
@@ -843,7 +842,7 @@ impl Task {
     /// Set the task up to start executing, based on the task start configuration.
     pub(crate) fn setup_task_start(
         &mut self,
-        control_sender: &Sender<(TaskId, TaskControlMsg)>,
+        tsc: &TaskSchedulerClient,
         config: &Config,
     ) -> bool {
         let perfc = sched_counters();
@@ -860,9 +859,7 @@ impl Task {
                 if let Err(e) = with_current_transaction_mut(|world_state| {
                     self.start_command(&handler_object, &player, command.as_str(), world_state)
                 }) {
-                    control_sender
-                        .send((self.task_id, TaskControlMsg::TaskCommandError(e)))
-                        .expect("Could not send start response");
+                    tsc.command_error(e);
                 };
             }
             TaskStart::StartVerb {
@@ -885,12 +882,7 @@ impl Task {
                     Variant::Flyweight(f) => *f.delegate(),
                     Variant::Obj(o) => *o,
                     _ => {
-                        control_sender
-                            .send((
-                                self.task_id,
-                                TaskControlMsg::TaskVerbNotFound(this, verb_name),
-                            ))
-                            .expect("Could not send start response");
+                        tsc.verb_not_found(this, verb_name);
                         return false;
                     }
                 };
@@ -904,12 +896,7 @@ impl Task {
                     )
                 }) {
                     Ok(None) => {
-                        control_sender
-                            .send((
-                                self.task_id,
-                                TaskControlMsg::TaskVerbNotFound(this, verb_name),
-                            ))
-                            .expect("Could not send start response");
+                        tsc.verb_not_found(this, verb_name);
                         return false;
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -1025,18 +1012,13 @@ impl Task {
                                             ),
                                         ),
                                     ));
-                                    control_sender
-                                        .send((
-                                            self.task_id,
-                                            TaskControlMsg::TaskCommandError(
-                                                CommandError::DatabaseError(
-                                                    moor_common::model::WorldStateError::DatabaseError(
-                                                        "Transaction conflict".to_string(),
-                                                    ),
-                                                ),
+                                    tsc.command_error(
+                                        CommandError::DatabaseError(
+                                            moor_common::model::WorldStateError::DatabaseError(
+                                                "Transaction conflict".to_string(),
                                             ),
-                                        ))
-                                        .expect("Could not send batch error");
+                                        ),
+                                    );
                                     return false;
                                 }
                                 Err(e) => {
@@ -1045,41 +1027,26 @@ impl Task {
                                             CommandError::DatabaseError(e),
                                         ),
                                     ));
-                                    control_sender
-                                        .send((
-                                            self.task_id,
-                                            TaskControlMsg::TaskCommandError(
-                                                CommandError::DatabaseError(
-                                                    moor_common::model::WorldStateError::DatabaseError(
-                                                        "Commit failed".to_string(),
-                                                    ),
-                                                ),
+                                    tsc.command_error(
+                                        CommandError::DatabaseError(
+                                            moor_common::model::WorldStateError::DatabaseError(
+                                                "Commit failed".to_string(),
                                             ),
-                                        ))
-                                        .expect("Could not send batch error");
+                                        ),
+                                    );
                                     return false;
                                 }
                             }
                         }
-                        control_sender
-                            .send((
-                                self.task_id,
-                                TaskControlMsg::TaskSuccess(v_int(0), !rollback, 0),
-                            ))
-                            .expect("Could not send batch success");
+                        tsc.success(v_int(0), !rollback, 0);
                         return false; // No VM loop needed
                     }
                     Err(ref e) => {
-                        control_sender
-                            .send((
-                                self.task_id,
-                                TaskControlMsg::TaskCommandError(CommandError::DatabaseError(
-                                    moor_common::model::WorldStateError::DatabaseError(
-                                        e.to_string(),
-                                    ),
-                                )),
-                            ))
-                            .expect("Could not send batch error");
+                        tsc.command_error(CommandError::DatabaseError(
+                            moor_common::model::WorldStateError::DatabaseError(
+                                e.to_string(),
+                            ),
+                        ));
                         return false;
                     }
                 }
@@ -1491,7 +1458,7 @@ mod tests {
             max_task_retries: DEFAULT_MAX_TASK_RETRIES,
             max_task_mailbox: DEFAULT_MAX_TASK_MAILBOX,
         };
-        let task_scheduler_client = TaskSchedulerClient::new(1, control_sender.clone());
+        let task_scheduler_client = TaskSchedulerClient::new_channel(1, control_sender.clone());
         let task = Task::new(
             1,
             SYSTEM_OBJECT,
@@ -1604,7 +1571,7 @@ mod tests {
         {
             let _tx_guard = setup_task_context(tx);
             let config = Arc::new(Config::default());
-            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            task.setup_task_start(&task_scheduler_client, &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
@@ -1633,7 +1600,7 @@ mod tests {
         {
             let _tx_guard = setup_task_context(tx);
             let config = Arc::new(Config::default());
-            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            task.setup_task_start(&task_scheduler_client, &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
@@ -1668,7 +1635,7 @@ mod tests {
                 session.clone(),
             );
             let config = Arc::new(Config::default());
-            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            task.setup_task_start(&task_scheduler_client, &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
@@ -1716,7 +1683,7 @@ mod tests {
         {
             let _tx_guard = setup_task_context(tx);
             let config = Arc::new(Config::default());
-            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            task.setup_task_start(&task_scheduler_client, &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
@@ -1766,7 +1733,7 @@ mod tests {
         {
             let _tx_guard = setup_task_context(tx);
             let config = Arc::new(Config::default());
-            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            task.setup_task_start(&task_scheduler_client, &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
@@ -1831,7 +1798,7 @@ mod tests {
             {
                 let _tx_guard = setup_task_context(tx);
                 let config = Arc::new(Config::default());
-                task.setup_task_start(task_scheduler_client.control_sender(), &config);
+                task.setup_task_start(&task_scheduler_client, &config);
                 Task::run_task_loop(
                     task,
                     &task_scheduler_client,
@@ -1896,7 +1863,7 @@ mod tests {
             {
                 let _tx_guard = setup_task_context(tx);
                 let config = Arc::new(Config::default());
-                parent_task.setup_task_start(parent_scheduler.control_sender(), &config);
+                parent_task.setup_task_start(&parent_scheduler, &config);
                 Task::run_task_loop(
                     parent_task,
                     &parent_scheduler,
@@ -1946,7 +1913,7 @@ mod tests {
         {
             let _tx_guard = setup_task_context(child_tx);
             let config = Arc::new(Config::default());
-            child_task.setup_task_start(child_scheduler.control_sender(), &config);
+            child_task.setup_task_start(&child_scheduler, &config);
             Task::run_task_loop(
                 child_task,
                 &child_scheduler,
@@ -1973,7 +1940,7 @@ mod tests {
         {
             let _tx_guard = setup_task_context(tx);
             let config = Arc::new(Config::default());
-            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            task.setup_task_start(&task_scheduler_client, &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
@@ -2010,7 +1977,7 @@ mod tests {
         {
             let _tx_guard = setup_task_context(tx);
             let config = Arc::new(Config::default());
-            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            task.setup_task_start(&task_scheduler_client, &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
@@ -2045,7 +2012,7 @@ mod tests {
         {
             let _tx_guard = setup_task_context(tx);
             let config = Arc::new(Config::default());
-            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            task.setup_task_start(&task_scheduler_client, &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
@@ -2081,7 +2048,7 @@ mod tests {
         {
             let _tx_guard = setup_task_context(tx);
             let config = Arc::new(Config::default());
-            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            task.setup_task_start(&task_scheduler_client, &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
@@ -2125,7 +2092,7 @@ mod tests {
         {
             let _tx_guard = setup_task_context(tx);
             let config = Arc::new(Config::default());
-            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            task.setup_task_start(&task_scheduler_client, &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
@@ -2199,7 +2166,7 @@ mod tests {
         {
             let _tx_guard = setup_task_context(tx);
             let config = Arc::new(Config::default());
-            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            task.setup_task_start(&task_scheduler_client, &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
@@ -2240,7 +2207,7 @@ mod tests {
         {
             let _tx_guard = setup_task_context(tx);
             let config = Arc::new(Config::default());
-            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            task.setup_task_start(&task_scheduler_client, &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
@@ -2292,7 +2259,7 @@ mod tests {
         {
             let _tx_guard = setup_task_context(tx);
             let config = Arc::new(Config::default());
-            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            task.setup_task_start(&task_scheduler_client, &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
@@ -2352,7 +2319,7 @@ mod tests {
         {
             let _tx_guard = setup_task_context(tx);
             let config = Arc::new(Config::default());
-            task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            task.setup_task_start(&task_scheduler_client, &config);
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
@@ -2404,7 +2371,7 @@ mod tests {
         {
             let _tx_guard = setup_task_context(tx);
             let config = Arc::new(Config::default());
-            let needs_vm = task.setup_task_start(task_scheduler_client.control_sender(), &config);
+            let needs_vm = task.setup_task_start(&task_scheduler_client, &config);
             assert!(!needs_vm, "Batch task should not need VM loop");
         }
 

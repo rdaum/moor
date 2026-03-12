@@ -11,6 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
+pub(crate) mod lifecycle;
 mod scheduler_client_msg;
 mod scheduler_config;
 mod scheduler_gc;
@@ -23,11 +24,11 @@ use crate::{
     tasks::checkpoint::{CheckpointMode, start_checkpoint},
 };
 use flume::{Receiver, Sender};
-use moor_common::util::{Deadline, Instant, Timestamp};
+use moor_common::util::{Deadline, Instant};
 use rand::Rng;
 use std::{
     sync::{
-        Arc, LazyLock,
+        Arc, Condvar, LazyLock, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     thread::yield_now,
@@ -36,7 +37,7 @@ use std::{
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use moor_common::model::{CommitResult, ObjectRef, Perms, WorldState};
+use moor_common::model::{CommitResult, Perms, WorldState};
 use moor_compiler::to_literal;
 use moor_db::Database;
 
@@ -49,10 +50,9 @@ use crate::{
         TaskNotification, TaskStart,
         gc_thread::spawn_gc_mark_phase,
         sched_counters,
-        scheduler_client::{SchedulerClient, SchedulerClientMsg},
         task::Task,
         task_q::{RunningTask, SuspendedTask, SuspensionQ, TaskQ, WakeCondition},
-        task_scheduler_client::{TaskControlMsg, TaskSchedulerClient, WorkerInfo},
+        task_scheduler_client::{TaskSchedulerClient, WorkerInfo},
         tasks_db::TasksDb,
         workers::{WorkerRequest, WorkerResponse},
         world_state_action::{WorldStateAction, WorldStateResponse},
@@ -89,6 +89,8 @@ use moor_var::{
 };
 use std::collections::HashMap;
 
+use self::lifecycle::TaskLifecycle;
+
 /// Action to take when resuming a suspended task
 #[derive(Debug, Clone)]
 pub enum ResumeAction {
@@ -99,61 +101,38 @@ pub enum ResumeAction {
 }
 
 /// Responsible for the dispatching, control, and accounting of tasks in the system.
-/// There should be only one scheduler per server.
+/// Cheaply cloneable handle — replaces both SchedulerClient and TaskSchedulerClient.
+#[derive(Clone)]
 pub struct Scheduler {
-    pub(super) version: semver::Version,
+    /// All mutable lifecycle state, protected by a single Mutex.
+    pub(crate) lifecycle: Arc<Mutex<TaskLifecycle>>,
 
-    pub(super) task_control_sender: Sender<(TaskId, TaskControlMsg)>,
-    pub(super) task_control_receiver: Receiver<(TaskId, TaskControlMsg)>,
+    /// Database access (thread-safe, lock-free reads).
+    pub(crate) database: Arc<dyn Database>,
 
-    pub(super) scheduler_sender: Sender<SchedulerClientMsg>,
-    pub(super) scheduler_receiver: Receiver<SchedulerClientMsg>,
+    /// Runtime configuration.
+    pub(crate) config: Arc<Config>,
 
-    pub(super) config: Arc<Config>,
+    /// Host/connection management.
+    pub(crate) system_control: Arc<dyn SystemControl>,
 
-    pub(super) running: bool,
-    pub(super) database: Box<dyn Database>,
-    pub(super) next_task_id: usize,
+    /// Builtin function registry.
+    pub(crate) builtin_registry: BuiltinRegistry,
 
-    pub(super) server_options: ServerOptions,
+    /// Server version.
+    pub(crate) version: semver::Version,
 
-    pub(super) builtin_registry: BuiltinRegistry,
+    /// Tracks whether a checkpoint operation is currently in progress.
+    pub(crate) checkpoint_in_progress: Arc<AtomicBool>,
 
-    pub(super) system_control: Arc<dyn SystemControl>,
+    /// Channel for sending requests TO workers.
+    pub(crate) worker_request_send: Option<Sender<WorkerRequest>>,
 
-    pub(super) worker_request_send: Option<Sender<WorkerRequest>>,
-    pub(super) worker_request_recv: Option<Receiver<WorkerResponse>>,
+    /// Worker response receiver — taken once when starting the worker response thread.
+    worker_response_recv: Arc<Mutex<Option<Receiver<WorkerResponse>>>>,
 
-    /// The internal task queue which holds our suspended tasks, and control records for actively
-    /// running tasks.
-    /// This is in a lock to allow interior mutability for the scheduler loop, but is only ever
-    /// accessed by the scheduler thread.
-    pub(super) task_q: TaskQ,
-
-    /// Anonymous object garbage collection flag
-    pub(super) gc_collection_in_progress: bool,
-    /// Flag indicating concurrent GC mark phase is in progress
-    pub(super) gc_mark_in_progress: bool,
-    /// Flag indicating GC sweep phase is in progress (blocks new tasks)
-    pub(super) gc_sweep_in_progress: bool,
-    /// Flag to force GC on next opportunity (set by gc_collect() builtin)
-    pub(super) gc_force_collect: bool,
-    /// Counter tracking the number of GC cycles completed
-    pub(super) gc_cycle_count: u64,
-    /// Time of last GC cycle (for interval-based collection)
-    pub(super) gc_last_cycle_time: std::time::Instant,
-    /// Transaction timestamp (monotonically incrementing) of the last mutating task/transaction
-    pub(super) last_mutation_timestamp: Option<u64>,
-
-    /// Tracks whether a checkpoint operation is currently in progress to prevent overlapping checkpoints
-    pub(super) checkpoint_in_progress: Arc<AtomicBool>,
-
-    /// Time of last tasks DB compaction (independent of GC)
-    pub(super) last_compact_time: std::time::Instant,
-
-    /// Buffered inter-task messages awaiting commit. Keyed by sending task_id.
-    /// Delivered to target queues when the sending task commits; discarded on abort/conflict.
-    pub(super) pending_task_sends: HashMap<TaskId, Vec<(TaskId, Var)>>,
+    /// Condvar to wake the timer thread when a new earlier timer is inserted.
+    timer_notify: Arc<(Mutex<bool>, Condvar)>,
 }
 
 impl Scheduler {
@@ -173,8 +152,6 @@ impl Scheduler {
         affinity_config.service_perf_cores = config.runtime.service_perf_cores;
         set_task_pool_affinity_config(affinity_config);
 
-        let (task_control_sender, task_control_receiver) = flume::unbounded();
-        let (scheduler_sender, scheduler_receiver) = flume::unbounded();
         let suspension_q = SuspensionQ::new(tasks_database);
         let task_q = TaskQ::new(suspension_q);
         let default_server_options = ServerOptions {
@@ -190,22 +167,12 @@ impl Scheduler {
         };
         let builtin_registry = BuiltinRegistry::new();
 
-        let mut s = Self {
-            version,
-            running: false,
-            database,
-            next_task_id: Default::default(),
+        let database: Arc<dyn Database> = Arc::from(database);
+
+        let lifecycle = TaskLifecycle {
             task_q,
-            config,
-            task_control_sender,
-            task_control_receiver,
-            scheduler_sender,
-            scheduler_receiver,
-            builtin_registry,
-            server_options: default_server_options,
-            system_control,
-            worker_request_send,
-            worker_request_recv,
+            pending_task_sends: HashMap::new(),
+            next_task_id: 0,
             gc_collection_in_progress: false,
             gc_mark_in_progress: false,
             gc_sweep_in_progress: false,
@@ -213,256 +180,233 @@ impl Scheduler {
             gc_cycle_count: 0,
             gc_last_cycle_time: std::time::Instant::now(),
             last_mutation_timestamp: None,
-            checkpoint_in_progress: Arc::new(AtomicBool::new(false)),
+            server_options: default_server_options,
+            running: false,
             last_compact_time: std::time::Instant::now(),
-            pending_task_sends: HashMap::new(),
         };
 
         let mut timing_policy = perf_timing_policy();
-        if let Some(enabled) = s.config.runtime.perf_timing_enabled {
+        if let Some(enabled) = config.runtime.perf_timing_enabled {
             timing_policy.enabled = enabled;
         }
-        if let Some(shift) = s.config.runtime.perf_timing_hot_path_shift {
+        if let Some(shift) = config.runtime.perf_timing_hot_path_shift {
             timing_policy.hot_path_shift = shift;
         }
-        if let Some(shift) = s.config.runtime.perf_timing_medium_path_shift {
+        if let Some(shift) = config.runtime.perf_timing_medium_path_shift {
             timing_policy.medium_path_shift = shift;
         }
         set_perf_timing_policy(timing_policy);
+
+        let s = Self {
+            lifecycle: Arc::new(Mutex::new(lifecycle)),
+            database,
+            config,
+            builtin_registry,
+            system_control,
+            version,
+            checkpoint_in_progress: Arc::new(AtomicBool::new(false)),
+            worker_request_send,
+            worker_response_recv: Arc::new(Mutex::new(worker_request_recv)),
+            timer_notify: Arc::new((Mutex::new(false), Condvar::new())),
+        };
 
         s.reload_server_options();
         s
     }
 
-    /// Execute the scheduler loop, run from the server process.
-    pub fn run(mut self, bg_session_factory: Arc<dyn SessionFactory>) {
+    /// Start the scheduler: rehydrate tasks, spawn timer and worker-response threads.
+    /// Returns join handle for the timer thread (join it at shutdown).
+    pub fn start(
+        &self,
+        bg_session_factory: Arc<dyn SessionFactory>,
+    ) -> std::thread::JoinHandle<()> {
         // Rehydrate suspended tasks.
-        self.task_q.suspended.load_tasks(bg_session_factory);
-
-        set_current_thread_background_priority().ok();
-
-        self.running = true;
-        info!("Starting scheduler loop");
-
-        // Set up receivers for listening to various message types
-        let task_receiver = self.task_control_receiver.clone();
-        let scheduler_receiver = self.scheduler_receiver.clone();
-        let worker_receiver = self.worker_request_recv.clone();
+        {
+            let mut lc = self.lifecycle.lock().unwrap();
+            lc.task_q.suspended.load_tasks(bg_session_factory);
+            lc.running = true;
+        }
 
         self.reload_server_options();
-        while self.running {
-            // Check if we should run GC (and no GC is already in progress)
-            // Only run GC if anonymous objects are enabled
-            if self.config.features.anonymous_objects
-                && !self.gc_collection_in_progress
-                && !self.gc_mark_in_progress
-                && self.should_run_gc()
+
+        // Start worker response thread if we have a worker receiver.
+        if let Some(recv) = self.worker_response_recv.lock().unwrap().take() {
+            let scheduler = self.clone();
+            spawn_perf("moor-worker-recv", move || {
+                scheduler.worker_response_loop(recv);
+            })
+            .expect("Could not spawn worker response thread");
+        }
+
+        // Start timer thread.
+        let scheduler = self.clone();
+        let timer_jh = spawn_perf("moor-timer", move || {
+            set_current_thread_background_priority().ok();
+            scheduler.timer_loop();
+        })
+        .expect("Could not spawn timer thread");
+
+        info!("Scheduler started");
+        timer_jh
+    }
+
+    /// The timer loop replaces the old run() main loop.
+    /// Handles: timer expirations, GC checks, compaction, immediate wakes.
+    fn timer_loop(&self) {
+        loop {
             {
-                self.run_gc_cycle();
+                let lc = self.lifecycle.lock().unwrap();
+                if !lc.running {
+                    break;
+                }
             }
 
-            // Periodic tasks DB compaction (independent of GC)
-            if self.last_compact_time.elapsed()
-                >= Duration::from_secs(DEFAULT_COMPACT_INTERVAL_SECONDS)
+            // Check GC conditions
             {
-                debug!("Triggering periodic tasks database compaction");
-                self.task_q.compact();
-                self.last_compact_time = std::time::Instant::now();
+                let mut lc = self.lifecycle.lock().unwrap();
+                if self.config.features.anonymous_objects
+                    && !lc.gc_collection_in_progress
+                    && !lc.gc_mark_in_progress
+                    && self.should_run_gc(&lc)
+                {
+                    self.run_gc_cycle(&mut lc);
+                }
+
+                // Periodic tasks DB compaction
+                if lc.last_compact_time.elapsed()
+                    >= Duration::from_secs(DEFAULT_COMPACT_INTERVAL_SECONDS)
+                {
+                    debug!("Triggering periodic tasks database compaction");
+                    lc.task_q.compact();
+                    lc.last_compact_time = std::time::Instant::now();
+                }
             }
 
-            // Skip task processing only if GC sweep is in progress
-            // (mark phase allows concurrent task processing)
-            if self.gc_sweep_in_progress {
-                let tick_duration = self
-                    .config
-                    .runtime
-                    .scheduler_tick_duration
-                    .unwrap_or(Duration::from_millis(50));
-                std::thread::sleep(tick_duration);
-                continue;
-            }
-
-            // Define an enum to handle different message types
-            enum SchedulerMessage {
-                Task(TaskId, TaskControlMsg),
-                Scheduler(SchedulerClientMsg),
-                Worker(WorkerResponse),
-            }
-
-            // Immediate wakes are produced by scheduler-owned state transitions.
-            // Drain them first to avoid waiting for channel activity.
+            // Drain immediate wakes
             self.drain_immediate_wakes();
 
-            // Use flume's Selector to properly select across channels with different types
-            let selector = flume::Selector::new();
+            // Collect timer-based wakes
+            self.collect_and_wake_expired_tasks();
 
-            // Add task receiver
-            let selector = selector.recv(&task_receiver, |result| match result {
-                Ok((task_id, msg)) => Some(SchedulerMessage::Task(task_id, msg)),
-                Err(_) => None,
-            });
-
-            // Add scheduler receiver
-            let selector = selector.recv(&scheduler_receiver, |result| match result {
-                Ok(msg) => Some(SchedulerMessage::Scheduler(msg)),
-                Err(_) => None,
-            });
-
-            // Add worker receiver if present
-            let selector = if let Some(ref wr) = worker_receiver {
-                selector.recv(wr, |result| match result {
-                    Ok(response) => Some(SchedulerMessage::Worker(response)),
-                    Err(_) => None,
-                })
-            } else {
-                selector
-            };
-
+            // Sleep until next timer expiry or notification
             let tick_duration = self
                 .config
                 .runtime
                 .scheduler_tick_duration
                 .unwrap_or(Duration::from_millis(10));
 
-            // Process first message from selector (blocking with timeout)
-            match selector.wait_timeout(tick_duration) {
-                Ok(Some(SchedulerMessage::Task(task_id, msg))) => {
-                    self.handle_task_msg(task_id, msg);
-                }
-                Ok(Some(SchedulerMessage::Scheduler(msg))) => {
-                    self.handle_scheduler_msg(msg);
-                }
-                Ok(Some(SchedulerMessage::Worker(response))) => {
-                    self.handle_worker_response(response);
-                }
-                Ok(None) | Err(_) => {
-                    // Timeout or channel disconnected, continue
-                }
-            }
-
-            // Drain any additional ready messages (non-blocking) to process them in batch
-            loop {
-                let mut found_message = false;
-
-                // Check task receiver
-                if let Ok((task_id, msg)) = task_receiver.try_recv() {
-                    self.handle_task_msg(task_id, msg);
-                    found_message = true;
-                }
-
-                // Check scheduler receiver
-                if let Ok(msg) = scheduler_receiver.try_recv() {
-                    self.handle_scheduler_msg(msg);
-                    found_message = true;
-                }
-
-                // Check worker receiver if present
-                if let Some(ref wr) = worker_receiver
-                    && let Ok(response) = wr.try_recv()
-                {
-                    self.handle_worker_response(response);
-                    found_message = true;
-                }
-
-                // If no messages were found, exit the drain loop
-                if !found_message {
-                    break;
-                }
-            }
-
-            self.drain_immediate_wakes();
-
-            // Check for tasks that need to be woken (timer wheel handles timing internally)
-            if let Some(to_wake) = self.task_q.collect_wake_tasks() {
-                for sr in to_wake {
-                    let task_id = sr.task.task_id;
-                    let is_retry = matches!(sr.wake_condition, WakeCondition::Retry(_));
-
-                    #[cfg(feature = "trace_events")]
-                    {
-                        let max_ticks = sr.task.vm_host.max_ticks;
-                        let tick_count = sr.task.vm_host.tick_count();
-
-                        let (wake_condition, wake_reason) = match &sr.wake_condition {
-                            WakeCondition::Time(_) => ("Time", "Timer expired"),
-                            WakeCondition::Input(_) => ("Input", "Input request fulfilled"),
-                            WakeCondition::Task(_) => ("Task", "Dependency task completed"),
-                            WakeCondition::Immediate(_) => ("Immediate", "Immediate wake"),
-                            WakeCondition::Worker(_) => ("Worker", "Worker response received"),
-                            WakeCondition::GCComplete => {
-                                ("GCComplete", "Garbage collection completed")
-                            }
-                            WakeCondition::Never => ("Never", "Manual wake"),
-                            WakeCondition::Retry(_) => ("Retry", "Transaction retry backoff"),
-                            WakeCondition::TaskMessage(_) => {
-                                ("TaskMessage", "Message received or timeout")
-                            }
-                        };
-
-                        trace_task_resume!(
-                            task_id,
-                            wake_condition,
-                            wake_reason,
-                            to_literal(&v_int(0)),
-                            max_ticks,
-                            tick_count
-                        );
-                    }
-
-                    if is_retry {
-                        // Retry tasks need special handling - restore state and restart
-                        self.task_q.wake_retry_suspended_task(
-                            sr,
-                            &self.task_control_sender,
-                            self.database.as_ref(),
-                            self.builtin_registry.clone(),
-                            self.config.clone(),
-                        );
-                    } else {
-                        // Determine resume value based on wake condition
-                        let resume_value = match &sr.wake_condition {
-                            WakeCondition::TaskMessage(_) => {
-                                // Drain message queue and return as list
-                                let messages = self.task_q.drain_messages(task_id);
-                                List::from_iter(messages).into()
-                            }
-                            WakeCondition::Immediate(val) => {
-                                val.clone().unwrap_or_else(|| v_int(0))
-                            }
-                            _ => v_int(0),
-                        };
-                        if let Err(e) = self.task_q.wake_suspended_task(
-                            sr,
-                            ResumeAction::Return(resume_value),
-                            &self.task_control_sender,
-                            self.database.as_ref(),
-                            self.builtin_registry.clone(),
-                            self.config.clone(),
-                        ) {
-                            error!(?task_id, ?e, "Error resuming task");
-                        }
-                    }
-                }
-            }
+            let (lock, cvar) = &*self.timer_notify;
+            let mut notified = lock.lock().unwrap();
+            *notified = false;
+            let _ = cvar.wait_timeout(notified, tick_duration);
         }
 
         // Write out all the suspended tasks to the database.
-        info!("Scheduler done; saving suspended tasks");
-        self.task_q.suspended.save_tasks();
+        info!("Timer loop done; saving suspended tasks");
+        let lc = self.lifecycle.lock().unwrap();
+        lc.task_q.suspended.save_tasks();
         info!("Saved.");
     }
 
-    pub fn client(&self) -> Result<SchedulerClient, SchedulerError> {
-        Ok(SchedulerClient::new(self.scheduler_sender.clone()))
+    /// Wake the timer thread to recompute its sleep duration.
+    #[allow(dead_code)]
+    pub(crate) fn wake_timer_thread(&self) {
+        let (lock, cvar) = &*self.timer_notify;
+        let mut notified = lock.lock().unwrap();
+        *notified = true;
+        cvar.notify_one();
     }
-}
 
-impl Scheduler {
+    /// Dedicated thread for receiving worker responses.
+    fn worker_response_loop(&self, recv: Receiver<WorkerResponse>) {
+        while let Ok(response) = recv.recv() {
+            self.handle_worker_response(response);
+        }
+        debug!("Worker response loop exited");
+    }
+
+    /// Collect expired timer tasks and wake them.
+    fn collect_and_wake_expired_tasks(&self) {
+        let mut lc = self.lifecycle.lock().unwrap();
+
+        let to_wake = match lc.task_q.collect_wake_tasks() {
+            Some(tasks) => tasks,
+            None => return,
+        };
+
+        for sr in to_wake {
+            let task_id = sr.task.task_id;
+            let is_retry = matches!(sr.wake_condition, WakeCondition::Retry(_));
+
+            #[cfg(feature = "trace_events")]
+            {
+                let max_ticks = sr.task.vm_host.max_ticks;
+                let tick_count = sr.task.vm_host.tick_count();
+
+                let (wake_condition, wake_reason) = match &sr.wake_condition {
+                    WakeCondition::Time(_) => ("Time", "Timer expired"),
+                    WakeCondition::Input(_) => ("Input", "Input request fulfilled"),
+                    WakeCondition::Task(_) => ("Task", "Dependency task completed"),
+                    WakeCondition::Immediate(_) => ("Immediate", "Immediate wake"),
+                    WakeCondition::Worker(_) => ("Worker", "Worker response received"),
+                    WakeCondition::GCComplete => {
+                        ("GCComplete", "Garbage collection completed")
+                    }
+                    WakeCondition::Never => ("Never", "Manual wake"),
+                    WakeCondition::Retry(_) => ("Retry", "Transaction retry backoff"),
+                    WakeCondition::TaskMessage(_) => {
+                        ("TaskMessage", "Message received or timeout")
+                    }
+                };
+
+                trace_task_resume!(
+                    task_id,
+                    wake_condition,
+                    wake_reason,
+                    to_literal(&v_int(0)),
+                    max_ticks,
+                    tick_count
+                );
+            }
+
+            if is_retry {
+                lc.task_q.wake_retry_suspended_task(
+                    sr,
+                    self,
+                    self.database.as_ref(),
+                    self.builtin_registry.clone(),
+                    self.config.clone(),
+                );
+            } else {
+                let resume_value = match &sr.wake_condition {
+                    WakeCondition::TaskMessage(_) => {
+                        let messages = lc.task_q.drain_messages(task_id);
+                        List::from_iter(messages).into()
+                    }
+                    WakeCondition::Immediate(val) => {
+                        val.clone().unwrap_or_else(|| v_int(0))
+                    }
+                    _ => v_int(0),
+                };
+                if let Err(e) = lc.task_q.wake_suspended_task(
+                    sr,
+                    ResumeAction::Return(resume_value),
+                    self,
+                    self.database.as_ref(),
+                    self.builtin_registry.clone(),
+                    self.config.clone(),
+                ) {
+                    error!(?task_id, ?e, "Error resuming task");
+                }
+            }
+        }
+    }
+
     /// Submit a new task and wake it immediately if needed.
-    /// This is the main entry point for starting new tasks.
     #[allow(clippy::too_many_arguments)]
-    fn submit_task(
-        &mut self,
+    pub(crate) fn submit_task(
+        &self,
+        lc: &mut TaskLifecycle,
         task_id: TaskId,
         player: &Obj,
         perms: &Obj,
@@ -471,16 +415,16 @@ impl Scheduler {
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
         let gc_in_progress = self.config.features.anonymous_objects
-            && (self.gc_sweep_in_progress || self.gc_force_collect);
+            && (lc.gc_sweep_in_progress || lc.gc_force_collect);
 
-        match self.task_q.submit_new_task(
+        match lc.task_q.submit_new_task(
             task_id,
             player,
             perms,
             task_start,
             delay_start,
             session,
-            &self.server_options,
+            &lc.server_options,
             gc_in_progress,
         ) {
             task_q_ops::TaskSubmission::Suspended(handle) => Ok(handle),
@@ -490,12 +434,12 @@ impl Scheduler {
                 session,
                 result_sender,
             } => {
-                self.task_q.wake_task_thread(
+                lc.task_q.wake_task_thread(
                     task,
                     ResumeAction::Return(v_int(0)),
                     session,
                     result_sender,
-                    &self.task_control_sender,
+                    self,
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
@@ -503,5 +447,10 @@ impl Scheduler {
                 Ok(handle)
             }
         }
+    }
+
+    /// Legacy compatibility: returns a SchedulerClient wrapping this Scheduler.
+    pub fn client(&self) -> Result<crate::tasks::scheduler_client::SchedulerClient, SchedulerError> {
+        Ok(crate::tasks::scheduler_client::SchedulerClient::new(self.clone()))
     }
 }
