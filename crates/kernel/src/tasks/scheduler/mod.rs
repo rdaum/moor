@@ -309,7 +309,6 @@ impl Scheduler {
     }
 
     /// Wake the timer thread to recompute its sleep duration.
-    #[allow(dead_code)]
     pub(crate) fn wake_timer_thread(&self) {
         let (lock, cvar) = &*self.timer_notify;
         let mut notified = lock.lock().unwrap();
