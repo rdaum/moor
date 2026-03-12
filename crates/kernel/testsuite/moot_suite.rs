@@ -179,10 +179,7 @@ fn test(db: Box<dyn Database>, path: &Path) {
     );
     let scheduler_client = scheduler.client().unwrap();
     let session_factory = Arc::new(NoopSessionFactory {});
-    let scheduler_loop_jh = std::thread::Builder::new()
-        .name("moor-scheduler".to_string())
-        .spawn(move || scheduler.run(session_factory.clone()))
-        .expect("Failed to spawn scheduler");
+    let scheduler_loop_jh = scheduler.start(session_factory);
 
     let options = MootOptions::default();
     execute_moot_test(

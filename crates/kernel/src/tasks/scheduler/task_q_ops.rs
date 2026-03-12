@@ -38,7 +38,7 @@ impl TaskQ {
         &mut self,
         suspended_task: SuspendedTask,
         resume_action: ResumeAction,
-        control_sender: &Sender<(TaskId, TaskControlMsg)>,
+        scheduler: &Scheduler,
         database: &dyn Database,
         builtin_registry: BuiltinRegistry,
         config: Arc<Config>,
@@ -54,7 +54,7 @@ impl TaskQ {
             resume_action,
             session,
             result_sender,
-            control_sender,
+            scheduler,
             database,
             builtin_registry,
             config,
@@ -65,7 +65,7 @@ impl TaskQ {
     pub(super) fn wake_retry_suspended_task(
         &mut self,
         suspended_task: SuspendedTask,
-        control_sender: &Sender<(TaskId, TaskControlMsg)>,
+        scheduler: &Scheduler,
         database: &dyn Database,
         builtin_registry: BuiltinRegistry,
         config: Arc<Config>,
@@ -80,7 +80,7 @@ impl TaskQ {
             task,
             session,
             result_sender,
-            control_sender,
+            scheduler,
             database,
             builtin_registry,
             config,
@@ -149,17 +149,13 @@ impl TaskQ {
         resume_action: ResumeAction,
         session: Arc<dyn Session>,
         result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
-        control_sender: &Sender<(TaskId, TaskControlMsg)>,
+        scheduler: &Scheduler,
         database: &dyn Database,
         builtin_registry: BuiltinRegistry,
         config: Arc<Config>,
     ) -> Result<(), SchedulerError> {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.resume_task);
-
-        // Take a task out of a suspended state and start running it again.
-        // For Created tasks, we need to call setup_task_start first.
-        // For Running tasks, we just resume execution.
 
         // Start its new transaction...
         let world_state = match database.new_world_state() {
@@ -173,7 +169,7 @@ impl TaskQ {
         let task_id = task.task_id;
         let player = task.perms;
 
-        // Brand new kill switch for the resumed task. The old one may have gotten toggled.
+        // Brand new kill switch for the resumed task.
         let kill_switch = Arc::new(AtomicBool::new(false));
         task.kill_switch = kill_switch.clone();
         let task_control = RunningTask {
@@ -186,8 +182,8 @@ impl TaskQ {
 
         self.active.insert(task_id, task_control);
 
-        let control_sender = control_sender.clone();
-        let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
+        let scheduler_clone = scheduler.clone();
+        let task_scheduler_client = TaskSchedulerClient::new(task_id, scheduler.clone());
 
         // Check if this is a brand new task or a resuming task
         let is_created = matches!(task.state, crate::tasks::task::TaskState::Pending(_));
@@ -221,7 +217,7 @@ impl TaskQ {
 
                 if is_created {
                     // Brand new task - call setup_task_start and transition to Running
-                    let setup_success = task.setup_task_start(&control_sender, &config);
+                    let setup_success = task.setup_task_start(&task_scheduler_client, &config);
                     if !setup_success {
                         // Setup failed (e.g., verb not found)
                         return;
@@ -274,13 +270,12 @@ impl TaskQ {
                     "Task thread panicked"
                 );
 
-                // Send panic abort to scheduler
-                control_sender
-                    .send((
-                        task_id,
-                        TaskControlMsg::TaskAbortPanicked(panic_msg, Box::new(backtrace)),
-                    ))
-                    .ok(); // Ignore send errors - scheduler might be shutting down
+                // Send panic abort directly to scheduler
+                scheduler_clone.handle_task_abort_panicked(
+                    task_id,
+                    panic_msg,
+                    Box::new(backtrace),
+                );
             }
         });
 
@@ -293,8 +288,6 @@ impl TaskQ {
         result: Result<Var, SchedulerError>,
     ) {
         let Some(mut task_control) = self.active.remove(&task_id) else {
-            // Missing task, must have ended already or gone into suspension?
-            // This is odd though? So we'll warn.
             warn!(task_id, "Task not found for notification, ignoring");
             return;
         };
@@ -327,7 +320,7 @@ impl TaskQ {
         mut task: Box<Task>,
         session: Arc<dyn Session>,
         result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
-        control_sender: &Sender<(TaskId, TaskControlMsg)>,
+        scheduler: &Scheduler,
         database: &dyn Database,
         builtin_registry: BuiltinRegistry,
         config: Arc<Config>,
@@ -337,13 +330,9 @@ impl TaskQ {
 
         let task_id = task.task_id;
 
-        // Restore the VM state from its last snapshot, which would either be the original state of
-        // the task, or its state as of the last commit.
+        // Restore the VM state from its last snapshot
         task.vm_host.restore_state(&task.retry_state);
         task.reclaim_program_cache();
-
-        // Reset the execution time limit - the restored state has the old start_time from when
-        // the snapshot was taken, which could cause immediate timeout if enough time has passed.
         task.vm_host.reset_time();
 
         // Fork the session for the new attempt
@@ -361,10 +350,9 @@ impl TaskQ {
             task_start: task.state.task_start().clone(),
         };
 
-        // Footgun warning: ALWAYS `self.tasks.insert` before spawning the task thread!
         self.active.insert(task_id, task_control);
 
-        let control_sender = control_sender.clone();
+        let scheduler_clone = scheduler.clone();
 
         let world_state = match database.new_world_state() {
             Ok(ws) => ws,
@@ -372,7 +360,7 @@ impl TaskQ {
                 panic!("Could not start transaction for retry wake task due to DB error: {e:?}");
             }
         };
-        let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
+        let task_scheduler_client = TaskSchedulerClient::new(task_id, scheduler.clone());
         let player = task.player;
         let wake_to_dispatch_started_at = Instant::now();
         let dispatch_started_at = Instant::now();
@@ -425,12 +413,11 @@ impl TaskQ {
                     "Retry task thread panicked"
                 );
 
-                control_sender
-                    .send((
-                        task_id,
-                        TaskControlMsg::TaskAbortPanicked(panic_msg, Box::new(backtrace)),
-                    ))
-                    .ok();
+                scheduler_clone.handle_task_abort_panicked(
+                    task_id,
+                    panic_msg,
+                    Box::new(backtrace),
+                );
             }
         });
     }
@@ -452,7 +439,6 @@ impl TaskQ {
             }
             true
         } else if self.active.contains_key(&victim_task_id) {
-            // For active tasks, check if sender has permission to kill them
             let tc = self.active.get(&victim_task_id).unwrap();
             if !sender_permissions
                 .check_is_wizard()
@@ -466,7 +452,6 @@ impl TaskQ {
             return v_err(E_INVARG);
         };
 
-        // If suspended we can just remove completely and move on.
         if is_suspended {
             if self
                 .suspended
@@ -481,8 +466,6 @@ impl TaskQ {
             return v_bool_int(false);
         }
 
-        // Otherwise we have to check if the task is running, remove its control record, and flip
-        // its kill switch.
         let victim_task = match self.active.remove(&victim_task_id) {
             Some(victim_task) => victim_task,
             None => {
@@ -501,13 +484,11 @@ impl TaskQ {
         queued_task_id: TaskId,
         sender_permissions: Perms,
         return_value: Var,
-        control_sender: &Sender<(TaskId, TaskControlMsg)>,
+        scheduler: &Scheduler,
         database: &dyn Database,
         builtin_registry: BuiltinRegistry,
         config: Arc<Config>,
     ) -> Var {
-        // Task can't resume itself, it couldn't be queued. Builtin should not have sent this
-        // request.
         if requesting_task_id == queued_task_id {
             error!(
                 task = requesting_task_id,
@@ -516,19 +497,16 @@ impl TaskQ {
             return v_err(E_INVARG);
         }
 
-        // Check permissions for resumption.
         if !self
             .suspended
             .perms_check(queued_task_id, sender_permissions.who, true)
         {
-            // If failed, and not wizard, permission denied
             if !sender_permissions
                 .check_is_wizard()
                 .expect("Could not check wizard status for resume request")
             {
                 return v_err(E_PERM);
             }
-            // Wizard can resume any task, but task must still exist
             if !self.suspended.tasks.contains_key(&queued_task_id) {
                 error!(task = queued_task_id, "Task not found for resume request");
                 return v_err(E_INVARG);
@@ -541,7 +519,7 @@ impl TaskQ {
             .wake_suspended_task(
                 sr,
                 ResumeAction::Return(return_value),
-                control_sender,
+                scheduler,
                 database,
                 builtin_registry,
                 config,
@@ -559,15 +537,12 @@ impl TaskQ {
             warn!(task = disconnect_task_id, "Disconnecting task not found");
             return;
         };
-        // First disconnect the player...
         warn!(?player, ?disconnect_task_id, "Disconnecting player");
         if let Err(e) = task.session.disconnect(*player) {
             warn!(?player, ?disconnect_task_id, error = ?e, "Could not disconnect player's session");
             return;
         }
 
-        // Then abort all of their still-living forked tasks (that weren't the disconnect
-        // task, we need to let that run to completion for sanity's sake.)
         for (task_id, tc) in self.active.iter() {
             if *task_id == disconnect_task_id {
                 continue;
@@ -581,7 +556,6 @@ impl TaskQ {
             );
             tc.kill_switch.store(true, Ordering::SeqCst);
         }
-        // Prune out non-background tasks for the player.
         self.suspended.prune_foreground_tasks(player);
     }
 }

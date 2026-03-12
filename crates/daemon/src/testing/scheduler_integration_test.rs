@@ -304,10 +304,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             None, // No worker receiver for testing
         );
 
-        // Get scheduler client before moving scheduler
+        // Get scheduler client before starting scheduler
         let scheduler_client = scheduler.client().expect("Failed to get scheduler client");
 
-        // Run scheduler in background thread like in main.rs
         let rpc_server_arc = Arc::new(rpc_server);
 
         // Start the RPC server's request loop (handles SessionActions messages)
@@ -326,10 +325,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             })
             .expect("Failed to spawn RPC server thread");
 
-        let scheduler_thread = std::thread::Builder::new()
-            .name("test-scheduler".to_string())
-            .spawn(move || scheduler.run(rpc_server_arc))
-            .expect("Failed to spawn scheduler thread");
+        // Start scheduler (spawns timer + worker threads internally)
+        let scheduler_thread = scheduler.start(rpc_server_arc);
 
         TestEnvironment {
             message_handler,

@@ -27,10 +27,7 @@ use crate::{
     task_context::{
         current_task_scheduler_client, with_current_transaction, with_current_transaction_mut,
     },
-    tasks::{
-        sched_counters, task_program_cache::program_cache_global_stats,
-        task_scheduler_client::TaskControlMsg,
-    },
+    tasks::{sched_counters, task_program_cache::program_cache_global_stats},
     vm::{
         builtins::{
             BfCallState, BfErr,
@@ -720,10 +717,7 @@ fn bf_gc_collect(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
 
     // Send ForceGC message to scheduler
-    current_task_scheduler_client()
-        .control_sender()
-        .send((bf_args.exec_state.task_id, TaskControlMsg::ForceGC))
-        .expect("Could not deliver GC request to scheduler");
+    current_task_scheduler_client().force_gc();
 
     Ok(RetNil)
 }

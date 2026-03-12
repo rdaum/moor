@@ -44,7 +44,7 @@ use moor_common::{
     build,
     model::ObjectRef,
     tasks::SessionFactory,
-    threading::{spawn_efficient, spawn_perf},
+    threading::spawn_efficient,
 };
 use moor_compiler::emit_compile_error;
 use moor_db::{Database, TxDB};
@@ -752,7 +752,7 @@ fn main() -> Result<(), Report> {
     // The pieces from core we're going to use:
     //   Our DB.
     //   Our scheduler.
-    let mut scheduler = Scheduler::new(
+    let scheduler = Scheduler::new(
         version,
         database,
         tasks_db,
@@ -761,9 +761,7 @@ fn main() -> Result<(), Report> {
         Some(workers_sender),
         Some(worker_scheduler_recv),
     );
-    let scheduler_client = scheduler
-        .client()
-        .map_err(|e| eyre!("Failed to get scheduler client: {}", e))?;
+    let scheduler_client = scheduler.client().unwrap();
 
     // Background DB checkpoint thread
     (|| -> Result<(), Report> {
@@ -802,11 +800,8 @@ fn main() -> Result<(), Report> {
         Ok(())
     })()?;
 
-    // The scheduler thread:
-    let scheduler_rpc_server = rpc_server.clone();
-    let scheduler_loop_jh = spawn_perf("moor-scheduler", move || {
-        scheduler.run(scheduler_rpc_server)
-    })?;
+    // Start the scheduler (spawns timer + worker-response threads internally).
+    let scheduler_loop_jh = scheduler.start(rpc_server.clone());
 
     // Invoke server_started hook if it exists
     invoke_server_started_hook(&scheduler_client, &rpc_server)?;
