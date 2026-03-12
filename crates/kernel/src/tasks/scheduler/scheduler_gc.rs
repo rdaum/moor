@@ -19,27 +19,27 @@ fn gc_error(context: &str, e: impl std::fmt::Debug) -> SchedulerError {
 
 impl Scheduler {
     /// Check if garbage collection should run
-    pub(super) fn should_run_gc(&self) -> bool {
+    pub(super) fn should_run_gc(&self, lc: &TaskLifecycle) -> bool {
         // Force GC if requested via gc_collect() builtin
-        if self.gc_force_collect {
+        if lc.gc_force_collect {
             return true;
         }
 
         // Run automatic GC based on conditions
-        self.should_run_automatic_gc()
+        self.should_run_automatic_gc(lc)
     }
 
     /// Check if automatic GC should run based on heuristics
-    fn should_run_automatic_gc(&self) -> bool {
+    fn should_run_automatic_gc(&self, lc: &TaskLifecycle) -> bool {
         let gc_interval = if let Some(config_interval) = self.config.runtime.gc_interval {
             config_interval
-        } else if let Some(db_secs) = self.server_options.gc_interval {
+        } else if let Some(db_secs) = lc.server_options.gc_interval {
             Duration::from_secs(db_secs)
         } else {
             Duration::from_secs(DEFAULT_GC_INTERVAL_SECONDS)
         };
 
-        let time_since_last_gc = self.gc_last_cycle_time.elapsed();
+        let time_since_last_gc = lc.gc_last_cycle_time.elapsed();
 
         if time_since_last_gc >= gc_interval {
             debug!(
@@ -58,15 +58,15 @@ impl Scheduler {
     }
 
     /// Run a garbage collection cycle - mark & sweep collection
-    pub(super) fn run_gc_cycle(&mut self) {
-        self.gc_force_collect = false; // Clear force flag
-        self.gc_cycle_count += 1;
+    pub(super) fn run_gc_cycle(&self, lc: &mut TaskLifecycle) {
+        lc.gc_force_collect = false; // Clear force flag
+        lc.gc_cycle_count += 1;
 
         // Run concurrent mark & sweep GC with retry logic for conflicts
         let max_retries = 3;
         let mut mark_started = false;
         for attempt in 1..=max_retries {
-            let result = self.run_concurrent_gc();
+            let result = self.run_concurrent_gc(lc);
 
             match result {
                 Ok(()) => {
@@ -93,35 +93,35 @@ impl Scheduler {
         }
 
         if !mark_started {
-            self.task_q.suspended.enqueue_gc_waiting_tasks();
+            lc.task_q.suspended.enqueue_gc_waiting_tasks();
         }
 
         // Update the timestamp AFTER GC completes, not before
-        self.gc_last_cycle_time = std::time::Instant::now();
+        lc.gc_last_cycle_time = std::time::Instant::now();
     }
 
     /// Run concurrent mark & sweep GC
-    fn run_concurrent_gc(&mut self) -> Result<(), SchedulerError> {
+    fn run_concurrent_gc(&self, lc: &mut TaskLifecycle) -> Result<(), SchedulerError> {
         // Collect VM references before spawning thread
-        let vm_refs = self.task_q.collect_anonymous_object_references();
-        let mutation_timestamp_before_mark = self.last_mutation_timestamp;
+        let vm_refs = lc.task_q.collect_anonymous_object_references();
+        let mutation_timestamp_before_mark = lc.last_mutation_timestamp;
 
         // Create GC transaction for the background thread
         let gc_tx = self.database.gc_interface().map_err(|e| {
             SchedulerError::GarbageCollectionFailed(format!("Failed to create GC interface: {e}"))
         })?;
         let config_clone = self.config.clone();
-        let scheduler_sender = self.scheduler_sender.clone();
-        let gc_cycle_count = self.gc_cycle_count;
+        let scheduler = self.clone();
+        let gc_cycle_count = lc.gc_cycle_count;
 
         // Set flag to prevent additional concurrent GC
-        self.gc_mark_in_progress = true;
+        lc.gc_mark_in_progress = true;
 
         // Spawn the mark thread
         let _handle = spawn_gc_mark_phase(
             gc_tx,
             config_clone,
-            scheduler_sender,
+            scheduler,
             vm_refs,
             mutation_timestamp_before_mark,
             gc_cycle_count,
@@ -130,40 +130,24 @@ impl Scheduler {
         Ok(())
     }
 
-    /// Wait for all active tasks to finish before starting sweep phase
-    fn wait_for_active_tasks_to_finish(&mut self) -> Result<(), SchedulerError> {
-        if self.task_q.active.is_empty() {
-            info!("No active tasks to wait for");
-            return Ok(());
-        }
-
-        debug!(
-            "Waiting for {} active tasks to finish before GC sweep phase",
-            self.task_q.active.len()
-        );
-
-        // Spin until all active tasks are done
-        let tick_duration = self
-            .config
-            .runtime
-            .scheduler_tick_duration
-            .unwrap_or(Duration::from_millis(50));
-
-        while !self.task_q.active.is_empty() {
-            std::thread::sleep(tick_duration);
-
-            // Process any incoming messages while waiting
-            if let Ok((task_id, msg)) = self.task_control_receiver.try_recv() {
-                self.handle_task_msg(task_id, msg);
+    /// Wait for all active tasks to finish before starting sweep phase.
+    /// This method manages its own locking since it must drop and reacquire
+    /// the lifecycle lock while waiting.
+    fn wait_for_active_tasks_to_finish(&self) -> Result<(), SchedulerError> {
+        loop {
+            {
+                let lc = self.lifecycle.lock().unwrap();
+                if lc.task_q.active.is_empty() {
+                    return Ok(());
+                }
             }
+            std::thread::sleep(Duration::from_millis(50));
         }
-
-        Ok(())
     }
 
     /// Blocking sweep phase for concurrent GC - waits for tasks and collects objects
     pub(super) fn run_blocking_sweep_phase(
-        &mut self,
+        &self,
         unreachable_objects: std::collections::HashSet<Obj>,
     ) -> Result<(), SchedulerError> {
         debug!(
@@ -172,37 +156,49 @@ impl Scheduler {
         );
 
         // Block new tasks during sweep
-        self.gc_sweep_in_progress = true;
+        {
+            let mut lc = self.lifecycle.lock().unwrap();
+            lc.gc_sweep_in_progress = true;
+        }
 
         // Check mutation timestamp before waiting for tasks
-        let mutation_timestamp_before_wait = self.last_mutation_timestamp;
+        let mutation_timestamp_before_wait = {
+            let lc = self.lifecycle.lock().unwrap();
+            lc.last_mutation_timestamp
+        };
 
-        // Wait for all active tasks to finish
+        // Wait for all active tasks to finish (manages its own locking)
         self.wait_for_active_tasks_to_finish()?;
 
         // Check mutation timestamp after waiting for tasks
-        let mutation_timestamp_after_wait = self.last_mutation_timestamp;
-        if mutation_timestamp_before_wait != mutation_timestamp_after_wait {
-            info!(
-                "Minor GC cycle #{}: mutations detected while waiting for tasks (before: {:?}, after: {:?}), sweep phase invalidated",
-                self.gc_cycle_count, mutation_timestamp_before_wait, mutation_timestamp_after_wait
-            );
-            self.gc_sweep_in_progress = false;
-            return Ok(());
+        {
+            let mut lc = self.lifecycle.lock().unwrap();
+            let mutation_timestamp_after_wait = lc.last_mutation_timestamp;
+            if mutation_timestamp_before_wait != mutation_timestamp_after_wait {
+                info!(
+                    "Minor GC cycle #{}: mutations detected while waiting for tasks (before: {:?}, after: {:?}), sweep phase invalidated",
+                    lc.gc_cycle_count, mutation_timestamp_before_wait, mutation_timestamp_after_wait
+                );
+                lc.gc_sweep_in_progress = false;
+                return Ok(());
+            }
         }
 
         // Run the actual sweep
         let result = self.run_gc_sweep_phase(std::collections::HashSet::new(), unreachable_objects);
 
         // Unblock new tasks
-        self.gc_sweep_in_progress = false;
+        {
+            let mut lc = self.lifecycle.lock().unwrap();
+            lc.gc_sweep_in_progress = false;
+        }
 
         result
     }
 
     /// Sweep phase of minor GC - collects unreachable objects (promotion already done in mark phase)
     fn run_gc_sweep_phase(
-        &mut self,
+        &self,
         _reachable_objects: std::collections::HashSet<Obj>,
         unreachable_objects: std::collections::HashSet<Obj>,
     ) -> Result<(), SchedulerError> {

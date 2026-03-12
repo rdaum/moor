@@ -39,7 +39,7 @@ pub type ExecResult = Result<Var, Exception>;
 /// Setup test task context with proper task scheduler client
 pub fn setup_task_context(world_state: Box<dyn WorldState>) -> TaskGuard {
     let (scs_tx, _scs_rx) = flume::unbounded();
-    let task_scheduler_client = TaskSchedulerClient::new(0, scs_tx);
+    let task_scheduler_client = TaskSchedulerClient::new_channel(0, scs_tx);
     let session = std::sync::Arc::new(moor_common::tasks::NoopClientSession::new());
     TaskGuard::new(
         world_state,

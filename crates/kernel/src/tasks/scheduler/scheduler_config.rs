@@ -51,14 +51,15 @@ fn load_float_sysprop(server_options_obj: &Obj, name: Symbol, tx: &dyn WorldStat
 }
 
 impl Scheduler {
-    pub fn reload_server_options(&mut self) {
+    pub fn reload_server_options(&self) {
         // Load the server options from the database, if possible.
         let tx = self
             .database
             .new_world_state()
             .expect("Could not open transaction to read server properties");
 
-        let mut so = self.server_options.clone();
+        let mut lc = self.lifecycle.lock().unwrap();
+        let mut so = lc.server_options.clone();
 
         let Ok(server_options_obj) =
             tx.retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, *SERVER_OPTIONS)
@@ -130,17 +131,19 @@ impl Scheduler {
         }
         tx.rollback().unwrap();
 
-        self.server_options = so;
+        lc.server_options = so;
 
         info!("Server options refreshed.");
     }
 
     pub fn get_checkpoint_interval(
-        &mut self,
+        &self,
         cli_checkpoint_interval: Option<Duration>,
     ) -> Option<Duration> {
         // Reload server options to get fresh dump_interval from database
         self.reload_server_options();
+
+        let lc = self.lifecycle.lock().unwrap();
 
         // Determine the checkpoint interval using the proper precedence:
         // 1. Command-line config overrides all
@@ -152,7 +155,7 @@ impl Scheduler {
                 cli_interval
             );
             Some(cli_interval)
-        } else if let Some(db_secs) = self.server_options.dump_interval {
+        } else if let Some(db_secs) = lc.server_options.dump_interval {
             let db_interval = Duration::from_secs(db_secs);
             info!("Using dump_interval from database: {:?}", db_interval);
             Some(db_interval)
@@ -161,9 +164,11 @@ impl Scheduler {
         }
     }
 
-    pub fn get_gc_interval(&mut self) -> Option<Duration> {
+    pub fn get_gc_interval(&self) -> Option<Duration> {
         // Reload server options to get fresh gc_interval from database
         self.reload_server_options();
+
+        let lc = self.lifecycle.lock().unwrap();
 
         // Determine the GC interval using the proper precedence:
         // 1. Command-line config overrides all
@@ -175,7 +180,7 @@ impl Scheduler {
                 config_interval
             );
             Some(config_interval)
-        } else if let Some(db_secs) = self.server_options.gc_interval {
+        } else if let Some(db_secs) = lc.server_options.gc_interval {
             let db_interval = Duration::from_secs(db_secs);
             info!("Using gc_interval from database: {:?}", db_interval);
             Some(db_interval)

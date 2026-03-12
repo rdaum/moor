@@ -58,7 +58,7 @@ pub type SnapshotCallback = Box<
 // Re-export sequence constants for use in VM
 pub use engine::SEQUENCE_MAX_OBJECT;
 
-pub trait Database: Send + WorldStateSource {
+pub trait Database: Send + Sync + WorldStateSource {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
     fn create_snapshot(&self) -> Result<Box<dyn SnapshotInterface>, WorldStateError>;
     fn create_snapshot_async(&self, callback: SnapshotCallback) -> Result<(), WorldStateError>;

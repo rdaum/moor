@@ -27,7 +27,7 @@ use clap_derive::Parser;
 use moor_common::model::ObjectRef;
 use moor_common::{
     model::{CommitResult, ObjAttrs, ObjFlag, ObjectKind, PropFlag, VerbArgsSpec, VerbFlag},
-    threading::{ThreadClass, pin_current_thread_to_class, spawn_perf},
+    threading::{ThreadClass, pin_current_thread_to_class},
     util::BitEnum,
 };
 use moor_compiler::compile;
@@ -467,9 +467,7 @@ async fn main() -> Result<(), eyre::Error> {
     let scheduler_client = scheduler.client()?;
 
     let session_factory = Arc::new(DirectSessionFactory {});
-    let _scheduler_handle = spawn_perf("moor-scheduler", move || {
-        scheduler.run(session_factory);
-    })?;
+    let _scheduler_handle = scheduler.start(session_factory);
 
     run_workload(&args, &scheduler_client, player, opcodes_per_invocation).await?;
 

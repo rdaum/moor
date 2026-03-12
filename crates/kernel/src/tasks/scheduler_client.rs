@@ -11,16 +11,15 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use flume::Sender;
-use std::{sync::Arc, time::Duration};
-use uuid::Uuid;
+use std::sync::Arc;
 
 use moor_common::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
 use moor_common::tasks::{SchedulerError, SchedulerError::CompilationError, Session};
 use moor_common::util::PerfTimerGuard;
-use moor_compiler::{Program, compile};
+use moor_compiler::compile;
 use moor_var::{List, Obj, Symbol, Var};
 
+use crate::tasks::scheduler::Scheduler;
 use crate::tasks::world_state_action::{
     WorldStateAction, WorldStateRequest, WorldStateResponse, WorldStateResult,
 };
@@ -41,12 +40,12 @@ pub struct GCStats {
 /// Handles requests for task submission, shutdown, etc.
 #[derive(Clone)]
 pub struct SchedulerClient {
-    pub(crate) scheduler_sender: Sender<SchedulerClientMsg>,
+    scheduler: Scheduler,
 }
 
 impl SchedulerClient {
-    pub fn new(scheduler_sender: Sender<SchedulerClientMsg>) -> Self {
-        Self { scheduler_sender }
+    pub fn new(scheduler: Scheduler) -> Self {
+        Self { scheduler }
     }
 
     /// Submit a command to the scheduler for execution.
@@ -59,20 +58,12 @@ impl SchedulerClient {
     ) -> Result<TaskHandle, SchedulerError> {
         let _timer = PerfTimerGuard::new(&sched_counters().submit_command_task_latency);
 
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::SubmitCommandTask {
-                handler_object: *handler_object,
-                player: *player,
-                command: command.to_string(),
-                session,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-
-        receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        self.scheduler.submit_command_task_inner(
+            *handler_object,
+            *player,
+            command.to_string(),
+            session,
+        )
     }
 
     /// Submit a verb task to the scheduler for execution.
@@ -92,23 +83,15 @@ impl SchedulerClient {
     ) -> Result<TaskHandle, SchedulerError> {
         let _timer = PerfTimerGuard::new(&sched_counters().submit_verb_task_latency);
 
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::SubmitVerbTask {
-                player: *player,
-                vloc: vloc.clone(),
-                verb,
-                args,
-                argstr,
-                perms: *perms,
-                session,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-
-        receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        self.scheduler.submit_verb_task_inner(
+            *player,
+            vloc.clone(),
+            verb,
+            args,
+            argstr,
+            *perms,
+            session,
+        )
     }
 
     /// Receive input that the (suspended) task previously requested, using the given
@@ -118,22 +101,11 @@ impl SchedulerClient {
     pub fn submit_requested_input(
         &self,
         player: &Obj,
-        input_request_id: Uuid,
+        input_request_id: uuid::Uuid,
         input: Var,
     ) -> Result<(), SchedulerError> {
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::SubmitTaskInput {
-                player: *player,
-                input_request_id,
-                input,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-
-        receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        self.scheduler
+            .submit_task_input_inner(*player, input_request_id, input)
     }
 
     pub fn submit_out_of_band_task(
@@ -146,21 +118,13 @@ impl SchedulerClient {
     ) -> Result<TaskHandle, SchedulerError> {
         let _timer = PerfTimerGuard::new(&sched_counters().submit_oob_task_latency);
 
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::SubmitOobTask {
-                handler_object: *handler_object,
-                player: *player,
-                command,
-                argstr,
-                session,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-
-        receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        self.scheduler.submit_oob_task_inner(
+            *handler_object,
+            *player,
+            command,
+            argstr,
+            session,
+        )
     }
 
     /// Submit an eval task to the scheduler for execution.
@@ -181,32 +145,17 @@ impl SchedulerClient {
             Err(e) => return Err(CompilationError(e)),
         };
 
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::SubmitEvalTask {
-                player: *player,
-                perms: *perms,
-                program,
-                initial_env,
-                sessions,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-
-        receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        self.scheduler.submit_eval_task_inner(
+            *player,
+            *perms,
+            program,
+            initial_env,
+            sessions,
+        )
     }
 
     pub fn submit_shutdown(&self, msg: &str) -> Result<(), SchedulerError> {
-        // If we can't deliver a shutdown message, that's really a cause for panic!
-        let (send, reply) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::Shutdown(msg.to_string(), send))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-        reply
-            .recv()
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        self.scheduler.handle_shutdown_request(msg.to_string())
     }
 
     pub fn submit_verb_program(
@@ -217,8 +166,6 @@ impl SchedulerClient {
         verb_name: Symbol,
         code: Vec<String>,
     ) -> Result<(Obj, Symbol), SchedulerError> {
-        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
-
         let action = WorldStateAction::ProgramVerb {
             player: *player,
             perms: *perms,
@@ -245,8 +192,6 @@ impl SchedulerClient {
         obj: &ObjectRef,
         property: Symbol,
     ) -> Result<Var, SchedulerError> {
-        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
-
         let action = WorldStateAction::RequestSystemProperty {
             player: *player,
             obj: obj.clone(),
@@ -285,56 +230,22 @@ impl SchedulerClient {
     pub fn request_checkpoint_with_blocking(&self, blocking: bool) -> Result<(), SchedulerError> {
         let _timer = PerfTimerGuard::new(&sched_counters().checkpoint_latency);
 
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::Checkpoint(blocking, reply))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-
-        let timeout = if blocking {
-            Duration::from_secs(600) // 10 minutes for large textdumps
-        } else {
-            Duration::from_secs(30) // 30 seconds for checkpoint initiation (snapshot creation can be slow)
-        };
-
-        receive
-            .recv_timeout(timeout)
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        self.scheduler.handle_checkpoint_request(blocking)
     }
 
     /// Check if the scheduler is alive and responding (lightweight operation)
     pub fn check_status(&self) -> Result<(), SchedulerError> {
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::CheckStatus(reply))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-
-        receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        self.scheduler.handle_check_status()
     }
 
     /// Get garbage collection statistics from the scheduler
     pub fn get_gc_stats(&self) -> Result<GCStats, SchedulerError> {
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::GetGCStats(reply))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-
-        receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        self.scheduler.handle_get_gc_stats()
     }
 
     /// Request a garbage collection cycle from the scheduler
     pub fn request_gc(&self) -> Result<(), SchedulerError> {
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::RequestGC(reply))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-
-        receive
-            .recv_timeout(Duration::from_secs(10)) // Longer timeout since GC might take time
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        self.scheduler.handle_request_gc()
     }
 
     pub fn request_verbs(
@@ -344,8 +255,6 @@ impl SchedulerClient {
         obj: &ObjectRef,
         inherited: bool,
     ) -> Result<VerbDefs, SchedulerError> {
-        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
-
         let action = WorldStateAction::RequestVerbs {
             player: *player,
             perms: *perms,
@@ -372,8 +281,6 @@ impl SchedulerClient {
         obj: &ObjectRef,
         verb: Symbol,
     ) -> Result<(VerbDef, Vec<String>), SchedulerError> {
-        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
-
         let action = WorldStateAction::RequestVerbCode {
             player: *player,
             perms: *perms,
@@ -400,8 +307,6 @@ impl SchedulerClient {
         obj: &ObjectRef,
         inherited: bool,
     ) -> Result<Vec<(PropDef, PropPerms)>, SchedulerError> {
-        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
-
         let action = WorldStateAction::RequestProperties {
             player: *player,
             perms: *perms,
@@ -428,8 +333,6 @@ impl SchedulerClient {
         obj: &ObjectRef,
         property: Symbol,
     ) -> Result<(PropDef, PropPerms, Var), SchedulerError> {
-        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
-
         let action = WorldStateAction::RequestProperty {
             player: *player,
             perms: *perms,
@@ -450,8 +353,6 @@ impl SchedulerClient {
     }
 
     pub fn resolve_object(&self, player: Obj, obj: ObjectRef) -> Result<Var, SchedulerError> {
-        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
-
         let action = WorldStateAction::ResolveObject { player, obj };
         let request = WorldStateRequest::new(action);
         let responses = self.execute_world_state_actions(vec![request], false)?;
@@ -469,21 +370,11 @@ impl SchedulerClient {
     /// Execute a batch of WorldStateActions.
     pub fn execute_world_state_actions(
         &self,
-        actions: Vec<crate::tasks::world_state_action::WorldStateRequest>,
+        actions: Vec<WorldStateRequest>,
         rollback: bool,
     ) -> Result<Vec<WorldStateResponse>, SchedulerError> {
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::ExecuteWorldStateActions {
-                actions,
-                rollback,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-
-        receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        self.scheduler
+            .execute_world_state_actions_inner(actions, rollback)
     }
 
     /// Submit a batch of WorldStateActions as a tracked task.
@@ -508,22 +399,15 @@ impl SchedulerClient {
         let result_sink: Arc<
             std::sync::Mutex<Option<Result<Vec<WorldStateResult>, SchedulerError>>>,
         > = Arc::new(std::sync::Mutex::new(None));
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::SubmitBatchWorldStateTask {
-                player: *player,
-                perms: *perms,
-                actions,
-                rollback,
-                result_sink: result_sink.clone(),
-                session,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
 
-        let handle = receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)??;
+        let handle = self.scheduler.submit_batch_world_state_task_inner(
+            *player,
+            *perms,
+            actions,
+            rollback,
+            result_sink.clone(),
+            session,
+        )?;
 
         Ok((handle, result_sink))
     }
@@ -537,19 +421,8 @@ impl SchedulerClient {
     ) -> Result<moor_objdef::ObjDefLoaderResults, SchedulerError> {
         let _timer = PerfTimerGuard::new(&sched_counters().load_object_latency);
 
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::LoadObject {
-                object_definition,
-                options,
-                return_conflicts,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-
-        receive
-            .recv_timeout(Duration::from_secs(30)) // Longer timeout for object loading
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        self.scheduler
+            .handle_load_object_request(object_definition, options, return_conflicts)
     }
 
     /// Submit a system handler task with proper permissions lookup.
@@ -564,20 +437,8 @@ impl SchedulerClient {
     ) -> Result<TaskHandle, SchedulerError> {
         let _timer = PerfTimerGuard::new(&sched_counters().submit_system_handler_task_latency);
 
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::SubmitSystemHandlerTask {
-                player: *player,
-                handler_type,
-                args,
-                session,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-
-        receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        self.scheduler
+            .submit_system_handler_task_inner(*player, handler_type, args, session)
     }
 
     /// Reload an existing object from objdef text, completely replacing its contents.
@@ -589,19 +450,8 @@ impl SchedulerClient {
     ) -> Result<moor_objdef::ObjDefLoaderResults, SchedulerError> {
         let _timer = PerfTimerGuard::new(&sched_counters().reload_object_latency);
 
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::ReloadObject {
-                object_definition,
-                constants,
-                target_obj,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-
-        receive
-            .recv_timeout(Duration::from_secs(30)) // Longer timeout for object reloading
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        self.scheduler
+            .handle_reload_object_request(object_definition, constants, target_obj)
     }
 
     /// Get all objects in the database (for tab completion)
@@ -685,6 +535,7 @@ impl SchedulerClient {
     }
 }
 
+#[allow(dead_code)]
 pub enum SchedulerClientMsg {
     /// Submit a command to be executed by the player.
     SubmitCommandTask {
@@ -708,7 +559,7 @@ pub enum SchedulerClientMsg {
     /// Submit input to a task that is waiting for it.
     SubmitTaskInput {
         player: Obj,
-        input_request_id: Uuid,
+        input_request_id: uuid::Uuid,
         input: Var,
         reply: oneshot::Sender<Result<(), SchedulerError>>,
     },
@@ -725,7 +576,7 @@ pub enum SchedulerClientMsg {
     SubmitEvalTask {
         player: Obj,
         perms: Obj,
-        program: Program,
+        program: moor_compiler::Program,
         /// Optional initial variable bindings to inject into the eval's environment.
         initial_env: Option<Vec<(Symbol, Var)>>,
         sessions: Arc<dyn Session>,
