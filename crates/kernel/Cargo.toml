@@ -84,6 +84,7 @@ serde_json.workspace = true
 xml-rs.workspace = true
 
 # Async Runtime & Concurrency
+arc-swap.workspace = true
 flume.workspace = true
 oneshot.workspace = true
 

@@ -33,7 +33,7 @@ impl Scheduler {
     fn should_run_automatic_gc(&self, lc: &TaskLifecycle) -> bool {
         let gc_interval = if let Some(config_interval) = self.config.runtime.gc_interval {
             config_interval
-        } else if let Some(db_secs) = lc.server_options.gc_interval {
+        } else if let Some(db_secs) = self.server_options.load().gc_interval {
             Duration::from_secs(db_secs)
         } else {
             Duration::from_secs(DEFAULT_GC_INTERVAL_SECONDS)
