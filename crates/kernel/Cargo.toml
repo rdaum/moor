@@ -86,7 +86,6 @@ xml-rs.workspace = true
 # Async Runtime & Concurrency
 arc-swap.workspace = true
 flume.workspace = true
-oneshot.workspace = true
 parking_lot.workspace = true
 
 # Authentication & Security
