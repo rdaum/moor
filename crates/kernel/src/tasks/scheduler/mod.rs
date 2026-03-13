@@ -28,9 +28,10 @@ use crate::{
 use flume::{Receiver, Sender};
 use moor_common::util::{Deadline, Instant};
 use rand::Rng;
+use parking_lot::{Condvar, Mutex};
 use std::{
     sync::{
-        Arc, Condvar, LazyLock, Mutex,
+        Arc, LazyLock,
         atomic::{AtomicBool, Ordering},
     },
     thread::yield_now,
@@ -229,7 +230,7 @@ impl Scheduler {
     ) -> std::thread::JoinHandle<()> {
         // Rehydrate suspended tasks.
         {
-            let mut lc = self.lifecycle.lock().unwrap();
+            let mut lc = self.lifecycle.lock();
             lc.task_q.suspended.load_tasks(bg_session_factory);
             lc.running = true;
         }
@@ -237,7 +238,7 @@ impl Scheduler {
         self.reload_server_options();
 
         // Start worker response thread if we have a worker receiver.
-        if let Some(recv) = self.worker_response_recv.lock().unwrap().take() {
+        if let Some(recv) = self.worker_response_recv.lock().take() {
             let scheduler = self.clone();
             spawn_perf("moor-worker-recv", move || {
                 scheduler.worker_response_loop(recv);
@@ -262,7 +263,7 @@ impl Scheduler {
     fn timer_loop(&self) {
         loop {
             {
-                let lc = self.lifecycle.lock().unwrap();
+                let lc = self.lifecycle.lock();
                 if !lc.running {
                     break;
                 }
@@ -270,7 +271,7 @@ impl Scheduler {
 
             // Check GC conditions
             {
-                let mut lc = self.lifecycle.lock().unwrap();
+                let mut lc = self.lifecycle.lock();
                 if self.config.features.anonymous_objects
                     && !lc.gc_collection_in_progress
                     && !lc.gc_mark_in_progress
@@ -303,14 +304,14 @@ impl Scheduler {
                 .unwrap_or(Duration::from_millis(10));
 
             let (lock, cvar) = &*self.timer_notify;
-            let mut notified = lock.lock().unwrap();
+            let mut notified = lock.lock();
             *notified = false;
-            let _ = cvar.wait_timeout(notified, tick_duration);
+            cvar.wait_for(&mut notified, tick_duration);
         }
 
         // Write out all the suspended tasks to the database.
         info!("Timer loop done; saving suspended tasks");
-        let lc = self.lifecycle.lock().unwrap();
+        let lc = self.lifecycle.lock();
         lc.task_q.suspended.save_tasks();
         info!("Saved.");
     }
@@ -318,7 +319,7 @@ impl Scheduler {
     /// Wake the timer thread to recompute its sleep duration.
     pub(crate) fn wake_timer_thread(&self) {
         let (lock, cvar) = &*self.timer_notify;
-        let mut notified = lock.lock().unwrap();
+        let mut notified = lock.lock();
         *notified = true;
         cvar.notify_one();
     }
@@ -333,7 +334,7 @@ impl Scheduler {
 
     /// Collect expired timer tasks and wake them.
     fn collect_and_wake_expired_tasks(&self) {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         let to_wake = match lc.task_q.collect_wake_tasks() {
             Some(tasks) => tasks,

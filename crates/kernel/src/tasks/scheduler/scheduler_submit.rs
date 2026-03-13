@@ -25,7 +25,7 @@ impl Scheduler {
         command: String,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         let task_id = lc.next_task_id;
         lc.next_task_id += 1;
 
@@ -68,7 +68,7 @@ impl Scheduler {
             }
         };
 
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         let task_id = lc.next_task_id;
         lc.next_task_id += 1;
 
@@ -91,7 +91,7 @@ impl Scheduler {
         input_request_id: Uuid,
         input: Var,
     ) -> Result<(), SchedulerError> {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         // Validate that the given input request is valid, and if so, resume the task, sending it
         // the given input, clearing the input request out.
@@ -125,7 +125,7 @@ impl Scheduler {
         argstr: Var,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         let task_id = lc.next_task_id;
         lc.next_task_id += 1;
 
@@ -148,7 +148,7 @@ impl Scheduler {
         initial_env: Option<Vec<(Symbol, Var)>>,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         let task_id = lc.next_task_id;
         lc.next_task_id += 1;
 
@@ -167,7 +167,7 @@ impl Scheduler {
         &self,
         msg: String,
     ) -> Result<(), SchedulerError> {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         // Send shutdown notification to all live tasks.
         for (_, task) in lc.task_q.active.iter() {
@@ -190,7 +190,7 @@ impl Scheduler {
             // Drop the lock while spinning so tasks can complete.
             drop(lc);
             yield_now();
-            lc = self.lifecycle.lock().unwrap();
+            lc = self.lifecycle.lock();
         }
 
         // Now ask the rpc server and hosts to shutdown
@@ -223,7 +223,7 @@ impl Scheduler {
     pub(crate) fn handle_get_gc_stats(
         &self,
     ) -> Result<crate::tasks::scheduler_client::GCStats, SchedulerError> {
-        let lc = self.lifecycle.lock().unwrap();
+        let lc = self.lifecycle.lock();
         Ok(crate::tasks::scheduler_client::GCStats {
             cycle_count: lc.gc_cycle_count,
         })
@@ -232,7 +232,7 @@ impl Scheduler {
     pub(crate) fn handle_request_gc(&self) -> Result<(), SchedulerError> {
         debug!("Direct GC request received via scheduler client");
 
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         // Check if anonymous objects are enabled first
         if !self.config.features.anonymous_objects {
@@ -278,7 +278,7 @@ impl Scheduler {
         unreachable_objects: std::collections::HashSet<Obj>,
         mutation_timestamp_before_mark: Option<u64>,
     ) {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         // Clear the concurrent GC flag
         lc.gc_mark_in_progress = false;
@@ -313,7 +313,7 @@ impl Scheduler {
         // Start blocking sweep phase - drop lock first since run_blocking_sweep_phase manages its own locking
         drop(lc);
         let _ = self.run_blocking_sweep_phase(unreachable_objects);
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         lc.task_q.suspended.enqueue_gc_waiting_tasks();
     }
 
@@ -344,7 +344,7 @@ impl Scheduler {
         // Prepare arguments: [args...] (handler_type is now encoded in the verb name)
         let handler_args = args;
 
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         let task_id = lc.next_task_id;
         lc.next_task_id += 1;
         debug!("Created system handler task with id={}", task_id);
@@ -437,7 +437,7 @@ impl Scheduler {
         >,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         let task_id = lc.next_task_id;
         lc.next_task_id += 1;
 
