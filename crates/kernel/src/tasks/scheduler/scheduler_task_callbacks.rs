@@ -33,7 +33,7 @@ impl Scheduler {
         mutations_made: bool,
         timestamp: u64,
     ) {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         // Record that this is the transaction to have last mutated the world.
         // Used by e.g. concurrent GC algorithm.
@@ -60,7 +60,7 @@ impl Scheduler {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.task_conflict_retry);
 
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         lc.discard_pending_sends(task_id);
 
@@ -117,7 +117,7 @@ impl Scheduler {
     }
 
     pub fn handle_task_verb_not_found(&self, task_id: TaskId, who: Var, what: Symbol) {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         lc.task_q.send_task_result(
             task_id,
             Err(SchedulerError::TaskAbortedVerbNotFound(who, what)),
@@ -125,7 +125,7 @@ impl Scheduler {
     }
 
     pub fn handle_task_command_error(&self, task_id: TaskId, error: CommandError) {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         // This is a common occurrence, so we don't want to log it at warn level.
         lc.task_q
             .send_task_result(task_id, Err(CommandExecutionError(error)));
@@ -135,7 +135,7 @@ impl Scheduler {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.task_abort_cancelled);
 
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         lc.discard_pending_sends(task_id);
         lc.task_q.remove_message_queue(task_id);
@@ -170,7 +170,7 @@ impl Scheduler {
     ) {
         warn!(?task_id, ?panic_msg, "Task thread panicked");
 
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         lc.discard_pending_sends(task_id);
         lc.task_q.remove_message_queue(task_id);
@@ -188,7 +188,7 @@ impl Scheduler {
         line_number: usize,
         handler_info: Box<TimeoutHandlerInfo>,
     ) {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         lc.discard_pending_sends(task_id);
         lc.task_q.remove_message_queue(task_id);
@@ -286,7 +286,7 @@ impl Scheduler {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.task_exception);
 
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         let Some(task) = lc.task_q.active.get_mut(&task_id) else {
             warn!(task_id, "Task not found for abort");
@@ -324,7 +324,7 @@ impl Scheduler {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.fork_task);
 
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         // Task has requested a fork. Dispatch it and reply with the new task id.
         let new_session = {
@@ -371,7 +371,7 @@ impl Scheduler {
         wake_condition: TaskSuspend,
         task: Box<Task>,
     ) {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         // Task is suspended. The resume time (if any) is the system time at which
         // the scheduler should try to wake us up.
@@ -468,7 +468,7 @@ impl Scheduler {
         task: Box<Task>,
         metadata: Option<Vec<(Symbol, Var)>>,
     ) {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         // Task has gone into suspension waiting for input from the client.
         // Create a unique ID for this request, and we'll wake the task when the
@@ -504,13 +504,13 @@ impl Scheduler {
     }
 
     pub fn handle_request_tasks(&self, _task_id: TaskId) -> Vec<TaskDescription> {
-        let lc = self.lifecycle.lock().unwrap();
+        let lc = self.lifecycle.lock();
         lc.task_q.suspended.tasks()
         // TODO: add non-queued tasks.
     }
 
     pub fn handle_task_exists(&self, check_task_id: TaskId) -> Option<Obj> {
-        let lc = self.lifecycle.lock().unwrap();
+        let lc = self.lifecycle.lock();
         // Check both suspended and active tasks atomically
         lc.task_q.task_owner(check_task_id)
     }
@@ -521,7 +521,7 @@ impl Scheduler {
         victim_task_id: TaskId,
         sender_permissions: Perms,
     ) -> Var {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         lc.task_q.kill_task(victim_task_id, sender_permissions)
     }
 
@@ -532,7 +532,7 @@ impl Scheduler {
         sender_permissions: Perms,
         return_value: Var,
     ) -> Var {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         lc.task_q.resume_task(
             task_id,
             queued_task_id,
@@ -546,7 +546,7 @@ impl Scheduler {
     }
 
     pub fn handle_boot_player(&self, task_id: TaskId, player: Obj) {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         // Task is asking to boot a player.
         lc.task_q.disconnect_task(task_id, &player);
     }
@@ -557,7 +557,7 @@ impl Scheduler {
         player: Obj,
         event: Box<NarrativeEvent>,
     ) {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         // Task is asking to notify a player of an event.
         let Some(task) = lc.task_q.active.get_mut(&task_id) else {
             warn!(task_id, "Task not found for notify request");
@@ -575,7 +575,7 @@ impl Scheduler {
         player: Obj,
         event: Box<NarrativeEvent>,
     ) {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         // Task is asking to log an event without broadcasting.
         let Some(task) = lc.task_q.active.get_mut(&task_id) else {
             warn!(task_id, "Task not found for log_event request");
@@ -601,7 +601,7 @@ impl Scheduler {
         port: u16,
         options: Box<Vec<(Symbol, Var)>>,
     ) -> Option<Error> {
-        let lc = self.lifecycle.lock().unwrap();
+        let lc = self.lifecycle.lock();
         let Some(_task) = lc.task_q.active.get(&task_id) else {
             warn!(task_id, "Task not found for listen request");
             return Some(E_INVARG.msg("Task not found"));
@@ -619,7 +619,7 @@ impl Scheduler {
         host_type: String,
         port: u16,
     ) -> Option<Error> {
-        let lc = self.lifecycle.lock().unwrap();
+        let lc = self.lifecycle.lock();
         let Some(_task) = lc.task_q.active.get(&task_id) else {
             warn!(task_id, "Task not found for unlisten request");
             return Some(E_INVARG.msg("Task not found"));
@@ -648,7 +648,7 @@ impl Scheduler {
         who: Obj,
         line: String,
     ) -> Result<TaskId, Error> {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         let new_session = {
             let Some(task) = lc.task_q.active.get_mut(&task_id) else {
@@ -679,7 +679,7 @@ impl Scheduler {
     }
 
     pub fn handle_active_tasks(&self, _task_id: TaskId) -> Result<ActiveTaskDescriptions, Error> {
-        let lc = self.lifecycle.lock().unwrap();
+        let lc = self.lifecycle.lock();
         let mut results = vec![];
         for (task_id, tc) in lc.task_q.active.iter() {
             results.push((*task_id, tc.player, tc.task_start.clone()));
@@ -706,7 +706,7 @@ impl Scheduler {
         value: Var,
         sender_permissions: Perms,
     ) -> Var {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         let Some(owner) = lc.task_q.task_owner(target_task_id) else {
             return v_error(E_INVARG.with_msg(|| {
@@ -751,7 +751,7 @@ impl Scheduler {
     }
 
     pub fn handle_task_recv(&self, task_id: TaskId) -> Vec<Var> {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         // Drain all messages from the calling task's queue
         let (messages, total_wait_nanos, message_count) =
             lc.task_q.drain_messages_with_wait_nanos(task_id);
@@ -777,7 +777,7 @@ impl Scheduler {
             );
         } else {
             {
-                let mut lc = self.lifecycle.lock().unwrap();
+                let mut lc = self.lifecycle.lock();
                 lc.gc_force_collect = true;
             }
             self.wake_timer_thread();
@@ -812,7 +812,7 @@ impl Scheduler {
         &self,
         task_id: TaskId,
     ) -> Result<Box<dyn WorldState>, SchedulerError> {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         lc.flush_pending_sends(task_id);
         drop(lc);
 
@@ -838,7 +838,7 @@ impl Scheduler {
         task_id: TaskId,
         new_player: Obj,
     ) -> Result<(), Error> {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         // Get the current task to access its session
         let Some(task) = lc.task_q.active.get_mut(&task_id) else {

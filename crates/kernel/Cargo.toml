@@ -87,6 +87,7 @@ xml-rs.workspace = true
 arc-swap.workspace = true
 flume.workspace = true
 oneshot.workspace = true
+parking_lot.workspace = true
 
 # Authentication & Security
 age = { workspace = true, features = ["ssh"] }
