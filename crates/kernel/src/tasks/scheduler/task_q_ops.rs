@@ -274,7 +274,7 @@ impl TaskQ {
                 scheduler_clone.handle_task_abort_panicked(
                     task_id,
                     panic_msg,
-                    Box::new(backtrace),
+                    backtrace,
                 );
             }
         });
@@ -416,7 +416,7 @@ impl TaskQ {
                 scheduler_clone.handle_task_abort_panicked(
                     task_id,
                     panic_msg,
-                    Box::new(backtrace),
+                    backtrace,
                 );
             }
         });

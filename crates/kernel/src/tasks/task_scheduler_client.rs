@@ -196,7 +196,7 @@ impl TaskSchedulerClient {
             handler_object,
             host_type,
             port,
-            Box::new(options),
+            options,
         )
     }
 
