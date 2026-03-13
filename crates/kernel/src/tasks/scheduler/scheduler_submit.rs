@@ -386,7 +386,7 @@ impl Scheduler {
             actions.iter().map(|req| req.action.clone()).collect();
         let config = self.config.clone();
 
-        // Use a oneshot channel to get the result back from the spawned thread
+        // Use a channel to get the result back from the spawned thread
         let (tx_send, rx_recv) = std::sync::mpsc::channel();
 
         // Spawn thread to execute actions, moving transaction into the thread
@@ -425,16 +425,7 @@ impl Scheduler {
         perms: Obj,
         actions: Vec<WorldStateAction>,
         rollback: bool,
-        result_sink: Arc<
-            std::sync::Mutex<
-                Option<
-                    Result<
-                        Vec<crate::tasks::world_state_action::WorldStateResult>,
-                        SchedulerError,
-                    >,
-                >,
-            >,
-        >,
+        result_sink: crate::tasks::BatchResultSink,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
         let mut lc = self.lifecycle.lock();
