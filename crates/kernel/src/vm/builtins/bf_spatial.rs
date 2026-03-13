@@ -96,11 +96,10 @@ fn bf_astar(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         if i >= grid_size {
             break;
         }
-        if let Variant::Int(tile_id) = item.variant() {
-            if solid_ids.contains(&tile_id) {
+        if let Variant::Int(tile_id) = item.variant()
+            && solid_ids.contains(&tile_id) {
                 passable[i] = false;
             }
-        }
     }
 
     // Check goal is passable.
@@ -171,11 +170,10 @@ fn bf_astar(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             }
 
             // Diagonal corner-cutting check.
-            if dx != 0 && dy != 0 {
-                if !is_passable(cx + dx, cy) || !is_passable(cx, cy + dy) {
+            if dx != 0 && dy != 0
+                && (!is_passable(cx + dx, cy) || !is_passable(cx, cy + dy)) {
                     continue;
                 }
-            }
 
             let nidx = (ny as usize) * width + (nx as usize);
             if ng < g_score[nidx] {

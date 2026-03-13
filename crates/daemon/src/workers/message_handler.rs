@@ -67,7 +67,7 @@ pub trait WorkersMessageHandler: Send + Sync {
     fn process_worker_request(&self, request: WorkerRequest) -> Result<(), eyre::Error>;
 
     /// Get information about all workers
-    fn get_workers_info(&self) -> Vec<moor_kernel::tasks::task_scheduler_client::WorkerInfo>;
+    fn get_workers_info(&self) -> Vec<moor_common::tasks::WorkerInfo>;
 }
 
 /// Implementation of message handler that contains the actual business logic
@@ -271,21 +271,11 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
                 worker.requests.push((request_id, perms, request));
                 Ok(())
             }
-            WorkerRequest::GetWorkersInfo { request_id } => {
-                let workers_info = self.get_workers_info();
-                self.scheduler_send
-                    .send(WorkerResponse::WorkersInfo {
-                        request_id,
-                        workers_info,
-                    })
-                    .map_err(|e| eyre::eyre!("Failed to send workers info response: {e}"))?;
-                Ok(())
-            }
         }
     }
 
-    fn get_workers_info(&self) -> Vec<moor_kernel::tasks::task_scheduler_client::WorkerInfo> {
-        use moor_kernel::tasks::task_scheduler_client::WorkerInfo;
+    fn get_workers_info(&self) -> Vec<moor_common::tasks::WorkerInfo> {
+        use moor_common::tasks::WorkerInfo;
         use std::collections::HashMap;
 
         let workers = self.workers.read().unwrap();
@@ -322,6 +312,12 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
                 },
             )
             .collect()
+    }
+}
+
+impl crate::system_control::WorkerInfoSource for WorkersMessageHandlerImpl {
+    fn get_workers_info(&self) -> Vec<moor_common::tasks::WorkerInfo> {
+        WorkersMessageHandler::get_workers_info(self)
     }
 }
 

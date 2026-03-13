@@ -17,4 +17,5 @@ mod message_handler;
 mod server;
 mod transport;
 
+pub use message_handler::WorkersMessageHandlerImpl;
 pub use server::WorkersServer;

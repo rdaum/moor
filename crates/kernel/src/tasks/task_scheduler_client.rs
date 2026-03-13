@@ -29,6 +29,8 @@ use moor_var::{Error, Obj, Symbol, Var};
 
 use crate::tasks::scheduler::Scheduler;
 
+pub use moor_common::tasks::WorkerInfo;
+
 /// Information for invoking a timeout handler verb on #0.
 /// This contains the traceback data that should be passed to $handle_task_timeout.
 /// The abort reason is provided separately in TaskAbortLimitsReached.
@@ -39,16 +41,6 @@ pub struct TimeoutHandlerInfo {
     pub stack: Vec<Var>,
     /// Formatted backtrace strings
     pub backtrace: Vec<Var>,
-}
-
-/// Information about a worker type and its current state
-#[derive(Debug, Clone)]
-pub struct WorkerInfo {
-    pub worker_type: Symbol,
-    pub worker_count: usize,
-    pub total_queue_size: usize,
-    pub avg_response_time_ms: f64,
-    pub last_ping_ago_secs: f64,
 }
 
 /// A handle for talking to the scheduler from within a task.
@@ -262,7 +254,7 @@ impl TaskSchedulerClient {
     }
 
     pub fn workers_info(&self) -> Vec<WorkerInfo> {
-        self.scheduler.handle_get_workers_info_from_task()
+        self.scheduler.system_control.workers_info().unwrap_or_default()
     }
 
     pub fn begin_new_transaction(&self) -> Result<Box<dyn WorldState>, SchedulerError> {

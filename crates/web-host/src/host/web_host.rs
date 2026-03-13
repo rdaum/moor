@@ -423,7 +423,7 @@ impl WebHost {
             rpc_addr: self.rpc_addr.clone(),
             pubsub_addr: self.pubsub_addr.clone(),
             auth_token,
-            handler_object: self.handler_object.clone(),
+            handler_object: self.handler_object,
             peer_addr: "web-host".to_string(),
             local_port: self.local_port,
             curve_keys: self.curve_keys.as_ref().map(

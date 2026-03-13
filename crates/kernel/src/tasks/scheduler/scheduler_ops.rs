@@ -14,6 +14,18 @@
 use super::*;
 
 impl Scheduler {
+    /// Dumps an object's definition to a list of strings for export.
+    ///
+    /// Creates a database snapshot to avoid blocking ongoing operations, collects
+    /// the object definition, and optionally builds index names from import_export_id
+    /// properties when `use_constants` is true.
+    ///
+    /// # Arguments
+    /// * `obj` - The object to dump
+    /// * `use_constants` - If true, builds index names from all object definitions
+    ///
+    /// # Returns
+    /// A vector of strings representing the object's definition, or an error
     pub(crate) fn handle_dump_object(
         &self,
         obj: Obj,
@@ -44,6 +56,19 @@ impl Scheduler {
         Ok(lines)
     }
 
+    /// Loads an object definition into the database.
+    ///
+    /// Creates a new world state, initializes an object definition loader,
+    /// and loads a single object from the provided definition string.
+    /// Commits the transaction if the loader result indicates success.
+    ///
+    /// # Arguments
+    /// * `object_definition` - The object definition string to load
+    /// * `options` - Loader options controlling the load behavior
+    /// * `_return_conflicts` - Whether to return conflict information (unused)
+    ///
+    /// # Returns
+    /// The loader results containing loaded object information, or a SchedulerError
     pub(crate) fn handle_load_object(
         &self,
         object_definition: String,
@@ -81,6 +106,19 @@ impl Scheduler {
         Ok(result)
     }
 
+    /// Reloads an object definition, updating an existing object in the database.
+    ///
+    /// Creates a new world state, initializes an object definition loader,
+    /// and reloads a single object from the provided definition string.
+    /// Unlike load, this always commits the transaction (no dry-run mode).
+    ///
+    /// # Arguments
+    /// * `object_definition` - The object definition string to reload
+    /// * `constants` - Optional constants to use during reload
+    /// * `target_obj` - Optional target object to reload into
+    ///
+    /// # Returns
+    /// The loader results containing reloaded object information, or a SchedulerError
     pub(crate) fn handle_reload_object(
         &self,
         object_definition: String,
@@ -114,18 +152,15 @@ impl Scheduler {
         Ok(result)
     }
 
-    pub(crate) fn handle_get_workers_info(&self) -> Vec<WorkerInfo> {
-        // Worker info requires synchronous request/response with the worker process,
-        // but the worker channel is consumed by the async response thread.
-        // For now, return an empty list when workers are not queryable.
-        if self.worker_request_send.is_none() {
-            return vec![];
-        }
-
-        warn!("handle_get_workers_info: synchronous worker query not yet implemented");
-        vec![]
-    }
-
+    /// Drains and processes all immediate wake tasks from the suspended queue.
+    ///
+    /// Iterates through tasks that have been signaled for immediate wake,
+    /// extracts their return values based on wake condition type (Immediate,
+    /// Time, TaskMessage), and resumes them with the appropriate action.
+    /// Handles latency recording and trace events when enabled.
+    ///
+    /// This method holds the lifecycle lock throughout execution to safely
+    /// manipulate the suspended task queue.
     pub(crate) fn drain_immediate_wakes(&self) {
         let mut lc = self.lifecycle.lock();
         while let Some((task_id, signaled_at)) = lc.task_q.suspended.pop_immediate_wake() {
@@ -187,6 +222,20 @@ impl Scheduler {
         }
     }
 
+    /// Handles a response from a worker task and resumes the suspended task.
+    ///
+    /// Converts worker responses (errors or successful responses) into appropriate
+    /// resume actions, finds the suspended task associated with the request ID,
+    /// and wakes it with the result. Handles error mapping from WorkerError to
+    /// MOO error types and records trace events when enabled.
+    ///
+    /// # Arguments
+    /// * `worker_response` - The response from a worker task containing either
+    ///   an error or a successful result value
+    ///
+    /// # Notes
+    /// If the suspended task is not found (e.g., was killed or expired), a warning
+    /// is logged and the response is discarded.
     pub(crate) fn handle_worker_response(&self, worker_response: WorkerResponse) {
         let (request_id, resume_action) = match worker_response {
             WorkerResponse::Error { request_id, error } => {
@@ -206,14 +255,6 @@ impl Scheduler {
                 request_id,
                 response,
             } => (request_id, ResumeAction::Return(response)),
-            WorkerResponse::WorkersInfo {
-                request_id: _,
-                workers_info: _,
-            } => {
-                // Workers info responses are handled separately
-                warn!("Received unexpected WorkersInfo response in handle_worker_response");
-                return;
-            }
         };
 
         let mut lc = self.lifecycle.lock();

@@ -696,34 +696,31 @@ impl WorldStateTransaction {
         let mut results = Vec::new();
         for obj in candidates {
             // Check parent filter (if not already the starting set)
-            if query.location.is_some() || query.owner.is_some() {
-                if let Some(ref parent) = query.parent {
+            if (query.location.is_some() || query.owner.is_some())
+                && let Some(ref parent) = query.parent {
                     let obj_parent = self.get_object_parent(&obj).unwrap_or(NOTHING);
                     if obj_parent != *parent {
                         continue;
                     }
                 }
-            }
 
             // Check location filter (if not already the starting set)
-            if query.parent.is_some() || query.owner.is_some() {
-                if let Some(ref location) = query.location {
+            if (query.parent.is_some() || query.owner.is_some())
+                && let Some(ref location) = query.location {
                     let obj_location = self.get_object_location(&obj).unwrap_or(NOTHING);
                     if obj_location != *location {
                         continue;
                     }
                 }
-            }
 
             // Check owner filter (if not already the starting set)
-            if query.location.is_some() || query.parent.is_some() {
-                if let Some(ref owner) = query.owner {
+            if (query.location.is_some() || query.parent.is_some())
+                && let Some(ref owner) = query.owner {
                     let obj_owner = self.get_object_owner(&obj).unwrap_or(NOTHING);
                     if obj_owner != *owner {
                         continue;
                     }
                 }
-            }
 
             // Check flags filters
             if query.flags_all.is_some() || query.flags_any.is_some() {
@@ -732,16 +729,14 @@ impl WorldStateTransaction {
                     Err(_) => continue,
                 };
 
-                if let Some(ref required) = query.flags_all {
-                    if !flags.contains_all(*required) {
+                if let Some(ref required) = query.flags_all
+                    && !flags.contains_all(*required) {
                         continue;
                     }
-                }
-                if let Some(ref any_of) = query.flags_any {
-                    if !flags.contains_any(*any_of) {
+                if let Some(ref any_of) = query.flags_any
+                    && !flags.contains_any(*any_of) {
                         continue;
                     }
-                }
             }
 
             results.push(obj);

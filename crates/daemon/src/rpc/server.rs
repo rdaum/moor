@@ -68,6 +68,7 @@ impl RpcServer {
         transport: Arc<dyn Transport>,
         config: Arc<Config>,
         enrollment_token_path: Option<PathBuf>,
+        worker_info_source: Arc<dyn crate::system_control::WorkerInfoSource>,
     ) -> (Self, Arc<TaskMonitor>, SystemControlHandle) {
         info!("Creating new RPC server...");
 
@@ -102,6 +103,7 @@ impl RpcServer {
             message_handler.clone(),
             enrollment_token_path,
             event_log.clone(),
+            worker_info_source,
         );
 
         let server = Self {

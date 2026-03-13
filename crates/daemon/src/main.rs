@@ -680,6 +680,23 @@ fn main() -> Result<(), Report> {
         Arc::new(NoOpEventLog::new())
     };
 
+    let (worker_scheduler_send, worker_scheduler_recv) = flume::unbounded();
+
+    // Create workers message handler early so it can be shared with SystemControlHandle
+    let workers_message_handler = Arc::new(
+        workers::WorkersMessageHandlerImpl::new(
+            zmq_ctx.clone(),
+            &args.workers_request_listen,
+            worker_scheduler_send,
+            if use_curve_for_workers {
+                Some(daemon_curve_keypair.secret.clone())
+            } else {
+                None
+            },
+        )
+        .map_err(|e| eyre!("Failed to create workers message handler: {e}"))?,
+    );
+
     let (rpc_server, task_monitor, system_control) = RpcServer::new(
         kill_switch.clone(),
         public_key.clone(),
@@ -693,24 +710,21 @@ fn main() -> Result<(), Report> {
         } else {
             None
         },
+        workers_message_handler.clone(),
     );
     let rpc_server = Arc::new(rpc_server);
 
-    let (worker_scheduler_send, worker_scheduler_recv) = flume::unbounded();
-
-    // Workers RPC server (only use CURVE if workers endpoints are TCP)
+    // Workers RPC server
     let mut workers_server = WorkersServer::new(
         kill_switch.clone(),
         zmq_ctx.clone(),
-        &args.workers_request_listen,
-        worker_scheduler_send,
+        workers_message_handler,
         if use_curve_for_workers {
             Some(daemon_curve_keypair.secret.clone())
         } else {
             None
         },
-    )
-    .map_err(|e| eyre!("Failed to create workers server: {}", e))?;
+    );
     let workers_sender = workers_server.start().map_err(|e| {
         eyre!(
             "Failed to start workers server on {}: {}",
