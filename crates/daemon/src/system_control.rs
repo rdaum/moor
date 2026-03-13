@@ -22,12 +22,27 @@ use std::{
     time::SystemTime,
 };
 
-use moor_common::tasks::{EventLogPurgeResult, EventLogStats, SystemControl};
+use moor_common::tasks::{EventLogPurgeResult, EventLogStats, SystemControl, WorkerInfo};
 use moor_var::{E_INVARG, E_QUOTA, Obj, Symbol, Var};
 use rpc_common::HostType;
 use tracing::warn;
 
 use crate::{enrollment, event_log::EventLogOps, rpc::MessageHandler};
+
+/// Trait for querying worker state. Implemented by `WorkersMessageHandlerImpl`.
+pub trait WorkerInfoSource: Send + Sync {
+    fn get_workers_info(&self) -> Vec<WorkerInfo>;
+}
+
+/// No-op worker info source for tests and configurations without workers.
+#[allow(dead_code)]
+pub struct NoopWorkerInfoSource;
+
+impl WorkerInfoSource for NoopWorkerInfoSource {
+    fn get_workers_info(&self) -> Vec<WorkerInfo> {
+        vec![]
+    }
+}
 
 /// Handle for system control operations - just what the scheduler needs
 #[derive(Clone)]
@@ -36,6 +51,7 @@ pub struct SystemControlHandle {
     message_handler: Arc<dyn MessageHandler>,
     enrollment_token_path: Option<PathBuf>,
     event_log: Arc<dyn EventLogOps>,
+    worker_info_source: Arc<dyn WorkerInfoSource>,
 }
 
 impl SystemControlHandle {
@@ -44,12 +60,14 @@ impl SystemControlHandle {
         message_handler: Arc<dyn MessageHandler>,
         enrollment_token_path: Option<PathBuf>,
         event_log: Arc<dyn EventLogOps>,
+        worker_info_source: Arc<dyn WorkerInfoSource>,
     ) -> Self {
         Self {
             kill_switch,
             message_handler,
             enrollment_token_path,
             event_log,
+            worker_info_source,
         }
     }
 }
@@ -138,5 +156,9 @@ impl SystemControl for SystemControlHandle {
         self.event_log
             .purge_player_event_log(player, before, drop_pubkey)
             .map_err(|msg| E_INVARG.with_msg(|| msg))
+    }
+
+    fn workers_info(&self) -> Result<Vec<WorkerInfo>, moor_var::Error> {
+        Ok(self.worker_info_source.get_workers_info())
     }
 }

@@ -55,7 +55,7 @@ use crate::{
         sched_counters,
         task::Task,
         task_q::{RunningTask, SuspendedTask, SuspensionQ, TaskQ, WakeCondition},
-        task_scheduler_client::{TaskSchedulerClient, WorkerInfo},
+        task_scheduler_client::TaskSchedulerClient,
         tasks_db::TasksDb,
         workers::{WorkerRequest, WorkerResponse},
         world_state_action::{WorldStateAction, WorldStateResponse},
