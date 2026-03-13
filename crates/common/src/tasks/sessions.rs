@@ -58,6 +58,16 @@ pub struct EventLogPurgeResult {
 /// Information about a network listener: (handler_object, host_type, port, options)
 pub type ListenerInfo = (Obj, String, u16, Vec<(Symbol, Var)>);
 
+/// Information about a worker type and its current state.
+#[derive(Debug, Clone)]
+pub struct WorkerInfo {
+    pub worker_type: Symbol,
+    pub worker_count: usize,
+    pub total_queue_size: usize,
+    pub avg_response_time_ms: f64,
+    pub last_ping_ago_secs: f64,
+}
+
 /// The interface for managing the user I/O connection side of state, exposed by the scheduler to
 /// the VM during execution and by the host server to the scheduler.
 ///
@@ -222,6 +232,9 @@ pub trait SystemControl: Send + Sync {
         before: Option<SystemTime>,
         drop_pubkey: bool,
     ) -> Result<EventLogPurgeResult, Error>;
+
+    /// Return information about attached workers, grouped by type.
+    fn workers_info(&self) -> Result<Vec<WorkerInfo>, Error>;
 }
 
 /// A factory for creating background sessions, usually on task resumption on server restart.
@@ -392,6 +405,10 @@ impl SystemControl for NoopSystemControl {
     ) -> Result<EventLogPurgeResult, Error> {
         Ok(EventLogPurgeResult::default())
     }
+
+    fn workers_info(&self) -> Result<Vec<WorkerInfo>, Error> {
+        Ok(vec![])
+    }
 }
 /// A 'mock' client connection which collects output in a vector of strings that tests can use to
 /// verify output.
@@ -542,6 +559,10 @@ impl Session for MockClientSession {
 }
 
 impl SystemControl for MockClientSession {
+    fn workers_info(&self) -> Result<Vec<WorkerInfo>, Error> {
+        Ok(vec![])
+    }
+
     fn shutdown(&self, _msg: Option<String>) -> Result<(), Error> {
         let mut system = self.system.write().unwrap();
         system.push(String::from("shutdown"));

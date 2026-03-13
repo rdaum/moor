@@ -186,6 +186,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             transport.clone(),
             config.clone(),
             None,
+            Arc::new(crate::system_control::NoopWorkerInfoSource),
         );
 
         // Get the message handler from the RpcServer

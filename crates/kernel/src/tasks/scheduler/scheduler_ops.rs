@@ -114,18 +114,6 @@ impl Scheduler {
         Ok(result)
     }
 
-    pub(crate) fn handle_get_workers_info(&self) -> Vec<WorkerInfo> {
-        // Worker info requires synchronous request/response with the worker process,
-        // but the worker channel is consumed by the async response thread.
-        // For now, return an empty list when workers are not queryable.
-        if self.worker_request_send.is_none() {
-            return vec![];
-        }
-
-        warn!("handle_get_workers_info: synchronous worker query not yet implemented");
-        vec![]
-    }
-
     pub(crate) fn drain_immediate_wakes(&self) {
         let mut lc = self.lifecycle.lock();
         while let Some((task_id, signaled_at)) = lc.task_q.suspended.pop_immediate_wake() {
@@ -206,14 +194,6 @@ impl Scheduler {
                 request_id,
                 response,
             } => (request_id, ResumeAction::Return(response)),
-            WorkerResponse::WorkersInfo {
-                request_id: _,
-                workers_info: _,
-            } => {
-                // Workers info responses are handled separately
-                warn!("Received unexpected WorkersInfo response in handle_worker_response");
-                return;
-            }
         };
 
         let mut lc = self.lifecycle.lock();

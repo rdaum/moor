@@ -25,4 +25,5 @@ pub use events::{Event, NarrativeEvent, Presentation};
 pub use sessions::{
     ConnectionDetails, EventLogPurgeResult, EventLogStats, ListenerInfo, MockClientSession,
     NoopClientSession, NoopSystemControl, Session, SessionError, SessionFactory, SystemControl,
+    WorkerInfo,
 };
