@@ -14,45 +14,6 @@
 use super::*;
 
 impl Scheduler {
-    pub(crate) fn handle_switch_player(
-        &self,
-        task_id: TaskId,
-        new_player: Obj,
-    ) -> Result<(), Error> {
-        let mut lc = self.lifecycle.lock().unwrap();
-
-        // Get the current task to access its session
-        let Some(task) = lc.task_q.active.get_mut(&task_id) else {
-            return Err(E_INVARG.with_msg(|| "Task not found for switch_player".to_string()));
-        };
-
-        // Get the connection details for the current session (player=None means "this session")
-        let connection_details = task.session.connection_details(None).map_err(|e| {
-            E_INVARG
-                .with_msg(|| format!("Failed to get connection details for current session: {e:?}"))
-        })?;
-
-        // There should be exactly one connection for the current session
-        let connection_obj = connection_details
-            .first()
-            .ok_or_else(|| {
-                E_INVARG.with_msg(|| "No connection found for current session".to_string())
-            })?
-            .connection_obj;
-
-        // Update the task's player
-        task.player = new_player;
-
-        // Drop the lock before calling into system_control (avoid holding lock across RPC)
-        drop(lc);
-
-        // Switch the player through the system control (which handles connection registry and host notification)
-        self.system_control
-            .switch_player(connection_obj, new_player)?;
-
-        Ok(())
-    }
-
     pub(crate) fn handle_dump_object(
         &self,
         obj: Obj,
