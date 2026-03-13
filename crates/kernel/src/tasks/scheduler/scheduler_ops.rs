@@ -128,7 +128,7 @@ impl Scheduler {
     }
 
     pub(crate) fn drain_immediate_wakes(&self) {
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
         while let Some((task_id, signaled_at)) = lc.task_q.suspended.pop_immediate_wake() {
             // Inline the wake logic here since we already hold the lock.
             let Some(sr) = lc.task_q.suspended.remove_task(task_id) else {
@@ -217,7 +217,7 @@ impl Scheduler {
             }
         };
 
-        let mut lc = self.lifecycle.lock().unwrap();
+        let mut lc = self.lifecycle.lock();
 
         // Find the suspended task for this request.
         let task = lc.task_q.suspended.pull_task_for_worker(request_id);
@@ -289,7 +289,7 @@ impl Scheduler {
     pub(crate) fn stop(&self, msg: Option<String>) -> Result<(), SchedulerError> {
         // Send shutdown notification and kill all active tasks while holding the lock.
         {
-            let mut lc = self.lifecycle.lock().unwrap();
+            let mut lc = self.lifecycle.lock();
 
             // Notify all live tasks of shutdown.
             for (_, task) in lc.task_q.active.iter() {
@@ -308,7 +308,7 @@ impl Scheduler {
         // Spin until all tasks are done (re-acquire lock briefly each iteration).
         loop {
             {
-                let lc = self.lifecycle.lock().unwrap();
+                let lc = self.lifecycle.lock();
                 if lc.task_q.active.is_empty() {
                     break;
                 }
@@ -323,7 +323,7 @@ impl Scheduler {
 
         warn!("All tasks finished.  Stopping scheduler.");
         {
-            let mut lc = self.lifecycle.lock().unwrap();
+            let mut lc = self.lifecycle.lock();
             lc.running = false;
         }
 

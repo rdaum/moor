@@ -136,7 +136,7 @@ impl Scheduler {
     fn wait_for_active_tasks_to_finish(&self) -> Result<(), SchedulerError> {
         loop {
             {
-                let lc = self.lifecycle.lock().unwrap();
+                let lc = self.lifecycle.lock();
                 if lc.task_q.active.is_empty() {
                     return Ok(());
                 }
@@ -157,13 +157,13 @@ impl Scheduler {
 
         // Block new tasks during sweep
         {
-            let mut lc = self.lifecycle.lock().unwrap();
+            let mut lc = self.lifecycle.lock();
             lc.gc_sweep_in_progress = true;
         }
 
         // Check mutation timestamp before waiting for tasks
         let mutation_timestamp_before_wait = {
-            let lc = self.lifecycle.lock().unwrap();
+            let lc = self.lifecycle.lock();
             lc.last_mutation_timestamp
         };
 
@@ -172,7 +172,7 @@ impl Scheduler {
 
         // Check mutation timestamp after waiting for tasks
         {
-            let mut lc = self.lifecycle.lock().unwrap();
+            let mut lc = self.lifecycle.lock();
             let mutation_timestamp_after_wait = lc.last_mutation_timestamp;
             if mutation_timestamp_before_wait != mutation_timestamp_after_wait {
                 info!(
@@ -189,7 +189,7 @@ impl Scheduler {
 
         // Unblock new tasks
         {
-            let mut lc = self.lifecycle.lock().unwrap();
+            let mut lc = self.lifecycle.lock();
             lc.gc_sweep_in_progress = false;
         }
 
