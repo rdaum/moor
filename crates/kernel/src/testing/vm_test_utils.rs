@@ -26,20 +26,42 @@ use moor_var::{
 use strum::EnumCount;
 
 use crate::{
-    config::FeaturesConfig,
+    config::{Config, FeaturesConfig},
     task_context::TaskGuard,
-    tasks::{task_program_cache::TaskProgramCache, task_scheduler_client::TaskSchedulerClient},
+    tasks::{
+        NoopTasksDb,
+        scheduler::Scheduler,
+        task_program_cache::TaskProgramCache,
+        task_scheduler_client::TaskSchedulerClient,
+    },
     vm::{VMHostResponse, builtins::BuiltinRegistry, vm_host::VmHost},
 };
 
-use moor_common::tasks::{Exception, Session};
+use moor_common::tasks::{Exception, NoopSystemControl, Session};
 
 pub type ExecResult = Result<Var, Exception>;
 
+/// Create a minimal Scheduler for test contexts where scheduler methods are
+/// never (or rarely) called — e.g. VM-level tests that drive VmHost directly.
+pub fn test_scheduler_for_db(db: moor_db::TxDB) -> Scheduler {
+    Scheduler::new(
+        semver::Version::new(0, 0, 0),
+        Box::new(db),
+        Box::new(NoopTasksDb {}),
+        Arc::new(Config::default()),
+        Arc::new(NoopSystemControl::default()),
+        None,
+        None,
+    )
+}
+
 /// Setup test task context with proper task scheduler client
 pub fn setup_task_context(world_state: Box<dyn WorldState>) -> TaskGuard {
-    let (scs_tx, _scs_rx) = flume::unbounded();
-    let task_scheduler_client = TaskSchedulerClient::new_channel(0, scs_tx);
+    // Create a minimal TxDB just for the scheduler — the world_state is the
+    // actual transaction the test will use.
+    let (db, _) = moor_db::TxDB::open(None, moor_db::DatabaseConfig::default());
+    let scheduler = test_scheduler_for_db(db);
+    let task_scheduler_client = TaskSchedulerClient::new(0, scheduler);
     let session = std::sync::Arc::new(moor_common::tasks::NoopClientSession::new());
     TaskGuard::new(
         world_state,

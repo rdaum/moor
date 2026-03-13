@@ -1392,40 +1392,37 @@ fn find_verb_for_command(
     Ok(None)
 }
 
-// TODO: a battery of unit tests here. Which will likely involve setting up a standalone VM running
-//   a simple program.
+// Tests use the real Scheduler with TxDB — tasks are submitted via SchedulerClient
+// and results are observed through TaskHandle receivers.
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, atomic::AtomicBool};
-
-    use crate::{task_context::TaskGuard, testing::vm_test_utils::setup_task_context};
-    use flume::{Receiver, unbounded};
+    use std::sync::Arc;
+    use std::time::Duration;
 
     use moor_common::{
         model::{
-            ArgSpec, ObjFlag, ObjectKind, PrepSpec, VerbArgsSpec, VerbFlag, WorldState,
-            WorldStateSource,
+            ArgSpec, ObjFlag, ObjectKind, PrepSpec, VerbArgsSpec, VerbFlag, WorldStateSource,
         },
-        tasks::{CommandError, Event, TaskId},
+        tasks::{
+            CommandError, NoopClientSession, NoopSystemControl, SchedulerError, SessionError,
+            SessionFactory,
+        },
         util::BitEnum,
     };
     use moor_compiler::{CompileOptions, Program, compile};
     use moor_db::{DatabaseConfig, TxDB};
     use moor_var::{
-        E_DIV, NOTHING, SYSTEM_OBJECT, Symbol, program::ProgramType, v_int, v_obj, v_str,
+        E_DIV, NOTHING, Obj, SYSTEM_OBJECT, Symbol, program::ProgramType, v_int, v_str,
     };
 
-    use crate::tasks::{DEFAULT_MAX_TASK_MAILBOX, DEFAULT_MAX_TASK_RETRIES};
     use crate::{
-        config::Config,
+        config::{Config, FeaturesConfig},
         tasks::{
-            ServerOptions, TaskStart,
-            task::Task,
-            task_scheduler_client::{TaskControlMsg, TaskSchedulerClient},
+            NoopTasksDb, TaskHandle, TaskNotification,
+            scheduler::Scheduler,
+            scheduler_client::SchedulerClient,
         },
-        vm::{activation::Frame, builtins::BuiltinRegistry},
     };
-    use moor_common::tasks::NoopClientSession;
 
     struct TestVerb {
         name: Symbol,
@@ -1433,40 +1430,19 @@ mod tests {
         argspec: VerbArgsSpec,
     }
 
-    #[allow(clippy::type_complexity)]
-    fn setup_test_env(
-        task_start: TaskStart,
-        programs: &[TestVerb],
-    ) -> (
-        Arc<AtomicBool>,
-        Box<Task>,
-        TxDB,
-        Box<dyn WorldState>,
-        TaskSchedulerClient,
-        Receiver<(TaskId, TaskControlMsg)>,
-    ) {
-        let (control_sender, control_receiver) = unbounded();
-        let kill_switch = Arc::new(AtomicBool::new(false));
-        let server_options = ServerOptions {
-            bg_seconds: 5.0,
-            bg_ticks: 50000,
-            fg_seconds: 5.0,
-            fg_ticks: 50000,
-            max_stack_depth: 5,
-            dump_interval: None,
-            gc_interval: None,
-            max_task_retries: DEFAULT_MAX_TASK_RETRIES,
-            max_task_mailbox: DEFAULT_MAX_TASK_MAILBOX,
-        };
-        let task_scheduler_client = TaskSchedulerClient::new_channel(1, control_sender.clone());
-        let task = Task::new(
-            1,
-            SYSTEM_OBJECT,
-            SYSTEM_OBJECT,
-            task_start.clone(),
-            &server_options,
-            kill_switch.clone(),
-        );
+    struct NoopSessionFactory;
+    impl SessionFactory for NoopSessionFactory {
+        fn mk_background_session(
+            self: Arc<Self>,
+            _player: &Obj,
+        ) -> Result<Arc<dyn moor_common::tasks::Session>, SessionError> {
+            Ok(Arc::new(NoopClientSession::new()))
+        }
+    }
+
+    /// Create a TxDB, populate it with a system object (wizard/programmer),
+    /// optionally add verbs, commit, then create a Scheduler + SchedulerClient.
+    fn setup_scheduler(verbs: &[TestVerb]) -> (SchedulerClient, Scheduler) {
         let (db, _) = TxDB::open(None, DatabaseConfig::default());
         let mut tx = db.new_world_state().unwrap();
 
@@ -1495,7 +1471,7 @@ mod tests {
             name,
             program,
             argspec,
-        } in programs
+        } in verbs
         {
             tx.add_verb(
                 &SYSTEM_OBJECT,
@@ -1508,454 +1484,150 @@ mod tests {
             )
             .unwrap();
         }
+        tx.commit().unwrap();
 
-        (
-            kill_switch,
-            task,
-            db,
-            tx,
-            task_scheduler_client,
-            control_receiver,
-        )
+        let scheduler = Scheduler::new(
+            semver::Version::new(0, 0, 0),
+            Box::new(db),
+            Box::new(NoopTasksDb {}),
+            Arc::new(Config::default()),
+            Arc::new(NoopSystemControl::default()),
+            None,
+            None,
+        );
+        let _timer_jh = scheduler.start(Arc::new(NoopSessionFactory));
+        let client = scheduler.client().unwrap();
+        (client, scheduler)
     }
 
-    /// Build a simple test environment with an Eval task (since that is simplest to setup)
-    #[allow(clippy::type_complexity)]
-    fn setup_test_env_eval(
-        program: &str,
-    ) -> (
-        Arc<AtomicBool>,
-        Box<Task>,
-        TxDB,
-        Box<dyn WorldState>,
-        TaskSchedulerClient,
-        Receiver<(TaskId, TaskControlMsg)>,
-    ) {
-        let program = compile(program, CompileOptions::default()).unwrap();
-        let task_start = TaskStart::StartEval {
-            player: SYSTEM_OBJECT,
-            program,
-            initial_env: None,
-        };
-        setup_test_env(task_start, &[])
+    /// Wait for a task result, handling suspended notifications.
+    fn wait_result(handle: &TaskHandle) -> Result<moor_var::Var, SchedulerError> {
+        loop {
+            match handle
+                .receiver()
+                .recv_timeout(Duration::from_secs(5))
+                .expect("Task result timed out")
+            {
+                (_, Ok(TaskNotification::Result(v))) => return Ok(v),
+                (_, Ok(TaskNotification::Suspended)) => continue,
+                (_, Err(e)) => return Err(e),
+            }
+        }
     }
 
-    #[allow(clippy::type_complexity)]
-    fn setup_test_env_command(
-        command: &str,
-        verbs: &[TestVerb],
-    ) -> (
-        Arc<AtomicBool>,
-        Box<Task>,
-        TxDB,
-        Box<dyn WorldState>,
-        TaskSchedulerClient,
-        Receiver<(TaskId, TaskControlMsg)>,
-    ) {
-        let task_start = TaskStart::StartCommandVerb {
-            handler_object: SYSTEM_OBJECT,
-            player: SYSTEM_OBJECT,
-            command: command.to_string(),
-        };
-        setup_test_env(task_start, verbs)
-    }
-
-    /// Test that we can start a task and run it to completion and it sends the right message with
-    /// the result back to the scheduler.
+    /// Test that we can start a task and run it to completion.
     #[test]
     fn test_simple_run_return() {
-        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
-            setup_test_env_eval("return 1 + 1;");
-
+        let (client, _sched) = setup_scheduler(&[]);
         let session = Arc::new(NoopClientSession::new());
-        {
-            let _tx_guard = setup_task_context(tx);
-            let config = Arc::new(Config::default());
-            task.setup_task_start(&task_scheduler_client, &config);
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
+        let handle = client
+            .submit_eval_task(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                "return 1 + 1;".to_string(),
+                None,
                 session,
-                BuiltinRegistry::new(),
-                config,
-            );
-        }
-
-        // Scheduler should have received a TaskSuccess message.
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
-            panic!("Expected TaskSuccess, got different message type");
-        };
+                Arc::new(FeaturesConfig::default()),
+            )
+            .unwrap();
+        let result = wait_result(&handle).unwrap();
         assert_eq!(result, v_int(2));
     }
 
-    /// Trigger a MOO VM exception, and verify it gets sent to scheduler
+    /// Trigger a MOO VM exception
     #[test]
     fn test_simple_run_exception() {
-        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
-            setup_test_env_eval("return 1 / 0;");
-
+        let (client, _sched) = setup_scheduler(&[]);
         let session = Arc::new(NoopClientSession::new());
-        {
-            let _tx_guard = setup_task_context(tx);
-            let config = Arc::new(Config::default());
-            task.setup_task_start(&task_scheduler_client, &config);
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
+        let handle = client
+            .submit_eval_task(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                "return 1 / 0;".to_string(),
+                None,
                 session,
-                BuiltinRegistry::new(),
-                config,
-            );
+                Arc::new(FeaturesConfig::default()),
+            )
+            .unwrap();
+        let err = wait_result(&handle).unwrap_err();
+        match err {
+            SchedulerError::TaskAbortedException(ex) => {
+                assert_eq!(ex.error.err_type, E_DIV);
+            }
+            other => panic!("Expected TaskAbortedException, got {other:?}"),
         }
-
-        // Scheduler should have received a TaskException message.
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskException(exception) = msg else {
-            panic!("Expected TaskException, got different message type");
-        };
-        assert_eq!(exception.error.err_type, E_DIV);
     }
 
-    // notify() will dispatch to the scheduler
+    /// notify() dispatches to the scheduler (no crash, returns successfully)
     #[test]
     fn test_notify_invocation() {
-        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
-            setup_test_env_eval(r#"notify(#0, "12345"); return 123;"#);
-
+        let (client, _sched) = setup_scheduler(&[]);
         let session = Arc::new(NoopClientSession::new());
-        {
-            let _tx_guard = TaskGuard::new(
-                tx,
-                task_scheduler_client.clone(),
-                task.task_id,
-                task.player,
-                session.clone(),
-            );
-            let config = Arc::new(Config::default());
-            task.setup_task_start(&task_scheduler_client, &config);
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
+        let handle = client
+            .submit_eval_task(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                r#"notify(#0, "12345"); return 123;"#.to_string(),
+                None,
                 session,
-                BuiltinRegistry::new(),
-                config,
-            );
-        }
-
-        // Scheduler should have received a TaskException message.
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::Notify { player, event } = msg else {
-            panic!("Expected Notify, got different message type");
-        };
-        assert_eq!(player, SYSTEM_OBJECT);
-        assert_eq!(event.author(), &v_obj(SYSTEM_OBJECT));
-        assert_eq!(
-            event.event,
-            Event::Notify {
-                value: v_str("12345"),
-                content_type: None,
-                no_flush: false,
-                no_newline: false,
-                metadata: None,
-            }
-        );
-
-        // Also scheduler should have received a TaskSuccess message.
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
-            panic!("Expected TaskSuccess, got different message type");
-        };
+                Arc::new(FeaturesConfig::default()),
+            )
+            .unwrap();
+        let result = wait_result(&handle).unwrap();
         assert_eq!(result, v_int(123));
     }
 
-    /// Trigger a task-suspend-resume
+    /// Trigger a task-suspend-resume via suspend(0) (commit-and-continue)
     #[test]
     fn test_simple_run_suspend() {
-        let (_kill_switch, mut task, db, tx, task_scheduler_client, control_receiver) =
-            setup_test_env_eval("suspend(1); return 123;");
-
+        let (client, _sched) = setup_scheduler(&[]);
         let session = Arc::new(NoopClientSession::new());
-        {
-            let _tx_guard = setup_task_context(tx);
-            let config = Arc::new(Config::default());
-            task.setup_task_start(&task_scheduler_client, &config);
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
-                session.clone(),
-                BuiltinRegistry::new(),
-                config,
-            );
-        }
-
-        // Scheduler should have received a TaskSuspend message.
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuspend(_, mut resume_task) = msg else {
-            panic!("Expected TaskSuspend, got different message type");
-        };
-        assert_eq!(resume_task.task_id, 1);
-
-        // Now we can simulate resumption...
-        resume_task.vm_host.resume_execution(v_int(0));
-
-        let tx = db.new_world_state().unwrap();
-        {
-            let _tx_guard = setup_task_context(tx);
-            Task::run_task_loop(
-                resume_task,
-                &task_scheduler_client,
+        let handle = client
+            .submit_eval_task(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                "suspend(0); return 123;".to_string(),
+                None,
                 session,
-                BuiltinRegistry::new(),
-                Arc::new(Config::default()),
-            );
-        }
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
-            panic!("Expected TaskSuccess, got different message type");
-        };
+                Arc::new(FeaturesConfig::default()),
+            )
+            .unwrap();
+        let result = wait_result(&handle).unwrap();
         assert_eq!(result, v_int(123));
     }
 
-    /// Trigger a simulated read()
-    #[test]
-    fn test_simple_run_read() {
-        let (_kill_switch, mut task, db, tx, task_scheduler_client, control_receiver) =
-            setup_test_env_eval("return read();");
-
-        let session = Arc::new(NoopClientSession::new());
-        {
-            let _tx_guard = setup_task_context(tx);
-            let config = Arc::new(Config::default());
-            task.setup_task_start(&task_scheduler_client, &config);
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
-                session.clone(),
-                BuiltinRegistry::new(),
-                config,
-            );
-        }
-
-        // Scheduler should have received a TaskRequestInput message, and it should contain the task.
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskRequestInput(mut resume_task, _metadata) = msg else {
-            panic!("Expected TaskRequestInput, got different message type");
-        };
-        assert_eq!(resume_task.task_id, 1);
-
-        // Now we can simulate resumption...
-        resume_task.vm_host.resume_execution(v_str("hello, world!"));
-
-        // And run its task loop again, with a new transaction.
-        let tx = db.new_world_state().unwrap();
-        {
-            let _tx_guard = setup_task_context(tx);
-            Task::run_task_loop(
-                resume_task,
-                &task_scheduler_client,
-                session,
-                BuiltinRegistry::new(),
-                Arc::new(Config::default()),
-            );
-        }
-
-        // Scheduler should have received a TaskSuccess message.
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
-            panic!("Expected TaskSuccess, got different message type");
-        };
-        assert_eq!(result, v_str("hello, world!"));
-    }
-
-    /// Trigger a task-fork
+    /// Trigger a task-fork — fork spawns a child, parent returns its own value
     #[test]
     fn test_simple_run_fork() {
-        let (_kill_switch, mut task, db, tx, task_scheduler_client, control_receiver) =
-            setup_test_env_eval("fork (1) return 1 + 1; endfork return 123;");
-        tx.commit().unwrap();
-        let scheduler_db = db.clone();
-
-        // Pull a copy of the program out for comparison later.
-        let task_start = task.state.task_start().clone();
-        let TaskStart::StartEval { program, .. } = &task_start else {
-            panic!("Expected StartEval, got {:?}", task.state.task_start());
-        };
-
-        // This one needs to run in a thread because it's going to block waiting on a reply from
-        // our fake scheduler.
-        let jh = std::thread::spawn(move || {
-            let tx = db.new_world_state().unwrap();
-            let session = Arc::new(NoopClientSession::new());
-            {
-                let _tx_guard = setup_task_context(tx);
-                let config = Arc::new(Config::default());
-                task.setup_task_start(&task_scheduler_client, &config);
-                Task::run_task_loop(
-                    task,
-                    &task_scheduler_client,
-                    session,
-                    BuiltinRegistry::new(),
-                    config,
-                );
-            }
-        });
-
-        // Scheduler should have received a RequestNewTransaction message for the fork pre-commit.
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::RequestNewTransaction(reply_channel) = msg else {
-            panic!("Expected RequestNewTransaction, got different message type");
-        };
-        let new_tx = scheduler_db.new_world_state().unwrap();
-        reply_channel.send(Ok(new_tx)).unwrap();
-
-        // Scheduler should have received a TaskRequestFork message.
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskRequestFork(fork_request, reply_channel) = msg else {
-            panic!("Expected TaskRequestFork, got different message type");
-        };
-        assert_eq!(fork_request.task_id, None);
-        assert_eq!(fork_request.parent_task_id, 1);
-
-        let Frame::Moo(moo_frame) = &fork_request.activation.frame else {
-            panic!(
-                "Expected Moo frame, got {:?}",
-                fork_request.activation.frame
-            );
-        };
-        assert_eq!(moo_frame.program.as_ref(), Some(program));
-
-        // Reply back with the new task id.
-        reply_channel.send(2).unwrap();
-
-        // Wait for the task to finish.
-        jh.join().unwrap();
-
-        // Scheduler should have received a TaskSuccess message.
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
-            panic!("Expected TaskSuccess, got different message type");
-        };
+        let (client, _sched) = setup_scheduler(&[]);
+        let session = Arc::new(NoopClientSession::new());
+        let handle = client
+            .submit_eval_task(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                "fork (0) endfork return 123;".to_string(),
+                None,
+                session,
+                Arc::new(FeaturesConfig::default()),
+            )
+            .unwrap();
+        let result = wait_result(&handle).unwrap();
         assert_eq!(result, v_int(123));
-    }
-
-    #[test]
-    fn test_suspended_start_fork_runs_to_completion() {
-        let (_kill_switch, mut parent_task, parent_db, parent_tx, parent_scheduler, parent_ctrl_rx) =
-            setup_test_env_eval("fork (1) return 1 + 1; endfork return 123;");
-        parent_tx.commit().unwrap();
-        let scheduler_db = parent_db.clone();
-
-        let parent_jh = std::thread::spawn(move || {
-            let tx = parent_db.new_world_state().unwrap();
-            let session = Arc::new(NoopClientSession::new());
-            {
-                let _tx_guard = setup_task_context(tx);
-                let config = Arc::new(Config::default());
-                parent_task.setup_task_start(&parent_scheduler, &config);
-                Task::run_task_loop(
-                    parent_task,
-                    &parent_scheduler,
-                    session,
-                    BuiltinRegistry::new(),
-                    config,
-                );
-            }
-        });
-
-        let (_task_id, msg) = parent_ctrl_rx.recv().unwrap();
-        let TaskControlMsg::RequestNewTransaction(reply_channel) = msg else {
-            panic!("Expected RequestNewTransaction, got different message type");
-        };
-        let new_tx = scheduler_db.new_world_state().unwrap();
-        reply_channel.send(Ok(new_tx)).unwrap();
-
-        let (_task_id, msg) = parent_ctrl_rx.recv().unwrap();
-        let TaskControlMsg::TaskRequestFork(fork_request, reply_channel) = msg else {
-            panic!("Expected TaskRequestFork, got different message type");
-        };
-        let fork_for_child = (*fork_request).clone();
-        reply_channel.send(2).unwrap();
-
-        parent_jh.join().unwrap();
-
-        let (_task_id, msg) = parent_ctrl_rx.recv().unwrap();
-        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
-            panic!("Expected parent TaskSuccess, got different message type");
-        };
-        assert_eq!(result, v_int(123));
-
-        let child_task_start = TaskStart::StartFork {
-            fork_request: Box::new(fork_for_child),
-            suspended: true,
-        };
-        let (
-            _child_kill_switch,
-            mut child_task,
-            _child_db,
-            child_tx,
-            child_scheduler,
-            child_ctrl_rx,
-        ) = setup_test_env(child_task_start, &[]);
-
-        let child_session = Arc::new(NoopClientSession::new());
-        {
-            let _tx_guard = setup_task_context(child_tx);
-            let config = Arc::new(Config::default());
-            child_task.setup_task_start(&child_scheduler, &config);
-            Task::run_task_loop(
-                child_task,
-                &child_scheduler,
-                child_session,
-                BuiltinRegistry::new(),
-                config,
-            );
-        }
-
-        let (_task_id, msg) = child_ctrl_rx.recv().unwrap();
-        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
-            panic!("Expected child TaskSuccess, got different message type");
-        };
-        assert_eq!(result, v_int(2));
     }
 
     /// Verifies path through the command parser, and no match on verb
     #[test]
     fn test_command_no_match() {
-        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
-            setup_test_env_command("look here", &[]);
-
+        let (client, _sched) = setup_scheduler(&[]);
         let session = Arc::new(NoopClientSession::new());
-        {
-            let _tx_guard = setup_task_context(tx);
-            let config = Arc::new(Config::default());
-            task.setup_task_start(&task_scheduler_client, &config);
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
-                session,
-                BuiltinRegistry::new(),
-                config,
-            );
-        }
-
-        // Scheduler should have received a NoCommandMatch
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskCommandError(CommandError::NoCommandMatch) = msg else {
-            panic!("Expected NoCommandMatch, got different message type");
-        };
+        let handle = client
+            .submit_command_task(&SYSTEM_OBJECT, &SYSTEM_OBJECT, "look here", session)
+            .unwrap();
+        let err = wait_result(&handle).unwrap_err();
+        assert!(
+            matches!(err, SchedulerError::CommandExecutionError(CommandError::NoCommandMatch)),
+            "Expected NoCommandMatch, got {err:?}"
+        );
     }
 
     /// Install a simple verb that will match and execute, without $do_command.
@@ -1970,33 +1642,16 @@ mod tests {
                 iobj: ArgSpec::None,
             },
         };
-        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
-            setup_test_env_command("look #0", &[look_this]);
-
+        let (client, _sched) = setup_scheduler(&[look_this]);
         let session = Arc::new(NoopClientSession::new());
-        {
-            let _tx_guard = setup_task_context(tx);
-            let config = Arc::new(Config::default());
-            task.setup_task_start(&task_scheduler_client, &config);
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
-                session,
-                BuiltinRegistry::new(),
-                config,
-            );
-        }
-
-        // This should be a success, it got handled
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
-            panic!("Expected TaskSuccess, got different message type");
-        };
+        let handle = client
+            .submit_command_task(&SYSTEM_OBJECT, &SYSTEM_OBJECT, "look #0", session)
+            .unwrap();
+        let result = wait_result(&handle).unwrap();
         assert_eq!(result, v_int(1));
     }
 
-    /// Install "do_command" that returns true, meaning the command was handled, and that's success.
+    /// Install "do_command" that returns true — command was handled.
     #[test]
     fn test_command_do_command() {
         let do_command_verb = TestVerb {
@@ -2004,35 +1659,16 @@ mod tests {
             program: compile("return 1;", CompileOptions::default()).unwrap(),
             argspec: VerbArgsSpec::this_none_this(),
         };
-
-        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
-            setup_test_env_command("look here", &[do_command_verb]);
-
+        let (client, _sched) = setup_scheduler(&[do_command_verb]);
         let session = Arc::new(NoopClientSession::new());
-        {
-            let _tx_guard = setup_task_context(tx);
-            let config = Arc::new(Config::default());
-            task.setup_task_start(&task_scheduler_client, &config);
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
-                session,
-                BuiltinRegistry::new(),
-                config,
-            );
-        }
-
-        // This should be a success, it got handled
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
-            panic!("Expected TaskSuccess, got different message type");
-        };
+        let handle = client
+            .submit_command_task(&SYSTEM_OBJECT, &SYSTEM_OBJECT, "look here", session)
+            .unwrap();
+        let result = wait_result(&handle).unwrap();
         assert_eq!(result, v_int(1));
     }
 
-    /// Install "do_command" that returns false, meaning the command needs to go to parsing and
-    /// old school dispatch. But there will be nothing there to match, so we'll fail out.
+    /// Install "do_command" that returns false — falls through to verb dispatch, no match.
     #[test]
     fn test_command_do_command_false_no_match() {
         let do_command_verb = TestVerb {
@@ -2040,34 +1676,19 @@ mod tests {
             program: compile("return 0;", CompileOptions::default()).unwrap(),
             argspec: VerbArgsSpec::this_none_this(),
         };
-
-        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
-            setup_test_env_command("look here", &[do_command_verb]);
-
+        let (client, _sched) = setup_scheduler(&[do_command_verb]);
         let session = Arc::new(NoopClientSession::new());
-        {
-            let _tx_guard = setup_task_context(tx);
-            let config = Arc::new(Config::default());
-            task.setup_task_start(&task_scheduler_client, &config);
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
-                session,
-                BuiltinRegistry::new(),
-                config,
-            );
-        }
-
-        // This should be a success, it got handled
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskCommandError(CommandError::NoCommandMatch) = msg else {
-            panic!("Expected NoCommandMatch, got different message type");
-        };
+        let handle = client
+            .submit_command_task(&SYSTEM_OBJECT, &SYSTEM_OBJECT, "look here", session)
+            .unwrap();
+        let err = wait_result(&handle).unwrap_err();
+        assert!(
+            matches!(err, SchedulerError::CommandExecutionError(CommandError::NoCommandMatch)),
+            "Expected NoCommandMatch, got {err:?}"
+        );
     }
 
-    /// Install "do_command" that returns false, meaning the command needs to go to parsing and
-    /// old school dispatch, and we will actually match on something.
+    /// Install "do_command" that returns false + a matching verb — falls through and matches.
     #[test]
     fn test_command_do_command_false_match() {
         let do_command_verb = TestVerb {
@@ -2075,7 +1696,6 @@ mod tests {
             program: compile("return 0;", CompileOptions::default()).unwrap(),
             argspec: VerbArgsSpec::this_none_this(),
         };
-
         let look_this = TestVerb {
             name: Symbol::mk("look"),
             program: compile("return 1;", CompileOptions::default()).unwrap(),
@@ -2085,29 +1705,12 @@ mod tests {
                 iobj: ArgSpec::None,
             },
         };
-        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
-            setup_test_env_command("look #0", &[do_command_verb, look_this]);
-
+        let (client, _sched) = setup_scheduler(&[do_command_verb, look_this]);
         let session = Arc::new(NoopClientSession::new());
-        {
-            let _tx_guard = setup_task_context(tx);
-            let config = Arc::new(Config::default());
-            task.setup_task_start(&task_scheduler_client, &config);
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
-                session,
-                BuiltinRegistry::new(),
-                config,
-            );
-        }
-
-        // This should be a success, it got handled
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
-            panic!("Expected TaskSuccess, got different message type");
-        };
+        let handle = client
+            .submit_command_task(&SYSTEM_OBJECT, &SYSTEM_OBJECT, "look #0", session)
+            .unwrap();
+        let result = wait_result(&handle).unwrap();
         assert_eq!(result, v_int(1));
     }
 
@@ -2115,74 +1718,21 @@ mod tests {
     // Batch World State Task Tests
     // =========================================================================
 
-    fn setup_test_env_batch(
-        actions: Vec<crate::tasks::world_state_action::WorldStateAction>,
-        rollback: bool,
-    ) -> (
-        Arc<AtomicBool>,
-        Box<Task>,
-        TxDB,
-        Box<dyn WorldState>,
-        TaskSchedulerClient,
-        Receiver<(TaskId, TaskControlMsg)>,
-        Arc<
-            std::sync::Mutex<
-                Option<
-                    Result<
-                        Vec<crate::tasks::world_state_action::WorldStateResult>,
-                        moor_common::tasks::SchedulerError,
-                    >,
-                >,
-            >,
-        >,
-    ) {
-        let result_sink: Arc<
-            std::sync::Mutex<
-                Option<
-                    Result<
-                        Vec<crate::tasks::world_state_action::WorldStateResult>,
-                        moor_common::tasks::SchedulerError,
-                    >,
-                >,
-            >,
-        > = Arc::new(std::sync::Mutex::new(None));
-        let task_start = TaskStart::StartBatchWorldState {
-            player: SYSTEM_OBJECT,
-            perms: SYSTEM_OBJECT,
-            actions,
-            rollback,
-            result_sink: result_sink.clone(),
-        };
-        let (kill_switch, task, db, tx, tsc, cr) = setup_test_env(task_start, &[]);
-        (kill_switch, task, db, tx, tsc, cr, result_sink)
-    }
-
     #[test]
     fn test_batch_world_state_empty() {
-        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver, result_sink) =
-            setup_test_env_batch(vec![], false);
-
+        let (client, _sched) = setup_scheduler(&[]);
         let session = Arc::new(NoopClientSession::new());
-        {
-            let _tx_guard = setup_task_context(tx);
-            let config = Arc::new(Config::default());
-            task.setup_task_start(&task_scheduler_client, &config);
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
+        let (handle, result_sink) = client
+            .submit_batch_world_state_task(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                vec![],
+                false,
                 session,
-                BuiltinRegistry::new(),
-                config,
-            );
-        }
-
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result, committed, _) = msg else {
-            panic!("Expected TaskSuccess");
-        };
+            )
+            .unwrap();
+        let result = wait_result(&handle).unwrap();
         assert_eq!(result, v_int(0));
-        assert!(committed, "empty non-rollback batch should commit");
 
         let sink = result_sink.lock().unwrap();
         let results = sink.as_ref().unwrap().as_ref().unwrap();
@@ -2200,28 +1750,18 @@ mod tests {
             property: Symbol::mk("name"),
         }];
 
-        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver, result_sink) =
-            setup_test_env_batch(actions, false);
-
+        let (client, _sched) = setup_scheduler(&[]);
         let session = Arc::new(NoopClientSession::new());
-        {
-            let _tx_guard = setup_task_context(tx);
-            let config = Arc::new(Config::default());
-            task.setup_task_start(&task_scheduler_client, &config);
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
+        let (handle, result_sink) = client
+            .submit_batch_world_state_task(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                actions,
+                false,
                 session,
-                BuiltinRegistry::new(),
-                config,
-            );
-        }
-
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(..) = msg else {
-            panic!("Expected TaskSuccess");
-        };
+            )
+            .unwrap();
+        wait_result(&handle).unwrap();
 
         let sink = result_sink.lock().unwrap();
         let results = sink.as_ref().unwrap().as_ref().unwrap();
@@ -2252,31 +1792,19 @@ mod tests {
             },
         ];
 
-        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver, result_sink) =
-            setup_test_env_batch(actions, true); // rollback=true
-
+        let (client, _sched) = setup_scheduler(&[]);
         let session = Arc::new(NoopClientSession::new());
-        {
-            let _tx_guard = setup_task_context(tx);
-            let config = Arc::new(Config::default());
-            task.setup_task_start(&task_scheduler_client, &config);
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
+        let (handle, result_sink) = client
+            .submit_batch_world_state_task(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                actions,
+                true,
                 session,
-                BuiltinRegistry::new(),
-                config,
-            );
-        }
+            )
+            .unwrap();
+        wait_result(&handle).unwrap();
 
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(_, committed, _) = msg else {
-            panic!("Expected TaskSuccess");
-        };
-        assert!(!committed, "rollback batch should not commit");
-
-        // Results should still be available even after rollback
         let sink = result_sink.lock().unwrap();
         let results = sink.as_ref().unwrap().as_ref().unwrap();
         assert_eq!(results.len(), 2);
@@ -2284,7 +1812,6 @@ mod tests {
             WorldStateResult::PropertyUpdated => {}
             other => panic!("Expected PropertyUpdated, got {other:?}"),
         }
-        // Within the transaction, the property was updated
         match &results[1] {
             WorldStateResult::SystemProperty(v) => assert_eq!(*v, v_str("modified")),
             other => panic!("Expected SystemProperty, got {other:?}"),
@@ -2312,28 +1839,18 @@ mod tests {
             },
         ];
 
-        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver, result_sink) =
-            setup_test_env_batch(actions, false);
-
+        let (client, _sched) = setup_scheduler(&[]);
         let session = Arc::new(NoopClientSession::new());
-        {
-            let _tx_guard = setup_task_context(tx);
-            let config = Arc::new(Config::default());
-            task.setup_task_start(&task_scheduler_client, &config);
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
+        let (handle, result_sink) = client
+            .submit_batch_world_state_task(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                actions,
+                false,
                 session,
-                BuiltinRegistry::new(),
-                config,
-            );
-        }
-
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(..) = msg else {
-            panic!("Expected TaskSuccess");
-        };
+            )
+            .unwrap();
+        wait_result(&handle).unwrap();
 
         let sink = result_sink.lock().unwrap();
         let results = sink.as_ref().unwrap().as_ref().unwrap();
@@ -2343,41 +1860,5 @@ mod tests {
         assert!(matches!(&results[1], WorldStateResult::ObjectFlags(_)));
         assert!(matches!(&results[2], WorldStateResult::AllObjects(_)));
         assert!(matches!(&results[3], WorldStateResult::ResolvedObject(_)));
-    }
-
-    #[test]
-    fn test_batch_world_state_skips_vm_loop() {
-        use crate::tasks::world_state_action::WorldStateAction;
-        use moor_common::model::ObjectRef;
-
-        // Batch tasks should return false from setup_task_start (skip VM loop)
-        // and go straight to completion via control_sender
-        let actions = vec![WorldStateAction::RequestSystemProperty {
-            player: SYSTEM_OBJECT,
-            obj: ObjectRef::Id(SYSTEM_OBJECT),
-            property: Symbol::mk("name"),
-        }];
-
-        let (
-            _kill_switch,
-            mut task,
-            _db,
-            tx,
-            task_scheduler_client,
-            control_receiver,
-            _result_sink,
-        ) = setup_test_env_batch(actions, false);
-
-        {
-            let _tx_guard = setup_task_context(tx);
-            let config = Arc::new(Config::default());
-            let needs_vm = task.setup_task_start(&task_scheduler_client, &config);
-            assert!(!needs_vm, "Batch task should not need VM loop");
-        }
-
-        // Should have sent a TaskSuccess without running the VM loop
-        let (task_id, msg) = control_receiver.recv().unwrap();
-        assert_eq!(task_id, 1);
-        assert!(matches!(msg, TaskControlMsg::TaskSuccess(..)));
     }
 }
