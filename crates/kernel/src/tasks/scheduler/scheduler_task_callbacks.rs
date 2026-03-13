@@ -33,24 +33,30 @@ impl Scheduler {
         mutations_made: bool,
         timestamp: u64,
     ) {
-        let mut lc = self.lifecycle.lock();
+        // Extract session under lock, then commit outside.
+        let session = {
+            let mut lc = self.lifecycle.lock();
 
-        // Record that this is the transaction to have last mutated the world.
-        // Used by e.g. concurrent GC algorithm.
-        if mutations_made {
-            lc.last_mutation_timestamp = Some(timestamp);
-        }
+            if mutations_made {
+                lc.last_mutation_timestamp = Some(timestamp);
+            }
 
-        // Commit the session.
-        let Some(task) = lc.task_q.active.get_mut(&task_id) else {
-            warn!(task_id, "Task not found for success");
-            return;
+            let Some(task) = lc.task_q.active.get_mut(&task_id) else {
+                warn!(task_id, "Task not found for success");
+                return;
+            };
+            task.session.clone()
         };
-        let Ok(()) = task.session.commit() else {
+
+        // Session commit (potential I/O) outside the lock.
+        if session.commit().is_err() {
             warn!("Could not commit session; aborting task");
+            let mut lc = self.lifecycle.lock();
             lc.discard_pending_sends(task_id);
             return lc.task_q.send_task_result(task_id, Err(TaskAbortedError));
-        };
+        }
+
+        let mut lc = self.lifecycle.lock();
         lc.flush_pending_sends(task_id);
         lc.task_q.remove_message_queue(task_id);
         lc.task_q.send_task_result(task_id, Ok(value))
@@ -135,29 +141,34 @@ impl Scheduler {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.task_abort_cancelled);
 
-        let mut lc = self.lifecycle.lock();
-
-        lc.discard_pending_sends(task_id);
-        lc.task_q.remove_message_queue(task_id);
-
         warn!(?task_id, "Task cancelled");
 
-        // Rollback the session.
-        let Some(task) = lc.task_q.active.get_mut(&task_id) else {
-            warn!(task_id, "Task not found for abort");
-            return;
-        };
-        if let Err(send_error) = task
-            .session
-            .send_system_msg(task.player, "Aborted.".to_string().as_str())
-        {
-            warn!("Could not send abort message to player: {:?}", send_error);
+        // Extract session and player under lock.
+        let session = {
+            let mut lc = self.lifecycle.lock();
+            lc.discard_pending_sends(task_id);
+            lc.task_q.remove_message_queue(task_id);
+
+            let Some(task) = lc.task_q.active.get_mut(&task_id) else {
+                warn!(task_id, "Task not found for abort");
+                return;
+            };
+            let session = task.session.clone();
+            let player = task.player;
+            if let Err(send_error) = session.send_system_msg(player, "Aborted.") {
+                warn!("Could not send abort message to player: {:?}", send_error);
+            }
+            session
         };
 
-        let Ok(()) = task.session.commit() else {
+        // Session commit (potential I/O) outside the lock.
+        if session.commit().is_err() {
             warn!("Could not commit aborted session; aborting task");
+            let mut lc = self.lifecycle.lock();
             return lc.task_q.send_task_result(task_id, Err(TaskAbortedError));
-        };
+        }
+
+        let mut lc = self.lifecycle.lock();
         lc.task_q
             .send_task_result(task_id, Err(TaskAbortedCancelled));
     }
@@ -188,24 +199,25 @@ impl Scheduler {
         line_number: usize,
         handler_info: Box<TimeoutHandlerInfo>,
     ) {
-        let mut lc = self.lifecycle.lock();
-
-        lc.discard_pending_sends(task_id);
-        lc.task_q.remove_message_queue(task_id);
-
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.task_abort_limits);
 
-        // Get the task's session and player for notifications and handler invocation
-        let Some(mut task) = lc.task_q.active.remove(&task_id) else {
-            warn!(task_id, "Task not found for abort");
-            return;
+        // Extract task and session under lock.
+        let (mut task, session, player) = {
+            let mut lc = self.lifecycle.lock();
+            lc.discard_pending_sends(task_id);
+            lc.task_q.remove_message_queue(task_id);
+
+            let Some(task) = lc.task_q.active.remove(&task_id) else {
+                warn!(task_id, "Task not found for abort");
+                return;
+            };
+            let session = task.session.clone();
+            let player = task.player;
+            (task, session, player)
         };
 
-        let player = task.player;
-        let session = task.session.clone();
-
-        // Send abort notification to player
+        // Send abort notification and commit session outside the lock.
         let abort_reason_text = match limit_reason {
             AbortLimitReason::Ticks(t) => {
                 warn!(?task_id, ticks = t, "Task aborted, ticks exceeded");
@@ -226,7 +238,10 @@ impl Scheduler {
 
         let _ = session.commit();
 
-        // Attempt to invoke the handler verb as a separate task
+        // Re-acquire lock for handler task submission.
+        let mut lc = self.lifecycle.lock();
+
+        // Attempt to invoke the handler verb as a separate task.
         let resource_str = match limit_reason {
             AbortLimitReason::Ticks(_) => "ticks",
             AbortLimitReason::Time(_) => "seconds",
@@ -258,7 +273,7 @@ impl Scheduler {
             &mut lc,
             handler_task_id,
             &player,
-            &player, // Use player as permissions for handler
+            &player,
             handler_task_start,
             None,
             session.clone().fork().unwrap_or_else(|_| session.clone()),
@@ -286,30 +301,34 @@ impl Scheduler {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.task_exception);
 
-        let mut lc = self.lifecycle.lock();
-
-        let Some(task) = lc.task_q.active.get_mut(&task_id) else {
-            warn!(task_id, "Task not found for abort");
-            return;
+        // Extract session under lock, send traceback event.
+        let session = {
+            let lc = self.lifecycle.lock();
+            let Some(task) = lc.task_q.active.get(&task_id) else {
+                warn!(task_id, "Task not found for abort");
+                return;
+            };
+            let session = task.session.clone();
+            if let Err(send_error) = session.send_event(
+                task.player,
+                Box::new(NarrativeEvent {
+                    event_id: Uuid::now_v7(),
+                    timestamp: SystemTime::now(),
+                    author: v_obj(task.player),
+                    event: Event::Traceback(exception.as_ref().clone()),
+                }),
+            ) {
+                warn!("Could not send traceback to player: {:?}", send_error);
+            }
+            session
         };
 
-        // Compose a string out of the backtrace
-        if let Err(send_error) = task.session.send_event(
-            task.player,
-            Box::new(NarrativeEvent {
-                event_id: Uuid::now_v7(),
-                timestamp: SystemTime::now(),
-                author: v_obj(task.player),
-                event: Event::Traceback(exception.as_ref().clone()),
-            }),
-        ) {
-            warn!("Could not send traceback to player: {:?}", send_error);
-        }
+        // Session commit (potential I/O) outside the lock.
+        let _ = session.commit();
 
-        let _ = task.session.commit();
+        let mut lc = self.lifecycle.lock();
         lc.flush_pending_sends(task_id);
         lc.task_q.remove_message_queue(task_id);
-
         lc.task_q.send_task_result(
             task_id,
             Err(TaskAbortedException(exception.as_ref().clone())),
@@ -371,23 +390,25 @@ impl Scheduler {
         wake_condition: TaskSuspend,
         task: Box<Task>,
     ) {
-        let mut lc = self.lifecycle.lock();
-
-        // Task is suspended. The resume time (if any) is the system time at which
-        // the scheduler should try to wake us up.
-
-        // Remove from the active task queue.
-        let Some(tc) = lc.task_q.active.remove(&task_id) else {
-            warn!(task_id, "Task not found for suspend request");
-            return;
+        // Remove from active and extract session under lock.
+        let tc = {
+            let mut lc = self.lifecycle.lock();
+            let Some(tc) = lc.task_q.active.remove(&task_id) else {
+                warn!(task_id, "Task not found for suspend request");
+                return;
+            };
+            tc
         };
 
-        // Commit the session.
-        let Ok(()) = tc.session.commit() else {
+        // Session commit (potential I/O) outside the lock.
+        if tc.session.commit().is_err() {
             warn!("Could not commit session; aborting task");
+            let mut lc = self.lifecycle.lock();
             lc.discard_pending_sends(task_id);
             return lc.task_q.send_task_result(task_id, Err(TaskAbortedError));
-        };
+        }
+
+        let mut lc = self.lifecycle.lock();
         lc.flush_pending_sends(task_id);
 
         // And insert into the suspended list.
@@ -468,33 +489,39 @@ impl Scheduler {
         task: Box<Task>,
         metadata: Option<Vec<(Symbol, Var)>>,
     ) {
-        let mut lc = self.lifecycle.lock();
-
-        // Task has gone into suspension waiting for input from the client.
-        // Create a unique ID for this request, and we'll wake the task when the
-        // session receives input.
-
         let input_request_id = Uuid::new_v4();
-        let Some(tc) = lc.task_q.active.remove(&task_id) else {
-            warn!(task_id, "Task not found for input request");
-            return;
+
+        // Remove from active under lock.
+        let tc = {
+            let mut lc = self.lifecycle.lock();
+            let Some(tc) = lc.task_q.active.remove(&task_id) else {
+                warn!(task_id, "Task not found for input request");
+                return;
+            };
+            tc
         };
-        // Commit the session (not DB transaction) to make sure current output is
-        // flushed up to the prompt point.
-        let Ok(()) = tc.session.commit() else {
+
+        // Session commit (potential I/O) outside the lock — flushes output
+        // up to the prompt point.
+        if tc.session.commit().is_err() {
             warn!("Could not commit session; aborting task");
+            let mut lc = self.lifecycle.lock();
             lc.discard_pending_sends(task_id);
             return lc.task_q.send_task_result(task_id, Err(TaskAbortedError));
-        };
-        lc.flush_pending_sends(task_id);
+        }
 
-        let Ok(()) = tc
+        if tc
             .session
             .request_input(tc.player, input_request_id, metadata)
-        else {
+            .is_err()
+        {
             warn!("Could not request input from session; aborting task");
+            let mut lc = self.lifecycle.lock();
             return lc.task_q.send_task_result(task_id, Err(TaskAbortedError));
-        };
+        }
+
+        let mut lc = self.lifecycle.lock();
+        lc.flush_pending_sends(task_id);
         lc.task_q.suspended.add_task(
             WakeCondition::Input(input_request_id),
             task,
