@@ -115,15 +115,14 @@ impl Scheduler {
     }
 
     pub(crate) fn handle_get_workers_info(&self) -> Vec<WorkerInfo> {
-        // TODO: worker_request_recv is now consumed by the worker response thread,
-        // so we can no longer do synchronous request/response here.
-        // Need to implement a oneshot channel mechanism for GetWorkersInfo requests.
-        let Some(_workers_sender) = self.worker_request_send.as_ref() else {
-            warn!("No workers configured for scheduler; returning empty worker list");
+        // Worker info requires synchronous request/response with the worker process,
+        // but the worker channel is consumed by the async response thread.
+        // For now, return an empty list when workers are not queryable.
+        if self.worker_request_send.is_none() {
             return vec![];
-        };
+        }
 
-        warn!("handle_get_workers_info not yet implemented for new scheduler design");
+        warn!("handle_get_workers_info: synchronous worker query not yet implemented");
         vec![]
     }
 
