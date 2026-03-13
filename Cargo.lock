@@ -3352,7 +3352,6 @@ dependencies = [
  "moor-textdump",
  "moor-var",
  "natord",
- "oneshot",
  "onig",
  "parking_lot",
  "paste",
