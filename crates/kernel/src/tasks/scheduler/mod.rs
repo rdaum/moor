@@ -12,11 +12,11 @@
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
 pub(crate) mod lifecycle;
-mod scheduler_client_msg;
 mod scheduler_config;
 mod scheduler_gc;
-mod scheduler_task_msg;
-mod scheduler_task_ops;
+mod scheduler_ops;
+mod scheduler_submit;
+mod scheduler_task_callbacks;
 mod task_q_ops;
 
 use crate::{
