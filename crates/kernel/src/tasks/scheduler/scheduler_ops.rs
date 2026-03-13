@@ -304,15 +304,14 @@ impl Scheduler {
 
         warn!("Waiting for tasks to finish...");
 
-        // Spin until all tasks are done (re-acquire lock briefly each iteration).
+        // Wait for all active tasks to drain, polling with short sleeps.
+        // Tasks complete quickly once killed, so this is bounded.
         loop {
-            {
-                let lc = self.lifecycle.lock();
-                if lc.task_q.active.is_empty() {
-                    break;
-                }
+            let is_empty = self.lifecycle.lock().task_q.active.is_empty();
+            if is_empty {
+                break;
             }
-            yield_now();
+            std::thread::sleep(Duration::from_millis(1));
         }
 
         // Now ask the rpc server and hosts to shutdown (no lock held).

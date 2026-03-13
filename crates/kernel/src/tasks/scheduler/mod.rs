@@ -333,14 +333,19 @@ impl Scheduler {
     }
 
     /// Collect expired timer tasks and wake them.
+    /// Collection happens under one lock acquisition; each wake re-acquires
+    /// briefly so other operations aren't blocked for the entire batch.
     fn collect_and_wake_expired_tasks(&self) {
-        let mut lc = self.lifecycle.lock();
-
-        let to_wake = match lc.task_q.collect_wake_tasks() {
-            Some(tasks) => tasks,
-            None => return,
+        // Collect expired tasks under lock, then release.
+        let to_wake = {
+            let mut lc = self.lifecycle.lock();
+            match lc.task_q.collect_wake_tasks() {
+                Some(tasks) => tasks,
+                None => return,
+            }
         };
 
+        // Wake each task individually, re-acquiring the lock per task.
         for sr in to_wake {
             let task_id = sr.task.task_id;
             let is_retry = matches!(sr.wake_condition, WakeCondition::Retry(_));
@@ -376,6 +381,7 @@ impl Scheduler {
                 );
             }
 
+            let mut lc = self.lifecycle.lock();
             if is_retry {
                 lc.task_q.wake_retry_suspended_task(
                     sr,
