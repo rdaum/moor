@@ -19,6 +19,8 @@ mod scheduler_submit;
 mod scheduler_task_callbacks;
 mod task_q_ops;
 
+use arc_swap::ArcSwap;
+
 use crate::{
     task_context::TaskGuard,
     tasks::checkpoint::{CheckpointMode, start_checkpoint},
@@ -116,6 +118,9 @@ pub struct Scheduler {
     /// Host/connection management.
     pub(crate) system_control: Arc<dyn SystemControl>,
 
+    /// Server options (lock-free reads via ArcSwap, updated from database).
+    pub(crate) server_options: Arc<ArcSwap<ServerOptions>>,
+
     /// Builtin function registry.
     pub(crate) builtin_registry: BuiltinRegistry,
 
@@ -169,6 +174,8 @@ impl Scheduler {
 
         let database: Arc<dyn Database> = Arc::from(database);
 
+        let server_options = Arc::new(ArcSwap::from_pointee(default_server_options));
+
         let lifecycle = TaskLifecycle {
             task_q,
             pending_task_sends: HashMap::new(),
@@ -180,7 +187,6 @@ impl Scheduler {
             gc_cycle_count: 0,
             gc_last_cycle_time: std::time::Instant::now(),
             last_mutation_timestamp: None,
-            server_options: default_server_options,
             running: false,
             last_compact_time: std::time::Instant::now(),
         };
@@ -201,6 +207,7 @@ impl Scheduler {
             lifecycle: Arc::new(Mutex::new(lifecycle)),
             database,
             config,
+            server_options,
             builtin_registry,
             system_control,
             version,
@@ -416,6 +423,7 @@ impl Scheduler {
         let gc_in_progress = self.config.features.anonymous_objects
             && (lc.gc_sweep_in_progress || lc.gc_force_collect);
 
+        let so = self.server_options.load();
         match lc.task_q.submit_new_task(
             task_id,
             player,
@@ -423,7 +431,7 @@ impl Scheduler {
             task_start,
             delay_start,
             session,
-            &lc.server_options,
+            &so,
             gc_in_progress,
         ) {
             task_q_ops::TaskSubmission::Suspended(handle) => Ok(handle),

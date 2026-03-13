@@ -3324,6 +3324,7 @@ dependencies = [
  "ahash",
  "anstream",
  "anstyle",
+ "arc-swap",
  "argon2",
  "arrayvec",
  "base32",

@@ -77,7 +77,7 @@ impl Scheduler {
         };
 
         // If the number of retries has been exceeded, abort immediately
-        if task.retries >= lc.server_options.max_task_retries {
+        if task.retries >= self.server_options.load().max_task_retries {
             error!(
                 "Maximum number of retries exceeded for task {}.  Aborting.",
                 task.task_id
@@ -732,7 +732,7 @@ impl Scheduler {
                 .filter(|(tid, _)| *tid == target_task_id)
                 .count()
         });
-        if committed_len + pending_len >= lc.server_options.max_task_mailbox {
+        if committed_len + pending_len >= self.server_options.load().max_task_mailbox {
             return v_error(E_QUOTA.with_msg(|| {
                 format!(
                     "Task mailbox full ({} messages) for task ({target_task_id})",
