@@ -166,7 +166,7 @@ impl Scheduler {
         &self,
         task_id: TaskId,
         panic_msg: String,
-        _backtrace: Box<Backtrace>,
+        _backtrace: Backtrace,
     ) {
         warn!(?task_id, ?panic_msg, "Task thread panicked");
 
@@ -376,7 +376,7 @@ impl Scheduler {
         // Task is suspended. The resume time (if any) is the system time at which
         // the scheduler should try to wake us up.
 
-        // Remove from the local task control...
+        // Remove from the active task queue.
         let Some(tc) = lc.task_q.active.remove(&task_id) else {
             warn!(task_id, "Task not found for suspend request");
             return;
@@ -400,8 +400,8 @@ impl Scheduler {
             }
             TaskSuspend::WorkerRequest(worker_type, args, timeout) => {
                 let worker_request_id = Uuid::new_v4();
-                // Send out a message over the workers channel.
-                // If we're not set up to do workers, just abort the task.
+                // Send request to the worker process.
+                // If no workers are configured, abort the task.
                 let Some(workers_sender) = self.worker_request_send.as_ref() else {
                     warn!("No workers configured for scheduler; aborting task");
                     return lc.task_q.send_task_result(task_id, Err(TaskAbortedError));
@@ -599,7 +599,7 @@ impl Scheduler {
         handler_object: Obj,
         host_type: String,
         port: u16,
-        options: Box<Vec<(Symbol, Var)>>,
+        options: Vec<(Symbol, Var)>,
     ) -> Option<Error> {
         let lc = self.lifecycle.lock();
         let Some(_task) = lc.task_q.active.get(&task_id) else {
@@ -609,7 +609,7 @@ impl Scheduler {
         drop(lc);
 
         self.system_control
-            .listen(handler_object, &host_type, port, *options)
+            .listen(handler_object, &host_type, port, options)
             .err()
     }
 

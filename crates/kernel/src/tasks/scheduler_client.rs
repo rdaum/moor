@@ -389,16 +389,9 @@ impl SchedulerClient {
         actions: Vec<WorldStateAction>,
         rollback: bool,
         session: Arc<dyn Session>,
-    ) -> Result<
-        (
-            TaskHandle,
-            Arc<std::sync::Mutex<Option<Result<Vec<WorldStateResult>, SchedulerError>>>>,
-        ),
-        SchedulerError,
-    > {
-        let result_sink: Arc<
-            std::sync::Mutex<Option<Result<Vec<WorldStateResult>, SchedulerError>>>,
-        > = Arc::new(std::sync::Mutex::new(None));
+    ) -> Result<(TaskHandle, crate::tasks::BatchResultSink), SchedulerError> {
+        let result_sink: crate::tasks::BatchResultSink =
+            Arc::new(std::sync::Mutex::new(None));
 
         let handle = self.scheduler.submit_batch_world_state_task_inner(
             *player,

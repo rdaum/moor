@@ -24,6 +24,12 @@ use moor_common::{
     util::PerfCounter,
 };
 
+/// Shared sink for batch world state task results.
+/// Written by the task thread, read by the caller after the task completes.
+pub type BatchResultSink = std::sync::Arc<
+    std::sync::Mutex<Option<Result<Vec<world_state_action::WorldStateResult>, SchedulerError>>>,
+>;
+
 pub mod scheduler;
 
 pub(crate) mod checkpoint;
@@ -365,16 +371,7 @@ pub enum TaskStart {
         perms: Obj,
         actions: Vec<world_state_action::WorldStateAction>,
         rollback: bool,
-        result_sink: std::sync::Arc<
-            std::sync::Mutex<
-                Option<
-                    Result<
-                        Vec<world_state_action::WorldStateResult>,
-                        moor_common::tasks::SchedulerError,
-                    >,
-                >,
-            >,
-        >,
+        result_sink: BatchResultSink,
     },
 }
 
