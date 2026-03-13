@@ -15,8 +15,6 @@ use moor_common::tasks::WorkerError;
 use moor_var::{Obj, Symbol, Var};
 use uuid::Uuid;
 
-use crate::tasks::task_scheduler_client::WorkerInfo;
-
 #[derive(Debug)]
 pub enum WorkerRequest {
     /// A request to a worker of X type, with an optional response channel.
@@ -28,8 +26,6 @@ pub enum WorkerRequest {
         request: Vec<Var>,
         timeout: Option<std::time::Duration>,
     },
-    /// Request information about all workers.
-    GetWorkersInfo { request_id: Uuid },
 }
 
 #[derive(Debug)]
@@ -41,10 +37,5 @@ pub enum WorkerResponse {
     Response {
         request_id: Uuid,
         response: Var,
-    },
-    /// Response containing worker information.
-    WorkersInfo {
-        request_id: Uuid,
-        workers_info: Vec<WorkerInfo>,
     },
 }

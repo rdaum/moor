@@ -15,7 +15,7 @@
 
 use moor_common::threading::spawn_efficient;
 use moor_common::util::Deadline;
-use moor_kernel::tasks::workers::{WorkerRequest, WorkerResponse};
+use moor_kernel::tasks::workers::WorkerRequest;
 use std::{
     sync::{
         Arc,
@@ -47,30 +47,21 @@ pub struct WorkersServer {
 }
 
 impl WorkersServer {
-    /// Create a new workers server coordinator
+    /// Create a new workers server coordinator with a pre-built message handler.
     pub fn new(
         kill_switch: Arc<AtomicBool>,
         zmq_context: zmq::Context,
-        workers_broadcast: &str,
-        scheduler_send: flume::Sender<WorkerResponse>,
-        curve_secret_key: Option<String>, // Z85-encoded CURVE secret key
-    ) -> eyre::Result<Self> {
-        // Create the message handler
-        let message_handler = Arc::new(WorkersMessageHandlerImpl::new(
-            zmq_context.clone(),
-            workers_broadcast,
-            scheduler_send,
-            curve_secret_key.clone(),
-        )?);
-
-        Ok(Self {
+        message_handler: Arc<WorkersMessageHandlerImpl>,
+        curve_secret_key: Option<String>,
+    ) -> Self {
+        Self {
             zmq_context,
             kill_switch,
             message_handler,
             curve_secret_key,
             request_processor_jh: None,
             transport_jh: None,
-        })
+        }
     }
 
     /// Start the request processor thread that handles scheduler requests

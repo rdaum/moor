@@ -40,6 +40,7 @@ impl Scheduler {
         self.submit_task(&mut lc, task_id, &player, &player, task_start, None, session)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn submit_verb_task_inner(
         &self,
         player: Obj,

@@ -856,10 +856,6 @@ impl Scheduler {
         self.handle_dump_object(obj, use_constants)
     }
 
-    pub fn handle_get_workers_info_from_task(&self) -> Vec<WorkerInfo> {
-        self.handle_get_workers_info()
-    }
-
     pub fn handle_switch_player_from_task(
         &self,
         task_id: TaskId,

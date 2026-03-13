@@ -463,8 +463,8 @@ impl WebSocketConnection {
 
                     let bytes = event_msg.consume();
                     if use_data_channel {
-                        if let Some(peer) = &self.webrtc_peer {
-                            if let Err(e) = peer.send(&bytes).await {
+                        if let Some(peer) = &self.webrtc_peer
+                            && let Err(e) = peer.send(&bytes).await {
                                 // Fall back to WebSocket on send failure.
                                 debug!("Data channel send failed, falling back to WS: {e}");
                                 let msg = Message::Binary(bytes.into());
@@ -473,7 +473,6 @@ impl WebSocketConnection {
                                     break;
                                 }
                             }
-                        }
                     } else {
                         let msg = Message::Binary(bytes.into());
                         if let Err(e) = ws_sender.send(msg).await {

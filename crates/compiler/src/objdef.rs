@@ -682,14 +682,12 @@ fn resolve_include_path(
     let root = context.root_path().unwrap_or(base);
     if let (Ok(canonical_root), Ok(canonical_resolved)) =
         (root.canonicalize(), resolved.canonicalize())
-    {
-        if !canonical_resolved.starts_with(&canonical_root) {
+        && !canonical_resolved.starts_with(&canonical_root) {
             return Err(ObjDefParseError::IncludeError(
                 rel_path.to_string(),
                 "path escapes the source directory".to_string(),
             ));
         }
-    }
     Ok(resolved)
 }
 
