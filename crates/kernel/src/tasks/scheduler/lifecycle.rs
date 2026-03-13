@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use moor_common::tasks::TaskId;
 use moor_var::Var;
 
-use crate::tasks::{ServerOptions, task_q::TaskQ};
+use crate::tasks::task_q::TaskQ;
 
 /// All mutable state that must be consistent during task state transitions.
 /// Protected by a single Mutex in the Scheduler handle.
@@ -49,9 +49,6 @@ pub(crate) struct TaskLifecycle {
 
     /// Transaction timestamp (monotonically incrementing) of the last mutating task/transaction.
     pub(crate) last_mutation_timestamp: Option<u64>,
-
-    /// Server options (refreshed from database).
-    pub(crate) server_options: ServerOptions,
 
     /// Whether the scheduler is running.
     pub(crate) running: bool,

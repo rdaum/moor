@@ -58,8 +58,7 @@ impl Scheduler {
             .new_world_state()
             .expect("Could not open transaction to read server properties");
 
-        let mut lc = self.lifecycle.lock().unwrap();
-        let mut so = lc.server_options.clone();
+        let mut so = (**self.server_options.load()).clone();
 
         let Ok(server_options_obj) =
             tx.retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, *SERVER_OPTIONS)
@@ -131,7 +130,7 @@ impl Scheduler {
         }
         tx.rollback().unwrap();
 
-        lc.server_options = so;
+        self.server_options.store(Arc::new(so));
 
         info!("Server options refreshed.");
     }
@@ -143,7 +142,7 @@ impl Scheduler {
         // Reload server options to get fresh dump_interval from database
         self.reload_server_options();
 
-        let lc = self.lifecycle.lock().unwrap();
+        let so = self.server_options.load();
 
         // Determine the checkpoint interval using the proper precedence:
         // 1. Command-line config overrides all
@@ -155,7 +154,7 @@ impl Scheduler {
                 cli_interval
             );
             Some(cli_interval)
-        } else if let Some(db_secs) = lc.server_options.dump_interval {
+        } else if let Some(db_secs) = so.dump_interval {
             let db_interval = Duration::from_secs(db_secs);
             info!("Using dump_interval from database: {:?}", db_interval);
             Some(db_interval)
@@ -168,7 +167,7 @@ impl Scheduler {
         // Reload server options to get fresh gc_interval from database
         self.reload_server_options();
 
-        let lc = self.lifecycle.lock().unwrap();
+        let so = self.server_options.load();
 
         // Determine the GC interval using the proper precedence:
         // 1. Command-line config overrides all
@@ -180,7 +179,7 @@ impl Scheduler {
                 config_interval
             );
             Some(config_interval)
-        } else if let Some(db_secs) = lc.server_options.gc_interval {
+        } else if let Some(db_secs) = so.gc_interval {
             let db_interval = Duration::from_secs(db_secs);
             info!("Using gc_interval from database: {:?}", db_interval);
             Some(db_interval)
