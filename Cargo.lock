@@ -3582,6 +3582,7 @@ dependencies = [
  "moor-common",
  "moor-compiler",
  "moor-var",
+ "serde",
  "smallvec",
  "strum",
  "tracing",
