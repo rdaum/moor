@@ -30,7 +30,10 @@ use axum::{
 };
 use moor_common::model::ObjectRef;
 use moor_var::Symbol;
-use rpc_common::{mk_batch_world_state_msg, mk_list_objects_msg, mk_update_property_msg, ws_query_objects, BatchAction};
+use rpc_common::{
+    BatchAction, mk_batch_world_state_msg, mk_list_objects_msg, mk_update_property_msg,
+    ws_query_objects,
+};
 use serde::Deserialize;
 use tracing::error;
 

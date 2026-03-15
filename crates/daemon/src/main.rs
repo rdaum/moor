@@ -40,12 +40,7 @@ use ed25519_dalek::{
 };
 use eyre::Report;
 use mimalloc::MiMalloc;
-use moor_common::{
-    build,
-    model::ObjectRef,
-    tasks::SessionFactory,
-    threading::spawn_efficient,
-};
+use moor_common::{build, model::ObjectRef, tasks::SessionFactory, threading::spawn_efficient};
 use moor_compiler::emit_compile_error;
 use moor_db::{Database, TxDB};
 use moor_kernel::{

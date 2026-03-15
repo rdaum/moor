@@ -31,6 +31,7 @@ mod tests {
         rpc::RpcServer,
         testing::{MockEventLog, MockTransport},
     };
+    use moor_common::model::ObjectRef;
     use moor_common::{model::CommitResult, tasks::Event};
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_kernel::{
@@ -40,7 +41,6 @@ mod tests {
     use moor_schema::rpc as moor_rpc;
     use moor_textdump::{TextdumpImportOptions, textdump_load};
     use moor_var::{Obj, SYSTEM_OBJECT};
-    use moor_common::model::ObjectRef;
     use rpc_common::{
         AuthToken, BatchAction, ClientToken, mk_batch_world_state_msg, mk_command_msg,
         mk_connection_establish_msg, mk_login_command_msg, ws_list_objects,
@@ -1304,10 +1304,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             &env.transport,
             player_obj,
             |event| {
-                if let Event::Notify {
-                    value: content, ..
-                } = event
-                {
+                if let Event::Notify { value: content, .. } = event {
                     content
                         .as_string()
                         .is_some_and(|s| s == "This is all there is right now.")

@@ -18,10 +18,7 @@ mod tests {
     use std::{
         net::SocketAddr,
         path::PathBuf,
-        sync::{
-            Arc,
-            atomic::AtomicBool,
-        },
+        sync::{Arc, atomic::AtomicBool},
         time::{SystemTime, UNIX_EPOCH},
     };
     use tempfile::TempDir;
@@ -440,9 +437,11 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             listeners.clone(),
         );
 
-        let result = env
-            .transport
-            .process_host_message(env.message_handler.as_ref(), host_id, register_message);
+        let result = env.transport.process_host_message(
+            env.message_handler.as_ref(),
+            host_id,
+            register_message,
+        );
 
         assert!(result.is_ok(), "Host registration should succeed");
         match result.unwrap().reply {
@@ -483,9 +482,11 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Step 3: Detach the host and verify reply
         let detach_message = mk_detach_host_msg(host_id);
-        let result = env
-            .transport
-            .process_host_message(env.message_handler.as_ref(), host_id, detach_message);
+        let result = env.transport.process_host_message(
+            env.message_handler.as_ref(),
+            host_id,
+            detach_message,
+        );
 
         assert!(result.is_ok(), "Host detach should succeed");
         match result.unwrap().reply {
@@ -533,9 +534,11 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             listeners,
         );
 
-        let result = env
-            .transport
-            .process_host_message(env.message_handler.as_ref(), host_id, register_message);
+        let result = env.transport.process_host_message(
+            env.message_handler.as_ref(),
+            host_id,
+            register_message,
+        );
         assert!(result.is_ok(), "Host registration should succeed");
 
         // Step 2: Establish a client connection
@@ -552,9 +555,11 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Step 3: Detach the host
         let detach_message = mk_detach_host_msg(host_id);
-        let result = env
-            .transport
-            .process_host_message(env.message_handler.as_ref(), host_id, detach_message);
+        let result = env.transport.process_host_message(
+            env.message_handler.as_ref(),
+            host_id,
+            detach_message,
+        );
 
         assert!(result.is_ok(), "Host detach should succeed");
 
@@ -760,9 +765,11 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             )],
         );
 
-        let register_result = env
-            .transport
-            .process_host_message(env.message_handler.as_ref(), host_id, register_message);
+        let register_result = env.transport.process_host_message(
+            env.message_handler.as_ref(),
+            host_id,
+            register_message,
+        );
 
         assert!(register_result.is_ok(), "Host registration should succeed");
         assert!(matches!(
@@ -781,9 +788,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Test 2: Performance counters request should reply with PerfCounters
         let perf_message = mk_request_performance_counters_msg();
 
-        let perf_result = env
-            .transport
-            .process_host_message(env.message_handler.as_ref(), host_id, perf_message);
+        let perf_result =
+            env.transport
+                .process_host_message(env.message_handler.as_ref(), host_id, perf_message);
 
         assert!(
             perf_result.is_ok(),
@@ -1215,10 +1222,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             !env.transport.has_client_events(),
             "Events should be cleared"
         );
-        assert!(
-            !env.transport.has_host_events(),
-            "Events should be cleared"
-        );
+        assert!(!env.transport.has_host_events(), "Events should be cleared");
         assert!(
             !env.transport.has_client_broadcast_events(),
             "Events should be cleared"
@@ -1292,9 +1296,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         assert!(listen_result.is_ok(), "Broadcast listen should succeed");
 
         // Test broadcast_unlisten
-        let unlisten_result =
-            env.message_handler
-                .broadcast_unlisten(rpc_common::HostType::WebSocket, 8080);
+        let unlisten_result = env
+            .message_handler
+            .broadcast_unlisten(rpc_common::HostType::WebSocket, 8080);
 
         assert!(unlisten_result.is_ok(), "Broadcast unlisten should succeed");
     }
@@ -1316,9 +1320,11 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             listeners.clone(),
         );
 
-        let register_result = env
-            .transport
-            .process_host_message(env.message_handler.as_ref(), host_id, register_message);
+        let register_result = env.transport.process_host_message(
+            env.message_handler.as_ref(),
+            host_id,
+            register_message,
+        );
         assert!(register_result.is_ok(), "Host registration should succeed");
 
         // Step 2: Send a HostPong message (response to daemon's ping)
@@ -1330,9 +1336,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             listeners,
         );
 
-        let pong_result = env
-            .transport
-            .process_host_message(env.message_handler.as_ref(), host_id, pong_message);
+        let pong_result =
+            env.transport
+                .process_host_message(env.message_handler.as_ref(), host_id, pong_message);
 
         assert!(
             matches!(&pong_result, Ok(reply) if matches!(reply.reply, moor_rpc::DaemonToHostReplyUnion::DaemonToHostAck(_))),
@@ -1461,10 +1467,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             client_id,
             invalid_ping_message,
         );
-        assert!(
-            invalid_result.is_err(),
-            "Invalid client token should fail"
-        );
+        assert!(invalid_result.is_err(), "Invalid client token should fail");
     }
 
     #[test]

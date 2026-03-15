@@ -25,18 +25,18 @@ use std::sync::Arc;
 
 use serde_derive::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
+use webrtc::api::APIBuilder;
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::setting_engine::SettingEngine;
-use webrtc::api::APIBuilder;
-use webrtc::data_channel::data_channel_state::RTCDataChannelState;
 use webrtc::data_channel::RTCDataChannel;
+use webrtc::data_channel::data_channel_state::RTCDataChannelState;
 use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::interceptor::registry::Registry;
+use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
-use webrtc::peer_connection::RTCPeerConnection;
 
 /// WebSocket message prefix for WebRTC signaling messages.
 pub const SIGNALING_PREFIX: u8 = 0x03;
@@ -232,10 +232,9 @@ impl WebRtcPeer {
 
     /// Add a remote ICE candidate received from the client.
     pub async fn add_ice_candidate(&self, candidate_json: &str) -> Result<(), eyre::Error> {
-        let candidate =
-            serde_json::from_str::<webrtc::ice_transport::ice_candidate::RTCIceCandidateInit>(
-                candidate_json,
-            )?;
+        let candidate = serde_json::from_str::<
+            webrtc::ice_transport::ice_candidate::RTCIceCandidateInit,
+        >(candidate_json)?;
         self.peer_connection
             .add_ice_candidate(candidate)
             .await
@@ -244,8 +243,7 @@ impl WebRtcPeer {
 
     /// Whether the data channel is currently open and ready for sending.
     pub fn is_open(&self) -> bool {
-        self.dc_open
-            .load(std::sync::atomic::Ordering::SeqCst)
+        self.dc_open.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Send binary data over the data channel.
@@ -271,18 +269,18 @@ impl WebRtcPeer {
 
     /// Set up a callback to collect ICE candidates to send to the client.
     /// The provided sender receives serialized signaling messages.
-    pub fn on_ice_candidate(
-        &self,
-        ice_tx: tokio::sync::mpsc::UnboundedSender<SignalingMessage>,
-    ) {
-        self.peer_connection.on_ice_candidate(Box::new(
-            move |candidate| {
+    pub fn on_ice_candidate(&self, ice_tx: tokio::sync::mpsc::UnboundedSender<SignalingMessage>) {
+        self.peer_connection
+            .on_ice_candidate(Box::new(move |candidate| {
                 if let Some(candidate) = candidate {
-                    let candidate_str = candidate.to_json().map(|init| SignalingMessage::IceCandidate {
-                        candidate: init.candidate,
-                        sdp_mid: init.sdp_mid,
-                        sdp_mline_index: init.sdp_mline_index,
-                    });
+                    let candidate_str =
+                        candidate
+                            .to_json()
+                            .map(|init| SignalingMessage::IceCandidate {
+                                candidate: init.candidate,
+                                sdp_mid: init.sdp_mid,
+                                sdp_mline_index: init.sdp_mline_index,
+                            });
                     match candidate_str {
                         Ok(msg) => {
                             let _ = ice_tx.send(msg);
@@ -293,8 +291,7 @@ impl WebRtcPeer {
                     }
                 }
                 Box::pin(async {})
-            },
-        ));
+            }));
     }
 }
 

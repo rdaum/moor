@@ -160,7 +160,8 @@ impl WebSocketConnection {
         let mut ping_interval = tokio::time::interval(WEBSOCKET_PING_INTERVAL);
         let mut heartbeat_interval = tokio::time::interval(HEARTBEAT_INTERVAL);
         let mut pending_heartbeat: Option<Instant> = None;
-        let mut ice_candidate_rx: Option<tokio::sync::mpsc::UnboundedReceiver<SignalingMessage>> = None;
+        let mut ice_candidate_rx: Option<tokio::sync::mpsc::UnboundedReceiver<SignalingMessage>> =
+            None;
         loop {
             // Check for heartbeat timeout - if we sent a heartbeat and haven't received
             // a response within HEARTBEAT_TIMEOUT, the websocket connection is likely zombie.
