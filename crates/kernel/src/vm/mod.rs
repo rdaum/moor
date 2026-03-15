@@ -17,7 +17,7 @@ use moor_var::{Obj, Symbol, Var};
 // Re-export types from moor-vm that kernel code uses.
 pub use moor_vm::FinallyReason;
 pub use moor_vm::Fork;
-pub use moor_vm::execute::{CommandVerbExecutionRequest, VerbExecutionRequest};
+pub use moor_vm::{CommandVerbExecutionRequest, VerbExecutionRequest};
 pub(crate) use moor_vm::{Activation, Frame, MooStackFrame, ScopeType};
 
 pub(crate) mod kernel_host;
@@ -51,7 +51,7 @@ pub enum VMHostResponse {
     RollbackRetry,
 }
 
-pub use moor_vm::execute::TaskSuspend;
+pub use moor_vm::TaskSuspend;
 
 /// Extract anonymous object references from a variable
 fn extract_anonymous_refs_from_var(var: &Var, refs: &mut std::collections::HashSet<Obj>) {
@@ -214,7 +214,7 @@ fn extract_anonymous_refs_from_activation(
 
 /// Extract anonymous object references from VM execution state
 pub(crate) fn extract_anonymous_refs_from_vm_exec_state(
-    vm_state: &moor_vm::VMExecState,
+    vm_state: &moor_vm::ExecState,
     refs: &mut std::collections::HashSet<Obj>,
 ) {
     // Scan all activations in the call stack
@@ -226,7 +226,7 @@ pub(crate) fn extract_anonymous_refs_from_vm_exec_state(
 #[cfg(test)]
 mod tests {
     use crate::vm::VMHostResponse;
-    use moor_vm::{Activation, BfFrame, Frame, MooStackFrame};
+    use moor_vm::{Activation, BuiltinFrame, Frame, MooStackFrame};
     use std::mem::size_of;
 
     #[test]
@@ -243,13 +243,13 @@ mod tests {
     #[test]
     fn test_frame_sizes() {
         println!("Size of MooStackFrame: {}", size_of::<MooStackFrame>());
-        println!("Size of BfFrame: {}", size_of::<BfFrame>());
+        println!("Size of BuiltinFrame: {}", size_of::<BuiltinFrame>());
         println!("Size of Frame (unboxed): {}", size_of::<Frame>());
         println!("Size of Activation: {}", size_of::<Activation>());
 
-        // Frame is an enum with MooStackFrame and BfFrame (unboxed)
-        // Size should be max(MooStackFrame, BfFrame) + discriminant
-        let expected_size = size_of::<MooStackFrame>().max(size_of::<BfFrame>()) + 8;
+        // Frame is an enum with MooStackFrame and BuiltinFrame (unboxed)
+        // Size should be max(MooStackFrame, BuiltinFrame) + discriminant
+        let expected_size = size_of::<MooStackFrame>().max(size_of::<BuiltinFrame>()) + 8;
         println!("Expected Frame size: {expected_size}");
         println!("Total activation size: {} bytes", size_of::<Activation>());
     }

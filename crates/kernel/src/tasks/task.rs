@@ -81,8 +81,8 @@ use moor_common::{
     tasks::Session,
 };
 use moor_var::program::ProgramType;
+use moor_vm::ExecState;
 use moor_vm::Frame;
-use moor_vm::VMExecState;
 
 static HUH_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("huh"));
 static HANDLE_UNCAUGHT_ERROR_SYM: LazyLock<Symbol> =
@@ -132,7 +132,7 @@ pub struct Task {
     pub(crate) retries: u8,
     /// A copy of the VM state at the time the task was created or last committed/suspended.
     /// For restoring on retry.
-    pub(crate) retry_state: VMExecState,
+    pub(crate) retry_state: ExecState,
     /// True if we're currently handling an uncaught error to prevent infinite recursion.
     pub(crate) handling_uncaught_error: bool,
     /// The original exception when calling handle_uncaught_error, in case it returns false.
@@ -262,7 +262,7 @@ impl Task {
     }
 
     fn collect_live_program_ptrs_from_state(
-        state: &VMExecState,
+        state: &ExecState,
         live_ptrs: &mut HashSet<usize, std::hash::BuildHasherDefault<AHasher>>,
     ) {
         for activation in &state.stack {
@@ -1284,9 +1284,9 @@ impl Drop for Task {
             return;
         };
 
-        let stack = VMExecState::make_stack_list(&vm_state.stack);
+        let stack = ExecState::make_stack_list(&vm_state.stack);
         let panic_error = Error::new(ErrorCode::E_MAXREC, Some("Task panicked".to_string()), None);
-        let backtrace = VMExecState::make_backtrace(&vm_state.stack, &panic_error);
+        let backtrace = ExecState::make_backtrace(&vm_state.stack, &panic_error);
         let stack_literals = stack.iter().map(to_literal).collect::<Vec<_>>();
         let backtrace_lines = backtrace
             .iter()

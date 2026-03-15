@@ -48,7 +48,7 @@ use moor_var::{
     E_INVARG, E_TYPE, Error, ErrorCode, List, Map, Obj, Sequence, Symbol, Var, Variant, v_bool_int,
     v_map,
 };
-use moor_vm::{BfFrame, Frame, VMExecState};
+use moor_vm::{BuiltinFrame, ExecState, Frame};
 
 mod bf_cryptography;
 mod bf_documents;
@@ -180,7 +180,7 @@ pub(crate) struct BfCallState<'a> {
     pub(crate) args: &'a List,
     /// The current execution state of this task in this VM, including the stack
     /// so that BFs can inspect and manipulate it.
-    pub(crate) exec_state: &'a mut VMExecState,
+    pub(crate) exec_state: &'a mut ExecState,
     /// Config
     pub(crate) config: &'a FeaturesConfig,
 }
@@ -205,7 +205,7 @@ impl BfCallState<'_> {
         Ok(Perms { who, flags })
     }
 
-    pub fn bf_frame(&self) -> &BfFrame {
+    pub fn bf_frame(&self) -> &BuiltinFrame {
         let Frame::Bf(frame) = &self.exec_state.top().frame else {
             panic!("Expected a BF frame at the top of the stack");
         };
@@ -213,7 +213,7 @@ impl BfCallState<'_> {
         frame
     }
 
-    pub fn bf_frame_mut(&mut self) -> &mut BfFrame {
+    pub fn bf_frame_mut(&mut self) -> &mut BuiltinFrame {
         let Frame::Bf(frame) = &mut self.exec_state.top_mut().frame else {
             panic!("Expected a BF frame at the top of the stack");
         };

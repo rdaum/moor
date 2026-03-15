@@ -34,10 +34,11 @@ use moor_schema::{
 use moor_var::program::names::Name;
 use moor_var::v_str;
 use moor_vm::{
-    Activation as KernelActivation, BfFrame as KernelBfFrame, CatchType as KernelCatchType,
+    Activation as KernelActivation, BuiltinFrame as KernelBuiltinFrame,
+    CatchType as KernelCatchType, ExecState as KernelExecState,
     FinallyReason as KernelFinallyReason, Frame as KernelFrame,
     MooStackFrame as KernelMooStackFrame, PcType as KernelPcType, Scope as KernelScope,
-    ScopeType as KernelScopeType, VMExecState as KernelVMExecState,
+    ScopeType as KernelScopeType,
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
@@ -1066,7 +1067,7 @@ pub(crate) fn moo_stack_frame_from_ref(
 // ============================================================================
 
 pub(crate) fn bf_frame_to_flatbuffer(
-    frame: &KernelBfFrame,
+    frame: &KernelBuiltinFrame,
 ) -> Result<fb::BfFrame, TaskConversionError> {
     let fb_trampoline_arg = frame
         .bf_trampoline_arg
@@ -1095,7 +1096,7 @@ pub(crate) fn bf_frame_to_flatbuffer(
 
 pub(crate) fn bf_frame_from_ref(
     fb: fb::BfFrameRef<'_>,
-) -> Result<KernelBfFrame, TaskConversionError> {
+) -> Result<KernelBuiltinFrame, TaskConversionError> {
     let has_trampoline = fb
         .has_trampoline()
         .map_err(|e| TaskConversionError::DecodingError(format!("has_trampoline: {e}")))?;
@@ -1126,7 +1127,7 @@ pub(crate) fn bf_frame_from_ref(
         .bf_id()
         .map_err(|e| TaskConversionError::DecodingError(format!("bf_id: {e}")))?;
 
-    Ok(KernelBfFrame {
+    Ok(KernelBuiltinFrame {
         bf_id: moor_compiler::BuiltinId(bf_id),
         bf_trampoline,
         bf_trampoline_arg,
@@ -1296,7 +1297,7 @@ pub(crate) fn activation_from_ref(
 // ============================================================================
 
 pub(crate) fn vm_exec_state_to_flatbuffer(
-    state: &KernelVMExecState,
+    state: &KernelExecState,
 ) -> Result<fb::VmExecState, TaskConversionError> {
     let fb_activation_stack: Result<Vec<_>, _> =
         state.stack.iter().map(activation_to_flatbuffer).collect();
@@ -1317,7 +1318,7 @@ pub(crate) fn vm_exec_state_to_flatbuffer(
 
 pub(crate) fn vm_exec_state_from_ref(
     fb: fb::VmExecStateRef<'_>,
-) -> Result<KernelVMExecState, TaskConversionError> {
+) -> Result<KernelExecState, TaskConversionError> {
     let activation_stack_vec = fb
         .activation_stack()
         .map_err(|e| TaskConversionError::DecodingError(format!("activation_stack: {e}")))?;
@@ -1344,7 +1345,7 @@ pub(crate) fn vm_exec_state_from_ref(
         None
     };
 
-    Ok(KernelVMExecState {
+    Ok(KernelExecState {
         task_id: 0, // Will be set by caller
         stack,
         tick_slice: 0,

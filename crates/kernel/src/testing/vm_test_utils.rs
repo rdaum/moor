@@ -321,7 +321,7 @@ pub struct ActivationAssemblyBenchState {
 /// Holds the result of creating a raw environment for a frame.
 #[allow(dead_code)]
 pub struct EnvironmentBenchResult {
-    inner: moor_vm::environment::Environment,
+    inner: moor_vm::Environment,
 }
 
 /// Create a top-level MooStackFrame for benchmarking purposes.
@@ -490,7 +490,7 @@ pub fn create_top_level_environment_for_bench(
     };
     let width = max(program.var_names().global_width(), GlobalName::COUNT);
 
-    let env = moor_vm::environment::Environment::with_call_globals(
+    let env = moor_vm::Environment::with_call_globals(
         v_obj(player),
         this,
         caller,
@@ -521,7 +521,7 @@ pub fn create_nested_environment_for_bench(
     };
     let width = max(program.var_names().global_width(), GlobalName::COUNT);
 
-    let env = moor_vm::environment::Environment::with_call_globals_copy_parsing(
+    let env = moor_vm::Environment::with_call_globals_copy_parsing(
         v_obj(player),
         this,
         caller,
@@ -560,7 +560,7 @@ pub fn create_activation_for_bench(
         caller,
         argstr,
         None, // No parent activation for top-level calls
-        moor_vm::activation::CallProgram::Materialized(program),
+        moor_vm::CallProgram::Materialized(program),
     );
     ActivationBenchResult { inner: activation }
 }
@@ -592,7 +592,7 @@ pub fn create_command_activation_for_bench(
         caller,
         argstr,
         None,
-        moor_vm::activation::CallProgram::Materialized(program),
+        moor_vm::CallProgram::Materialized(program),
     );
 
     activation.frame.set_global_variable(
@@ -655,7 +655,7 @@ pub fn create_nested_activation_for_bench(
         caller,
         argstr,
         Some(parent.as_ref()),
-        moor_vm::activation::CallProgram::Materialized(program),
+        moor_vm::CallProgram::Materialized(program),
     );
     ActivationBenchResult { inner: activation }
 }
