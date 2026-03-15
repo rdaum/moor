@@ -42,14 +42,6 @@ pub struct ProgramCacheGlobalSnapshot {
     pub live_slots: i64,
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct ProgramCacheLocalSnapshot {
-    pub hits: i64,
-    pub misses: i64,
-    pub inserts: i64,
-    pub reclaimed: i64,
-}
-
 #[derive(Debug)]
 pub struct ProgramCacheGlobalStats {
     hits: ConcurrentCounter,
@@ -196,15 +188,6 @@ impl TaskProgramCache {
         }
 
         reclaimed
-    }
-
-    pub fn local_stats_snapshot(&self) -> ProgramCacheLocalSnapshot {
-        ProgramCacheLocalSnapshot {
-            hits: self.local_hits,
-            misses: self.local_misses,
-            inserts: self.local_inserts,
-            reclaimed: self.local_reclaimed,
-        }
     }
 
     pub fn total_slot_count(&self) -> usize {
