@@ -27,8 +27,8 @@ use crate::{
 };
 use flume::{Receiver, Sender};
 use moor_common::util::{Deadline, Instant};
-use rand::Rng;
 use parking_lot::{Condvar, Mutex};
+use rand::Rng;
 use std::{
     sync::{
         Arc, LazyLock,
@@ -361,14 +361,10 @@ impl Scheduler {
                     WakeCondition::Task(_) => ("Task", "Dependency task completed"),
                     WakeCondition::Immediate(_) => ("Immediate", "Immediate wake"),
                     WakeCondition::Worker(_) => ("Worker", "Worker response received"),
-                    WakeCondition::GCComplete => {
-                        ("GCComplete", "Garbage collection completed")
-                    }
+                    WakeCondition::GCComplete => ("GCComplete", "Garbage collection completed"),
                     WakeCondition::Never => ("Never", "Manual wake"),
                     WakeCondition::Retry(_) => ("Retry", "Transaction retry backoff"),
-                    WakeCondition::TaskMessage(_) => {
-                        ("TaskMessage", "Message received or timeout")
-                    }
+                    WakeCondition::TaskMessage(_) => ("TaskMessage", "Message received or timeout"),
                 };
 
                 trace_task_resume!(
@@ -396,9 +392,7 @@ impl Scheduler {
                         let messages = lc.task_q.drain_messages(task_id);
                         List::from_iter(messages).into()
                     }
-                    WakeCondition::Immediate(val) => {
-                        val.clone().unwrap_or_else(|| v_int(0))
-                    }
+                    WakeCondition::Immediate(val) => val.clone().unwrap_or_else(|| v_int(0)),
                     _ => v_int(0),
                 };
                 if let Err(e) = lc.task_q.wake_suspended_task(
@@ -464,7 +458,11 @@ impl Scheduler {
     }
 
     /// Legacy compatibility: returns a SchedulerClient wrapping this Scheduler.
-    pub fn client(&self) -> Result<crate::tasks::scheduler_client::SchedulerClient, SchedulerError> {
-        Ok(crate::tasks::scheduler_client::SchedulerClient::new(self.clone()))
+    pub fn client(
+        &self,
+    ) -> Result<crate::tasks::scheduler_client::SchedulerClient, SchedulerError> {
+        Ok(crate::tasks::scheduler_client::SchedulerClient::new(
+            self.clone(),
+        ))
     }
 }

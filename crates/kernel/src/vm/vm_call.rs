@@ -14,16 +14,14 @@
 use crate::{
     config::FeaturesConfig,
     task_context::with_current_transaction,
-    tasks::task_program_cache::ProgramSlot,
     vm::{
         Fork,
-        activation::{Activation, Frame},
         builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry, bf_perf_counters},
         exec_state::VMExecState,
         vm_host::ExecutionResult,
-        vm_unwind::FinallyReason,
     },
 };
+use moor_vm::{Activation, FinallyReason, Frame, activation::CallProgram};
 
 #[cfg(feature = "trace_events")]
 use crate::{trace_builtin_begin, trace_builtin_end, trace_verb_begin};
@@ -40,11 +38,8 @@ use moor_common::{
 use moor_compiler::{BUILTINS, BuiltinId, Program, to_literal};
 use moor_var::{
     E_INVIND, E_PERM, E_TYPE, E_VERBNF, Error, List, NOTHING, Obj, SYSTEM_OBJECT, Sequence, Symbol,
-    Var,
-    VarType::TYPE_NONE,
-    Variant,
-    program::{ProgramType, names::GlobalName},
-    v_empty_str, v_int, v_obj, v_string,
+    Var, VarType::TYPE_NONE, Variant, program::names::GlobalName, v_empty_str, v_int, v_obj,
+    v_string,
 };
 use std::sync::LazyLock;
 
@@ -103,12 +98,6 @@ pub struct CommandVerbExecutionRequest {
     pub command: ParsedCommand,
     /// Stable key for the dispatched verb program.
     pub program_key: VerbProgramKey,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum CallProgram {
-    Materialized(ProgramType),
-    TxSlot(ProgramSlot),
 }
 
 /// The set of parameters & utilities passed to the VM for execution of a given task.

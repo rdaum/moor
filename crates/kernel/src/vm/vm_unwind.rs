@@ -11,31 +11,19 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::vm::{
-    activation::{Activation, Frame},
-    exec_state::VMExecState,
-    moo_frame::{CatchType, ScopeType},
-    vm_host::ExecutionResult,
-};
+use moor_vm::{Activation, CatchType, FinallyReason, Frame, ScopeType};
+
+use crate::vm::{exec_state::VMExecState, vm_host::ExecutionResult};
 
 #[cfg(feature = "trace_events")]
 use crate::{trace_builtin_end, trace_stack_unwind, trace_verb_end};
 use moor_common::{model::VerbFlag, tasks::Exception};
-use moor_compiler::{BUILTINS, Label, Offset, to_literal};
+use moor_compiler::{BUILTINS, to_literal};
 use moor_var::{
     Error, NOTHING, Var, v_arc_str, v_bool, v_err, v_error, v_int, v_list, v_none, v_obj, v_str,
     v_string,
 };
 use tracing::warn;
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum FinallyReason {
-    Fallthrough,
-    Raise(Box<Exception>),
-    Return(Var),
-    Abort,
-    Exit { stack: Offset, label: Label },
-}
 
 impl VMExecState {
     /// Compose a list of the current stack frames, starting from `start_frame_num` and working
@@ -50,7 +38,6 @@ impl VMExecState {
                 None => v_none(),
                 Some(l) => v_int(l as i64),
             };
-            // TODO: abstract this a bit further, putting its construction onto the activation/frame
             match &a.frame {
                 Frame::Moo(_) => stack_list.push(v_list(&[
                     a.this.clone(),
@@ -86,7 +73,6 @@ impl VMExecState {
             if i != 0 {
                 piece.push_str("... called from ");
             }
-            // TODO: abstract this a bit further, putting it onto the frame itself
             match &a.frame {
                 Frame::Moo(_) => {
                     piece.push_str(&format!("{}:{}", a.verb_definer(), a.verb_name));
@@ -145,8 +131,6 @@ impl VMExecState {
             )
         });
 
-        // TODO: remove at some point 1.0, this is mainly here for diagnostics on uncooperative
-        //   dbs.
         warn!(error = ?error, verb = ?verb_this_name, "Pushing error from !d verb");
         ExecutionResult::More
     }

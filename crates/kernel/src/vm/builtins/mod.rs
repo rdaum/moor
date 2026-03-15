@@ -21,7 +21,6 @@ use crate::{
     config::FeaturesConfig,
     task_context::with_current_transaction,
     vm::{
-        activation::{BfFrame, Frame},
         builtins::{
             bf_cryptography::register_bf_cryptography,
             bf_documents::register_bf_documents,
@@ -50,6 +49,7 @@ use moor_var::{
     E_INVARG, E_TYPE, Error, ErrorCode, List, Map, Obj, Sequence, Symbol, Var, Variant, v_bool_int,
     v_map,
 };
+use moor_vm::{BfFrame, Frame};
 
 mod bf_cryptography;
 mod bf_documents;

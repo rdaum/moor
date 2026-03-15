@@ -11,9 +11,9 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::tasks::task_program_cache::ProgramSlot;
-use crate::vm::FinallyReason;
-use crate::vm::environment::Environment;
+use crate::ProgramSlot;
+use crate::environment::Environment;
+use crate::vm_unwind::FinallyReason;
 use moor_compiler::{Label, Op, Program};
 use moor_var::{
     Error, Var,
@@ -31,30 +31,30 @@ use strum::EnumCount;
 /// The MOO stack-frame specific portions of the activation:
 ///   the value stack, local variables, program, program counter, handler stack, etc.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct MooStackFrame {
+pub struct MooStackFrame {
     /// The program of the verb that is currently being executed.
-    pub(crate) program: Option<Program>,
-    pub(crate) program_ptr: Option<usize>,
+    pub program: Option<Program>,
+    pub program_ptr: Option<usize>,
     /// The program counter.
-    pub(crate) pc: usize,
+    pub pc: usize,
     /// Where is the PC pointing to?
-    pub(crate) pc_type: PcType,
+    pub pc_type: PcType,
     /// The values of the variables currently in scope, by their offset.
-    pub(crate) environment: Environment,
+    pub environment: Environment,
     /// The value stack.
-    pub(crate) valstack: Vec<Var>,
+    pub valstack: Vec<Var>,
     /// A stack of active scopes. Used for catch and finally blocks and in the future for lexical
     /// scoping as well.
-    pub(crate) scope_stack: Vec<Scope>,
+    pub scope_stack: Vec<Scope>,
     /// Scratch space for PushTemp and PutTemp opcodes.
-    pub(crate) temp: Var,
+    pub temp: Var,
     /// Scratch space for constructing the catch handlers for a forthcoming try scope.
-    pub(crate) catch_stack: Vec<(CatchType, Label)>,
+    pub catch_stack: Vec<(CatchType, Label)>,
     /// Scratch space for holding finally-reasons to be popped off the stack when a finally block
     /// is ended.
-    pub(crate) finally_stack: Vec<FinallyReason>,
+    pub finally_stack: Vec<FinallyReason>,
     /// Stack for captured variables during lambda creation
-    pub(crate) capture_stack: Vec<(Name, Var)>,
+    pub capture_stack: Vec<(Name, Var)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,7 +73,7 @@ pub enum CatchType {
 /// The kinds of block scopes that can be entered and exited, which far now are just catch and
 /// finally blocks.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ScopeType {
+pub enum ScopeType {
     /// A scope that attempts to execute a block of code, and then executes the block of code at
     /// "Label" regardless of whether the block of code succeeded or failed.
     /// Note that `return` and `exit` are not considered failures.
@@ -110,13 +110,13 @@ pub(crate) enum ScopeType {
 /// On entry, the current size of the valstack is stored in `valstack_pos`.
 /// On exit, the valstack is eaten back to that size.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Scope {
-    pub(crate) scope_type: ScopeType,
-    pub(crate) valstack_pos: usize,
-    pub(crate) start_pos: usize,
-    pub(crate) end_pos: usize,
+pub struct Scope {
+    pub scope_type: ScopeType,
+    pub valstack_pos: usize,
+    pub start_pos: usize,
+    pub end_pos: usize,
     /// True if this scope has a variable environment.
-    pub(crate) environment: bool,
+    pub environment: bool,
 }
 
 static PARSE_EMPTY_STR: LazyLock<Var> = LazyLock::new(v_empty_str);
@@ -133,7 +133,7 @@ impl MooStackFrame {
 
     /// Create a new MOO stack frame with default environment.
     #[allow(dead_code)]
-    pub(crate) fn new(program: Program) -> Self {
+    pub fn new(program: Program) -> Self {
         let width = max(program.var_names().global_width(), GlobalName::COUNT);
         Self {
             program: Some(program),
@@ -152,7 +152,7 @@ impl MooStackFrame {
 
     /// Create frame with all globals pre-populated (for top-level verb calls).
     #[inline]
-    pub(crate) fn new_with_all_globals(
+    pub fn new_with_all_globals(
         program: Program,
         player: Var,
         this: Var,
@@ -181,7 +181,7 @@ impl MooStackFrame {
 
     /// Create frame with core globals and parsing globals copied from source (for nested calls).
     #[inline]
-    pub(crate) fn new_with_globals_from_source(
+    pub fn new_with_globals_from_source(
         program: Program,
         player: Var,
         this: Var,
@@ -216,7 +216,7 @@ impl MooStackFrame {
 
     /// Create a new frame with a pre-built environment (for lambdas).
     /// Uses v_none() as sentinel for uninitialized slots.
-    pub(crate) fn with_environment(program: Program, environment: Vec<Vec<Var>>) -> Self {
+    pub fn with_environment(program: Program, environment: Vec<Vec<Var>>) -> Self {
         // Ensure global scope exists with proper width for global variables
         let global_width = max(program.var_names().global_width(), GlobalName::COUNT);
         let env = if environment.is_empty() {
@@ -285,12 +285,12 @@ impl MooStackFrame {
         Some(unsafe { &*ptr })
     }
 
-    pub(crate) fn program_ref(&self) -> &Program {
+    pub fn program_ref(&self) -> &Program {
         self.debug_assert_resolvable_program();
         self.resolved_program()
     }
 
-    pub(crate) fn materialize_program_from_slot(&mut self) {
+    pub fn materialize_program_from_slot(&mut self) {
         self.debug_assert_resolvable_program();
         if self.program.is_some() {
             self.program_ptr = None;
@@ -304,7 +304,7 @@ impl MooStackFrame {
         self.program_ptr = None;
     }
 
-    pub(crate) fn materialize_program_for_handoff(&mut self) {
+    pub fn materialize_program_for_handoff(&mut self) {
         self.debug_assert_resolvable_program();
         if self.program.is_none() {
             self.program = Some(self.program_ref().clone());
@@ -312,7 +312,7 @@ impl MooStackFrame {
         self.program_ptr = None;
     }
 
-    pub(crate) fn new_with_all_globals_from_slot(
+    pub fn new_with_all_globals_from_slot(
         program_slot: ProgramSlot,
         player: Var,
         this: Var,
@@ -339,7 +339,7 @@ impl MooStackFrame {
         }
     }
 
-    pub(crate) fn new_with_globals_from_source_slot(
+    pub fn new_with_globals_from_source_slot(
         program_slot: ProgramSlot,
         player: Var,
         this: Var,
@@ -372,7 +372,7 @@ impl MooStackFrame {
         }
     }
 
-    pub(crate) fn opcodes(&self) -> &[Op] {
+    pub fn opcodes(&self) -> &[Op] {
         let program = self.resolved_program();
         match self.pc_type {
             PcType::Main => program.main_vector(),
@@ -381,7 +381,7 @@ impl MooStackFrame {
         }
     }
 
-    pub(crate) fn find_line_no(&self, pc: usize) -> Option<usize> {
+    pub fn find_line_no(&self, pc: usize) -> Option<usize> {
         let program = self.try_resolved_program()?;
         match self.pc_type {
             PcType::Main => Some(program.line_num_for_position(pc, 0)),
@@ -424,7 +424,7 @@ impl MooStackFrame {
     }
 
     /// Return the value of a local variable.
-    pub(crate) fn get_env(&self, id: &Name) -> Option<&Var> {
+    pub fn get_env(&self, id: &Name) -> Option<&Var> {
         let scope_idx = id.1 as usize;
         let var_idx = id.0 as usize;
 
@@ -446,7 +446,7 @@ impl MooStackFrame {
         }
     }
 
-    pub(crate) fn switch_to_fork_vector(&mut self, fork_vector: Offset) {
+    pub fn switch_to_fork_vector(&mut self, fork_vector: Offset) {
         self.pc_type = PcType::ForkVector(fork_vector);
         self.pc = 0;
     }
@@ -485,7 +485,7 @@ impl MooStackFrame {
         self.valstack.last_mut().expect("stack underflow")
     }
 
-    pub(crate) fn peek_abs(&self, amt: usize) -> &Var {
+    pub fn peek_abs(&self, amt: usize) -> &Var {
         &self.valstack[amt]
     }
 
@@ -584,7 +584,6 @@ impl MooStackFrame {
 
     /// Get the current ForSequence scope for iteration
     pub fn get_for_sequence_scope_mut(&mut self) -> Option<&mut ScopeType> {
-        // Scan upwards through scope stack to find ForSequence scope
         for scope in self.scope_stack.iter_mut().rev() {
             if matches!(scope.scope_type, ScopeType::ForSequence { .. }) {
                 return Some(&mut scope.scope_type);
@@ -622,7 +621,6 @@ impl MooStackFrame {
 
     /// Get the current ForRange scope for iteration
     pub fn get_for_range_scope_mut(&mut self) -> Option<&mut ScopeType> {
-        // Scan upwards through scope stack to find ForRange scope
         for scope in self.scope_stack.iter_mut().rev() {
             if matches!(scope.scope_type, ScopeType::ForRange { .. }) {
                 return Some(&mut scope.scope_type);

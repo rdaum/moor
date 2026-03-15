@@ -27,7 +27,6 @@ use moor_compiler::{BuiltinId, CompileOptions, Offset, Program, compile};
 use moor_var::{E_MAXREC, Error, List, Obj, Symbol, Var, v_none};
 
 use crate::{
-    PhantomUnsync,
     config::FeaturesConfig,
     task_context::with_current_transaction,
     tasks::task_program_cache::TaskProgramCache,
@@ -35,15 +34,15 @@ use crate::{
         CommandVerbExecutionRequest, FinallyReason, Fork, TaskSuspend, VMHostResponse,
         VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend},
         VerbExecutionRequest,
-        activation::Frame,
         builtins::BuiltinRegistry,
         exec_state::VMExecState,
         moo_execute::moo_frame_execute,
-        vm_call::{CallProgram, VmExecParams},
+        vm_call::VmExecParams,
     },
 };
 use moor_common::{matching::ParsedCommand, tasks::Session};
 use moor_var::program::{ProgramType, names::Name};
+use moor_vm::{Frame, PhantomUnsync, activation::CallProgram};
 
 /// Possible outcomes from VM execution inner loop, which are used to determine what to do next.
 #[derive(Debug, Clone)]

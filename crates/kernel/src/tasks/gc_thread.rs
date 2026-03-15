@@ -40,18 +40,13 @@ pub fn spawn_gc_mark_phase(
 
         match result {
             Ok(unreachable_objects) => {
-                scheduler.handle_gc_mark_complete(
-                    unreachable_objects,
-                    mutation_timestamp_before_mark,
-                );
+                scheduler
+                    .handle_gc_mark_complete(unreachable_objects, mutation_timestamp_before_mark);
             }
             Err(e) => {
                 error!("GC mark phase failed: {e}");
                 // Send empty results to indicate failure
-                scheduler.handle_gc_mark_complete(
-                    HashSet::new(),
-                    mutation_timestamp_before_mark,
-                );
+                scheduler.handle_gc_mark_complete(HashSet::new(), mutation_timestamp_before_mark);
             }
         }
     })

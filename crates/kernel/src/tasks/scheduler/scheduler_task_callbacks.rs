@@ -88,11 +88,7 @@ impl Scheduler {
                 "Maximum number of retries exceeded for task {}.  Aborting.",
                 task.task_id
             );
-            TaskQ::send_task_result_direct(
-                task_id,
-                old_tc.result_sender,
-                Err(TaskAbortedError),
-            );
+            TaskQ::send_task_result_direct(task_id, old_tc.result_sender, Err(TaskAbortedError));
             return;
         }
         task.retries += 1;
@@ -335,11 +331,7 @@ impl Scheduler {
         );
     }
 
-    pub fn handle_task_request_fork(
-        &self,
-        task_id: TaskId,
-        fork_request: Box<Fork>,
-    ) -> TaskId {
+    pub fn handle_task_request_fork(&self, task_id: TaskId, fork_request: Box<Fork>) -> TaskId {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.fork_task);
 
@@ -416,9 +408,7 @@ impl Scheduler {
             TaskSuspend::Never => WakeCondition::Never,
             TaskSuspend::Timed(t) => WakeCondition::Time(Deadline::from_now(t).instant()),
             TaskSuspend::WaitTask(task_id) => WakeCondition::Task(task_id),
-            TaskSuspend::Commit(return_value) => {
-                WakeCondition::Immediate(Some(return_value))
-            }
+            TaskSuspend::Commit(return_value) => WakeCondition::Immediate(Some(return_value)),
             TaskSuspend::WorkerRequest(worker_type, args, timeout) => {
                 let worker_request_id = Uuid::new_v4();
                 // Send request to the worker process.
@@ -578,12 +568,7 @@ impl Scheduler {
         lc.task_q.disconnect_task(task_id, &player);
     }
 
-    pub fn handle_notify(
-        &self,
-        task_id: TaskId,
-        player: Obj,
-        event: Box<NarrativeEvent>,
-    ) {
+    pub fn handle_notify(&self, task_id: TaskId, player: Obj, event: Box<NarrativeEvent>) {
         let mut lc = self.lifecycle.lock();
         // Task is asking to notify a player of an event.
         let Some(task) = lc.task_q.active.get_mut(&task_id) else {
@@ -596,12 +581,7 @@ impl Scheduler {
         };
     }
 
-    pub fn handle_log_event(
-        &self,
-        task_id: TaskId,
-        player: Obj,
-        event: Box<NarrativeEvent>,
-    ) {
+    pub fn handle_log_event(&self, task_id: TaskId, player: Obj, event: Box<NarrativeEvent>) {
         let mut lc = self.lifecycle.lock();
         // Task is asking to log an event without broadcasting.
         let Some(task) = lc.task_q.active.get_mut(&task_id) else {
@@ -640,12 +620,7 @@ impl Scheduler {
             .err()
     }
 
-    pub fn handle_unlisten(
-        &self,
-        task_id: TaskId,
-        host_type: String,
-        port: u16,
-    ) -> Option<Error> {
+    pub fn handle_unlisten(&self, task_id: TaskId, host_type: String, port: u16) -> Option<Error> {
         let lc = self.lifecycle.lock();
         let Some(_task) = lc.task_q.active.get(&task_id) else {
             warn!(task_id, "Task not found for unlisten request");
@@ -692,14 +667,19 @@ impl Scheduler {
 
         let new_task_id = lc.next_task_id;
         lc.next_task_id += 1;
-        let result =
-            self.submit_task(&mut lc, new_task_id, &who, &who, task_start, None, new_session);
+        let result = self.submit_task(
+            &mut lc,
+            new_task_id,
+            &who,
+            &who,
+            task_start,
+            None,
+            new_session,
+        );
         match result {
             Err(e) => {
                 error!(?e, "Could not start task thread");
-                Err(E_INVIND.with_msg(|| {
-                    format!("Could not start thread for force_input: {e:?}")
-                }))
+                Err(E_INVIND.with_msg(|| format!("Could not start thread for force_input: {e:?}")))
             }
             Ok(th) => Ok(th.0),
         }
@@ -736,9 +716,9 @@ impl Scheduler {
         let mut lc = self.lifecycle.lock();
 
         let Some(owner) = lc.task_q.task_owner(target_task_id) else {
-            return v_error(E_INVARG.with_msg(|| {
-                format!("Task ({target_task_id}) not found for task_send")
-            }));
+            return v_error(
+                E_INVARG.with_msg(|| format!("Task ({target_task_id}) not found for task_send")),
+            );
         };
 
         let is_wizard = sender_permissions
@@ -799,9 +779,7 @@ impl Scheduler {
     pub fn handle_force_gc(&self) {
         info!("Forcing garbage collection via gc_collect() builtin");
         if !self.config.features.anonymous_objects {
-            warn!(
-                "GC force requested but anonymous objects are disabled, ignoring request"
-            );
+            warn!("GC force requested but anonymous objects are disabled, ignoring request");
         } else {
             {
                 let mut lc = self.lifecycle.lock();

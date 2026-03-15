@@ -118,13 +118,8 @@ impl SchedulerClient {
     ) -> Result<TaskHandle, SchedulerError> {
         let _timer = PerfTimerGuard::new(&sched_counters().submit_oob_task_latency);
 
-        self.scheduler.submit_oob_task_inner(
-            *handler_object,
-            *player,
-            command,
-            argstr,
-            session,
-        )
+        self.scheduler
+            .submit_oob_task_inner(*handler_object, *player, command, argstr, session)
     }
 
     /// Submit an eval task to the scheduler for execution.
@@ -145,13 +140,8 @@ impl SchedulerClient {
             Err(e) => return Err(CompilationError(e)),
         };
 
-        self.scheduler.submit_eval_task_inner(
-            *player,
-            *perms,
-            program,
-            initial_env,
-            sessions,
-        )
+        self.scheduler
+            .submit_eval_task_inner(*player, *perms, program, initial_env, sessions)
     }
 
     pub fn submit_shutdown(&self, msg: &str) -> Result<(), SchedulerError> {
@@ -390,8 +380,7 @@ impl SchedulerClient {
         rollback: bool,
         session: Arc<dyn Session>,
     ) -> Result<(TaskHandle, crate::tasks::BatchResultSink), SchedulerError> {
-        let result_sink: crate::tasks::BatchResultSink =
-            Arc::new(std::sync::Mutex::new(None));
+        let result_sink: crate::tasks::BatchResultSink = Arc::new(std::sync::Mutex::new(None));
 
         let handle = self.scheduler.submit_batch_world_state_task_inner(
             *player,

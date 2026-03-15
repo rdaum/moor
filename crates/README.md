@@ -24,10 +24,10 @@ Libraries:
 - `db` - implementation of the `WorldState` object database overtop of `rdb`
 - `compiler` - the MOO language grammar, parser, AST, and codegen, as well as the decompiler &
   unparser
-- `kernel` - the kernel of the MOO driver: virtual machine, task scheduler, implementations of all
-  builtin\
-  functions
+- `vm` - the VM execution core: stack frames, activations, environment storage, and unwind logic.
+  Pure types with no host/scheduler dependencies.
+- `kernel` - the kernel of the MOO driver: task scheduler, builtin functions, and host services that
+  wire the VM into the transactional database
 - `rpc/rpc-common` - provides types & functions used by both `daemon` and each host binary, for the
   RPC interface
 - `rpc/rpc-async-client` - provides an async RPC client for the `daemon`'s RPC interface
-- `rpc/rpc-sync-client` - provides a synchronous RPC client for the `daemon`'s RPC interface

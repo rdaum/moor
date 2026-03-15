@@ -84,6 +84,7 @@ use moor_common::{
     tasks::Session,
 };
 use moor_var::program::ProgramType;
+use moor_vm::Frame;
 
 static HUH_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("huh"));
 static HANDLE_UNCAUGHT_ERROR_SYM: LazyLock<Symbol> =
@@ -267,7 +268,7 @@ impl Task {
         live_ptrs: &mut HashSet<usize, std::hash::BuildHasherDefault<AHasher>>,
     ) {
         for activation in &state.stack {
-            let crate::vm::activation::Frame::Moo(frame) = &activation.frame else {
+            let Frame::Moo(frame) = &activation.frame else {
                 continue;
             };
             if let Some(ptr) = frame.program_ptr {
@@ -284,7 +285,7 @@ impl Task {
         Self::collect_live_program_ptrs_from_state(&self.retry_state, &mut live_ptrs);
 
         if let TaskStart::StartFork { fork_request, .. } = self.state.task_start()
-            && let crate::vm::activation::Frame::Moo(frame) = &fork_request.activation.frame
+            && let Frame::Moo(frame) = &fork_request.activation.frame
             && let Some(ptr) = frame.program_ptr
         {
             live_ptrs.insert(ptr);
@@ -840,11 +841,7 @@ impl Task {
     }
 
     /// Set the task up to start executing, based on the task start configuration.
-    pub(crate) fn setup_task_start(
-        &mut self,
-        tsc: &TaskSchedulerClient,
-        config: &Config,
-    ) -> bool {
+    pub(crate) fn setup_task_start(&mut self, tsc: &TaskSchedulerClient, config: &Config) -> bool {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.setup_task);
         match self.state.task_start() {
@@ -944,9 +941,7 @@ impl Task {
                 suspended: _,
             } => {
                 let mut prepared_fork = (**fork_request).clone();
-                if let crate::vm::activation::Frame::Moo(ref mut frame) =
-                    prepared_fork.activation.frame
-                {
+                if let Frame::Moo(ref mut frame) = prepared_fork.activation.frame {
                     frame.materialize_program_for_handoff();
                 }
                 // When setup_task_start is called, the task is being woken/started, so we always
@@ -1012,13 +1007,11 @@ impl Task {
                                             ),
                                         ),
                                     ));
-                                    tsc.command_error(
-                                        CommandError::DatabaseError(
-                                            moor_common::model::WorldStateError::DatabaseError(
-                                                "Transaction conflict".to_string(),
-                                            ),
+                                    tsc.command_error(CommandError::DatabaseError(
+                                        moor_common::model::WorldStateError::DatabaseError(
+                                            "Transaction conflict".to_string(),
                                         ),
-                                    );
+                                    ));
                                     return false;
                                 }
                                 Err(e) => {
@@ -1027,13 +1020,11 @@ impl Task {
                                             CommandError::DatabaseError(e),
                                         ),
                                     ));
-                                    tsc.command_error(
-                                        CommandError::DatabaseError(
-                                            moor_common::model::WorldStateError::DatabaseError(
-                                                "Commit failed".to_string(),
-                                            ),
+                                    tsc.command_error(CommandError::DatabaseError(
+                                        moor_common::model::WorldStateError::DatabaseError(
+                                            "Commit failed".to_string(),
                                         ),
-                                    );
+                                    ));
                                     return false;
                                 }
                             }
@@ -1043,9 +1034,7 @@ impl Task {
                     }
                     Err(ref e) => {
                         tsc.command_error(CommandError::DatabaseError(
-                            moor_common::model::WorldStateError::DatabaseError(
-                                e.to_string(),
-                            ),
+                            moor_common::model::WorldStateError::DatabaseError(e.to_string()),
                         ));
                         return false;
                     }
@@ -1400,9 +1389,7 @@ mod tests {
     use std::time::Duration;
 
     use moor_common::{
-        model::{
-            ArgSpec, ObjFlag, ObjectKind, PrepSpec, VerbArgsSpec, VerbFlag, WorldStateSource,
-        },
+        model::{ArgSpec, ObjFlag, ObjectKind, PrepSpec, VerbArgsSpec, VerbFlag, WorldStateSource},
         tasks::{
             CommandError, NoopClientSession, NoopSystemControl, SchedulerError, SessionError,
             SessionFactory,
@@ -1418,8 +1405,7 @@ mod tests {
     use crate::{
         config::{Config, FeaturesConfig},
         tasks::{
-            NoopTasksDb, TaskHandle, TaskNotification,
-            scheduler::Scheduler,
+            NoopTasksDb, TaskHandle, TaskNotification, scheduler::Scheduler,
             scheduler_client::SchedulerClient,
         },
     };
@@ -1625,7 +1611,10 @@ mod tests {
             .unwrap();
         let err = wait_result(&handle).unwrap_err();
         assert!(
-            matches!(err, SchedulerError::CommandExecutionError(CommandError::NoCommandMatch)),
+            matches!(
+                err,
+                SchedulerError::CommandExecutionError(CommandError::NoCommandMatch)
+            ),
             "Expected NoCommandMatch, got {err:?}"
         );
     }
@@ -1683,7 +1672,10 @@ mod tests {
             .unwrap();
         let err = wait_result(&handle).unwrap_err();
         assert!(
-            matches!(err, SchedulerError::CommandExecutionError(CommandError::NoCommandMatch)),
+            matches!(
+                err,
+                SchedulerError::CommandExecutionError(CommandError::NoCommandMatch)
+            ),
             "Expected NoCommandMatch, got {err:?}"
         );
     }
@@ -1723,13 +1715,7 @@ mod tests {
         let (client, _sched) = setup_scheduler(&[]);
         let session = Arc::new(NoopClientSession::new());
         let (handle, result_sink) = client
-            .submit_batch_world_state_task(
-                &SYSTEM_OBJECT,
-                &SYSTEM_OBJECT,
-                vec![],
-                false,
-                session,
-            )
+            .submit_batch_world_state_task(&SYSTEM_OBJECT, &SYSTEM_OBJECT, vec![], false, session)
             .unwrap();
         let result = wait_result(&handle).unwrap();
         assert_eq!(result, v_int(0));
@@ -1753,13 +1739,7 @@ mod tests {
         let (client, _sched) = setup_scheduler(&[]);
         let session = Arc::new(NoopClientSession::new());
         let (handle, result_sink) = client
-            .submit_batch_world_state_task(
-                &SYSTEM_OBJECT,
-                &SYSTEM_OBJECT,
-                actions,
-                false,
-                session,
-            )
+            .submit_batch_world_state_task(&SYSTEM_OBJECT, &SYSTEM_OBJECT, actions, false, session)
             .unwrap();
         wait_result(&handle).unwrap();
 
@@ -1795,13 +1775,7 @@ mod tests {
         let (client, _sched) = setup_scheduler(&[]);
         let session = Arc::new(NoopClientSession::new());
         let (handle, result_sink) = client
-            .submit_batch_world_state_task(
-                &SYSTEM_OBJECT,
-                &SYSTEM_OBJECT,
-                actions,
-                true,
-                session,
-            )
+            .submit_batch_world_state_task(&SYSTEM_OBJECT, &SYSTEM_OBJECT, actions, true, session)
             .unwrap();
         wait_result(&handle).unwrap();
 
@@ -1842,13 +1816,7 @@ mod tests {
         let (client, _sched) = setup_scheduler(&[]);
         let session = Arc::new(NoopClientSession::new());
         let (handle, result_sink) = client
-            .submit_batch_world_state_task(
-                &SYSTEM_OBJECT,
-                &SYSTEM_OBJECT,
-                actions,
-                false,
-                session,
-            )
+            .submit_batch_world_state_task(&SYSTEM_OBJECT, &SYSTEM_OBJECT, actions, false, session)
             .unwrap();
         wait_result(&handle).unwrap();
 

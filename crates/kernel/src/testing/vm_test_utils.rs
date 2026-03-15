@@ -29,9 +29,7 @@ use crate::{
     config::{Config, FeaturesConfig},
     task_context::TaskGuard,
     tasks::{
-        NoopTasksDb,
-        scheduler::Scheduler,
-        task_program_cache::TaskProgramCache,
+        NoopTasksDb, scheduler::Scheduler, task_program_cache::TaskProgramCache,
         task_scheduler_client::TaskSchedulerClient,
     },
     vm::{VMHostResponse, builtins::BuiltinRegistry, vm_host::VmHost},
@@ -285,12 +283,12 @@ pub fn call_fork(
 /// Opaque wrapper for benchmarking Activation creation without exposing internals.
 /// Holds the result of creating an activation frame.
 pub struct ActivationBenchResult {
-    inner: crate::vm::activation::Activation,
+    inner: moor_vm::Activation,
 }
 
 impl ActivationBenchResult {
     /// Get a reference to the inner activation for use as a parent frame.
-    pub(crate) fn as_ref(&self) -> &crate::vm::activation::Activation {
+    pub(crate) fn as_ref(&self) -> &moor_vm::Activation {
         &self.inner
     }
 }
@@ -298,11 +296,11 @@ impl ActivationBenchResult {
 /// Opaque wrapper for benchmarking MooStackFrame construction without exposing internals.
 /// Holds the result of creating a raw MOO frame.
 pub struct MooFrameBenchResult {
-    inner: crate::vm::moo_frame::MooStackFrame,
+    inner: moor_vm::MooStackFrame,
 }
 
 impl MooFrameBenchResult {
-    pub(crate) fn as_ref(&self) -> &crate::vm::moo_frame::MooStackFrame {
+    pub(crate) fn as_ref(&self) -> &moor_vm::MooStackFrame {
         &self.inner
     }
 }
@@ -310,7 +308,7 @@ impl MooFrameBenchResult {
 /// Opaque state for directly benchmarking activation assembly around a prebuilt MOO frame.
 /// This reuses owned values across iterations to avoid measuring clone/setup overhead.
 pub struct ActivationAssemblyBenchState {
-    frame: Option<crate::vm::moo_frame::MooStackFrame>,
+    frame: Option<moor_vm::MooStackFrame>,
     this: Option<Var>,
     args: Option<List>,
     verbdef: Option<moor_common::model::ResolvedVerb>,
@@ -323,7 +321,7 @@ pub struct ActivationAssemblyBenchState {
 /// Holds the result of creating a raw environment for a frame.
 #[allow(dead_code)]
 pub struct EnvironmentBenchResult {
-    inner: crate::vm::environment::Environment,
+    inner: moor_vm::environment::Environment,
 }
 
 /// Create a top-level MooStackFrame for benchmarking purposes.
@@ -343,7 +341,7 @@ pub fn create_top_level_moo_frame_for_bench(
         unimplemented!("Only MOO programs are supported");
     };
 
-    let frame = crate::vm::moo_frame::MooStackFrame::new_with_all_globals(
+    let frame = moor_vm::MooStackFrame::new_with_all_globals(
         program,
         v_obj(player),
         this,
@@ -372,7 +370,7 @@ pub fn create_nested_moo_frame_for_bench(
         unimplemented!("Only MOO programs are supported");
     };
 
-    let frame = crate::vm::moo_frame::MooStackFrame::new_with_globals_from_source(
+    let frame = moor_vm::MooStackFrame::new_with_globals_from_source(
         program,
         v_obj(player),
         this,
@@ -425,8 +423,8 @@ pub fn run_activation_assembly_cycle_for_bench(state: &mut ActivationAssemblyBen
         .take()
         .expect("activation assembly bench state missing verbdef");
 
-    let activation = crate::vm::activation::Activation {
-        frame: crate::vm::activation::Frame::Moo(frame),
+    let activation = moor_vm::Activation {
+        frame: moor_vm::Frame::Moo(frame),
         this,
         player: state.player,
         args,
@@ -437,7 +435,7 @@ pub fn run_activation_assembly_cycle_for_bench(state: &mut ActivationAssemblyBen
     };
     let activation = std::hint::black_box(activation);
 
-    let crate::vm::activation::Frame::Moo(frame) = activation.frame else {
+    let moor_vm::Frame::Moo(frame) = activation.frame else {
         unreachable!("activation assembly bench uses only MOO frames")
     };
     state.frame = Some(frame);
@@ -492,7 +490,7 @@ pub fn create_top_level_environment_for_bench(
     };
     let width = max(program.var_names().global_width(), GlobalName::COUNT);
 
-    let env = crate::vm::environment::Environment::with_call_globals(
+    let env = moor_vm::environment::Environment::with_call_globals(
         v_obj(player),
         this,
         caller,
@@ -523,7 +521,7 @@ pub fn create_nested_environment_for_bench(
     };
     let width = max(program.var_names().global_width(), GlobalName::COUNT);
 
-    let env = crate::vm::environment::Environment::with_call_globals_copy_parsing(
+    let env = moor_vm::environment::Environment::with_call_globals_copy_parsing(
         v_obj(player),
         this,
         caller,
@@ -552,7 +550,7 @@ pub fn create_activation_for_bench(
 ) -> ActivationBenchResult {
     // Use wizard + programmer flags for benchmarking
     let permissions_flags = BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer;
-    let activation = crate::vm::activation::Activation::for_call(
+    let activation = moor_vm::Activation::for_call(
         verbdef,
         permissions_flags,
         verb_name,
@@ -562,7 +560,7 @@ pub fn create_activation_for_bench(
         caller,
         argstr,
         None, // No parent activation for top-level calls
-        crate::vm::vm_call::CallProgram::Materialized(program),
+        moor_vm::activation::CallProgram::Materialized(program),
     );
     ActivationBenchResult { inner: activation }
 }
@@ -584,7 +582,7 @@ pub fn create_command_activation_for_bench(
     let args: List = std::mem::take(&mut command.args).into_iter().collect();
     let argstr = moor_var::v_string(std::mem::take(&mut command.argstr));
 
-    let mut activation = crate::vm::activation::Activation::for_call(
+    let mut activation = moor_vm::Activation::for_call(
         verbdef,
         permissions_flags,
         verb_name,
@@ -594,7 +592,7 @@ pub fn create_command_activation_for_bench(
         caller,
         argstr,
         None,
-        crate::vm::vm_call::CallProgram::Materialized(program),
+        moor_vm::activation::CallProgram::Materialized(program),
     );
 
     activation.frame.set_global_variable(
@@ -647,7 +645,7 @@ pub fn create_nested_activation_for_bench(
 ) -> ActivationBenchResult {
     // Use wizard + programmer flags for benchmarking
     let permissions_flags = BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer;
-    let activation = crate::vm::activation::Activation::for_call(
+    let activation = moor_vm::Activation::for_call(
         verbdef,
         permissions_flags,
         verb_name,
@@ -657,7 +655,7 @@ pub fn create_nested_activation_for_bench(
         caller,
         argstr,
         Some(parent.as_ref()),
-        crate::vm::vm_call::CallProgram::Materialized(program),
+        moor_vm::activation::CallProgram::Materialized(program),
     );
     ActivationBenchResult { inner: activation }
 }
