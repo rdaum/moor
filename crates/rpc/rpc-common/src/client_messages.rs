@@ -572,10 +572,7 @@ pub fn mk_batch_world_state_msg(
 }
 
 /// Helper to build a WsRequestProperty action
-pub fn ws_request_property(
-    object: &ObjectRef,
-    property: &Symbol,
-) -> rpc::WorldStateActionUnion {
+pub fn ws_request_property(object: &ObjectRef, property: &Symbol) -> rpc::WorldStateActionUnion {
     rpc::WorldStateActionUnion::WsRequestProperty(Box::new(rpc::WsRequestProperty {
         object: objectref_fb(object),
         property: symbol_fb(property),
@@ -624,10 +621,7 @@ pub fn ws_request_verbs(object: &ObjectRef, inherited: bool) -> rpc::WorldStateA
 }
 
 /// Helper to build a WsRequestVerbCode action
-pub fn ws_request_verb_code(
-    object: &ObjectRef,
-    verb: &Symbol,
-) -> rpc::WorldStateActionUnion {
+pub fn ws_request_verb_code(object: &ObjectRef, verb: &Symbol) -> rpc::WorldStateActionUnion {
     rpc::WorldStateActionUnion::WsRequestVerbCode(Box::new(rpc::WsRequestVerbCode {
         object: objectref_fb(object),
         verb: symbol_fb(verb),
