@@ -11,48 +11,21 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::time::Duration;
-
 use moor_common::tasks::{AbortLimitReason, Exception};
-use moor_compiler::Offset;
 pub use moor_var::program::ProgramType;
-use moor_var::{Obj, Symbol, Var, program::names::Name};
+use moor_var::{Obj, Symbol, Var};
 
 // Re-export types from moor-vm that kernel code uses.
 pub use moor_vm::FinallyReason;
+pub use moor_vm::Fork;
 pub use moor_vm::execute::{CommandVerbExecutionRequest, VerbExecutionRequest};
 pub(crate) use moor_vm::{Activation, Frame, MooStackFrame, ScopeType};
 
-pub(crate) mod exec_state;
 pub(crate) mod kernel_host;
 pub(crate) mod vm_call;
-pub(crate) mod vm_unwind;
 
 pub mod builtins;
 pub mod vm_host;
-
-/// The set of parameters for a VM-requested fork.
-#[derive(Debug, Clone)]
-pub struct Fork {
-    /// The player. This is in the activation as well, but it's nicer to have it up here and
-    /// explicit
-    pub(crate) player: Obj,
-    /// The permissions context for the forked task.
-    pub(crate) progr: Obj,
-    /// The task ID of the task that forked us
-    pub(crate) parent_task_id: usize,
-    /// The time to delay before starting the forked task, if any.
-    pub(crate) delay: Option<Duration>,
-    /// A copy of the activation record from the task that forked us.
-    pub(crate) activation: Activation,
-    /// The unique fork vector offset into the fork vector for the executing binary held in the
-    /// activation record.  This is copied into the main vector and execution proceeds from there,
-    /// instead.
-    pub(crate) fork_vector_offset: Offset,
-    /// The (optional) variable label where the task ID of the new task should be stored, in both
-    /// the parent activation and the new task's activation.
-    pub task_id: Option<Name>,
-}
 
 /// Return common from exec_interpreter back to the Task scheduler loop
 pub enum VMHostResponse {
@@ -242,7 +215,7 @@ fn extract_anonymous_refs_from_activation(
 
 /// Extract anonymous object references from VM execution state
 pub(crate) fn extract_anonymous_refs_from_vm_exec_state(
-    vm_state: &exec_state::VMExecState,
+    vm_state: &moor_vm::VMExecState,
     refs: &mut std::collections::HashSet<Obj>,
 ) {
     // Scan all activations in the call stack

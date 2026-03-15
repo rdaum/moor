@@ -15,30 +15,24 @@ use crate::{
     config::FeaturesConfig,
     task_context::with_current_transaction,
     vm::{
-        Fork,
         builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry, bf_perf_counters},
-        exec_state::VMExecState,
         vm_host::ExecutionResult,
     },
 };
-use moor_vm::{Activation, FinallyReason, Frame, activation::CallProgram};
+use moor_vm::{Activation, FinallyReason, Frame, VMExecState};
 
 #[cfg(feature = "trace_events")]
 use crate::{trace_builtin_begin, trace_builtin_end, trace_verb_begin};
 
 use moor_common::{
-    matching::ParsedCommand,
-    model::{
-        DispatchFlagsSource, ObjFlag, ResolvedVerb, VerbDispatch, VerbLookup, WorldStateError,
-    },
+    model::{DispatchFlagsSource, ObjFlag, VerbDispatch, VerbLookup, WorldStateError},
     tasks::Session,
-    util::{BitEnum, PerfIntensity},
+    util::PerfIntensity,
 };
 use moor_compiler::{BUILTINS, BuiltinId, Program, to_literal};
 use moor_var::{
-    E_INVIND, E_PERM, E_TYPE, E_VERBNF, Error, List, NOTHING, Obj, SYSTEM_OBJECT, Sequence, Symbol,
-    Var, VarType::TYPE_NONE, Variant, program::names::GlobalName, v_empty_str, v_int, v_obj,
-    v_string,
+    E_INVIND, E_PERM, E_TYPE, E_VERBNF, Error, List, Obj, SYSTEM_OBJECT, Sequence, Symbol, Var,
+    VarType::TYPE_NONE, Variant, program::names::GlobalName, v_empty_str, v_int, v_obj,
 };
 use std::sync::LazyLock;
 
@@ -60,10 +54,60 @@ pub struct VmExecParams<'a> {
     pub config: &'a FeaturesConfig,
 }
 
-impl VMExecState {
+/// Extension trait for VMExecState methods that require kernel-level TLS access
+/// (e.g., `with_current_transaction`).
+pub(crate) trait VMExecStateKernelExt {
+    fn verb_dispatch(
+        &mut self,
+        exec_params: &VmExecParams,
+        target: Var,
+        verb: Symbol,
+        args: List,
+    ) -> Result<ExecutionResult, Error>;
+
+    fn prepare_call_verb(
+        &mut self,
+        location: Obj,
+        this: Var,
+        verb_name: Symbol,
+        args: List,
+    ) -> ExecutionResult;
+
+    fn prepare_pass_verb(&mut self, args: &List) -> ExecutionResult;
+
+    fn exec_eval_request(
+        &mut self,
+        permissions: &Obj,
+        player: &Obj,
+        program: Program,
+        initial_env: Option<&[(Symbol, Var)]>,
+    );
+
+    fn maybe_invoke_bf_proxy(
+        &mut self,
+        bf_override_name: Symbol,
+        args: &List,
+    ) -> Option<ExecutionResult>;
+
+    fn call_builtin_function(
+        &mut self,
+        bf_id: BuiltinId,
+        args: List,
+        exec_args: &VmExecParams,
+        session: &dyn Session,
+    ) -> ExecutionResult;
+
+    fn reenter_builtin_function(
+        &mut self,
+        exec_args: &VmExecParams,
+        session: &dyn Session,
+    ) -> ExecutionResult;
+}
+
+impl VMExecStateKernelExt for VMExecState {
     /// Entry point for dispatching a verb (method) call.
     /// Called from the VM execution loop for CallVerb opcodes.
-    pub(crate) fn verb_dispatch(
+    fn verb_dispatch(
         &mut self,
         exec_params: &VmExecParams,
         target: Var,
@@ -239,7 +283,7 @@ impl VMExecState {
     /// Setup the VM to execute the verb of the same current name, but using the parent's
     /// version.
     /// TODO this should be done up in task.rs instead. let's add a new ExecutionResult for it.
-    pub(crate) fn prepare_pass_verb(&mut self, args: &List) -> ExecutionResult {
+    fn prepare_pass_verb(&mut self, args: &List) -> ExecutionResult {
         // get parent of verb definer object & current verb name.
         let definer = self.top().verb_definer();
         let permissions = self.top().permissions;
@@ -303,127 +347,7 @@ impl VMExecState {
         }))
     }
 
-    /// Entry point from scheduler for beginning the dispatch of an initial command verb execution.
-    /// This sets up the initial activation with parsing variables from the parsed command.
-    #[allow(clippy::too_many_arguments)]
-    pub fn exec_command_request(
-        &mut self,
-        permissions_flags: BitEnum<ObjFlag>,
-        resolved_verb: ResolvedVerb,
-        verb_name: Symbol,
-        this: Var,
-        player: Obj,
-        caller: Var,
-        mut command: ParsedCommand,
-        program: CallProgram,
-    ) {
-        let args: List = std::mem::take(&mut command.args).into_iter().collect();
-        let argstr = v_string(std::mem::take(&mut command.argstr));
-
-        // Initial command activation - no parent to inherit from
-        let mut a = Activation::for_call(
-            resolved_verb,
-            permissions_flags,
-            verb_name,
-            this,
-            player,
-            args,
-            caller,
-            argstr,
-            None,
-            program,
-        );
-
-        // Set parsing variables from the parsed command
-        a.frame
-            .set_global_variable(GlobalName::dobj, v_obj(command.dobj.unwrap_or(NOTHING)));
-        a.frame.set_global_variable(
-            GlobalName::dobjstr,
-            command.dobjstr.take().map_or_else(v_empty_str, v_string),
-        );
-        a.frame.set_global_variable(
-            GlobalName::prepstr,
-            command.prepstr.take().map_or_else(v_empty_str, v_string),
-        );
-        a.frame
-            .set_global_variable(GlobalName::iobj, v_obj(command.iobj.unwrap_or(NOTHING)));
-        a.frame.set_global_variable(
-            GlobalName::iobjstr,
-            command.iobjstr.take().map_or_else(v_empty_str, v_string),
-        );
-
-        self.stack.push(a);
-
-        // Emit VerbBegin trace event if this is a MOO verb
-        #[cfg(feature = "trace_events")]
-        if let Frame::Moo(_) = self.top().frame {
-            // No calling line number for initial command activation
-            trace_verb_begin!(
-                self.task_id,
-                &self.top().verb_name.as_string(),
-                &self.top().this,
-                &self.top().verb_definer(),
-                None,
-                &self.top().args
-            );
-        }
-    }
-
-    /// Entry point from scheduler for actually beginning the dispatch of a method execution
-    /// (verb-to-verb call) in this VM.
-    /// Actually creates the activation record and puts it on the stack.
-    #[allow(clippy::too_many_arguments)]
-    pub fn exec_call_request(
-        &mut self,
-        permissions_flags: BitEnum<ObjFlag>,
-        resolved_verb: ResolvedVerb,
-        verb_name: Symbol,
-        this: Var,
-        player: Obj,
-        args: List,
-        caller: Var,
-        argstr: Var,
-        program: CallProgram,
-    ) {
-        // Get current activation to inherit global variables from, if any.
-        let current_activation = self.stack.last();
-
-        let a = Activation::for_call(
-            resolved_verb,
-            permissions_flags,
-            verb_name,
-            this,
-            player,
-            args,
-            caller,
-            argstr,
-            current_activation,
-            program,
-        );
-        self.stack.push(a);
-
-        // Emit VerbBegin trace event if this is a MOO verb
-        #[cfg(feature = "trace_events")]
-        if let Frame::Moo(_) = self.top().frame {
-            // Capture calling line number from the previous frame (before this push)
-            let calling_line = if self.stack.len() > 1 {
-                self.stack[self.stack.len() - 2].frame.find_line_no()
-            } else {
-                None
-            };
-
-            trace_verb_begin!(
-                self.task_id,
-                &self.top().verb_name.as_string(),
-                &self.top().this,
-                &self.top().verb_definer(),
-                calling_line,
-                &self.top().args
-            );
-        }
-    }
-
-    pub fn exec_eval_request(
+    fn exec_eval_request(
         &mut self,
         permissions: &Obj,
         player: &Obj,
@@ -450,80 +374,6 @@ impl VMExecState {
             } else {
                 None
             };
-
-            trace_verb_begin!(
-                self.task_id,
-                &self.top().verb_name.as_string(),
-                &self.top().this,
-                &self.top().verb_definer(),
-                calling_line,
-                &self.top().args
-            );
-        }
-    }
-
-    /// Execute a lambda call by creating a new lambda activation
-    pub fn exec_lambda_request(
-        &mut self,
-        lambda: moor_var::Lambda,
-        args: List,
-    ) -> Result<(), Error> {
-        // Get current activation before borrowing self immutably
-        let current_activation = self.top();
-        let a = Activation::for_lambda_call(&lambda, current_activation, args.into_vec())?;
-        self.stack.push(a);
-
-        // Emit VerbBegin trace event if this is a MOO lambda
-        #[cfg(feature = "trace_events")]
-        if let Frame::Moo(_) = self.top().frame {
-            // Capture calling line number from the previous frame (before this push)
-            let calling_line = if self.stack.len() > 1 {
-                self.stack[self.stack.len() - 2].frame.find_line_no()
-            } else {
-                None
-            };
-
-            trace_verb_begin!(
-                self.task_id,
-                &self.top().verb_name.as_string(),
-                &self.top().this,
-                &self.top().verb_definer(),
-                calling_line,
-                &self.top().args
-            );
-        }
-        Ok(())
-    }
-
-    /// Prepare a new stack & call hierarchy for invocation of a forked task.
-    /// Called (ultimately) from the scheduler as the result of a fork() call.
-    /// We get an activation record which is a copy of where it was borked from, and a new Program
-    /// which is the new task's code, derived from a fork vector in the original task.
-    pub(crate) fn exec_fork_vector(&mut self, fork_request: Fork) {
-        // Set the activation up with the new task ID, and the new code.
-        let mut a = fork_request.activation;
-
-        // This makes sense only for a MOO stack frame, and could only be initiated from there,
-        // so anything else is a legit panic, we shouldn't have gotten here.
-        let Frame::Moo(ref mut frame) = a.frame else {
-            panic!("Attempt to fork a non-MOO frame");
-        };
-
-        frame.switch_to_fork_vector(fork_request.fork_vector_offset);
-        if let Some(task_id_name) = fork_request.task_id {
-            frame.set_variable(&task_id_name, v_int(self.task_id as i64));
-        }
-
-        // TODO how to set the task_id in the parent activation, as we no longer have a reference
-        //  to it?
-        self.stack = vec![a];
-
-        // Emit VerbBegin trace event for forked MOO verb
-        #[cfg(feature = "trace_events")]
-        {
-            // For forked tasks, we capture the line number from the original activation
-            // before it was modified by switch_to_fork_vector
-            let calling_line = self.top().frame.find_line_no();
 
             trace_verb_begin!(
                 self.task_id,
@@ -588,7 +438,7 @@ impl VMExecState {
     }
 
     /// Call into a builtin function.
-    pub(crate) fn call_builtin_function(
+    fn call_builtin_function(
         &mut self,
         bf_id: BuiltinId,
         args: List,
@@ -661,7 +511,7 @@ impl VMExecState {
     }
 
     /// We're returning into a builtin function, which is all set up at the top of the stack.
-    pub(crate) fn reenter_builtin_function(
+    fn reenter_builtin_function(
         &mut self,
         exec_args: &VmExecParams,
         _session: &dyn Session,

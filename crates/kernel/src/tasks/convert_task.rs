@@ -21,7 +21,7 @@ use crate::{
         task_program_cache::TaskProgramCache,
         task_q::{SuspendedTask as KernelSuspendedTask, WakeCondition as KernelWakeCondition},
     },
-    vm::{Fork, exec_state::VMExecState as KernelVMExecState, vm_host::VmHost as KernelVmHost},
+    vm::{Fork, vm_host::VmHost as KernelVmHost},
 };
 use moor_common::util::{BitEnum, Instant, Timestamp};
 use moor_compiler::{Label, Offset};
@@ -37,7 +37,7 @@ use moor_vm::{
     Activation as KernelActivation, BfFrame as KernelBfFrame, CatchType as KernelCatchType,
     FinallyReason as KernelFinallyReason, Frame as KernelFrame,
     MooStackFrame as KernelMooStackFrame, PcType as KernelPcType, Scope as KernelScope,
-    ScopeType as KernelScopeType,
+    ScopeType as KernelScopeType, VMExecState as KernelVMExecState,
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;

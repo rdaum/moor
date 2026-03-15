@@ -11,12 +11,13 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::task_context::with_current_transaction_mut;
-use moor_common::model::WorldStateError;
+use crate::task_context::{with_current_transaction, with_current_transaction_mut};
+use moor_common::model::{ObjFlag, WorldStateError};
+use moor_common::util::BitEnum;
 use moor_var::{Obj, Symbol, Var};
 use moor_vm::WorldStateCallback;
 
-/// Bridges VM property access to the kernel's TLS-based transaction context.
+/// Bridges VM operations to the kernel's TLS-based transaction context.
 pub(crate) struct KernelHost;
 
 impl WorldStateCallback for KernelHost {
@@ -37,5 +38,9 @@ impl WorldStateCallback for KernelHost {
         value: &Var,
     ) -> Result<(), WorldStateError> {
         with_current_transaction_mut(|ws| ws.update_property(perms, obj, prop, value))
+    }
+
+    fn flags_of(&self, obj: &Obj) -> Result<BitEnum<ObjFlag>, WorldStateError> {
+        with_current_transaction(|ws| ws.flags_of(obj))
     }
 }
