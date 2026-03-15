@@ -26,8 +26,7 @@ use moor_var::{
     v_str, v_symbol_str,
 };
 
-use crate::ProgramSlot;
-use crate::moo_frame::MooStackFrame;
+use crate::moo_frame::{MooStackFrame, ProgramSlot};
 use crate::scatter_assign::scatter_assign;
 use moor_var::program::{
     ProgramType,
@@ -40,7 +39,7 @@ static EVAL_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("eval"));
 #[derive(Debug, Clone, PartialEq)]
 pub enum CallProgram {
     Materialized(ProgramType),
-    TxSlot(ProgramSlot),
+    CachedSlot(ProgramSlot),
 }
 
 /// Helper function to perform scatter assignment for lambda parameter binding.
@@ -126,7 +125,7 @@ pub struct Activation {
 #[derive(Clone, Debug)]
 pub enum Frame {
     Moo(MooStackFrame),
-    Bf(BfFrame),
+    Bf(BuiltinFrame),
 }
 
 impl Frame {
@@ -188,7 +187,7 @@ impl Frame {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct BfFrame {
+pub struct BuiltinFrame {
     /// The index of the built-in function being called.
     pub bf_id: BuiltinId,
     /// If the activation is a call to a built-in function, the per-bf unique # trampoline passed
@@ -275,7 +274,7 @@ impl Activation {
                     argstr,
                 )
             }
-            (CallProgram::TxSlot(program_slot), Some(source)) => {
+            (CallProgram::CachedSlot(program_slot), Some(source)) => {
                 MooStackFrame::new_with_globals_from_source_slot(
                     program_slot,
                     player_var,
@@ -286,7 +285,7 @@ impl Activation {
                     source,
                 )
             }
-            (CallProgram::TxSlot(program_slot), None) => {
+            (CallProgram::CachedSlot(program_slot), None) => {
                 MooStackFrame::new_with_all_globals_from_slot(
                     program_slot,
                     player_var,
@@ -575,7 +574,7 @@ impl Activation {
             VerbArgsSpec::this_none_this(),
         );
 
-        let bf_frame = BfFrame {
+        let bf_frame = BuiltinFrame {
             bf_id,
             bf_trampoline: None,
             bf_trampoline_arg: None,

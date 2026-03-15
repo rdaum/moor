@@ -128,7 +128,7 @@ fn bf_set_task_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     bf_args
         .exec_state
-        .set_task_perms(&crate::vm::kernel_host::KernelHost, perms_for);
+        .set_task_perms(&mut crate::vm::kernel_host::KernelHost, perms_for);
 
     Ok(RetNil)
 }

@@ -1204,7 +1204,7 @@ fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if obj.eq(&bf_args.task_perms().map_err(world_state_bf_err)?.who) {
         bf_args
             .exec_state
-            .set_task_perms(&crate::vm::kernel_host::KernelHost, obj);
+            .set_task_perms(&mut crate::vm::kernel_host::KernelHost, obj);
     }
 
     Ok(RetNil)
