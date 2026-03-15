@@ -223,6 +223,12 @@ impl Environment {
         self.scope_offsets.len()
     }
 
+    /// Returns true if no scopes have been pushed.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.scope_offsets.is_empty()
+    }
+
     /// Compute the absolute index for a (scope_index, var_index) pair.
     #[inline]
     fn absolute_index(&self, scope_index: usize, var_index: usize) -> usize {

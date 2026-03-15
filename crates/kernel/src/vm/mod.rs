@@ -12,7 +12,6 @@
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use moor_common::tasks::{AbortLimitReason, Exception};
-pub use moor_var::program::ProgramType;
 use moor_var::{Obj, Symbol, Var};
 
 // Re-export types from moor-vm that kernel code uses.
