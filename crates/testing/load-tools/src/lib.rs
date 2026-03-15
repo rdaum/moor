@@ -185,9 +185,7 @@ impl SystemControl for NoopSystemControl {
         Ok(EventLogPurgeResult::default())
     }
 
-    fn workers_info(
-        &self,
-    ) -> Result<Vec<moor_common::tasks::WorkerInfo>, Error> {
+    fn workers_info(&self) -> Result<Vec<moor_common::tasks::WorkerInfo>, Error> {
         Ok(vec![])
     }
 }

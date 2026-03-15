@@ -2594,10 +2594,7 @@ impl RpcMessageHandler {
                     ))
                 }
                 WorldStateResult::AllObjects(objects) => {
-                    let obj_fbs = objects
-                        .iter()
-                        .map(obj_to_flatbuffer_struct)
-                        .collect();
+                    let obj_fbs = objects.iter().map(obj_to_flatbuffer_struct).collect();
                     moor_rpc::WorldStateResultUnion::WsAllObjectsResult(Box::new(
                         moor_rpc::WsAllObjectsResult { objects: obj_fbs },
                     ))
@@ -2623,10 +2620,7 @@ impl RpcMessageHandler {
                     ))
                 }
                 WorldStateResult::QueriedObjects(objects) => {
-                    let obj_fbs = objects
-                        .iter()
-                        .map(obj_to_flatbuffer_struct)
-                        .collect();
+                    let obj_fbs = objects.iter().map(obj_to_flatbuffer_struct).collect();
                     moor_rpc::WorldStateResultUnion::WsQueryObjectsResult(Box::new(
                         moor_rpc::WsQueryObjectsResult { objects: obj_fbs },
                     ))

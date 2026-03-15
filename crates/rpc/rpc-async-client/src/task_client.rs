@@ -217,8 +217,7 @@ impl TaskClient {
         tokio::time::sleep(Duration::from_millis(10)).await;
 
         let waiters = Arc::new(Mutex::new(HashMap::new()));
-        let (session_events_tx, _) =
-            broadcast::channel(SESSION_EVENT_CHANNEL_CAPACITY);
+        let (session_events_tx, _) = broadcast::channel(SESSION_EVENT_CHANNEL_CAPACITY);
 
         let dispatcher_handle = tokio::spawn(dispatcher_loop(
             client_id,
@@ -263,8 +262,7 @@ impl TaskClient {
         tokio::time::sleep(Duration::from_millis(10)).await;
 
         let waiters = Arc::new(WaiterMap::new(HashMap::new()));
-        let (session_events_tx, _) =
-            broadcast::channel(SESSION_EVENT_CHANNEL_CAPACITY);
+        let (session_events_tx, _) = broadcast::channel(SESSION_EVENT_CHANNEL_CAPACITY);
 
         let dispatcher_handle = tokio::spawn(dispatcher_loop(
             client_id,
@@ -691,11 +689,9 @@ mod tests {
     /// Helper: build a ReplyResult containing a ClientSuccess with a DaemonToClientReply.
     fn build_reply_result(reply: moor_rpc::DaemonToClientReply) -> Vec<u8> {
         let reply_result = moor_rpc::ReplyResult {
-            result: moor_rpc::ReplyResultUnion::ClientSuccess(Box::new(
-                moor_rpc::ClientSuccess {
-                    reply: Box::new(reply),
-                },
-            )),
+            result: moor_rpc::ReplyResultUnion::ClientSuccess(Box::new(moor_rpc::ClientSuccess {
+                reply: Box::new(reply),
+            })),
         };
         let mut builder = planus::Builder::new();
         builder.finish(&reply_result, None).to_vec()
@@ -805,17 +801,13 @@ mod tests {
         // Bind a PUB socket
         let zmq_ctx = tmq::Context::new();
         let addr = format!("inproc://test-dispatcher-success-{}", Uuid::new_v4());
-        let publisher = tmq::publish(&zmq_ctx)
-            .bind(&addr)
-            .expect("bind PUB");
+        let publisher = tmq::publish(&zmq_ctx).bind(&addr).expect("bind PUB");
 
         // Create SUB socket
         let sub = tmq::subscribe(&zmq_ctx)
             .connect(&addr)
             .expect("connect SUB");
-        let sub = sub
-            .subscribe(&client_id.as_bytes()[..])
-            .expect("subscribe");
+        let sub = sub.subscribe(&client_id.as_bytes()[..]).expect("subscribe");
 
         tokio::time::sleep(Duration::from_millis(20)).await;
 
@@ -824,9 +816,7 @@ mod tests {
         let (tx, rx) = oneshot::channel();
         waiters.lock().unwrap().insert(task_id, tx);
 
-        let handle = tokio::spawn(dispatcher_loop(
-            client_id, sub, waiters.clone(), session_tx,
-        ));
+        let handle = tokio::spawn(dispatcher_loop(client_id, sub, waiters.clone(), session_tx));
 
         // Publish a TaskSuccessEvent
         let value_fb = var_to_flatbuffer(&v_int(42)).unwrap();
@@ -844,7 +834,12 @@ mod tests {
         let multipart = vec![client_id.as_bytes().to_vec(), event_bytes];
         let mut publisher = publisher;
         publisher
-            .send(multipart.into_iter().map(zmq::Message::from).collect::<Vec<_>>())
+            .send(
+                multipart
+                    .into_iter()
+                    .map(zmq::Message::from)
+                    .collect::<Vec<_>>(),
+            )
             .await
             .expect("publish");
 
@@ -868,16 +863,12 @@ mod tests {
 
         let zmq_ctx = tmq::Context::new();
         let addr = format!("inproc://test-dispatcher-error-{}", Uuid::new_v4());
-        let publisher = tmq::publish(&zmq_ctx)
-            .bind(&addr)
-            .expect("bind PUB");
+        let publisher = tmq::publish(&zmq_ctx).bind(&addr).expect("bind PUB");
 
         let sub = tmq::subscribe(&zmq_ctx)
             .connect(&addr)
             .expect("connect SUB");
-        let sub = sub
-            .subscribe(&client_id.as_bytes()[..])
-            .expect("subscribe");
+        let sub = sub.subscribe(&client_id.as_bytes()[..]).expect("subscribe");
 
         tokio::time::sleep(Duration::from_millis(20)).await;
 
@@ -886,20 +877,16 @@ mod tests {
         let (tx, rx) = oneshot::channel();
         waiters.lock().unwrap().insert(task_id, tx);
 
-        let handle = tokio::spawn(dispatcher_loop(
-            client_id, sub, waiters.clone(), session_tx,
-        ));
+        let handle = tokio::spawn(dispatcher_loop(client_id, sub, waiters.clone(), session_tx));
 
         // Publish a TaskErrorEvent
         let sched_err = SchedulerError::TaskAbortedError;
         let error_fb = scheduler_error_to_flatbuffer_struct(&sched_err).unwrap();
         let event = moor_rpc::ClientEvent {
-            event: moor_rpc::ClientEventUnion::TaskErrorEvent(Box::new(
-                moor_rpc::TaskErrorEvent {
-                    task_id,
-                    error: Box::new(error_fb),
-                },
-            )),
+            event: moor_rpc::ClientEventUnion::TaskErrorEvent(Box::new(moor_rpc::TaskErrorEvent {
+                task_id,
+                error: Box::new(error_fb),
+            })),
         };
         let event_bytes = build_client_event(event);
 
@@ -907,7 +894,12 @@ mod tests {
         let multipart = vec![client_id.as_bytes().to_vec(), event_bytes];
         let mut publisher = publisher;
         publisher
-            .send(multipart.into_iter().map(zmq::Message::from).collect::<Vec<_>>())
+            .send(
+                multipart
+                    .into_iter()
+                    .map(zmq::Message::from)
+                    .collect::<Vec<_>>(),
+            )
             .await
             .expect("publish");
 
@@ -938,16 +930,12 @@ mod tests {
 
         let zmq_ctx = tmq::Context::new();
         let addr = format!("inproc://test-dispatcher-unmatched-{}", Uuid::new_v4());
-        let publisher = tmq::publish(&zmq_ctx)
-            .bind(&addr)
-            .expect("bind PUB");
+        let publisher = tmq::publish(&zmq_ctx).bind(&addr).expect("bind PUB");
 
         let sub = tmq::subscribe(&zmq_ctx)
             .connect(&addr)
             .expect("connect SUB");
-        let sub = sub
-            .subscribe(&client_id.as_bytes()[..])
-            .expect("subscribe");
+        let sub = sub.subscribe(&client_id.as_bytes()[..]).expect("subscribe");
 
         tokio::time::sleep(Duration::from_millis(20)).await;
 
@@ -956,9 +944,7 @@ mod tests {
         let (tx, rx) = oneshot::channel();
         waiters.lock().unwrap().insert(task_id_registered, tx);
 
-        let handle = tokio::spawn(dispatcher_loop(
-            client_id, sub, waiters.clone(), session_tx,
-        ));
+        let handle = tokio::spawn(dispatcher_loop(client_id, sub, waiters.clone(), session_tx));
 
         // First: publish event for a different task_id — should be ignored
         let value_fb = var_to_flatbuffer(&v_int(0)).unwrap();
@@ -1031,25 +1017,19 @@ mod tests {
 
         let zmq_ctx = tmq::Context::new();
         let addr = format!("inproc://test-dispatcher-session-{}", Uuid::new_v4());
-        let publisher = tmq::publish(&zmq_ctx)
-            .bind(&addr)
-            .expect("bind PUB");
+        let publisher = tmq::publish(&zmq_ctx).bind(&addr).expect("bind PUB");
 
         let sub = tmq::subscribe(&zmq_ctx)
             .connect(&addr)
             .expect("connect SUB");
-        let sub = sub
-            .subscribe(&client_id.as_bytes()[..])
-            .expect("subscribe");
+        let sub = sub.subscribe(&client_id.as_bytes()[..]).expect("subscribe");
 
         tokio::time::sleep(Duration::from_millis(20)).await;
 
         let waiters = Arc::new(WaiterMap::new(HashMap::new()));
         let (session_tx, mut session_rx) = broadcast::channel(16);
 
-        let handle = tokio::spawn(dispatcher_loop(
-            client_id, sub, waiters.clone(), session_tx,
-        ));
+        let handle = tokio::spawn(dispatcher_loop(client_id, sub, waiters.clone(), session_tx));
 
         // Publish a DisconnectEvent (simplest session event to construct)
         let event = moor_rpc::ClientEvent {

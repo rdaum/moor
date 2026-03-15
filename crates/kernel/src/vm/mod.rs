@@ -17,8 +17,8 @@ use moor_var::{Obj, Symbol, Var};
 // Re-export types from moor-vm that kernel code uses.
 pub use moor_vm::FinallyReason;
 pub use moor_vm::Fork;
-pub use moor_vm::{CommandVerbExecutionRequest, VerbExecutionRequest};
 pub(crate) use moor_vm::{Activation, Frame, MooStackFrame, ScopeType};
+pub use moor_vm::{CommandVerbExecutionRequest, VerbExecutionRequest};
 
 pub(crate) mod kernel_host;
 pub(crate) mod vm_call;

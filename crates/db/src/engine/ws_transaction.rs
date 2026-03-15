@@ -28,9 +28,9 @@ use byteview::ByteView;
 use moor_common::util::{Instant, PerfIntensity};
 use moor_common::{
     model::{
-        CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, ObjectQuery, ObjectRef, PropDef,
-        PropDefs, PropFlag, PropPerms, ResolvedVerb, ValSet, VerbArgsSpec, VerbAttrs, VerbDef,
-        VerbDefs, VerbFlag, WorldStateError,
+        CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, ObjectQuery,
+        ObjectRef, PropDef, PropDefs, PropFlag, PropPerms, ResolvedVerb, ValSet, VerbArgsSpec,
+        VerbAttrs, VerbDef, VerbDefs, VerbFlag, WorldStateError,
     },
     util::{BitEnum, PerfTimerGuard},
 };
@@ -658,10 +658,7 @@ impl WorldStateTransaction {
         Ok(ObjSet::from_iter(owned))
     }
 
-    pub fn query_objects(
-        &self,
-        query: &ObjectQuery,
-    ) -> Result<ObjSet, WorldStateError> {
+    pub fn query_objects(&self, query: &ObjectQuery) -> Result<ObjSet, WorldStateError> {
         // Strategy: pick the most selective indexed filter as the starting candidate
         // set, then apply remaining filters via point lookups.
 
@@ -683,12 +680,9 @@ impl WorldStateTransaction {
             v
         } else {
             // No indexed filter — fall back to all objects.
-            let objects = self
-                .object_flags
-                .scan(&|_, _| true)
-                .map_err(|e| {
-                    WorldStateError::DatabaseError(format!("Error scanning objects: {e:?}"))
-                })?;
+            let objects = self.object_flags.scan(&|_, _| true).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error scanning objects: {e:?}"))
+            })?;
             objects.into_iter().map(|(obj, _)| obj).collect()
         };
 
@@ -697,30 +691,33 @@ impl WorldStateTransaction {
         for obj in candidates {
             // Check parent filter (if not already the starting set)
             if (query.location.is_some() || query.owner.is_some())
-                && let Some(ref parent) = query.parent {
-                    let obj_parent = self.get_object_parent(&obj).unwrap_or(NOTHING);
-                    if obj_parent != *parent {
-                        continue;
-                    }
+                && let Some(ref parent) = query.parent
+            {
+                let obj_parent = self.get_object_parent(&obj).unwrap_or(NOTHING);
+                if obj_parent != *parent {
+                    continue;
                 }
+            }
 
             // Check location filter (if not already the starting set)
             if (query.parent.is_some() || query.owner.is_some())
-                && let Some(ref location) = query.location {
-                    let obj_location = self.get_object_location(&obj).unwrap_or(NOTHING);
-                    if obj_location != *location {
-                        continue;
-                    }
+                && let Some(ref location) = query.location
+            {
+                let obj_location = self.get_object_location(&obj).unwrap_or(NOTHING);
+                if obj_location != *location {
+                    continue;
                 }
+            }
 
             // Check owner filter (if not already the starting set)
             if (query.location.is_some() || query.parent.is_some())
-                && let Some(ref owner) = query.owner {
-                    let obj_owner = self.get_object_owner(&obj).unwrap_or(NOTHING);
-                    if obj_owner != *owner {
-                        continue;
-                    }
+                && let Some(ref owner) = query.owner
+            {
+                let obj_owner = self.get_object_owner(&obj).unwrap_or(NOTHING);
+                if obj_owner != *owner {
+                    continue;
                 }
+            }
 
             // Check flags filters
             if query.flags_all.is_some() || query.flags_any.is_some() {
@@ -730,13 +727,15 @@ impl WorldStateTransaction {
                 };
 
                 if let Some(ref required) = query.flags_all
-                    && !flags.contains_all(*required) {
-                        continue;
-                    }
+                    && !flags.contains_all(*required)
+                {
+                    continue;
+                }
                 if let Some(ref any_of) = query.flags_any
-                    && !flags.contains_any(*any_of) {
-                        continue;
-                    }
+                    && !flags.contains_any(*any_of)
+                {
+                    continue;
+                }
             }
 
             results.push(obj);

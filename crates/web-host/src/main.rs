@@ -215,7 +215,11 @@ struct Args {
     pub webrtc_enabled: Option<bool>,
 
     /// Domains eligible for WebRTC data channel delivery (comma-separated).
-    #[arg(long, help = "Comma-separated realtime domains for WebRTC", value_delimiter = ',')]
+    #[arg(
+        long,
+        help = "Comma-separated realtime domains for WebRTC",
+        value_delimiter = ','
+    )]
     pub webrtc_realtime_domains: Option<Vec<String>>,
 }
 
