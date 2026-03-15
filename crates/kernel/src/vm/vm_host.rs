@@ -23,97 +23,27 @@ use moor_common::{
     tasks::{AbortLimitReason, TaskId},
     util::BitEnum,
 };
-use moor_compiler::{BuiltinId, CompileOptions, Offset, Program, compile};
-use moor_var::{E_MAXREC, Error, List, Obj, Symbol, Var, v_none};
+use moor_compiler::{CompileOptions, Program, compile};
+use moor_var::{E_MAXREC, List, Obj, Symbol, Var, v_none};
 
 use crate::{
     config::FeaturesConfig,
     task_context::with_current_transaction,
     tasks::task_program_cache::TaskProgramCache,
     vm::{
-        CommandVerbExecutionRequest, FinallyReason, Fork, TaskSuspend, VMHostResponse,
+        FinallyReason, Fork, VMHostResponse,
         VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend},
-        VerbExecutionRequest,
         builtins::BuiltinRegistry,
         exec_state::VMExecState,
-        moo_execute::moo_frame_execute,
+        kernel_host::KernelHost,
         vm_call::VmExecParams,
     },
 };
 use moor_common::{matching::ParsedCommand, tasks::Session};
 use moor_var::program::{ProgramType, names::Name};
-use moor_vm::{Frame, PhantomUnsync, activation::CallProgram};
+use moor_vm::{Frame, PhantomUnsync, activation::CallProgram, moo_frame_execute};
 
-/// Possible outcomes from VM execution inner loop, which are used to determine what to do next.
-#[derive(Debug, Clone)]
-pub(crate) enum ExecutionResult {
-    /// All is well. The task should let the VM continue executing.
-    More,
-    /// Execution of this stack frame is complete with a return value.
-    Complete(Var),
-    /// An error occurred during execution, that we might need to push to the stack and
-    /// potentially resume or unwind, depending on the context.
-    PushError(Error),
-    /// An error occurred during execution, that should definitely be treated as a proper "raise"
-    /// and unwind event unless there's a catch handler in place
-    RaiseError(Error),
-    /// An explicit stack unwind (for a reason other than a return.)
-    Unwind(FinallyReason),
-    /// Explicit return, unwind stack
-    Return(Var),
-    /// An exception was raised during execution.
-    Exception(FinallyReason),
-    /// Create the frames necessary to perform a `pass` up the inheritance chain.
-    DispatchVerbPass(List),
-    /// Begin preparing to call a verb, by looking up the verb and preparing the dispatch.
-    PrepareVerbDispatch {
-        this: Var,
-        verb_name: Symbol,
-        args: List,
-    },
-    /// Perform the verb dispatch, building the stack frame and executing it.
-    DispatchVerb(Box<VerbExecutionRequest>),
-    /// Perform command verb dispatch with full command environment (dobj, iobj, prep, etc).
-    DispatchCommandVerb(Box<CommandVerbExecutionRequest>),
-    /// Request `eval` execution, which is a kind of special activation creation where we've already
-    /// been given the program to execute instead of having to look it up.
-    DispatchEval {
-        /// The permissions context for the eval.
-        permissions: Obj,
-        /// The player who is performing the eval.
-        player: Obj,
-        /// The program to execute.
-        program: Program,
-        /// Optional initial variable bindings to inject into the eval's environment.
-        initial_env: Option<Vec<(Symbol, Var)>>,
-    },
-    /// Request dispatch of a builtin function with the given arguments.
-    DispatchBuiltin { builtin: BuiltinId, arguments: List },
-    /// Request dispatch of a lambda function with the given arguments.
-    DispatchLambda {
-        lambda: moor_var::Lambda,
-        arguments: List,
-    },
-    /// Request start of a new task as a fork, at a given offset into the fork vector of the
-    /// current program. If the duration is None, the task should be started immediately, otherwise
-    /// it should be scheduled to start after the given delay.
-    /// If a Name is provided, the task ID of the new task should be stored in the variable with
-    /// that in the parent activation.
-    TaskStartFork(Option<Duration>, Option<Name>, Offset),
-    /// Request that this task be suspended for a duration of time.
-    /// This leads to the task performing a commit, being suspended for a delay, and then being
-    /// resumed under a new transaction.
-    /// If the duration is None, then the task is suspended indefinitely, until it is killed or
-    /// resumed using `resume()` or `kill_task()`.
-    TaskSuspend(TaskSuspend),
-    /// Request input from the client, with optional metadata for UI hints.
-    TaskNeedInput(Option<Vec<(Symbol, Var)>>),
-    /// Rollback the current transaction and restart the task in a new transaction.
-    /// This can happen when a conflict occurs during execution, independent of a commit.
-    TaskRollbackRestart,
-    /// Just rollback and die. Kills all task DB mutations. Output (Session) is optionally committed.
-    TaskRollback(bool),
-}
+pub(crate) use moor_vm::ExecutionResult;
 
 /// A 'host' for running some kind of interpreter / virtual machine inside a running moor task.
 pub struct VmHost {
@@ -547,7 +477,9 @@ impl VmHost {
 
         let (result, new_tick_count) = match &mut activation.frame {
             Frame::Moo(fr) => {
+                let mut host = KernelHost;
                 let result = moo_frame_execute(
+                    &mut host,
                     tick_slice,
                     &mut tick_count,
                     activation.permissions,

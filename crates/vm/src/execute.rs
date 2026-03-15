@@ -12,17 +12,164 @@
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use crate::{
-    config::FeaturesConfig, task_context::with_current_transaction_mut,
-    vm::vm_host::ExecutionResult,
+    WorldStateCallback,
+    config::FeaturesConfig,
+    moo_frame::{CatchType, MooStackFrame, PcType, ScopeType},
+    scatter_assign::scatter_assign,
+    vm_unwind::FinallyReason,
 };
-use moor_compiler::{Op, to_literal};
+use moor_common::{
+    matching::ParsedCommand,
+    model::{ObjFlag, ResolvedVerb, VerbProgramKey},
+    tasks::TaskId,
+    util::BitEnum,
+};
+use moor_compiler::{BuiltinId, Offset, Op, Program, to_literal};
 use moor_var::{
-    E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, Error, IndexMode, Obj, Symbol,
-    TypeClass, Var, VarType, program::names::Name, v_arc_str, v_bool, v_bool_int, v_empty_list,
-    v_empty_map, v_err, v_error, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_sym,
+    E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, Error, IndexMode, List, Obj,
+    Symbol, TypeClass, Var, VarType, program::names::Name, v_arc_str, v_bool, v_bool_int,
+    v_empty_list, v_empty_map, v_err, v_error, v_float, v_flyweight, v_int, v_list, v_map, v_none,
+    v_obj, v_sym,
 };
-use moor_vm::{CatchType, FinallyReason, MooStackFrame, PcType, ScopeType, scatter_assign};
 use std::{sync::LazyLock, time::Duration};
+
+/// The set of parameters for a scheduler-requested *resolved* verb method dispatch.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerbExecutionRequest {
+    /// The applicable permissions.
+    pub permissions: Obj,
+    /// The precomputed flags for `permissions`.
+    pub permissions_flags: BitEnum<ObjFlag>,
+    /// The resolved verb.
+    pub resolved_verb: ResolvedVerb,
+    /// Verb name
+    pub verb_name: Symbol,
+    /// This object
+    pub this: Var,
+    /// Player
+    pub player: Obj,
+    /// Arguments
+    pub args: List,
+    /// Caller
+    pub caller: Var,
+    /// Argument string
+    pub argstr: Var,
+    /// Stable key for the dispatched verb program.
+    pub program_key: VerbProgramKey,
+}
+
+/// The set of parameters for a command verb dispatch with full command environment.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommandVerbExecutionRequest {
+    /// The applicable permissions.
+    pub permissions: Obj,
+    /// The precomputed flags for `permissions`.
+    pub permissions_flags: BitEnum<ObjFlag>,
+    /// The resolved verb.
+    pub resolved_verb: ResolvedVerb,
+    /// Verb name
+    pub verb_name: Symbol,
+    /// This object
+    pub this: Var,
+    /// Player
+    pub player: Obj,
+    /// Caller
+    pub caller: Var,
+    /// The parsed command with dobj, iobj, prep, etc.
+    pub command: ParsedCommand,
+    /// Stable key for the dispatched verb program.
+    pub program_key: VerbProgramKey,
+}
+
+/// Flavours of task suspension.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TaskSuspend {
+    /// Suspend forever.
+    Never,
+    /// Suspend for a given duration.
+    Timed(Duration),
+    /// Suspend until another task completes (or never exists)
+    WaitTask(TaskId),
+    /// Commit and resume immediately with the given return value.
+    Commit(Var),
+    /// Ask the scheduler to ask a worker to do some work, suspend us, and then resume us when
+    /// the work is done.
+    WorkerRequest(Symbol, Vec<Var>, Option<Duration>),
+    /// Commit and receive inter-task messages. None = immediate (fast path),
+    /// Some(duration) = wait up to duration for messages if queue is empty.
+    RecvMessages(Option<Duration>),
+}
+
+/// Possible outcomes from VM execution inner loop, which are used to determine what to do next.
+#[derive(Debug, Clone)]
+pub enum ExecutionResult {
+    /// All is well. The task should let the VM continue executing.
+    More,
+    /// Execution of this stack frame is complete with a return value.
+    Complete(Var),
+    /// An error occurred during execution, that we might need to push to the stack and
+    /// potentially resume or unwind, depending on the context.
+    PushError(Error),
+    /// An error occurred during execution, that should definitely be treated as a proper "raise"
+    /// and unwind event unless there's a catch handler in place
+    RaiseError(Error),
+    /// An explicit stack unwind (for a reason other than a return.)
+    Unwind(FinallyReason),
+    /// Explicit return, unwind stack
+    Return(Var),
+    /// An exception was raised during execution.
+    Exception(FinallyReason),
+    /// Create the frames necessary to perform a `pass` up the inheritance chain.
+    DispatchVerbPass(List),
+    /// Begin preparing to call a verb, by looking up the verb and preparing the dispatch.
+    PrepareVerbDispatch {
+        this: Var,
+        verb_name: Symbol,
+        args: List,
+    },
+    /// Perform the verb dispatch, building the stack frame and executing it.
+    DispatchVerb(Box<VerbExecutionRequest>),
+    /// Perform command verb dispatch with full command environment (dobj, iobj, prep, etc).
+    DispatchCommandVerb(Box<CommandVerbExecutionRequest>),
+    /// Request `eval` execution, which is a kind of special activation creation where we've already
+    /// been given the program to execute instead of having to look it up.
+    DispatchEval {
+        /// The permissions context for the eval.
+        permissions: Obj,
+        /// The player who is performing the eval.
+        player: Obj,
+        /// The program to execute.
+        program: Program,
+        /// Optional initial variable bindings to inject into the eval's environment.
+        initial_env: Option<Vec<(Symbol, Var)>>,
+    },
+    /// Request dispatch of a builtin function with the given arguments.
+    DispatchBuiltin { builtin: BuiltinId, arguments: List },
+    /// Request dispatch of a lambda function with the given arguments.
+    DispatchLambda {
+        lambda: moor_var::Lambda,
+        arguments: List,
+    },
+    /// Request start of a new task as a fork, at a given offset into the fork vector of the
+    /// current program. If the duration is None, the task should be started immediately, otherwise
+    /// it should be scheduled to start after the given delay.
+    /// If a Name is provided, the task ID of the new task should be stored in the variable with
+    /// that in the parent activation.
+    TaskStartFork(Option<Duration>, Option<Name>, Offset),
+    /// Request that this task be suspended for a duration of time.
+    /// This leads to the task performing a commit, being suspended for a delay, and then being
+    /// resumed under a new transaction.
+    /// If the duration is None, then the task is suspended indefinitely, until it is killed or
+    /// resumed using `resume()` or `kill_task()`.
+    TaskSuspend(TaskSuspend),
+    /// Request input from the client, with optional metadata for UI hints.
+    TaskNeedInput(Option<Vec<(Symbol, Var)>>),
+    /// Rollback the current transaction and restart the task in a new transaction.
+    /// This can happen when a conflict occurs during execution, independent of a commit.
+    TaskRollbackRestart,
+    /// Just rollback and die. Kills all task DB mutations. Output (Session) is optionally committed.
+    TaskRollback(bool),
+}
 
 static DELEGATE_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("delegate"));
 static SLOTS_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("slots"));
@@ -182,7 +329,8 @@ fn remove_stack_indices(stack: &mut Vec<Var>, indices: &mut [usize]) {
 }
 
 /// Main VM opcode execution for MOO stack frames. The actual meat of the MOO virtual machine.
-pub fn moo_frame_execute(
+pub fn moo_frame_execute<H: WorldStateCallback>(
+    host: &mut H,
     tick_slice: usize,
     tick_count: &mut usize,
     permissions: Obj,
@@ -961,7 +1109,7 @@ pub fn moo_frame_execute(
                     return push_error_cold(invalid_property_name_error(&propname));
                 };
 
-                let value = get_property(&permissions, &obj, propname, features_config);
+                let value = get_property(host, &permissions, &obj, propname, features_config);
                 match value {
                     Ok(v) => {
                         f.poke(0, v);
@@ -978,7 +1126,7 @@ pub fn moo_frame_execute(
                     return push_error_cold(invalid_property_name_error(propname));
                 };
 
-                let value = get_property(&permissions, obj, propname, features_config);
+                let value = get_property(host, &permissions, obj, propname, features_config);
                 match value {
                     Ok(v) => {
                         f.push(v);
@@ -997,9 +1145,7 @@ pub fn moo_frame_execute(
                 let Ok(propname) = propname.as_symbol() else {
                     return push_error_cold(invalid_property_name_error(&propname));
                 };
-                let update_result = with_current_transaction_mut(|world_state| {
-                    world_state.update_property(&permissions, &obj, propname, &rhs)
-                });
+                let update_result = host.update_property(&permissions, &obj, propname, &rhs);
 
                 match update_result {
                     Ok(()) => {
@@ -1036,11 +1182,9 @@ pub fn moo_frame_execute(
                 };
 
                 let update_result = if let Some(obj) = base.as_object() {
-                    with_current_transaction_mut(|world_state| {
-                        world_state.update_property(&permissions, &obj, propname, &rhs)
-                    })
-                    .map(|()| base)
-                    .map_err(|e| e.to_error())
+                    host.update_property(&permissions, &obj, propname, &rhs)
+                        .map(|()| base)
+                        .map_err(|e| e.to_error())
                 } else if let Some(flyweight) = base.as_flyweight() {
                     if propname == *DELEGATE_SYM || propname == *SLOTS_SYM {
                         let mut to_remove = vec![rhs_idx, prop_idx, base_idx];
@@ -1462,7 +1606,8 @@ pub fn moo_frame_execute(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn get_property(
+fn get_property<H: WorldStateCallback>(
+    host: &mut H,
     permissions: &Obj,
     obj: &Var,
     propname: Symbol,
@@ -1470,10 +1615,9 @@ fn get_property(
 ) -> Result<Var, Error> {
     // Fast path: Obj is by far the most common case for property access
     if let Some(obj_ref) = obj.as_object() {
-        return with_current_transaction_mut(|world_state| {
-            world_state.retrieve_property(permissions, &obj_ref, propname)
-        })
-        .map_err(|e| e.to_error());
+        return host
+            .retrieve_property(permissions, &obj_ref, propname)
+            .map_err(|e| e.to_error());
     }
 
     // Flyweight case
@@ -1504,9 +1648,7 @@ fn get_property(
         } else {
             // Now check the delegate
             let delegate = flyweight.delegate();
-            let result = with_current_transaction_mut(|world_state| {
-                world_state.retrieve_property(permissions, delegate, propname)
-            });
+            let result = host.retrieve_property(permissions, delegate, propname);
             match result {
                 Ok(v) => v,
                 Err(e) => return Err(e.to_error()),

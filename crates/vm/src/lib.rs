@@ -14,12 +14,16 @@
 use std::{cell::Cell, marker::PhantomData};
 
 pub mod activation;
+pub mod config;
 pub mod environment;
+pub mod execute;
 pub mod moo_frame;
 pub mod scatter_assign;
 pub mod vm_unwind;
 
 pub use activation::{Activation, BfFrame, Frame};
+pub use config::FeaturesConfig;
+pub use execute::{ExecutionResult, moo_frame_execute};
 pub use moo_frame::{CatchType, MooStackFrame, PcType, Scope, ScopeType};
 pub use scatter_assign::{ScatterResult, scatter_assign};
 pub use vm_unwind::FinallyReason;
@@ -33,4 +37,23 @@ pub type PhantomUnsync = PhantomData<Cell<()>>;
 pub struct ProgramSlot {
     pub program_ptr: usize,
     pub global_width: usize,
+}
+
+/// Services the VM opcode loop needs from its host environment.
+/// Monomorphized at the call site for zero-cost dispatch.
+pub trait WorldStateCallback {
+    fn retrieve_property(
+        &mut self,
+        perms: &moor_var::Obj,
+        obj: &moor_var::Obj,
+        prop: moor_var::Symbol,
+    ) -> Result<moor_var::Var, moor_common::model::WorldStateError>;
+
+    fn update_property(
+        &mut self,
+        perms: &moor_var::Obj,
+        obj: &moor_var::Obj,
+        prop: moor_var::Symbol,
+        value: &moor_var::Var,
+    ) -> Result<(), moor_common::model::WorldStateError>;
 }
