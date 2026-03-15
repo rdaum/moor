@@ -36,12 +36,14 @@ use crate::{
         VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend},
         builtins::BuiltinRegistry,
         kernel_host::KernelHost,
-        vm_call::{VMExecStateKernelExt, VmExecParams},
+        vm_call::{VMExecStateBuiltinExt, VmExecParams},
     },
 };
 use moor_common::{matching::ParsedCommand, tasks::Session};
 use moor_var::program::{ProgramType, names::Name};
-use moor_vm::{Frame, PhantomUnsync, activation::CallProgram, moo_frame_execute};
+use moor_vm::{
+    Frame, PhantomUnsync, WorldStateCallback, activation::CallProgram, moo_frame_execute,
+};
 
 pub(crate) use moor_vm::ExecutionResult;
 
@@ -178,13 +180,12 @@ impl VmHost {
         program: Program,
         initial_env: Option<&[(Symbol, Var)]>,
     ) {
-        let is_programmer = with_current_transaction(|world_state| {
-            world_state
-                .flags_of(player)
-                .inspect_err(|e| error!(?e, "Failed to read player flags"))
-                .map(|flags| flags.contains(ObjFlag::Programmer))
-                .unwrap_or(false)
-        });
+        let host = KernelHost;
+        let is_programmer = host
+            .flags_of(player)
+            .inspect_err(|e| error!(?e, "Failed to read player flags"))
+            .map(|flags| flags.contains(ObjFlag::Programmer))
+            .unwrap_or(false);
         let program = if is_programmer {
             program
         } else {
@@ -196,7 +197,7 @@ impl VmHost {
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
         self.vm_exec_state
-            .exec_eval_request(player, player, program, initial_env);
+            .exec_eval_request(&host, player, player, program, initial_env);
         self.running = true;
     }
 
@@ -261,7 +262,8 @@ impl VmHost {
                     continue;
                 }
                 ExecutionResult::DispatchVerbPass(pass_args) => {
-                    result = self.vm_exec_state.prepare_pass_verb(&pass_args);
+                    let host = KernelHost;
+                    result = self.vm_exec_state.prepare_pass_verb(&host, &pass_args);
                     continue;
                 }
                 ExecutionResult::PrepareVerbDispatch {
@@ -269,9 +271,16 @@ impl VmHost {
                     verb_name,
                     args,
                 } => {
+                    let mut host = KernelHost;
                     result = self
                         .vm_exec_state
-                        .verb_dispatch(&exec_params, this, verb_name, args)
+                        .verb_dispatch(
+                            &mut host,
+                            exec_params.config.type_dispatch,
+                            this,
+                            verb_name,
+                            args,
+                        )
                         .unwrap_or_else(ExecutionResult::PushError);
                     continue;
                 }
@@ -358,7 +367,9 @@ impl VmHost {
                     program,
                     initial_env,
                 } => {
+                    let host = KernelHost;
                     self.vm_exec_state.exec_eval_request(
+                        &host,
                         &permissions,
                         &player,
                         program,

@@ -11,25 +11,40 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
+use std::sync::LazyLock;
+use std::time::{Duration, SystemTime};
+
+use tracing::warn;
+
 use moor_common::matching::ParsedCommand;
-use moor_common::model::{ObjFlag, ResolvedVerb, VerbFlag};
+use moor_common::model::{
+    DispatchFlagsSource, ObjFlag, ResolvedVerb, VerbDispatch, VerbFlag, VerbLookup, WorldStateError,
+};
 use moor_common::tasks::{Exception, TaskId};
 use moor_common::util::BitEnum;
 use moor_common::util::Instant;
 use moor_compiler::{BUILTINS, Offset, to_literal};
 use moor_var::{
-    Error, List, NOTHING, Obj, Symbol, Var,
+    E_INVIND, E_PERM, E_TYPE, E_VERBNF, Error, List, NOTHING, Obj, SYSTEM_OBJECT, Sequence, Symbol,
+    Var, Variant,
     program::names::{GlobalName, Name},
     v_arc_str, v_bool, v_empty_str, v_err, v_error, v_int, v_list, v_none, v_obj, v_str, v_string,
 };
-use std::time::{Duration, SystemTime};
-use tracing::warn;
 
 use crate::activation::CallProgram;
-use crate::execute::ExecutionResult;
+use crate::execute::{ExecutionResult, VerbExecutionRequest};
 use crate::{
     Activation, CatchType, FinallyReason, Frame, PhantomUnsync, ScopeType, WorldStateCallback,
 };
+
+static LIST_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("list_proto"));
+static MAP_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("map_proto"));
+static STRING_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("str_proto"));
+static INTEGER_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("int_proto"));
+static FLOAT_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("float_proto"));
+static ERROR_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("err_proto"));
+static BOOL_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("bool_proto"));
+static SYM_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("sym_proto"));
 
 /// Per-task snapshot of program cache performance counters.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -634,6 +649,303 @@ impl VMExecState {
         let a = Activation::for_lambda_call(&lambda, current_activation, args.into_vec())?;
         self.stack.push(a);
         Ok(())
+    }
+}
+
+/// Verb dispatch methods. These take a `WorldStateCallback` host to access world state
+/// without requiring kernel-level TLS.
+impl VMExecState {
+    /// Entry point for dispatching a verb (method) call.
+    /// Called from the VM execution loop for CallVerb opcodes.
+    pub fn verb_dispatch(
+        &mut self,
+        host: &mut impl WorldStateCallback,
+        type_dispatch: bool,
+        target: Var,
+        verb: Symbol,
+        args: List,
+    ) -> Result<ExecutionResult, Error> {
+        // Fast path: Obj is by far the most common case for verb dispatch
+        if let Some(o) = target.as_object() {
+            return Ok(self.prepare_call_verb(host, o, target, verb, args));
+        }
+
+        // Flyweight dispatches to its delegate
+        if let Some(f) = target.as_flyweight() {
+            return Ok(self.prepare_call_verb(host, *f.delegate(), target, verb, args));
+        }
+
+        // Primitive dispatch (int, string, float are most common)
+        if !type_dispatch {
+            return Err(E_TYPE.with_msg(|| {
+                format!("Invalid target {:?} for verb dispatch", target.type_code())
+            }));
+        }
+
+        // For primitives, look at type and dispatch to corresponding sysprop
+        // e.g. "blah":reverse() becomes $string:reverse("blah")
+        // Check common types first with direct accessors
+        let sysprop_sym = if target.is_int() {
+            *INTEGER_PROTO_SYM
+        } else if target.is_string() {
+            *STRING_PROTO_SYM
+        } else if target.is_float() {
+            *FLOAT_PROTO_SYM
+        } else if target.is_list() {
+            *LIST_PROTO_SYM
+        } else {
+            // Less common types - use variant()
+            match target.variant() {
+                Variant::Map(_) => *MAP_PROTO_SYM,
+                Variant::Err(_) => *ERROR_PROTO_SYM,
+                Variant::Sym(_) => *SYM_PROTO_SYM,
+                Variant::Bool(_) => *BOOL_PROTO_SYM,
+                _ => {
+                    return Err(E_TYPE.with_msg(|| {
+                        format!(
+                            "Invalid target for verb dispatch: {}",
+                            target.type_code().to_literal()
+                        )
+                    }));
+                }
+            }
+        };
+        let perms = self.top().permissions;
+        let prop_val = host
+            .retrieve_property(&perms, &SYSTEM_OBJECT, sysprop_sym)
+            .map_err(|e| e.to_error())?;
+        let Some(prop_val) = prop_val.as_object() else {
+            return Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Invalid target for verb dispatch: {}",
+                    prop_val.type_code().to_literal()
+                )
+            }));
+        };
+        let arguments = args
+            .insert(0, &target)
+            .expect("Failed to insert object for dispatch");
+        let Some(arguments) = arguments.as_list() else {
+            return Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Invalid arguments for verb dispatch: {}",
+                    arguments.type_code().to_literal()
+                )
+            }));
+        };
+        Ok(self.prepare_call_verb(host, prop_val, v_obj(prop_val), verb, arguments.clone()))
+    }
+
+    pub fn prepare_call_verb(
+        &mut self,
+        host: &impl WorldStateCallback,
+        location: Obj,
+        this: Var,
+        verb_name: Symbol,
+        args: List,
+    ) -> ExecutionResult {
+        let caller = self.caller();
+
+        // Only wizards can propagate a modified player value to called verbs.
+        let activation_player = self.top().player;
+        let player = if let Frame::Moo(frame) = &self.top().frame {
+            frame
+                .get_gvar(GlobalName::player)
+                .and_then(|v| v.as_object())
+                .filter(|fp| fp != &activation_player)
+                .map_or(activation_player, |fp| {
+                    let is_wiz = self.task_perms_flags().contains(ObjFlag::Wizard);
+                    if is_wiz { fp } else { activation_player }
+                })
+        } else {
+            activation_player
+        };
+
+        if !host.valid(&location).unwrap_or_default() {
+            return self.push_error(
+                E_INVIND.with_msg(|| format!("Invalid object ({location}) for verb dispatch")),
+            );
+        }
+
+        let verb_result = host.dispatch_verb(
+            &self.top().permissions,
+            VerbDispatch::new(
+                VerbLookup::method(&location, verb_name),
+                DispatchFlagsSource::VerbOwner,
+            ),
+        );
+
+        let (program_key, resolved_verb, permissions_flags) = match verb_result {
+            Ok(Some(vi)) => (vi.program_key, vi.verbdef, vi.permissions_flags),
+            Ok(None) => {
+                return self.push_error(E_VERBNF.with_msg(|| {
+                    format!(
+                        "Verb {}:{} not found",
+                        to_literal(&v_obj(location)),
+                        verb_name,
+                    )
+                }));
+            }
+            Err(WorldStateError::ObjectPermissionDenied) => {
+                return self.push_error(E_PERM.into());
+            }
+            Err(WorldStateError::RollbackRetry) => {
+                return ExecutionResult::TaskRollbackRestart;
+            }
+            Err(WorldStateError::VerbPermissionDenied) => {
+                return self.push_error(E_PERM.into());
+            }
+            Err(WorldStateError::VerbNotFound(_, _)) => {
+                panic!("dispatch_verb() should return Ok(None), not VerbNotFound");
+            }
+            Err(e) => {
+                panic!("Unexpected error from dispatch_verb: {e:?}")
+            }
+        };
+
+        // Defer program materialization/slot resolution to VmHost so it can source programs
+        // from the task-owned cache.
+        ExecutionResult::DispatchVerb(Box::new(VerbExecutionRequest {
+            permissions: self.top().permissions,
+            permissions_flags,
+            resolved_verb,
+            verb_name,
+            this,
+            player,
+            args,
+            caller,
+            argstr: v_empty_str(),
+            program_key,
+        }))
+    }
+
+    /// Setup the VM to execute the verb of the same current name, but using the parent's
+    /// version.
+    /// TODO this should be done up in task.rs instead. let's add a new ExecutionResult for it.
+    pub fn prepare_pass_verb(
+        &mut self,
+        host: &impl WorldStateCallback,
+        args: &List,
+    ) -> ExecutionResult {
+        // get parent of verb definer object & current verb name.
+        let definer = self.top().verb_definer();
+        let permissions = self.top().permissions;
+        let verb = self.top().verb_name;
+
+        let parent = match host.parent_of(&permissions, &definer) {
+            Ok(p) => p,
+            Err(WorldStateError::RollbackRetry) => {
+                return ExecutionResult::TaskRollbackRestart;
+            }
+            Err(e) => return self.raise_error(e.to_error()),
+        };
+
+        if !host.valid(&parent).unwrap_or_default() {
+            return self.push_error(E_INVIND.msg("Invalid object for pass() verb dispatch"));
+        }
+
+        let verb_result = host.dispatch_verb(
+            &permissions,
+            VerbDispatch::new(
+                VerbLookup::method(&parent, verb),
+                DispatchFlagsSource::Permissions,
+            ),
+        );
+
+        let (program_key, resolved_verb, permissions_flags) = match verb_result {
+            Ok(Some(vi)) => (vi.program_key, vi.verbdef, vi.permissions_flags),
+            Ok(None) => {
+                return self.push_error(E_VERBNF.msg("Verb not found for pass() dispatch"));
+            }
+            Err(WorldStateError::RollbackRetry) => {
+                return ExecutionResult::TaskRollbackRestart;
+            }
+            Err(e) => return self.raise_error(e.to_error()),
+        };
+
+        let caller = self.caller();
+        let this = self.top().this.clone();
+        let player = self.top().player;
+        let args_list = args.clone();
+        ExecutionResult::DispatchVerb(Box::new(VerbExecutionRequest {
+            permissions,
+            permissions_flags,
+            resolved_verb,
+            verb_name: verb,
+            this,
+            player,
+            args: args_list,
+            caller,
+            argstr: v_empty_str(),
+            program_key,
+        }))
+    }
+
+    pub fn exec_eval_request(
+        &mut self,
+        host: &impl WorldStateCallback,
+        permissions: &Obj,
+        player: &Obj,
+        program: moor_compiler::Program,
+        initial_env: Option<&[(Symbol, Var)]>,
+    ) {
+        let permissions_flags = host.flags_of(permissions).unwrap_or_default();
+        let a = Activation::for_eval(
+            *permissions,
+            permissions_flags,
+            player,
+            program,
+            initial_env,
+        );
+        self.stack.push(a);
+    }
+
+    /// If a bf_<xxx> wrapper function is present on #0, invoke that instead.
+    pub fn maybe_invoke_bf_proxy(
+        &mut self,
+        host: &impl WorldStateCallback,
+        bf_override_name: Symbol,
+        args: &List,
+    ) -> Option<ExecutionResult> {
+        // Reject invocations of maybe-wrapper functions if the caller is #0.
+        // This prevents recursion through them.
+        if self.caller() == v_obj(SYSTEM_OBJECT) {
+            return None;
+        }
+
+        // Look for it...
+        let verb_result = host
+            .dispatch_verb(
+                &self.top().permissions,
+                VerbDispatch::new(
+                    VerbLookup::method(&SYSTEM_OBJECT, bf_override_name),
+                    DispatchFlagsSource::Permissions,
+                ),
+            )
+            .ok()?;
+        let verb_result = verb_result?;
+        let program_key = verb_result.program_key;
+        let resolved_verb = verb_result.verbdef;
+        let permissions_flags = verb_result.permissions_flags;
+
+        let player = self.top().player;
+        let caller = self.caller();
+        let args_list = args.clone();
+        let permissions = self.top().permissions;
+        Some(ExecutionResult::DispatchVerb(Box::new(
+            VerbExecutionRequest {
+                permissions,
+                permissions_flags,
+                resolved_verb,
+                verb_name: bf_override_name,
+                this: v_obj(SYSTEM_OBJECT),
+                player,
+                args: args_list,
+                caller,
+                argstr: v_empty_str(),
+                program_key,
+            },
+        )))
     }
 }
 
