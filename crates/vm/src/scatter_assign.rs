@@ -46,7 +46,7 @@ where
 {
     let mut args_iter = args.into_iter();
 
-    // Count parameter types - this logic is identical in both implementations
+    // Count parameter types
     let (nargs, rest, nreq) = {
         let mut nargs = 0;
         let mut rest = 0;
@@ -62,8 +62,7 @@ where
         (nargs, rest, nreq)
     };
 
-    // Validate arguments - this logic is identical in both implementations
-    let have_rest = rest > 0; // We have rest parameters if any ScatterLabel::Rest exists
+    let have_rest = rest > 0;
     let len = args_iter.len();
 
     if len < nreq || (!have_rest && len > nargs) {
@@ -75,7 +74,6 @@ where
         };
     }
 
-    // Calculate distribution - this logic is identical in both implementations
     let mut nopt_avail = len - nreq;
     let nrest = if have_rest && len >= nargs {
         len - nargs + 1
@@ -86,11 +84,9 @@ where
     let mut needs_defaults = false;
     let mut first_default_label = None;
     let mut first_default_index = None;
-    // Assign parameters - this logic is very similar but handles defaults differently
     for (idx, label) in table.labels.iter().enumerate() {
         match label {
             ScatterLabel::Rest(id) => {
-                // Collect remaining arguments into a list
                 let mut v = Vec::with_capacity(nrest);
                 for _ in 0..nrest {
                     if let Some(rest) = args_iter.next() {
@@ -101,7 +97,6 @@ where
                 set_var(id, rest);
             }
             ScatterLabel::Required(id) => {
-                // Assign required parameter
                 if let Some(arg) = args_iter.next() {
                     set_var(id, arg.clone());
                 } else {
@@ -127,14 +122,11 @@ where
                         };
                     }
                 } else {
-                    // No argument provided for this optional parameter
-                    // Track the first optional that needs defaults
                     if first_default_label.is_none() && first_default_index.is_none() {
                         needs_defaults = true;
                         first_default_label = *jump_to;
                         first_default_index = Some(idx);
                     }
-                    // Note: We don't set the variable here - the caller handles defaults
                 }
             }
         }
@@ -154,11 +146,10 @@ mod tests {
     use moor_var::{program::names::Name, v_int, v_str};
     use std::collections::HashMap;
 
-    // Create a test ScatterArgs - we'll use unsafe to create the Label since it's private
     fn create_test_scatter_args(labels: Vec<ScatterLabel>) -> ScatterArgs {
         ScatterArgs {
             labels,
-            done: unsafe { std::mem::zeroed() }, // Dummy label for testing
+            done: unsafe { std::mem::zeroed() },
         }
     }
 
@@ -191,7 +182,7 @@ mod tests {
             ScatterLabel::Optional(Name(1, 0, 0), Some(unsafe { std::mem::zeroed() })),
         ]);
 
-        let args = [v_str("Alice")]; // Missing optional arg
+        let args = [v_str("Alice")];
         let mut assignments = HashMap::new();
 
         let result = scatter_assign(&table, args.iter(), |name, value| {
@@ -199,11 +190,10 @@ mod tests {
         });
 
         assert!(result.result.is_ok());
-        assert!(result.needs_defaults); // Need to handle default for optional param
+        assert!(result.needs_defaults);
         assert!(result.first_default_label.is_some());
         assert_eq!(result.first_default_index, Some(1));
         assert_eq!(assignments.get(&Name(0, 0, 0)), Some(&v_str("Alice")));
-        // Name(1,0,0) should NOT be in assignments - defaults handled by caller
         assert!(!assignments.contains_key(&Name(1, 0, 0)));
     }
 
@@ -211,7 +201,7 @@ mod tests {
     fn test_too_many_args_without_rest() {
         let table = create_test_scatter_args(vec![ScatterLabel::Required(Name(0, 0, 0))]);
 
-        let args = [v_int(1), v_int(2), v_int(3)]; // Too many!
+        let args = [v_int(1), v_int(2), v_int(3)];
         let mut assignments = HashMap::new();
 
         let result = scatter_assign(&table, args.iter(), |name, value| {

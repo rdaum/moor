@@ -83,13 +83,11 @@ impl TaskSchedulerClient {
 
     pub fn request_fork(&self, fork: Box<Fork>) -> TaskId {
         let _timer = PerfTimerGuard::new(&sched_counters().task_request_fork_latency);
-        self.scheduler
-            .handle_task_request_fork(self.task_id, fork)
+        self.scheduler.handle_task_request_fork(self.task_id, fork)
     }
 
     pub fn abort_cancelled(&self) {
-        self.scheduler
-            .handle_task_abort_cancelled(self.task_id);
+        self.scheduler.handle_task_abort_cancelled(self.task_id);
     }
 
     pub fn abort_limits_reached(
@@ -150,8 +148,7 @@ impl TaskSchedulerClient {
     }
 
     pub fn boot_player(&self, player: Obj) {
-        self.scheduler
-            .handle_boot_player(self.task_id, player);
+        self.scheduler.handle_boot_player(self.task_id, player);
     }
 
     pub fn checkpoint(&self) {
@@ -167,13 +164,11 @@ impl TaskSchedulerClient {
     }
 
     pub fn notify(&self, player: Obj, event: Box<NarrativeEvent>) {
-        self.scheduler
-            .handle_notify(self.task_id, player, event);
+        self.scheduler.handle_notify(self.task_id, player, event);
     }
 
     pub fn log_event(&self, player: Obj, event: Box<NarrativeEvent>) {
-        self.scheduler
-            .handle_log_event(self.task_id, player, event);
+        self.scheduler.handle_log_event(self.task_id, player, event);
     }
 
     pub fn listen(
@@ -183,13 +178,8 @@ impl TaskSchedulerClient {
         port: u16,
         options: Vec<(Symbol, Var)>,
     ) -> Option<Error> {
-        self.scheduler.handle_listen(
-            self.task_id,
-            handler_object,
-            host_type,
-            port,
-            options,
-        )
+        self.scheduler
+            .handle_listen(self.task_id, handler_object, host_type, port, options)
     }
 
     pub fn listeners(&self) -> Vec<ListenerInfo> {
@@ -234,8 +224,7 @@ impl TaskSchedulerClient {
     }
 
     pub fn force_input(&self, who: Obj, line: String) -> Result<TaskId, Error> {
-        self.scheduler
-            .handle_force_input(self.task_id, who, line)
+        self.scheduler.handle_force_input(self.task_id, who, line)
     }
 
     pub fn active_tasks(&self) -> Result<ActiveTaskDescriptions, Error> {
@@ -254,13 +243,15 @@ impl TaskSchedulerClient {
     }
 
     pub fn workers_info(&self) -> Vec<WorkerInfo> {
-        self.scheduler.system_control.workers_info().unwrap_or_default()
+        self.scheduler
+            .system_control
+            .workers_info()
+            .unwrap_or_default()
     }
 
     pub fn begin_new_transaction(&self) -> Result<Box<dyn WorldState>, SchedulerError> {
         let _timer = PerfTimerGuard::new(&sched_counters().task_begin_transaction_latency);
-        self.scheduler
-            .handle_request_new_transaction(self.task_id)
+        self.scheduler.handle_request_new_transaction(self.task_id)
     }
 
     pub fn task_send(&self, target_task_id: TaskId, value: Var, sender_permissions: Perms) -> Var {

@@ -13,8 +13,8 @@
 
 //! Builtin functions for spatial/tile-map operations (pathfinding, etc.).
 
-use std::collections::BinaryHeap;
 use std::cmp::Reverse;
+use std::collections::BinaryHeap;
 
 use moor_compiler::offset_for_builtin;
 use moor_var::{E_ARGS, E_INVARG, E_TYPE, Variant, v_empty_list, v_int, v_list, v_list_iter};
@@ -41,11 +41,19 @@ fn bf_astar(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let width = match bf_args.args[0].variant() {
         Variant::Int(i) if i > 0 => i as usize,
-        _ => return Err(BfErr::ErrValue(E_INVARG.msg("width must be a positive integer"))),
+        _ => {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("width must be a positive integer"),
+            ));
+        }
     };
     let height = match bf_args.args[1].variant() {
         Variant::Int(i) if i > 0 => i as usize,
-        _ => return Err(BfErr::ErrValue(E_INVARG.msg("height must be a positive integer"))),
+        _ => {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("height must be a positive integer"),
+            ));
+        }
     };
     let start_x = match bf_args.args[2].variant() {
         Variant::Int(i) => i as i32,
@@ -64,9 +72,11 @@ fn bf_astar(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::ErrValue(E_TYPE.msg("goal_y must be an integer"))),
     };
 
-    let tile_map_list = bf_args.args[6].as_list()
+    let tile_map_list = bf_args.args[6]
+        .as_list()
         .ok_or_else(|| BfErr::ErrValue(E_TYPE.msg("tile_map must be a list")))?;
-    let solid_tiles_list = bf_args.args[7].as_list()
+    let solid_tiles_list = bf_args.args[7]
+        .as_list()
         .ok_or_else(|| BfErr::ErrValue(E_TYPE.msg("solid_tiles must be a list")))?;
 
     let w = width as i32;
@@ -74,7 +84,9 @@ fn bf_astar(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Validate start/goal in bounds.
     if start_x < 0 || start_x >= w || start_y < 0 || start_y >= h {
-        return Err(BfErr::ErrValue(E_INVARG.msg("start position out of bounds")));
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("start position out of bounds"),
+        ));
     }
     if goal_x < 0 || goal_x >= w || goal_y < 0 || goal_y >= h {
         return Err(BfErr::ErrValue(E_INVARG.msg("goal position out of bounds")));
@@ -97,9 +109,10 @@ fn bf_astar(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             break;
         }
         if let Variant::Int(tile_id) = item.variant()
-            && solid_ids.contains(&tile_id) {
-                passable[i] = false;
-            }
+            && solid_ids.contains(&tile_id)
+        {
+            passable[i] = false;
+        }
     }
 
     // Check goal is passable.
@@ -131,9 +144,14 @@ fn bf_astar(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // 8-directional neighbors.
     const DIRS: [(i32, i32); 8] = [
-        (-1, -1), (0, -1), (1, -1),
-        (-1,  0),          (1,  0),
-        (-1,  1), (0,  1), (1,  1),
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+        (-1, 0),
+        (1, 0),
+        (-1, 1),
+        (0, 1),
+        (1, 1),
     ];
 
     while let Some(Reverse((_f, g, cx, cy))) = open.pop() {
@@ -170,10 +188,9 @@ fn bf_astar(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             }
 
             // Diagonal corner-cutting check.
-            if dx != 0 && dy != 0
-                && (!is_passable(cx + dx, cy) || !is_passable(cx, cy + dy)) {
-                    continue;
-                }
+            if dx != 0 && dy != 0 && (!is_passable(cx + dx, cy) || !is_passable(cx, cy + dy)) {
+                continue;
+            }
 
             let nidx = (ny as usize) * width + (nx as usize);
             if ng < g_score[nidx] {

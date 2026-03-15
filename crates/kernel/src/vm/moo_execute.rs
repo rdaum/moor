@@ -12,14 +12,8 @@
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use crate::{
-    config::FeaturesConfig,
-    task_context::with_current_transaction_mut,
-    vm::{
-        moo_frame::{CatchType, MooStackFrame, PcType, ScopeType},
-        scatter_assign::scatter_assign,
-        vm_host::ExecutionResult,
-        vm_unwind::FinallyReason,
-    },
+    config::FeaturesConfig, task_context::with_current_transaction_mut,
+    vm::vm_host::ExecutionResult,
 };
 use moor_compiler::{Op, to_literal};
 use moor_var::{
@@ -27,6 +21,7 @@ use moor_var::{
     TypeClass, Var, VarType, program::names::Name, v_arc_str, v_bool, v_bool_int, v_empty_list,
     v_empty_map, v_err, v_error, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_sym,
 };
+use moor_vm::{CatchType, FinallyReason, MooStackFrame, PcType, ScopeType, scatter_assign};
 use std::{sync::LazyLock, time::Duration};
 
 static DELEGATE_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("delegate"));

@@ -22,7 +22,7 @@ pub use crate::{
 };
 pub use moor_common::tasks::TaskId;
 
-use std::{cell::Cell, marker::PhantomData, sync::OnceLock};
+use std::sync::OnceLock;
 
 /// Server's symmetric key for PASETO V4.Local tokens.
 /// Derived from the server's Ed25519 private key and initialized at daemon startup.
@@ -49,6 +49,3 @@ pub mod tracing_events;
 pub mod vm;
 
 pub mod testing;
-
-/// A phantom type for explicitly marking types as !Sync
-type PhantomUnsync = PhantomData<Cell<()>>;

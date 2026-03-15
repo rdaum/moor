@@ -21,18 +21,7 @@ use crate::{
         task_program_cache::TaskProgramCache,
         task_q::{SuspendedTask as KernelSuspendedTask, WakeCondition as KernelWakeCondition},
     },
-    vm::{
-        FinallyReason as KernelFinallyReason, Fork,
-        activation::{
-            Activation as KernelActivation, BfFrame as KernelBfFrame, Frame as KernelFrame,
-        },
-        exec_state::VMExecState as KernelVMExecState,
-        moo_frame::{
-            CatchType as KernelCatchType, MooStackFrame as KernelMooStackFrame,
-            PcType as KernelPcType, Scope as KernelScope, ScopeType as KernelScopeType,
-        },
-        vm_host::VmHost as KernelVmHost,
-    },
+    vm::{Fork, exec_state::VMExecState as KernelVMExecState, vm_host::VmHost as KernelVmHost},
 };
 use moor_common::util::{BitEnum, Instant, Timestamp};
 use moor_compiler::{Label, Offset};
@@ -44,6 +33,12 @@ use moor_schema::{
 };
 use moor_var::program::names::Name;
 use moor_var::v_str;
+use moor_vm::{
+    Activation as KernelActivation, BfFrame as KernelBfFrame, CatchType as KernelCatchType,
+    FinallyReason as KernelFinallyReason, Frame as KernelFrame,
+    MooStackFrame as KernelMooStackFrame, PcType as KernelPcType, Scope as KernelScope,
+    ScopeType as KernelScopeType,
+};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 

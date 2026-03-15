@@ -19,12 +19,7 @@ use moor_common::model::{VerbProgramKey, WorldState, WorldStateError};
 use moor_common::util::ConcurrentCounter;
 use moor_compiler::Program;
 use moor_var::{Obj, program::ProgramType};
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ProgramSlot {
-    pub program_ptr: usize,
-    pub global_width: usize,
-}
+pub use moor_vm::ProgramSlot;
 
 #[derive(Debug)]
 struct CachedProgramSlot {

@@ -271,11 +271,7 @@ impl TaskQ {
                 );
 
                 // Send panic abort directly to scheduler
-                scheduler_clone.handle_task_abort_panicked(
-                    task_id,
-                    panic_msg,
-                    backtrace,
-                );
+                scheduler_clone.handle_task_abort_panicked(task_id, panic_msg, backtrace);
             }
         });
 
@@ -413,11 +409,7 @@ impl TaskQ {
                     "Retry task thread panicked"
                 );
 
-                scheduler_clone.handle_task_abort_panicked(
-                    task_id,
-                    panic_msg,
-                    backtrace,
-                );
+                scheduler_clone.handle_task_abort_panicked(task_id, panic_msg, backtrace);
             }
         });
     }

@@ -1,0 +1,33 @@
+[package]
+name = "moor-vm"
+version = "1.1.0-dev"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+resolver = "2"
+rust-version.workspace = true
+description = "Virtual machine types and execution logic for the moor system."
+
+[features]
+default = []
+trace_events = []
+
+[dependencies]
+# Internal Dependencies
+moor-common = { path = "../common" }
+moor-compiler = { path = "../compiler" }
+moor-var = { path = "../var" }
+
+# Collections & Data Structures
+smallvec.workspace = true
+
+# Error Handling & Logging
+tracing.workspace = true
+
+# Utilities & Helpers
+strum.workspace = true
+uuid.workspace = true
