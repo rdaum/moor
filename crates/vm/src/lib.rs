@@ -13,6 +13,8 @@
 
 use std::{cell::Cell, marker::PhantomData};
 
+use uuid::Uuid;
+
 pub mod activation;
 pub mod config;
 pub mod environment;
@@ -66,6 +68,31 @@ pub trait WorldStateCallback {
         obj: &moor_var::Obj,
     ) -> Result<
         moor_common::util::BitEnum<moor_common::model::ObjFlag>,
+        moor_common::model::WorldStateError,
+    >;
+
+    fn valid(&self, obj: &moor_var::Obj) -> Result<bool, moor_common::model::WorldStateError>;
+
+    fn dispatch_verb(
+        &self,
+        perms: &moor_var::Obj,
+        dispatch: moor_common::model::VerbDispatch<'_>,
+    ) -> Result<Option<moor_common::model::VerbDispatchResult>, moor_common::model::WorldStateError>;
+
+    fn parent_of(
+        &self,
+        perms: &moor_var::Obj,
+        obj: &moor_var::Obj,
+    ) -> Result<moor_var::Obj, moor_common::model::WorldStateError>;
+
+    /// Resolve a verb's program by UUID. Used by the program cache.
+    fn retrieve_verb(
+        &self,
+        perms: &moor_var::Obj,
+        obj: &moor_var::Obj,
+        uuid: Uuid,
+    ) -> Result<
+        (moor_var::program::ProgramType, moor_common::model::VerbDef),
         moor_common::model::WorldStateError,
     >;
 }
