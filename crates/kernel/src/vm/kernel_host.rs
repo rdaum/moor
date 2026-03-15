@@ -11,10 +11,12 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
+use uuid::Uuid;
+
 use crate::task_context::{with_current_transaction, with_current_transaction_mut};
-use moor_common::model::{ObjFlag, WorldStateError};
+use moor_common::model::{ObjFlag, VerbDef, VerbDispatch, VerbDispatchResult, WorldStateError};
 use moor_common::util::BitEnum;
-use moor_var::{Obj, Symbol, Var};
+use moor_var::{Obj, Symbol, Var, program::ProgramType};
 use moor_vm::WorldStateCallback;
 
 /// Bridges VM operations to the kernel's TLS-based transaction context.
@@ -42,5 +44,30 @@ impl WorldStateCallback for KernelHost {
 
     fn flags_of(&self, obj: &Obj) -> Result<BitEnum<ObjFlag>, WorldStateError> {
         with_current_transaction(|ws| ws.flags_of(obj))
+    }
+
+    fn valid(&self, obj: &Obj) -> Result<bool, WorldStateError> {
+        with_current_transaction(|ws| ws.valid(obj))
+    }
+
+    fn dispatch_verb(
+        &self,
+        perms: &Obj,
+        dispatch: VerbDispatch<'_>,
+    ) -> Result<Option<VerbDispatchResult>, WorldStateError> {
+        with_current_transaction(|ws| ws.dispatch_verb(perms, dispatch))
+    }
+
+    fn parent_of(&self, perms: &Obj, obj: &Obj) -> Result<Obj, WorldStateError> {
+        with_current_transaction(|ws| ws.parent_of(perms, obj))
+    }
+
+    fn retrieve_verb(
+        &self,
+        perms: &Obj,
+        obj: &Obj,
+        uuid: Uuid,
+    ) -> Result<(ProgramType, VerbDef), WorldStateError> {
+        with_current_transaction(|ws| ws.retrieve_verb(perms, obj, uuid))
     }
 }
