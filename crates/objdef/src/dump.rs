@@ -633,7 +633,19 @@ fn dump_verb(
     };
 
     // decompile the verb
-    let ProgramType::MooR(program) = &v.program;
+    let ProgramType::MooR(program) = &v.program else {
+        // JS verbs cannot be decompiled to MOO source
+        return Err(ObjectDumpError::DecompileError {
+            obj: *obj,
+            verb_name: v
+                .names
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>()
+                .join(" "),
+            reason: "JavaScript verbs cannot be decompiled".to_string(),
+        });
+    };
     let verb_name_for_error = v
         .names
         .iter()

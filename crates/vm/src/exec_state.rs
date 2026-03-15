@@ -25,9 +25,9 @@ use moor_common::util::BitEnum;
 use moor_common::util::Instant;
 use moor_compiler::{BUILTINS, to_literal};
 use moor_var::{
-    E_INVIND, E_PERM, E_TYPE, E_VERBNF, Error, List, NOTHING, Obj, SYSTEM_OBJECT, Sequence, Symbol,
-    Var, Variant, program::names::GlobalName, v_arc_str, v_bool, v_empty_str, v_err, v_error,
-    v_int, v_list, v_none, v_obj, v_str, v_string,
+    E_INVIND, E_PERM, E_TYPE, E_VERBNF, Error, List, NOTHING, Obj, SYSTEM_OBJECT, Sequence,
+    Symbol, Var, Variant, program::names::GlobalName, v_arc_str, v_bool, v_empty_str, v_err,
+    v_error, v_int, v_list, v_none, v_obj, v_str, v_string,
 };
 
 use crate::activation::CallProgram;
@@ -129,7 +129,7 @@ impl ExecState {
             let perms = activation.permissions;
             let programmer = match activation.frame {
                 Frame::Bf(_) => NOTHING,
-                _ => perms,
+                Frame::Moo(_) | Frame::Js(_) => perms,
             };
             callers.push(Caller {
                 verb_name,
@@ -163,7 +163,7 @@ impl ExecState {
 
         // Skip builtin-frames (for now?)
         for activation in stack_iter {
-            if let Frame::Bf(_) = activation.frame {
+            if matches!(activation.frame, Frame::Bf(_)) {
                 continue;
             }
             return activation.this.clone();
@@ -272,8 +272,9 @@ impl ExecState {
 
     pub fn materialize_frame_programs(&mut self) {
         for activation in &mut self.stack {
-            if let Frame::Moo(frame) = &mut activation.frame {
-                frame.materialize_program_from_slot();
+            match &mut activation.frame {
+                Frame::Moo(frame) => frame.materialize_program_from_slot(),
+                Frame::Bf(_) | Frame::Js(_) => {}
             }
         }
     }
@@ -312,6 +313,14 @@ impl ExecState {
                         v_int(0),
                     ]));
                 }
+                Frame::Js(_) => stack_list.push(v_list(&[
+                    a.this.clone(),
+                    v_str(&a.verb_name.as_string()),
+                    v_obj(a.permissions),
+                    v_obj(a.verb_definer()),
+                    v_obj(a.player),
+                    v_none(),
+                ])),
             }
         }
         stack_list
@@ -334,6 +343,9 @@ impl ExecState {
                 Frame::Bf(bf_frame) => {
                     let bf_name = BUILTINS.name_of(bf_frame.bf_id).unwrap();
                     piece.push_str(&format!("builtin {bf_name}"));
+                }
+                Frame::Js(_) => {
+                    piece.push_str(&format!("js {}:{}", a.verb_definer(), a.verb_name));
                 }
             }
             if v_obj(a.verb_definer()) != a.this {
@@ -473,6 +485,9 @@ impl ExecState {
                     //   `return_value` (and maybe error state/) and propagates it up the stack.
                     //   This way things like push_bf_err can be removed.
                     //   This might involve encompassing some of the stuff below, too.
+                }
+                Frame::Js(_) => {
+                    // JS frames have no catch/finally handling; just pop.
                 }
             }
 

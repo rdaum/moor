@@ -396,11 +396,15 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Ok(Ret(v_empty_list()));
     }
 
-    #[allow(irrefutable_let_patterns)]
+    match &verb_info.0 {
+        ProgramType::JavaScript(source) => {
+            let lines: Vec<Var> = source.lines().map(|l| v_string(l.to_string())).collect();
+            return Ok(Ret(v_list(&lines)));
+        }
+        ProgramType::MooR(_) => {}
+    }
     let ProgramType::MooR(program) = &verb_info.0 else {
-        return Err(BfErr::ErrValue(
-            E_INVARG.msg("verb_code: verb program is not Moo"),
-        ));
+        unreachable!()
     };
     let decompiled = match program_to_tree(program) {
         Ok(decompiled) => decompiled,
@@ -420,10 +424,11 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(unparsed.iter().map(|s| v_str(s)))))
 }
 
-/// Usage: `list set_verb_code(obj object, str|int verb_desc, list code [, int verbosity [, int output_mode]])`
+/// Usage: `list set_verb_code(obj object, str|int verb_desc, list code [, sym language [, int verbosity [, int output_mode]]])`
 /// Sets the source code of a verb. Returns empty list on success, or compilation errors.
 ///
-/// Arguments controlling compilation error output:
+/// Arguments:
+///   - language: 'moo (default) or 'js. Controls which compiler/runtime the verb uses.
 ///   - verbosity: Controls error detail level (default: 2)
 ///     - 0=summary: Brief error message only
 ///     - 1=context: Message with error location (graphical display when output_mode > 0)
@@ -437,7 +442,7 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// When verbosity=3, returns a map with diagnostic data instead of formatted strings.
 /// Use `format_compile_error()` to format the structured map into human-readable text.
 fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() < 3 || bf_args.args.len() > 5 {
+    if bf_args.args.len() < 3 || bf_args.args.len() > 6 {
         return Err(BfErr::Code(E_ARGS));
     }
     let Some(obj) = bf_args.args[0].as_object() else {
@@ -461,28 +466,36 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let verbdef = get_verbdef(&obj, bf_args.args[1].clone(), bf_args)?;
 
-    // Parse optional verbosity (default 2 for set_verb_code) and output_mode (default 0)
-    let verbosity = if bf_args.args.len() >= 4 {
-        bf_args.args[3].as_integer()
+    // Parse optional language arg (default 'moo). Accepts string or symbol.
+    let language = if bf_args.args.len() >= 4 {
+        bf_args.args[3]
+            .as_symbol()
+            .map(|s| s.as_string())
+            .unwrap_or_else(|_| "moo".into())
     } else {
-        Some(2) // Default to detailed for set_verb_code
+        "moo".into()
     };
 
-    let output_mode = if bf_args.args.len() >= 5 {
+    // Parse optional verbosity (default 2) and output_mode (default 0) — now at positions 5 and 6
+    let verbosity = if bf_args.args.len() >= 5 {
         bf_args.args[4].as_integer()
+    } else {
+        Some(2)
+    };
+
+    let output_mode = if bf_args.args.len() >= 6 {
+        bf_args.args[5].as_integer()
     } else {
         Some(0)
     };
 
     let diagnostic_output = parse_diagnostic_options(verbosity, output_mode)?;
 
-    // Right now set_verb_code is going to always compile to LambdaMOO 1.8.x. binary type.
     let program_code = match bf_args.args[2].variant() {
         Variant::List(code) => code,
         _ => return Err(BfErr::Code(E_TYPE)),
     };
-    // Code should be a list of strings.
-    // Which we will join (with linefeeds) into one string.
+    // Join code lines into one string.
     let mut code_string = String::new();
     for line in program_code.iter() {
         let line = match line.variant() {
@@ -492,6 +505,46 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         code_string.push_str(line.as_str());
         code_string.push('\n');
     }
+
+    // JavaScript verb path.
+    if language == "js" || language == "javascript" {
+        #[cfg(feature = "javascript")]
+        {
+            let update_attrs = VerbAttrs {
+                definer: None,
+                owner: None,
+                names: None,
+                flags: None,
+                args_spec: None,
+                program: Some(ProgramType::JavaScript(std::sync::Arc::from(
+                    code_string.as_str(),
+                ))),
+            };
+            with_current_transaction_mut(|world_state| {
+                world_state.update_verb_with_id(
+                    &bf_args.task_perms_who(),
+                    &obj,
+                    verbdef.uuid(),
+                    update_attrs,
+                )
+            })
+            .map_err(world_state_bf_err)?;
+            return Ok(RetNil);
+        }
+        #[cfg(not(feature = "javascript"))]
+        {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("JavaScript verbs not enabled"),
+            ));
+        }
+    }
+
+    if language != "moo" {
+        return Err(BfErr::ErrValue(
+            E_INVARG.with_msg(|| format!("Unknown language: {language}")),
+        ));
+    }
+
     // Now try to compile...
     let program = match compile(code_string.as_str(), bf_args.config.compile_options()) {
         Ok(program) => program,

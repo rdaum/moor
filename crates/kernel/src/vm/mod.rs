@@ -182,6 +182,11 @@ fn extract_anonymous_refs_from_activation(
                 extract_anonymous_refs_from_var(return_value, refs);
             }
         }
+        Frame::Js(js_frame) => {
+            if let Some(return_value) = &js_frame.return_value {
+                extract_anonymous_refs_from_var(return_value, refs);
+            }
+        }
     }
 
     // 2. Scan activation-level variables

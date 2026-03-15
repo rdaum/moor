@@ -350,7 +350,54 @@ pub fn encode_program_to_fb(program: &Program) -> Result<fb::StoredProgram, Enco
     })
 }
 
-/// Convert a FlatBuffer StoredProgram struct to a Program (runtime format)
+/// Encode a ProgramType (any language) to a StoredProgram FlatBuffer.
+pub fn encode_program_type_to_fb(
+    program_type: &moor_var::program::ProgramType,
+) -> Result<fb::StoredProgram, EncodeError> {
+    match program_type {
+        moor_var::program::ProgramType::MooR(program) => encode_program_to_fb(program),
+        moor_var::program::ProgramType::JavaScript(source) => {
+            Ok(fb::StoredProgram {
+                language: fb::StoredProgramLanguage::StoredJavaScriptProgram(Box::new(
+                    fb::StoredJavaScriptProgram {
+                        source: source.to_string(),
+                    },
+                )),
+            })
+        }
+    }
+}
+
+/// Decode a StoredProgram FlatBuffer to a ProgramType (any language).
+pub fn decode_stored_program_to_program_type(
+    stored: &moor_var::program::stored_program::StoredProgram,
+) -> Result<moor_var::program::ProgramType, DecodeError> {
+    let fb_program = fb::StoredProgramRef::read_as_root(stored.as_bytes())
+        .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read FlatBuffer: {e}")))?;
+
+    let language = fb_program
+        .language()
+        .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read language union: {e}")))?;
+
+    match language {
+        fb::StoredProgramLanguageRef::StoredMooRProgram(moor_ref) => {
+            decode_fb_program(moor_ref).map(moor_var::program::ProgramType::MooR)
+        }
+        fb::StoredProgramLanguageRef::StoredJavaScriptProgram(js_ref) => {
+            let source = js_ref
+                .source()
+                .map_err(|e| {
+                    DecodeError::DecodeFailed(format!("Failed to read JS source: {e}"))
+                })?;
+            Ok(moor_var::program::ProgramType::JavaScript(
+                std::sync::Arc::from(source),
+            ))
+        }
+    }
+}
+
+/// Convert a FlatBuffer StoredProgram struct to a Program (runtime format).
+/// Panics if the stored program is not a MooR program.
 pub fn decode_stored_program_struct(stored: &fb::StoredProgram) -> Result<Program, DecodeError> {
     // Convert owned struct to bytes and back to ref for decoding
     let mut builder = planus::Builder::new();
@@ -366,6 +413,9 @@ pub fn decode_stored_program_struct(stored: &fb::StoredProgram) -> Result<Progra
 
     match language {
         fb::StoredProgramLanguageRef::StoredMooRProgram(moor_ref) => decode_fb_program(moor_ref),
+        fb::StoredProgramLanguageRef::StoredJavaScriptProgram(_) => Err(
+            DecodeError::DecodeFailed("Expected MooR program, got JavaScript".to_string()),
+        ),
     }
 }
 
@@ -378,6 +428,9 @@ pub fn decode_stored_program_ref(fb_ref: fb::StoredProgramRef<'_>) -> Result<Pro
 
     match language {
         fb::StoredProgramLanguageRef::StoredMooRProgram(moor_ref) => decode_fb_program(moor_ref),
+        fb::StoredProgramLanguageRef::StoredJavaScriptProgram(_) => Err(
+            DecodeError::DecodeFailed("Expected MooR program, got JavaScript".to_string()),
+        ),
     }
 }
 
@@ -394,7 +447,8 @@ pub fn program_to_stored(program: &Program) -> Result<StoredProgram, EncodeError
     Ok(StoredProgram::from_bytes(ByteView::from(bytes)))
 }
 
-/// Convert a StoredProgram to a Program (runtime format)
+/// Convert a StoredProgram to a MooR Program (runtime format).
+/// Returns an error if the stored program is not a MooR program.
 pub fn stored_to_program(stored: &StoredProgram) -> Result<Program, DecodeError> {
     // 1. Read FlatBuffer wrapper
     let fb_program = fb::StoredProgramRef::read_as_root(stored.as_bytes())
@@ -408,6 +462,9 @@ pub fn stored_to_program(stored: &StoredProgram) -> Result<Program, DecodeError>
     // 3. Match on union variant and decode
     match language {
         fb::StoredProgramLanguageRef::StoredMooRProgram(moor_ref) => decode_fb_program(moor_ref),
+        fb::StoredProgramLanguageRef::StoredJavaScriptProgram(_) => Err(
+            DecodeError::DecodeFailed("Expected MooR program, got JavaScript".to_string()),
+        ),
     }
 }
 

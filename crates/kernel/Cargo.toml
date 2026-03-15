@@ -15,6 +15,7 @@ description = "The actual implementation of most of the moor system; virtual mac
 [features]
 default = []
 trace_events = []
+javascript = ["dep:moor-js-engine"]
 
 [dev-dependencies]
 moor-db = { path = "../db" }
@@ -74,6 +75,7 @@ moor-moot = { path = "../testing/moot", features = ["colors"] }
 moor-objdef = { path = "../objdef" }
 moor-schema = { path = "../schema" }
 moor-textdump = { path = "../textdump" }
+moor-js-engine = { path = "../js-engine", optional = true }
 moor-var = { path = "../var" }
 
 # Core Runtime & System

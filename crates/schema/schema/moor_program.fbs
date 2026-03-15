@@ -230,10 +230,14 @@ table StoredMooRProgram {
     fork_line_number_spans: [ForkLineSpans] (required);
 }
 
+table StoredJavaScriptProgram {
+    source: string (required);
+}
+
 // Union for different program language implementations
 union StoredProgramLanguage {
-    StoredMooRProgram
-    // Future: StoredJavaScriptProgram, StoredLuaProgram, etc.
+    StoredMooRProgram,
+    StoredJavaScriptProgram
 }
 
 // Top-level program wrapper matching Rust ProgramType enum

@@ -1154,6 +1154,11 @@ pub(crate) fn frame_to_flatbuffer(frame: &KernelFrame) -> Result<fb::Frame, Task
             let fb_bf = bf_frame_to_flatbuffer(bf_frame)?;
             FrameUnion::BfFrame(Box::new(fb_bf))
         }
+        KernelFrame::Js(_) => {
+            return Err(TaskConversionError::EncodingError(
+                "JavaScript frames cannot be serialized".to_string(),
+            ));
+        }
     };
 
     Ok(fb::Frame { frame: frame_union })
@@ -1409,6 +1414,10 @@ pub(crate) fn vm_host_from_ref(fb: fb::VmHostRef<'_>) -> Result<KernelVmHost, Ta
         max_ticks: max_ticks as usize,
         max_time: Duration::from_millis(max_time_ms),
         running: true,
+        #[cfg(feature = "javascript")]
+        js_worker: None,
+        #[cfg(feature = "javascript")]
+        js_trampolines: Vec::new(),
         unsync: Default::default(),
     })
 }

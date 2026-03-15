@@ -11,6 +11,8 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
+use std::sync::Arc;
+
 use crate::program::{names::Variable, program::Program};
 
 pub mod labels;
@@ -24,12 +26,14 @@ pub mod program;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProgramType {
     MooR(Program),
+    JavaScript(Arc<str>),
 }
 
 impl ProgramType {
     pub fn is_empty(&self) -> bool {
         match self {
             ProgramType::MooR(p) => p.main_vector().is_empty(),
+            ProgramType::JavaScript(source) => source.is_empty(),
         }
     }
 }

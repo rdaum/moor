@@ -43,7 +43,21 @@ use moor_common::{matching::ParsedCommand, tasks::Session};
 use moor_var::program::{ProgramType, names::Name};
 use moor_vm::{CallProgram, Frame, PhantomUnsync, VmHost as _, moo_frame_execute};
 
+#[cfg(feature = "javascript")]
+use moor_js_engine::{
+    JsError, JsWorkerPool, TrampolineRequest, TrampolineResponse, WorkerInput,
+};
+
 pub(crate) use moor_vm::ExecutionResult;
+
+/// Active trampoline channels for a single JS verb execution.
+#[cfg(feature = "javascript")]
+pub(crate) struct JsTrampolineState {
+    pub trampoline_rx: flume::Receiver<TrampolineRequest>,
+    pub worker_tx: flume::Sender<WorkerInput>,
+    /// The resolver_id of a pending CallVerb, if any (VerbCallPending state).
+    pub pending_resolver_id: Option<usize>,
+}
 
 /// A 'host' for running some kind of interpreter / virtual machine inside a running moor task.
 pub struct VmHost {
@@ -57,6 +71,14 @@ pub struct VmHost {
     /// The maximum amount of time allotted to this task
     pub(crate) max_time: Duration,
     pub(crate) running: bool,
+
+    /// V8 worker pool for JavaScript verb execution.
+    #[cfg(feature = "javascript")]
+    pub(crate) js_worker: Option<std::sync::Arc<JsWorkerPool>>,
+
+    /// Stack of active trampolines — one per nested JS verb execution.
+    #[cfg(feature = "javascript")]
+    pub(crate) js_trampolines: Vec<JsTrampolineState>,
 
     pub(crate) unsync: PhantomUnsync,
 }
@@ -90,8 +112,18 @@ impl VmHost {
             max_ticks,
             max_time,
             running: false,
+            #[cfg(feature = "javascript")]
+            js_worker: None,
+            #[cfg(feature = "javascript")]
+            js_trampolines: Vec::new(),
             unsync: Default::default(),
         }
+    }
+
+    /// Set the JS worker pool reference for this host.
+    #[cfg(feature = "javascript")]
+    pub fn set_js_worker(&mut self, pool: std::sync::Arc<JsWorkerPool>) {
+        self.js_worker = Some(pool);
     }
 }
 
@@ -283,6 +315,34 @@ impl VmHost {
                     continue;
                 }
                 ExecutionResult::DispatchVerb(exec_request) => {
+                    // Check if this is a JavaScript verb before hitting the MooR cache.
+                    #[cfg(feature = "javascript")]
+                    {
+                        let maybe_js = with_current_transaction(|ws| {
+                            ws.retrieve_verb(
+                                &exec_request.permissions,
+                                &exec_request.program_key.verb_definer,
+                                exec_request.program_key.verb_uuid,
+                            )
+                        });
+                        match maybe_js {
+                            Ok((ProgramType::JavaScript(source), _)) => {
+                                result = self.dispatch_js_verb(&exec_request, source);
+                                continue;
+                            }
+                            Ok((ProgramType::MooR(_), _)) => {
+                                // Fall through to normal MooR dispatch below.
+                            }
+                            Err(moor_common::model::WorldStateError::RollbackRetry) => {
+                                return VMHostResponse::RollbackRetry;
+                            }
+                            Err(e) => {
+                                result = ExecutionResult::PushError(e.to_error());
+                                continue;
+                            }
+                        }
+                    }
+
                     let resolved = match with_current_transaction(|ws| {
                         program_cache.resolve_verb_slot(
                             ws,
@@ -431,9 +491,17 @@ impl VmHost {
                     return VMHostResponse::SuspendNeedInput(metadata);
                 }
                 ExecutionResult::Complete(a) => {
+                    #[cfg(feature = "javascript")]
+                    self.cleanup_js_trampoline(None);
                     return VMHostResponse::CompleteSuccess(a);
                 }
                 ExecutionResult::Exception(fr) => {
+                    #[cfg(feature = "javascript")]
+                    if let FinallyReason::Raise(ref exception) = fr {
+                        self.cleanup_js_trampoline(Some(&exception.error));
+                    } else {
+                        self.cleanup_js_trampoline(None);
+                    }
                     return match &fr {
                         FinallyReason::Abort => VMHostResponse::CompleteAbort,
                         FinallyReason::Raise(exception) => {
@@ -479,7 +547,12 @@ impl VmHost {
             return self.vm_exec_state.throw_error(E_MAXREC.into());
         }
 
-        // Pick the right kind of execution flow depending on the activation -- builtin or MOO?
+        // JS frames are handled via the trampoline, not the normal interpreter path.
+        if matches!(self.vm_exec_state.top().frame, Frame::Js(_)) {
+            return self.handle_js_trampoline();
+        }
+
+        // Pick the right kind of execution flow depending on the activation — builtin or MOO?
         let mut tick_count = self.vm_exec_state.tick_count;
         let tick_slice = self.vm_exec_state.tick_slice;
         let activation = self.vm_exec_state.top_mut();
@@ -503,6 +576,7 @@ impl VmHost {
                     .reenter_builtin_function(vm_exec_params, session);
                 (result, tick_count)
             }
+            Frame::Js(_) => unreachable!("Js case handled above"),
         };
         self.vm_exec_state.tick_count = new_tick_count;
 
@@ -629,6 +703,204 @@ impl VmHost {
         );
         let backtrace = ExecState::make_backtrace(&self.vm_exec_state.stack, &timeout_error);
         (stack, backtrace)
+    }
+
+    /// Push a JsFrame activation, send the DockRequest to the V8 worker, and
+    /// store the trampoline channels. Returns More so the exec_interpreter loop
+    /// comes back around and hits run_interpreter → handle_js_trampoline.
+    #[cfg(feature = "javascript")]
+    fn dispatch_js_verb(
+        &mut self,
+        exec_request: &moor_vm::VerbExecutionRequest,
+        source: std::sync::Arc<str>,
+    ) -> ExecutionResult {
+        let Some(ref js_pool) = self.js_worker else {
+            return ExecutionResult::PushError(
+                moor_var::E_INVARG.msg("JavaScript execution not available"),
+            );
+        };
+
+        let activation = moor_vm::Activation::for_js_call(
+            exec_request.resolved_verb,
+            exec_request.permissions_flags,
+            exec_request.verb_name,
+            exec_request.this.clone(),
+            exec_request.player,
+            exec_request.args.clone(),
+        );
+        self.vm_exec_state.stack.push(activation);
+
+        let this_obj = exec_request
+            .this
+            .as_object()
+            .unwrap_or(moor_var::NOTHING);
+        let args: Vec<moor_var::Var> = exec_request.args.iter().collect();
+
+        let (trampoline_rx, worker_tx) =
+            js_pool.submit(source, this_obj, exec_request.player, args);
+
+        self.js_trampolines.push(JsTrampolineState {
+            trampoline_rx,
+            worker_tx,
+            pending_resolver_id: None,
+        });
+
+        ExecutionResult::More
+    }
+
+    /// Process the JS trampoline when a JsFrame is at the top of stack.
+    /// Called from run_interpreter.
+    fn handle_js_trampoline(&mut self) -> ExecutionResult {
+        #[cfg(feature = "javascript")]
+        {
+            use moor_vm::JsFrameState;
+
+            let Some(trampoline) = self.js_trampolines.last_mut() else {
+                self.vm_exec_state.stack.pop();
+                return ExecutionResult::PushError(
+                    moor_var::E_INVARG.msg("JS frame without active trampoline"),
+                );
+            };
+
+            // If a verb call just returned, send its result back to V8.
+            {
+                let activation = self.vm_exec_state.top_mut();
+                let Frame::Js(ref mut js_frame) = activation.frame else {
+                    unreachable!()
+                };
+                if js_frame.state == JsFrameState::VerbCallPending {
+                    let val = js_frame.return_value.take().unwrap_or_else(moor_var::v_none);
+                    let resolver_id = trampoline.pending_resolver_id.take().unwrap_or(0);
+                    let _ = trampoline.worker_tx.send(WorkerInput::Response {
+                        resolver_id,
+                        response: TrampolineResponse::Value(val),
+                    });
+                    js_frame.state = JsFrameState::AwaitingRequest;
+                }
+            }
+
+            // Block waiting for the next request from V8.
+            let request = match trampoline.trampoline_rx.recv() {
+                Ok(r) => r,
+                Err(_) => {
+                    self.js_trampolines.pop();
+                    self.vm_exec_state.stack.pop();
+                    return ExecutionResult::PushError(
+                        moor_var::E_INVARG.msg("JS worker channel closed"),
+                    );
+                }
+            };
+
+            match request {
+                TrampolineRequest::Complete(Ok(value)) => {
+                    self.js_trampolines.pop();
+                    self.vm_exec_state.stack.pop();
+                    if self.vm_exec_state.stack.is_empty() {
+                        return ExecutionResult::Complete(value);
+                    }
+                    self.vm_exec_state.set_return_value(value);
+                    ExecutionResult::More
+                }
+                TrampolineRequest::Complete(Err(js_err)) => {
+                    self.js_trampolines.pop();
+                    self.vm_exec_state.stack.pop();
+                    ExecutionResult::PushError(moor_var::E_INVARG.with_msg(|| {
+                        format!("JavaScript error: {}", js_err.message)
+                    }))
+                }
+                TrampolineRequest::GetProp {
+                    resolver_id,
+                    obj,
+                    prop,
+                } => {
+                    let mut host = KernelHost;
+                    let perms = self.vm_exec_state.top().permissions;
+                    let response = match host.retrieve_property(&perms, &obj, prop) {
+                        Ok(val) => TrampolineResponse::Value(val),
+                        Err(e) => TrampolineResponse::Error(JsError {
+                            message: format!("{e:?}"),
+                        }),
+                    };
+                    // Re-borrow after KernelHost is done.
+                    let trampoline = self.js_trampolines.last().unwrap();
+                    let _ = trampoline.worker_tx.send(WorkerInput::Response {
+                        resolver_id,
+                        response,
+                    });
+                    ExecutionResult::More
+                }
+                TrampolineRequest::SetProp {
+                    resolver_id,
+                    obj,
+                    prop,
+                    value,
+                } => {
+                    let mut host = KernelHost;
+                    let perms = self.vm_exec_state.top().permissions;
+                    let response = match host.update_property(&perms, &obj, prop, &value) {
+                        Ok(()) => TrampolineResponse::Value(moor_var::v_none()),
+                        Err(e) => TrampolineResponse::Error(JsError {
+                            message: format!("{e:?}"),
+                        }),
+                    };
+                    let trampoline = self.js_trampolines.last().unwrap();
+                    let _ = trampoline.worker_tx.send(WorkerInput::Response {
+                        resolver_id,
+                        response,
+                    });
+                    ExecutionResult::More
+                }
+                TrampolineRequest::CallVerb {
+                    resolver_id,
+                    this,
+                    verb,
+                    args,
+                } => {
+                    // Store the resolver_id so we can send the response when
+                    // the verb returns.
+                    let trampoline = self.js_trampolines.last_mut().unwrap();
+                    trampoline.pending_resolver_id = Some(resolver_id);
+
+                    // Mark the JS frame as waiting for a verb return.
+                    let activation = self.vm_exec_state.top_mut();
+                    let Frame::Js(ref mut js_frame) = activation.frame else {
+                        unreachable!()
+                    };
+                    js_frame.state = JsFrameState::VerbCallPending;
+
+                    let args_list: moor_var::List = args.into_iter().collect();
+                    ExecutionResult::PrepareVerbDispatch {
+                        this: moor_var::v_obj(this),
+                        verb_name: verb,
+                        args: args_list,
+                    }
+                }
+            }
+        }
+
+        #[cfg(not(feature = "javascript"))]
+        {
+            self.vm_exec_state.stack.pop();
+            ExecutionResult::PushError(moor_var::E_INVARG.msg("JavaScript not enabled"))
+        }
+    }
+
+    /// Clean up all JS trampoline state, notifying V8 of the error if needed.
+    #[cfg(feature = "javascript")]
+    fn cleanup_js_trampoline(&mut self, error: Option<&moor_var::Error>) {
+        for trampoline in self.js_trampolines.drain(..) {
+            if let Some(err) = error {
+                // Send error so the V8 worker doesn't hang waiting for a response.
+                if let Some(resolver_id) = trampoline.pending_resolver_id {
+                    let _ = trampoline.worker_tx.send(WorkerInput::Response {
+                        resolver_id,
+                        response: TrampolineResponse::Error(JsError {
+                            message: format!("{err}"),
+                        }),
+                    });
+                }
+            }
+        }
     }
 
     pub fn reset_ticks(&mut self) {

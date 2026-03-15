@@ -22,8 +22,8 @@ use moor_common::{
 };
 use moor_compiler::{BuiltinId, Program, ScatterLabel};
 use moor_var::{
-    Error, Lambda, List, NOTHING, Obj, Symbol, Var, v_empty_list, v_empty_str, v_list, v_obj,
-    v_str, v_symbol_str,
+    Error, Lambda, List, NOTHING, Obj, Symbol, Var, v_empty_list, v_empty_str, v_list, v_none,
+    v_obj, v_str, v_symbol_str,
 };
 
 use crate::moo_frame::{MooStackFrame, ProgramSlot};
@@ -119,6 +119,24 @@ pub struct Activation {
     pub permissions_flags: BitEnum<ObjFlag>,
 }
 
+/// State of a JS frame's trampoline interaction.
+#[derive(Clone, Debug, PartialEq)]
+pub enum JsFrameState {
+    /// Waiting for the next request from the V8 worker.
+    AwaitingRequest,
+    /// A verb call was dispatched through the normal interpreter loop;
+    /// when it returns and sets our return_value, send the result to V8.
+    VerbCallPending,
+}
+
+/// A JavaScript verb execution frame. Channels live on VmHost (kernel-side),
+/// not here — JsFrame just tracks the state machine and return value.
+#[derive(Clone, Debug, PartialEq)]
+pub struct JsFrame {
+    pub return_value: Option<Var>,
+    pub state: JsFrameState,
+}
+
 // Boxing MooStackFrame would add pointer indirection on every opcode dispatch,
 // which is unacceptable for performance. The size difference is intentional.
 #[allow(clippy::large_enum_variant)]
@@ -126,6 +144,7 @@ pub struct Activation {
 pub enum Frame {
     Moo(MooStackFrame),
     Bf(BuiltinFrame),
+    Js(JsFrame),
 }
 
 impl Frame {
@@ -133,7 +152,7 @@ impl Frame {
     pub fn find_line_no(&self) -> Option<usize> {
         match self {
             Frame::Moo(frame) => frame.find_line_no(frame.pc),
-            Frame::Bf(_) => None,
+            Frame::Bf(_) | Frame::Js(_) => None,
         }
     }
 
@@ -146,6 +165,9 @@ impl Frame {
             Frame::Bf(_) => {
                 panic!("set_variable called for a built-in function frame")
             }
+            Frame::Js(_) => {
+                panic!("set_variable called for a JavaScript frame")
+            }
         }
     }
 
@@ -154,6 +176,9 @@ impl Frame {
             Frame::Moo(frame) => frame.set_gvar(gname, value),
             Frame::Bf(_) => {
                 panic!("set_global_variable called for a built-in function frame")
+            }
+            Frame::Js(_) => {
+                panic!("set_global_variable called for a JavaScript frame")
             }
         }
     }
@@ -165,6 +190,9 @@ impl Frame {
             }
             Frame::Bf(bf_frame) => {
                 bf_frame.return_value = Some(value);
+            }
+            Frame::Js(js_frame) => {
+                js_frame.return_value = Some(value);
             }
         }
     }
@@ -182,6 +210,7 @@ impl Frame {
                 };
                 return_value.clone()
             }
+            Frame::Js(js_frame) => js_frame.return_value.clone().unwrap_or_else(v_none),
         }
     }
 }
@@ -209,6 +238,10 @@ pub struct BuiltinFrame {
 impl Activation {
     pub fn is_builtin_frame(&self) -> bool {
         matches!(self.frame, Frame::Bf(_))
+    }
+
+    pub fn is_js_frame(&self) -> bool {
+        matches!(self.frame, Frame::Js(_))
     }
 
     #[allow(irrefutable_let_patterns)] // We know this is a Moo frame
@@ -239,7 +272,7 @@ impl Activation {
         // Check if we have a Moo frame to inherit parsing globals from
         let source_frame = current_activation.and_then(|a| match &a.frame {
             Frame::Moo(frame) => Some(frame),
-            Frame::Bf(_) => None,
+            Frame::Bf(_) | Frame::Js(_) => None,
         });
         let player_var = v_obj(player);
         let verb_var = v_symbol_str(verb_name);
@@ -248,7 +281,7 @@ impl Activation {
         let moo_frame = match (program, source_frame) {
             (CallProgram::Materialized(program), Some(source)) => {
                 let ProgramType::MooR(program) = program else {
-                    unimplemented!("Only MOO programs are supported")
+                    panic!("Activation::for_call requires a MooR program")
                 };
                 MooStackFrame::new_with_globals_from_source(
                     program,
@@ -262,7 +295,7 @@ impl Activation {
             }
             (CallProgram::Materialized(program), None) => {
                 let ProgramType::MooR(program) = program else {
-                    unimplemented!("Only MOO programs are supported")
+                    panic!("Activation::for_call requires a MooR program")
                 };
                 MooStackFrame::new_with_all_globals(
                     program,
@@ -598,7 +631,34 @@ impl Activation {
     pub fn verb_definer(&self) -> Obj {
         match self.frame {
             Frame::Bf(_) => NOTHING,
-            _ => self.verbdef.location(),
+            Frame::Moo(_) | Frame::Js(_) => self.verbdef.location(),
+        }
+    }
+
+    /// Create an activation for a JavaScript verb call.
+    #[allow(clippy::too_many_arguments)]
+    pub fn for_js_call(
+        resolved_verb: ResolvedVerb,
+        permissions_flags: BitEnum<ObjFlag>,
+        verb_name: Symbol,
+        this: Var,
+        player: Obj,
+        args: List,
+    ) -> Self {
+        let verb_owner = resolved_verb.owner();
+        let frame = Frame::Js(JsFrame {
+            return_value: None,
+            state: JsFrameState::AwaitingRequest,
+        });
+        Self {
+            frame,
+            this,
+            player,
+            verbdef: resolved_verb,
+            verb_name,
+            args,
+            permissions: verb_owner,
+            permissions_flags,
         }
     }
 }

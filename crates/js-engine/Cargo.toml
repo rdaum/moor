@@ -1,0 +1,19 @@
+[package]
+name = "moor-js-engine"
+version = "1.1.0-dev"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "V8-based JavaScript verb execution engine for the moor system."
+
+[dependencies]
+moor-var = { path = "../var" }
+
+flume.workspace = true
+tracing.workspace = true
+v8.workspace = true

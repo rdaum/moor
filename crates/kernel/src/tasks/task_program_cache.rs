@@ -124,7 +124,13 @@ impl TaskProgramCache {
         PROGRAM_CACHE_GLOBAL_STATS.misses.add(1);
 
         let (program, _) = world_state.retrieve_verb(perms, verb_definer, verb_uuid)?;
-        let ProgramType::MooR(program) = program;
+        let ProgramType::MooR(program) = program else {
+            // Only MooR programs are cacheable; JS programs are not compiled bytecode.
+            return Err(WorldStateError::VerbNotFound(
+                *verb_definer,
+                "JavaScript programs are not cacheable".to_string(),
+            ));
+        };
         let entry = CachedProgramSlot { program };
 
         let slot = if let Some(reuse_slot) = self.slots.iter().position(|entry| entry.is_none()) {

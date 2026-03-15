@@ -417,9 +417,7 @@ use moor_common::{
     model::{ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs},
     util::BitEnum,
 };
-use moor_schema::convert::{
-    program_to_stored, stored_to_program, var_from_db_flatbuffer_ref, var_to_db_flatbuffer,
-};
+use moor_schema::convert::{var_from_db_flatbuffer_ref, var_to_db_flatbuffer};
 use moor_var::{Obj, Var, program::ProgramType};
 // Per-type encoding implementations
 // Each type can be encoded regardless of whether it's used as Domain or Codomain
@@ -573,42 +571,24 @@ impl EncodeFor<ProgramType> for FjallCodec {
     type Stored = ByteView;
 
     fn encode(&self, program: &ProgramType) -> Result<Self::Stored, Error> {
-        match program {
-            ProgramType::MooR(prog) => {
-                let stored = program_to_stored(prog)
-                    .map_err(|e| Error::StorageFailure(format!("Failed to encode program: {e}")))?;
-                // StoredProgram is a ByteView wrapper - extract the inner ByteView
-                Ok(AsRef::<ByteView>::as_ref(&stored).clone())
-            }
-        }
+        use moor_schema::convert_program::encode_program_type_to_fb;
+        use planus::WriteAsOffset;
+
+        let stored_program = encode_program_type_to_fb(program)
+            .map_err(|e| Error::StorageFailure(format!("Failed to encode program: {e}")))?;
+        let mut builder = planus::Builder::new();
+        let offset = stored_program.prepare(&mut builder);
+        let bytes = builder.finish(offset, None);
+        Ok(ByteView::from(bytes))
     }
 
     fn decode(&self, stored: Self::Stored) -> Result<ProgramType, Error> {
+        use moor_schema::convert_program::decode_stored_program_to_program_type;
         use moor_var::program::stored_program::StoredProgram;
 
         let stored_program = StoredProgram::from(stored);
-
-        // Read the FlatBuffer and extract the language union
-        use moor_schema::program as fb;
-        use planus::ReadAsRoot;
-
-        let fb_program = fb::StoredProgramRef::read_as_root(stored_program.as_bytes())
-            .map_err(|e| Error::StorageFailure(format!("Failed to read program: {e}")))?;
-
-        let language = fb_program
-            .language()
-            .map_err(|e| Error::StorageFailure(format!("Failed to read language union: {e}")))?;
-
-        // Match on language variant and construct appropriate ProgramType
-        match language {
-            fb::StoredProgramLanguageRef::StoredMooRProgram(_moor_ref) => {
-                // Decode the full program using the existing function
-                let program = stored_to_program(&stored_program).map_err(|e| {
-                    Error::StorageFailure(format!("Failed to decode MooR program: {e}"))
-                })?;
-                Ok(ProgramType::MooR(program))
-            }
-        }
+        decode_stored_program_to_program_type(&stored_program)
+            .map_err(|e| Error::StorageFailure(format!("Failed to decode program: {e}")))
     }
 }
 

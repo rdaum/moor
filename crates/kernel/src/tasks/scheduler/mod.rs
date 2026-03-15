@@ -139,6 +139,10 @@ pub struct Scheduler {
 
     /// Condvar to wake the timer thread when a new earlier timer is inserted.
     timer_notify: Arc<(Mutex<bool>, Condvar)>,
+
+    /// V8 worker pool for JavaScript verb execution (created lazily on first use).
+    #[cfg(feature = "javascript")]
+    js_worker_pool: Arc<std::sync::OnceLock<std::sync::Arc<moor_js_engine::JsWorkerPool>>>,
 }
 
 impl Scheduler {
@@ -216,10 +220,20 @@ impl Scheduler {
             worker_request_send,
             worker_response_recv: Arc::new(Mutex::new(worker_request_recv)),
             timer_notify: Arc::new((Mutex::new(false), Condvar::new())),
+            #[cfg(feature = "javascript")]
+            js_worker_pool: Arc::new(std::sync::OnceLock::new()),
         };
 
         s.reload_server_options();
         s
+    }
+
+    /// Get or lazily create the JS worker pool.
+    #[cfg(feature = "javascript")]
+    pub(crate) fn js_worker(&self) -> std::sync::Arc<moor_js_engine::JsWorkerPool> {
+        self.js_worker_pool
+            .get_or_init(|| std::sync::Arc::new(moor_js_engine::JsWorkerPool::new()))
+            .clone()
     }
 
     /// Start the scheduler: rehydrate tasks, spawn timer and worker-response threads.

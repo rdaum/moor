@@ -242,6 +242,9 @@ impl TaskQ {
                     }
                 }
 
+                #[cfg(feature = "javascript")]
+                task.vm_host.set_js_worker(scheduler_clone.js_worker());
+
                 Task::run_task_loop(
                     task,
                     &task_scheduler_client,
@@ -382,6 +385,10 @@ impl TaskQ {
                     retries = task.retries,
                     "Waking retry task from suspension"
                 );
+
+                #[cfg(feature = "javascript")]
+                task.vm_host.set_js_worker(scheduler_clone.js_worker());
+
                 Task::run_task_loop(
                     task,
                     &task_scheduler_client,
