@@ -22,6 +22,9 @@ moor-common = { path = "../common" }
 moor-compiler = { path = "../compiler" }
 moor-var = { path = "../var" }
 
+# Serialization
+serde.workspace = true
+
 # Collections & Data Structures
 smallvec.workspace = true
 

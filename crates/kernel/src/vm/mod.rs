@@ -13,18 +13,18 @@
 
 use std::time::Duration;
 
-use moor_common::tasks::{AbortLimitReason, Exception, TaskId};
+use moor_common::tasks::{AbortLimitReason, Exception};
 use moor_compiler::Offset;
 pub use moor_var::program::ProgramType;
 use moor_var::{Obj, Symbol, Var, program::names::Name};
 
 // Re-export types from moor-vm that kernel code uses.
 pub use moor_vm::FinallyReason;
+pub use moor_vm::execute::{CommandVerbExecutionRequest, VerbExecutionRequest};
 pub(crate) use moor_vm::{Activation, Frame, MooStackFrame, ScopeType};
-pub use vm_call::{CommandVerbExecutionRequest, VerbExecutionRequest};
 
 pub(crate) mod exec_state;
-pub(crate) mod moo_execute;
+pub(crate) mod kernel_host;
 pub(crate) mod vm_call;
 pub(crate) mod vm_unwind;
 
@@ -79,24 +79,7 @@ pub enum VMHostResponse {
     RollbackRetry,
 }
 
-/// Response back to our caller (scheduler) that we would like to be suspended in the manner described.
-#[derive(Debug, Clone)]
-pub enum TaskSuspend {
-    /// Suspend forever.
-    Never,
-    /// Suspend for a given duration.
-    Timed(Duration),
-    /// Suspend until another task completes (or never exists)
-    WaitTask(TaskId),
-    /// Commit and resume immediately with the given return value.
-    Commit(Var),
-    /// Ask the scheduler to ask a worker to do some work, suspend us, and then resume us when
-    /// the work is done.
-    WorkerRequest(Symbol, Vec<Var>, Option<Duration>),
-    /// Commit and receive inter-task messages. None = immediate (fast path),
-    /// Some(duration) = wait up to duration for messages if queue is empty.
-    RecvMessages(Option<Duration>),
-}
+pub use moor_vm::execute::TaskSuspend;
 
 /// Extract anonymous object references from a variable
 fn extract_anonymous_refs_from_var(var: &Var, refs: &mut std::collections::HashSet<Obj>) {

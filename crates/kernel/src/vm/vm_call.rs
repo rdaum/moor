@@ -29,8 +29,7 @@ use crate::{trace_builtin_begin, trace_builtin_end, trace_verb_begin};
 use moor_common::{
     matching::ParsedCommand,
     model::{
-        DispatchFlagsSource, ObjFlag, ResolvedVerb, VerbDispatch, VerbLookup, VerbProgramKey,
-        WorldStateError,
+        DispatchFlagsSource, ObjFlag, ResolvedVerb, VerbDispatch, VerbLookup, WorldStateError,
     },
     tasks::Session,
     util::{BitEnum, PerfIntensity},
@@ -52,53 +51,7 @@ static ERROR_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("err_prot
 static BOOL_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("bool_proto"));
 static SYM_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("sym_proto"));
 
-/// The set of parameters for a scheduler-requested *resolved* verb method dispatch.
-#[derive(Debug, Clone, PartialEq)]
-pub struct VerbExecutionRequest {
-    /// The applicable permissions.
-    pub permissions: Obj,
-    /// The precomputed flags for `permissions`.
-    pub permissions_flags: BitEnum<ObjFlag>,
-    /// The resolved verb.
-    pub resolved_verb: ResolvedVerb,
-    /// Verb name
-    pub verb_name: Symbol,
-    /// This object
-    pub this: Var,
-    /// Player
-    pub player: Obj,
-    /// Arguments
-    pub args: List,
-    /// Caller
-    pub caller: Var,
-    /// Argument string
-    pub argstr: Var,
-    /// Stable key for the dispatched verb program.
-    pub program_key: VerbProgramKey,
-}
-
-/// The set of parameters for a command verb dispatch with full command environment.
-#[derive(Debug, Clone, PartialEq)]
-pub struct CommandVerbExecutionRequest {
-    /// The applicable permissions.
-    pub permissions: Obj,
-    /// The precomputed flags for `permissions`.
-    pub permissions_flags: BitEnum<ObjFlag>,
-    /// The resolved verb.
-    pub resolved_verb: ResolvedVerb,
-    /// Verb name
-    pub verb_name: Symbol,
-    /// This object
-    pub this: Var,
-    /// Player
-    pub player: Obj,
-    /// Caller
-    pub caller: Var,
-    /// The parsed command with dobj, iobj, prep, etc.
-    pub command: ParsedCommand,
-    /// Stable key for the dispatched verb program.
-    pub program_key: VerbProgramKey,
-}
+pub use moor_vm::execute::VerbExecutionRequest;
 
 /// The set of parameters & utilities passed to the VM for execution of a given task.
 pub struct VmExecParams<'a> {
