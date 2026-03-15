@@ -25,7 +25,7 @@ use moor_common::{
 };
 use moor_compiler::{CompileOptions, Program, compile};
 use moor_var::{E_MAXREC, List, Obj, Symbol, Var, v_none};
-use moor_vm::VMExecState;
+use moor_vm::ExecState;
 
 use crate::{
     config::FeaturesConfig,
@@ -36,14 +36,12 @@ use crate::{
         VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend},
         builtins::BuiltinRegistry,
         kernel_host::KernelHost,
-        vm_call::{VMExecStateBuiltinExt, VmExecParams},
+        vm_call::{ExecStateBuiltinExt, VmExecParams},
     },
 };
 use moor_common::{matching::ParsedCommand, tasks::Session};
 use moor_var::program::{ProgramType, names::Name};
-use moor_vm::{
-    Frame, PhantomUnsync, WorldStateCallback, activation::CallProgram, moo_frame_execute,
-};
+use moor_vm::{CallProgram, Frame, PhantomUnsync, VmHost as _, moo_frame_execute};
 
 pub(crate) use moor_vm::ExecutionResult;
 
@@ -51,7 +49,7 @@ pub(crate) use moor_vm::ExecutionResult;
 pub struct VmHost {
     /// Where we store current execution state for this host. Includes all activations and the
     /// interpreter-specific frames inside them.
-    pub(crate) vm_exec_state: VMExecState,
+    pub(crate) vm_exec_state: ExecState,
     /// The maximum stack depth for this task
     pub(crate) max_stack_depth: usize,
     /// The amount of ticks (opcode executions) allotted to this task
@@ -83,7 +81,7 @@ impl VmHost {
         max_ticks: usize,
         max_time: Duration,
     ) -> Self {
-        let vm_exec_state = VMExecState::new(task_id, max_ticks);
+        let vm_exec_state = ExecState::new(task_id, max_ticks);
 
         // Created in an initial suspended state.
         Self {
@@ -180,7 +178,7 @@ impl VmHost {
         program: Program,
         initial_env: Option<&[(Symbol, Var)]>,
     ) {
-        let host = KernelHost;
+        let mut host = KernelHost;
         let is_programmer = host
             .flags_of(player)
             .inspect_err(|e| error!(?e, "Failed to read player flags"))
@@ -197,7 +195,7 @@ impl VmHost {
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
         self.vm_exec_state
-            .exec_eval_request(&host, player, player, program, initial_env);
+            .exec_eval_request(&mut host, player, player, program, initial_env);
         self.running = true;
     }
 
@@ -262,8 +260,8 @@ impl VmHost {
                     continue;
                 }
                 ExecutionResult::DispatchVerbPass(pass_args) => {
-                    let host = KernelHost;
-                    result = self.vm_exec_state.prepare_pass_verb(&host, &pass_args);
+                    let mut host = KernelHost;
+                    result = self.vm_exec_state.prepare_pass_verb(&mut host, &pass_args);
                     continue;
                 }
                 ExecutionResult::PrepareVerbDispatch {
@@ -319,7 +317,7 @@ impl VmHost {
                         exec_request.args,
                         exec_request.caller,
                         exec_request.argstr,
-                        CallProgram::TxSlot(resolved.slot),
+                        CallProgram::CachedSlot(resolved.slot),
                     );
                     return ContinueOk;
                 }
@@ -357,7 +355,7 @@ impl VmHost {
                         exec_request.player,
                         exec_request.caller,
                         exec_request.command,
-                        CallProgram::TxSlot(resolved.slot),
+                        CallProgram::CachedSlot(resolved.slot),
                     );
                     return ContinueOk;
                 }
@@ -367,9 +365,9 @@ impl VmHost {
                     program,
                     initial_env,
                 } => {
-                    let host = KernelHost;
+                    let mut host = KernelHost;
                     self.vm_exec_state.exec_eval_request(
-                        &host,
+                        &mut host,
                         &permissions,
                         &player,
                         program,
@@ -543,23 +541,23 @@ impl VmHost {
     }
 
     /// Get a copy of the current VM state, for later restoration.
-    pub(crate) fn snapshot_state(&self) -> VMExecState {
+    pub(crate) fn snapshot_state(&self) -> ExecState {
         let mut snapshot = self.vm_exec_state.clone();
         snapshot.materialize_frame_programs();
         snapshot
     }
 
     /// Get a reference to the current VM execution state for read-only access.
-    pub(crate) fn vm_exec_state(&self) -> &VMExecState {
+    pub(crate) fn vm_exec_state(&self) -> &ExecState {
         &self.vm_exec_state
     }
 
-    pub(crate) fn vm_exec_state_mut(&mut self) -> &mut VMExecState {
+    pub(crate) fn vm_exec_state_mut(&mut self) -> &mut ExecState {
         &mut self.vm_exec_state
     }
 
     /// Restore from a snapshot.
-    pub(crate) fn restore_state(&mut self, state: &VMExecState) {
+    pub(crate) fn restore_state(&mut self, state: &ExecState) {
         self.vm_exec_state = state.clone();
     }
 
@@ -622,14 +620,14 @@ impl VmHost {
 
     /// Get the current traceback and formatted backtrace
     pub fn get_traceback(&self) -> (Vec<Var>, Vec<Var>) {
-        let stack = VMExecState::make_stack_list(&self.vm_exec_state.stack);
+        let stack = ExecState::make_stack_list(&self.vm_exec_state.stack);
         // For timeouts, we don't have an Error, so create a simple timeout "error" for formatting
         let timeout_error = moor_var::Error::new(
             moor_var::ErrorCode::E_MAXREC, // Use a generic error code
             Some("Task timeout".to_string()),
             None,
         );
-        let backtrace = VMExecState::make_backtrace(&self.vm_exec_state.stack, &timeout_error);
+        let backtrace = ExecState::make_backtrace(&self.vm_exec_state.stack, &timeout_error);
         (stack, backtrace)
     }
 

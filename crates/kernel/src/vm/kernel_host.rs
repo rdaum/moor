@@ -17,12 +17,12 @@ use crate::task_context::{with_current_transaction, with_current_transaction_mut
 use moor_common::model::{ObjFlag, VerbDef, VerbDispatch, VerbDispatchResult, WorldStateError};
 use moor_common::util::BitEnum;
 use moor_var::{Obj, Symbol, Var, program::ProgramType};
-use moor_vm::WorldStateCallback;
+use moor_vm::VmHost;
 
 /// Bridges VM operations to the kernel's TLS-based transaction context.
 pub(crate) struct KernelHost;
 
-impl WorldStateCallback for KernelHost {
+impl VmHost for KernelHost {
     fn retrieve_property(
         &mut self,
         perms: &Obj,
@@ -42,28 +42,28 @@ impl WorldStateCallback for KernelHost {
         with_current_transaction_mut(|ws| ws.update_property(perms, obj, prop, value))
     }
 
-    fn flags_of(&self, obj: &Obj) -> Result<BitEnum<ObjFlag>, WorldStateError> {
+    fn flags_of(&mut self, obj: &Obj) -> Result<BitEnum<ObjFlag>, WorldStateError> {
         with_current_transaction(|ws| ws.flags_of(obj))
     }
 
-    fn valid(&self, obj: &Obj) -> Result<bool, WorldStateError> {
+    fn valid(&mut self, obj: &Obj) -> Result<bool, WorldStateError> {
         with_current_transaction(|ws| ws.valid(obj))
     }
 
     fn dispatch_verb(
-        &self,
+        &mut self,
         perms: &Obj,
         dispatch: VerbDispatch<'_>,
     ) -> Result<Option<VerbDispatchResult>, WorldStateError> {
         with_current_transaction(|ws| ws.dispatch_verb(perms, dispatch))
     }
 
-    fn parent_of(&self, perms: &Obj, obj: &Obj) -> Result<Obj, WorldStateError> {
+    fn parent_of(&mut self, perms: &Obj, obj: &Obj) -> Result<Obj, WorldStateError> {
         with_current_transaction(|ws| ws.parent_of(perms, obj))
     }
 
     fn retrieve_verb(
-        &self,
+        &mut self,
         perms: &Obj,
         obj: &Obj,
         uuid: Uuid,

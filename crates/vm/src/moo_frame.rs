@@ -11,8 +11,15 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::ProgramSlot;
 use crate::environment::Environment;
+
+/// Stable handle to a program residing in a task-local program cache.
+/// The pointer is valid for the duration of the owning task's transaction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProgramSlot {
+    pub program_ptr: usize,
+    pub global_width: usize,
+}
 use crate::vm_unwind::FinallyReason;
 use moor_compiler::{Label, Op, Program};
 use moor_var::{

@@ -15,7 +15,7 @@ use crate::{
     config::FeaturesConfig,
     vm::builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry, bf_perf_counters},
 };
-use moor_vm::{Activation, FinallyReason, Frame, VMExecState};
+use moor_vm::{Activation, ExecState, FinallyReason, Frame};
 
 #[cfg(feature = "trace_events")]
 use crate::{trace_builtin_begin, trace_builtin_end};
@@ -33,8 +33,8 @@ pub struct VmExecParams<'a> {
     pub config: &'a FeaturesConfig,
 }
 
-/// Extension trait for VMExecState methods that require kernel-level builtin registry access.
-pub(crate) trait VMExecStateBuiltinExt {
+/// Extension trait for ExecState methods that require kernel-level builtin registry access.
+pub(crate) trait ExecStateBuiltinExt {
     fn call_builtin_function(
         &mut self,
         bf_id: BuiltinId,
@@ -50,7 +50,7 @@ pub(crate) trait VMExecStateBuiltinExt {
     ) -> ExecutionResult;
 }
 
-impl VMExecStateBuiltinExt for VMExecState {
+impl ExecStateBuiltinExt for ExecState {
     /// Call into a builtin function.
     fn call_builtin_function(
         &mut self,
@@ -77,9 +77,9 @@ impl VMExecStateBuiltinExt for VMExecState {
 
         // TODO: check for $server_options.protect_[func]
         // Check for builtin override at #0.
-        let host = crate::vm::kernel_host::KernelHost;
+        let mut host = crate::vm::kernel_host::KernelHost;
         if let Some(proxy_result) =
-            self.maybe_invoke_bf_proxy(&host, bf_desc.bf_override_name, &args)
+            self.maybe_invoke_bf_proxy(&mut host, bf_desc.bf_override_name, &args)
         {
             return proxy_result;
         }

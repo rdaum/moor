@@ -23,18 +23,18 @@ use moor_common::model::{
 use moor_common::tasks::{Exception, TaskId};
 use moor_common::util::BitEnum;
 use moor_common::util::Instant;
-use moor_compiler::{BUILTINS, Offset, to_literal};
+use moor_compiler::{BUILTINS, to_literal};
 use moor_var::{
     E_INVIND, E_PERM, E_TYPE, E_VERBNF, Error, List, NOTHING, Obj, SYSTEM_OBJECT, Sequence, Symbol,
     Var, Variant,
-    program::names::{GlobalName, Name},
+    program::names::GlobalName,
     v_arc_str, v_bool, v_empty_str, v_err, v_error, v_int, v_list, v_none, v_obj, v_str, v_string,
 };
 
 use crate::activation::CallProgram;
-use crate::execute::{ExecutionResult, VerbExecutionRequest};
+use crate::moo_execute::{ExecutionResult, Fork, VerbExecutionRequest};
 use crate::{
-    Activation, CatchType, FinallyReason, Frame, PhantomUnsync, ScopeType, WorldStateCallback,
+    Activation, CatchType, FinallyReason, Frame, PhantomUnsync, ScopeType, VmHost,
 };
 
 static LIST_PROTO_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("list_proto"));
@@ -68,7 +68,7 @@ pub struct Caller {
 
 /// Represents the state of VM execution for a given task.
 #[derive(Debug)]
-pub struct VMExecState {
+pub struct ExecState {
     /// The task ID of the task that for current stack of activations.
     pub task_id: TaskId,
     /// The stack of activation records / stack frames.
@@ -97,7 +97,7 @@ pub struct VMExecState {
     pub unsync: PhantomUnsync,
 }
 
-impl VMExecState {
+impl ExecState {
     pub fn new(task_id: TaskId, max_ticks: usize) -> Self {
         Self {
             task_id,
@@ -231,7 +231,7 @@ impl VMExecState {
 
     /// Update the permissions of the current task, as called by the `set_task_perms`
     /// built-in.
-    pub fn set_task_perms(&mut self, host: &impl WorldStateCallback, perms: Obj) {
+    pub fn set_task_perms(&mut self, host: &mut impl VmHost, perms: Obj) {
         // Look up the flags for the new perms object
         let perms_flags = host.flags_of(&perms).unwrap_or_default();
 
@@ -282,30 +282,7 @@ impl VMExecState {
     }
 }
 
-/// The set of parameters for a VM-requested fork.
-#[derive(Debug, Clone)]
-pub struct Fork {
-    /// The player. This is in the activation as well, but it's nicer to have it up here and
-    /// explicit
-    pub player: Obj,
-    /// The permissions context for the forked task.
-    pub progr: Obj,
-    /// The task ID of the task that forked us
-    pub parent_task_id: usize,
-    /// The time to delay before starting the forked task, if any.
-    pub delay: Option<Duration>,
-    /// A copy of the activation record from the task that forked us.
-    pub activation: Activation,
-    /// The unique fork vector offset into the fork vector for the executing binary held in the
-    /// activation record.  This is copied into the main vector and execution proceeds from there,
-    /// instead.
-    pub fork_vector_offset: Offset,
-    /// The (optional) variable label where the task ID of the new task should be stored, in both
-    /// the parent activation and the new task's activation.
-    pub task_id: Option<Name>,
-}
-
-impl VMExecState {
+impl ExecState {
     /// Compose a list of the current stack frames, starting from `start_frame_num` and working
     /// upwards.
     pub fn make_stack_list(activations: &[Activation]) -> Vec<Var> {
@@ -527,7 +504,7 @@ impl VMExecState {
     }
 }
 
-impl VMExecState {
+impl ExecState {
     /// Entry point from scheduler for actually beginning the dispatch of a method execution
     /// (verb-to-verb call) in this VM.
     /// Actually creates the activation record and puts it on the stack.
@@ -652,14 +629,14 @@ impl VMExecState {
     }
 }
 
-/// Verb dispatch methods. These take a `WorldStateCallback` host to access world state
+/// Verb dispatch methods. These take a `VmHost` host to access world state
 /// without requiring kernel-level TLS.
-impl VMExecState {
+impl ExecState {
     /// Entry point for dispatching a verb (method) call.
     /// Called from the VM execution loop for CallVerb opcodes.
     pub fn verb_dispatch(
         &mut self,
-        host: &mut impl WorldStateCallback,
+        host: &mut impl VmHost,
         type_dispatch: bool,
         target: Var,
         verb: Symbol,
@@ -738,7 +715,7 @@ impl VMExecState {
 
     pub fn prepare_call_verb(
         &mut self,
-        host: &impl WorldStateCallback,
+        host: &mut impl VmHost,
         location: Obj,
         this: Var,
         verb_name: Symbol,
@@ -824,7 +801,7 @@ impl VMExecState {
     /// TODO this should be done up in task.rs instead. let's add a new ExecutionResult for it.
     pub fn prepare_pass_verb(
         &mut self,
-        host: &impl WorldStateCallback,
+        host: &mut impl VmHost,
         args: &List,
     ) -> ExecutionResult {
         // get parent of verb definer object & current verb name.
@@ -883,7 +860,7 @@ impl VMExecState {
 
     pub fn exec_eval_request(
         &mut self,
-        host: &impl WorldStateCallback,
+        host: &mut impl VmHost,
         permissions: &Obj,
         player: &Obj,
         program: moor_compiler::Program,
@@ -903,7 +880,7 @@ impl VMExecState {
     /// If a bf_<xxx> wrapper function is present on #0, invoke that instead.
     pub fn maybe_invoke_bf_proxy(
         &mut self,
-        host: &impl WorldStateCallback,
+        host: &mut impl VmHost,
         bf_override_name: Symbol,
         args: &List,
     ) -> Option<ExecutionResult> {
@@ -950,7 +927,7 @@ impl VMExecState {
 }
 
 // Manual Clone implementation because we need to create a new arena
-impl Clone for VMExecState {
+impl Clone for ExecState {
     fn clone(&self) -> Self {
         Self {
             task_id: self.task_id,

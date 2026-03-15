@@ -12,7 +12,7 @@
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use crate::{
-    WorldStateCallback,
+    VmHost,
     config::FeaturesConfig,
     moo_frame::{CatchType, MooStackFrame, PcType, ScopeType},
     scatter_assign::scatter_assign,
@@ -98,6 +98,29 @@ pub enum TaskSuspend {
     /// Commit and receive inter-task messages. None = immediate (fast path),
     /// Some(duration) = wait up to duration for messages if queue is empty.
     RecvMessages(Option<Duration>),
+}
+
+/// The set of parameters for a VM-requested fork.
+#[derive(Debug, Clone)]
+pub struct Fork {
+    /// The player. This is in the activation as well, but it's nicer to have it up here and
+    /// explicit
+    pub player: Obj,
+    /// The permissions context for the forked task.
+    pub progr: Obj,
+    /// The task ID of the task that forked us
+    pub parent_task_id: usize,
+    /// The time to delay before starting the forked task, if any.
+    pub delay: Option<Duration>,
+    /// A copy of the activation record from the task that forked us.
+    pub activation: crate::Activation,
+    /// The unique fork vector offset into the fork vector for the executing binary held in the
+    /// activation record.  This is copied into the main vector and execution proceeds from there,
+    /// instead.
+    pub fork_vector_offset: Offset,
+    /// The (optional) variable label where the task ID of the new task should be stored, in both
+    /// the parent activation and the new task's activation.
+    pub task_id: Option<Name>,
 }
 
 /// Possible outcomes from VM execution inner loop, which are used to determine what to do next.
@@ -329,7 +352,7 @@ fn remove_stack_indices(stack: &mut Vec<Var>, indices: &mut [usize]) {
 }
 
 /// Main VM opcode execution for MOO stack frames. The actual meat of the MOO virtual machine.
-pub fn moo_frame_execute<H: WorldStateCallback>(
+pub fn moo_frame_execute<H: VmHost>(
     host: &mut H,
     tick_slice: usize,
     tick_count: &mut usize,
@@ -1606,7 +1629,7 @@ pub fn moo_frame_execute<H: WorldStateCallback>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn get_property<H: WorldStateCallback>(
+fn get_property<H: VmHost>(
     host: &mut H,
     permissions: &Obj,
     obj: &Var,
