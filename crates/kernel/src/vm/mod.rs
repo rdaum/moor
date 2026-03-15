@@ -18,23 +18,17 @@ use moor_compiler::Offset;
 pub use moor_var::program::ProgramType;
 use moor_var::{Obj, Symbol, Var, program::names::Name};
 
-use crate::vm::{
-    activation::{Activation, Frame},
-    moo_frame::{MooStackFrame, ScopeType},
-};
+// Re-export types from moor-vm that kernel code uses.
+pub use moor_vm::FinallyReason;
+pub(crate) use moor_vm::{Activation, Frame, MooStackFrame, ScopeType};
 pub use vm_call::{CommandVerbExecutionRequest, VerbExecutionRequest};
-pub use vm_unwind::FinallyReason;
 
-pub(crate) mod activation;
-pub(crate) mod environment;
 pub(crate) mod exec_state;
 pub(crate) mod moo_execute;
-pub(crate) mod scatter_assign;
 pub(crate) mod vm_call;
 pub(crate) mod vm_unwind;
 
 pub mod builtins;
-pub(crate) mod moo_frame;
 pub mod vm_host;
 
 /// The set of parameters for a VM-requested fork.
@@ -277,8 +271,7 @@ pub(crate) fn extract_anonymous_refs_from_vm_exec_state(
 #[cfg(test)]
 mod tests {
     use crate::vm::VMHostResponse;
-    use crate::vm::activation::{Activation, BfFrame, Frame};
-    use crate::vm::moo_frame::MooStackFrame;
+    use moor_vm::{Activation, BfFrame, Frame, MooStackFrame};
     use std::mem::size_of;
 
     #[test]

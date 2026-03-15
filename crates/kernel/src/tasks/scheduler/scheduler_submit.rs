@@ -37,7 +37,9 @@ impl Scheduler {
             command: command.to_string(),
         };
 
-        self.submit_task(&mut lc, task_id, &player, &player, task_start, None, session)
+        self.submit_task(
+            &mut lc, task_id, &player, &player, task_start, None, session,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -138,7 +140,9 @@ impl Scheduler {
             argstr,
         };
 
-        self.submit_task(&mut lc, task_id, &player, &player, task_start, None, session)
+        self.submit_task(
+            &mut lc, task_id, &player, &player, task_start, None, session,
+        )
     }
 
     pub(crate) fn submit_eval_task_inner(
@@ -164,10 +168,7 @@ impl Scheduler {
         self.submit_task(&mut lc, task_id, &player, &perms, task_start, None, session)
     }
 
-    pub(crate) fn handle_shutdown_request(
-        &self,
-        msg: String,
-    ) -> Result<(), SchedulerError> {
+    pub(crate) fn handle_shutdown_request(&self, msg: String) -> Result<(), SchedulerError> {
         let mut lc = self.lifecycle.lock();
 
         // Send shutdown notification to all live tasks.
@@ -205,10 +206,7 @@ impl Scheduler {
         Ok(())
     }
 
-    pub(crate) fn handle_checkpoint_request(
-        &self,
-        blocking: bool,
-    ) -> Result<(), SchedulerError> {
+    pub(crate) fn handle_checkpoint_request(&self, blocking: bool) -> Result<(), SchedulerError> {
         if blocking {
             self.checkpoint_blocking()
         } else {
@@ -240,9 +238,7 @@ impl Scheduler {
             warn!("GC requested but anonymous objects are disabled, ignoring request");
             Ok(())
         } else if lc.gc_collection_in_progress {
-            info!(
-                "GC already in progress, request acknowledged but no additional cycle started"
-            );
+            info!("GC already in progress, request acknowledged but no additional cycle started");
             Ok(())
         } else if lc.task_q.active.is_empty() {
             // Can run GC immediately since no active tasks
@@ -293,9 +289,7 @@ impl Scheduler {
         if mutation_timestamp_before_mark != lc.last_mutation_timestamp {
             info!(
                 "Minor GC cycle #{}: mark phase invalidated by mutation during marking (before: {:?}, after: {:?}), skipping sweep phase",
-                lc.gc_cycle_count,
-                mutation_timestamp_before_mark,
-                lc.last_mutation_timestamp
+                lc.gc_cycle_count, mutation_timestamp_before_mark, lc.last_mutation_timestamp
             );
             lc.task_q.suspended.enqueue_gc_waiting_tasks();
             return;
@@ -359,13 +353,8 @@ impl Scheduler {
         };
 
         let result = self.submit_task(
-            &mut lc,
-            task_id,
-            &player,
-            &player, // Use the same player as permissions object
-            task_start,
-            None,
-            session,
+            &mut lc, task_id, &player, &player, // Use the same player as permissions object
+            task_start, None, session,
         );
         debug!("System handler task submission result: {:?}", result);
         result

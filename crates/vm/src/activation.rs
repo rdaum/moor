@@ -26,14 +26,22 @@ use moor_var::{
     v_str, v_symbol_str,
 };
 
-use crate::vm::vm_call::CallProgram;
-use crate::vm::{moo_frame::MooStackFrame, scatter_assign::scatter_assign};
+use crate::ProgramSlot;
+use crate::moo_frame::MooStackFrame;
+use crate::scatter_assign::scatter_assign;
 use moor_var::program::{
     ProgramType,
     names::{GlobalName, Name},
 };
 
 static EVAL_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("eval"));
+
+/// How a program is supplied to a new activation frame.
+#[derive(Debug, Clone, PartialEq)]
+pub enum CallProgram {
+    Materialized(ProgramType),
+    TxSlot(ProgramSlot),
+}
 
 /// Helper function to perform scatter assignment for lambda parameter binding.
 /// Uses the shared scatter assignment logic and handles lambda-specific defaults.
@@ -88,28 +96,28 @@ fn lambda_scatter_assign(
 /// Activation frame for the call stack of verb executions.
 /// Holds the current VM stack frame, along with the current verb activation information.
 #[derive(Debug, Clone)]
-pub(crate) struct Activation {
+pub struct Activation {
     /// The current stack frame, which holds the current execution state for the interpreter
     /// running this activation.
-    pub(crate) frame: Frame,
+    pub frame: Frame,
     /// The object that is the receiver of the current verb call.
-    pub(crate) this: Var,
+    pub this: Var,
     /// The object that is the 'player' role; that is, the active user of this task.
-    pub(crate) player: Obj,
+    pub player: Obj,
     /// The arguments to the verb or bf being called.
-    pub(crate) args: List,
+    pub args: List,
     /// The name of the verb that is currently being executed.
-    pub(crate) verb_name: Symbol,
+    pub verb_name: Symbol,
     /// Compact resolved metadata for the running verb.
-    pub(crate) verbdef: ResolvedVerb,
+    pub verbdef: ResolvedVerb,
     /// This is the "task perms" for the current activation. It is the "who" the verb is acting on
     /// behalf-of in terms of permissions in the world.
     /// Set initially to verb owner ('programmer'). It is what set_task_perms() can override,
     /// and caller_perms() returns the value of this in the *parent* stack frame (or #-1 if none)
-    pub(crate) permissions: Obj,
+    pub permissions: Obj,
     /// Cached flags for the permissions object, to avoid repeated DB lookups.
     /// Updated when set_task_perms is called.
-    pub(crate) permissions_flags: BitEnum<ObjFlag>,
+    pub permissions_flags: BitEnum<ObjFlag>,
 }
 
 // Boxing MooStackFrame would add pointer indirection on every opcode dispatch,
@@ -182,21 +190,21 @@ impl Frame {
 #[derive(Clone, Debug, PartialEq)]
 pub struct BfFrame {
     /// The index of the built-in function being called.
-    pub(crate) bf_id: BuiltinId,
+    pub bf_id: BuiltinId,
     /// If the activation is a call to a built-in function, the per-bf unique # trampoline passed
     /// in, which can be used by the bf to figure out how to resume where it left off.
-    pub(crate) bf_trampoline: Option<usize>,
+    pub bf_trampoline: Option<usize>,
     /// And an optional argument that can be passed with the above...
-    pub(crate) bf_trampoline_arg: Option<Var>,
+    pub bf_trampoline_arg: Option<Var>,
 
     /// Return value into this frame.
-    pub(crate) return_value: Option<Var>,
+    pub return_value: Option<Var>,
 
     /// Optional override for what caller_perms() should return when called from verbs invoked
     /// by this builtin. When set, caller_perms() returns this value instead of filtering out
     /// this frame. Used by dispatch_command_verb to make dispatched verbs see the player as
     /// the caller rather than the wizard who invoked dispatch_command_verb.
-    pub(crate) caller_perms_override: Option<Obj>,
+    pub caller_perms_override: Option<Obj>,
 }
 
 impl Activation {

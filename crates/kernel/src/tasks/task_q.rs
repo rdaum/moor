@@ -1017,7 +1017,9 @@ impl SuspensionQ {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tasks::{NoopTasksDb, ServerOptions, TaskStart, DEFAULT_MAX_TASK_MAILBOX, DEFAULT_MAX_TASK_RETRIES};
+    use crate::tasks::{
+        DEFAULT_MAX_TASK_MAILBOX, DEFAULT_MAX_TASK_RETRIES, NoopTasksDb, ServerOptions, TaskStart,
+    };
     use moor_common::tasks::NoopClientSession;
     use moor_var::SYSTEM_OBJECT;
 
@@ -1092,7 +1094,10 @@ mod tests {
             None,
         );
         let gen2 = sq.tasks.get(&task_id).unwrap().timer_generation;
-        assert_ne!(gen1, gen2, "second suspension must have a different generation");
+        assert_ne!(
+            gen1, gen2,
+            "second suspension must have a different generation"
+        );
 
         // Sleep past the first timer's deadline (50ms) but not the second (100ms).
         std::thread::sleep(Duration::from_millis(60));

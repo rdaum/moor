@@ -177,7 +177,9 @@ impl Scheduler {
             if mutation_timestamp_before_wait != mutation_timestamp_after_wait {
                 info!(
                     "Minor GC cycle #{}: mutations detected while waiting for tasks (before: {:?}, after: {:?}), sweep phase invalidated",
-                    lc.gc_cycle_count, mutation_timestamp_before_wait, mutation_timestamp_after_wait
+                    lc.gc_cycle_count,
+                    mutation_timestamp_before_wait,
+                    mutation_timestamp_after_wait
                 );
                 lc.gc_sweep_in_progress = false;
                 return Ok(());

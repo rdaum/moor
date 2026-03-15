@@ -3378,6 +3378,7 @@ dependencies = [
  "moor-schema",
  "moor-textdump",
  "moor-var",
+ "moor-vm",
  "natord",
  "onig",
  "parking_lot",
@@ -3599,6 +3600,19 @@ dependencies = [
  "triomphe",
  "unicase",
  "zerocopy",
+]
+
+[[package]]
+name = "moor-vm"
+version = "1.1.0-dev"
+dependencies = [
+ "moor-common",
+ "moor-compiler",
+ "moor-var",
+ "smallvec",
+ "strum",
+ "tracing",
+ "uuid 1.22.0",
 ]
 
 [[package]]

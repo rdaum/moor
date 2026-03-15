@@ -19,11 +19,9 @@ use moor_var::{NOTHING, Obj, Symbol, Var, v_obj};
 use std::time::{Duration, SystemTime};
 
 use crate::{
-    PhantomUnsync,
-    task_context::with_current_transaction,
-    tasks::task_program_cache::ProgramCacheLocalSnapshot,
-    vm::activation::{Activation, Frame},
+    task_context::with_current_transaction, tasks::task_program_cache::ProgramCacheLocalSnapshot,
 };
+use moor_vm::{Activation, Frame, PhantomUnsync};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]

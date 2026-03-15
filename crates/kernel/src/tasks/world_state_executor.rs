@@ -1085,7 +1085,10 @@ mod tests {
         match &results[0] {
             WorldStateResult::QueriedObjects(objs) => {
                 assert!(objs.contains(&child), "Expected child in results");
-                assert!(!objs.contains(&grandchild), "Grandchild has different parent");
+                assert!(
+                    !objs.contains(&grandchild),
+                    "Grandchild has different parent"
+                );
             }
             other => panic!("Expected QueriedObjects, got {other:?}"),
         }
