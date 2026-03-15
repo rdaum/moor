@@ -126,7 +126,9 @@ fn bf_set_task_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             "set_task_perms() requires the caller to be a wizard or the caller itself",
         )));
     }
-    bf_args.exec_state.set_task_perms(perms_for);
+    bf_args
+        .exec_state
+        .set_task_perms(&crate::vm::kernel_host::KernelHost, perms_for);
 
     Ok(RetNil)
 }

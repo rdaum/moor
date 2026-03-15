@@ -36,7 +36,6 @@ use crate::{
             bf_values::register_bf_values,
             bf_verbs::register_bf_verbs,
         },
-        exec_state::VMExecState,
         vm_host::ExecutionResult,
     },
 };
@@ -49,7 +48,7 @@ use moor_var::{
     E_INVARG, E_TYPE, Error, ErrorCode, List, Map, Obj, Sequence, Symbol, Var, Variant, v_bool_int,
     v_map,
 };
-use moor_vm::{BfFrame, Frame};
+use moor_vm::{BfFrame, Frame, VMExecState};
 
 mod bf_cryptography;
 mod bf_documents;

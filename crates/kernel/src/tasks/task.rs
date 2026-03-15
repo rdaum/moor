@@ -71,10 +71,7 @@ use crate::{
         task_program_cache::TaskProgramCache,
         task_scheduler_client::{TaskSchedulerClient, TimeoutHandlerInfo},
     },
-    vm::{
-        TaskSuspend, VMHostResponse, builtins::BuiltinRegistry, exec_state::VMExecState,
-        vm_host::VmHost,
-    },
+    vm::{TaskSuspend, VMHostResponse, builtins::BuiltinRegistry, vm_host::VmHost},
 };
 use moor_common::{
     matching::{
@@ -85,6 +82,7 @@ use moor_common::{
 };
 use moor_var::program::ProgramType;
 use moor_vm::Frame;
+use moor_vm::VMExecState;
 
 static HUH_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("huh"));
 static HANDLE_UNCAUGHT_ERROR_SYM: LazyLock<Symbol> =

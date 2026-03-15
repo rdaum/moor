@@ -39,7 +39,11 @@ pub struct ProgramSlot {
     pub global_width: usize,
 }
 
-/// Services the VM opcode loop needs from its host environment.
+pub mod exec_state;
+
+pub use exec_state::{Caller, Fork, ProgramCacheLocalSnapshot, VMExecState};
+
+/// Services the VM needs from its host environment.
 /// Monomorphized at the call site for zero-cost dispatch.
 pub trait WorldStateCallback {
     fn retrieve_property(
@@ -56,4 +60,12 @@ pub trait WorldStateCallback {
         prop: moor_var::Symbol,
         value: &moor_var::Var,
     ) -> Result<(), moor_common::model::WorldStateError>;
+
+    fn flags_of(
+        &self,
+        obj: &moor_var::Obj,
+    ) -> Result<
+        moor_common::util::BitEnum<moor_common::model::ObjFlag>,
+        moor_common::model::WorldStateError,
+    >;
 }

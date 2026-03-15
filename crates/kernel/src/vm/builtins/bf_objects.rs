@@ -1202,7 +1202,9 @@ fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // If the object was player, update the VM's copy of the perms.
     if obj.eq(&bf_args.task_perms().map_err(world_state_bf_err)?.who) {
-        bf_args.exec_state.set_task_perms(obj);
+        bf_args
+            .exec_state
+            .set_task_perms(&crate::vm::kernel_host::KernelHost, obj);
     }
 
     Ok(RetNil)

@@ -25,6 +25,7 @@ use moor_common::{
 };
 use moor_compiler::{CompileOptions, Program, compile};
 use moor_var::{E_MAXREC, List, Obj, Symbol, Var, v_none};
+use moor_vm::VMExecState;
 
 use crate::{
     config::FeaturesConfig,
@@ -34,9 +35,8 @@ use crate::{
         FinallyReason, Fork, VMHostResponse,
         VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend},
         builtins::BuiltinRegistry,
-        exec_state::VMExecState,
         kernel_host::KernelHost,
-        vm_call::VmExecParams,
+        vm_call::{VMExecStateKernelExt, VmExecParams},
     },
 };
 use moor_common::{matching::ParsedCommand, tasks::Session};
@@ -611,7 +611,6 @@ impl VmHost {
 
     /// Get the current traceback and formatted backtrace
     pub fn get_traceback(&self) -> (Vec<Var>, Vec<Var>) {
-        use crate::vm::exec_state::VMExecState;
         let stack = VMExecState::make_stack_list(&self.vm_exec_state.stack);
         // For timeouts, we don't have an Error, so create a simple timeout "error" for formatting
         let timeout_error = moor_var::Error::new(
