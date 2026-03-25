@@ -131,6 +131,9 @@ pub struct MoorDB {
     batch_writer: BatchWriter,
     /// Last write transaction timestamp that completed
     last_write_commit: AtomicU64,
+    /// Keeps temp directory alive for the lifetime of the database when using
+    /// an ephemeral path. Dropped after fjall shuts down in `Drop`.
+    _tmpdir: Option<TempDir>,
 }
 
 impl TransactionContext for MoorDB {
@@ -309,6 +312,7 @@ impl MoorDB {
             batch_writer,
             keyspace,
             last_write_commit: AtomicU64::new(0),
+            _tmpdir: tmpdir,
         });
 
         (s, fresh)
