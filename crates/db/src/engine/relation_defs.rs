@@ -117,6 +117,10 @@ macro_rules! define_relations {
                 pub(crate) version: u64,
                 pub(crate) caches: std::sync::Arc<crate::engine::moor_db::Caches>,
                 $( pub(crate) $field: std::sync::Arc<dyn crate::tx::RelationIndex<$domain, $codomain>>, )*
+                /// Bloom filter of keys modified in this commit. Used for fast
+                /// conflict detection during CAS rebase — if the loser's keys
+                /// don't hit this filter, rebase is safe.
+                pub(crate) commit_bloom: Option<crate::tx::CommitBloom>,
             }
 
             /// Trait defining the interface for processing transaction commits.
@@ -162,15 +166,25 @@ macro_rules! define_relations {
                 }
 
                 /// Update imbl indexes from working sets without touching providers.
-                /// Returns deferred persistence operations to apply after CAS success.
-                fn prepare_apply_all(&mut self, ws: &RelationWorkingSets) -> RelationPersistOps {
-                    RelationPersistOps {
+                /// Returns deferred persistence operations and a bloom filter of
+                /// modified keys (used for fast rebase conflict detection).
+                fn prepare_apply_all(
+                    &mut self,
+                    ws: &RelationWorkingSets,
+                ) -> (RelationPersistOps, crate::tx::CommitBloom) {
+                    let mut bloom = crate::tx::CommitBloom::new();
+                    let ops = RelationPersistOps {
                         $( $field: if !ws.$field.is_empty() {
+                            // Insert all keys from this relation into the bloom filter
+                            for key in ws.$field.tuples_ref().keys() {
+                                bloom.insert(key);
+                            }
                             self.$field.prepare_indexes(&ws.$field)
                         } else {
                             Vec::new()
                         }, )*
-                    }
+                    };
+                    (ops, bloom)
                 }
 
                 /// Build a candidate snapshot from the updated indexes without consuming self.
@@ -178,6 +192,7 @@ macro_rules! define_relations {
                     &self,
                     current_root: &std::sync::Arc<WorldStateSnapshot>,
                     combined_caches: crate::engine::moor_db::Caches,
+                    bloom: crate::tx::CommitBloom,
                 ) -> std::sync::Arc<WorldStateSnapshot> {
                     let caches = if combined_caches.has_changed() {
                         std::sync::Arc::new(combined_caches)
@@ -189,35 +204,40 @@ macro_rules! define_relations {
                         version: current_root.version + 1,
                         caches,
                         $( $field: self.$field.snapshot_index_or(&current_root.$field), )*
+                        commit_bloom: Some(bloom),
                     })
                 }
 
                 /// After a CAS failure, attempt to rebase our prepared indexes onto the
-                /// winner's snapshot. Succeeds if no relation was modified by both us and
-                /// the winner (relation-level conflict detection via Arc pointer comparison).
+                /// winner's snapshot. Tests our working set keys against the winner's
+                /// bloom filter for key-level conflict detection.
                 ///
                 /// Returns `Some(new_snapshot)` if rebase succeeded, `None` if there's a
-                /// relation-level conflict requiring full re-check.
+                /// possible key overlap requiring full re-check.
                 fn try_rebase(
                     &self,
-                    our_base: &std::sync::Arc<WorldStateSnapshot>,
+                    ws: &RelationWorkingSets,
                     winner: &std::sync::Arc<WorldStateSnapshot>,
                     combined_caches: crate::engine::moor_db::Caches,
+                    our_bloom: &crate::tx::CommitBloom,
                 ) -> Option<std::sync::Arc<WorldStateSnapshot>> {
-                    // Check for relation-level conflicts: did the winner modify a
-                    // relation that we also modified?
-                    $(
-                        let winner_changed = !std::sync::Arc::ptr_eq(&our_base.$field, &winner.$field);
-                        if winner_changed && self.$field.dirty() {
-                            // Both we and the winner touched this relation
-                            return None;
-                        }
-                    )*
+                    // If the winner has a bloom filter, test our keys against it.
+                    // Any hit means possible key overlap — bail to full retry.
+                    if let Some(ref winner_bloom) = winner.commit_bloom {
+                        $(
+                            for key in ws.$field.tuples_ref().keys() {
+                                if winner_bloom.might_contain(key) {
+                                    return None;
+                                }
+                            }
+                        )*
+                    } else {
+                        // Winner has no bloom filter (e.g. initial snapshot).
+                        // This shouldn't happen in normal operation, but be safe.
+                        return None;
+                    }
 
-                    // No relation-level conflict. Build rebased snapshot:
-                    // - For relations we modified: use our dirty index
-                    // - For relations the winner modified: use winner's index
-                    // - For unchanged relations: either works (same Arc)
+                    // No key overlap detected. Build rebased snapshot.
                     let caches = if combined_caches.has_changed() {
                         std::sync::Arc::new(combined_caches)
                     } else {
@@ -228,6 +248,7 @@ macro_rules! define_relations {
                         version: winner.version + 1,
                         caches,
                         $( $field: self.$field.snapshot_index_or(&winner.$field), )*
+                        commit_bloom: Some(our_bloom.clone()),
                     }))
                 }
             }
@@ -296,6 +317,7 @@ macro_rules! define_relations {
                                 std::sync::Arc::from(index)
                             },
                         )*
+                        commit_bloom: None,
                     }
                 }
 
@@ -313,6 +335,7 @@ macro_rules! define_relations {
                                 std::sync::Arc::from(index)
                             },
                         )*
+                        commit_bloom: None,
                     })
                 }
 

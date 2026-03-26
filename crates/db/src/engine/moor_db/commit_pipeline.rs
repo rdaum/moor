@@ -130,13 +130,13 @@ impl MoorDB {
         }
 
         let _t = PerfTimerGuard::new(&counters.commit_apply_phase);
-        let persist_ops = checkers.prepare_apply_all(&relation_ws);
+        let (persist_ops, bloom) = checkers.prepare_apply_all(&relation_ws);
         let combined_caches = Caches {
             verb_resolution_cache: verb_cache.fork(),
             prop_resolution_cache: prop_cache.fork(),
             ancestry_cache: ancestry_cache.fork(),
         };
-        let next_root = checkers.build_snapshot(&current_root, combined_caches);
+        let next_root = checkers.build_snapshot(&current_root, combined_caches, bloom.clone());
         drop(_t);
 
         // Phase 2: Try to publish
@@ -152,8 +152,8 @@ impl MoorDB {
         }
 
         // Phase 3: CAS failed — try to rebase onto the winner's snapshot.
-        // If no relation-level conflict, this is a cheap pointer re-slot.
-        let mut our_base = current_root;
+        // Test our keys against the winner's bloom filter for key-level
+        // conflict detection. If no hits, rebase is safe.
         for _rebase in 0..MAX_REBASE_ATTEMPTS {
             let winner = self.snapshot_planes.load_root();
 
@@ -163,8 +163,10 @@ impl MoorDB {
                 ancestry_cache: ancestry_cache.fork(),
             };
 
-            if let Some(rebased) = checkers.try_rebase(&our_base, &winner, combined_caches) {
-                // Rebase succeeded — no relation-level conflict. Try CAS again.
+            if let Some(rebased) =
+                checkers.try_rebase(&relation_ws, &winner, combined_caches, &bloom)
+            {
+                // Rebase succeeded — no key overlap. Try CAS again.
                 if self
                     .snapshot_planes
                     .try_publish_write_root(winner.version, rebased)
@@ -175,14 +177,12 @@ impl MoorDB {
                         timestamp: tx_timestamp.0,
                     };
                 }
-                // CAS failed again — another writer snuck in. Update our base
-                // and try to rebase again.
-                our_base = winner;
+                // CAS failed again — another writer snuck in. Loop to rebase
+                // against the new winner.
                 continue;
             }
 
-            // Relation-level conflict: the winner touched a relation we also
-            // touched. Fall back to full conflict retry.
+            // Bloom filter hit: possible key overlap. Fall back to full retry.
             break;
         }
 
