@@ -188,12 +188,21 @@ macro_rules! define_relations {
                 }
 
                 /// Build a candidate snapshot from the updated indexes without consuming self.
+                /// The bloom filter is cumulative: this commit's keys OR'd with the
+                /// previous snapshot's bloom, so readers can test against it to detect
+                /// conflicts with any commit in the chain.
                 fn build_snapshot(
                     &self,
                     current_root: &std::sync::Arc<WorldStateSnapshot>,
                     combined_caches: crate::engine::moor_db::Caches,
-                    bloom: crate::tx::CommitBloom,
+                    mut bloom: crate::tx::CommitBloom,
                 ) -> std::sync::Arc<WorldStateSnapshot> {
+                    // Accumulate: OR in the previous snapshot's bloom so the filter
+                    // covers all commits, not just this one.
+                    if let Some(ref prev_bloom) = current_root.commit_bloom {
+                        bloom.merge(prev_bloom);
+                    }
+
                     let caches = if combined_caches.has_changed() {
                         std::sync::Arc::new(combined_caches)
                     } else {
@@ -423,6 +432,8 @@ macro_rules! define_relations {
                 pub(crate) prop_resolution_cache: PropResolutionCache,
                 pub(crate) ancestry_cache: AncestryCache,
                 pub(crate) has_mutations: bool,
+                /// Bloom filter of all keys written in this transaction.
+                pub(crate) tx_bloom: crate::tx::CommitBloom,
             }
 
             impl WorkingSets {
@@ -500,6 +511,14 @@ macro_rules! define_relations {
                         let $field = self.$field.working_set()?;
                     )*
 
+                    // Build bloom filter from all written keys across all relations.
+                    let mut tx_bloom = crate::tx::CommitBloom::new();
+                    $(
+                        for key in $field.tuples_ref().keys() {
+                            tx_bloom.insert(key);
+                        }
+                    )*
+
                     let ws = Box::new(WorkingSets {
                         tx: self.tx,
                         $( $field, )*
@@ -507,6 +526,7 @@ macro_rules! define_relations {
                         prop_resolution_cache: self.prop_resolution_cache.into_inner(),
                         ancestry_cache: self.ancestry_cache.into_inner(),
                         has_mutations: self.has_mutations,
+                        tx_bloom,
                     });
 
                     Ok(ws)

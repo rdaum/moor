@@ -63,6 +63,24 @@ impl CommitBloom {
         self.bits.iter().all(|&b| b == 0)
     }
 
+    /// Test whether two bloom filters might share any keys.
+    /// Returns false if the filters are definitely disjoint (no common bits set).
+    pub fn might_intersect(&self, other: &CommitBloom) -> bool {
+        for i in 0..BLOOM_BYTES {
+            if self.bits[i] & other.bits[i] != 0 {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// OR another bloom filter into this one (cumulative union).
+    pub fn merge(&mut self, other: &CommitBloom) {
+        for i in 0..BLOOM_BYTES {
+            self.bits[i] |= other.bits[i];
+        }
+    }
+
     fn set_bit(&mut self, bit: usize) {
         self.bits[bit / 8] |= 1 << (bit % 8);
     }
