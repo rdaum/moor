@@ -82,14 +82,30 @@ impl SnapshotPlanes {
         }));
     }
 
-    /// Publish a new committed root snapshot and synchronize cache sidecar.
-    pub(super) fn publish_write_root(&self, next_root: Arc<WorldStateSnapshot>) {
-        let next_cache_publication = Arc::new(CachePublication {
+    /// Attempt to publish a new root snapshot via CAS. Succeeds only if the
+    /// current root version matches `expected_version` (no concurrent commit).
+    /// Returns `true` on success, `false` if another writer published first.
+    pub(super) fn try_publish_write_root(
+        &self,
+        expected_version: u64,
+        next_root: Arc<WorldStateSnapshot>,
+    ) -> bool {
+        let mut success = false;
+        let next_cache = Arc::new(CachePublication {
             version: next_root.version,
             caches: next_root.caches.clone(),
         });
-        self.root_state.store(next_root);
-        self.cache_publication.store(next_cache_publication);
+        self.root_state.rcu(|current| {
+            if current.version == expected_version {
+                success = true;
+                self.cache_publication.store(next_cache.clone());
+                next_root.clone()
+            } else {
+                success = false;
+                Arc::clone(current)
+            }
+        });
+        success
     }
 
     pub(super) fn load_root(&self) -> Arc<WorldStateSnapshot> {

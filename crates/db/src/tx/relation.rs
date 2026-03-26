@@ -243,6 +243,10 @@ where
     Codomain: RelationCodomain,
     Source: Provider<Domain, Codomain>,
 {
+    pub fn provider(&self) -> &Source {
+        &self.source
+    }
+
     pub fn stop_provider(&self) -> Result<(), Error> {
         self.source.stop()
     }

@@ -18,6 +18,7 @@ mod relation;
 mod resolve;
 mod transaction;
 
+pub use apply::PersistOp;
 pub use check::{CheckRelation, PotentialConflict, ProposedOp};
 pub use indexes::RelationIndex;
 pub use relation::Relation;
