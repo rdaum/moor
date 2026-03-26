@@ -86,6 +86,7 @@ impl MoorDB {
         let tx_timestamp = ws.tx.ts;
         let snapshot_version = ws.tx.snapshot_version;
         let has_mutations = ws.has_mutations;
+        let tx_bloom = ws.tx_bloom.clone();
         let (mut relation_ws, verb_cache, prop_cache, ancestry_cache) =
             ws.extract_relation_working_sets();
 
@@ -111,7 +112,16 @@ impl MoorDB {
         let current_root = self.snapshot_planes.load_root();
         let mut checkers = self.relations.begin_check_all(&current_root);
 
-        let skip_conflict_check = snapshot_version == current_root.version;
+        // Skip conflict check if:
+        // - No commits since our snapshot (existing fast path), OR
+        // - The snapshot's bloom filter doesn't intersect our written keys
+        //   (no possible key overlap with the last commit)
+        let skip_conflict_check = snapshot_version == current_root.version
+            || current_root
+                .commit_bloom
+                .as_ref()
+                .is_some_and(|snap_bloom| !tx_bloom.might_intersect(snap_bloom));
+
         if !skip_conflict_check {
             let _t = PerfTimerGuard::new(&counters.commit_check_phase);
             if let Err(conflict_info) = checkers.check_all(&mut relation_ws) {
