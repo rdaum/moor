@@ -59,6 +59,7 @@ impl CommitBloom {
     }
 
     /// Returns true if the filter is empty (no keys inserted).
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.bits.iter().all(|&b| b == 0)
     }
