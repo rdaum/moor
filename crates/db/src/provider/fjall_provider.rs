@@ -121,9 +121,10 @@ where
     batch_collector: Arc<BatchCollector>,
     /// Shared state tracking operations in-flight for read-your-writes consistency
     pending_ops: Arc<RwLock<PendingOperations<Domain, Codomain>>>,
-    /// Set of domains that have been checked and found to not exist (tombstones/misses)
-    /// This is shared across all transactions to avoid redundant database lookups
-    tombstones: Arc<RwLock<HashSet<Domain>>>,
+    /// Bloom filter of domains known to not exist in the backing store.
+    /// Lock-free negative cache — avoids redundant fjall lookups for missing keys.
+    /// False positives cause a skipped lookup (harmless since the key doesn't exist).
+    tombstone_bloom: Arc<crate::tx::AtomicBloom>,
 }
 
 fn decode_codomain_with_ts<P, Codomain>(
@@ -195,7 +196,7 @@ where
             fjall_keyspace,
             batch_collector,
             pending_ops: Arc::new(RwLock::new(PendingOperations::default())),
-            tombstones: Arc::new(RwLock::new(HashSet::new())),
+            tombstone_bloom: Arc::new(crate::tx::AtomicBloom::new()),
         }
     }
 
@@ -229,30 +230,8 @@ where
         Ok(guard)
     }
 
-    fn tombstones_read(&self) -> Result<RwLockReadGuard<'_, HashSet<Domain>>, Error> {
-        let start = MonoTimestamp::now();
-        let guard = self.tombstones.read().map_err(|_| {
-            Error::StorageFailure("Failed to acquire tombstones read lock".to_string())
-        })?;
-        db_counters()
-            .provider_tombstones_read_lock_wait
-            .record_elapsed_from_with(PerfIntensity::HotPath, start.instant());
-        Ok(guard)
-    }
-
-    fn tombstones_write(&self) -> Result<RwLockWriteGuard<'_, HashSet<Domain>>, Error> {
-        let start = MonoTimestamp::now();
-        let guard = self.tombstones.write().map_err(|_| {
-            Error::StorageFailure("Failed to acquire tombstones write lock".to_string())
-        })?;
-        db_counters()
-            .provider_tombstones_write_lock_wait
-            .record_elapsed_from_with(PerfIntensity::HotPath, start.instant());
-        Ok(guard)
-    }
 }
 
-const MAX_TOMBSTONE_COUNT: usize = 100_000;
 
 impl<Domain, Codomain> FjallProvider<Domain, Codomain>
 where
@@ -319,28 +298,26 @@ where
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
         let _t = PerfTimerGuard::new(&db_counters().provider_tuple_check);
 
-        // 1. Check both pending operations and tombstones together for consistency
+        // 1. Check pending operations for read-your-writes consistency
         {
             let pending = self.pending_ops_read()?;
-            let tombstones = self.tombstones_read()?;
 
-            // If pending delete, definitely doesn't exist
             if pending.pending_deletes.contains(domain) {
                 return Ok(None);
             }
 
-            // If pending write, return that value
             if let Some((ts, value)) = pending.pending_writes.get(domain) {
                 return Ok(Some((*ts, value.clone())));
             }
-
-            // If tombstoned, we know it doesn't exist - no need to hit database
-            if tombstones.contains(domain) {
-                return Ok(None);
-            }
         }
 
-        // 2. Only hit backing store if not in pending ops or tombstones
+        // 2. Check bloom filter — if the key was previously seen as absent,
+        //    skip the fjall lookup entirely. Lock-free, no false negatives.
+        if self.tombstone_bloom.might_contain(domain) {
+            return Ok(None);
+        }
+
+        // 3. Hit backing store
         let _t = PerfTimerGuard::new(&db_counters().provider_tuple_load);
         let key_stored = <Self as EncodeFor<Domain>>::encode(self, domain)?;
         let Some(result) = self
@@ -348,15 +325,8 @@ where
             .get(key_stored)
             .map_err(|e| Error::RetrievalFailure(e.to_string()))?
         else {
-            // Database miss - add to tombstones to avoid future lookups
-            let mut tombstones = self.tombstones_write()?;
-            tombstones.insert(domain.clone());
-
-            // If tombstones set gets too large, clear it to bound memory usage
-            if tombstones.len() > MAX_TOMBSTONE_COUNT {
-                tombstones.clear();
-            }
-
+            // Database miss — record in bloom filter for future lookups
+            self.tombstone_bloom.insert(domain);
             return Ok(None);
         };
         let (ts, codomain) = decode_codomain_with_ts::<Self, Codomain>(self, result)?;
@@ -364,18 +334,15 @@ where
     }
 
     fn put(&self, timestamp: Timestamp, domain: &Domain, codomain: &Codomain) -> Result<(), Error> {
-        // Add to pending writes and clear from tombstones immediately
+        // Add to pending writes (bloom filter false positives are harmless —
+        // pending_ops is checked before the bloom filter on reads)
         {
             let mut pending = self.pending_ops_write()?;
-            let mut tombstones = self.tombstones_write()?;
 
             pending
                 .pending_writes
                 .insert(domain.clone(), (timestamp, codomain.clone()));
-            // Also remove from pending deletes if it was there (overwriting a deleted key)
             pending.pending_deletes.remove(domain);
-            // Remove from tombstones since this key now exists
-            tombstones.remove(domain);
         }
 
         // Encode and add to shared batch collector

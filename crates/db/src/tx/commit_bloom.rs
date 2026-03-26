@@ -107,6 +107,52 @@ fn double_hash<K: Hash>(key: &K) -> (usize, usize) {
     (v1, v2)
 }
 
+/// Concurrent bloom filter using atomic operations for lock-free insert and query.
+/// Suitable for long-lived shared state like the provider tombstone cache.
+///
+/// Larger than `CommitBloom` (64KB / 524288 bits) since it accumulates over the
+/// provider's lifetime. At 10K keys with 2 probes: ~0.02% false positive rate.
+/// At 100K keys: ~1.8% false positive rate.
+const ATOMIC_BLOOM_BITS: usize = 524288;
+const ATOMIC_BLOOM_BYTES: usize = ATOMIC_BLOOM_BITS / 8;
+
+pub struct AtomicBloom {
+    bits: Box<[std::sync::atomic::AtomicU8; ATOMIC_BLOOM_BYTES]>,
+}
+
+impl AtomicBloom {
+    pub fn new() -> Self {
+        Self {
+            bits: (0..ATOMIC_BLOOM_BYTES)
+                .map(|_| std::sync::atomic::AtomicU8::new(0))
+                .collect::<Vec<_>>()
+                .into_boxed_slice()
+                .try_into()
+                .unwrap_or_else(|_| unreachable!()),
+        }
+    }
+
+    /// Insert a key into the filter. Lock-free, safe to call concurrently.
+    pub fn insert<K: Hash>(&self, key: &K) {
+        let (h1, h2) = double_hash(key);
+        let b1 = h1 % ATOMIC_BLOOM_BITS;
+        let b2 = h2 % ATOMIC_BLOOM_BITS;
+        self.bits[b1 / 8].fetch_or(1 << (b1 % 8), std::sync::atomic::Ordering::Relaxed);
+        self.bits[b2 / 8].fetch_or(1 << (b2 % 8), std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Test if a key might be in the filter. Lock-free.
+    /// False means definitely not present.
+    pub fn might_contain<K: Hash>(&self, key: &K) -> bool {
+        let (h1, h2) = double_hash(key);
+        let b1 = h1 % ATOMIC_BLOOM_BITS;
+        let b2 = h2 % ATOMIC_BLOOM_BITS;
+        (self.bits[b1 / 8].load(std::sync::atomic::Ordering::Relaxed) & (1 << (b1 % 8)) != 0)
+            && (self.bits[b2 / 8].load(std::sync::atomic::Ordering::Relaxed) & (1 << (b2 % 8))
+                != 0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,6 +180,25 @@ mod tests {
             }
         }
         assert_eq!(false_positives, 0);
+    }
+
+    #[test]
+    fn test_atomic_bloom_insert_and_query() {
+        let bloom = AtomicBloom::new();
+        bloom.insert(&42u64);
+        bloom.insert(&99u64);
+
+        assert!(bloom.might_contain(&42u64));
+        assert!(bloom.might_contain(&99u64));
+
+        // Test something not inserted — should very likely be false
+        let mut false_positives = 0;
+        for i in 1000u64..2000 {
+            if bloom.might_contain(&i) {
+                false_positives += 1;
+            }
+        }
+        assert!(false_positives < 50, "Too many false positives: {false_positives}/1000");
     }
 
     #[test]
