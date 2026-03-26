@@ -114,10 +114,10 @@ type WaiterMap = Mutex<HashMap<u64, oneshot::Sender<TaskResult>>>;
 ///
 /// # async fn example(client: &TaskClient) {
 /// use moor_common::model::ObjectRef;
-/// use moor_var::Symbol;
+/// use moor_var::{Obj, Symbol};
 ///
 /// let result = client.invoke_verb(
-///     &ObjectRef::Id(42.into()),
+///     &ObjectRef::Id(Obj::mk_id(42)),
 ///     &Symbol::mk("look"),
 ///     vec![],
 /// ).await;
