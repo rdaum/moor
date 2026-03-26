@@ -114,13 +114,14 @@ impl MoorDB {
 
         // Skip conflict check if:
         // - No commits since our snapshot (existing fast path), OR
-        // - The snapshot's bloom filter doesn't intersect our written keys
-        //   (no possible key overlap with the last commit)
+        // - The snapshot's cumulative bloom filter covers all commits since
+        //   our snapshot, and our keys don't intersect it
         let skip_conflict_check = snapshot_version == current_root.version
-            || current_root
-                .commit_bloom
-                .as_ref()
-                .is_some_and(|snap_bloom| !tx_bloom.might_intersect(snap_bloom));
+            || (snapshot_version >= current_root.bloom_since_version
+                && current_root
+                    .commit_bloom
+                    .as_ref()
+                    .is_some_and(|snap_bloom| !tx_bloom.might_intersect(snap_bloom)));
 
         if !skip_conflict_check {
             let _t = PerfTimerGuard::new(&counters.commit_check_phase);

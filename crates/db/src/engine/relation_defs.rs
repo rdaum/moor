@@ -117,10 +117,16 @@ macro_rules! define_relations {
                 pub(crate) version: u64,
                 pub(crate) caches: std::sync::Arc<crate::engine::moor_db::Caches>,
                 $( pub(crate) $field: std::sync::Arc<dyn crate::tx::RelationIndex<$domain, $codomain>>, )*
-                /// Bloom filter of keys modified in this commit. Used for fast
-                /// conflict detection during CAS rebase — if the loser's keys
-                /// don't hit this filter, rebase is safe.
+                /// Cumulative bloom filter of keys modified since `bloom_since_version`.
+                /// Used for fast conflict detection: if a transaction's written keys
+                /// don't intersect this bloom, check_all can be skipped entirely.
+                /// Also used for key-level rebase after CAS failure.
                 pub(crate) commit_bloom: Option<crate::tx::CommitBloom>,
+                /// The snapshot version from which `commit_bloom` has been accumulating.
+                /// A transaction with `snapshot_version >= bloom_since_version` can trust
+                /// the bloom filter covers all intervening commits. Otherwise, fall back
+                /// to check_all.
+                pub(crate) bloom_since_version: u64,
             }
 
             /// Trait defining the interface for processing transaction commits.
@@ -189,19 +195,33 @@ macro_rules! define_relations {
 
                 /// Build a candidate snapshot from the updated indexes without consuming self.
                 /// The bloom filter is cumulative: this commit's keys OR'd with the
-                /// previous snapshot's bloom, so readers can test against it to detect
-                /// conflicts with any commit in the chain.
+                /// previous snapshot's bloom, covering all commits since `bloom_since_version`.
+                /// Resets when the bloom has accumulated too many versions (saturation guard).
                 fn build_snapshot(
                     &self,
                     current_root: &std::sync::Arc<WorldStateSnapshot>,
                     combined_caches: crate::engine::moor_db::Caches,
                     mut bloom: crate::tx::CommitBloom,
                 ) -> std::sync::Arc<WorldStateSnapshot> {
-                    // Accumulate: OR in the previous snapshot's bloom so the filter
-                    // covers all commits, not just this one.
-                    if let Some(ref prev_bloom) = current_root.commit_bloom {
-                        bloom.merge(prev_bloom);
-                    }
+                    // Decide whether to accumulate or reset the bloom.
+                    // Reset if the previous bloom covers more than 32 versions —
+                    // beyond that, most bits are set and the filter is useless.
+                    // After reset, bloom_since_version advances to current_root.version,
+                    // meaning only transactions newer than that can use the bloom skip.
+                    const MAX_BLOOM_SPAN: u64 = 32;
+                    let bloom_since_version = if let Some(ref prev_bloom) = current_root.commit_bloom {
+                        let span = current_root.version.saturating_sub(current_root.bloom_since_version);
+                        if span < MAX_BLOOM_SPAN {
+                            bloom.merge(prev_bloom);
+                            current_root.bloom_since_version
+                        } else {
+                            // Reset: bloom covers only this commit
+                            current_root.version
+                        }
+                    } else {
+                        // No previous bloom (initial snapshot). Start fresh.
+                        current_root.version
+                    };
 
                     let caches = if combined_caches.has_changed() {
                         std::sync::Arc::new(combined_caches)
@@ -214,6 +234,7 @@ macro_rules! define_relations {
                         caches,
                         $( $field: self.$field.snapshot_index_or(&current_root.$field), )*
                         commit_bloom: Some(bloom),
+                        bloom_since_version,
                     })
                 }
 
@@ -247,6 +268,21 @@ macro_rules! define_relations {
                     }
 
                     // No key overlap detected. Build rebased snapshot.
+                    // Apply the same span guard as build_snapshot: if the winner's
+                    // bloom has accumulated too many versions, reset instead of merging.
+                    const MAX_BLOOM_SPAN: u64 = 32;
+                    let span = winner.version.saturating_sub(winner.bloom_since_version);
+                    let (merged_bloom, bloom_since_version) = if span < MAX_BLOOM_SPAN {
+                        let mut merged = our_bloom.clone();
+                        if let Some(ref winner_bloom) = winner.commit_bloom {
+                            merged.merge(winner_bloom);
+                        }
+                        (merged, winner.bloom_since_version)
+                    } else {
+                        // Reset: bloom covers only our commit
+                        (our_bloom.clone(), winner.version)
+                    };
+
                     let caches = if combined_caches.has_changed() {
                         std::sync::Arc::new(combined_caches)
                     } else {
@@ -257,7 +293,8 @@ macro_rules! define_relations {
                         version: winner.version + 1,
                         caches,
                         $( $field: self.$field.snapshot_index_or(&winner.$field), )*
-                        commit_bloom: Some(our_bloom.clone()),
+                        commit_bloom: Some(merged_bloom),
+                        bloom_since_version,
                     }))
                 }
             }
@@ -327,6 +364,7 @@ macro_rules! define_relations {
                             },
                         )*
                         commit_bloom: None,
+                        bloom_since_version: 0,
                     }
                 }
 
@@ -345,6 +383,7 @@ macro_rules! define_relations {
                             },
                         )*
                         commit_bloom: None,
+                        bloom_since_version: 0,
                     })
                 }
 
