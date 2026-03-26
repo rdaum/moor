@@ -79,26 +79,31 @@ fn run_concurrent_workload(
                 ready.wait();
                 start.wait();
                 for iter in 0..iters {
-                    let mut tx = db.new_world_state().unwrap();
-                    for op in 0..ops_per_tx {
-                        let prop_name = prop_names[rng.random_range(0..prop_names.len())];
-                        if rng.random_range(0..100) < write_percent {
-                            let value = v_int(
-                                (thread_id as i64) * 1_000_000
-                                    + (iter as i64) * ops_per_tx as i64
-                                    + op as i64,
-                            );
-                            let _ = tx.update_property(
-                                &SYSTEM_OBJECT,
-                                &SYSTEM_OBJECT,
-                                prop_name,
-                                &value,
-                            );
-                        } else {
-                            let _ = tx.retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, prop_name);
+                    loop {
+                        let mut tx = db.new_world_state().unwrap();
+                        for op in 0..ops_per_tx {
+                            let prop_name = prop_names[rng.random_range(0..prop_names.len())];
+                            if rng.random_range(0..100) < write_percent {
+                                let value = v_int(
+                                    (thread_id as i64) * 1_000_000
+                                        + (iter as i64) * ops_per_tx as i64
+                                        + op as i64,
+                                );
+                                let _ = tx.update_property(
+                                    &SYSTEM_OBJECT,
+                                    &SYSTEM_OBJECT,
+                                    prop_name,
+                                    &value,
+                                );
+                            } else {
+                                let _ = tx.retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, prop_name);
+                            }
+                        }
+                        match tx.commit() {
+                            Ok(CommitResult::Success { .. }) => break,
+                            _ => continue, // Retry the whole transaction
                         }
                     }
-                    let _ = tx.commit();
                 }
             });
         }
@@ -118,7 +123,7 @@ fn commit_concurrency(c: &mut Criterion) {
     group.sample_size(10);
 
     let ops_per_tx = 64usize;
-    let write_percents = [10u32, 50u32, 90u32];
+    let write_percents = [10u32, 25u32, 50u32, 90u32];
     let max_threads = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1);

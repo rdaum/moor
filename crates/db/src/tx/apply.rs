@@ -13,7 +13,7 @@
 
 use crate::{
     api::world_state::db_counters,
-    tx::{Error, RelationCodomain, RelationDomain},
+    tx::{Error, RelationCodomain, RelationDomain, Timestamp},
 };
 use arc_swap::ArcSwap;
 use moor_common::util::Instant;
@@ -24,6 +24,20 @@ use super::{
     indexes::RelationIndex,
     transaction::{OpType, WorkingSet},
 };
+
+/// A deferred persistence operation produced by `prepare_indexes`.
+/// Applied to the provider and batch writer only after a successful CAS publish.
+pub enum PersistOp<Domain, Codomain> {
+    Put {
+        ts: Timestamp,
+        domain: Domain,
+        codomain: Codomain,
+    },
+    Del {
+        ts: Timestamp,
+        domain: Domain,
+    },
+}
 
 impl<Domain, Codomain, P> CheckRelation<Domain, Codomain, P>
 where
@@ -81,6 +95,80 @@ where
                 .add(elapsed_nanos);
         }
         Ok(())
+    }
+
+    /// Update the imbl index from the working set without touching the provider.
+    /// Returns a list of deferred persistence operations to be applied after a
+    /// successful CAS publish of the new snapshot.
+    pub fn prepare_indexes(
+        &mut self,
+        working_set: &WorkingSet<Domain, Codomain>,
+    ) -> Vec<PersistOp<Domain, Codomain>> {
+        if working_set.provider_fully_loaded() {
+            self.index.set_provider_fully_loaded(true);
+        }
+
+        if working_set.is_empty() {
+            return Vec::new();
+        }
+        self.dirty = true;
+
+        let counters = db_counters();
+        let total_ops = working_set.len();
+        let mut inserts = Vec::with_capacity(total_ops);
+        let mut tombstones = Vec::new();
+        let mut persist_ops = Vec::with_capacity(total_ops);
+
+        for (domain, op) in working_set.tuples_ref().iter() {
+            match &op.operation {
+                OpType::Insert(codomain) | OpType::Update(codomain) => {
+                    persist_ops.push(PersistOp::Put {
+                        ts: op.write_ts,
+                        domain: domain.clone(),
+                        codomain: codomain.clone(),
+                    });
+                    inserts.push((op.write_ts, domain.clone(), codomain.clone()));
+                }
+                OpType::Delete => {
+                    persist_ops.push(PersistOp::Del {
+                        ts: op.write_ts,
+                        domain: domain.clone(),
+                    });
+                    tombstones.push((op.write_ts, domain.clone()));
+                }
+            }
+        }
+
+        let index_ops = inserts.len() + tombstones.len();
+        if index_ops > 0 {
+            let start = Instant::now();
+            self.index.apply_batch(inserts, tombstones);
+            let elapsed_nanos = isize::try_from(start.elapsed().as_nanos()).unwrap_or(isize::MAX);
+            let invocation_count = isize::try_from(index_ops).unwrap_or(isize::MAX);
+            counters
+                .apply_index_insert
+                .invocations()
+                .add(invocation_count);
+            counters
+                .apply_index_insert
+                .cumulative_duration_nanos()
+                .add(elapsed_nanos);
+        }
+
+        persist_ops
+    }
+
+    /// Borrow the updated index for snapshot building without consuming self.
+    /// Returns the dirty index (via O(1) imbl fork) or the existing snapshot index.
+    pub fn snapshot_index_or(
+        &self,
+        existing: &Arc<dyn RelationIndex<Domain, Codomain>>,
+    ) -> Arc<dyn RelationIndex<Domain, Codomain>> {
+        if self.dirty {
+            Arc::from(self.index.fork())
+        } else {
+            existing.clone()
+        }
     }
 
     pub fn commit(self, index_swap: &Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>>) {

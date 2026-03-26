@@ -13,17 +13,26 @@
 
 //! Write and read-only commit execution pipeline for `MoorDB`.
 //!
-//! This module implements the serialized write commit path, including conflict
-//! checking, relation apply, root publication, and async durability handoff.
+//! Uses a lock-free CAS loop for write commits: multiple workers can check
+//! conflicts and build candidate snapshots in parallel. Only the final atomic
+//! publish (via `ArcSwap::rcu`) serializes.
+//!
+//! On CAS failure, we first attempt a cheap rebase: if the winner only modified
+//! different relations than us, we can re-slot our prepared indexes onto the
+//! winner's snapshot and CAS again without re-checking or re-preparing. Only if
+//! both we and the winner touched the same relation do we fall back to a full
+//! re-check cycle.
 
 use super::{Caches, MoorDB, WorkingSets};
 use crate::api::world_state::db_counters;
 use moor_common::model::CommitResult;
 use moor_common::util::Instant;
-use moor_common::util::PerfIntensity;
 use moor_common::util::PerfTimerGuard;
 use std::time::Duration;
 use tracing::warn;
+
+/// Maximum number of rebase attempts after the initial CAS before giving up.
+const MAX_REBASE_ATTEMPTS: u32 = 16;
 
 impl MoorDB {
     /// Publish read-only cache updates for the transaction snapshot version.
@@ -32,151 +41,153 @@ impl MoorDB {
             .publish_read_only_cache(snapshot_version, combined_caches);
     }
 
-    /// Execute the serialized write-commit path for a transaction.
-    pub(crate) fn commit_writes(&self, ws: Box<WorkingSets>, enqueued_at: Instant) -> CommitResult {
-        let counters = db_counters();
-        let lock_wait_timer = PerfTimerGuard::from_start_with_intensity(
-            &counters.commit_lock_wait_phase,
-            enqueued_at,
-            PerfIntensity::MediumPath,
-        );
-        let _commit_guard = self.commit_apply_lock.lock();
-        drop(lock_wait_timer);
+    /// Persist a successfully published snapshot to the durable store.
+    fn persist_commit(
+        &self,
+        persist_ops: &super::RelationPersistOps,
+        tx_timestamp: crate::tx::Timestamp,
+    ) {
+        let batch = self
+            .relations
+            .persist_ops_to_batch(persist_ops, tx_timestamp);
+        if !batch.is_empty() {
+            self.batch_writer.write(batch);
+        }
 
-        let _process_timer = PerfTimerGuard::new(&counters.commit_process_phase);
-        self.process_commit_writes(ws, counters)
+        self.last_write_commit
+            .store(tx_timestamp.0, std::sync::atomic::Ordering::Release);
+        self.batch_writer.send_barrier(tx_timestamp);
+
+        self.sequences[15].store(
+            self.monotonic.load(std::sync::atomic::Ordering::Relaxed) as i64,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        let mut seq_values = [0i64; 16];
+        for (i, seq) in self.sequences.iter().enumerate() {
+            seq_values[i] = seq.load(std::sync::atomic::Ordering::Relaxed);
+        }
+        self.sequence_writer.write(seq_values);
     }
 
-    /// Perform conflict check, apply, publication, and durability scheduling.
-    fn process_commit_writes(
+    /// Execute the write-commit path for a transaction via CAS loop.
+    pub(crate) fn commit_writes(
         &self,
         ws: Box<WorkingSets>,
-        counters: &moor_common::model::WorldStatePerf,
+        _enqueued_at: Instant,
     ) -> CommitResult {
-        let _t = PerfTimerGuard::new(&counters.commit_check_phase);
-        let start_time = Instant::now();
-
-        let current_root = self.snapshot_planes.load_root();
-        let mut checkers = self.relations.begin_check_all(&current_root);
+        let counters = db_counters();
+        let _process_timer = PerfTimerGuard::new(&counters.commit_process_phase);
 
         let num_tuples = ws.total_tuples();
         if num_tuples > 10_000 {
-            warn!(
-                "Potential large batch @ commit... Checking {num_tuples} total tuples from the working set..."
-            );
+            warn!("Potential large batch @ commit... {num_tuples} total tuples in working set");
         }
 
-        // Get the transaction timestamp and mutations flag before extracting working sets
         let tx_timestamp = ws.tx.ts;
         let snapshot_version = ws.tx.snapshot_version;
         let has_mutations = ws.has_mutations;
         let (mut relation_ws, verb_cache, prop_cache, ancestry_cache) =
             ws.extract_relation_working_sets();
 
-        // Optimization: If no mutation commits completed since transaction start, skip conflict checking.
-        // The transaction already validated against its snapshot when creating operations.
-        let skip_conflict_check = snapshot_version == current_root.version;
+        // Read-only fast path
+        if !has_mutations {
+            self.commit_read_only(
+                snapshot_version,
+                Caches {
+                    verb_resolution_cache: verb_cache,
+                    prop_resolution_cache: prop_cache,
+                    ancestry_cache,
+                },
+            );
+            return CommitResult::Success {
+                mutations_made: false,
+                timestamp: tx_timestamp.0,
+            };
+        }
 
-        {
-            // Conflict validation - can skip if no concurrent commits
-            if !skip_conflict_check && let Err(conflict_info) = checkers.check_all(&mut relation_ws)
-            {
-                warn!("Transaction conflict during commit: {}", conflict_info);
+        let start_time = Instant::now();
+
+        // Phase 1: Check conflicts and prepare indexes against current snapshot
+        let current_root = self.snapshot_planes.load_root();
+        let mut checkers = self.relations.begin_check_all(&current_root);
+
+        let skip_conflict_check = snapshot_version == current_root.version;
+        if !skip_conflict_check {
+            let _t = PerfTimerGuard::new(&counters.commit_check_phase);
+            if let Err(conflict_info) = checkers.check_all(&mut relation_ws) {
+                warn!("Transaction conflict during commit: {conflict_info}");
                 return CommitResult::ConflictRetry {
                     conflict_info: Some(conflict_info),
                 };
             }
-            drop(_t);
+        }
 
-            // Mutation detection - use has_mutations since we might have skipped check_all
-            // (which normally sets the dirty flags that all_clean checks)
-            if !has_mutations {
-                self.commit_read_only(
-                    snapshot_version,
-                    Caches {
-                        verb_resolution_cache: verb_cache,
-                        prop_resolution_cache: prop_cache,
-                        ancestry_cache,
-                    },
-                );
-                return CommitResult::Success {
-                    mutations_made: false,
-                    timestamp: tx_timestamp.0,
-                };
-            }
+        if start_time.elapsed() > Duration::from_secs(5) {
+            warn!(
+                "Long running commit; check phase took {}s for {num_tuples} tuples",
+                start_time.elapsed().as_secs_f32()
+            );
+        }
 
-            // Warn if the check phase took a really long time
-            if start_time.elapsed() > Duration::from_secs(5) {
-                warn!(
-                    "Long running commit; check phase took {}s for {num_tuples} tuples",
-                    start_time.elapsed().as_secs_f32()
-                );
-            }
+        let _t = PerfTimerGuard::new(&counters.commit_apply_phase);
+        let persist_ops = checkers.prepare_apply_all(&relation_ws);
+        let combined_caches = Caches {
+            verb_resolution_cache: verb_cache.fork(),
+            prop_resolution_cache: prop_cache.fork(),
+            ancestry_cache: ancestry_cache.fork(),
+        };
+        let next_root = checkers.build_snapshot(&current_root, combined_caches);
+        drop(_t);
 
-            let _t = PerfTimerGuard::new(&counters.commit_apply_phase);
+        // Phase 2: Try to publish
+        if self
+            .snapshot_planes
+            .try_publish_write_root(current_root.version, next_root)
+        {
+            self.persist_commit(&persist_ops, tx_timestamp);
+            return CommitResult::Success {
+                mutations_made: true,
+                timestamp: tx_timestamp.0,
+            };
+        }
 
-            // Start collecting operations for this commit's batch
-            self.batch_collector.start_commit(tx_timestamp, num_tuples);
+        // Phase 3: CAS failed — try to rebase onto the winner's snapshot.
+        // If no relation-level conflict, this is a cheap pointer re-slot.
+        let mut our_base = current_root;
+        for _rebase in 0..MAX_REBASE_ATTEMPTS {
+            let winner = self.snapshot_planes.load_root();
 
-            let checkers = match checkers.apply_all(relation_ws) {
-                Ok(checkers) => checkers,
-                Err(()) => {
-                    // Discard the batch on failure
-                    self.batch_collector.abort_commit();
-                    warn!("Transaction conflict during apply phase (no detailed info available)");
-                    return CommitResult::ConflictRetry {
-                        conflict_info: None,
-                    };
-                }
+            let combined_caches = Caches {
+                verb_resolution_cache: verb_cache.fork(),
+                prop_resolution_cache: prop_cache.fork(),
+                ancestry_cache: ancestry_cache.fork(),
             };
 
-            // Take the completed batch and send to background writer
-            let batch = self.batch_collector.finish_commit();
-            let batch_op_count = batch.operations.len();
-            let batch_write_start = Instant::now();
-            if !batch.is_empty() {
-                self.batch_writer.write(batch);
-            }
-            let batch_write_elapsed = batch_write_start.elapsed();
-
-            let next_root =
-                checkers.commit_all(&current_root, verb_cache, prop_cache, ancestry_cache);
-            self.snapshot_planes.publish_write_root(next_root);
-
-            // Track the last write timestamp and send barrier
-            self.last_write_commit
-                .store(tx_timestamp.0, std::sync::atomic::Ordering::Release);
-            self.batch_writer.send_barrier(tx_timestamp);
-
-            // Warn if batch_write blocked (backpressure)
-            if batch_write_elapsed > Duration::from_secs(1) {
-                warn!(
-                    "Slow batch_write: {} ops blocked for {:.2}s (ts {})",
-                    batch_op_count,
-                    batch_write_elapsed.as_secs_f32(),
-                    tx_timestamp.0
-                );
+            if let Some(rebased) = checkers.try_rebase(&our_base, &winner, combined_caches) {
+                // Rebase succeeded — no relation-level conflict. Try CAS again.
+                if self
+                    .snapshot_planes
+                    .try_publish_write_root(winner.version, rebased)
+                {
+                    self.persist_commit(&persist_ops, tx_timestamp);
+                    return CommitResult::Success {
+                        mutations_made: true,
+                        timestamp: tx_timestamp.0,
+                    };
+                }
+                // CAS failed again — another writer snuck in. Update our base
+                // and try to rebase again.
+                our_base = winner;
+                continue;
             }
 
-            drop(_t);
+            // Relation-level conflict: the winner touched a relation we also
+            // touched. Fall back to full conflict retry.
+            break;
         }
 
-        // Queue sequence persistence to background thread
-        // (Caches and relation indexes were published atomically in the root snapshot)
-        // Store monotonic counter in sequence slot 15
-        self.sequences[15].store(
-            self.monotonic.load(std::sync::atomic::Ordering::Relaxed) as i64,
-            std::sync::atomic::Ordering::Relaxed,
-        );
-        // Collect current sequence values and send to background writer
-        let mut seq_values = [0i64; 16];
-        for (i, seq) in self.sequences.iter().enumerate() {
-            seq_values[i] = seq.load(std::sync::atomic::Ordering::Relaxed);
-        }
-        self.sequence_writer.write(seq_values);
-        CommitResult::Success {
-            mutations_made: has_mutations,
-            timestamp: tx_timestamp.0,
+        CommitResult::ConflictRetry {
+            conflict_info: None,
         }
     }
 }

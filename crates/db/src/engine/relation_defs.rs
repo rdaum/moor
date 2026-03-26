@@ -133,6 +133,12 @@ macro_rules! define_relations {
                 fn usage_bytes(&self) -> usize;
             }
 
+            /// Deferred persistence operations for all relations, produced by
+            /// `prepare_apply_all` and consumed after a successful CAS publish.
+            pub(crate) struct RelationPersistOps {
+                $( $field: Vec<crate::tx::PersistOp<$domain, $codomain>>, )*
+            }
+
             impl RelationCheckers {
                 /// Check all relations for conflicts with the given working sets.
                 ///
@@ -155,35 +161,24 @@ macro_rules! define_relations {
                     Ok(())
                 }
 
-                /// Apply all working sets to their respective relations.
-                ///
-                /// Consumes the working sets and applies them to the relations.
-                /// Returns `Ok(self)` if all applications succeed, `Err(())` if any fail.
-                /// Skips empty working sets to avoid overhead of calling apply() on empty relations.
-                fn apply_all(mut self, ws: RelationWorkingSets) -> Result<Self, ()> {
-                    $(
-                        if !ws.$field.is_empty() {
-                            if self.$field.apply(ws.$field).is_err() {
-                                return Err(());
-                            }
-                        }
-                    )*
-                    Ok(self)
+                /// Update imbl indexes from working sets without touching providers.
+                /// Returns deferred persistence operations to apply after CAS success.
+                fn prepare_apply_all(&mut self, ws: &RelationWorkingSets) -> RelationPersistOps {
+                    RelationPersistOps {
+                        $( $field: if !ws.$field.is_empty() {
+                            self.$field.prepare_indexes(&ws.$field)
+                        } else {
+                            Vec::new()
+                        }, )*
+                    }
                 }
 
-                /// Commit all changes to the relations by constructing a new world snapshot.
-                fn commit_all(
-                    self,
+                /// Build a candidate snapshot from the updated indexes without consuming self.
+                fn build_snapshot(
+                    &self,
                     current_root: &std::sync::Arc<WorldStateSnapshot>,
-                    verb_cache: VerbResolutionCache,
-                    prop_cache: PropResolutionCache,
-                    ancestry_cache: AncestryCache,
+                    combined_caches: crate::engine::moor_db::Caches,
                 ) -> std::sync::Arc<WorldStateSnapshot> {
-                    let combined_caches = crate::engine::moor_db::Caches {
-                        verb_resolution_cache: verb_cache,
-                        prop_resolution_cache: prop_cache,
-                        ancestry_cache,
-                    };
                     let caches = if combined_caches.has_changed() {
                         std::sync::Arc::new(combined_caches)
                     } else {
@@ -193,8 +188,47 @@ macro_rules! define_relations {
                     std::sync::Arc::new(WorldStateSnapshot {
                         version: current_root.version + 1,
                         caches,
-                        $( $field: self.$field.committed_index_or(current_root.$field.clone()), )*
+                        $( $field: self.$field.snapshot_index_or(&current_root.$field), )*
                     })
+                }
+
+                /// After a CAS failure, attempt to rebase our prepared indexes onto the
+                /// winner's snapshot. Succeeds if no relation was modified by both us and
+                /// the winner (relation-level conflict detection via Arc pointer comparison).
+                ///
+                /// Returns `Some(new_snapshot)` if rebase succeeded, `None` if there's a
+                /// relation-level conflict requiring full re-check.
+                fn try_rebase(
+                    &self,
+                    our_base: &std::sync::Arc<WorldStateSnapshot>,
+                    winner: &std::sync::Arc<WorldStateSnapshot>,
+                    combined_caches: crate::engine::moor_db::Caches,
+                ) -> Option<std::sync::Arc<WorldStateSnapshot>> {
+                    // Check for relation-level conflicts: did the winner modify a
+                    // relation that we also modified?
+                    $(
+                        let winner_changed = !std::sync::Arc::ptr_eq(&our_base.$field, &winner.$field);
+                        if winner_changed && self.$field.dirty() {
+                            // Both we and the winner touched this relation
+                            return None;
+                        }
+                    )*
+
+                    // No relation-level conflict. Build rebased snapshot:
+                    // - For relations we modified: use our dirty index
+                    // - For relations the winner modified: use winner's index
+                    // - For unchanged relations: either works (same Arc)
+                    let caches = if combined_caches.has_changed() {
+                        std::sync::Arc::new(combined_caches)
+                    } else {
+                        winner.caches.clone()
+                    };
+
+                    Some(std::sync::Arc::new(WorldStateSnapshot {
+                        version: winner.version + 1,
+                        caches,
+                        $( $field: self.$field.snapshot_index_or(&winner.$field), )*
+                    }))
                 }
             }
 
@@ -280,6 +314,22 @@ macro_rules! define_relations {
                             },
                         )*
                     })
+                }
+
+                /// Build a CommitBatch from deferred persistence operations.
+                /// Called after a successful CAS publish to persist changes to Fjall.
+                fn persist_ops_to_batch(
+                    &self,
+                    ops: &RelationPersistOps,
+                    timestamp: crate::tx::Timestamp,
+                ) -> crate::provider::batch_writer::CommitBatch {
+                    let mut all_ops = Vec::new();
+                    $(
+                        if !ops.$field.is_empty() {
+                            all_ops.extend(self.$field.provider().encode_persist_ops(&ops.$field));
+                        }
+                    )*
+                    crate::provider::batch_writer::CommitBatch::from_ops(timestamp, all_ops)
                 }
 
                 /// Stop all relation providers.

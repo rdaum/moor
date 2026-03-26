@@ -74,6 +74,7 @@ pub struct CommitBatch {
 }
 
 impl CommitBatch {
+    #[allow(dead_code)]
     pub fn with_capacity(timestamp: Timestamp, expected_operations: usize) -> Self {
         Self {
             timestamp,
@@ -98,6 +99,13 @@ impl CommitBatch {
     pub fn is_empty(&self) -> bool {
         self.operations.is_empty()
     }
+
+    pub fn from_ops(timestamp: Timestamp, operations: Vec<BatchOp>) -> Self {
+        Self {
+            timestamp,
+            operations,
+        }
+    }
 }
 
 /// Manages the current commit batch. Shared across all FjallProviders.
@@ -113,6 +121,7 @@ impl BatchCollector {
         }
     }
 
+    #[allow(dead_code)]
     pub fn start_commit(&self, timestamp: Timestamp, expected_operations: usize) {
         let mut current = self.current.lock();
         debug_assert!(
@@ -139,6 +148,7 @@ impl BatchCollector {
             .delete(partition, key);
     }
 
+    #[allow(dead_code)]
     pub fn finish_commit(&self) -> CommitBatch {
         self.current
             .lock()
@@ -146,6 +156,7 @@ impl BatchCollector {
             .expect("No active commit batch to finish")
     }
 
+    #[allow(dead_code)]
     pub fn abort_commit(&self) {
         self.current.lock().take();
     }

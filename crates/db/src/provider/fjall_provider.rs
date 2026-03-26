@@ -254,6 +254,62 @@ where
 
 const MAX_TOMBSTONE_COUNT: usize = 100_000;
 
+impl<Domain, Codomain> FjallProvider<Domain, Codomain>
+where
+    Domain: RelationDomain,
+    Codomain: RelationCodomain,
+    Self: EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
+{
+    /// Encode deferred persistence operations into batch ops for the BatchWriter.
+    /// Does not update pending_ops — the imbl index (already published via CAS)
+    /// is the source of truth for reads.
+    pub fn encode_persist_ops(
+        &self,
+        ops: &[crate::tx::PersistOp<Domain, Codomain>],
+    ) -> Vec<super::batch_writer::BatchOp> {
+        use super::batch_writer::{BatchOp, BatchOpType};
+        use crate::tx::PersistOp;
+
+        let mut batch_ops = Vec::with_capacity(ops.len());
+        for op in ops {
+            match op {
+                PersistOp::Put {
+                    ts,
+                    domain,
+                    codomain,
+                } => {
+                    if let Ok(key_bytes) = <Self as EncodeFor<Domain>>::encode(self, domain) {
+                        let batch_value: Arc<dyn super::batch_writer::BatchValue> =
+                            Arc::new(FjallBatchValue {
+                                provider: self.clone(),
+                                timestamp: *ts,
+                                codomain: codomain.clone(),
+                            });
+                        batch_ops.push(BatchOp {
+                            partition: self.fjall_keyspace.clone(),
+                            op_type: BatchOpType::Insert {
+                                key: key_bytes.to_vec(),
+                                value: batch_value,
+                            },
+                        });
+                    }
+                }
+                PersistOp::Del { ts: _, domain } => {
+                    if let Ok(key_bytes) = <Self as EncodeFor<Domain>>::encode(self, domain) {
+                        batch_ops.push(BatchOp {
+                            partition: self.fjall_keyspace.clone(),
+                            op_type: BatchOpType::Delete {
+                                key: key_bytes.to_vec(),
+                            },
+                        });
+                    }
+                }
+            }
+        }
+        batch_ops
+    }
+}
+
 impl<Domain, Codomain> Provider<Domain, Codomain> for FjallProvider<Domain, Codomain>
 where
     Domain: RelationDomain,

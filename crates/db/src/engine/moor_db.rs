@@ -45,7 +45,6 @@ use moor_common::{
     util::BitEnum,
 };
 use moor_var::{Obj, Symbol, Var, program::ProgramType};
-use parking_lot::Mutex;
 use std::{
     path::Path,
     sync::{
@@ -117,15 +116,15 @@ impl Caches {
 /// Core storage engine for transactional world-state access.
 pub struct MoorDB {
     monotonic: CachePadded<AtomicU64>,
-    /// Serializes write commit processing.
-    commit_apply_lock: Mutex<()>,
     keyspace: Database,
     relations: Relations,
     snapshot_planes: SnapshotPlanes,
     sequences: Arc<[CachePadded<AtomicI64>; 16]>,
     /// Background writer for sequence persistence
     sequence_writer: fjall_provider::SequenceWriter,
-    /// Shared batch collector for all providers
+    /// Shared batch collector — still passed to FjallProviders during init for
+    /// use in read-your-writes paths. The commit pipeline no longer uses it.
+    #[allow(dead_code)]
     batch_collector: Arc<BatchCollector>,
     /// Single background writer for all fjall operations
     batch_writer: BatchWriter,
@@ -303,7 +302,6 @@ impl MoorDB {
 
         let s = Arc::new(Self {
             monotonic: CachePadded::new(AtomicU64::new(start_tx_num)),
-            commit_apply_lock: Mutex::new(()),
             relations,
             snapshot_planes,
             sequences,
