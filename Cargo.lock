@@ -3613,7 +3613,7 @@ dependencies = [
  "smallvec",
  "strum",
  "tracing",
- "uuid 1.22.0",
+ "uuid 1.23.0",
 ]
 
 [[package]]
