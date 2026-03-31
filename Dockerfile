@@ -1,3 +1,15 @@
+# Frontend build stage
+FROM node:20-bookworm AS frontend-build
+WORKDIR /moor-frontend
+RUN apt update && apt -y install git flatbuffers-compiler
+COPY ./.git ./.git
+COPY package.json package-lock.json* ./
+COPY clients/ ./clients/
+COPY crates/schema/schema/ ./crates/schema/schema/
+RUN rm -rf clients/meadow/.git
+RUN npm ci
+RUN npm run build --prefix clients/meadow
+
 # Backend build stage
 FROM rust:1.92-bookworm AS backend-build
 
@@ -69,5 +81,6 @@ COPY --from=backend-build /moor-build/target-final/moor-mcp-host /moor/moor-mcp-
 
 EXPOSE 8080
 
-# Default stage - backend services with moor binaries
+# Default stage - backend services with web client
 FROM backend AS default
+COPY --from=frontend-build /moor-frontend/clients/meadow/dist /moor/web-client

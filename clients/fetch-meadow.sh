@@ -22,7 +22,7 @@ set -e
 MEADOW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/meadow"
 MEADOW_REPO="timbran/meadow"
 CODEBERG_HOST="codeberg.org"
-DEFAULT_BRANCH="main"
+DEFAULT_BRANCH="v1.0-release"
 
 # Determine the protocol based on the current repository's 'origin' remote
 # This helps use the same credentials/access method as the main repo.

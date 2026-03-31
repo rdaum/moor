@@ -4,15 +4,20 @@
 # Multi-stage build: Frontend build stage
 FROM node:20-bookworm AS frontend-build
 WORKDIR /moor-frontend
-# Install git for git hash lookup during build
-RUN apt update && apt -y install git
-COPY package.json package-lock.json* ./
-RUN npm ci
-COPY web-client/ ./web-client/
-COPY tsconfig.json vite.config.ts ./
-# Copy .git directory so vite can get the git hash during build
+# Install git for git hash lookup during build and local package resolution
+RUN apt update && apt -y install git flatbuffers-compiler
+# Copy .git directory so vite can get the git hash
 COPY ./.git ./.git
-RUN npm run build
+# Copy root package files; postinstall will find meadow already present and pack local deps
+COPY package.json package-lock.json* ./
+# Copy the web client and its local dependencies
+COPY clients/ ./clients/
+COPY crates/schema/schema/ ./crates/schema/schema/
+# Remove meadow's .git so fetch-meadow.sh (postinstall) treats it as non-repo and skips updates
+RUN rm -rf clients/meadow/.git
+RUN npm ci
+# Build the meadow web client
+RUN npm run build --prefix clients/meadow
 
 # Backend build stage - runs on native x86_64 platform
 FROM rust:1.92-bookworm AS backend-build
@@ -89,7 +94,7 @@ COPY --from=backend-build /moor-build/target-final/moor-telnet-host /moor/moor-t
 COPY --from=backend-build /moor-build/target-final/moor-curl-worker /moor/moor-curl-worker
 
 # Copy web client static files
-COPY --from=frontend-build /moor-frontend/dist /moor/web-client
+COPY --from=frontend-build /moor-frontend/clients/meadow/dist /moor/web-client
 
 # Copy utility binaries
 COPY --from=backend-build /moor-build/target-final/moorc /moor/moorc
@@ -100,7 +105,7 @@ EXPOSE 8080
 
 # nginx-based frontend image
 FROM --platform=linux/arm64 nginx:alpine AS frontend
-COPY --from=frontend-build /moor-frontend/dist /usr/share/nginx/html
+COPY --from=frontend-build /moor-frontend/clients/meadow/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 EXPOSE 80
 
