@@ -137,7 +137,7 @@ jobs:
                 "tag_name": "${{ inputs.ref }}",
                 "target_commitish": "${{ inputs.ref }}",
                 "name": "Release ${{ inputs.ref }}",
-                "body": "## mooR Release ${{ inputs.ref }}\n\n### Downloads\n\n**Debian Packages:**\n- Available in the release artifacts below\n\n**Docker Images:**\n- Backend: `codeberg.org/timbran/moor:${{ inputs.ref }}-x86_64` and `:${{ inputs.ref }}-aarch64`\n- Latest tags: `:latest-x86_64` and `:latest-aarch64` \n\n**Frontend:**\n- The [Meadow](https://codeberg.org/timbran/meadow) web client is now released separately.",\n- Latest tags: `:latest-x86_64` and `:latest-aarch64`",
+                "body": "## mooR Release ${{ inputs.ref }}\n\n### Downloads\n\n**Debian Packages:**\n- Available in the release artifacts below\n\n**Docker Images:**\n- Backend: `codeberg.org/timbran/moor:${{ inputs.ref }}-x86_64` and `:${{ inputs.ref }}-aarch64`\n- Latest tags: `:latest-x86_64` and `:latest-aarch64`\n\n**Frontend:**\n- The [Meadow](https://codeberg.org/timbran/meadow) web client is now released separately.",
                 "draft": false,
                 "prerelease": false
               }' \
