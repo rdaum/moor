@@ -11,12 +11,14 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
+#[path = "unparse_expr.rs"]
+mod expr;
+
 use crate::{
     ast,
     ast::{Expr, Stmt, StmtNode},
     decompile::DecompileError,
     parse::Parse,
-    precedence::{PrecedenceLevel, expr_precedence_level},
 };
 use base64::{Engine, engine::general_purpose};
 use moor_common::util::quote_str;
@@ -26,45 +28,9 @@ use moor_var::{
 };
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy)]
-pub enum ParenPosition {
-    Left,
-    Right,
-}
-
-/// Check if an expression needs parentheses when used in a given position relative to a parent.
-/// Handles right-associative operators correctly.
-pub fn needs_parens(
-    expr: &crate::ast::Expr,
-    parent: &crate::ast::Expr,
-    position: ParenPosition,
-) -> bool {
-    use crate::ast::{BinaryOp, Expr};
-    use std::cmp::Ordering;
-
-    let expr_prec = expr_precedence_level(expr);
-    let parent_prec = expr_precedence_level(parent);
-
-    match expr_prec.cmp(&parent_prec) {
-        Ordering::Less => true,     // Lower precedence always needs parens
-        Ordering::Greater => false, // Higher precedence never needs parens
-        Ordering::Equal => {
-            // Equal precedence: check associativity and position
-            match (parent, position) {
-                // Right-associative operators: left side needs parens, right side doesn't
-                (Expr::Binary(BinaryOp::Exp, _, _), ParenPosition::Left) => true,
-                (Expr::Binary(BinaryOp::Exp, _, _), ParenPosition::Right) => false,
-                // Left-associative operators: left side doesn't need parens, right side does
-                (_, ParenPosition::Left) => false,
-                (_, ParenPosition::Right) => true,
-            }
-        }
-    }
-}
-
 /// This could probably be combined with the structure for Parse.
 #[derive(Debug)]
-struct Unparse<'a> {
+pub(crate) struct Unparse<'a> {
     tree: &'a Parse,
     fully_paren: bool,
     indent_width: usize,
@@ -101,27 +67,6 @@ impl<'a> Unparse<'a> {
         match codes {
             ast::CatchCodes::Codes(codes) => self.unparse_args(codes),
             ast::CatchCodes::Any => Ok(String::from("ANY")),
-        }
-    }
-
-    fn unparse_var(&self, var: &moor_var::Var, aggressive: bool) -> String {
-        if !aggressive {
-            return to_literal(var);
-        }
-
-        if let Some(s) = var.as_string() {
-            // If the string contains anything that isn't alphanumeric and _, it's
-            // not a valid ident and needs to be quoted. Likewise if it begins with a non-alpha/underscore
-            let needs_quotes = s.chars().any(|c| !c.is_alphanumeric() && c != '_')
-                || (s.chars().next().unwrap().is_numeric() && !s.starts_with('_'));
-
-            if !needs_quotes {
-                s.to_string()
-            } else {
-                format!("({})", quote_str(s))
-            }
-        } else {
-            to_literal(var)
         }
     }
 
@@ -169,446 +114,31 @@ impl<'a> Unparse<'a> {
         })
     }
 
-    fn unparse_expr(&self, current_expr: &Expr) -> Result<String, DecompileError> {
-        let brace_if_needed = |expr: &Expr, position: ParenPosition| -> String {
-            if (self.fully_paren && expr_precedence_level(expr) != PrecedenceLevel::Atomic)
-                || needs_parens(expr, current_expr, position)
-            {
-                format!("({})", self.unparse_expr(expr).unwrap())
-            } else {
-                self.unparse_expr(expr).unwrap()
-            }
-        };
-
-        match current_expr {
-            Expr::Assign { left, right } => {
-                let left_frag = self.unparse_expr(left)?;
-                let right_frag = self.unparse_expr(right)?;
-                Ok(format!("{left_frag} = {right_frag}"))
-            }
-            Expr::Pass { args } => {
-                let mut buffer = String::new();
-                buffer.push_str("pass");
-                buffer.push('(');
-                buffer.push_str(self.unparse_args(args).unwrap().as_str());
-                buffer.push(')');
-                Ok(buffer)
-            }
-            Expr::Error(code, msg) => {
-                let mut buffer: String = (*code).into();
-                if let Some(msg) = msg {
-                    let msg_str = self.unparse_expr(msg).unwrap();
-                    buffer.push_str(format!("({msg_str})").as_str());
-                }
-                Ok(buffer)
-            }
-            Expr::Value(var) => Ok(self.unparse_var(var, false)),
-            Expr::TypeConstant(vt) => Ok(vt.to_literal().to_string()),
-            Expr::Id(id) => Ok(self.unparse_variable(id).to_string()),
-            Expr::Binary(op, left_expr, right_expr) => Ok(format!(
-                "{} {} {}",
-                brace_if_needed(left_expr, ParenPosition::Left),
-                op,
-                brace_if_needed(right_expr, ParenPosition::Right)
-            )),
-            Expr::And(left, right) => Ok(format!(
-                "{} && {}",
-                brace_if_needed(left, ParenPosition::Left),
-                brace_if_needed(right, ParenPosition::Right)
-            )),
-            Expr::Or(left, right) => Ok(format!(
-                "{} || {}",
-                brace_if_needed(left, ParenPosition::Left),
-                brace_if_needed(right, ParenPosition::Right)
-            )),
-            Expr::Unary(op, expr) => {
-                let inner_str = brace_if_needed(expr, ParenPosition::Right);
-                // The MOO grammar has:
-                //   neg = { "-" ~ !ASCII_DIGIT }
-                // So `-0.0` parses as a negative float literal, not unary negation of 0.0.
-                //
-                // We need parentheses in two cases:
-                // 1. Inner starts with '-' (e.g., `--0.0` is ambiguous)
-                // 2. When op is Neg and inner starts with a digit/dot (e.g., `-0.0[0]` would be
-                //    parsed as `(-0.0)[0]` not `-(0.0[0])`)
-                //
-                // The second case handles: Unary(Neg, Index(Float(0), 0)) -> should be `-(0.0[0])`
-                // not `-0.0[0]` which parses as Index(Float(-0.0), 0).
-                let needs_parens = inner_str.starts_with('-')
-                    || (matches!(op, crate::ast::UnaryOp::Neg)
-                        && inner_str
-                            .chars()
-                            .next()
-                            .is_some_and(|c| c.is_ascii_digit() || c == '.'));
-                if needs_parens {
-                    Ok(format!("{}({})", op, inner_str))
+    fn unparse_scatter_items(
+        &self,
+        items: &[ast::ScatterItem],
+    ) -> Result<String, DecompileError> {
+        let items = items
+            .iter()
+            .map(|item| {
+                let prefix = match item.kind {
+                    ast::ScatterKind::Required => "",
+                    ast::ScatterKind::Optional => "?",
+                    ast::ScatterKind::Rest => "@",
+                };
+                let name = self.unparse_variable(&item.id);
+                if let Some(expr) = &item.expr {
+                    Ok(format!(
+                        "{prefix}{} = {}",
+                        name.as_arc_str(),
+                        self.unparse_expr(expr)?
+                    ))
                 } else {
-                    Ok(format!("{}{}", op, inner_str))
+                    Ok(format!("{prefix}{}", name.as_arc_str()))
                 }
-            }
-            Expr::Prop { location, property } => {
-                let location = match (&**location, &**property) {
-                    (Expr::Value(var), Expr::Value(_)) if var.is_sysobj() => String::from("$"),
-                    _ => {
-                        let loc_str = brace_if_needed(location, ParenPosition::Left);
-                        // Wrap in parens if location starts with '-' (negative literal) or
-                        // looks like a numeric literal (ends with digit, doesn't start with #).
-                        // E.g., `123.prop` looks like float `123.p...` which fails to parse.
-                        // But `#1.prop` is fine since # distinguishes object refs.
-                        let looks_like_number = loc_str.ends_with(|c: char| c.is_ascii_digit())
-                            && !loc_str.starts_with('#');
-                        let needs_parens = loc_str.starts_with('-') || looks_like_number;
-                        if needs_parens {
-                            format!("({}).", loc_str)
-                        } else {
-                            format!("{}.", loc_str)
-                        }
-                    }
-                };
-                let prop = match &**property {
-                    Expr::Value(var) => {
-                        let s = self.unparse_var(var, true).to_string();
-                        // Property access with non-identifier values needs parens.
-                        // `obj.propname` is valid when propname is an identifier-like string.
-                        // `obj.(expr)` is needed for dynamic properties (numbers, negative, etc).
-                        // Check if s could be a valid identifier.
-                        let needs_parens = s.is_empty()
-                            || s.starts_with(|c: char| {
-                                c == '-' || c == '"' || c == '#' || c.is_ascii_digit()
-                            });
-                        if needs_parens { format!("({})", s) } else { s }
-                    }
-                    _ => format!("({})", brace_if_needed(property, ParenPosition::Right)),
-                };
-                Ok(format!("{location}{prop}"))
-            }
-            Expr::Verb {
-                location,
-                verb,
-                args,
-            } => {
-                // First, determine what the verb string looks like and if it needs parens
-                // Also track if the $-shorthand can be used (only for identifier verbs)
-                let (verb_str, verb_needs_parens, can_use_dollar) = match &**verb {
-                    Expr::Value(var) => {
-                        let s = self.unparse_var(var, true);
-                        // Per LambdaMOO spec, verb names are identifiers or string expressions.
-                        // `obj:verbname(...)` - identifier (can use $verbname())
-                        // `obj:(expr)(...)` - dynamic expression needs parens (NO $ shorthand)
-                        // Only need parens for: empty, negative, object refs, or non-identifier values
-                        let needs_parens = s.is_empty() || s.starts_with(['-', '#']);
-                        // $ shorthand only works for identifier-like verbs
-                        let is_identifier = !s.is_empty()
-                            && !s.starts_with(|c: char| {
-                                c == '-' || c == '"' || c == '#' || c.is_ascii_digit()
-                            });
-                        (s, needs_parens, is_identifier)
-                    }
-                    _ => (self.unparse_expr(verb)?, true, false),
-                };
-
-                // Now determine location string. Only use `$` shorthand for sysobj when
-                // verb is a valid identifier. Otherwise use full object ref.
-                let location = match &**location {
-                    Expr::Value(var) if var.is_sysobj() && can_use_dollar => String::from("$"),
-                    _ => {
-                        let loc_str = brace_if_needed(location, ParenPosition::Left);
-                        // Wrap in parens if location starts with '-' (negative literal) or
-                        // looks like a numeric literal (ends with digit, doesn't start with #).
-                        // But `#1:verb()` is fine since # distinguishes object refs.
-                        let looks_like_number = loc_str.ends_with(|c: char| c.is_ascii_digit())
-                            && !loc_str.starts_with('#');
-                        let needs_parens = loc_str.starts_with('-') || looks_like_number;
-                        if needs_parens {
-                            format!("({}):", loc_str)
-                        } else {
-                            format!("{}:", loc_str)
-                        }
-                    }
-                };
-
-                let verb = if verb_needs_parens {
-                    format!("({})", verb_str)
-                } else {
-                    verb_str
-                };
-                let mut buffer = String::new();
-                buffer.push_str(format!("{location}{verb}").as_str());
-                buffer.push('(');
-                buffer.push_str(self.unparse_args(args)?.as_str());
-                buffer.push(')');
-                Ok(buffer)
-            }
-            Expr::Call { function, args } => {
-                let mut buffer = String::new();
-                match function {
-                    crate::ast::CallTarget::Builtin(symbol) => {
-                        buffer.push_str(&symbol.as_arc_str());
-                    }
-                    crate::ast::CallTarget::Expr(expr) => {
-                        buffer.push_str(self.unparse_expr(expr)?.as_str());
-                    }
-                }
-                buffer.push('(');
-                buffer.push_str(self.unparse_args(args)?.as_str());
-                buffer.push(')');
-                Ok(buffer)
-            }
-            Expr::Range { base, from, to } => {
-                // Conditionals inside range bounds need parentheses because without them,
-                // `base[(a ? b | c)..(d ? e | f)]` would be unparsed as
-                // `base[a ? b | c..d ? e | f]` which parses differently - the parser
-                // sees `c..d` as part of the conditional alternative, breaking the range.
-                let paren_if_conditional = |expr: &Expr| -> String {
-                    if matches!(expr, Expr::Cond { .. }) {
-                        format!("({})", self.unparse_expr(expr).unwrap())
-                    } else {
-                        self.unparse_expr(expr).unwrap()
-                    }
-                };
-                let base_str = brace_if_needed(base, ParenPosition::Left);
-                // Wrap in parens if base starts with '-' to prevent ambiguity with
-                // negative literals. See comment in Expr::Unary for details.
-                let base_str = if base_str.starts_with('-') {
-                    format!("({})", base_str)
-                } else {
-                    base_str
-                };
-                Ok(format!(
-                    "{}[{}..{}]",
-                    base_str,
-                    paren_if_conditional(from),
-                    paren_if_conditional(to)
-                ))
-            }
-            Expr::Cond {
-                condition,
-                consequence,
-                alternative,
-            } => {
-                // For conditionals, the condition part needs special handling.
-                // If the condition is itself a conditional, it needs parentheses because
-                // `a ? b | c ? d | e` parses as `a ? b | (c ? d | e)`, not `(a ? b | c) ? d | e`.
-                let condition_str = if matches!(condition.as_ref(), Expr::Cond { .. }) {
-                    format!("({})", self.unparse_expr(condition)?)
-                } else {
-                    brace_if_needed(condition, ParenPosition::Left)
-                };
-                Ok(format!(
-                    "{} ? {} | {}",
-                    condition_str,
-                    self.unparse_expr(consequence)?,
-                    brace_if_needed(alternative, ParenPosition::Right)
-                ))
-            }
-            Expr::TryCatch {
-                trye,
-                codes,
-                except,
-            } => {
-                let mut buffer = String::new();
-                buffer.push('`');
-                buffer.push_str(self.unparse_expr(trye)?.as_str());
-                buffer.push_str(" ! ");
-                buffer.push_str(self.unparse_catch_codes(codes)?.to_uppercase().as_str());
-                if let Some(except) = except {
-                    buffer.push_str(" => ");
-                    buffer.push_str(self.unparse_expr(except)?.as_str());
-                }
-                buffer.push('\'');
-                Ok(buffer)
-            }
-            Expr::Return(expr) => Ok(match expr {
-                None => "return".to_string(),
-                Some(e) => format!("return {}", self.unparse_expr(e)?),
-            }),
-            Expr::Index(lvalue, index) => {
-                let left = brace_if_needed(lvalue, ParenPosition::Left);
-                // Wrap in parens if left starts with '-' to prevent ambiguity with
-                // negative literals. See comment in Expr::Unary for details.
-                let left = if left.starts_with('-') {
-                    format!("({})", left)
-                } else {
-                    left
-                };
-                let right = self.unparse_expr(index).unwrap();
-                Ok(format!("{left}[{right}]"))
-            }
-            Expr::List(list) => {
-                let mut buffer = String::new();
-                buffer.push('{');
-                buffer.push_str(self.unparse_args(list)?.as_str());
-                buffer.push('}');
-                Ok(buffer)
-            }
-            Expr::Map(pairs) => {
-                let mut buffer = String::new();
-                buffer.push('[');
-                let len = pairs.len();
-                for (i, (key, value)) in pairs.iter().enumerate() {
-                    buffer.push_str(self.unparse_expr(key)?.as_str());
-                    buffer.push_str(" -> ");
-                    buffer.push_str(self.unparse_expr(value)?.as_str());
-                    if i + 1 < len {
-                        buffer.push_str(", ");
-                    }
-                }
-                buffer.push(']');
-                Ok(buffer)
-            }
-            Expr::Scatter(vars, expr) => {
-                let mut buffer = String::new();
-                // TODO: this is currently broken and will unparse all locals as lets, even when
-                //   they are re-assigning to an existing declared variable.
-                let is_local = vars.iter().any(|var| var.id.scope_id != 0);
-                let is_const = vars
-                    .iter()
-                    .any(|var| self.tree.variables.decl_for(&var.id).constant);
-                if is_local && is_const {
-                    buffer.push_str("const ");
-                } else if is_local {
-                    buffer.push_str("let ");
-                }
-                buffer.push('{');
-                let len = vars.len();
-                for (i, var) in vars.iter().enumerate() {
-                    match var.kind {
-                        ast::ScatterKind::Required => {}
-                        ast::ScatterKind::Optional => {
-                            buffer.push('?');
-                        }
-                        ast::ScatterKind::Rest => {
-                            buffer.push('@');
-                        }
-                    }
-                    let name = self.unparse_variable(&var.id);
-                    buffer.push_str(&name.as_arc_str());
-                    if let Some(expr) = &var.expr {
-                        buffer.push_str(" = ");
-                        buffer.push_str(self.unparse_expr(expr)?.as_str());
-                    }
-                    if i + 1 < len {
-                        buffer.push_str(", ");
-                    }
-                }
-                buffer.push_str("} = ");
-                buffer.push_str(self.unparse_expr(expr)?.as_str());
-                Ok(buffer)
-            }
-            Expr::Length => Ok(String::from("$")),
-            Expr::Decl { id, is_const, expr } => {
-                let prefix = if *is_const { "const " } else { "let " };
-                let var_name = self.unparse_variable(id);
-                match expr {
-                    Some(e) => Ok(format!(
-                        "{}{} = {}",
-                        prefix,
-                        var_name,
-                        self.unparse_expr(e)?
-                    )),
-                    None => Ok(format!("{prefix}{var_name}")),
-                }
-            }
-            Expr::Flyweight(delegate, slots, contents) => {
-                // "< #1, .slot = value, ..., {1, 2, 3} >"
-                let mut buffer = String::new();
-                buffer.push('<');
-                buffer.push_str(self.unparse_expr(delegate)?.as_str());
-                if !slots.is_empty() {
-                    for (slot, value) in slots.iter() {
-                        buffer.push_str(", .");
-                        buffer.push_str(&slot.as_arc_str());
-                        buffer.push_str(" = ");
-                        buffer.push_str(self.unparse_expr(value)?.as_str());
-                    }
-                }
-                if let Some(contents_expr) = contents {
-                    buffer.push_str(", ");
-                    buffer.push_str(self.unparse_expr(contents_expr)?.as_str());
-                }
-                buffer.push('>');
-                Ok(buffer)
-            }
-            Expr::ComprehendRange {
-                variable,
-                end_of_range_register: _,
-                producer_expr,
-                from,
-                to,
-            } => {
-                // { <producer_expr> for <variable> in [<from>..<to>] }
-                let mut buffer = String::new();
-                buffer.push_str("{ ");
-                buffer.push_str(&self.unparse_expr(producer_expr)?);
-                buffer.push_str(" for ");
-                let name = self.unparse_variable(variable);
-                buffer.push_str(&name.as_arc_str());
-                buffer.push_str(" in [");
-                buffer.push_str(&self.unparse_expr(from)?);
-                buffer.push_str("..");
-                buffer.push_str(&self.unparse_expr(to)?);
-                buffer.push_str("] }");
-                Ok(buffer)
-            }
-            Expr::ComprehendList {
-                variable,
-                position_register: _,
-                producer_expr,
-                list,
-                ..
-            } => {
-                // { <producer_Expr> for <variable> in (list) }
-                // { <producer_expr> for <variable> in [<from>..<to>] }
-                let mut buffer = String::new();
-                buffer.push_str("{ ");
-                buffer.push_str(&self.unparse_expr(producer_expr)?);
-                buffer.push_str(" for ");
-                let name = self.unparse_variable(variable);
-                buffer.push_str(&name.as_arc_str());
-                buffer.push_str(" in (");
-                buffer.push_str(&self.unparse_expr(list)?);
-                buffer.push_str(") }");
-                Ok(buffer)
-            }
-            Expr::Lambda {
-                params,
-                body,
-                self_name,
-            } => {
-                // Check if this is a simple expression lambda or a complex multi-statement lambda
-                let is_simple_expr = matches!(&body.node, StmtNode::Expr(Expr::Return(Some(_))));
-
-                let param_str = self.unparse_lambda_params(params)?;
-
-                if is_simple_expr && self_name.is_none() {
-                    // Simple expression lambda: {param1, ?param2, @param3} => expr
-                    let expr = match &body.node {
-                        StmtNode::Expr(Expr::Return(Some(e))) => self.unparse_expr(e)?,
-                        _ => unreachable!("is_simple_expr check guarantees this pattern"),
-                    };
-                    Ok(format!("{{{param_str}}} => {expr}"))
-                } else {
-                    // Multi-statement lambda: fn (params) ... endfn
-                    // or fn name(params) ... endfn for named/recursive functions
-                    let fn_header = match self_name {
-                        Some(name_var) => {
-                            let name = self.unparse_variable(name_var);
-                            format!("fn {}({param_str}) ", name.as_arc_str())
-                        }
-                        None => format!("fn ({param_str}) "),
-                    };
-
-                    // Collect body statements
-                    let stmts = match &body.node {
-                        StmtNode::Scope { body, .. } => body.as_slice(),
-                        _ => std::slice::from_ref(body.as_ref()),
-                    };
-
-                    let body_str = self.unparse_lambda_body_inline(stmts)?;
-                    Ok(format!("{fn_header}{body_str}endfn"))
-                }
-            }
-        }
+            })
+            .collect::<Result<Vec<_>, DecompileError>>()?;
+        Ok(items.join(", "))
     }
 
     fn unparse_stmt<W: std::fmt::Write>(
@@ -845,12 +375,40 @@ impl<'a> Unparse<'a> {
                 Ok(())
             }
             StmtNode::Scope {
-                num_bindings: _,
+                num_bindings,
                 body,
             } => {
                 // Begin/End
                 writeln!(writer, "{indent_str}begin")?;
-                self.unparse_stmts(body, writer, indent + 1)?;
+                let mut remaining_bindings = *num_bindings;
+                for stmt in body {
+                    if let StmtNode::Expr(Expr::Scatter(items, right)) = &stmt.node
+                        && remaining_bindings > 0
+                    {
+                        let decl_prefix = if items
+                            .iter()
+                            .all(|item| self.tree.variables.decl_for(&item.id).constant)
+                        {
+                            "const "
+                        } else {
+                            "let "
+                        };
+                        let items_frag = self.unparse_scatter_items(items)?;
+                        let right_frag = self.unparse_expr(right)?;
+                        let inner_indent = if self.indent_width > 0 {
+                            " ".repeat((indent + 1) * self.indent_width)
+                        } else {
+                            String::new()
+                        };
+                        writeln!(
+                            writer,
+                            "{inner_indent}{decl_prefix}{{{items_frag}}} = {right_frag};"
+                        )?;
+                        remaining_bindings = remaining_bindings.saturating_sub(items.len());
+                        continue;
+                    }
+                    self.unparse_stmt(stmt, writer, indent + 1)?;
+                }
                 writeln!(writer, "{indent_str}end")?;
                 Ok(())
             }
