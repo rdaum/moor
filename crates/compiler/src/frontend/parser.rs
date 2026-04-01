@@ -36,6 +36,7 @@ struct Parser<'a> {
     cursor: TokenCursor<'a>,
     builder: CstBuilder,
     emitted: usize,
+    expr_stops: Vec<SyntaxKind>,
 }
 
 impl<'a> Parser<'a> {
@@ -46,6 +47,7 @@ impl<'a> Parser<'a> {
             cursor: TokenCursor::new(source, tokens),
             builder: CstBuilder::new(),
             emitted: 0,
+            expr_stops: Vec::new(),
         }
     }
 
@@ -80,6 +82,22 @@ impl<'a> Parser<'a> {
         }
 
         match self.cursor.current_kind() {
+            SyntaxKind::LetKw => {
+                self.parse_decl_statement(SyntaxKind::LetStmt);
+                return;
+            }
+            SyntaxKind::ConstKw => {
+                self.parse_decl_statement(SyntaxKind::ConstStmt);
+                return;
+            }
+            SyntaxKind::GlobalKw => {
+                self.parse_decl_statement(SyntaxKind::GlobalStmt);
+                return;
+            }
+            SyntaxKind::FnKw => {
+                self.parse_fn_statement();
+                return;
+            }
             SyntaxKind::ReturnKw => {
                 self.parse_return_statement();
                 return;
@@ -134,6 +152,73 @@ impl<'a> Parser<'a> {
         }
 
         self.consume_unsupported_statement();
+        self.builder.finish_node();
+    }
+
+    fn parse_decl_statement(&mut self, stmt_kind: SyntaxKind) {
+        self.builder.start_node(stmt_kind);
+        self.bump_significant();
+
+        if matches!(stmt_kind, SyntaxKind::LetStmt | SyntaxKind::ConstStmt)
+            && self.cursor.at(SyntaxKind::LBrace)
+        {
+            self.parse_scatter_pattern();
+            if !self.cursor.bump_if(SyntaxKind::Eq) {
+                self.cursor
+                    .push_error("expected '=' after scatter declaration");
+            } else {
+                self.emit_to_cursor();
+            }
+            if self.starts_expr() {
+                self.parse_expr();
+            } else {
+                self.cursor
+                    .push_error("expected expression after scatter declaration");
+                self.consume_error_node_until(&[SyntaxKind::Semi]);
+            }
+        } else {
+            if !self.cursor.bump_if(SyntaxKind::Ident) {
+                self.cursor.push_error("expected identifier in declaration");
+            } else {
+                self.emit_to_cursor();
+            }
+
+            if self.cursor.bump_if(SyntaxKind::Eq) {
+                self.emit_to_cursor();
+                if self.starts_expr() {
+                    self.parse_expr();
+                } else {
+                    self.cursor
+                        .push_error("expected initializer expression after '='");
+                    self.consume_error_node_until(&[SyntaxKind::Semi]);
+                }
+            }
+        }
+
+        if !self.cursor.bump_if(SyntaxKind::Semi) {
+            let keyword = match stmt_kind {
+                SyntaxKind::LetStmt => "let",
+                SyntaxKind::ConstStmt => "const",
+                SyntaxKind::GlobalStmt => "global",
+                _ => "declaration",
+            };
+            self.cursor.push_error(format!("expected ';' after {keyword}"));
+            self.consume_statement_error_tail();
+        } else {
+            self.emit_to_cursor();
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_fn_statement(&mut self) {
+        self.builder.start_node(SyntaxKind::FnStmt);
+        self.bump_significant();
+        if !self.cursor.bump_if(SyntaxKind::Ident) {
+            self.cursor.push_error("expected function name after fn");
+        } else {
+            self.emit_to_cursor();
+        }
+        self.parse_fn_signature_and_body();
         self.builder.finish_node();
     }
 
@@ -389,6 +474,108 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_fn_signature_and_body(&mut self) {
+        self.builder.start_node(SyntaxKind::ParamList);
+        if !self.cursor.bump_if(SyntaxKind::LParen) {
+            self.cursor.push_error("expected '(' after fn");
+        } else {
+            self.emit_to_cursor();
+            if !self.cursor.at(SyntaxKind::RParen) {
+                loop {
+                    self.parse_param_item();
+                    if self.cursor.bump_if(SyntaxKind::Comma) {
+                        self.emit_to_cursor();
+                        continue;
+                    }
+                    break;
+                }
+            }
+            if !self.cursor.bump_if(SyntaxKind::RParen) {
+                self.cursor.push_error("expected ')'");
+            } else {
+                self.emit_to_cursor();
+            }
+        }
+        self.builder.finish_node();
+
+        self.parse_stmt_list_until(&[SyntaxKind::EndFnKw]);
+        if !self.cursor.bump_if(SyntaxKind::EndFnKw) {
+            self.cursor.push_error("expected endfn");
+        } else {
+            self.emit_to_cursor();
+        }
+    }
+
+    fn parse_param_item(&mut self) {
+        self.builder.start_node(SyntaxKind::ScatterItem);
+        if self.cursor.at(SyntaxKind::Question) || self.cursor.at(SyntaxKind::At) {
+            self.bump_significant();
+        }
+        if !self.cursor.bump_if(SyntaxKind::Ident) {
+            self.cursor.push_error("expected parameter name");
+        } else {
+            self.emit_to_cursor();
+        }
+        if self.cursor.bump_if(SyntaxKind::Eq) {
+            self.emit_to_cursor();
+            if self.starts_expr() {
+                self.parse_expr();
+            } else {
+                self.cursor.push_error("expected default parameter expression");
+                self.consume_error_node_until(&[SyntaxKind::Comma, SyntaxKind::RParen]);
+            }
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_scatter_pattern(&mut self) {
+        self.builder.start_node(SyntaxKind::ScatterExpr);
+        if !self.cursor.bump_if(SyntaxKind::LBrace) {
+            self.cursor.push_error("expected '{' to start scatter pattern");
+            self.builder.finish_node();
+            return;
+        }
+        self.emit_to_cursor();
+
+        if !self.cursor.at(SyntaxKind::RBrace) {
+            loop {
+                self.builder.start_node(SyntaxKind::ScatterItem);
+                if self.cursor.at(SyntaxKind::Question) || self.cursor.at(SyntaxKind::At) {
+                    self.bump_significant();
+                }
+                if !self.cursor.bump_if(SyntaxKind::Ident) {
+                    self.cursor.push_error("expected scatter target");
+                } else {
+                    self.emit_to_cursor();
+                }
+                if self.cursor.bump_if(SyntaxKind::Eq) {
+                    self.emit_to_cursor();
+                    if self.starts_expr() {
+                        self.parse_expr();
+                    } else {
+                        self.cursor
+                            .push_error("expected default expression in scatter item");
+                        self.consume_error_node_until(&[SyntaxKind::Comma, SyntaxKind::RBrace]);
+                    }
+                }
+                self.builder.finish_node();
+
+                if self.cursor.bump_if(SyntaxKind::Comma) {
+                    self.emit_to_cursor();
+                    continue;
+                }
+                break;
+            }
+        }
+
+        if !self.cursor.bump_if(SyntaxKind::RBrace) {
+            self.cursor.push_error("expected '}' to end scatter pattern");
+        } else {
+            self.emit_to_cursor();
+        }
+        self.builder.finish_node();
+    }
+
     fn parse_range_clause(&mut self, keyword: &str) {
         if !self.cursor.bump_if(SyntaxKind::LBracket) {
             self.cursor.push_error(format!("expected '[' after {keyword}"));
@@ -426,6 +613,13 @@ impl<'a> Parser<'a> {
         self.parse_expr_bp(1);
     }
 
+    fn parse_expr_with_stops(&mut self, stops: &[SyntaxKind]) {
+        let saved_len = self.expr_stops.len();
+        self.expr_stops.extend_from_slice(stops);
+        self.parse_expr();
+        self.expr_stops.truncate(saved_len);
+    }
+
     fn parse_expr_bp(&mut self, min_bp: u8) {
         let checkpoint = self.builder.checkpoint();
         self.parse_prefix();
@@ -433,6 +627,34 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_prefix(&mut self) {
+        if self.cursor.at(SyntaxKind::LBrace)
+            && matches!(self.classify_brace_form(), BraceForm::ScatterAssign)
+        {
+            let checkpoint = self.builder.checkpoint();
+            self.builder.start_node_at(checkpoint, SyntaxKind::ScatterExpr);
+            self.parse_scatter_pattern();
+            if !self.cursor.bump_if(SyntaxKind::Eq) {
+                self.cursor
+                    .push_error("expected '=' after scatter assignment");
+            } else {
+                self.emit_to_cursor();
+            }
+            if self.starts_expr() {
+                self.parse_expr_bp(1);
+            } else {
+                self.cursor
+                    .push_error("expected expression after scatter assignment");
+                self.consume_error_node_until(&[
+                    SyntaxKind::Semi,
+                    SyntaxKind::RParen,
+                    SyntaxKind::RBracket,
+                    SyntaxKind::RBrace,
+                ]);
+            }
+            self.builder.finish_node();
+            return;
+        }
+
         if matches!(
             self.cursor.current_kind(),
             SyntaxKind::Minus | SyntaxKind::Bang | SyntaxKind::Tilde
@@ -466,15 +688,35 @@ impl<'a> Parser<'a> {
                 }
                 self.builder.finish_node();
             }
-            SyntaxKind::Dollar => {
-                self.builder.start_node(SyntaxKind::SysPropExpr);
-                self.bump_significant();
-                if !self.cursor.bump_if(SyntaxKind::Ident) {
-                    self.cursor.push_error("expected identifier after '$'");
-                } else {
-                    self.emit_to_cursor();
+            SyntaxKind::LBrace => match self.classify_brace_form() {
+                BraceForm::Lambda => self.parse_lambda_literal(),
+                BraceForm::Comprehension => self.parse_comprehension_or_list(true),
+                BraceForm::List | BraceForm::ScatterAssign => {
+                    self.parse_comprehension_or_list(false);
                 }
-                self.builder.finish_node();
+            },
+            SyntaxKind::LBracket => {
+                self.parse_map_literal();
+            }
+            SyntaxKind::Lt => {
+                self.parse_flyweight_literal();
+            }
+            SyntaxKind::Backtick => {
+                self.parse_try_expr();
+            }
+            SyntaxKind::Dollar => {
+                if self.cursor.nth_kind(1) == SyntaxKind::Ident {
+                    self.builder.start_node(SyntaxKind::SysPropExpr);
+                    self.bump_significant();
+                    if !self.cursor.bump_if(SyntaxKind::Ident) {
+                        self.cursor.push_error("expected identifier after '$'");
+                    } else {
+                        self.emit_to_cursor();
+                    }
+                    self.builder.finish_node();
+                } else {
+                    self.bump_significant();
+                }
             }
             SyntaxKind::PassKw => {
                 let checkpoint = self.builder.checkpoint();
@@ -485,6 +727,21 @@ impl<'a> Parser<'a> {
                     self.builder.finish_node();
                 }
             }
+            SyntaxKind::FnKw => {
+                let checkpoint = self.builder.checkpoint();
+                self.bump_significant();
+                self.builder.start_node_at(checkpoint, SyntaxKind::LambdaExpr);
+                self.parse_fn_signature_and_body();
+                self.builder.finish_node();
+            }
+            SyntaxKind::ReturnKw => {
+                self.builder.start_node(SyntaxKind::ReturnStmt);
+                self.bump_significant();
+                if self.starts_expr() {
+                    self.parse_expr();
+                }
+                self.builder.finish_node();
+            }
             kind if is_atom_token(kind) => {
                 self.bump_significant();
             }
@@ -493,6 +750,291 @@ impl<'a> Parser<'a> {
                 self.consume_error_node_until(&[SyntaxKind::Semi, SyntaxKind::RParen]);
             }
         }
+    }
+
+    fn parse_lambda_literal(&mut self) {
+        let checkpoint = self.builder.checkpoint();
+        self.builder.start_node_at(checkpoint, SyntaxKind::LambdaExpr);
+        self.parse_braced_param_list();
+        if !self.cursor.bump_if(SyntaxKind::FatArrow) {
+            self.cursor.push_error("expected '=>'");
+        } else {
+            self.emit_to_cursor();
+        }
+        if self.starts_expr() {
+            self.parse_expr();
+        } else {
+            self.cursor.push_error("expected expression after lambda arrow");
+            self.consume_error_node_until(&[
+                SyntaxKind::Semi,
+                SyntaxKind::Comma,
+                SyntaxKind::RParen,
+                SyntaxKind::RBracket,
+                SyntaxKind::RBrace,
+            ]);
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_braced_param_list(&mut self) {
+        self.builder.start_node(SyntaxKind::ParamList);
+        if !self.cursor.bump_if(SyntaxKind::LBrace) {
+            self.cursor.push_error("expected '{' after lambda");
+            self.builder.finish_node();
+            return;
+        }
+        self.emit_to_cursor();
+        if !self.cursor.at(SyntaxKind::RBrace) {
+            loop {
+                self.parse_param_item();
+                if self.cursor.bump_if(SyntaxKind::Comma) {
+                    self.emit_to_cursor();
+                    continue;
+                }
+                break;
+            }
+        }
+        if !self.cursor.bump_if(SyntaxKind::RBrace) {
+            self.cursor.push_error("expected '}' after lambda parameters");
+        } else {
+            self.emit_to_cursor();
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_comprehension_or_list(&mut self, is_comprehension: bool) {
+        let checkpoint = self.builder.checkpoint();
+        let expr_kind = if is_comprehension {
+            SyntaxKind::ComprehensionExpr
+        } else {
+            SyntaxKind::ListExpr
+        };
+        self.builder.start_node_at(checkpoint, expr_kind);
+        self.bump_significant();
+
+        if self.cursor.at(SyntaxKind::RBrace) {
+            self.bump_significant();
+            self.builder.finish_node();
+            return;
+        }
+
+        self.parse_expr();
+        if is_comprehension {
+            if !self.cursor.bump_if(SyntaxKind::ForKw) {
+                self.cursor.push_error("expected for in comprehension");
+            } else {
+                self.emit_to_cursor();
+            }
+            if !self.cursor.bump_if(SyntaxKind::Ident) {
+                self.cursor
+                    .push_error("expected loop variable in comprehension");
+            } else {
+                self.emit_to_cursor();
+            }
+            if !self.cursor.bump_if(SyntaxKind::InKw) {
+                self.cursor.push_error("expected in");
+            } else {
+                self.emit_to_cursor();
+            }
+            if self.cursor.at(SyntaxKind::LBracket) {
+                self.parse_range_clause("for");
+            } else if self.cursor.at(SyntaxKind::LParen) {
+                self.parse_paren_condition("for");
+            } else {
+                self.cursor
+                    .push_error("expected range or source clause in comprehension");
+                self.consume_error_node_until(&[SyntaxKind::RBrace]);
+            }
+        } else {
+            while self.cursor.bump_if(SyntaxKind::Comma) {
+                self.emit_to_cursor();
+                if self.cursor.at(SyntaxKind::At) {
+                    self.bump_significant();
+                }
+                if self.starts_expr() {
+                    self.parse_expr();
+                } else {
+                    self.cursor.push_error("expected list item expression");
+                    self.consume_error_node_until(&[SyntaxKind::Comma, SyntaxKind::RBrace]);
+                    if !self.cursor.at(SyntaxKind::Comma) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        if !self.cursor.bump_if(SyntaxKind::RBrace) {
+            self.cursor.push_error("expected '}'");
+        } else {
+            self.emit_to_cursor();
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_map_literal(&mut self) {
+        let checkpoint = self.builder.checkpoint();
+        self.builder.start_node_at(checkpoint, SyntaxKind::MapExpr);
+        self.bump_significant();
+        if self.cursor.at(SyntaxKind::RBracket) {
+            self.bump_significant();
+            self.builder.finish_node();
+            return;
+        }
+
+        loop {
+            if self.starts_expr() {
+                self.parse_expr();
+            } else {
+                self.cursor.push_error("expected map key expression");
+                self.consume_error_node_until(&[
+                    SyntaxKind::Arrow,
+                    SyntaxKind::Comma,
+                    SyntaxKind::RBracket,
+                ]);
+            }
+
+            if !self.cursor.bump_if(SyntaxKind::Arrow) {
+                self.cursor.push_error("expected '->' in map literal");
+            } else {
+                self.emit_to_cursor();
+            }
+
+            if self.starts_expr() {
+                self.parse_expr();
+            } else {
+                self.cursor.push_error("expected map value expression");
+                self.consume_error_node_until(&[SyntaxKind::Comma, SyntaxKind::RBracket]);
+            }
+
+            if self.cursor.bump_if(SyntaxKind::Comma) {
+                self.emit_to_cursor();
+                continue;
+            }
+            break;
+        }
+
+        if !self.cursor.bump_if(SyntaxKind::RBracket) {
+            self.cursor.push_error("expected ']'");
+        } else {
+            self.emit_to_cursor();
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_flyweight_literal(&mut self) {
+        let checkpoint = self.builder.checkpoint();
+        self.builder.start_node_at(checkpoint, SyntaxKind::FlyweightExpr);
+        self.bump_significant();
+
+        if self.starts_expr() {
+            self.parse_expr_with_stops(&[SyntaxKind::Gt]);
+        } else {
+            self.cursor.push_error("expected flyweight delegate expression");
+            self.consume_error_node_until(&[SyntaxKind::Comma, SyntaxKind::Gt]);
+        }
+
+        while self.cursor.bump_if(SyntaxKind::Comma) {
+            self.emit_to_cursor();
+            if self.cursor.at(SyntaxKind::Dot) {
+                self.bump_significant();
+                if !self.cursor.bump_if(SyntaxKind::Ident) {
+                    self.cursor.push_error("expected flyweight slot name");
+                } else {
+                    self.emit_to_cursor();
+                }
+                if !self.cursor.bump_if(SyntaxKind::Eq) {
+                    self.cursor.push_error("expected '=' after flyweight slot");
+                } else {
+                    self.emit_to_cursor();
+                }
+                if self.starts_expr() {
+                    self.parse_expr_with_stops(&[SyntaxKind::Gt]);
+                } else {
+                    self.cursor.push_error("expected flyweight slot value");
+                    self.consume_error_node_until(&[SyntaxKind::Comma, SyntaxKind::Gt]);
+                }
+                continue;
+            }
+
+            if self.starts_expr() {
+                self.parse_expr_with_stops(&[SyntaxKind::Gt]);
+            } else {
+                self.cursor.push_error("expected flyweight contents expression");
+                self.consume_error_node_until(&[SyntaxKind::Gt]);
+            }
+            break;
+        }
+
+        if !self.cursor.bump_if(SyntaxKind::Gt) {
+            self.cursor.push_error("expected '>'");
+        } else {
+            self.emit_to_cursor();
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_try_expr(&mut self) {
+        let checkpoint = self.builder.checkpoint();
+        self.builder.start_node_at(checkpoint, SyntaxKind::TryExpr);
+        self.bump_significant();
+
+        if self.starts_expr() {
+            self.parse_expr();
+        } else {
+            self.cursor.push_error("expected expression after '`'");
+            self.consume_error_node_until(&[SyntaxKind::Bang, SyntaxKind::Apostrophe]);
+        }
+
+        if !self.cursor.bump_if(SyntaxKind::Bang) {
+            self.cursor.push_error("expected '!'");
+        } else {
+            self.emit_to_cursor();
+        }
+
+        if self.cursor.at(SyntaxKind::AnyKw) {
+            self.bump_significant();
+        } else if self.starts_expr() {
+            loop {
+                if self.cursor.at(SyntaxKind::At) {
+                    self.bump_significant();
+                }
+                if self.starts_expr() {
+                    self.parse_expr();
+                } else {
+                    self.cursor.push_error("expected catch code expression");
+                    self.consume_error_node_until(&[
+                        SyntaxKind::Comma,
+                        SyntaxKind::FatArrow,
+                        SyntaxKind::Apostrophe,
+                    ]);
+                    break;
+                }
+                if !self.cursor.bump_if(SyntaxKind::Comma) {
+                    break;
+                }
+                self.emit_to_cursor();
+            }
+        } else {
+            self.cursor.push_error("expected catch codes");
+        }
+
+        if self.cursor.bump_if(SyntaxKind::FatArrow) {
+            self.emit_to_cursor();
+            if self.starts_expr() {
+                self.parse_expr();
+            } else {
+                self.cursor.push_error("expected fallback expression after '=>'");
+                self.consume_error_node_until(&[SyntaxKind::Apostrophe]);
+            }
+        }
+
+        if !self.cursor.bump_if(SyntaxKind::Apostrophe) {
+            self.cursor
+                .push_error("expected closing apostrophe for try expression");
+        } else {
+            self.emit_to_cursor();
+        }
+        self.builder.finish_node();
     }
 
     fn parse_expr_suffix(&mut self, checkpoint: rowan::Checkpoint, min_bp: u8) {
@@ -651,6 +1193,9 @@ impl<'a> Parser<'a> {
     }
 
     fn postfix_kind(&self) -> Option<PostfixOp> {
+        if self.expr_stops.contains(&self.cursor.current_kind()) {
+            return None;
+        }
         match self.cursor.current_kind() {
             SyntaxKind::LParen => Some(PostfixOp::Call),
             SyntaxKind::Dot => Some(PostfixOp::Property),
@@ -661,6 +1206,9 @@ impl<'a> Parser<'a> {
     }
 
     fn infix_binding_power(&self) -> Option<(u8, u8, SyntaxKind, InfixOp)> {
+        if self.expr_stops.contains(&self.cursor.current_kind()) {
+            return None;
+        }
         match self.cursor.current_kind() {
             SyntaxKind::Eq => Some((1, 1, SyntaxKind::AssignExpr, InfixOp::Assign)),
             SyntaxKind::Question => Some((2, 2, SyntaxKind::CondExpr, InfixOp::Conditional)),
@@ -798,6 +1346,82 @@ impl<'a> Parser<'a> {
         self.cursor.at(SyntaxKind::Ident) && self.cursor.current_text().eq_ignore_ascii_case(ident)
     }
 
+    fn classify_brace_form(&self) -> BraceForm {
+        let open_idx = self.cursor.current_raw_index();
+        let Some(close_idx) =
+            self.find_matching_delim(open_idx, SyntaxKind::LBrace, SyntaxKind::RBrace)
+        else {
+            return BraceForm::List;
+        };
+
+        match self.peek_significant_kind_from(close_idx + 1) {
+            Some(SyntaxKind::FatArrow) => return BraceForm::Lambda,
+            Some(SyntaxKind::Eq) => return BraceForm::ScatterAssign,
+            _ => {}
+        }
+
+        let mut idx = open_idx + 1;
+        let mut paren_depth = 0usize;
+        let mut brace_depth = 0usize;
+        let mut bracket_depth = 0usize;
+        while idx < close_idx {
+            let kind = self.tokens[idx].kind;
+            if kind.is_trivia() {
+                idx += 1;
+                continue;
+            }
+            match kind {
+                SyntaxKind::LParen => paren_depth += 1,
+                SyntaxKind::RParen => paren_depth = paren_depth.saturating_sub(1),
+                SyntaxKind::LBrace => brace_depth += 1,
+                SyntaxKind::RBrace => brace_depth = brace_depth.saturating_sub(1),
+                SyntaxKind::LBracket => bracket_depth += 1,
+                SyntaxKind::RBracket => bracket_depth = bracket_depth.saturating_sub(1),
+                SyntaxKind::ForKw
+                    if paren_depth == 0 && brace_depth == 0 && bracket_depth == 0 =>
+                {
+                    return BraceForm::Comprehension;
+                }
+                _ => {}
+            }
+            idx += 1;
+        }
+
+        BraceForm::List
+    }
+
+    fn peek_significant_kind_from(&self, start: usize) -> Option<SyntaxKind> {
+        self.tokens[start..]
+            .iter()
+            .find(|token| !token.kind.is_trivia())
+            .map(|token| token.kind)
+    }
+
+    fn find_matching_delim(
+        &self,
+        start: usize,
+        open: SyntaxKind,
+        close: SyntaxKind,
+    ) -> Option<usize> {
+        let mut depth = 0usize;
+        for (idx, token) in self.tokens.iter().enumerate().skip(start) {
+            if token.kind.is_trivia() {
+                continue;
+            }
+            if token.kind == open {
+                depth += 1;
+                continue;
+            }
+            if token.kind == close {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return Some(idx);
+                }
+            }
+        }
+        None
+    }
+
     fn looks_like_for_range(&self) -> bool {
         self.cursor.nth_kind(1) == SyntaxKind::Ident
             && self.cursor.nth_kind(2) == SyntaxKind::InKw
@@ -819,8 +1443,14 @@ impl<'a> Parser<'a> {
                 | SyntaxKind::TrueKw
                 | SyntaxKind::FalseKw
                 | SyntaxKind::PassKw
+                | SyntaxKind::ReturnKw
+                | SyntaxKind::FnKw
                 | SyntaxKind::Dollar
                 | SyntaxKind::LParen
+                | SyntaxKind::LBrace
+                | SyntaxKind::LBracket
+                | SyntaxKind::Lt
+                | SyntaxKind::Backtick
                 | SyntaxKind::Minus
                 | SyntaxKind::Bang
                 | SyntaxKind::Tilde
@@ -850,6 +1480,14 @@ enum InfixOp {
     Assign,
     Conditional,
     Binary,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BraceForm {
+    Lambda,
+    ScatterAssign,
+    Comprehension,
+    List,
 }
 
 fn is_atom_token(kind: SyntaxKind) -> bool {
@@ -1003,6 +1641,62 @@ mod tests {
     }
 
     #[test]
+    fn parses_let_const_and_global_declarations() {
+        let source = "let x = 1; const y = 2; global z = 3;";
+        let (root, errors) = parse_to_syntax_node(source);
+        assert!(errors.is_empty(), "{errors:?}");
+        let kinds: Vec<_> = root.descendants().map(|node| node.kind()).collect();
+        assert!(kinds.contains(&SyntaxKind::LetStmt));
+        assert!(kinds.contains(&SyntaxKind::ConstStmt));
+        assert!(kinds.contains(&SyntaxKind::GlobalStmt));
+    }
+
+    #[test]
+    fn parses_scatter_declarations() {
+        let source = "let {?a = 1, @rest} = value; const {x, y} = pair;";
+        let (root, errors) = parse_to_syntax_node(source);
+        assert!(errors.is_empty(), "{errors:?}");
+        let kinds: Vec<_> = root.descendants().map(|node| node.kind()).collect();
+        assert!(kinds.contains(&SyntaxKind::ScatterExpr));
+        assert!(kinds.iter().filter(|kind| **kind == SyntaxKind::ScatterItem).count() >= 3);
+    }
+
+    #[test]
+    fn parses_named_fn_statement_and_fn_expression() {
+        let source = "fn add(a, ?b = 1, @rest) return a + b; endfn value = fn(x) return x; endfn;";
+        let (root, errors) = parse_to_syntax_node(source);
+        assert!(errors.is_empty(), "{errors:?}");
+        let kinds: Vec<_> = root.descendants().map(|node| node.kind()).collect();
+        assert!(kinds.contains(&SyntaxKind::FnStmt));
+        assert!(kinds.contains(&SyntaxKind::LambdaExpr));
+        assert!(kinds.contains(&SyntaxKind::ParamList));
+    }
+
+    #[test]
+    fn parses_remaining_primary_expression_forms() {
+        let source = "{?x = 1, @rest} => x; {1, @items}; {x for item in (items)}; [a -> 1, b -> 2]; <parent, .slot = value, contents>; `foo ! ANY => bar';";
+        let (root, errors) = parse_to_syntax_node(source);
+        assert!(errors.is_empty(), "{errors:?}");
+        let kinds: Vec<_> = root.descendants().map(|node| node.kind()).collect();
+        assert!(kinds.contains(&SyntaxKind::LambdaExpr));
+        assert!(kinds.contains(&SyntaxKind::ListExpr));
+        assert!(kinds.contains(&SyntaxKind::ComprehensionExpr));
+        assert!(kinds.contains(&SyntaxKind::MapExpr));
+        assert!(kinds.contains(&SyntaxKind::FlyweightExpr));
+        assert!(kinds.contains(&SyntaxKind::TryExpr));
+    }
+
+    #[test]
+    fn parses_scatter_assignment_and_range_end() {
+        let source = "{x, ?y = 1, @rest} = value; list[1..$];";
+        let (root, errors) = parse_to_syntax_node(source);
+        assert!(errors.is_empty(), "{errors:?}");
+        let kinds: Vec<_> = root.descendants().map(|node| node.kind()).collect();
+        assert!(kinds.iter().filter(|kind| **kind == SyntaxKind::ScatterExpr).count() >= 2);
+        assert!(kinds.contains(&SyntaxKind::RangeExpr));
+    }
+
+    #[test]
     fn missing_endif_reports_error() {
         let (_root, errors) = parse_to_syntax_node("if (a) return b;");
         assert!(!errors.is_empty());
@@ -1019,7 +1713,7 @@ mod tests {
 
     #[test]
     fn unsupported_statement_produces_error_node_and_error() {
-        let (root, errors) = parse_to_syntax_node("let x = y;");
+        let (root, errors) = parse_to_syntax_node("elseif (x) return y;");
         assert!(!errors.is_empty());
         let has_error = root
             .descendants()
