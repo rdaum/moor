@@ -1,4 +1,4 @@
-<p align="center"><img src="./doc/logo.png" alt="mooR logo" width="300"/></p>
+<p align="center"><img src="./doc/logo.png" alt="mooR logo"/></p>
 
 # mooR
 
@@ -14,10 +14,12 @@ enhancements.
 
 📖 **For comprehensive documentation, see our [mooR Book](https://timbran.org/book/html/).**
 
-> **⚠️ Release Status:** `main` now tracks `1.1.0-dev` work. The `v1.0-release` branch is in code
-> freeze ahead of the imminent `1.0.0-rc1` release; use that branch, the Releases tab, or published
-> images if you want the stabilized release line. See the [Status](#status) section below for
-> details.
+> **⚠️ Release Status:**
+> [`1.0.0-rc1`](https://codeberg.org/timbran/moor/releases/tag/1.0.0-rc1) has been released on the
+> `v1.0-release` branch. Use that branch, the Releases tab, or published images if you want the
+> stabilized release line. `main` now tracks `1.1.0-dev` with more aggressive feature development
+> (VM extraction, scheduler rewrite, batch APIs, WebRTC). See the [Status](#status) section below
+> for details.
 >
 > See the
 > [full announcement blog post for more...](https://timbran.org/announcing-moor-1-0-beta1.html)
@@ -86,19 +88,18 @@ To see a live running instance, visit our demonstrator community at
 
 ## Status
 
-mooR is in the **1.0-beta** series, focusing on stability, bug fixes, and documentation. The core
-runtime and database formats are considered "stable" but churn may still happen. It successfully
-runs databases imported from LambdaMOO with real-world workloads and has passed extensive stress and
-performance testing.
+mooR `1.0.0-rc1` has been released. The core runtime and database formats are stable. It
+successfully runs databases imported from LambdaMOO with real-world workloads and has passed
+extensive stress and performance testing. `main` now tracks `1.1.0-dev` development.
 
-**Beta series policy**:
+**Branch policy**:
 
-- `main` branch: pre-release/next-version development (new features land here first)
-- `1.0` branch: stable release line (bug fixes, stability improvements, documentation)
-- Bug fixes land on `main` first, then are cherry-picked to `1.0` when safe
-- Beta tags are cut from the `1.0` branch; releases and images publish from there
-- Database formats and APIs are now stable
-- Ready for testing and feedback from users
+- `v1.0-release` branch: stable `1.0` release line (`1.0.0-rc1` and subsequent patch releases)
+- `main` branch: `1.1.0-dev` feature development (runtime and database optimizations, WebRTC
+  extensions, compiler rework for performance, batch world state APIs, new builtins)
+- Bug fixes land on `main` first, then are cherry-picked to `v1.0-release` when safe
+- Release tags and published images are cut from `v1.0-release`
+- Database formats and APIs are stable on the release branch
 
 **Repository**: The primary mooR repository is hosted on
 [Codeberg](https://codeberg.org/timbran/moor) with a mirror on GitHub. All issues filed and pull
