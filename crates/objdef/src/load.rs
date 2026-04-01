@@ -227,6 +227,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
         dirpath: &Path,
         options: ObjDefLoaderOptions,
     ) -> Result<ObjDefLoaderResults, ObjdefLoaderError> {
+        let compilation_started_at = Instant::now();
         // Check that the directory exists
         if !dirpath.exists() {
             return Err(ObjdefLoaderError::DirectoryNotFound(dirpath.to_path_buf()));
@@ -280,6 +281,14 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 &compile_options,
             )?;
         }
+
+        info!(
+            directory = %dirpath.display(),
+            object_count = self.object_definitions.len(),
+            constant_count = context.constants().len(),
+            elapsed_ms = compilation_started_at.elapsed().as_secs_f64() * 1000.0,
+            "Compiled object definition directory"
+        );
 
         let num_loaded_verbs = self
             .object_definitions

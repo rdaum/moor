@@ -76,6 +76,21 @@ fn malformed_string_becomes_error_token_without_panicking() {
 }
 
 #[test]
+fn hex_and_unicode_string_escapes_lex_as_strings() {
+    assert_eq!(
+        kinds("\"\\x1B[0m\" \"\\u001B\" \"\\U00000041\""),
+        vec![
+            SyntaxKind::StringLit,
+            SyntaxKind::Whitespace,
+            SyntaxKind::StringLit,
+            SyntaxKind::Whitespace,
+            SyntaxKind::StringLit,
+            SyntaxKind::Eof,
+        ]
+    );
+}
+
+#[test]
 fn malformed_block_comment_becomes_error_token() {
     assert_eq!(kinds("/* nope"), vec![SyntaxKind::Error, SyntaxKind::Eof]);
 }

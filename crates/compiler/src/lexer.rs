@@ -320,6 +320,27 @@ impl<'a> Lexer<'a> {
                                 self.bump();
                             }
                         }
+                        Some('x') => {
+                            self.bump();
+                            if !self.consume_hex_digits(2) {
+                                self.consume_string_error_tail();
+                                return SyntaxKind::Error;
+                            }
+                        }
+                        Some('u') => {
+                            self.bump();
+                            if !self.consume_hex_digits(4) {
+                                self.consume_string_error_tail();
+                                return SyntaxKind::Error;
+                            }
+                        }
+                        Some('U') => {
+                            self.bump();
+                            if !self.consume_hex_digits(8) {
+                                self.consume_string_error_tail();
+                                return SyntaxKind::Error;
+                            }
+                        }
                         Some(_) | None => {
                             self.consume_string_error_tail();
                             return SyntaxKind::Error;

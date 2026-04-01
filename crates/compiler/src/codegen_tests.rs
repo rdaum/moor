@@ -61,6 +61,42 @@ mod tests {
     }
 
     #[test]
+    fn frontend_codegen_matches_classic_for_return_in_short_circuit_expr() {
+        let program = "typeof(description) == TYPE_STR || return description;";
+        assert_frontend_compiles_same(program);
+    }
+
+    #[test]
+    fn frontend_codegen_matches_classic_for_keyword_named_verb_call() {
+        let program = "result = {1, 2, 3}:any({x} => x > 2);";
+        assert_frontend_compiles_same(program);
+    }
+
+    #[test]
+    fn frontend_codegen_matches_classic_for_builtin_call_followed_by_index() {
+        let program = "return callers()[1];";
+        assert_frontend_compiles_same(program);
+    }
+
+    #[test]
+    fn frontend_codegen_matches_classic_for_negated_builtin_call_condition() {
+        let program = "if (!callers()) return 1; endif";
+        assert_frontend_compiles_same(program);
+    }
+
+    #[test]
+    fn frontend_codegen_matches_classic_for_sysobj_handle_uncaught_error_prefix() {
+        let program = r#"if (!callers())
+  {code, msg, value, stack, traceback} = args;
+  if (!$object_utils:connected(player))
+    $mail_agent:send_message(#0, player, {"traceback", $gripe_recipients}, traceback);
+  endif
+  return `player:(verb)(@args) ! ANY';
+endif"#;
+        assert_frontend_compiles_same(program);
+    }
+
+    #[test]
     fn test_var_assign_expr() {
         let program = "a = 1 + 2;";
         let binary = compile(program, CompileOptions::default()).unwrap();

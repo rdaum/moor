@@ -82,19 +82,19 @@ impl<'a> Parser<'a> {
         }
 
         match self.cursor.current_kind() {
-            SyntaxKind::LetKw => {
+            SyntaxKind::LetKw if self.looks_like_decl_statement(SyntaxKind::LetKw) => {
                 self.parse_decl_statement(SyntaxKind::LetStmt);
                 return;
             }
-            SyntaxKind::ConstKw => {
+            SyntaxKind::ConstKw if self.looks_like_decl_statement(SyntaxKind::ConstKw) => {
                 self.parse_decl_statement(SyntaxKind::ConstStmt);
                 return;
             }
-            SyntaxKind::GlobalKw => {
+            SyntaxKind::GlobalKw if self.looks_like_decl_statement(SyntaxKind::GlobalKw) => {
                 self.parse_decl_statement(SyntaxKind::GlobalStmt);
                 return;
             }
-            SyntaxKind::FnKw => {
+            SyntaxKind::FnKw if self.looks_like_fn_statement() => {
                 self.parse_fn_statement();
                 return;
             }
@@ -133,7 +133,7 @@ impl<'a> Parser<'a> {
             _ => {}
         }
 
-        if self.at_contextual_ident("begin") {
+        if self.looks_like_begin_statement() {
             self.parse_begin_statement();
             return;
         }
@@ -511,10 +511,8 @@ impl<'a> Parser<'a> {
         if self.cursor.at(SyntaxKind::Question) || self.cursor.at(SyntaxKind::At) {
             self.bump_significant();
         }
-        if !self.cursor.bump_if(SyntaxKind::Ident) {
+        if !self.bump_ident_like_name() {
             self.cursor.push_error("expected parameter name");
-        } else {
-            self.emit_to_cursor();
         }
         if self.cursor.bump_if(SyntaxKind::Eq) {
             self.emit_to_cursor();
@@ -543,10 +541,8 @@ impl<'a> Parser<'a> {
                 if self.cursor.at(SyntaxKind::Question) || self.cursor.at(SyntaxKind::At) {
                     self.bump_significant();
                 }
-                if !self.cursor.bump_if(SyntaxKind::Ident) {
+                if !self.bump_ident_like_name() {
                     self.cursor.push_error("expected scatter target");
-                } else {
-                    self.emit_to_cursor();
                 }
                 if self.cursor.bump_if(SyntaxKind::Eq) {
                     self.emit_to_cursor();
@@ -613,6 +609,16 @@ impl<'a> Parser<'a> {
         self.parse_expr_bp(1);
     }
 
+    fn bump_ident_like_name(&mut self) -> bool {
+        match self.cursor.current_kind() {
+            kind if is_name_like_token(kind) => {
+                self.bump_significant();
+                true
+            }
+            _ => false,
+        }
+    }
+
     fn parse_expr_with_stops(&mut self, stops: &[SyntaxKind]) {
         let saved_len = self.expr_stops.len();
         self.expr_stops.extend_from_slice(stops);
@@ -661,8 +667,9 @@ impl<'a> Parser<'a> {
         ) {
             let checkpoint = self.builder.checkpoint();
             self.bump_significant();
-            self.builder.start_node_at(checkpoint, SyntaxKind::UnaryExpr);
-            self.parse_prefix();
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::UnaryExpr);
+            self.parse_expr_bp(12);
             self.builder.finish_node();
             return;
         }
@@ -719,12 +726,14 @@ impl<'a> Parser<'a> {
                 }
             }
             SyntaxKind::PassKw => {
-                let checkpoint = self.builder.checkpoint();
-                self.bump_significant();
-                if self.cursor.at(SyntaxKind::LParen) {
+                if self.cursor.nth_kind(1) == SyntaxKind::LParen {
+                    let checkpoint = self.builder.checkpoint();
+                    self.bump_significant();
                     self.builder.start_node_at(checkpoint, SyntaxKind::PassExpr);
                     self.parse_call_arg_list();
                     self.builder.finish_node();
+                } else {
+                    self.bump_significant();
                 }
             }
             SyntaxKind::FnKw => {
@@ -818,8 +827,8 @@ impl<'a> Parser<'a> {
             return;
         }
 
-        self.parse_expr();
         if is_comprehension {
+            self.parse_expr();
             if !self.cursor.bump_if(SyntaxKind::ForKw) {
                 self.cursor.push_error("expected for in comprehension");
             } else {
@@ -846,20 +855,10 @@ impl<'a> Parser<'a> {
                 self.consume_error_node_until(&[SyntaxKind::RBrace]);
             }
         } else {
+            self.parse_list_item();
             while self.cursor.bump_if(SyntaxKind::Comma) {
                 self.emit_to_cursor();
-                if self.cursor.at(SyntaxKind::At) {
-                    self.bump_significant();
-                }
-                if self.starts_expr() {
-                    self.parse_expr();
-                } else {
-                    self.cursor.push_error("expected list item expression");
-                    self.consume_error_node_until(&[SyntaxKind::Comma, SyntaxKind::RBrace]);
-                    if !self.cursor.at(SyntaxKind::Comma) {
-                        break;
-                    }
-                }
+                self.parse_list_item();
             }
         }
 
@@ -869,6 +868,18 @@ impl<'a> Parser<'a> {
             self.emit_to_cursor();
         }
         self.builder.finish_node();
+    }
+
+    fn parse_list_item(&mut self) {
+        if self.cursor.at(SyntaxKind::At) {
+            self.bump_significant();
+        }
+        if self.starts_expr() {
+            self.parse_expr();
+            return;
+        }
+        self.cursor.push_error("expected list item expression");
+        self.consume_error_node_until(&[SyntaxKind::Comma, SyntaxKind::RBrace]);
     }
 
     fn parse_map_literal(&mut self) {
@@ -1053,8 +1064,7 @@ impl<'a> Parser<'a> {
                     PostfixOp::Property => {
                         self.builder.start_node_at(checkpoint, expr_kind);
                         self.bump_significant();
-                        if self.cursor.bump_if(SyntaxKind::Ident) {
-                            self.emit_to_cursor();
+                        if self.bump_ident_like_name() {
                         } else if self.cursor.bump_if(SyntaxKind::LParen) {
                             self.emit_to_cursor();
                             if self.starts_expr() {
@@ -1078,8 +1088,7 @@ impl<'a> Parser<'a> {
                     PostfixOp::VerbCall => {
                         self.builder.start_node_at(checkpoint, expr_kind);
                         self.bump_significant();
-                        if self.cursor.bump_if(SyntaxKind::Ident) {
-                            self.emit_to_cursor();
+                        if self.bump_ident_like_name() {
                         } else if self.cursor.bump_if(SyntaxKind::LParen) {
                             self.emit_to_cursor();
                             if self.starts_expr() {
@@ -1428,6 +1437,40 @@ impl<'a> Parser<'a> {
             && self.cursor.nth_kind(3) == SyntaxKind::LBracket
     }
 
+    fn looks_like_decl_statement(&self, keyword: SyntaxKind) -> bool {
+        match keyword {
+            SyntaxKind::LetKw | SyntaxKind::ConstKw => {
+                matches!(
+                    self.cursor.nth_kind(1),
+                    SyntaxKind::Ident | SyntaxKind::LBrace
+                )
+            }
+            SyntaxKind::GlobalKw => self.cursor.nth_kind(1) == SyntaxKind::Ident,
+            _ => false,
+        }
+    }
+
+    fn looks_like_fn_statement(&self) -> bool {
+        self.cursor.nth_kind(1) == SyntaxKind::Ident
+            && self.cursor.nth_kind(2) == SyntaxKind::LParen
+    }
+
+    fn looks_like_begin_statement(&self) -> bool {
+        if !self.at_contextual_ident("begin") {
+            return false;
+        }
+        !matches!(
+            self.cursor.nth_kind(1),
+            SyntaxKind::Semi
+                | SyntaxKind::Eq
+                | SyntaxKind::Dot
+                | SyntaxKind::Colon
+                | SyntaxKind::LParen
+                | SyntaxKind::LBracket
+                | SyntaxKind::Question
+        )
+    }
+
     fn starts_expr(&self) -> bool {
         matches!(
             self.cursor.current_kind(),
@@ -1445,6 +1488,7 @@ impl<'a> Parser<'a> {
                 | SyntaxKind::PassKw
                 | SyntaxKind::ReturnKw
                 | SyntaxKind::FnKw
+                | SyntaxKind::GlobalKw
                 | SyntaxKind::Dollar
                 | SyntaxKind::LParen
                 | SyntaxKind::LBrace
@@ -1456,6 +1500,40 @@ impl<'a> Parser<'a> {
                 | SyntaxKind::Tilde
         )
     }
+}
+
+fn is_name_like_token(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::Ident
+            | SyntaxKind::IfKw
+            | SyntaxKind::ElseKw
+            | SyntaxKind::ElseIfKw
+            | SyntaxKind::EndIfKw
+            | SyntaxKind::ForKw
+            | SyntaxKind::EndForKw
+            | SyntaxKind::WhileKw
+            | SyntaxKind::EndWhileKw
+            | SyntaxKind::ForkKw
+            | SyntaxKind::EndForkKw
+            | SyntaxKind::InKw
+            | SyntaxKind::ReturnKw
+            | SyntaxKind::BreakKw
+            | SyntaxKind::ContinueKw
+            | SyntaxKind::TryKw
+            | SyntaxKind::ExceptKw
+            | SyntaxKind::FinallyKw
+            | SyntaxKind::EndTryKw
+            | SyntaxKind::FnKw
+            | SyntaxKind::EndFnKw
+            | SyntaxKind::LetKw
+            | SyntaxKind::ConstKw
+            | SyntaxKind::GlobalKw
+            | SyntaxKind::PassKw
+            | SyntaxKind::AnyKw
+            | SyntaxKind::TrueKw
+            | SyntaxKind::FalseKw
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1504,6 +1582,7 @@ fn is_atom_token(kind: SyntaxKind) -> bool {
             | SyntaxKind::TypeConstant
             | SyntaxKind::TrueKw
             | SyntaxKind::FalseKw
+            | SyntaxKind::GlobalKw
     )
 }
 

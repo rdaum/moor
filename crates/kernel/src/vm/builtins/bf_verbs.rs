@@ -34,7 +34,7 @@ use moor_common::{
     util::BitEnum,
 };
 use moor_compiler::{
-    Program, compile, compile_error_to_map, format_compile_error, offset_for_builtin,
+    Program, compile_error_to_map, compile_frontend, format_compile_error, offset_for_builtin,
     program_to_tree, to_literal, unparse,
 };
 use moor_var::{
@@ -493,7 +493,7 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         code_string.push('\n');
     }
     // Now try to compile...
-    let program = match compile(code_string.as_str(), bf_args.config.compile_options()) {
+    let program = match compile_frontend(code_string.as_str(), bf_args.config.compile_options()) {
         Ok(program) => program,
         Err(e) => {
             // For set_verb_code(), the result is either a list of formatted error strings,
