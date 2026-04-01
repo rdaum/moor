@@ -2,28 +2,31 @@
 # This configuration includes HTTPS via Let's Encrypt certificates.
 # Use docker-compose.certbot.yml for initial certificate generation.
 # Uses IPC (Unix domain sockets) for inter-process communication since all services run on the same host.
+#
+# Set ARCH=aarch64 in your environment (or .env file) for ARM systems. Defaults to x86_64.
+
+# Reusable image reference -- change the arch in one place via the ARCH env var
+x-moor-image: &moor-image
+  image: codeberg.org/timbran/moor:latest-${ARCH:-x86_64}
 
 networks:
   moor_net:
 
-# Named volumes for persistent application data
-# Note: moor-config uses a bind mount instead of a named volume
-# to avoid permission issues with non-root users
-#volumes:
+# Named volume used to pass the pre-built web client from the moor image to the nginx frontend
+volumes:
+  web-client-files:
 
 services:
   # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
   moor-daemon:
-    # Use pre-built image from Codeberg registry
-    image: codeberg.org/timbran/moor:latest-x86_64
-    # To use locally-built images instead, replace the 'image:' line above with the 'build:' section below:
+    <<: *moor-image
+    # To use locally-built images instead, comment out the x-moor-image merge above and uncomment:
     # build:
     #   context: ../..
     #   target: backend
     #   network: host
     #   args:
     #     BUILD_PROFILE: release
-    # For aarch64 systems, change 'latest-x86_64' to 'latest-aarch64'
     container_name: "moor-daemon"
     user: "${USER_ID}:${GROUP_ID}"
     environment:
@@ -36,8 +39,8 @@ services:
       - ./moor-data:/moor/moor-data
       - ../../cores:/moor/cores:ro
       - ./moor-ipc:/var/run/moor
-      - ./moor-config:/moor/.config/moor
-      - ./moor-local-share:/moor/.local/share/moor
+      - ./moor-config:/moor/.config
+      - ./moor-local-share:/moor/.local/share
     command: >
       ./moor-daemon
         /moor/moor-data
@@ -54,16 +57,7 @@ services:
 
   # A host process that runs the telnet server, and handles incoming connections and forwards events to the daemon.
   moor-telnet-host:
-    # Use pre-built image from Codeberg registry
-    image: codeberg.org/timbran/moor:latest-x86_64
-    # To use locally-built images instead, replace the 'image:' line above with the 'build:' section below:
-    # build:
-    #   context: ../..
-    #   target: backend
-    #   network: host
-    #   args:
-    #     BUILD_PROFILE: release
-    # For aarch64 systems, change 'latest-x86_64' to 'latest-aarch64'
+    <<: *moor-image
     container_name: "moor-telnet-host"
     user: "${USER_ID}:${GROUP_ID}"
     environment:
@@ -75,8 +69,8 @@ services:
     volumes:
       - ./moor-telnet-host-data:/moor/.moor-host-data
       - ./moor-ipc:/var/run/moor
-      - ./moor-config:/moor/.config/moor:ro
-      - ./moor-local-share:/moor/.local/share/moor:ro
+      - ./moor-config:/moor/.config:ro
+      - ./moor-local-share:/moor/.local/share:ro
     command:
       - ./moor-telnet-host
       - --telnet-address=0.0.0.0
@@ -95,16 +89,7 @@ services:
 
   # API server that handles websocket connections and REST endpoints
   moor-web-host:
-    # Use pre-built image from Codeberg registry
-    image: codeberg.org/timbran/moor:latest-x86_64
-    # To use locally-built images instead, replace the 'image:' line above with the 'build:' section below:
-    # build:
-    #   context: ../..
-    #   target: backend
-    #   network: host
-    #   args:
-    #     BUILD_PROFILE: release
-    # For aarch64 systems, change 'latest-x86_64' to 'latest-aarch64'
+    <<: *moor-image
     container_name: "moor-web-host"
     user: "${USER_ID}:${GROUP_ID}"
     environment:
@@ -116,8 +101,8 @@ services:
     volumes:
       - ./moor-web-host-data:/moor/.moor-host-data
       - ./moor-ipc:/var/run/moor
-      - ./moor-config:/moor/.config/moor:ro
-      - ./moor-local-share:/moor/.local/share/moor:ro
+      - ./moor-config:/moor/.config:ro
+      - ./moor-local-share:/moor/.local/share:ro
     command:
       - ./moor-web-host
       - --listen-address=0.0.0.0:8081
@@ -130,23 +115,29 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  # One-shot init service that copies the pre-built web client out of the moor image into a shared volume
+  moor-frontend-init:
+    <<: *moor-image
+    container_name: "moor-frontend-init"
+    command: ["cp", "-r", "/moor/web-client/.", "/web-client/"]
+    volumes:
+      - web-client-files:/web-client
+    restart: "no"
+
   # Frontend web server with SSL/TLS support
   moor-frontend:
-    # Use pre-built image from Codeberg registry
-    image: codeberg.org/timbran/meadow:latest-x86_64
-    # To use locally-built images instead, replace the 'image:' line above with the 'build:' section below:
-    # build:
-    #   context: ${MEADOW_PATH:-../../meadow}
-    #   target: frontend
-    #   network: host
-    # For aarch64 systems, change 'latest-x86_64' to 'latest-aarch64'
+    image: nginx:alpine
     container_name: "moor-frontend"
     volumes:
+      - web-client-files:/usr/share/nginx/html:ro
       - ./nginx-ssl.conf:/etc/nginx/nginx.conf:ro
       - ./letsencrypt:/etc/letsencrypt:ro
       - ./certbot-webroot:/var/www/certbot:ro
     depends_on:
-      - moor-web-host
+      moor-frontend-init:
+        condition: service_completed_successfully
+      moor-web-host:
+        condition: service_started
     ports:
       # HTTP (redirects to HTTPS)
       - "80:80"
@@ -159,16 +150,7 @@ services:
   # A worker process that handles requests from the daemon for outbound HTTP requests and returns the results back
   # to the daemon.
   moor-curl-worker:
-    # Use pre-built image from Codeberg registry
-    image: codeberg.org/timbran/moor:latest-x86_64
-    # To use locally-built images instead, replace the 'image:' line above with the 'build:' section below:
-    # build:
-    #   context: ../..
-    #   target: backend
-    #   network: host
-    #   args:
-    #     BUILD_PROFILE: release
-    # For aarch64 systems, change 'latest-x86_64' to 'latest-aarch64'
+    <<: *moor-image
     container_name: "moor-curl-worker"
     user: "${USER_ID}:${GROUP_ID}"
     environment:
@@ -180,8 +162,8 @@ services:
     volumes:
       - ./moor-curl-worker-data:/moor/.moor-host-data
       - ./moor-ipc:/var/run/moor
-      - ./moor-config:/moor/.config/moor:ro
-      - ./moor-local-share:/moor/.local/share/moor:ro
+      - ./moor-config:/moor/.config:ro
+      - ./moor-local-share:/moor/.local/share:ro
     command:
       - ./moor-curl-worker
       - --rpc-address=ipc:///var/run/moor/rpc.sock

@@ -19,15 +19,25 @@ spec:
         app.kubernetes.io/name: moor
         app.kubernetes.io/component: frontend
     spec:
+      initContainers:
+        - name: copy-web-client
+          image: codeberg.org/timbran/moor:latest
+          command: ["cp", "-r", "/moor/web-client/.", "/web-client/"]
+          volumeMounts:
+            - name: web-client-files
+              mountPath: /web-client
       containers:
         - name: nginx
-          image: codeberg.org/timbran/meadow:latest
+          image: nginx:alpine
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 80
               protocol: TCP
           volumeMounts:
+            - name: web-client-files
+              mountPath: /usr/share/nginx/html
+              readOnly: true
             - name: nginx-cache
               mountPath: /var/cache/nginx
             - name: nginx-run
@@ -65,6 +75,8 @@ spec:
               add:
                 - NET_BIND_SERVICE  # Allow binding to port 80
       volumes:
+        - name: web-client-files
+          emptyDir: {}
         - name: nginx-cache
           emptyDir: {}
         - name: nginx-run
