@@ -51,14 +51,9 @@ impl<'a> Parser<'a> {
 
     fn parse_program(mut self) -> (GreenNode, Vec<ParseError>) {
         self.builder.start_node(SyntaxKind::Program);
-        self.builder.start_node(SyntaxKind::StmtList);
-
-        while !self.cursor.at(SyntaxKind::Eof) {
-            self.parse_statement();
-        }
+        self.parse_stmt_list_until(&[SyntaxKind::Eof]);
 
         self.emit_until(self.tokens.len().saturating_sub(1));
-        self.builder.finish_node();
         self.bump_significant();
         self.builder.finish_node();
 
@@ -68,15 +63,64 @@ impl<'a> Parser<'a> {
         (green, errors)
     }
 
-    fn parse_statement(&mut self) {
-        self.builder.start_node(SyntaxKind::ExprStmt);
+    fn parse_stmt_list_until(&mut self, stops: &[SyntaxKind]) {
+        self.builder.start_node(SyntaxKind::StmtList);
+        while !self.cursor.at(SyntaxKind::Eof) && !stops.contains(&self.cursor.current_kind()) {
+            self.parse_statement();
+        }
+        self.builder.finish_node();
+    }
 
+    fn parse_statement(&mut self) {
         if self.cursor.at(SyntaxKind::Semi) {
+            self.builder.start_node(SyntaxKind::ExprStmt);
             self.bump_significant();
             self.builder.finish_node();
             return;
         }
 
+        match self.cursor.current_kind() {
+            SyntaxKind::ReturnKw => {
+                self.parse_return_statement();
+                return;
+            }
+            SyntaxKind::ForKw => {
+                self.parse_for_statement();
+                return;
+            }
+            SyntaxKind::ForkKw => {
+                self.parse_fork_statement();
+                return;
+            }
+            SyntaxKind::BreakKw => {
+                self.parse_jump_statement(SyntaxKind::BreakStmt);
+                return;
+            }
+            SyntaxKind::ContinueKw => {
+                self.parse_jump_statement(SyntaxKind::ContinueStmt);
+                return;
+            }
+            SyntaxKind::IfKw => {
+                self.parse_if_statement();
+                return;
+            }
+            SyntaxKind::WhileKw => {
+                self.parse_while_statement();
+                return;
+            }
+            SyntaxKind::TryKw => {
+                self.parse_try_statement();
+                return;
+            }
+            _ => {}
+        }
+
+        if self.at_contextual_ident("begin") {
+            self.parse_begin_statement();
+            return;
+        }
+
+        self.builder.start_node(SyntaxKind::ExprStmt);
         if self.starts_expr() {
             self.parse_expr();
             if !self.cursor.bump_if(SyntaxKind::Semi) {
@@ -91,6 +135,291 @@ impl<'a> Parser<'a> {
 
         self.consume_unsupported_statement();
         self.builder.finish_node();
+    }
+
+    fn parse_return_statement(&mut self) {
+        self.builder.start_node(SyntaxKind::ReturnStmt);
+        self.bump_significant();
+        if !self.cursor.at(SyntaxKind::Semi) && self.starts_expr() {
+            self.parse_expr();
+        }
+        if !self.cursor.bump_if(SyntaxKind::Semi) {
+            self.cursor.push_error("expected ';' after return");
+            self.consume_statement_error_tail();
+        } else {
+            self.emit_to_cursor();
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_jump_statement(&mut self, stmt_kind: SyntaxKind) {
+        self.builder.start_node(stmt_kind);
+        self.bump_significant();
+        if self.cursor.at(SyntaxKind::Ident) {
+            self.bump_significant();
+        }
+        if !self.cursor.bump_if(SyntaxKind::Semi) {
+            let keyword = match stmt_kind {
+                SyntaxKind::BreakStmt => "break",
+                SyntaxKind::ContinueStmt => "continue",
+                _ => "jump",
+            };
+            self.cursor.push_error(format!("expected ';' after {keyword}"));
+            self.consume_statement_error_tail();
+        } else {
+            self.emit_to_cursor();
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_if_statement(&mut self) {
+        self.builder.start_node(SyntaxKind::IfStmt);
+        self.bump_significant();
+        self.parse_paren_condition("if");
+        self.parse_stmt_list_until(&[SyntaxKind::ElseIfKw, SyntaxKind::ElseKw, SyntaxKind::EndIfKw]);
+
+        while self.cursor.at(SyntaxKind::ElseIfKw) {
+            self.builder.start_node(SyntaxKind::ElseIfClause);
+            self.bump_significant();
+            self.parse_paren_condition("elseif");
+            self.parse_stmt_list_until(&[
+                SyntaxKind::ElseIfKw,
+                SyntaxKind::ElseKw,
+                SyntaxKind::EndIfKw,
+            ]);
+            self.builder.finish_node();
+        }
+
+        if self.cursor.at(SyntaxKind::ElseKw) {
+            self.builder.start_node(SyntaxKind::ElseClause);
+            self.bump_significant();
+            self.parse_stmt_list_until(&[SyntaxKind::EndIfKw]);
+            self.builder.finish_node();
+        }
+
+        if !self.cursor.bump_if(SyntaxKind::EndIfKw) {
+            self.cursor.push_error("expected endif");
+        } else {
+            self.emit_to_cursor();
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_for_statement(&mut self) {
+        let stmt_kind = if self.looks_like_for_range() {
+            SyntaxKind::ForRangeStmt
+        } else {
+            SyntaxKind::ForInStmt
+        };
+        self.builder.start_node(stmt_kind);
+        self.bump_significant();
+
+        if !self.cursor.bump_if(SyntaxKind::Ident) {
+            self.cursor.push_error("expected loop variable after for");
+        } else {
+            self.emit_to_cursor();
+            if stmt_kind == SyntaxKind::ForInStmt && self.cursor.bump_if(SyntaxKind::Comma) {
+                self.emit_to_cursor();
+                if !self.cursor.bump_if(SyntaxKind::Ident) {
+                    self.cursor.push_error("expected key variable after ','");
+                } else {
+                    self.emit_to_cursor();
+                }
+            }
+        }
+
+        if !self.cursor.bump_if(SyntaxKind::InKw) {
+            self.cursor.push_error("expected in");
+        } else {
+            self.emit_to_cursor();
+        }
+
+        if stmt_kind == SyntaxKind::ForRangeStmt {
+            self.parse_range_clause("for");
+        } else {
+            self.parse_paren_condition("for");
+        }
+
+        self.parse_stmt_list_until(&[SyntaxKind::EndForKw]);
+        if !self.cursor.bump_if(SyntaxKind::EndForKw) {
+            self.cursor.push_error("expected endfor");
+        } else {
+            self.emit_to_cursor();
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_while_statement(&mut self) {
+        self.builder.start_node(SyntaxKind::WhileStmt);
+        self.bump_significant();
+        if self.cursor.at(SyntaxKind::Ident) && self.cursor.nth_kind(1) == SyntaxKind::LParen {
+            self.bump_significant();
+        }
+        self.parse_paren_condition("while");
+        self.parse_stmt_list_until(&[SyntaxKind::EndWhileKw]);
+        if !self.cursor.bump_if(SyntaxKind::EndWhileKw) {
+            self.cursor.push_error("expected endwhile");
+        } else {
+            self.emit_to_cursor();
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_fork_statement(&mut self) {
+        self.builder.start_node(SyntaxKind::ForkStmt);
+        self.bump_significant();
+        if self.cursor.at(SyntaxKind::Ident) && self.cursor.nth_kind(1) == SyntaxKind::LParen {
+            self.bump_significant();
+        }
+        self.parse_paren_condition("fork");
+        self.parse_stmt_list_until(&[SyntaxKind::EndForkKw]);
+        if !self.cursor.bump_if(SyntaxKind::EndForkKw) {
+            self.cursor.push_error("expected endfork");
+        } else {
+            self.emit_to_cursor();
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_try_statement(&mut self) {
+        self.builder.start_node(SyntaxKind::TryExceptStmt);
+        self.bump_significant();
+        self.parse_stmt_list_until(&[
+            SyntaxKind::ExceptKw,
+            SyntaxKind::FinallyKw,
+            SyntaxKind::EndTryKw,
+        ]);
+
+        if self.cursor.at(SyntaxKind::FinallyKw) {
+            self.builder.start_node(SyntaxKind::TryFinallyStmt);
+            self.bump_significant();
+            self.parse_stmt_list_until(&[SyntaxKind::EndTryKw]);
+            self.builder.finish_node();
+        } else {
+            while self.cursor.at(SyntaxKind::ExceptKw) {
+                self.parse_except_clause();
+            }
+        }
+
+        if !self.cursor.bump_if(SyntaxKind::EndTryKw) {
+            self.cursor.push_error("expected endtry");
+        } else {
+            self.emit_to_cursor();
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_except_clause(&mut self) {
+        self.builder.start_node(SyntaxKind::ExceptClause);
+        self.bump_significant();
+
+        if self.cursor.at(SyntaxKind::Ident) && self.cursor.nth_kind(1) == SyntaxKind::LParen {
+            self.bump_significant();
+        }
+
+        if self.cursor.bump_if(SyntaxKind::LParen) {
+            self.emit_to_cursor();
+            if self.cursor.at(SyntaxKind::AnyKw) {
+                self.bump_significant();
+            } else if self.starts_expr() {
+                self.parse_expr();
+                while self.cursor.bump_if(SyntaxKind::Comma) {
+                    self.emit_to_cursor();
+                    if self.cursor.at(SyntaxKind::At) {
+                        self.bump_significant();
+                    }
+                    if self.starts_expr() {
+                        self.parse_expr();
+                    } else {
+                        self.cursor.push_error("expected catch code expression");
+                        self.consume_error_node_until(&[SyntaxKind::RParen]);
+                        break;
+                    }
+                }
+            } else {
+                self.cursor.push_error("expected catch codes");
+            }
+
+            if !self.cursor.bump_if(SyntaxKind::RParen) {
+                self.cursor.push_error("expected ')'");
+            } else {
+                self.emit_to_cursor();
+            }
+        } else {
+            self.cursor.push_error("expected '(' after except");
+        }
+
+        self.parse_stmt_list_until(&[
+            SyntaxKind::ExceptKw,
+            SyntaxKind::FinallyKw,
+            SyntaxKind::EndTryKw,
+        ]);
+        self.builder.finish_node();
+    }
+
+    fn parse_begin_statement(&mut self) {
+        self.builder.start_node(SyntaxKind::BeginStmt);
+        self.bump_significant();
+        self.parse_stmt_list_until_contextual_end("end");
+        if !self.at_contextual_ident("end") {
+            self.cursor.push_error("expected end");
+        } else {
+            self.bump_significant();
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_paren_condition(&mut self, keyword: &str) {
+        if !self.cursor.bump_if(SyntaxKind::LParen) {
+            self.cursor.push_error(format!("expected '(' after {keyword}"));
+            return;
+        }
+        self.emit_to_cursor();
+        if self.starts_expr() {
+            self.parse_expr();
+        } else {
+            self.cursor
+                .push_error(format!("expected condition expression after {keyword}("));
+            self.consume_error_node_until(&[SyntaxKind::RParen]);
+        }
+        if !self.cursor.bump_if(SyntaxKind::RParen) {
+            self.cursor.push_error("expected ')'");
+        } else {
+            self.emit_to_cursor();
+        }
+    }
+
+    fn parse_range_clause(&mut self, keyword: &str) {
+        if !self.cursor.bump_if(SyntaxKind::LBracket) {
+            self.cursor.push_error(format!("expected '[' after {keyword}"));
+            return;
+        }
+        self.emit_to_cursor();
+        if self.starts_expr() {
+            self.parse_expr();
+        } else {
+            self.cursor.push_error("expected range start expression");
+            self.consume_error_node_until(&[SyntaxKind::DotDot, SyntaxKind::RBracket]);
+        }
+
+        if !self.cursor.bump_if(SyntaxKind::DotDot) {
+            self.cursor.push_error("expected '..'");
+        } else {
+            self.emit_to_cursor();
+        }
+
+        if self.starts_expr() {
+            self.parse_expr();
+        } else {
+            self.cursor.push_error("expected range end expression");
+            self.consume_error_node_until(&[SyntaxKind::RBracket]);
+        }
+
+        if !self.cursor.bump_if(SyntaxKind::RBracket) {
+            self.cursor.push_error("expected ']'");
+        } else {
+            self.emit_to_cursor();
+        }
     }
 
     fn parse_expr(&mut self) {
@@ -457,6 +786,24 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_stmt_list_until_contextual_end(&mut self, stop_ident: &str) {
+        self.builder.start_node(SyntaxKind::StmtList);
+        while !self.cursor.at(SyntaxKind::Eof) && !self.at_contextual_ident(stop_ident) {
+            self.parse_statement();
+        }
+        self.builder.finish_node();
+    }
+
+    fn at_contextual_ident(&self, ident: &str) -> bool {
+        self.cursor.at(SyntaxKind::Ident) && self.cursor.current_text().eq_ignore_ascii_case(ident)
+    }
+
+    fn looks_like_for_range(&self) -> bool {
+        self.cursor.nth_kind(1) == SyntaxKind::Ident
+            && self.cursor.nth_kind(2) == SyntaxKind::InKw
+            && self.cursor.nth_kind(3) == SyntaxKind::LBracket
+    }
+
     fn starts_expr(&self) -> bool {
         matches!(
             self.cursor.current_kind(),
@@ -577,6 +924,92 @@ mod tests {
     }
 
     #[test]
+    fn parses_return_break_and_continue_statements() {
+        let (root, errors) = parse_to_syntax_node("return x; break loop; continue;");
+        assert!(errors.is_empty(), "{errors:?}");
+        let kinds: Vec<_> = root.descendants().map(|node| node.kind()).collect();
+        assert!(kinds.contains(&SyntaxKind::ReturnStmt));
+        assert!(kinds.contains(&SyntaxKind::BreakStmt));
+        assert!(kinds.contains(&SyntaxKind::ContinueStmt));
+    }
+
+    #[test]
+    fn parses_if_elseif_else_blocks() {
+        let source = "if (a) return b; elseif (c) return d; else return e; endif";
+        let (root, errors) = parse_to_syntax_node(source);
+        assert!(errors.is_empty(), "{errors:?}");
+        let kinds: Vec<_> = root.descendants().map(|node| node.kind()).collect();
+        assert!(kinds.contains(&SyntaxKind::IfStmt));
+        assert!(kinds.contains(&SyntaxKind::ElseIfClause));
+        assert!(kinds.contains(&SyntaxKind::ElseClause));
+    }
+
+    #[test]
+    fn parses_labelled_while_block() {
+        let source = "while loop (a < b) x = x + 1; endwhile";
+        let (root, errors) = parse_to_syntax_node(source);
+        assert!(errors.is_empty(), "{errors:?}");
+        let kinds: Vec<_> = root.descendants().map(|node| node.kind()).collect();
+        assert!(kinds.contains(&SyntaxKind::WhileStmt));
+        assert!(kinds.contains(&SyntaxKind::AssignExpr));
+        assert!(kinds.contains(&SyntaxKind::BinExpr));
+    }
+
+    #[test]
+    fn parses_for_range_and_for_in_blocks() {
+        let source = "for x in [1..5] return x; endfor for a, b in (items) return a; endfor";
+        let (root, errors) = parse_to_syntax_node(source);
+        assert!(errors.is_empty(), "{errors:?}");
+        let kinds: Vec<_> = root.descendants().map(|node| node.kind()).collect();
+        assert!(kinds.contains(&SyntaxKind::ForRangeStmt));
+        assert!(kinds.contains(&SyntaxKind::ForInStmt));
+    }
+
+    #[test]
+    fn parses_fork_statement() {
+        let source = "fork timer (5) return x; endfork";
+        let (root, errors) = parse_to_syntax_node(source);
+        assert!(errors.is_empty(), "{errors:?}");
+        let kinds: Vec<_> = root.descendants().map(|node| node.kind()).collect();
+        assert!(kinds.contains(&SyntaxKind::ForkStmt));
+        assert!(kinds.contains(&SyntaxKind::ReturnStmt));
+    }
+
+    #[test]
+    fn parses_try_except_and_try_finally_blocks() {
+        let except_src = "try return x; except (ANY) return y; endtry";
+        let (except_root, except_errors) = parse_to_syntax_node(except_src);
+        assert!(except_errors.is_empty(), "{except_errors:?}");
+        let except_kinds: Vec<_> = except_root.descendants().map(|node| node.kind()).collect();
+        assert!(except_kinds.contains(&SyntaxKind::TryExceptStmt));
+        assert!(except_kinds.contains(&SyntaxKind::ExceptClause));
+
+        let finally_src = "try return x; finally return y; endtry";
+        let (finally_root, finally_errors) = parse_to_syntax_node(finally_src);
+        assert!(finally_errors.is_empty(), "{finally_errors:?}");
+        let finally_kinds: Vec<_> = finally_root.descendants().map(|node| node.kind()).collect();
+        assert!(finally_kinds.contains(&SyntaxKind::TryExceptStmt));
+        assert!(finally_kinds.contains(&SyntaxKind::TryFinallyStmt));
+    }
+
+    #[test]
+    fn parses_contextual_begin_end_block() {
+        let source = "begin return x; end";
+        let (root, errors) = parse_to_syntax_node(source);
+        assert!(errors.is_empty(), "{errors:?}");
+        let kinds: Vec<_> = root.descendants().map(|node| node.kind()).collect();
+        assert!(kinds.contains(&SyntaxKind::BeginStmt));
+        assert!(kinds.contains(&SyntaxKind::ReturnStmt));
+    }
+
+    #[test]
+    fn missing_endif_reports_error() {
+        let (_root, errors) = parse_to_syntax_node("if (a) return b;");
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|error| error.message.contains("endif")));
+    }
+
+    #[test]
     fn preserves_trivia_losslessly() {
         let source = "foo /*x*/ (1);\n";
         let (root, errors) = parse_to_syntax_node(source);
@@ -586,7 +1019,7 @@ mod tests {
 
     #[test]
     fn unsupported_statement_produces_error_node_and_error() {
-        let (root, errors) = parse_to_syntax_node("if (x) y; endif");
+        let (root, errors) = parse_to_syntax_node("let x = y;");
         assert!(!errors.is_empty());
         let has_error = root
             .descendants()
