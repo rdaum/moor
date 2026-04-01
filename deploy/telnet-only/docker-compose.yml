@@ -2,28 +2,27 @@
 # This configuration runs only the core daemon and telnet host, without web components.
 # Uses IPC (Unix domain sockets) for inter-process communication since both services run on the same host.
 # Suitable for traditional MUD/MOO usage via telnet clients.
+#
+# Set ARCH=aarch64 in your environment (or .env file) for ARM systems. Defaults to x86_64.
+
+# Reusable image reference -- change the arch in one place via the ARCH env var
+x-moor-image: &moor-image
+  image: codeberg.org/timbran/moor:latest-${ARCH:-x86_64}
 
 networks:
   moor_net:
 
-# Named volumes for persistent application data
-# Note: moor-config uses a bind mount instead of a named volume
-# to avoid permission issues with non-root users
-#volumes:
-
 services:
   # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
   moor-daemon:
-    # Use pre-built image from Codeberg registry
-    image: codeberg.org/timbran/moor:latest-x86_64
-    # To use locally-built images instead, replace the 'image:' line above with the 'build:' section below:
+    <<: *moor-image
+    # To use locally-built images instead, comment out the x-moor-image merge above and uncomment:
     # build:
     #   context: ../..
     #   target: backend
     #   network: host
     #   args:
     #     BUILD_PROFILE: release
-    # For aarch64 systems, change 'latest-x86_64' to 'latest-aarch64'
     container_name: "moor-daemon"
     user: "${USER_ID}:${GROUP_ID}"
     environment:
@@ -36,8 +35,8 @@ services:
       - ./moor-data:/moor/moor-data
       - ../../cores:/moor/cores:ro
       - ./moor-ipc:/var/run/moor
-      - ./moor-config:/moor/.config/moor
-      - ./moor-local-share:/moor/.local/share/moor
+      - ./moor-config:/moor/.config
+      - ./moor-local-share:/moor/.local/share
     command: >
       ./moor-daemon
         /moor/moor-data
@@ -52,16 +51,7 @@ services:
 
   # A host process that runs the telnet server, and handles incoming connections and forwards events to the daemon.
   moor-telnet-host:
-    # Use pre-built image from Codeberg registry
-    image: codeberg.org/timbran/moor:latest-x86_64
-    # To use locally-built images instead, replace the 'image:' line above with the 'build:' section below:
-    # build:
-    #   context: ../..
-    #   target: backend
-    #   network: host
-    #   args:
-    #     BUILD_PROFILE: release
-    # For aarch64 systems, change 'latest-x86_64' to 'latest-aarch64'
+    <<: *moor-image
     container_name: "moor-telnet-host"
     user: "${USER_ID}:${GROUP_ID}"
     environment:
@@ -73,8 +63,8 @@ services:
     volumes:
       - ./moor-telnet-host-data:/moor/.moor-host-data
       - ./moor-ipc:/var/run/moor
-      - ./moor-config:/moor/.config/moor:ro
-      - ./moor-local-share:/moor/.local/share/moor:ro
+      - ./moor-config:/moor/.config:ro
+      - ./moor-local-share:/moor/.local/share:ro
     command:
       - ./moor-telnet-host
       - --telnet-address=0.0.0.0
