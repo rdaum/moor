@@ -66,58 +66,7 @@ pub mod objdef {
     pub struct ObjDefParser;
 }
 
-// Rule to Expression mapping - a single source of truth for bidirectional mapping
-// This allows us to move rules across precedent groups as needed and still provide
-// Expression mapping to the correct shared level.
-macro_rules! rule_to_expr_mapping {
-    () => {
-        pub fn rule_to_expr_pattern(rule: &Rule, expr: &crate::ast::Expr) -> bool {
-            use crate::ast::{BinaryOp, Expr, UnaryOp};
-            match (rule, expr) {
-                (Rule::assign, Expr::Assign { .. }) => true,
-                (Rule::scatter_assign, Expr::Scatter(_, _)) => true,
-                (Rule::cond_expr, Expr::Cond { .. }) => true,
-                (Rule::lor, Expr::Or(_, _)) => true,
-                (Rule::land, Expr::And(_, _)) => true,
-                (Rule::bitor, Expr::Binary(BinaryOp::BitOr, _, _)) => true,
-                (Rule::bitxor, Expr::Binary(BinaryOp::BitXor, _, _)) => true,
-                (Rule::bitand, Expr::Binary(BinaryOp::BitAnd, _, _)) => true,
-                (Rule::eq, Expr::Binary(BinaryOp::Eq, _, _)) => true,
-                (Rule::neq, Expr::Binary(BinaryOp::NEq, _, _)) => true,
-                (Rule::gt, Expr::Binary(BinaryOp::Gt, _, _)) => true,
-                (Rule::lt, Expr::Binary(BinaryOp::Lt, _, _)) => true,
-                (Rule::gte, Expr::Binary(BinaryOp::GtE, _, _)) => true,
-                (Rule::lte, Expr::Binary(BinaryOp::LtE, _, _)) => true,
-                (Rule::in_range, Expr::Binary(BinaryOp::In, _, _)) => true,
-                (Rule::bitshl, Expr::Binary(BinaryOp::BitShl, _, _)) => true,
-                (Rule::bitlshr, Expr::Binary(BinaryOp::BitLShr, _, _)) => true,
-                (Rule::bitshr, Expr::Binary(BinaryOp::BitShr, _, _)) => true,
-                (Rule::add, Expr::Binary(BinaryOp::Add, _, _)) => true,
-                (Rule::sub, Expr::Binary(BinaryOp::Sub, _, _)) => true,
-                (Rule::mul, Expr::Binary(BinaryOp::Mul, _, _)) => true,
-                (Rule::div, Expr::Binary(BinaryOp::Div, _, _)) => true,
-                (Rule::modulus, Expr::Binary(BinaryOp::Mod, _, _)) => true,
-                (Rule::pow, Expr::Binary(BinaryOp::Exp, _, _)) => true,
-                (Rule::neg, Expr::Unary(UnaryOp::Neg, _)) => true,
-                (Rule::not, Expr::Unary(UnaryOp::Not, _)) => true,
-                (Rule::bitnot, Expr::Unary(UnaryOp::BitNot, _)) => true,
-                (Rule::index_range, Expr::Index(_, _)) => true,
-                (Rule::index_single, Expr::Index(_, _)) => true,
-                (Rule::verb_call, Expr::Verb { .. }) => true,
-                (Rule::verb_expr_call, Expr::Verb { .. }) => true,
-                (Rule::prop, Expr::Prop { .. }) => true,
-                (Rule::prop_expr, Expr::Prop { .. }) => true,
-                _ => false,
-            }
-        }
-    };
-}
-
-// Makes the macro code available for creating the precedence level enum.
-rule_to_expr_mapping!();
-
-/// Macro to define operator precedence levels and generate both the PrecedenceLevel enum
-/// and the Pratt parser configuration from a single source of truth.
+/// Macro to define the Pratt parser configuration from a single source of truth.
 ///
 /// PRECEDENCE ORDER: Earlier levels = lower precedence, later levels = higher precedence
 /// (Assignment is lowest, Atomic is highest)
@@ -140,12 +89,6 @@ macro_rules! define_operators {
             $($binding:ident($assoc:ident): [$($op:ident),* $(,)?]),* $(,)?
         ]
     ),* $(,)?) => {
-        // Generate the PrecedenceLevel enum
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-        pub enum PrecedenceLevel {
-            $($level,)*
-        }
-
         // Creates a Pratt parser definition based on the define_operators! structure.
         fn build_pratt_parser() -> PrattParser<Rule> {
             PrattParser::new()
@@ -155,22 +98,6 @@ macro_rules! define_operators {
                 )*
             )*
         }
-
-        // Generate expression precedence mapping function
-        pub fn expr_precedence_level(expr: &crate::ast::Expr) -> PrecedenceLevel {
-            match expr {
-                $(
-                    $(
-                        $(
-                            _ if rule_to_expr_pattern(&Rule::$op, expr) => PrecedenceLevel::$level,
-                        )*
-                    )*
-                )*
-                // DEFAULT: All other expressions are Atomic precedence
-                _ => PrecedenceLevel::Atomic,
-            }
-        }
-
     };
 
     // Generate union of ops for a group

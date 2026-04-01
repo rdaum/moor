@@ -19,7 +19,11 @@ mod ast;
 mod codegen;
 mod decompile;
 mod diagnostics;
+pub mod frontend;
+mod lexer;
 mod parse;
+mod precedence;
+mod syntax_kind;
 mod unparse;
 
 mod codegen_tests;
@@ -36,11 +40,15 @@ pub use crate::diagnostics::{
 pub use crate::{
     codegen::compile,
     decompile::program_to_tree,
+    frontend::cursor::{ParseError as FrontendParseError, TokenCursor},
+    lexer::{Token, lex},
     objdef::{
         ObjDefParseError, ObjFileContext, ObjPropDef, ObjPropOverride, ObjVerbDef,
         ObjectDefinition, compile_object_definitions, parse_literal_value,
     },
     parse::CompileOptions,
+    precedence::{PrecedenceLevel, expr_precedence_level},
+    syntax_kind::SyntaxKind,
     unparse::{to_literal, to_literal_objsub, unparse},
 };
 // Re-export from var

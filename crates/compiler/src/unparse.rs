@@ -15,7 +15,8 @@ use crate::{
     ast,
     ast::{Expr, Stmt, StmtNode},
     decompile::DecompileError,
-    parse::{Parse, PrecedenceLevel, expr_precedence_level},
+    parse::Parse,
+    precedence::{PrecedenceLevel, expr_precedence_level},
 };
 use base64::{Engine, engine::general_purpose};
 use moor_common::util::quote_str;
