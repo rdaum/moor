@@ -40,6 +40,14 @@ pub use crate::diagnostics::{
 pub use crate::{
     codegen::compile,
     decompile::program_to_tree,
+    frontend::cst::{
+        AssignExpr, BeginStmt, BinExpr, BreakStmt, CallExpr, ComprehensionExpr, CondExpr,
+        ConstStmt, ContinueStmt, ElseClause, ElseIfClause, ExceptClause, ExprStmt, Expression,
+        FlyweightExpr, FnStmt, ForInStmt, ForRangeStmt, ForkStmt, GlobalStmt, IfStmt, IndexExpr,
+        LambdaExpr, LetStmt, ListExpr, MapExpr, ParamList, ParenExpr, PassExpr, Program as CstProgram,
+        PropExpr, RangeExpr, ReturnStmt, ScatterExpr, ScatterItem, Statement, StmtList,
+        SysPropExpr, TryExceptStmt, TryExpr, TryFinallyStmt, UnaryExpr, VerbCallExpr, WhileStmt,
+    },
     frontend::cursor::{ParseError as FrontendParseError, TokenCursor},
     frontend::parser::{parse_to_cst, parse_to_syntax_node},
     lexer::{Token, lex},
