@@ -38,7 +38,7 @@ pub use crate::diagnostics::{
     format_compile_error,
 };
 pub use crate::{
-    codegen::compile,
+    codegen::{compile, compile_frontend},
     decompile::program_to_tree,
     frontend::cst::{
         AssignExpr, BeginStmt, BinExpr, BreakStmt, CallExpr, ComprehensionExpr, CondExpr,

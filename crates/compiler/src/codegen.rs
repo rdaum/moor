@@ -27,6 +27,7 @@ use crate::{
         Arg, BinaryOp, CallTarget, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
         UnaryOp,
     },
+    frontend::lower::parse_program_frontend,
     parse::{CompileOptions, Parse, parse_program},
 };
 use moor_common::{
@@ -1539,6 +1540,13 @@ fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, 
 /// Compile from a program string, starting at the "program" rule.
 pub fn compile(program: &str, options: CompileOptions) -> Result<Program, CompileError> {
     let parse = parse_program(program, options.clone())?;
+
+    do_compile(parse, options)
+}
+
+/// Compile from a program string using the handwritten frontend parser and lowering path.
+pub fn compile_frontend(program: &str, options: CompileOptions) -> Result<Program, CompileError> {
+    let parse = parse_program_frontend(program, options.clone())?;
 
     do_compile(parse, options)
 }

@@ -13,7 +13,10 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{CompileOptions, codegen::compile};
+    use crate::{
+        CompileOptions,
+        codegen::{compile, compile_frontend},
+    };
     use moor_common::builtins::BUILTINS;
     use moor_var::{
         E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, Obj, SYSTEM_OBJECT, Symbol, UuObjid,
@@ -31,6 +34,30 @@ mod tests {
             binary.main_vector().to_vec(),
             vec![ImmInt(1), ImmInt(2), Add, Pop, Done]
         );
+    }
+
+    fn assert_frontend_compiles_same(program: &str) {
+        let classic = compile(program, CompileOptions::default()).unwrap();
+        let frontend = compile_frontend(program, CompileOptions::default()).unwrap();
+        assert_eq!(classic, frontend);
+    }
+
+    #[test]
+    fn frontend_codegen_matches_classic_for_control_flow() {
+        let program = "while loop (a) if (b) break loop; elseif (c) return d; else for x, y in (items) return x; endfor endif endwhile";
+        assert_frontend_compiles_same(program);
+    }
+
+    #[test]
+    fn frontend_codegen_matches_classic_for_lambda_and_fn_forms() {
+        let program = "fn add(a, ?b = 1, @rest) return a + b; endfn value = fn(x) return x; endfn; let f = {?x = 1, @rest} => x + 1; return f;";
+        assert_frontend_compiles_same(program);
+    }
+
+    #[test]
+    fn frontend_codegen_matches_classic_for_specialized_expressions() {
+        let program = "return foo:bar(1, @args) + `x ! E_PERM, @codes => y ' + <#1, .name = \"x\", .value = 1, {1, 2}> + {item * 2 for item in (items)};";
+        assert_frontend_compiles_same(program);
     }
 
     #[test]
