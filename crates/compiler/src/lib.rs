@@ -41,6 +41,7 @@ pub use crate::{
     codegen::compile,
     decompile::program_to_tree,
     frontend::cursor::{ParseError as FrontendParseError, TokenCursor},
+    frontend::parser::{parse_to_cst, parse_to_syntax_node},
     lexer::{Token, lex},
     objdef::{
         ObjDefParseError, ObjFileContext, ObjPropDef, ObjPropOverride, ObjVerbDef,

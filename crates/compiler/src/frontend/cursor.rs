@@ -73,6 +73,24 @@ impl<'a> TokenCursor<'a> {
         self.pos
     }
 
+    pub fn current_raw_index(&self) -> usize {
+        let mut idx = self.pos;
+        loop {
+            let token = self
+                .tokens
+                .get(idx)
+                .or_else(|| self.tokens.last())
+                .expect("lexer must always provide EOF token");
+            if !token.kind.is_trivia() {
+                return idx;
+            }
+            if token.kind == SyntaxKind::Eof {
+                return idx;
+            }
+            idx += 1;
+        }
+    }
+
     pub fn nth_kind(&self, n: usize) -> SyntaxKind {
         self.nth_non_trivia(n).kind
     }

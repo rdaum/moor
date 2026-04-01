@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use rowan::{GreenNode, GreenNodeBuilder};
+use rowan::{Checkpoint, GreenNode, GreenNodeBuilder};
 
 use crate::SyntaxKind;
 
@@ -64,6 +64,14 @@ impl CstBuilder {
 
     pub fn start_node(&mut self, kind: SyntaxKind) {
         self.inner.start_node(kind.into());
+    }
+
+    pub fn checkpoint(&self) -> Checkpoint {
+        self.inner.checkpoint()
+    }
+
+    pub fn start_node_at(&mut self, checkpoint: Checkpoint, kind: SyntaxKind) {
+        self.inner.start_node_at(checkpoint, kind.into());
     }
 
     pub fn token(&mut self, kind: SyntaxKind, text: &str) {
