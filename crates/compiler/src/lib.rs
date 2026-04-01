@@ -49,6 +49,7 @@ pub use crate::{
         SysPropExpr, TryExceptStmt, TryExpr, TryFinallyStmt, UnaryExpr, VerbCallExpr, WhileStmt,
     },
     frontend::cursor::{ParseError as FrontendParseError, TokenCursor},
+    frontend::lower::parse_program_frontend,
     frontend::parser::{parse_to_cst, parse_to_syntax_node},
     lexer::{Token, lex},
     objdef::{

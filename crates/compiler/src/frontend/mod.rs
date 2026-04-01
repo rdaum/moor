@@ -13,5 +13,6 @@
 
 pub mod cst;
 pub mod cursor;
+pub mod lower;
 pub mod parser;
 pub mod syntax;
