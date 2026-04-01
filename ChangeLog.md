@@ -5,15 +5,108 @@ All notable changes to mooR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased 1.1 series
+## Unreleased 1.1 series (`main`) branch
 
 ### Added
 
+`kernel`:
+
+- New `astar()` builtin for server-side A* pathfinding; accepts grid dimensions, start/goal
+  coordinates, tile map, and solid tile set; returns a list of `{x, y}` waypoints with 8-directional
+  movement and corner-cutting prevention
+
+`compiler`:
+
+- `include!("path")` and `include_bin!("path")` macros in the objdef compiler for embedding external
+  file contents (String and Binary respectively) at compile time.
+
+`web-host`:
+
+- WebRTC data channel support for realtime event delivery; domain-based routing sends matching
+  namespaces over unreliable/unordered data channels, falling back to WebSocket
+- Batch world state API: `POST /v1/batch` endpoint for executing multiple world state actions in a
+  single transaction (FlatBuffer and JSON payloads)
+- Object query API: `GET /v1/objects/query` endpoint for filtered object lookups using parent,
+  location, owner, and flag filters with secondary index acceleration
+- OpenAPI specification updated for new endpoints
+
+`daemon`:
+
+- `TaskClient` high-level async client for verb invocation from hosts, with session event streaming
+  and `TaskResult::Suspended` support
+- `invoke_verb_handler` rewritten to use `TaskClient`, removing ~162 lines of per-handler ZMQ
+  plumbing
+
+`rpc`:
+
+- FlatBuffer schema for batch world state RPC and `QueryObjects`
+- `QueryObjects` struct with parent/location/owner/flags_all/flags_any filters, wired through
+  `WorldState` trait, batch actions, FlatBuffer schema, and daemon message handler
+- Remaining batch world state action builder helpers (`ws_request_property`, `ws_request_verb_code`,
+  `ws_program_verb`)
+
+`testing`:
+
+- Multi-object benchmark for distributed write workloads
+- Integration tests for batch world state RPC
+
 ### Changed
+
+`kernel`:
+
+- New `moor-vm` crate extracted from `moor-kernel`, separating pure VM types (activations, frames,
+  opcode loop, unwind, stack ops, exec state) from kernel host services via a `WorldStateCallback`
+  trait; kernel provides `KernelHost` impl forwarding to TLS with zero vtable overhead
+  (monomorphized generics)
+
+`daemon`:
+
+- Scheduler rewritten from single-threaded channel-based event loop to direct mutex calls on shared
+  `TaskLifecycle` state behind `Arc<Mutex>`, eliminating per-request oneshot allocation and
+  unnecessary thread serialization.
+- `server_options` moved to `ArcSwap` for lock-free reads from task submission, GC checks, and
+  config queries
+- Scheduler lifecycle mutex switched to `parking_lot::Mutex` for faster uncontended acquisition
+- Lifecycle mutex hold times reduced: session commits, expired task collection, and shutdown polling
+  no longer hold the lock during I/O
+- `workers_info` routed through `SystemControl` trait instead of scheduler channel
+
+`db`:
+
+- Commit path rewritten from serialized mutex to lock-free CAS loop with `ArcSwap::rcu`; workers
+  speculatively check conflicts and build candidate snapshots in parallel
+- Relation-level rebase on CAS failure: if the winning commit didn't modify any relation the loser
+  also modified (detected via `Arc::ptr_eq`), re-slot prepared indexes onto the winner's snapshot and
+  CAS again without re-checking
+- Key-level CAS rebase via bloom filter of modified keys per committed snapshot; enables successful
+  rebase when two transactions modify different keys in the same relation
+- Cumulative bloom filter on snapshot to skip `check_all` when a committing transaction's keys don't
+  overlap any intervening commit's keys; epoch-bounded (resets every 32 versions) to prevent
+  saturation
+- Tombstone `HashSet`+`RwLock` replaced with lock-free `AtomicBloom` (64KB, <0.02% false positive
+  rate at 10K keys), eliminating RwLock contention on the provider read path
+- Faster `Instant` on ARM64
 
 ### Fixed
 
-## [1.0.0-rc.1] - 2026-03-05
+`kernel`:
+
+- Stale timer wheel entries no longer cause spurious task wakes; added monotonic generation counter
+  to `TimerEntry` and `SuspendedTask` so that re-suspended tasks discard leftover timer entries from
+  previous suspensions
+
+`compiler`:
+
+- Duplicate constants (both duplicate names and duplicate values) now detected and rejected in objdef
+  compiler
+- Trailing newlines in objdef output corrected
+- Fixed duplicate declarations in compiler roundtrip proptests
+
+`infra`:
+
+- SDK publish job fixed (missing build step, incorrect relative dirs)
+
+## [1.0.0-rc1] - 2026-03-05 (`v1.0-release` branch)
 
 ### BREAKING: Database Migration Required
 
