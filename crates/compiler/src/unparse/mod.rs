@@ -24,6 +24,7 @@ use base64::{Engine, engine::general_purpose};
 use moor_common::util::quote_str;
 use moor_var::{Obj, Var, Variant, program::opcode::ScatterLabel};
 use std::collections::HashMap;
+use std::fmt::Write as _;
 
 /// This could probably be combined with the structure for Parse.
 #[derive(Debug)]
@@ -150,12 +151,6 @@ impl<'a> Unparse<'a> {
     }
 }
 
-fn append_spaces(buffer: &mut String, count: usize) {
-    for _ in 0..count {
-        buffer.push(' ');
-    }
-}
-
 pub fn unparse(
     tree: &Parse,
     fully_paren: bool,
@@ -261,240 +256,196 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
 /// Utility function to produce a MOO literal from a Var/Variant.
 /// This is kept in `compiler` and not in `common` because it's specific to the MOO language, and
 /// other languages could have different representations.
-pub fn to_literal(v: &Var) -> String {
+pub fn write_literal<W: std::fmt::Write>(v: &Var, writer: &mut W) -> Result<(), DecompileError> {
     match v.variant() {
-        Variant::None => "None".to_string(),
-        Variant::Obj(oid) => {
-            format!("{oid}")
-        }
-        Variant::Bool(b) => {
-            format!("{b}")
-        }
-        Variant::Int(i) => i.to_string(),
-        Variant::Float(f) => {
-            format!("{f:?}")
-        }
+        Variant::None => write!(writer, "None")?,
+        Variant::Obj(oid) => write!(writer, "{oid}")?,
+        Variant::Bool(b) => write!(writer, "{b}")?,
+        Variant::Int(i) => write!(writer, "{i}")?,
+        Variant::Float(f) => write!(writer, "{f:?}")?,
         Variant::List(l) => {
-            let mut result = String::new();
-            result.push('{');
+            write!(writer, "{{")?;
             for (i, v) in l.iter().enumerate() {
                 if i > 0 {
-                    result.push_str(", ");
+                    write!(writer, ", ")?;
                 }
-                result.push_str(to_literal(&v).as_str());
+                write_literal(&v, writer)?;
             }
-            result.push('}');
-            result
+            write!(writer, "}}")?;
         }
-        Variant::Str(s) => quote_str(s.as_str()),
+        Variant::Str(s) => write!(writer, "{}", quote_str(s.as_str()))?,
         Variant::Map(m) => {
-            let mut result = String::new();
-            result.push('[');
+            write!(writer, "[")?;
             for (i, (k, v)) in m.iter().enumerate() {
                 if i > 0 {
-                    result.push_str(", ");
+                    write!(writer, ", ")?;
                 }
-                result.push_str(to_literal(&k).as_str());
-                result.push_str(" -> ");
-                result.push_str(to_literal(&v).as_str());
+                write_literal(&k, writer)?;
+                write!(writer, " -> ")?;
+                write_literal(&v, writer)?;
             }
-            result.push(']');
-            result
+            write!(writer, "]")?;
         }
         Variant::Err(e) => {
             let err_name = e.name().to_string().to_uppercase();
-            // If there's a message, format as E_CODE("message")
             if let Some(msg) = &e.msg {
-                format!("{}({})", err_name, quote_str(msg.as_str()))
+                write!(writer, "{}({})", err_name, quote_str(msg.as_str()))?;
             } else {
-                err_name
+                write!(writer, "{err_name}")?;
             }
         }
         Variant::Flyweight(fl) => {
-            // Syntax:
-            // < delegate, .slot = value, ..., { ... } >
-            let mut result = String::new();
-            result.push('<');
-            result.push_str(fl.delegate().to_literal().as_str());
+            write!(writer, "<")?;
+            write!(writer, "{}", fl.delegate().to_literal())?;
             let slots = fl.slots_storage();
             if !slots.is_empty() {
                 for (k, v) in slots.iter() {
-                    result.push_str(", .");
-                    result.push_str(&k.as_arc_str());
-                    result.push_str(" = ");
-                    result.push_str(to_literal(v).as_str());
+                    write!(writer, ", .{} = ", k.as_arc_str())?;
+                    write_literal(v, writer)?;
                 }
             }
             let v = fl.contents();
             if !v.is_empty() {
-                result.push_str(", {");
+                write!(writer, ", {{")?;
                 for (i, v) in v.iter().enumerate() {
                     if i > 0 {
-                        result.push_str(", ");
+                        write!(writer, ", ")?;
                     }
-                    result.push_str(to_literal(&v).as_str());
+                    write_literal(&v, writer)?;
                 }
-                result.push('}');
+                write!(writer, "}}")?;
             }
-
-            result.push('>');
-            result
+            write!(writer, ">")?;
         }
-        Variant::Sym(s) => {
-            format!("'{}", s.as_arc_str())
-        }
+        Variant::Sym(s) => write!(writer, "'{}", s.as_arc_str())?,
         Variant::Binary(b) => {
             let encoded = general_purpose::URL_SAFE.encode(b.as_bytes());
-            format!("b\"{encoded}\"")
+            write!(writer, "b\"{encoded}\"")?;
         }
         Variant::Lambda(l) => {
             use crate::decompile;
             use moor_var::program::opcode::ScatterLabel;
 
-            // Build parameter list with proper names and syntax
-            let param_strings: Vec<String> =
-                l.0.params
-                    .labels
-                    .iter()
-                    .map(|label| match label {
-                        ScatterLabel::Required(name) => {
-                            // Find the variable in lambda body's var_names and get its symbol
-                            if let Some(var) = l.0.body.var_names().find_variable(name) {
-                                var.to_symbol().as_arc_str().to_string()
-                            } else {
-                                format!("param_{}", name.0) // Fallback if name not found
-                            }
-                        }
-                        ScatterLabel::Optional(name, _) => {
-                            if let Some(var) = l.0.body.var_names().find_variable(name) {
-                                format!("?{}", var.to_symbol().as_arc_str())
-                            } else {
-                                format!("?param_{}", name.0)
-                            }
-                        }
-                        ScatterLabel::Rest(name) => {
-                            if let Some(var) = l.0.body.var_names().find_variable(name) {
-                                format!("@{}", var.to_symbol().as_arc_str())
-                            } else {
-                                format!("@param_{}", name.0)
-                            }
-                        }
-                    })
-                    .collect();
-            let param_str = param_strings.join(", ");
-
-            // Just manually construct the lambda syntax - simpler than reconstructing AST
             let decompiled_tree = decompile::program_to_tree(&l.0.body).unwrap();
             let temp_unparse = Unparse::new(&decompiled_tree, false, true);
-
-            // Check if this is a simple expression lambda or multi-statement
             let is_simple_expr = decompiled_tree.stmts.len() == 1
                 && matches!(
                     &decompiled_tree.stmts[0].node,
                     crate::ast::StmtNode::Expr(crate::ast::Expr::Return(Some(_)))
                 );
 
-            let body_str = if is_simple_expr {
-                // Expression lambda: return expr; → just show the expr
+            if is_simple_expr {
+                write!(writer, "{{")?;
+            } else {
+                write!(writer, "fn (")?;
+            }
+
+            for (i, label) in l.0.params.labels.iter().enumerate() {
+                if i > 0 {
+                    write!(writer, ", ")?;
+                }
+                match label {
+                    ScatterLabel::Required(name) => {
+                        if let Some(var) = l.0.body.var_names().find_variable(name) {
+                            write!(writer, "{}", var.to_symbol().as_arc_str())?;
+                        } else {
+                            write!(writer, "param_{}", name.0)?;
+                        }
+                    }
+                    ScatterLabel::Optional(name, _) => {
+                        if let Some(var) = l.0.body.var_names().find_variable(name) {
+                            write!(writer, "?{}", var.to_symbol().as_arc_str())?;
+                        } else {
+                            write!(writer, "?param_{}", name.0)?;
+                        }
+                    }
+                    ScatterLabel::Rest(name) => {
+                        if let Some(var) = l.0.body.var_names().find_variable(name) {
+                            write!(writer, "@{}", var.to_symbol().as_arc_str())?;
+                        } else {
+                            write!(writer, "@param_{}", name.0)?;
+                        }
+                    }
+                }
+            }
+
+            if is_simple_expr {
+                write!(writer, "}} => ")?;
                 if let crate::ast::StmtNode::Expr(crate::ast::Expr::Return(Some(expr))) =
                     &decompiled_tree.stmts[0].node
                 {
-                    temp_unparse.unparse_expr(expr).unwrap()
+                    temp_unparse.write_expr(expr, writer)?;
                 } else {
                     unreachable!()
                 }
             } else {
-                // Multi-statement lambda - use fn () ... endfn syntax
-                let mut buffer = String::new();
-                let _ = temp_unparse.write_lambda_body_inline(&decompiled_tree.stmts, &mut buffer);
-                buffer.trim_end().to_string()
-            };
+                write!(writer, ") ")?;
+                temp_unparse.write_lambda_body_inline(&decompiled_tree.stmts, writer)?;
+                write!(writer, "endfn")?;
+            }
 
-            let use_fn_syntax = !is_simple_expr;
-
-            // Build metadata string for captured environment and self-reference
-            let mut metadata_parts = vec![];
-
+            let mut wrote_metadata = false;
             if !l.0.captured_env.is_empty() {
-                let mut captured_vars: Vec<String> = vec![];
-
+                let var_names = l.0.body.var_names();
                 for (scope_depth, frame) in l.0.captured_env.iter().enumerate() {
                     for (var_offset, var_value) in frame.iter().enumerate() {
-                        // Only include variables that are not None/v_none
                         if var_value.is_none() {
                             continue;
                         }
 
-                        // Search for variable names in the lambda body's name table that match this scope and offset
-                        let var_names = l.0.body.var_names();
-                        let maybe_name = var_names
-                            .names()
-                            .iter()
-                            .filter_map(|name| {
-                                // Check if this name corresponds to our scope depth and offset
-                                if name.1 as usize == scope_depth && name.0 as usize == var_offset {
-                                    var_names.ident_for_name(name)
-                                } else {
-                                    None
-                                }
-                            })
-                            .next();
+                        let maybe_name = var_names.names().iter().find_map(|name| {
+                            if name.1 as usize == scope_depth && name.0 as usize == var_offset {
+                                var_names.ident_for_name(name)
+                            } else {
+                                None
+                            }
+                        });
 
-                        match maybe_name {
-                            Some(symbol) => {
-                                // Include both variable name and value for clarity
-                                captured_vars.push(format!(
-                                    "{}: {}",
-                                    symbol.as_arc_str(),
-                                    to_literal(var_value)
-                                ));
-                            }
-                            None => {
-                                // Fall back to just the value if no name is found
-                                captured_vars.push(to_literal(var_value));
-                            }
+                        if !wrote_metadata {
+                            write!(writer, " with captured [")?;
+                            wrote_metadata = true;
+                        } else {
+                            write!(writer, ", ")?;
                         }
+
+                        if let Some(symbol) = maybe_name {
+                            write!(writer, "{}: ", symbol.as_arc_str())?;
+                        }
+                        write_literal(var_value, writer)?;
                     }
                 }
-
-                if !captured_vars.is_empty() {
-                    metadata_parts.push(format!("captured [{}]", captured_vars.join(", ")));
+                if wrote_metadata {
+                    write!(writer, "]")?;
                 }
             }
 
-            if let Some(_self_var) = l.0.self_var {
-                // For now, represent self-reference as a simple marker
-                metadata_parts.push("self 1".to_string());
-            }
-
-            if use_fn_syntax {
-                // Multi-statement lambda: fn (params) statements endfn
-                if metadata_parts.is_empty() {
-                    format!("fn ({param_str}) {body_str} endfn")
+            if l.0.self_var.is_some() {
+                if !wrote_metadata {
+                    write!(writer, " with ")?;
                 } else {
-                    format!(
-                        "fn ({param_str}) {body_str} endfn with {}",
-                        metadata_parts.join(" ")
-                    )
+                    write!(writer, " ")?;
                 }
-            } else {
-                // Simple expression lambda: {params} => expr
-                if metadata_parts.is_empty() {
-                    format!("{{{param_str}}} => {body_str}")
-                } else {
-                    format!(
-                        "{{{param_str}}} => {body_str} with {}",
-                        metadata_parts.join(" ")
-                    )
-                }
+                write!(writer, "self 1")?;
             }
         }
     }
+    Ok(())
+}
+
+pub fn to_literal(v: &Var) -> String {
+    let mut buffer = String::new();
+    write_literal(v, &mut buffer).expect("string writes cannot fail");
+    buffer
 }
 
 /// Like `to_literal_objsub` but formats lists whose literal form would exceed 80 characters
 /// into multiple lines with indentation.
-pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth: usize) -> String {
+pub fn write_literal_objsub<W: std::fmt::Write>(
+    v: &Var,
+    name_subs: &HashMap<Obj, String>,
+    indent_depth: usize,
+    writer: &mut W,
+) -> Result<(), DecompileError> {
     let f = |o: &Obj| {
         if let Some(name_sub) = name_subs.get(o) {
             name_sub.clone()
@@ -511,233 +462,221 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
             format!("{o}")
         }
     };
-    let mut result = String::new();
 
     match v.variant() {
         Variant::List(l) => {
-            // First, try to format on one line
             let mut single_line = String::new();
             single_line.push('{');
             for (i, v) in l.iter().enumerate() {
                 if i > 0 {
                     single_line.push_str(", ");
                 }
-                single_line.push_str(
-                    to_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL).as_str(),
-                );
+                write_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL, &mut single_line)?;
             }
             single_line.push('}');
 
-            // If single line exceeds 80 characters, format multiline
             if single_line.len() > 80 {
-                result.push('{');
+                writer.write_char('{')?;
                 for (i, v) in l.iter().enumerate() {
                     if i > 0 {
-                        result.push(',');
+                        writer.write_char(',')?;
                     }
-                    result.push('\n');
-                    append_spaces(&mut result, indent_depth + INDENT_LEVEL);
-                    result.push_str(
-                        to_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL).as_str(),
-                    );
+                    writer.write_char('\n')?;
+                    for _ in 0..(indent_depth + INDENT_LEVEL) {
+                        writer.write_char(' ')?;
+                    }
+                    write_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL, writer)?;
                 }
-                result.push('\n');
-                append_spaces(&mut result, indent_depth);
-                result.push('}');
+                writer.write_char('\n')?;
+                for _ in 0..indent_depth {
+                    writer.write_char(' ')?;
+                }
+                writer.write_char('}')?;
             } else {
-                result = single_line;
+                write!(writer, "{single_line}")?;
             }
         }
         Variant::Map(m) => {
-            // First, try to format on one line
             let mut single_line = String::new();
             single_line.push('[');
             for (i, (k, v)) in m.iter().enumerate() {
                 if i > 0 {
                     single_line.push_str(", ");
                 }
-                single_line.push_str(
-                    to_literal_objsub(&k, name_subs, indent_depth + INDENT_LEVEL).as_str(),
-                );
+                write_literal_objsub(&k, name_subs, indent_depth + INDENT_LEVEL, &mut single_line)?;
                 single_line.push_str(" -> ");
-                single_line.push_str(
-                    to_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL).as_str(),
-                );
+                write_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL, &mut single_line)?;
             }
             single_line.push(']');
 
-            // If single line exceeds 80 characters, format multiline
             if single_line.len() > 80 {
-                result.push('[');
+                writer.write_char('[')?;
                 for (i, (k, v)) in m.iter().enumerate() {
                     if i > 0 {
-                        result.push(',');
+                        writer.write_char(',')?;
                     }
-                    result.push('\n');
-                    append_spaces(&mut result, indent_depth + INDENT_LEVEL);
-                    result.push_str(
-                        to_literal_objsub(&k, name_subs, indent_depth + INDENT_LEVEL).as_str(),
-                    );
-                    result.push_str(" -> ");
-                    result.push_str(
-                        to_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL).as_str(),
-                    );
+                    writer.write_char('\n')?;
+                    for _ in 0..(indent_depth + INDENT_LEVEL) {
+                        writer.write_char(' ')?;
+                    }
+                    write_literal_objsub(&k, name_subs, indent_depth + INDENT_LEVEL, writer)?;
+                    write!(writer, " -> ")?;
+                    write_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL, writer)?;
                 }
-                result.push('\n');
-                append_spaces(&mut result, indent_depth);
-                result.push(']');
+                writer.write_char('\n')?;
+                for _ in 0..indent_depth {
+                    writer.write_char(' ')?;
+                }
+                writer.write_char(']')?;
             } else {
-                result = single_line;
+                write!(writer, "{single_line}")?;
             }
         }
         Variant::Flyweight(fl) => {
-            // Syntax:
-            // < delegate, .slot = value, ..., { ... } >
-            result.push('<');
-            result.push_str(&f(fl.delegate()));
+            writer.write_char('<')?;
+            write!(writer, "{}", f(fl.delegate()))?;
             let slots = fl.slots_storage();
             if !slots.is_empty() {
                 for (k, v) in slots.iter() {
-                    result.push_str(", .");
-                    result.push_str(&k.as_arc_str());
-                    result.push_str(" = ");
-                    result.push_str(
-                        to_literal_objsub(v, name_subs, indent_depth + INDENT_LEVEL).as_str(),
-                    );
+                    write!(writer, ", .{} = ", k.as_arc_str())?;
+                    write_literal_objsub(v, name_subs, indent_depth + INDENT_LEVEL, writer)?;
                 }
             }
             let v = fl.contents();
             if !v.is_empty() {
-                result.push_str(", {");
+                write!(writer, ", {{")?;
                 for (i, v) in v.iter().enumerate() {
                     if i > 0 {
-                        result.push_str(", ");
+                        write!(writer, ", ")?;
                     }
-                    result.push_str(
-                        to_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL).as_str(),
-                    );
+                    write_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL, writer)?;
                 }
-                result.push('}');
+                writer.write_char('}')?;
             }
-
-            result.push('>');
+            writer.write_char('>')?;
         }
         Variant::Obj(oid) => {
-            result.push_str(&f(&oid));
+            write!(writer, "{}", f(&oid))?;
         }
         Variant::Lambda(l) => {
-            // Special objdef formatting for lambdas - needs to match the grammar:
-            // lambda_captured = { "captured" ~ "[" ~ (captured_var_map ~ ("," ~ captured_var_map)*)? ~ "]" }
-            // captured_var_map = { "{" ~ (captured_var_entry ~ ("," ~ captured_var_entry)*)? ~ "}" }
-            // captured_var_entry = { ident ~ ":" ~ literal }
-
-            // Build parameter string
-            let param_str =
-                l.0.params
-                    .labels
-                    .iter()
-                    .map(|label| match label {
-                        ScatterLabel::Required(name) => {
+            write!(writer, "{{")?;
+            for (i, label) in l.0.params.labels.iter().enumerate() {
+                if i > 0 {
+                    write!(writer, ", ")?;
+                }
+                match label {
+                    ScatterLabel::Required(name) => {
+                        write!(
+                            writer,
+                            "{}",
                             l.0.body
                                 .var_names()
                                 .ident_for_name(name)
                                 .map(|s| s.as_arc_str().to_string())
                                 .unwrap_or_else(|| "x".to_string())
-                        }
-                        ScatterLabel::Optional(name, _) => {
-                            let var_name =
-                                l.0.body
-                                    .var_names()
-                                    .ident_for_name(name)
-                                    .map(|s| s.as_arc_str().to_string())
-                                    .unwrap_or_else(|| "x".to_string());
-                            format!("?{var_name}")
-                        }
-                        ScatterLabel::Rest(name) => {
-                            let var_name =
-                                l.0.body
-                                    .var_names()
-                                    .ident_for_name(name)
-                                    .map(|s| s.as_arc_str().to_string())
-                                    .unwrap_or_else(|| "x".to_string());
-                            format!("@{var_name}")
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
+                        )?;
+                    }
+                    ScatterLabel::Optional(name, _) => {
+                        write!(
+                            writer,
+                            "?{}",
+                            l.0.body
+                                .var_names()
+                                .ident_for_name(name)
+                                .map(|s| s.as_arc_str().to_string())
+                                .unwrap_or_else(|| "x".to_string())
+                        )?;
+                    }
+                    ScatterLabel::Rest(name) => {
+                        write!(
+                            writer,
+                            "@{}",
+                            l.0.body
+                                .var_names()
+                                .ident_for_name(name)
+                                .map(|s| s.as_arc_str().to_string())
+                                .unwrap_or_else(|| "x".to_string())
+                        )?;
+                    }
+                }
+            }
+            write!(writer, "}} => 1")?;
 
-            // Build body string - for objdef we need to reconstruct the lambda body
-            // For now, use a simple placeholder that's valid MOO syntax
-            let body_str = "1"; // Simple placeholder
-
-            // Build metadata for objdef format
-            let mut metadata_parts = vec![];
+            let mut wrote_metadata = false;
 
             if !l.0.captured_env.is_empty() {
-                let mut scope_maps = vec![];
+                let var_names = l.0.body.var_names();
 
                 for (scope_depth, frame) in l.0.captured_env.iter().enumerate() {
-                    let mut captured_vars: Vec<String> = vec![];
+                    let mut scope_buf = String::new();
 
                     for (var_offset, var_value) in frame.iter().enumerate() {
                         if var_value.is_none() {
                             continue;
                         }
 
-                        let var_names = l.0.body.var_names();
-                        let maybe_name = var_names
-                            .names()
-                            .iter()
-                            .filter_map(|name| {
-                                if name.1 as usize == scope_depth && name.0 as usize == var_offset {
-                                    var_names.ident_for_name(name)
-                                } else {
-                                    None
-                                }
-                            })
-                            .next();
+                        let maybe_name = var_names.names().iter().find_map(|name| {
+                            if name.1 as usize == scope_depth && name.0 as usize == var_offset {
+                                var_names.ident_for_name(name)
+                            } else {
+                                None
+                            }
+                        });
 
-                        if let Some(symbol) = maybe_name {
-                            captured_vars.push(format!(
-                                "{}: {}",
-                                symbol.as_arc_str(),
-                                to_literal_objsub(
-                                    var_value,
-                                    name_subs,
-                                    indent_depth + INDENT_LEVEL
-                                )
-                            ));
+                        let Some(symbol) = maybe_name else {
+                            continue;
+                        };
+
+                        if !scope_buf.is_empty() {
+                            write!(scope_buf, ", ")?;
                         }
+                        write!(scope_buf, "{}: ", symbol.as_arc_str())?;
+                        write_literal_objsub(
+                            var_value,
+                            name_subs,
+                            indent_depth + INDENT_LEVEL,
+                            &mut scope_buf,
+                        )?;
                     }
 
-                    if !captured_vars.is_empty() {
-                        scope_maps.push(format!("{{{}}}", captured_vars.join(", ")));
+                    if scope_buf.is_empty() {
+                        continue;
                     }
+                    if !wrote_metadata {
+                        write!(writer, " with captured [")?;
+                        wrote_metadata = true;
+                    } else {
+                        write!(writer, ", ")?;
+                    }
+                    write!(writer, "{{{scope_buf}}}")?;
                 }
 
-                if !scope_maps.is_empty() {
-                    metadata_parts.push(format!("captured [{}]", scope_maps.join(", ")));
+                if wrote_metadata {
+                    write!(writer, "]")?;
                 }
             }
 
-            if let Some(_self_var) = l.0.self_var {
-                metadata_parts.push("self 1".to_string());
-            }
-
-            if metadata_parts.is_empty() {
-                result.push_str(&format!("{{{param_str}}} => {body_str}"));
-            } else {
-                result.push_str(&format!(
-                    "{{{param_str}}} => {body_str} with {}",
-                    metadata_parts.join(" ")
-                ));
+            if l.0.self_var.is_some() {
+                if !wrote_metadata {
+                    write!(writer, " with ")?;
+                } else {
+                    write!(writer, " ")?;
+                }
+                write!(writer, "self 1")?;
             }
         }
         _ => {
-            result.push_str(to_literal(v).as_str());
+            write_literal(v, writer)?;
         }
-    };
-    result
+    }
+    Ok(())
+}
+
+pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth: usize) -> String {
+    let mut buffer = String::new();
+    write_literal_objsub(v, name_subs, indent_depth, &mut buffer)
+        .expect("string writes cannot fail");
+    buffer
 }
 
 #[cfg(test)]
