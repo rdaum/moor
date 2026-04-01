@@ -22,21 +22,27 @@ use moor_var::{Symbol, program::names::Variable};
 impl<'a> Unparse<'a> {
     /// Format lambda body statements inline (space-separated, trimmed).
     /// Used for inline lambda representation in expressions.
-    pub(super) fn unparse_lambda_body_inline(
+    pub(super) fn write_lambda_body_inline<W: std::fmt::Write>(
         &self,
         stmts: &[Stmt],
-    ) -> Result<String, DecompileError> {
-        let mut parts = Vec::with_capacity(stmts.len());
-        for stmt in stmts {
+        writer: &mut W,
+    ) -> Result<(), DecompileError> {
+        for (i, stmt) in stmts.iter().enumerate() {
             let mut stmt_buf = String::new();
             self.unparse_stmt(stmt, &mut stmt_buf, 0)?;
-            parts.push(stmt_buf.trim().to_string());
+            let trimmed = stmt_buf.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if i > 0 {
+                write!(writer, " ")?;
+            }
+            write!(writer, "{trimmed}")?;
         }
-        Ok(if parts.is_empty() {
-            String::new()
-        } else {
-            format!("{} ", parts.join(" "))
-        })
+        if !stmts.is_empty() {
+            write!(writer, " ")?;
+        }
+        Ok(())
     }
 
     pub(super) fn unparse_stmt<W: std::fmt::Write>(
@@ -45,29 +51,30 @@ impl<'a> Unparse<'a> {
         writer: &mut W,
         indent: usize,
     ) -> Result<(), DecompileError> {
-        let indent_str = if self.indent_width > 0 {
-            " ".repeat(indent * self.indent_width)
-        } else {
-            String::new()
-        };
         match &stmt.node {
             StmtNode::Cond { arms, otherwise } => {
-                let cond_frag = self.unparse_expr(&arms[0].condition)?;
-                writeln!(writer, "{indent_str}if ({cond_frag})")?;
+                self.write_indent(indent, writer)?;
+                write!(writer, "if (")?;
+                self.write_expr(&arms[0].condition, writer)?;
+                writeln!(writer, ")")?;
                 self.unparse_stmts(&arms[0].statements, writer, indent + 1)?;
 
                 for arm in arms.iter().skip(1) {
-                    let cond_frag = self.unparse_expr(&arm.condition)?;
-                    writeln!(writer, "{indent_str}elseif ({cond_frag})")?;
+                    self.write_indent(indent, writer)?;
+                    write!(writer, "elseif (")?;
+                    self.write_expr(&arm.condition, writer)?;
+                    writeln!(writer, ")")?;
                     self.unparse_stmts(&arm.statements, writer, indent + 1)?;
                 }
 
                 if let Some(otherwise) = otherwise {
-                    writeln!(writer, "{indent_str}else")?;
+                    self.write_indent(indent, writer)?;
+                    writeln!(writer, "else")?;
                     self.unparse_stmts(&otherwise.statements, writer, indent + 1)?;
                 }
 
-                writeln!(writer, "{indent_str}endif")?;
+                self.write_indent(indent, writer)?;
+                writeln!(writer, "endif")?;
                 Ok(())
             }
             StmtNode::ForList {
@@ -77,18 +84,17 @@ impl<'a> Unparse<'a> {
                 body,
                 environment_width: _,
             } => {
-                let expr_frag = self.unparse_expr(expr)?;
-                let v_sym = self.unparse_variable(value_binding);
-                let idx_clause = match key_binding {
-                    None => v_sym.to_string(),
-                    Some(key_binding) => {
-                        let k_sym = self.unparse_variable(key_binding);
-                        format!("{v_sym}, {k_sym}")
-                    }
-                };
-                writeln!(writer, "{indent_str}for {idx_clause} in ({expr_frag})")?;
+                self.write_indent(indent, writer)?;
+                write!(writer, "for {}", self.unparse_variable(value_binding))?;
+                if let Some(key_binding) = key_binding {
+                    write!(writer, ", {}", self.unparse_variable(key_binding))?;
+                }
+                write!(writer, " in (")?;
+                self.write_expr(expr, writer)?;
+                writeln!(writer, ")")?;
                 self.unparse_stmts(body, writer, indent + 1)?;
-                writeln!(writer, "{indent_str}endfor")?;
+                self.write_indent(indent, writer)?;
+                writeln!(writer, "endfor")?;
                 Ok(())
             }
             StmtNode::ForRange {
@@ -98,13 +104,16 @@ impl<'a> Unparse<'a> {
                 body,
                 environment_width: _,
             } => {
-                let from_frag = self.unparse_expr(from)?;
-                let to_frag = self.unparse_expr(to)?;
                 let name = self.unparse_variable(id);
-
-                writeln!(writer, "{indent_str}for {name} in [{from_frag}..{to_frag}]")?;
+                self.write_indent(indent, writer)?;
+                write!(writer, "for {name} in [")?;
+                self.write_expr(from, writer)?;
+                write!(writer, "..")?;
+                self.write_expr(to, writer)?;
+                writeln!(writer, "]")?;
                 self.unparse_stmts(body, writer, indent + 1)?;
-                writeln!(writer, "{indent_str}endfor")?;
+                self.write_indent(indent, writer)?;
+                writeln!(writer, "endfor")?;
                 Ok(())
             }
             StmtNode::While {
@@ -113,30 +122,31 @@ impl<'a> Unparse<'a> {
                 body,
                 environment_width: _,
             } => {
-                let cond_frag = self.unparse_expr(condition)?;
-
-                let mut base_str = "while ".to_string();
+                self.write_indent(indent, writer)?;
+                write!(writer, "while ")?;
                 if let Some(id) = id {
-                    let id = self.unparse_variable(id);
-                    base_str.push_str(&id.as_arc_str());
+                    write!(writer, "{}", self.unparse_variable(id))?;
                 }
-                writeln!(writer, "{indent_str}{base_str}({cond_frag})")?;
+                write!(writer, "(")?;
+                self.write_expr(condition, writer)?;
+                writeln!(writer, ")")?;
                 self.unparse_stmts(body, writer, indent + 1)?;
-                writeln!(writer, "{indent_str}endwhile")?;
+                self.write_indent(indent, writer)?;
+                writeln!(writer, "endwhile")?;
                 Ok(())
             }
             StmtNode::Fork { id, time, body } => {
-                let delay_frag = self.unparse_expr(time)?;
-
-                let mut base_str = "fork".to_string();
+                self.write_indent(indent, writer)?;
+                write!(writer, "fork")?;
                 if let Some(id) = id {
-                    base_str.push(' ');
-                    let id = self.unparse_variable(id);
-                    base_str.push_str(&id.as_arc_str());
+                    write!(writer, " {}", self.unparse_variable(id))?;
                 }
-                writeln!(writer, "{indent_str}{base_str} ({delay_frag})")?;
+                write!(writer, " (")?;
+                self.write_expr(time, writer)?;
+                writeln!(writer, ")")?;
                 self.unparse_stmts(body, writer, indent + 1)?;
-                writeln!(writer, "{indent_str}endfork")?;
+                self.write_indent(indent, writer)?;
+                writeln!(writer, "endfork")?;
                 Ok(())
             }
             StmtNode::TryExcept {
@@ -144,23 +154,25 @@ impl<'a> Unparse<'a> {
                 excepts,
                 environment_width: _,
             } => {
-                writeln!(writer, "{indent_str}try")?;
+                self.write_indent(indent, writer)?;
+                writeln!(writer, "try")?;
                 self.unparse_stmts(body, writer, indent + 1)?;
 
                 for except in excepts {
-                    let mut base_str = "except ".to_string();
+                    self.write_indent(indent, writer)?;
+                    write!(writer, "except ")?;
                     if let Some(id) = &except.id {
                         let id = self.unparse_variable(id);
-                        base_str.push_str(&id.as_arc_str());
-                        base_str.push(' ');
+                        write!(writer, "{} ", id.as_arc_str())?;
                     }
-                    let catch_codes = self.unparse_catch_codes(&except.codes)?.to_uppercase();
-                    base_str.push_str(format!("({catch_codes})").as_str());
-                    writeln!(writer, "{indent_str}{base_str}")?;
+                    write!(writer, "(")?;
+                    self.write_catch_codes(&except.codes, writer)?;
+                    writeln!(writer, ")")?;
                     self.unparse_stmts(&except.statements, writer, indent + 1)?;
                 }
 
-                writeln!(writer, "{indent_str}endtry")?;
+                self.write_indent(indent, writer)?;
+                writeln!(writer, "endtry")?;
                 Ok(())
             }
             StmtNode::TryFinally {
@@ -168,15 +180,19 @@ impl<'a> Unparse<'a> {
                 handler,
                 environment_width: _,
             } => {
-                writeln!(writer, "{indent_str}try")?;
+                self.write_indent(indent, writer)?;
+                writeln!(writer, "try")?;
                 self.unparse_stmts(body, writer, indent + 1)?;
-                writeln!(writer, "{indent_str}finally")?;
+                self.write_indent(indent, writer)?;
+                writeln!(writer, "finally")?;
                 self.unparse_stmts(handler, writer, indent + 1)?;
-                writeln!(writer, "{indent_str}endtry")?;
+                self.write_indent(indent, writer)?;
+                writeln!(writer, "endtry")?;
                 Ok(())
             }
             StmtNode::Break { exit } => {
-                write!(writer, "{indent_str}break")?;
+                self.write_indent(indent, writer)?;
+                write!(writer, "break")?;
                 if let Some(exit) = &exit {
                     let exit_name = self.unparse_variable(exit);
                     write!(writer, " {}", exit_name.as_arc_str())?;
@@ -185,7 +201,8 @@ impl<'a> Unparse<'a> {
                 Ok(())
             }
             StmtNode::Continue { exit } => {
-                write!(writer, "{indent_str}continue")?;
+                self.write_indent(indent, writer)?;
+                write!(writer, "continue")?;
                 if let Some(exit) = &exit {
                     let exit_name = self.unparse_variable(exit);
                     write!(writer, " {}", exit_name.as_arc_str())?;
@@ -195,9 +212,11 @@ impl<'a> Unparse<'a> {
             }
             StmtNode::Expr(Expr::Assign { left, right }) => {
                 let Expr::Id(var) = left.as_ref() else {
-                    let left_frag = self.unparse_expr(left)?;
-                    let right_frag = self.unparse_expr(right)?;
-                    writeln!(writer, "{indent_str}{left_frag} = {right_frag};")?;
+                    self.write_indent(indent, writer)?;
+                    self.write_expr(left, writer)?;
+                    write!(writer, " = ")?;
+                    self.write_expr(right, writer)?;
+                    writeln!(writer, ";")?;
                     return Ok(());
                 };
 
@@ -208,8 +227,10 @@ impl<'a> Unparse<'a> {
                 } = right.as_ref()
                 else {
                     let var_name = self.unparse_variable(var);
-                    let right_frag = self.unparse_expr(right)?;
-                    writeln!(writer, "{indent_str}{var_name} = {right_frag};")?;
+                    self.write_indent(indent, writer)?;
+                    write!(writer, "{var_name} = ")?;
+                    self.write_expr(right, writer)?;
+                    writeln!(writer, ";")?;
                     return Ok(());
                 };
 
@@ -217,8 +238,10 @@ impl<'a> Unparse<'a> {
                 let name_str = self.unparse_variable(name);
 
                 if var_name != name_str {
-                    let right_frag = self.unparse_expr(right)?;
-                    writeln!(writer, "{indent_str}{var_name} = {right_frag};")?;
+                    self.write_indent(indent, writer)?;
+                    write!(writer, "{var_name} = ")?;
+                    self.write_expr(right, writer)?;
+                    writeln!(writer, ";")?;
                     return Ok(());
                 }
 
@@ -228,7 +251,8 @@ impl<'a> Unparse<'a> {
                 let Some(expr) = expr.as_ref() else {
                     let prefix = if *is_const { "const " } else { "let " };
                     let var_name = self.unparse_variable(id);
-                    writeln!(writer, "{indent_str}{prefix}{var_name};")?;
+                    self.write_indent(indent, writer)?;
+                    writeln!(writer, "{prefix}{var_name};")?;
                     return Ok(());
                 };
 
@@ -240,8 +264,10 @@ impl<'a> Unparse<'a> {
                 else {
                     let prefix = if *is_const { "const " } else { "let " };
                     let var_name = self.unparse_variable(id);
-                    let expr_str = self.unparse_expr(expr)?;
-                    writeln!(writer, "{indent_str}{prefix}{var_name} = {expr_str};")?;
+                    self.write_indent(indent, writer)?;
+                    write!(writer, "{prefix}{var_name} = ")?;
+                    self.write_expr(expr, writer)?;
+                    writeln!(writer, ";")?;
                     return Ok(());
                 };
 
@@ -250,20 +276,24 @@ impl<'a> Unparse<'a> {
 
                 if var_name != name_str {
                     let prefix = if *is_const { "const " } else { "let " };
-                    let expr_str = self.unparse_expr(expr)?;
-                    writeln!(writer, "{indent_str}{prefix}{var_name} = {expr_str};")?;
+                    self.write_indent(indent, writer)?;
+                    write!(writer, "{prefix}{var_name} = ")?;
+                    self.write_expr(expr, writer)?;
+                    writeln!(writer, ";")?;
                     return Ok(());
                 }
 
                 self.unparse_named_function(params, body, &name_str, writer, indent)
             }
             StmtNode::Expr(expr) => {
-                let expr_str = self.unparse_expr(expr)?;
-                writeln!(writer, "{indent_str}{expr_str};")?;
+                self.write_indent(indent, writer)?;
+                self.write_expr(expr, writer)?;
+                writeln!(writer, ";")?;
                 Ok(())
             }
             StmtNode::Scope { num_bindings, body } => {
-                writeln!(writer, "{indent_str}begin")?;
+                self.write_indent(indent, writer)?;
+                writeln!(writer, "begin")?;
                 let mut remaining_bindings = *num_bindings;
                 for stmt in body {
                     if let StmtNode::Expr(Expr::Scatter(items, right)) = &stmt.node
@@ -277,23 +307,19 @@ impl<'a> Unparse<'a> {
                         } else {
                             "let "
                         };
-                        let items_frag = self.unparse_scatter_items(items)?;
-                        let right_frag = self.unparse_expr(right)?;
-                        let inner_indent = if self.indent_width > 0 {
-                            " ".repeat((indent + 1) * self.indent_width)
-                        } else {
-                            String::new()
-                        };
-                        writeln!(
-                            writer,
-                            "{inner_indent}{decl_prefix}{{{items_frag}}} = {right_frag};"
-                        )?;
+                        self.write_indent(indent + 1, writer)?;
+                        write!(writer, "{decl_prefix}{{")?;
+                        self.write_scatter_items(items, writer)?;
+                        write!(writer, "}} = ")?;
+                        self.write_expr(right, writer)?;
+                        writeln!(writer, ";")?;
                         remaining_bindings = remaining_bindings.saturating_sub(items.len());
                         continue;
                     }
                     self.unparse_stmt(stmt, writer, indent + 1)?;
                 }
-                writeln!(writer, "{indent_str}end")?;
+                self.write_indent(indent, writer)?;
+                writeln!(writer, "end")?;
                 Ok(())
             }
         }
@@ -330,14 +356,10 @@ impl<'a> Unparse<'a> {
         writer: &mut W,
         indent: usize,
     ) -> Result<(), DecompileError> {
-        let indent_str = if self.indent_width > 0 {
-            " ".repeat(indent * self.indent_width)
-        } else {
-            String::new()
-        };
-
-        let param_str = self.unparse_lambda_params(params)?;
-        writeln!(writer, "{indent_str}fn {name}({param_str})")?;
+        self.write_indent(indent, writer)?;
+        write!(writer, "fn {name}(")?;
+        self.write_lambda_params(params, writer)?;
+        writeln!(writer, ")")?;
 
         match &body.node {
             StmtNode::Scope {
@@ -346,7 +368,8 @@ impl<'a> Unparse<'a> {
             _ => self.unparse_stmt(body, writer, indent + 1)?,
         }
 
-        writeln!(writer, "{indent_str}endfn")?;
+        self.write_indent(indent, writer)?;
+        writeln!(writer, "endfn")?;
         Ok(())
     }
 }

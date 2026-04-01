@@ -56,144 +56,177 @@ pub(super) fn needs_parens(
 }
 
 impl<'a> Unparse<'a> {
-    pub(super) fn unparse_expr(&self, current_expr: &Expr) -> Result<String, DecompileError> {
-        match current_expr {
+    pub(super) fn write_expr<W: std::fmt::Write>(
+        &self,
+        expr: &Expr,
+        writer: &mut W,
+    ) -> Result<(), DecompileError> {
+        self.write_expr_in_context(expr, writer, None, ParenPosition::Left)
+    }
+
+    fn write_expr_in_context<W: std::fmt::Write>(
+        &self,
+        expr: &Expr,
+        writer: &mut W,
+        parent: Option<&Expr>,
+        paren_position: ParenPosition,
+    ) -> Result<(), DecompileError> {
+        let needs_parens = parent
+            .is_some_and(|parent| needs_parens(expr, parent, self.fully_paren, paren_position));
+
+        if needs_parens {
+            write!(writer, "(")?;
+        }
+
+        self.write_expr_inner(expr, writer)?;
+
+        if needs_parens {
+            write!(writer, ")")?;
+        }
+        Ok(())
+    }
+
+    fn write_expr_inner<W: std::fmt::Write>(
+        &self,
+        expr: &Expr,
+        writer: &mut W,
+    ) -> Result<(), DecompileError> {
+        match expr {
             Expr::Assign { left, right } => {
-                let left_needs_parens = needs_parens(
-                    left,
-                    current_expr,
-                    self.fully_paren,
-                    ParenPosition::Left,
-                );
-                let right_needs_parens = needs_parens(
-                    right,
-                    current_expr,
-                    self.fully_paren,
-                    ParenPosition::Right,
-                );
-                let left_frag = self.unparse_expr(left)?;
-                let right_frag = self.unparse_expr(right)?;
-                Ok(format!(
-                    "{} = {}",
-                    maybe_parenthesize(left_frag, left_needs_parens),
-                    maybe_parenthesize(right_frag, right_needs_parens),
-                ))
+                self.write_expr_in_context(left, writer, Some(expr), ParenPosition::Left)?;
+                write!(writer, " = ")?;
+                self.write_expr_in_context(right, writer, Some(expr), ParenPosition::Right)?;
+                Ok(())
             }
-            Expr::Pass { args } => Ok(format!("pass({})", self.unparse_args(args)?)),
-            Expr::Error(code, message) => {
-                let code_name = code.to_string();
-                match message {
-                    Some(message) => Ok(format!("{code_name}({})", self.unparse_expr(message)?)),
-                    None => Ok(code_name),
-                }
-            }
-            Expr::Value(value) => Ok(to_literal(value)),
-            Expr::TypeConstant(typ) => Ok(unparse_type_constant(*typ)),
-            Expr::Id(id) => Ok(self.unparse_variable(id).as_arc_str().to_string()),
             Expr::Binary(op, left, right) => {
-                let left_needs_parens = needs_parens(
-                    left,
-                    current_expr,
-                    self.fully_paren,
-                    ParenPosition::Left,
-                );
-                let right_needs_parens = needs_parens(
-                    right,
-                    current_expr,
-                    self.fully_paren,
-                    ParenPosition::Right,
-                );
-                let left_frag = self.unparse_expr(left)?;
-                let right_frag = self.unparse_expr(right)?;
-                Ok(format!(
-                    "{} {} {}",
-                    maybe_parenthesize(left_frag, left_needs_parens),
-                    op,
-                    maybe_parenthesize(right_frag, right_needs_parens),
-                ))
+                self.write_expr_in_context(left, writer, Some(expr), ParenPosition::Left)?;
+                write!(writer, " {op} ")?;
+                self.write_expr_in_context(right, writer, Some(expr), ParenPosition::Right)?;
+                Ok(())
             }
             Expr::And(left, right) => {
-                let left_needs_parens = needs_parens(
-                    left,
-                    current_expr,
-                    self.fully_paren,
-                    ParenPosition::Left,
-                );
-                let right_needs_parens = needs_parens(
-                    right,
-                    current_expr,
-                    self.fully_paren,
-                    ParenPosition::Right,
-                );
-                let left_frag = self.unparse_expr(left)?;
-                let right_frag = self.unparse_expr(right)?;
-                Ok(format!(
-                    "{} && {}",
-                    maybe_parenthesize(left_frag, left_needs_parens),
-                    maybe_parenthesize(right_frag, right_needs_parens),
-                ))
+                self.write_expr_in_context(left, writer, Some(expr), ParenPosition::Left)?;
+                write!(writer, " && ")?;
+                self.write_expr_in_context(right, writer, Some(expr), ParenPosition::Right)?;
+                Ok(())
             }
             Expr::Or(left, right) => {
-                let left_needs_parens = needs_parens(
-                    left,
-                    current_expr,
-                    self.fully_paren,
-                    ParenPosition::Left,
-                );
-                let right_needs_parens = needs_parens(
-                    right,
-                    current_expr,
-                    self.fully_paren,
-                    ParenPosition::Right,
-                );
-                let left_frag = self.unparse_expr(left)?;
-                let right_frag = self.unparse_expr(right)?;
-                Ok(format!(
-                    "{} || {}",
-                    maybe_parenthesize(left_frag, left_needs_parens),
-                    maybe_parenthesize(right_frag, right_needs_parens),
-                ))
+                self.write_expr_in_context(left, writer, Some(expr), ParenPosition::Left)?;
+                write!(writer, " || ")?;
+                self.write_expr_in_context(right, writer, Some(expr), ParenPosition::Right)?;
+                Ok(())
             }
-            Expr::Unary(op, expr) => {
-                let expr_needs_parens = unary_operand_needs_parens(expr);
-                let expr_frag = self.unparse_expr(expr)?;
-                Ok(format!(
-                    "{op}{}",
-                    maybe_parenthesize(expr_frag, self.fully_paren || expr_needs_parens)
-                ))
+            Expr::Unary(op, operand) => {
+                write!(writer, "{op}")?;
+                let operand_needs_parens = self.fully_paren || unary_operand_needs_parens(operand);
+                write_maybe_parenthesized_expr(self, operand, writer, operand_needs_parens)?;
+                Ok(())
+            }
+            Expr::Pass { args } => {
+                write!(writer, "pass(")?;
+                self.write_args(args, writer)?;
+                write!(writer, ")")?;
+                Ok(())
+            }
+            Expr::Error(code, message) => {
+                write!(writer, "{code}")?;
+                if let Some(message) = message {
+                    write!(writer, "(")?;
+                    self.write_expr(message, writer)?;
+                    write!(writer, ")")?;
+                }
+                Ok(())
+            }
+            Expr::Value(value) => write!(writer, "{}", to_literal(value)).map_err(Into::into),
+            Expr::TypeConstant(typ) => {
+                write!(writer, "{}", unparse_type_constant(*typ)).map_err(Into::into)
+            }
+            Expr::Return(expr) => {
+                write!(writer, "return")?;
+                if let Some(expr) = expr {
+                    write!(writer, " ")?;
+                    self.write_expr(expr, writer)?;
+                }
+                Ok(())
+            }
+            Expr::Length => write!(writer, "$").map_err(Into::into),
+            Expr::List(values) => {
+                write!(writer, "{{")?;
+                self.write_args(values, writer)?;
+                write!(writer, "}}")?;
+                Ok(())
+            }
+            Expr::Map(pairs) => {
+                write!(writer, "[")?;
+                for (i, (key, value)) in pairs.iter().enumerate() {
+                    if i > 0 {
+                        write!(writer, ", ")?;
+                    }
+                    self.write_expr(key, writer)?;
+                    write!(writer, " -> ")?;
+                    self.write_expr(value, writer)?;
+                }
+                write!(writer, "]")?;
+                Ok(())
+            }
+            Expr::Decl { id, is_const, expr } => {
+                let prefix = if *is_const { "const" } else { "let" };
+                write!(
+                    writer,
+                    "{prefix} {}",
+                    self.unparse_variable(id).as_arc_str()
+                )?;
+                if let Some(expr) = expr {
+                    write!(writer, " = ")?;
+                    self.write_expr(expr, writer)?;
+                }
+                Ok(())
+            }
+            Expr::Scatter(items, value) => {
+                write!(writer, "{{")?;
+                self.write_scatter_items(items, writer)?;
+                write!(writer, "}} = ")?;
+                self.write_expr(value, writer)?;
+                Ok(())
+            }
+            Expr::Call { function, args } => {
+                match function {
+                    CallTarget::Builtin(name) => {
+                        write!(writer, "{}(", name.as_arc_str())?;
+                    }
+                    CallTarget::Expr(expr) => {
+                        let needs_parens = self.fully_paren
+                            || expr_precedence_level(expr) < PrecedenceLevel::Postfix;
+                        write_maybe_parenthesized_expr(self, expr, writer, needs_parens)?;
+                        write!(writer, "(")?;
+                    }
+                }
+                self.write_args(args, writer)?;
+                write!(writer, ")")?;
+                Ok(())
             }
             Expr::Prop { location, property } => {
                 if is_system_object(location)
                     && let Some(name) = literal_property_name(property)
                 {
-                    return Ok(format!("${name}"));
+                    write!(writer, "${name}")?;
+                    return Ok(());
                 }
-                let location_frag = self.unparse_expr(location)?;
+
                 let location_needs_parens =
-                    expr_precedence_level(location) < PrecedenceLevel::Postfix;
-                Ok(format!(
-                    "{}.{}",
-                    maybe_parenthesize(location_frag, self.fully_paren || location_needs_parens),
-                    unparse_property_access(self, property)?
-                ))
+                    self.fully_paren || expr_precedence_level(location) < PrecedenceLevel::Postfix;
+                write_maybe_parenthesized_expr(self, location, writer, location_needs_parens)?;
+                write!(writer, ".{}", unparse_property_access(self, property)?)?;
+                Ok(())
             }
-            Expr::Call { function, args } => {
-                let args_frag = self.unparse_args(args)?;
-                match function {
-                    CallTarget::Builtin(name) => Ok(format!("{}({args_frag})", name.as_arc_str())),
-                    CallTarget::Expr(expr) => {
-                        let function_frag = self.unparse_expr(expr)?;
-                        let function_needs_parens =
-                            expr_precedence_level(expr) < PrecedenceLevel::Postfix;
-                        Ok(format!(
-                            "{}({args_frag})",
-                            maybe_parenthesize(
-                                function_frag,
-                                self.fully_paren || function_needs_parens
-                            )
-                        ))
-                    }
-                }
+            Expr::Index(base, index) => {
+                let base_needs_parens =
+                    self.fully_paren || expr_precedence_level(base) < PrecedenceLevel::Postfix;
+                write_maybe_parenthesized_expr(self, base, writer, base_needs_parens)?;
+                write!(writer, "[")?;
+                self.write_expr(index, writer)?;
+                write!(writer, "]")?;
+                Ok(())
             }
             Expr::Verb {
                 location,
@@ -203,143 +236,72 @@ impl<'a> Unparse<'a> {
                 if is_system_object(location)
                     && let Some(name) = system_verb_name(self, verb)
                 {
-                    return Ok(format!("${name}({})", self.unparse_args(args)?));
+                    write!(writer, "${name}(")?;
+                    self.write_args(args, writer)?;
+                    write!(writer, ")")?;
+                    return Ok(());
                 }
-                let location_frag = self.unparse_expr(location)?;
+
                 let location_needs_parens =
-                    expr_precedence_level(location) < PrecedenceLevel::Postfix;
-                let args_frag = self.unparse_args(args)?;
-                Ok(format!(
-                    "{}:{}({args_frag})",
-                    maybe_parenthesize(location_frag, self.fully_paren || location_needs_parens),
-                    unparse_verb_access(self, verb)?
-                ))
+                    self.fully_paren || expr_precedence_level(location) < PrecedenceLevel::Postfix;
+                write_maybe_parenthesized_expr(self, location, writer, location_needs_parens)?;
+                write!(writer, ":{}(", unparse_verb_access(self, verb)?)?;
+                self.write_args(args, writer)?;
+                write!(writer, ")")?;
+                Ok(())
             }
             Expr::Range { base, from, to } => {
-                let base_frag = self.unparse_expr(base)?;
-                let from_frag = self.unparse_expr(from)?;
-                let to_frag = self.unparse_expr(to)?;
-                let base_needs_parens = expr_precedence_level(base) < PrecedenceLevel::Postfix;
-                Ok(format!(
-                    "{}[{from_frag}..{to_frag}]",
-                    maybe_parenthesize(base_frag, self.fully_paren || base_needs_parens)
-                ))
+                let base_needs_parens =
+                    self.fully_paren || expr_precedence_level(base) < PrecedenceLevel::Postfix;
+                write_maybe_parenthesized_expr(self, base, writer, base_needs_parens)?;
+                write!(writer, "[")?;
+                self.write_expr(from, writer)?;
+                write!(writer, "..")?;
+                self.write_expr(to, writer)?;
+                write!(writer, "]")?;
+                Ok(())
             }
             Expr::Cond {
                 condition,
                 consequence,
                 alternative,
             } => {
-                let condition_frag = self.unparse_expr(condition)?;
-                let consequence_frag = self.unparse_expr(consequence)?;
-                let alternative_frag = self.unparse_expr(alternative)?;
-                Ok(format!(
-                    "{} ? {} | {}",
-                    maybe_parenthesize(
-                        condition_frag,
-                        needs_parens(
-                            condition,
-                            current_expr,
-                            self.fully_paren,
-                            ParenPosition::Left
-                        )
-                    ),
-                    maybe_parenthesize(
-                        consequence_frag,
-                        needs_parens(
-                            consequence,
-                            current_expr,
-                            self.fully_paren,
-                            ParenPosition::Left
-                        )
-                    ),
-                    maybe_parenthesize(
-                        alternative_frag,
-                        needs_parens(
-                            alternative,
-                            current_expr,
-                            self.fully_paren,
-                            ParenPosition::Right
-                        )
-                    ),
-                ))
+                self.write_expr_in_context(condition, writer, Some(expr), ParenPosition::Left)?;
+                write!(writer, " ? ")?;
+                self.write_expr_in_context(consequence, writer, Some(expr), ParenPosition::Left)?;
+                write!(writer, " | ")?;
+                self.write_expr_in_context(alternative, writer, Some(expr), ParenPosition::Right)?;
+                Ok(())
             }
             Expr::TryCatch {
                 trye,
                 codes,
                 except,
             } => {
-                let try_frag = self.unparse_expr(trye)?;
-                let codes_frag = self.unparse_catch_codes(codes)?;
+                write!(writer, "`")?;
+                self.write_expr(trye, writer)?;
+                write!(writer, " ! ")?;
+                self.write_catch_codes(codes, writer)?;
                 if let Some(except) = except {
-                    Ok(format!(
-                        "`{} ! {} => {}'",
-                        try_frag,
-                        codes_frag,
-                        self.unparse_expr(except)?
-                    ))
-                } else {
-                    Ok(format!("`{} ! {}'", try_frag, codes_frag))
+                    write!(writer, " => ")?;
+                    self.write_expr(except, writer)?;
                 }
-            }
-            Expr::Return(expr) => match expr {
-                Some(expr) => Ok(format!("return {}", self.unparse_expr(expr)?)),
-                None => Ok("return".to_string()),
-            },
-            Expr::Index(base, index) => {
-                let base_frag = self.unparse_expr(base)?;
-                let index_frag = self.unparse_expr(index)?;
-                let base_needs_parens = expr_precedence_level(base) < PrecedenceLevel::Postfix;
-                Ok(format!(
-                    "{}[{index_frag}]",
-                    maybe_parenthesize(base_frag, self.fully_paren || base_needs_parens)
-                ))
-            }
-            Expr::List(values) => Ok(format!("{{{}}}", self.unparse_args(values)?)),
-            Expr::Map(pairs) => {
-                let pairs = pairs
-                    .iter()
-                    .map(|(key, value)| {
-                        Ok(format!(
-                            "{} -> {}",
-                            self.unparse_expr(key)?,
-                            self.unparse_expr(value)?
-                        ))
-                    })
-                    .collect::<Result<Vec<_>, DecompileError>>()?;
-                Ok(format!("[{}]", pairs.join(", ")))
-            }
-            Expr::Scatter(items, value) => {
-                Ok(format!(
-                    "{{{}}} = {}",
-                    self.unparse_scatter_items(items)?,
-                    self.unparse_expr(value)?
-                ))
-            }
-            Expr::Length => Ok("$".to_string()),
-            Expr::Decl { id, is_const, expr } => {
-                let prefix = if *is_const { "const" } else { "let" };
-                let name = self.unparse_variable(id);
-                if let Some(expr) = expr {
-                    Ok(format!(
-                        "{prefix} {} = {}",
-                        name.as_arc_str(),
-                        self.unparse_expr(expr)?
-                    ))
-                } else {
-                    Ok(format!("{prefix} {}", name.as_arc_str()))
-                }
+                write!(writer, "'")?;
+                Ok(())
             }
             Expr::Flyweight(delegate, slots, contents) => {
-                let mut parts = Vec::with_capacity(1 + slots.len() + usize::from(contents.is_some()));
-                parts.push(self.unparse_expr(delegate)?);
+                write!(writer, "<")?;
+                self.write_expr(delegate, writer)?;
                 for (slot, value) in slots {
-                    parts.push(format!(".{} = {}", slot.as_arc_str(), self.unparse_expr(value)?));
+                    write!(writer, ", .{} = ", slot.as_arc_str())?;
+                    self.write_expr(value, writer)?;
                 }
                 if let Some(contents) = contents {
-                    parts.push(self.unparse_expr(contents)?);
+                    write!(writer, ", ")?;
+                    self.write_expr(contents, writer)?;
                 }
-                Ok(format!("<{}>", parts.join(", ")))
+                write!(writer, ">")?;
+                Ok(())
             }
             Expr::ComprehendRange {
                 variable,
@@ -347,58 +309,89 @@ impl<'a> Unparse<'a> {
                 from,
                 to,
                 ..
-            } => Ok(format!(
-                "{{ {} for {} in [{}..{}] }}",
-                self.unparse_expr(producer_expr)?,
-                self.unparse_variable(variable).as_arc_str(),
-                self.unparse_expr(from)?,
-                self.unparse_expr(to)?
-            )),
+            } => {
+                write!(writer, "{{ ")?;
+                self.write_expr(producer_expr, writer)?;
+                write!(
+                    writer,
+                    " for {} in [",
+                    self.unparse_variable(variable).as_arc_str()
+                )?;
+                self.write_expr(from, writer)?;
+                write!(writer, "..")?;
+                self.write_expr(to, writer)?;
+                write!(writer, "] }}")?;
+                Ok(())
+            }
             Expr::ComprehendList {
                 variable,
                 producer_expr,
                 list,
                 ..
-            } => Ok(format!(
-                "{{ {} for {} in ({}) }}",
-                self.unparse_expr(producer_expr)?,
-                self.unparse_variable(variable).as_arc_str(),
-                self.unparse_expr(list)?
-            )),
+            } => {
+                write!(writer, "{{ ")?;
+                self.write_expr(producer_expr, writer)?;
+                write!(
+                    writer,
+                    " for {} in (",
+                    self.unparse_variable(variable).as_arc_str()
+                )?;
+                self.write_expr(list, writer)?;
+                write!(writer, ") }}")?;
+                Ok(())
+            }
             Expr::Lambda {
                 params,
                 body,
                 self_name,
             } => {
-                let params_frag = self.unparse_lambda_params(params)?;
-
                 if let Some(name) = self_name {
                     let name = self.unparse_variable(name);
-                    let mut writer = String::new();
-                    self.unparse_named_function(params, body, &name, &mut writer, 0)?;
-                    return Ok(writer.trim_end().to_string());
+                    let mut function_buffer = String::new();
+                    self.unparse_named_function(params, body, &name, &mut function_buffer, 0)?;
+                    write!(writer, "{}", function_buffer.trim_end())?;
+                    return Ok(());
                 }
 
                 if let ast::StmtNode::Expr(Expr::Return(Some(expr))) = &body.node {
-                    return Ok(format!(
-                        "{{{params_frag}}} => {}",
-                        self.unparse_expr(expr)?
-                    ));
+                    write!(writer, "{{")?;
+                    self.write_lambda_params(params, writer)?;
+                    write!(writer, "}} => ")?;
+                    self.write_expr(expr, writer)?;
+                    return Ok(());
                 }
 
-                let body_frag = self.unparse_lambda_body_inline(std::slice::from_ref(body))?;
-                Ok(format!("fn ({params_frag}) {}endfn", body_frag))
+                write!(writer, "fn (")?;
+                self.write_lambda_params(params, writer)?;
+                write!(writer, ") ")?;
+                self.write_lambda_body_inline(std::slice::from_ref(body), writer)?;
+                write!(writer, "endfn")?;
+                Ok(())
             }
         }
     }
+
+    pub(super) fn unparse_expr(&self, current_expr: &Expr) -> Result<String, DecompileError> {
+        let mut buffer = String::new();
+        self.write_expr(current_expr, &mut buffer)?;
+        Ok(buffer)
+    }
 }
 
-fn maybe_parenthesize(fragment: String, needs_parens: bool) -> String {
+fn write_maybe_parenthesized_expr<W: std::fmt::Write>(
+    unparse: &Unparse<'_>,
+    expr: &Expr,
+    writer: &mut W,
+    needs_parens: bool,
+) -> Result<(), DecompileError> {
     if needs_parens {
-        format!("({fragment})")
-    } else {
-        fragment
+        write!(writer, "(")?;
     }
+    unparse.write_expr(expr, writer)?;
+    if needs_parens {
+        write!(writer, ")")?;
+    }
+    Ok(())
 }
 
 fn unparse_property_access(unparse: &Unparse<'_>, property: &Expr) -> Result<String, DecompileError> {
@@ -406,7 +399,10 @@ fn unparse_property_access(unparse: &Unparse<'_>, property: &Expr) -> Result<Str
         return Ok(name);
     }
 
-    Ok(format!("({})", unparse.unparse_expr(property)?))
+    let mut buffer = String::from("(");
+    unparse.write_expr(property, &mut buffer)?;
+    buffer.push(')');
+    Ok(buffer)
 }
 
 fn unparse_verb_access(unparse: &Unparse<'_>, verb: &Expr) -> Result<String, DecompileError> {
@@ -414,7 +410,10 @@ fn unparse_verb_access(unparse: &Unparse<'_>, verb: &Expr) -> Result<String, Dec
         return Ok(name);
     }
 
-    Ok(format!("({})", unparse.unparse_expr(verb)?))
+    let mut buffer = String::from("(");
+    unparse.write_expr(verb, &mut buffer)?;
+    buffer.push(')');
+    Ok(buffer)
 }
 
 fn property_name(_unparse: &Unparse<'_>, expr: &Expr) -> Option<String> {

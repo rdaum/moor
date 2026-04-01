@@ -45,82 +45,115 @@ impl<'a> Unparse<'a> {
         }
     }
 
-    fn unparse_arg(&self, arg: &ast::Arg) -> Result<String, DecompileError> {
+    fn write_arg<W: std::fmt::Write>(
+        &self,
+        arg: &ast::Arg,
+        writer: &mut W,
+    ) -> Result<(), DecompileError> {
         match arg {
-            ast::Arg::Normal(expr) => Ok(self.unparse_expr(expr).unwrap()),
-            ast::Arg::Splice(expr) => Ok(format!("@{}", self.unparse_expr(expr).unwrap())),
+            ast::Arg::Normal(expr) => self.write_expr(expr, writer),
+            ast::Arg::Splice(expr) => {
+                write!(writer, "@")?;
+                self.write_expr(expr, writer)
+            }
         }
     }
 
-    fn unparse_args(&self, args: &[ast::Arg]) -> Result<String, DecompileError> {
-        Ok(args
-            .iter()
-            .map(|arg| self.unparse_arg(arg).unwrap())
-            .collect::<Vec<String>>()
-            .join(", "))
+    fn write_args<W: std::fmt::Write>(
+        &self,
+        args: &[ast::Arg],
+        writer: &mut W,
+    ) -> Result<(), DecompileError> {
+        for (i, arg) in args.iter().enumerate() {
+            if i > 0 {
+                write!(writer, ", ")?;
+            }
+            self.write_arg(arg, writer)?;
+        }
+        Ok(())
     }
 
-    fn unparse_catch_codes(&self, codes: &ast::CatchCodes) -> Result<String, DecompileError> {
+    fn write_catch_codes<W: std::fmt::Write>(
+        &self,
+        codes: &ast::CatchCodes,
+        writer: &mut W,
+    ) -> Result<(), DecompileError> {
         match codes {
-            ast::CatchCodes::Codes(codes) => self.unparse_args(codes),
-            ast::CatchCodes::Any => Ok(String::from("ANY")),
+            ast::CatchCodes::Codes(codes) => self.write_args(codes, writer),
+            ast::CatchCodes::Any => write!(writer, "ANY").map_err(Into::into),
         }
     }
 
     /// Format lambda parameters as a comma-separated string with proper prefixes.
     /// Used by both simple (`{params} => expr`) and complex (`fn (params) ... endfn`) lambda syntax.
-    fn unparse_lambda_params(&self, params: &[ast::ScatterItem]) -> Result<String, DecompileError> {
-        let param_strings: Vec<String> = params
-            .iter()
-            .map(|param| {
-                let prefix = match param.kind {
-                    ast::ScatterKind::Required => "",
-                    ast::ScatterKind::Optional => "?",
-                    ast::ScatterKind::Rest => "@",
-                };
-                let name = self.unparse_variable(&param.id);
-                if let Some(ref default) = param.expr {
-                    format!(
-                        "{}{} = {}",
-                        prefix,
-                        name.as_arc_str(),
-                        self.unparse_expr(default).unwrap()
-                    )
-                } else {
-                    format!("{}{}", prefix, name.as_arc_str())
-                }
-            })
-            .collect();
-        Ok(param_strings.join(", "))
+    fn write_lambda_params<W: std::fmt::Write>(
+        &self,
+        params: &[ast::ScatterItem],
+        writer: &mut W,
+    ) -> Result<(), DecompileError> {
+        for (i, param) in params.iter().enumerate() {
+            if i > 0 {
+                write!(writer, ", ")?;
+            }
+
+            let prefix = match param.kind {
+                ast::ScatterKind::Required => "",
+                ast::ScatterKind::Optional => "?",
+                ast::ScatterKind::Rest => "@",
+            };
+            let name = self.unparse_variable(&param.id);
+            if let Some(default) = &param.expr {
+                write!(writer, "{}{} = ", prefix, name.as_arc_str())?;
+                self.write_expr(default, writer)?;
+            } else {
+                write!(writer, "{}{}", prefix, name.as_arc_str())?;
+            }
+        }
+        Ok(())
     }
 
-    fn unparse_scatter_items(
+    fn write_scatter_items<W: std::fmt::Write>(
         &self,
         items: &[ast::ScatterItem],
-    ) -> Result<String, DecompileError> {
-        let items = items
-            .iter()
-            .map(|item| {
-                let prefix = match item.kind {
-                    ast::ScatterKind::Required => "",
-                    ast::ScatterKind::Optional => "?",
-                    ast::ScatterKind::Rest => "@",
-                };
-                let name = self.unparse_variable(&item.id);
-                if let Some(expr) = &item.expr {
-                    Ok(format!(
-                        "{prefix}{} = {}",
-                        name.as_arc_str(),
-                        self.unparse_expr(expr)?
-                    ))
-                } else {
-                    Ok(format!("{prefix}{}", name.as_arc_str()))
-                }
-            })
-            .collect::<Result<Vec<_>, DecompileError>>()?;
-        Ok(items.join(", "))
+        writer: &mut W,
+    ) -> Result<(), DecompileError> {
+        for (i, item) in items.iter().enumerate() {
+            if i > 0 {
+                write!(writer, ", ")?;
+            }
+
+            let prefix = match item.kind {
+                ast::ScatterKind::Required => "",
+                ast::ScatterKind::Optional => "?",
+                ast::ScatterKind::Rest => "@",
+            };
+            let name = self.unparse_variable(&item.id);
+            if let Some(expr) = &item.expr {
+                write!(writer, "{prefix}{} = ", name.as_arc_str())?;
+                self.write_expr(expr, writer)?;
+            } else {
+                write!(writer, "{prefix}{}", name.as_arc_str())?;
+            }
+        }
+        Ok(())
     }
 
+    fn write_indent<W: std::fmt::Write>(
+        &self,
+        indent: usize,
+        writer: &mut W,
+    ) -> Result<(), DecompileError> {
+        for _ in 0..(indent * self.indent_width) {
+            writer.write_char(' ')?;
+        }
+        Ok(())
+    }
+}
+
+fn append_spaces(buffer: &mut String, count: usize) {
+    for _ in 0..count {
+        buffer.push(' ');
+    }
 }
 
 pub fn unparse(
@@ -372,12 +405,9 @@ pub fn to_literal(v: &Var) -> String {
                 }
             } else {
                 // Multi-statement lambda - use fn () ... endfn syntax
-                // Reuse the inline body formatter (trim trailing space since we add it below)
-                temp_unparse
-                    .unparse_lambda_body_inline(&decompiled_tree.stmts)
-                    .unwrap_or_default()
-                    .trim_end()
-                    .to_string()
+                let mut buffer = String::new();
+                let _ = temp_unparse.write_lambda_body_inline(&decompiled_tree.stmts, &mut buffer);
+                buffer.trim_end().to_string()
             };
 
             let use_fn_syntax = !is_simple_expr;
@@ -482,8 +512,6 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
         }
     };
     let mut result = String::new();
-    let indent_str = " ".repeat(indent_depth);
-    let inner_indent_str = " ".repeat(indent_depth + INDENT_LEVEL);
 
     match v.variant() {
         Variant::List(l) => {
@@ -508,13 +536,13 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
                         result.push(',');
                     }
                     result.push('\n');
-                    result.push_str(&inner_indent_str);
+                    append_spaces(&mut result, indent_depth + INDENT_LEVEL);
                     result.push_str(
                         to_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL).as_str(),
                     );
                 }
                 result.push('\n');
-                result.push_str(&indent_str);
+                append_spaces(&mut result, indent_depth);
                 result.push('}');
             } else {
                 result = single_line;
@@ -546,7 +574,7 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
                         result.push(',');
                     }
                     result.push('\n');
-                    result.push_str(&inner_indent_str);
+                    append_spaces(&mut result, indent_depth + INDENT_LEVEL);
                     result.push_str(
                         to_literal_objsub(&k, name_subs, indent_depth + INDENT_LEVEL).as_str(),
                     );
@@ -556,7 +584,7 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
                     );
                 }
                 result.push('\n');
-                result.push_str(&indent_str);
+                append_spaces(&mut result, indent_depth);
                 result.push(']');
             } else {
                 result = single_line;
