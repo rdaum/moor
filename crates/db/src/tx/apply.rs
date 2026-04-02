@@ -97,6 +97,55 @@ where
         Ok(())
     }
 
+    /// Partition a working set into insert and tombstone vectors for apply_batch.
+    fn collect_index_ops(
+        working_set: &WorkingSet<Domain, Codomain>,
+    ) -> (
+        Vec<(Timestamp, Domain, Codomain)>,
+        Vec<(Timestamp, Domain)>,
+    ) {
+        let total_ops = working_set.len();
+        let mut inserts = Vec::with_capacity(total_ops);
+        let mut tombstones = Vec::new();
+
+        for (domain, op) in working_set.tuples_ref().iter() {
+            match &op.operation {
+                OpType::Insert(codomain) | OpType::Update(codomain) => {
+                    inserts.push((op.write_ts, domain.clone(), codomain.clone()));
+                }
+                OpType::Delete => {
+                    tombstones.push((op.write_ts, domain.clone()));
+                }
+            }
+        }
+
+        (inserts, tombstones)
+    }
+
+    /// Apply index ops with perf counters.
+    fn apply_batch_instrumented(
+        index: &mut Box<dyn RelationIndex<Domain, Codomain>>,
+        inserts: Vec<(Timestamp, Domain, Codomain)>,
+        tombstones: Vec<(Timestamp, Domain)>,
+    ) {
+        let index_ops = inserts.len() + tombstones.len();
+        if index_ops > 0 {
+            let counters = db_counters();
+            let start = Instant::now();
+            index.apply_batch(inserts, tombstones);
+            let elapsed_nanos = isize::try_from(start.elapsed().as_nanos()).unwrap_or(isize::MAX);
+            let invocation_count = isize::try_from(index_ops).unwrap_or(isize::MAX);
+            counters
+                .apply_index_insert
+                .invocations()
+                .add(invocation_count);
+            counters
+                .apply_index_insert
+                .cumulative_duration_nanos()
+                .add(elapsed_nanos);
+        }
+    }
+
     /// Update the imbl index from the working set without touching the provider.
     /// Returns a list of deferred persistence operations to be applied after a
     /// successful CAS publish of the new snapshot.
@@ -113,7 +162,7 @@ where
         }
         self.dirty = true;
 
-        let counters = db_counters();
+        // Single pass: collect index ops and persist ops together.
         let total_ops = working_set.len();
         let mut inserts = Vec::with_capacity(total_ops);
         let mut tombstones = Vec::new();
@@ -139,21 +188,7 @@ where
             }
         }
 
-        let index_ops = inserts.len() + tombstones.len();
-        if index_ops > 0 {
-            let start = Instant::now();
-            self.index.apply_batch(inserts, tombstones);
-            let elapsed_nanos = isize::try_from(start.elapsed().as_nanos()).unwrap_or(isize::MAX);
-            let invocation_count = isize::try_from(index_ops).unwrap_or(isize::MAX);
-            counters
-                .apply_index_insert
-                .invocations()
-                .add(invocation_count);
-            counters
-                .apply_index_insert
-                .cumulative_duration_nanos()
-                .add(elapsed_nanos);
-        }
+        Self::apply_batch_instrumented(&mut self.index, inserts, tombstones);
 
         persist_ops
     }
@@ -169,6 +204,27 @@ where
         } else {
             existing.clone()
         }
+    }
+
+    /// Rebuild a dirty snapshot index by replaying the working set onto the
+    /// winner's relation index. This is used during rebase after a failed CAS.
+    pub fn rebased_snapshot_index(
+        &self,
+        existing: &Arc<dyn RelationIndex<Domain, Codomain>>,
+        working_set: &WorkingSet<Domain, Codomain>,
+    ) -> Arc<dyn RelationIndex<Domain, Codomain>> {
+        if !self.dirty {
+            return existing.clone();
+        }
+
+        let mut rebased = existing.fork();
+        if working_set.provider_fully_loaded() {
+            rebased.set_provider_fully_loaded(true);
+        }
+
+        let (inserts, tombstones) = Self::collect_index_ops(working_set);
+        rebased.apply_batch(inserts, tombstones);
+        Arc::from(rebased)
     }
 
     pub fn commit(self, index_swap: &Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>>) {
@@ -269,6 +325,7 @@ mod tests {
         let relation = crate::tx::Relation::new(Symbol::mk("test"), provider.clone());
         let tx = Tx {
             ts: Timestamp(10),
+            visible_ts: Timestamp(10),
             snapshot_version: 0,
         };
 
@@ -297,6 +354,62 @@ mod tests {
                 .cloned()
                 .unwrap(),
             TestCodomain(99)
+        );
+    }
+
+    #[test]
+    fn test_rebased_snapshot_preserves_winner_unrelated_writes() {
+        let provider = Arc::new(TestProvider {
+            data: Arc::new(Mutex::new(HashMap::new())),
+        });
+
+        let base_key = TestDomain(1);
+        let winner_key = TestDomain(2);
+        let our_key = TestDomain(3);
+
+        let mut base_index = HashRelationIndex::new();
+        base_index.insert_entry(Timestamp(1), base_key.clone(), TestCodomain(10));
+
+        let mut checker_index = base_index.fork();
+        checker_index.insert_entry(Timestamp(3), our_key.clone(), TestCodomain(30));
+
+        let mut winner_index = base_index.fork();
+        winner_index.insert_entry(Timestamp(2), winner_key.clone(), TestCodomain(20));
+        let winner_index: Arc<dyn RelationIndex<TestDomain, TestCodomain>> =
+            Arc::from(winner_index);
+
+        let checker = CheckRelation {
+            index: checker_index,
+            relation_name: Symbol::mk("test"),
+            source: provider,
+            dirty: true,
+        };
+
+        let mut tuples = HashMap::default();
+        tuples.insert(
+            our_key.clone(),
+            Op {
+                read_ts: Timestamp(0),
+                write_ts: Timestamp(3),
+                operation: OpType::Insert(TestCodomain(30)),
+                guaranteed_unique: false,
+            },
+        );
+        let working_set = WorkingSet::new(Box::new(tuples), base_index.fork());
+
+        let rebased = checker.rebased_snapshot_index(&winner_index, &working_set);
+
+        assert_eq!(
+            rebased.index_lookup(&base_key).map(|entry| entry.value.clone()),
+            Some(TestCodomain(10))
+        );
+        assert_eq!(
+            rebased.index_lookup(&winner_key).map(|entry| entry.value.clone()),
+            Some(TestCodomain(20))
+        );
+        assert_eq!(
+            rebased.index_lookup(&our_key).map(|entry| entry.value.clone()),
+            Some(TestCodomain(30))
         );
     }
 }

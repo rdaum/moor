@@ -684,6 +684,7 @@ mod tests {
 
         let tx = Tx {
             ts: Timestamp(1),
+            visible_ts: Timestamp(1),
             snapshot_version: 0,
         };
         let mut rt: RelationTransaction<TestDomain, MergeCodomain, _> =

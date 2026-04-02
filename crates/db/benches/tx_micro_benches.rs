@@ -173,6 +173,7 @@ impl BenchContext for CheckNoConflictCoreContext {
         let base_index = relation.seeded_index().unwrap();
         let tx = Tx {
             ts: Timestamp(BASE_TS),
+            visible_ts: Timestamp(BASE_TS),
             snapshot_version: 0,
         };
         let mut rt = relation.start_from_index(&tx, base_index.as_ref());
@@ -198,6 +199,7 @@ impl BenchContext for CheckConflictIdenticalCoreContext {
         let base_index = relation.seeded_index().unwrap();
         let tx = Tx {
             ts: Timestamp(BASE_TS),
+            visible_ts: Timestamp(BASE_TS),
             snapshot_version: 0,
         };
         let mut rt = relation.start_from_index(&tx, base_index.as_ref());
@@ -226,6 +228,7 @@ impl BenchContext for CheckConflictUnresolvableCoreContext {
         let base_index = relation.seeded_index().unwrap();
         let tx = Tx {
             ts: Timestamp(BASE_TS),
+            visible_ts: Timestamp(BASE_TS),
             snapshot_version: 0,
         };
         let mut rt = relation.start_from_index(&tx, base_index.as_ref());
@@ -337,6 +340,7 @@ impl BenchContext for TxOpsContext {
         for i in 0..chunk_size {
             let tx = Tx {
                 ts: Timestamp(BASE_TS + i as u64),
+                visible_ts: Timestamp(BASE_TS + i as u64),
                 snapshot_version: 0,
             };
 
@@ -452,8 +456,10 @@ impl BenchContext for TxOpsContext {
 
 fn check_conflict_merge_rewrite(ctx: &mut CheckMergeContext, chunk_size: usize, chunk_num: usize) {
     for i in 0..chunk_size {
+        let ts = Timestamp(BASE_TS + (chunk_num as u64 * chunk_size as u64) + i as u64);
         let tx = Tx {
-            ts: Timestamp(BASE_TS + (chunk_num as u64 * chunk_size as u64) + i as u64),
+            ts,
+            visible_ts: ts,
             snapshot_version: 0,
         };
         let mut rt = ctx.relation.start_from_index(&tx, ctx.base_index.as_ref());
@@ -477,6 +483,7 @@ fn apply_mixed_batch(ctx: &mut ApplyContext, chunk_size: usize, chunk_num: usize
         let base = chunk_num as u64 * chunk_size as u64 * 16 + i as u64 * 16;
         let tx = Tx {
             ts: Timestamp(BASE_TS + base),
+            visible_ts: Timestamp(BASE_TS + base),
             snapshot_version: 0,
         };
         let mut rt = ctx.relation.start_from_index(&tx, ctx.base_index.as_ref());

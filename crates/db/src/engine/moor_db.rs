@@ -294,7 +294,11 @@ impl MoorDB {
         let batch_writer = BatchWriter::new(keyspace.clone());
 
         let relations = Relations::init(&keyspace, &config, batch_collector.clone());
-        let initial_root = Arc::new(relations.snapshot(0, Arc::new(Caches::new())));
+        let initial_root = Arc::new(relations.snapshot(
+            0,
+            Timestamp(start_tx_num.saturating_sub(1)),
+            Arc::new(Caches::new()),
+        ));
         let snapshot_planes = SnapshotPlanes::new(initial_root);
 
         // Create background sequence writer
@@ -340,6 +344,7 @@ impl MoorDB {
                     self.monotonic
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
                 ),
+                visible_ts: snapshot.committed_ts,
                 snapshot_version: snapshot.version,
             },
             snapshot,

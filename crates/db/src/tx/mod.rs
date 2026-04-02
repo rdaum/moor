@@ -33,7 +33,7 @@ use std::hash::Hash;
 use crate::model::{AnonymousObjectMetadata, ObjAndUUIDHolder, StringHolder};
 use moor_common::model::{ObjFlag, PropDefs, PropPerms, VerbDefs};
 use moor_common::util::BitEnum;
-use moor_var::{Associative, Obj, Sequence, Var, program::ProgramType};
+use moor_var::{Associative, Obj, Var, program::ProgramType};
 
 // ============================================================================
 // Trait Bounds for Relation Domain and Codomain Types
@@ -72,10 +72,7 @@ pub trait RelationCodomain: Clone + PartialEq + Send + Sync + 'static {
 impl RelationCodomain for Var {
     fn try_merge(&self, base: &Self, theirs: &Self) -> Option<Self> {
         // Only merge if both operations provided a hint
-        use moor_var::{
-            OP_HINT_FLYWEIGHT_ADD_SLOT, OP_HINT_FLYWEIGHT_APPEND_CONTENTS, OP_HINT_LIST_APPEND,
-            OP_HINT_MAP_INSERT, OP_HINT_STR_APPEND,
-        };
+        use moor_var::{OP_HINT_FLYWEIGHT_ADD_SLOT, OP_HINT_MAP_INSERT};
 
         let my_hint = self.op_hint();
         let their_hint = theirs.op_hint();
@@ -85,45 +82,6 @@ impl RelationCodomain for Var {
         }
 
         match my_hint {
-            OP_HINT_LIST_APPEND => {
-                // List append merge: Base + (Theirs - Base) + (Mine - Base)
-                let mine_list = self.as_list()?;
-                let their_list = theirs.as_list()?;
-                let base_list = base.as_list()?;
-
-                // Both must be longer than base (appended)
-                if mine_list.len() <= base_list.len() || their_list.len() <= base_list.len() {
-                    return None;
-                }
-
-                let base_len = base_list.len();
-
-                // Check prefixes
-                if !mine_list.iter().take(base_len).eq(base_list.iter()) {
-                    return None;
-                }
-                if !their_list.iter().take(base_len).eq(base_list.iter()) {
-                    return None;
-                }
-
-                // Merge: Take `theirs` (which is Base + TheirSuffix) and append Mine's suffix
-                let mut result = their_list.clone(); // Result starts as Theirs
-
-                // Append Mine's suffix
-                for item in mine_list.iter().skip(base_len) {
-                    result = match result.push(&item) {
-                        Ok(r) => match r.variant() {
-                            moor_var::Variant::List(l) => l.clone(),
-                            _ => return None,
-                        },
-                        Err(_) => return None,
-                    };
-                }
-
-                // Return result wrapped in Var, WITHOUT hint - merged values shouldn't carry hints
-                // as hints are only meaningful for the operation that created the value
-                Some(Var::from_list(result))
-            }
             OP_HINT_MAP_INSERT => {
                 // Map insert merge: Two concurrent inserts of DIFFERENT keys.
                 let mine_map = self.as_map()?;
@@ -204,59 +162,6 @@ impl RelationCodomain for Var {
                 // No hint - merged values shouldn't carry hints
                 Some(Var::from_flyweight(their_fw.add_slot(k_mine, v_mine)))
             }
-            OP_HINT_FLYWEIGHT_APPEND_CONTENTS => {
-                // Flyweight contents append merge
-                let mine_fw = self.as_flyweight()?;
-                let their_fw = theirs.as_flyweight()?;
-                let base_fw = base.as_flyweight()?;
-
-                // Slots and Delegate must match (only contents changed)
-                if mine_fw.delegate() != base_fw.delegate()
-                    || their_fw.delegate() != base_fw.delegate()
-                    || mine_fw.slots_storage() != base_fw.slots_storage()
-                    || their_fw.slots_storage() != base_fw.slots_storage()
-                {
-                    return None;
-                }
-
-                // Delegate to List merge for contents
-                let base_contents = Var::from_list(base_fw.contents().clone());
-
-                let mine_contents_hinted =
-                    Var::from_list_with_hint(mine_fw.contents().clone(), OP_HINT_LIST_APPEND);
-                let their_contents_hinted =
-                    Var::from_list_with_hint(their_fw.contents().clone(), OP_HINT_LIST_APPEND);
-
-                let merged_contents_var =
-                    mine_contents_hinted.try_merge(&base_contents, &their_contents_hinted)?;
-                let merged_contents = merged_contents_var.as_list()?.clone();
-
-                // No hint - merged values shouldn't carry hints
-                Some(Var::from_flyweight(their_fw.with_contents(merged_contents)))
-            }
-            OP_HINT_STR_APPEND => {
-                // String append merge
-                let mine_str = self.as_string()?;
-                let their_str = theirs.as_string()?;
-                let base_str = base.as_string()?;
-
-                // Both must be longer than base
-                if mine_str.len() <= base_str.len() || their_str.len() <= base_str.len() {
-                    return None;
-                }
-
-                // Verify base prefix
-                if !mine_str.starts_with(base_str) || !their_str.starts_with(base_str) {
-                    return None;
-                }
-
-                // Merge: Take theirs, append mine's suffix
-                let mut result = their_str.to_string();
-                result.push_str(&mine_str[base_str.len()..]);
-
-                // No hint - merged values shouldn't carry hints
-                Some(Var::from_str_type(moor_var::Str::mk_string(result)))
-            }
             _ => None,
         }
     }
@@ -300,6 +205,7 @@ pub struct Timestamp(pub u64);
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Tx {
     pub ts: Timestamp,
+    pub visible_ts: Timestamp,
     pub snapshot_version: u64,
 }
 

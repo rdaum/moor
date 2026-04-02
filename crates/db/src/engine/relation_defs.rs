@@ -115,6 +115,7 @@ macro_rules! define_relations {
             #[derive(Clone)]
             pub(crate) struct WorldStateSnapshot {
                 pub(crate) version: u64,
+                pub(crate) committed_ts: crate::tx::Timestamp,
                 pub(crate) caches: std::sync::Arc<crate::engine::moor_db::Caches>,
                 $( pub(crate) $field: std::sync::Arc<dyn crate::tx::RelationIndex<$domain, $codomain>>, )*
                 /// Cumulative bloom filter of keys modified since `bloom_since_version`.
@@ -200,6 +201,7 @@ macro_rules! define_relations {
                 fn build_snapshot(
                     &self,
                     current_root: &std::sync::Arc<WorldStateSnapshot>,
+                    committed_ts: crate::tx::Timestamp,
                     combined_caches: crate::engine::moor_db::Caches,
                     mut bloom: crate::tx::CommitBloom,
                 ) -> std::sync::Arc<WorldStateSnapshot> {
@@ -231,6 +233,7 @@ macro_rules! define_relations {
 
                     std::sync::Arc::new(WorldStateSnapshot {
                         version: current_root.version + 1,
+                        committed_ts: current_root.committed_ts.max(committed_ts),
                         caches,
                         $( $field: self.$field.snapshot_index_or(&current_root.$field), )*
                         commit_bloom: Some(bloom),
@@ -247,10 +250,16 @@ macro_rules! define_relations {
                 fn try_rebase(
                     &self,
                     ws: &RelationWorkingSets,
+                    checked_version: u64,
                     winner: &std::sync::Arc<WorldStateSnapshot>,
+                    committed_ts: crate::tx::Timestamp,
                     combined_caches: crate::engine::moor_db::Caches,
                     our_bloom: &crate::tx::CommitBloom,
                 ) -> Option<std::sync::Arc<WorldStateSnapshot>> {
+                    if checked_version < winner.bloom_since_version {
+                        return None;
+                    }
+
                     // If the winner has a bloom filter, test our keys against it.
                     // Any hit means possible key overlap — bail to full retry.
                     if let Some(ref winner_bloom) = winner.commit_bloom {
@@ -291,8 +300,9 @@ macro_rules! define_relations {
 
                     Some(std::sync::Arc::new(WorldStateSnapshot {
                         version: winner.version + 1,
+                        committed_ts: winner.committed_ts.max(committed_ts),
                         caches,
-                        $( $field: self.$field.snapshot_index_or(&winner.$field), )*
+                        $( $field: self.$field.rebased_snapshot_index(&winner.$field, &ws.$field), )*
                         commit_bloom: Some(merged_bloom),
                         bloom_since_version,
                     }))
@@ -351,10 +361,12 @@ macro_rules! define_relations {
                 fn snapshot(
                     &self,
                     version: u64,
+                    committed_ts: crate::tx::Timestamp,
                     caches: std::sync::Arc<crate::engine::moor_db::Caches>,
                 ) -> WorldStateSnapshot {
                     WorldStateSnapshot {
                         version,
+                        committed_ts,
                         caches,
                         $(
                             $field: {
@@ -374,6 +386,7 @@ macro_rules! define_relations {
                 ) -> std::sync::Arc<WorldStateSnapshot> {
                     std::sync::Arc::new(WorldStateSnapshot {
                         version: current_root.version,
+                        committed_ts: current_root.committed_ts,
                         caches: current_root.caches.clone(),
                         $(
                             $field: {

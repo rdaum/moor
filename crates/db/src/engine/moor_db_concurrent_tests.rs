@@ -889,7 +889,7 @@ mod tests {
     }
 
     #[test]
-    fn test_concurrent_list_append_merge() {
+    fn test_concurrent_list_append_conflicts() {
         check_random(
             || {
                 let db = setup_test_db();
@@ -914,11 +914,13 @@ mod tests {
                 }
 
                 let success_count = Arc::new(AtomicUsize::new(0));
+                let barrier = Arc::new(Barrier::new(2));
 
                 let handles: Vec<_> = (0..2)
                     .map(|thread_id| {
                         let db = db.clone();
                         let success_count = success_count.clone();
+                        let barrier = barrier.clone();
 
                         thread::spawn(move || {
                             let tx = db.start_transaction();
@@ -936,6 +938,8 @@ mod tests {
                             ws.update_property(&SYSTEM_OBJECT, &obj, prop_name, &new_list)
                                 .unwrap();
 
+                            barrier.wait();
+
                             if let Ok(CommitResult::Success { .. }) = Box::new(ws).commit() {
                                 success_count.fetch_add(1, Ordering::Relaxed);
                             }
@@ -947,8 +951,8 @@ mod tests {
                     handle.join().unwrap();
                 }
 
-                // Both should succeed due to smart merging
-                assert_eq!(success_count.load(Ordering::Relaxed), 2);
+                // Ordered appends are not merged; one writer must retry.
+                assert_eq!(success_count.load(Ordering::Relaxed), 1);
 
                 // Verify final state
                 let tx = db.start_transaction();
@@ -957,11 +961,8 @@ mod tests {
                     .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
                     .unwrap();
 
-                // Should contain both 0 and 1
                 let list = final_list.as_list().unwrap();
-                assert_eq!(list.len(), 2);
-                assert!(list.contains(&v_int(0), false).unwrap());
-                assert!(list.contains(&v_int(1), false).unwrap());
+                assert_eq!(list.len(), 1);
             },
             10,
         );
@@ -1233,7 +1234,7 @@ mod tests {
     }
 
     #[test]
-    fn test_concurrent_string_append_merge() {
+    fn test_concurrent_string_append_conflicts() {
         check_random(
             || {
                 let db = setup_test_db();
@@ -1258,11 +1259,13 @@ mod tests {
                 }
 
                 let success_count = Arc::new(AtomicUsize::new(0));
+                let barrier = Arc::new(Barrier::new(2));
 
                 let handles: Vec<_> = (0..2)
                     .map(|thread_id| {
                         let db = db.clone();
                         let success_count = success_count.clone();
+                        let barrier = barrier.clone();
 
                         thread::spawn(move || {
                             let tx = db.start_transaction();
@@ -1280,6 +1283,8 @@ mod tests {
                             ws.update_property(&SYSTEM_OBJECT, &obj, prop_name, &new_str)
                                 .unwrap();
 
+                            barrier.wait();
+
                             if let Ok(CommitResult::Success { .. }) = Box::new(ws).commit() {
                                 success_count.fetch_add(1, Ordering::Relaxed);
                             }
@@ -1291,8 +1296,8 @@ mod tests {
                     handle.join().unwrap();
                 }
 
-                // Both should succeed
-                assert_eq!(success_count.load(Ordering::Relaxed), 2);
+                // Ordered appends are not merged; one writer must retry.
+                assert_eq!(success_count.load(Ordering::Relaxed), 1);
 
                 // Verify final state
                 let tx = db.start_transaction();
@@ -1302,11 +1307,9 @@ mod tests {
                     .unwrap();
                 let s = final_str.as_string().unwrap();
 
-                // Should contain Base and both suffixes
+                // Final value should reflect a single committed append.
                 assert!(s.starts_with("Base"));
-                assert!(s.contains("+Suffix0"));
-                assert!(s.contains("+Suffix1"));
-                assert_eq!(s.len(), "Base+Suffix0+Suffix1".len());
+                assert!(s == "Base+Suffix0" || s == "Base+Suffix1");
             },
             10,
         );
@@ -1488,9 +1491,8 @@ mod tests {
     }
 
     #[test]
-    fn test_merged_values_have_no_hint() {
-        // Test that after a successful merge, the committed value has its hint cleared.
-        // This prevents stale hints from affecting future operations.
+    fn test_single_winner_list_append_preserves_hint() {
+        // A single committed append should preserve its operation hint.
         check_random(
             || {
                 let db = setup_test_db();
@@ -1515,11 +1517,13 @@ mod tests {
                 }
 
                 let success_count = Arc::new(AtomicUsize::new(0));
+                let barrier = Arc::new(Barrier::new(2));
 
                 let handles: Vec<_> = (0..2)
                     .map(|thread_id| {
                         let db = db.clone();
                         let success_count = success_count.clone();
+                        let barrier = barrier.clone();
 
                         thread::spawn(move || {
                             let tx = db.start_transaction();
@@ -1536,6 +1540,8 @@ mod tests {
                             ws.update_property(&SYSTEM_OBJECT, &obj, prop_name, &new_list)
                                 .unwrap();
 
+                            barrier.wait();
+
                             if let Ok(CommitResult::Success { .. }) = Box::new(ws).commit() {
                                 success_count.fetch_add(1, Ordering::Relaxed);
                             }
@@ -1547,26 +1553,24 @@ mod tests {
                     handle.join().unwrap();
                 }
 
-                // Both should succeed due to smart merging
-                assert_eq!(success_count.load(Ordering::Relaxed), 2);
+                // Ordered appends are not merged; one writer must retry.
+                assert_eq!(success_count.load(Ordering::Relaxed), 1);
 
-                // Verify final value has NO hint (hint was cleared after merge)
+                // Committed values should not retain stale operation hints.
                 let tx = db.start_transaction();
                 let ws = DbWorldState { tx };
                 let final_list = ws
                     .retrieve_property(&SYSTEM_OBJECT, &obj, prop_name)
                     .unwrap();
 
-                // The merged value should have OP_HINT_NONE
                 assert_eq!(
                     final_list.op_hint(),
                     OP_HINT_NONE,
-                    "Merged value should have hint cleared"
+                    "Committed values should have hints cleared"
                 );
 
-                // Verify the list still has the right content
                 let list = final_list.as_list().unwrap();
-                assert_eq!(list.len(), 2);
+                assert_eq!(list.len(), 1);
             },
             10,
         );

@@ -147,7 +147,8 @@ impl MoorDB {
             prop_resolution_cache: prop_cache.fork(),
             ancestry_cache: ancestry_cache.fork(),
         };
-        let next_root = checkers.build_snapshot(&current_root, combined_caches, bloom.clone());
+        let next_root =
+            checkers.build_snapshot(&current_root, tx_timestamp, combined_caches, bloom.clone());
         drop(_t);
 
         // Phase 2: Try to publish
@@ -175,7 +176,14 @@ impl MoorDB {
             };
 
             if let Some(rebased) =
-                checkers.try_rebase(&relation_ws, &winner, combined_caches, &bloom)
+                checkers.try_rebase(
+                    &relation_ws,
+                    current_root.version,
+                    &winner,
+                    tx_timestamp,
+                    combined_caches,
+                    &bloom,
+                )
             {
                 // Rebase succeeded — no key overlap. Try CAS again.
                 if self

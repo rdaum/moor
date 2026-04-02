@@ -202,6 +202,16 @@ where
     Domain: RelationDomain,
     Codomain: RelationCodomain,
 {
+    #[inline]
+    fn visible_ts(&self) -> Timestamp {
+        self.tx.visible_ts
+    }
+
+    #[inline]
+    fn write_ts(&self) -> Timestamp {
+        self.tx.ts
+    }
+
     pub fn new(
         tx: Tx,
         relation_name: Symbol,
@@ -268,6 +278,9 @@ where
     }
 
     pub fn insert(&mut self, domain: Domain, value: Codomain) -> Result<(), Error> {
+        let visible_ts = self.visible_ts();
+        let write_ts = self.write_ts();
+
         // Common fast path: this transaction has not mutated anything yet.
         if !self.index.has_local_mutations {
             // If we or upstream has already inserted this domain, we can't insert it again.
@@ -279,7 +292,7 @@ where
             if !self.index.provider_fully_loaded {
                 // Not in the index, check the backing source.
                 if let Some((read_ts, _)) = self.backing_source.get(&domain)?
-                    && read_ts < self.tx.ts
+                    && read_ts <= visible_ts
                 {
                     return Err(Error::Duplicate);
                 }
@@ -289,8 +302,8 @@ where
             self.index.local_operations.insert(
                 domain,
                 Op {
-                    read_ts: self.tx.ts,
-                    write_ts: self.tx.ts,
+                    read_ts: write_ts,
+                    write_ts,
                     operation: OpType::Insert(value),
                     guaranteed_unique: false,
                 },
@@ -306,11 +319,11 @@ where
                 // Recreating a locally deleted entry in this transaction:
                 // - if this key existed when we read it (read_ts < tx.ts), this is an update
                 // - otherwise it's re-inserting a locally-created key
-                entry.write_ts = self.tx.ts;
-                entry.operation = if entry.read_ts < self.tx.ts {
+                entry.write_ts = write_ts;
+                entry.operation = if entry.read_ts <= visible_ts {
                     OpType::Update(value)
                 } else {
-                    entry.read_ts = self.tx.ts;
+                    entry.read_ts = write_ts;
                     OpType::Insert(value)
                 };
                 return Ok(());
@@ -329,7 +342,7 @@ where
         if !self.index.provider_fully_loaded {
             // Not in the index, check the backing source.
             if let Some((read_ts, _)) = self.backing_source.get(&domain)?
-                && read_ts < self.tx.ts
+                && read_ts <= visible_ts
             {
                 return Err(Error::Duplicate);
             }
@@ -340,8 +353,8 @@ where
         self.index.local_operations.insert(
             domain,
             Op {
-                read_ts: self.tx.ts,
-                write_ts: self.tx.ts,
+                read_ts: write_ts,
+                write_ts,
                 operation: OpType::Insert(value),
                 guaranteed_unique: false,
             },
@@ -363,8 +376,8 @@ where
         self.index.local_operations.insert(
             domain,
             Op {
-                read_ts: self.tx.ts,
-                write_ts: self.tx.ts,
+                read_ts: self.write_ts(),
+                write_ts: self.write_ts(),
                 operation: OpType::Insert(value),
                 guaranteed_unique: true,
             },
@@ -376,6 +389,9 @@ where
     }
 
     pub fn update(&mut self, domain: &Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
+        let visible_ts = self.visible_ts();
+        let write_ts = self.write_ts();
+
         // Check our local index first, but only if we have mutations.
         // If we have an entry for this domain, we can update it.
         if self.index.has_local_mutations
@@ -385,7 +401,7 @@ where
             if entry.operation.is_delete() {
                 return Ok(None);
             }
-            entry.write_ts = self.tx.ts;
+            entry.write_ts = write_ts;
             let old_value = match &mut entry.operation {
                 // Keep an insert as insert; only the value changes.
                 OpType::Insert(current) => std::mem::replace(current, value),
@@ -399,7 +415,7 @@ where
 
         // Is this already in the *master* index?
         if let Some(entry) = self.index.master_entries.index_lookup(domain) {
-            if entry.ts > self.tx.ts {
+            if entry.ts > visible_ts {
                 // We can't update it, it's too new.
                 return Ok(None);
             }
@@ -412,7 +428,7 @@ where
                 domain.clone(),
                 Op {
                     read_ts,
-                    write_ts: self.tx.ts,
+                    write_ts,
                     operation: OpType::Update(value),
                     guaranteed_unique: false,
                 },
@@ -443,7 +459,7 @@ where
         // If the timestamp is greater than our own, we won't be able to update it when we actually
         // commit, so we may as well mark it as a conflict *now*.
         // (Let's just hope the "upper layers" try to do the right thing here)
-        if read_ts >= self.tx.ts {
+        if read_ts > visible_ts {
             return Err(Error::Conflict(
                 self.make_conflict_info(domain, ConflictType::ConcurrentWrite),
             ));
@@ -455,7 +471,7 @@ where
             domain.clone(),
             Op {
                 read_ts,
-                write_ts: self.tx.ts,
+                write_ts,
                 operation: OpType::Update(value),
                 guaranteed_unique: false,
             },
@@ -469,6 +485,9 @@ where
     }
 
     pub fn upsert(&mut self, domain: Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
+        let visible_ts = self.visible_ts();
+        let write_ts = self.write_ts();
+
         // Check local operations first - single lookup that handles all cases, but only if we have mutations
         if self.index.has_local_mutations
             && let Some(entry) = self.index.local_operations.get_mut(&domain)
@@ -480,12 +499,12 @@ where
                     //   an update of an existing tuple.
                     // - read_ts == tx.ts means this key only existed locally, so this remains
                     //   an insert.
-                    if entry.read_ts < self.tx.ts {
-                        entry.write_ts = self.tx.ts;
+                    if entry.read_ts <= visible_ts {
+                        entry.write_ts = write_ts;
                         entry.operation = OpType::Update(value);
                     } else {
-                        entry.read_ts = self.tx.ts;
-                        entry.write_ts = self.tx.ts;
+                        entry.read_ts = write_ts;
+                        entry.write_ts = write_ts;
                         entry.operation = OpType::Insert(value);
                     }
                     self.invalidate_local_codomain_index_cache();
@@ -495,7 +514,7 @@ where
                 }
                 OpType::Insert(_) | OpType::Update(_) => {
                     // Update existing entry
-                    entry.write_ts = self.tx.ts;
+                    entry.write_ts = write_ts;
                     let old_value = match &mut entry.operation {
                         OpType::Insert(current) | OpType::Update(current) => {
                             std::mem::replace(current, value)
@@ -517,7 +536,7 @@ where
                 domain,
                 Op {
                     read_ts: entry.ts,
-                    write_ts: self.tx.ts,
+                    write_ts,
                     operation: OpType::Update(value),
                     guaranteed_unique: false,
                 },
@@ -531,14 +550,14 @@ where
         // If provider not fully loaded, check backing source for existing data
         if !self.index.provider_fully_loaded
             && let Some((read_ts, backing_value)) = self.backing_source.get(&domain)?
-            && read_ts < self.tx.ts
+            && read_ts <= visible_ts
         {
             // Existing entry in backing - do update via local operation
             self.index.local_operations.insert(
                 domain,
                 Op {
                     read_ts,
-                    write_ts: self.tx.ts,
+                    write_ts,
                     operation: OpType::Update(value),
                     guaranteed_unique: false,
                 },
@@ -553,8 +572,8 @@ where
         self.index.local_operations.insert(
             domain,
             Op {
-                read_ts: self.tx.ts,
-                write_ts: self.tx.ts,
+                read_ts: write_ts,
+                write_ts,
                 operation: OpType::Insert(value),
                 guaranteed_unique: false,
             },
@@ -577,18 +596,21 @@ where
     where
         F: FnOnce(Option<&Codomain>) -> Option<Codomain>,
     {
+        let visible_ts = self.visible_ts();
+        let write_ts = self.write_ts();
+
         if self.index.has_local_mutations
             && let Some(entry) = self.index.local_operations.get_mut(&domain)
         {
             match &mut entry.operation {
                 OpType::Delete => {
                     if let Some(new_value) = f(None) {
-                        if entry.read_ts < self.tx.ts {
-                            entry.write_ts = self.tx.ts;
+                        if entry.read_ts <= visible_ts {
+                            entry.write_ts = write_ts;
                             entry.operation = OpType::Update(new_value);
                         } else {
-                            entry.read_ts = self.tx.ts;
-                            entry.write_ts = self.tx.ts;
+                            entry.read_ts = write_ts;
+                            entry.write_ts = write_ts;
                             entry.operation = OpType::Insert(new_value);
                         }
                         self.invalidate_local_codomain_index_cache();
@@ -599,7 +621,7 @@ where
                 OpType::Insert(current) | OpType::Update(current) => {
                     let old_value = current.clone();
                     if let Some(new_value) = f(Some(&old_value)) {
-                        entry.write_ts = self.tx.ts;
+                        entry.write_ts = write_ts;
                         *current = new_value;
                         self.invalidate_local_codomain_index_cache();
                         self.index.has_local_mutations = true;
@@ -616,7 +638,7 @@ where
                     domain,
                     Op {
                         read_ts: entry.ts,
-                        write_ts: self.tx.ts,
+                        write_ts: self.write_ts(),
                         operation: OpType::Update(new_value),
                         guaranteed_unique: false,
                     },
@@ -629,14 +651,14 @@ where
 
         if !self.index.provider_fully_loaded
             && let Some((read_ts, backing_value)) = self.backing_source.get(&domain)?
-            && read_ts < self.tx.ts
+            && read_ts <= self.visible_ts()
         {
             if let Some(new_value) = f(Some(&backing_value)) {
                 self.index.local_operations.insert(
                     domain,
                     Op {
                         read_ts,
-                        write_ts: self.tx.ts,
+                        write_ts: self.write_ts(),
                         operation: OpType::Update(new_value),
                         guaranteed_unique: false,
                     },
@@ -651,8 +673,8 @@ where
             self.index.local_operations.insert(
                 domain,
                 Op {
-                    read_ts: self.tx.ts,
-                    write_ts: self.tx.ts,
+                    read_ts: self.write_ts(),
+                    write_ts: self.write_ts(),
                     operation: OpType::Insert(new_value),
                     guaranteed_unique: false,
                 },
@@ -693,7 +715,7 @@ where
 
         Ok(matches!(
             self.backing_source.get(domain)?,
-            Some((ts, _)) if ts <= self.tx.ts
+            Some((ts, _)) if ts <= self.visible_ts()
         ))
     }
 
@@ -732,7 +754,7 @@ where
 
             // Provider not fully loaded - check backing source
             if let Some((ts, _)) = self.backing_source.get(&domain)?
-                && ts <= self.tx.ts
+                && ts <= self.visible_ts()
             {
                 valid_domains.insert(domain.clone());
             }
@@ -791,7 +813,7 @@ where
             }
 
             return match self.backing_source.get(domain)? {
-                Some((read_ts, value)) if read_ts < self.tx.ts => Ok(Some(value)),
+                Some((read_ts, value)) if read_ts <= self.visible_ts() => Ok(Some(value)),
                 _ => Ok(None),
             };
         }
@@ -814,7 +836,7 @@ where
         }
 
         match self.backing_source.get(domain)? {
-            Some((read_ts, value)) if read_ts < self.tx.ts => Ok(Some(value)),
+            Some((read_ts, value)) if read_ts <= self.visible_ts() => Ok(Some(value)),
             _ => Ok(None),
         }
     }
@@ -838,7 +860,7 @@ where
             }
 
             return match self.backing_source.get(domain)? {
-                Some((read_ts, value)) if read_ts < self.tx.ts => Ok(Some(f(&value))),
+                Some((read_ts, value)) if read_ts <= self.visible_ts() => Ok(Some(f(&value))),
                 _ => Ok(None),
             };
         }
@@ -861,12 +883,15 @@ where
         }
 
         match self.backing_source.get(domain)? {
-            Some((read_ts, value)) if read_ts < self.tx.ts => Ok(Some(f(&value))),
+            Some((read_ts, value)) if read_ts <= self.visible_ts() => Ok(Some(f(&value))),
             _ => Ok(None),
         }
     }
 
     pub fn delete(&mut self, domain: &Domain) -> Result<Option<Codomain>, Error> {
+        let visible_ts = self.visible_ts();
+        let write_ts = self.write_ts();
+
         // This is like update, but we're removing.
         // Check our local index first, but only if we have mutations.
         // If we have an entry for this domain, we can delete it and move on
@@ -878,7 +903,7 @@ where
                 return Ok(None);
             }
             // If it's an insert or update, we can delete it.
-            entry.write_ts = self.tx.ts;
+            entry.write_ts = write_ts;
             let old_value = match std::mem::replace(&mut entry.operation, OpType::Delete) {
                 OpType::Insert(value) | OpType::Update(value) => {
                     // Update local secondary index (remove from old codomain)
@@ -899,7 +924,7 @@ where
                 domain.clone(),
                 Op {
                     read_ts,
-                    write_ts: self.tx.ts,
+                    write_ts,
                     operation: OpType::Delete,
                     guaranteed_unique: false,
                 },
@@ -925,7 +950,7 @@ where
         };
 
         // Pretend we didn't see it, it's too new.
-        if read_ts >= self.tx.ts {
+        if read_ts > visible_ts {
             return Ok(None);
         }
 
@@ -935,7 +960,7 @@ where
             domain.clone(),
             Op {
                 read_ts,
-                write_ts: self.tx.ts,
+                write_ts,
                 operation: OpType::Delete,
                 guaranteed_unique: false,
             },
@@ -958,7 +983,7 @@ where
         if self.index.provider_fully_loaded {
             // Just use the master entries - they already contain all the provider data
             for (domain, entry) in self.index.master_entries.iter() {
-                if entry.ts <= self.tx.ts && predicate(domain, &entry.value) {
+                if entry.ts <= self.visible_ts() && predicate(domain, &entry.value) {
                     results.insert(domain.clone(), entry.value.clone());
                 }
             }
@@ -969,7 +994,7 @@ where
                 .scan(predicate)?
                 .iter()
                 .filter_map(|(ts, domain, value)| {
-                    if *ts <= self.tx.ts && predicate(domain, value) {
+                    if *ts <= self.visible_ts() && predicate(domain, value) {
                         return Some((domain.clone(), value.clone()));
                     }
                     None
@@ -980,7 +1005,7 @@ where
             // Also merge in the master entries from the index
             for (domain, entry) in self.index.master_entries.iter() {
                 if !results.contains_key(domain)
-                    && entry.ts <= self.tx.ts
+                    && entry.ts <= self.visible_ts()
                     && predicate(domain, &entry.value)
                 {
                     results.insert(domain.clone(), entry.value.clone());
@@ -1020,7 +1045,7 @@ where
 
         // Add all master entries that are visible to this transaction
         for (domain, entry) in self.index.master_entries.iter() {
-            if entry.ts <= self.tx.ts {
+            if entry.ts <= self.visible_ts() {
                 results.insert(domain.clone(), entry.value.clone());
             }
         }
@@ -1060,7 +1085,7 @@ where
 
             // Check master entries
             if let Some(entry) = self.index.master_entries.index_lookup(domain)
-                && entry.ts <= self.tx.ts
+                && entry.ts <= self.visible_ts()
             {
                 results.insert(domain.clone(), entry.value.clone());
                 continue;
@@ -1073,7 +1098,7 @@ where
 
             // Provider not fully loaded - check backing source as fallback
             if let Some((ts, value)) = self.backing_source.get(domain)?
-                && ts <= self.tx.ts
+                && ts <= self.visible_ts()
             {
                 results.insert(domain.clone(), value);
             }
@@ -1087,7 +1112,7 @@ where
         // Scan all data from the provider that's visible to this transaction
         let provider_data = self.backing_source.scan(&|_domain, _codomain| true)?;
         for (ts, domain, codomain) in provider_data {
-            if ts <= self.tx.ts {
+            if ts <= self.visible_ts() {
                 self.index.master_entries.insert_entry(ts, domain, codomain);
             }
         }

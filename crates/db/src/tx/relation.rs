@@ -353,6 +353,7 @@ mod tests {
 
         let tx = Tx {
             ts: Timestamp(1),
+            visible_ts: Timestamp(1),
             snapshot_version: 0,
         };
         let mut lc = relation.clone().start(&tx);
@@ -381,10 +382,12 @@ mod tests {
 
         let tx_a = Tx {
             ts: Timestamp(0),
+            visible_ts: Timestamp(0),
             snapshot_version: 0,
         };
         let tx_b = Tx {
             ts: Timestamp(1),
+            visible_ts: Timestamp(1),
             snapshot_version: 0,
         };
 
@@ -423,10 +426,12 @@ mod tests {
 
         let tx_1 = Tx {
             ts: Timestamp(10),
+            visible_ts: Timestamp(10),
             snapshot_version: 0,
         };
         let tx_2 = Tx {
             ts: Timestamp(20),
+            visible_ts: Timestamp(20),
             snapshot_version: 0,
         };
 
@@ -469,10 +474,12 @@ mod tests {
 
         let tx_1 = Tx {
             ts: Timestamp(10),
+            visible_ts: Timestamp(10),
             snapshot_version: 0,
         };
         let tx_2 = Tx {
             ts: Timestamp(20),
+            visible_ts: Timestamp(20),
             snapshot_version: 0,
         };
 
@@ -513,10 +520,12 @@ mod tests {
 
         let tx_1 = Tx {
             ts: Timestamp(10),
+            visible_ts: Timestamp(10),
             snapshot_version: 0,
         };
         let tx_2 = Tx {
             ts: Timestamp(20),
+            visible_ts: Timestamp(20),
             snapshot_version: 0,
         };
 
@@ -560,10 +569,12 @@ mod tests {
 
         let tx_1 = Tx {
             ts: Timestamp(10),
+            visible_ts: Timestamp(10),
             snapshot_version: 0,
         };
         let tx_2 = Tx {
             ts: Timestamp(20),
+            visible_ts: Timestamp(20),
             snapshot_version: 0,
         };
 
@@ -604,6 +615,7 @@ mod tests {
         let domain = TestDomain(1);
         let tx = Tx {
             ts: Timestamp(10),
+            visible_ts: Timestamp(10),
             snapshot_version: 0,
         };
 
@@ -631,6 +643,7 @@ mod tests {
         let domain = TestDomain(1);
         let tx = Tx {
             ts: Timestamp(10),
+            visible_ts: Timestamp(10),
             snapshot_version: 0,
         };
 
@@ -658,6 +671,7 @@ mod tests {
         for i in 1..=5 {
             let tx = Tx {
                 ts: Timestamp(i),
+                visible_ts: Timestamp(i),
                 snapshot_version: 0,
             };
             let mut r_tx = relation.clone().start(&tx);
@@ -688,14 +702,17 @@ mod tests {
 
         let tx_1 = Tx {
             ts: Timestamp(10),
+            visible_ts: Timestamp(10),
             snapshot_version: 0,
         };
         let tx_2 = Tx {
             ts: Timestamp(20),
+            visible_ts: Timestamp(20),
             snapshot_version: 0,
         };
         let tx_3 = Tx {
             ts: Timestamp(30),
+            visible_ts: Timestamp(30),
             snapshot_version: 0,
         };
 
@@ -768,10 +785,12 @@ mod tests {
         // Start both transactions, older one reads first
         let tx_older = Tx {
             ts: Timestamp(10),
+            visible_ts: Timestamp(10),
             snapshot_version: 0,
         };
         let tx_newer = Tx {
             ts: Timestamp(20),
+            visible_ts: Timestamp(20),
             snapshot_version: 0,
         };
 
@@ -810,6 +829,7 @@ mod tests {
 
         let tx = Tx {
             ts: Timestamp(10),
+            visible_ts: Timestamp(10),
             snapshot_version: 0,
         };
         let mut r_tx = relation.clone().start(&tx);
@@ -866,6 +886,7 @@ mod tests {
 
         let tx = Tx {
             ts: Timestamp(10),
+            visible_ts: Timestamp(10),
             snapshot_version: 0,
         };
         let mut r_tx = relation.clone().start(&tx);
@@ -895,6 +916,7 @@ mod tests {
         // Test that committed secondary index state is visible in new transaction
         let tx2 = Tx {
             ts: Timestamp(20),
+            visible_ts: Timestamp(20),
             snapshot_version: 0,
         };
         let r_tx2 = relation.clone().start(&tx2);

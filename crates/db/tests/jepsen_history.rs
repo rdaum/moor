@@ -244,6 +244,7 @@ mod tests {
                     tx_counter += 1;
                     let tx = Tx {
                         ts: Timestamp(tx_counter),
+                        visible_ts: Timestamp(tx_counter),
                         snapshot_version: 0,
                     };
                     let snapshot = root_index.load();
