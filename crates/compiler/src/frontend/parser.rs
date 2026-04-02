@@ -1573,6 +1573,7 @@ impl<'a> Parser<'a> {
                 | SyntaxKind::TypeConstant
                 | SyntaxKind::TrueKw
                 | SyntaxKind::FalseKw
+                | SyntaxKind::AnyKw
                 | SyntaxKind::PassKw
                 | SyntaxKind::ReturnKw
                 | SyntaxKind::FnKw
@@ -1670,6 +1671,7 @@ fn is_atom_token(kind: SyntaxKind) -> bool {
             | SyntaxKind::TypeConstant
             | SyntaxKind::TrueKw
             | SyntaxKind::FalseKw
+            | SyntaxKind::AnyKw
             | SyntaxKind::GlobalKw
     )
 }
@@ -1723,6 +1725,15 @@ mod tests {
         let kinds: Vec<_> = root.descendants().map(|node| node.kind()).collect();
         assert!(kinds.contains(&SyntaxKind::AssignExpr));
         assert!(kinds.contains(&SyntaxKind::CondExpr));
+    }
+
+    #[test]
+    fn parses_any_keyword_as_identifier_in_expression_position() {
+        let (root, errors) = parse_to_syntax_node("return (any ? 0 | 0);");
+        assert!(errors.is_empty(), "{errors:?}");
+        let kinds: Vec<_> = root.descendants().map(|node| node.kind()).collect();
+        assert!(kinds.contains(&SyntaxKind::CondExpr));
+        assert!(kinds.contains(&SyntaxKind::ParenExpr));
     }
 
     #[test]

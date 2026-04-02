@@ -1545,7 +1545,7 @@ impl<'a> Lowerer<'a> {
 
     fn lower_atom_token(&mut self, token: SyntaxToken) -> Result<Expr, CompileError> {
         match token.kind() {
-            SyntaxKind::Ident | SyntaxKind::GlobalKw | SyntaxKind::PassKw => {
+            SyntaxKind::Ident | SyntaxKind::GlobalKw | SyntaxKind::PassKw | SyntaxKind::AnyKw => {
                 let ident = token.text();
                 if self.options.legacy_type_constants
                     && let Some(type_id) = VarType::parse_legacy(ident)
