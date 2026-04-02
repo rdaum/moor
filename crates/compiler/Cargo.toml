@@ -41,8 +41,6 @@ planus.workspace = true
 
 # Compiler & Language Processing
 ariadne.workspace = true
-pest.workspace = true
-pest_derive.workspace = true
 rowan.workspace = true
 
 # Collections & Data Structures

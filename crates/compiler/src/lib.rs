@@ -11,8 +11,6 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-#[macro_use]
-extern crate pest_derive;
 pub use moor_var::program::names::Names;
 
 mod ast;
@@ -22,9 +20,9 @@ mod decompile;
 mod diagnostics;
 pub mod frontend;
 mod lexer;
+mod objdef_literal;
 mod parse_tree;
 mod precedence;
-mod pest_grammar;
 mod syntax_kind;
 mod unparse;
 
