@@ -38,7 +38,7 @@ pub enum Constants {
 }
 
 pub struct ObjectDefinitionLoader<'a> {
-    object_definitions: HashMap<Obj, (PathBuf, ObjectDefinition)>,
+    object_definitions: HashMap<Obj, (String, ObjectDefinition)>,
     loader: &'a mut dyn LoaderInterface,
     // Track conflicts as we go
     conflicts: Vec<(Obj, ConflictEntity)>,
@@ -51,7 +51,7 @@ pub struct ObjectDefinitionLoader<'a> {
 ///     * An existing defined property differs in value or flags from loaded objdef file
 ///     * An existing overridden property differs in value or flags from loaded objdef file
 ///     * A verb differs in flags or content from loaded objdef file
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum ConflictMode {
     /// Indiscriminately overwrite the existing entity with the new value.
     Clobber,
@@ -131,6 +131,12 @@ pub struct ObjDefLoaderResults {
     pub num_loaded_property_overrides: usize,
 }
 
+enum AttributeKind {
+    Parent,
+    Location,
+    Owner,
+}
+
 impl<'a> ObjectDefinitionLoader<'a> {
     pub fn new(loader: &'a mut dyn LoaderInterface) -> Self {
         Self {
@@ -138,6 +144,55 @@ impl<'a> ObjectDefinitionLoader<'a> {
             loader,
             conflicts: Vec::new(),
         }
+    }
+
+    fn definition_counts(&self) -> (usize, usize, usize) {
+        let verbs = self
+            .object_definitions
+            .values()
+            .map(|(_, d)| d.verbs.len())
+            .sum();
+        let property_defs = self
+            .object_definitions
+            .values()
+            .map(|(_, d)| d.property_definitions.len())
+            .sum();
+        let property_overrides = self
+            .object_definitions
+            .values()
+            .map(|(_, d)| d.property_overrides.len())
+            .sum();
+        (verbs, property_defs, property_overrides)
+    }
+
+    /// Apply constants from the provided option to the compilation context.
+    fn apply_constants(
+        constants: &Constants,
+        context: &mut ObjFileContext,
+        source_name: &str,
+    ) -> Result<(), ObjdefLoaderError> {
+        match constants {
+            Constants::Map(map) => {
+                for (key, value) in map.iter() {
+                    let key_symbol = key.as_symbol().map_err(|_| {
+                        ObjdefLoaderError::ObjectDefParseError(
+                            source_name.to_string(),
+                            Box::new(moor_compiler::ObjDefParseError::ConstantNotFound(format!(
+                                "Constants map key must be string or symbol, got: {key:?}"
+                            ))),
+                        )
+                    })?;
+                    context.add_constant(key_symbol, value.clone());
+                }
+            }
+            Constants::FileContent(content) => {
+                let compile_opts = CompileOptions::default();
+                compile_object_definitions(content, &compile_opts, context).map_err(|e| {
+                    ObjdefLoaderError::ObjectDefParseError(source_name.to_string(), Box::new(e))
+                })?;
+            }
+        }
+        Ok(())
     }
 
     /// Check if an entity should be overridden regardless of conflict mode
@@ -155,7 +210,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
         if self.should_override(obj, entity, options) {
             ConflictMode::Clobber
         } else {
-            options.conflict_mode.clone()
+            options.conflict_mode
         }
     }
 
@@ -290,21 +345,8 @@ impl<'a> ObjectDefinitionLoader<'a> {
             "Compiled object definition directory"
         );
 
-        let num_loaded_verbs = self
-            .object_definitions
-            .values()
-            .map(|(_, d)| d.verbs.len())
-            .sum::<usize>();
-        let num_loaded_property_definitions = self
-            .object_definitions
-            .values()
-            .map(|(_, d)| d.property_definitions.len())
-            .sum::<usize>();
-        let num_loaded_property_overrides = self
-            .object_definitions
-            .values()
-            .map(|(_, d)| d.property_overrides.len())
-            .sum::<usize>();
+        let (num_loaded_verbs, num_loaded_property_definitions, num_loaded_property_overrides) =
+            self.definition_counts();
 
         info!(
             "Created {} objects. Adjusting inheritance, location, and ownership attributes...",
@@ -342,13 +384,14 @@ impl<'a> ObjectDefinitionLoader<'a> {
         compile_options: &CompileOptions,
     ) -> Result<(), ObjdefLoaderError> {
         context.set_base_path(path);
+        let path_str = path.to_string_lossy().into_owned();
         let compiled_defs = compile_object_definitions(
             object_file_contents,
             compile_options,
             context,
         )
         .map_err(|e| {
-            ObjdefLoaderError::ObjectDefParseError(path.to_string_lossy().to_string(), Box::new(e))
+            ObjdefLoaderError::ObjectDefParseError(path_str.clone(), Box::new(e))
         })?;
 
         for compiled_def in compiled_defs {
@@ -366,15 +409,11 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     ),
                 )
                 .map_err(|wse| {
-                    ObjdefLoaderError::CouldNotCreateObject(
-                        path.to_string_lossy().to_string(),
-                        oid,
-                        wse,
-                    )
+                    ObjdefLoaderError::CouldNotCreateObject(path_str.clone(), oid, wse)
                 })?;
 
             self.object_definitions
-                .insert(oid, (path.to_path_buf(), compiled_def));
+                .insert(oid, (path_str.clone(), compiled_def));
         }
         Ok(())
     }
@@ -384,12 +423,12 @@ impl<'a> ObjectDefinitionLoader<'a> {
         options: &ObjDefLoaderOptions,
     ) -> Result<(), ObjdefLoaderError> {
         // First phase: collect all conflicts
-        let mut attribute_actions = Vec::new();
+        let mut attribute_actions: Vec<(Obj, AttributeKind, Obj, String)> = Vec::new();
 
         for (obj, (path, def)) in &self.object_definitions {
             // Check if object already exists
             let existing_attrs = self.loader.get_existing_object(obj).map_err(|e| {
-                ObjdefLoaderError::CouldNotSetObjectParent(path.to_string_lossy().to_string(), e)
+                ObjdefLoaderError::CouldNotSetObjectParent(path.clone(), e)
             })?;
 
             if let Some(existing) = existing_attrs {
@@ -407,7 +446,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         self.conflicts.push(conflict);
                     }
                     if should_proceed {
-                        attribute_actions.push((*obj, "parent", def.parent, path.clone()));
+                        attribute_actions.push((*obj, AttributeKind::Parent, def.parent, path.clone()));
                     }
                 }
 
@@ -430,7 +469,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         self.conflicts.push(conflict);
                     }
                     if should_proceed {
-                        attribute_actions.push((*obj, "location", def.location, path.clone()));
+                        attribute_actions.push((*obj, AttributeKind::Location, def.location, path.clone()));
                     }
                 }
 
@@ -453,7 +492,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         self.conflicts.push(conflict);
                     }
                     if should_proceed {
-                        attribute_actions.push((*obj, "owner", def.owner, path.clone()));
+                        attribute_actions.push((*obj, AttributeKind::Owner, def.owner, path.clone()));
                     }
                 }
 
@@ -470,12 +509,11 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     self.conflicts.push(conflict);
                 }
                 if should_proceed {
-                    // Update object flags to match objdef
                     self.loader
                         .update_object_flags(obj, def.flags)
                         .map_err(|e| {
                             ObjdefLoaderError::CouldNotSetObjectParent(
-                                path.to_string_lossy().to_string(),
+                                path.clone(),
                                 e,
                             )
                         })?;
@@ -485,7 +523,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         .update_object_flags(obj, existing.flags())
                         .map_err(|e| {
                             ObjdefLoaderError::CouldNotSetObjectParent(
-                                path.to_string_lossy().to_string(),
+                                path.clone(),
                                 e,
                             )
                         })?;
@@ -493,47 +531,37 @@ impl<'a> ObjectDefinitionLoader<'a> {
             } else {
                 // Object doesn't exist yet, add all non-nothing attributes
                 if def.parent != NOTHING {
-                    attribute_actions.push((*obj, "parent", def.parent, path.clone()));
+                    attribute_actions.push((*obj, AttributeKind::Parent, def.parent, path.clone()));
                 }
                 if def.location != NOTHING {
-                    attribute_actions.push((*obj, "location", def.location, path.clone()));
+                    attribute_actions.push((*obj, AttributeKind::Location, def.location, path.clone()));
                 }
                 if def.owner != NOTHING {
-                    attribute_actions.push((*obj, "owner", def.owner, path.clone()));
+                    attribute_actions.push((*obj, AttributeKind::Owner, def.owner, path.clone()));
                 }
             }
         }
 
         // Second phase: apply all the actions
-        for (obj, attr_type, value, path) in attribute_actions {
-            match attr_type {
-                "parent" => {
+        for (obj, kind, value, path) in attribute_actions {
+            match kind {
+                AttributeKind::Parent => {
                     self.loader
                         .set_object_parent(&obj, &value, options.validate_parent_changes)
                         .map_err(|e| {
-                            ObjdefLoaderError::CouldNotSetObjectParent(
-                                path.to_string_lossy().to_string(),
-                                e,
-                            )
+                            ObjdefLoaderError::CouldNotSetObjectParent(path.clone(), e)
                         })?;
                 }
-                "location" => {
+                AttributeKind::Location => {
                     self.loader.set_object_location(&obj, &value).map_err(|e| {
-                        ObjdefLoaderError::CouldNotSetObjectLocation(
-                            path.to_string_lossy().to_string(),
-                            e,
-                        )
+                        ObjdefLoaderError::CouldNotSetObjectLocation(path.clone(), e)
                     })?;
                 }
-                "owner" => {
+                AttributeKind::Owner => {
                     self.loader.set_object_owner(&obj, &value).map_err(|e| {
-                        ObjdefLoaderError::CouldNotSetObjectOwner(
-                            path.to_string_lossy().to_string(),
-                            e,
-                        )
+                        ObjdefLoaderError::CouldNotSetObjectOwner(path.clone(), e)
                     })?;
                 }
-                _ => unreachable!(),
             }
         }
         Ok(())
@@ -551,7 +579,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     .get_existing_verb_by_names(obj, &v.names)
                     .map_err(|wse| {
                         ObjdefLoaderError::CouldNotDefineVerb(
-                            path.to_string_lossy().to_string(),
+                            path.clone(),
                             *obj,
                             v.names.clone(),
                             wse,
@@ -586,7 +614,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         .get_verb_program(obj, existing_uuid)
                         .map_err(|wse| {
                             ObjdefLoaderError::CouldNotDefineVerb(
-                                path.to_string_lossy().to_string(),
+                                path.clone(),
                                 *obj,
                                 v.names.clone(),
                                 wse,
@@ -630,7 +658,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                             )
                             .map_err(|wse| {
                                 ObjdefLoaderError::CouldNotDefineVerb(
-                                    path.to_string_lossy().to_string(),
+                                    path.clone(),
                                     *obj,
                                     v.names.clone(),
                                     wse,
@@ -657,7 +685,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 )
                 .map_err(|wse| {
                     ObjdefLoaderError::CouldNotDefineVerb(
-                        path.to_string_lossy().to_string(),
+                        path.clone(),
                         obj,
                         verb.names.clone(),
                         wse,
@@ -682,7 +710,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     .get_existing_property_value(obj, pd.name)
                     .map_err(|wse| {
                         ObjdefLoaderError::CouldNotDefineProperty(
-                            path.to_string_lossy().to_string(),
+                            path.clone(),
                             *obj,
                             pd.name.as_arc_str().to_string(),
                             wse,
@@ -747,7 +775,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 )
                 .map_err(|wse| {
                     ObjdefLoaderError::CouldNotDefineProperty(
-                        path.to_string_lossy().to_string(),
+                        path.clone(),
                         obj,
                         prop_def.name.as_arc_str().to_string(),
                         wse,
@@ -767,7 +795,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 )
                 .map_err(|wse| {
                     ObjdefLoaderError::CouldNotDefineProperty(
-                        path.to_string_lossy().to_string(),
+                        path.clone(),
                         obj,
                         prop_def.name.as_arc_str().to_string(),
                         wse,
@@ -790,7 +818,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     .get_existing_property_value(obj, pv.name)
                     .map_err(|wse| {
                         ObjdefLoaderError::CouldNotOverrideProperty(
-                            path.to_string_lossy().to_string(),
+                            path.clone(),
                             *obj,
                             pv.name.as_arc_str().to_string(),
                             wse,
@@ -852,7 +880,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 )
                 .map_err(|wse| {
                     ObjdefLoaderError::CouldNotOverrideProperty(
-                        path.to_string_lossy().to_string(),
+                        path.clone(),
                         obj,
                         prop_override.name.as_arc_str().to_string(),
                         wse,
@@ -878,33 +906,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
         // Parse constants if provided
         if let Some(constants) = &options.constants {
-            match constants {
-                Constants::Map(map) => {
-                    // Add constants from the provided map
-                    for (key, value) in map.iter() {
-                        let key_symbol = key.as_symbol().map_err(|_| {
-                            ObjdefLoaderError::ObjectDefParseError(
-                                source_name.clone(),
-                                Box::new(moor_compiler::ObjDefParseError::ConstantNotFound(
-                                    format!(
-                                        "Constants map key must be string or symbol, got: {key:?}"
-                                    ),
-                                )),
-                            )
-                        })?;
-                        context.add_constant(key_symbol, value.clone());
-                    }
-                }
-                Constants::FileContent(content) => {
-                    // Parse the constants file content
-                    let compile_opts = CompileOptions::default();
-                    compile_object_definitions(content, &compile_opts, &mut context).map_err(
-                        |e| {
-                            ObjdefLoaderError::ObjectDefParseError(source_name.clone(), Box::new(e))
-                        },
-                    )?;
-                }
-            }
+            Self::apply_constants(constants, &mut context, &source_name)?;
         }
 
         // Parse the object definition
@@ -971,7 +973,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
         // Store the definition for processing
         self.object_definitions
-            .insert(oid, (PathBuf::from(&source_name), compiled_def));
+            .insert(oid, (source_name.clone(), compiled_def));
 
         // Use the conflict-aware methods instead of inline logic
         self.apply_attributes(&options)?;
@@ -979,21 +981,8 @@ impl<'a> ObjectDefinitionLoader<'a> {
         self.set_properties(&options)?;
         self.define_verbs(&options)?;
 
-        let num_loaded_verbs = self
-            .object_definitions
-            .values()
-            .map(|(_, d)| d.verbs.len())
-            .sum::<usize>();
-        let num_loaded_property_definitions = self
-            .object_definitions
-            .values()
-            .map(|(_, d)| d.property_definitions.len())
-            .sum::<usize>();
-        let num_loaded_property_overrides = self
-            .object_definitions
-            .values()
-            .map(|(_, d)| d.property_overrides.len())
-            .sum::<usize>();
+        let (num_loaded_verbs, num_loaded_property_definitions, num_loaded_property_overrides) =
+            self.definition_counts();
 
         info!(
             "Loaded single object {} in {} ms",
@@ -1033,33 +1022,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
         // Parse constants if provided
         if let Some(constants) = &constants {
-            match constants {
-                Constants::Map(map) => {
-                    // Add constants from the provided map
-                    for (key, value) in map.iter() {
-                        let key_symbol = key.as_symbol().map_err(|_| {
-                            ObjdefLoaderError::ObjectDefParseError(
-                                source_name.clone(),
-                                Box::new(moor_compiler::ObjDefParseError::ConstantNotFound(
-                                    format!(
-                                        "Constants map key must be string or symbol, got: {key:?}"
-                                    ),
-                                )),
-                            )
-                        })?;
-                        context.add_constant(key_symbol, value.clone());
-                    }
-                }
-                Constants::FileContent(content) => {
-                    // Parse the constants file content
-                    let compile_opts = CompileOptions::default();
-                    compile_object_definitions(content, &compile_opts, &mut context).map_err(
-                        |e| {
-                            ObjdefLoaderError::ObjectDefParseError(source_name.clone(), Box::new(e))
-                        },
-                    )?;
-                }
-            }
+            Self::apply_constants(constants, &mut context, &source_name)?;
         }
 
         // Parse the object definition
@@ -1184,7 +1147,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
         // Store the definition for processing
         self.object_definitions
-            .insert(target_oid, (PathBuf::from(&source_name), compiled_def));
+            .insert(target_oid, (source_name.clone(), compiled_def));
 
         // Apply all attributes, properties, and verbs using existing conflict-aware methods
         // Force Clobber mode and validation for reload operations
@@ -1202,21 +1165,8 @@ impl<'a> ObjectDefinitionLoader<'a> {
         self.set_properties(&apply_options)?;
         self.define_verbs(&apply_options)?;
 
-        let num_loaded_verbs = self
-            .object_definitions
-            .values()
-            .map(|(_, d)| d.verbs.len())
-            .sum::<usize>();
-        let num_loaded_property_definitions = self
-            .object_definitions
-            .values()
-            .map(|(_, d)| d.property_definitions.len())
-            .sum::<usize>();
-        let num_loaded_property_overrides = self
-            .object_definitions
-            .values()
-            .map(|(_, d)| d.property_overrides.len())
-            .sum::<usize>();
+        let (num_loaded_verbs, num_loaded_property_definitions, num_loaded_property_overrides) =
+            self.definition_counts();
 
         info!(
             "Reloaded object {} in {} ms",

@@ -188,15 +188,11 @@ fn canon_name(oid: &Obj, index_names: &HashMap<Obj, String>) -> String {
 }
 
 fn propname(pname: Symbol) -> String {
-    if !pname.as_arc_str().is_empty()
-        && pname
-            .to_string()
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-    {
-        pname.as_arc_str().to_string()
+    let s = pname.as_arc_str();
+    if !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        s.to_string()
     } else {
-        let name = v_arc_str(pname.as_arc_str());
+        let name = v_arc_str(s);
         to_literal(&name)
     }
 }
@@ -612,43 +608,38 @@ fn dump_verb(
         v.argspec.iobj.to_string(),
     );
 
-    // If there's only a single name, and it doesn't contain any funky characters, we can
-    // output just it, without any escaping. Otherwise, use a standard string literal.
-    let names = if v.names.len() == 1
-        && v.names[0]
-            .to_string()
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-    {
-        v.names[0].as_arc_str().to_string()
-    } else {
-        let names = v
-            .names
-            .iter()
-            .map(|s| s.to_string())
-            .collect::<Vec<String>>()
-            .join(" ");
-        let names = v_string(names);
-        to_literal(&names)
-    };
-
-    // decompile the verb
-    let ProgramType::MooR(program) = &v.program;
-    let verb_name_for_error = v
+    // Build the space-joined verb name (used for error messages and multi-name output).
+    let joined_names: String = v
         .names
         .iter()
         .map(|s| s.to_string())
         .collect::<Vec<String>>()
         .join(" ");
+
+    // If there's only a single name, and it doesn't contain any funky characters, we can
+    // output just it, without any escaping. Otherwise, use a standard string literal.
+    let names = if v.names.len() == 1
+        && v.names[0]
+            .as_arc_str()
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        v.names[0].as_arc_str().to_string()
+    } else {
+        to_literal(&v_string(joined_names.clone()))
+    };
+
+    // decompile the verb
+    let ProgramType::MooR(program) = &v.program;
     let decompiled = program_to_tree(program).map_err(|e| ObjectDumpError::DecompileError {
         obj: *obj,
-        verb_name: verb_name_for_error.clone(),
+        verb_name: joined_names.clone(),
         reason: e.to_string(),
     })?;
     let unparsed =
         unparse(&decompiled, false, true).map_err(|e| ObjectDumpError::UnparseError {
             obj: *obj,
-            verb_name: verb_name_for_error.clone(),
+            verb_name: joined_names.clone(),
             reason: e.to_string(),
         })?;
 
