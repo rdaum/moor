@@ -680,7 +680,7 @@ impl<'a> Lowerer<'a> {
 
         let expr = self
             .rhs_expr_from_decl(stmt.syntax())?
-            .map(|expr| Box::new(expr));
+            .map(Box::new);
         Ok(Stmt::new(
             StmtNode::Expr(Expr::Decl { id, is_const, expr }),
             self.line_col(stmt.syntax().text_range()),
@@ -722,7 +722,7 @@ impl<'a> Lowerer<'a> {
 
         let expr = self
             .rhs_expr_from_decl(stmt.syntax())?
-            .map(|expr| Box::new(expr));
+            .map(Box::new);
         Ok(Stmt::new(
             StmtNode::Expr(Expr::Decl {
                 id,

@@ -489,32 +489,29 @@ impl<'a> LiteralParser<'a> {
                 continue;
             }
 
-            if self.peek_char() == Some('{') {
-                let list = self.parse_literal_list()?;
-                let Some(list) = list.as_list() else {
-                    return Err(self.parse_error("expected flyweight contents list"));
-                };
-                contents = list.clone();
-                self.skip_trivia();
-                break;
+            if self.peek_char() != Some('{') {
+                return Err(self.parse_error("expected flyweight slot or contents"));
             }
 
-            return Err(self.parse_error("expected flyweight slot or contents"));
+            let list = self.parse_literal_list()?;
+            let Some(list) = list.as_list() else {
+                return Err(self.parse_error("expected flyweight contents list"));
+            };
+            contents = list.clone();
+            self.skip_trivia();
+            break;
         }
 
         self.expect_char('>', "expected '>' to close flyweight literal")?;
         Ok(v_flyweight(delegate, &slots, contents))
     }
 
+    /// `lambda-params = '{' [ param { ',' param } ] '}'`
     fn parse_lambda_params(
         &mut self,
     ) -> Result<moor_var::program::opcode::ScatterArgs, ObjDefParseError> {
         use moor_var::program::{
-            labels::Label,
-            names::Name,
-            opcode::{ScatterArgs, ScatterLabel},
-        };
-
+        use moor_var::program::{labels::Label, opcode::ScatterArgs};
         self.expect_char('{', "expected '{' to start lambda params")?;
         self.skip_trivia();
         let mut labels = Vec::new();
@@ -527,23 +524,11 @@ impl<'a> LiteralParser<'a> {
 
         loop {
             let label = if self.eat_char('?') {
-                let _name = self.parse_ident()?;
-                let dummy = Name(0, 0, 0);
-                self.skip_trivia();
-                let default = if self.eat_char('=') {
-                    self.skip_trivia();
-                    let _ = self.consume_expression_slice(&[Stopper::Char(','), Stopper::Char('}')])?;
-                    Some(Label(0))
-                } else {
-                    None
-                };
-                ScatterLabel::Optional(dummy, default)
+                self.parse_optional_lambda_param()?
             } else if self.eat_char('@') {
-                let _name = self.parse_ident()?;
-                ScatterLabel::Rest(Name(0, 0, 0))
+                self.parse_rest_lambda_param()?
             } else {
-                let _name = self.parse_ident()?;
-                ScatterLabel::Required(Name(0, 0, 0))
+                self.parse_required_lambda_param()?
             };
             labels.push(label);
             self.skip_trivia();
@@ -561,6 +546,43 @@ impl<'a> LiteralParser<'a> {
         })
     }
 
+    fn parse_optional_lambda_param(
+        &mut self,
+    ) -> Result<moor_var::program::opcode::ScatterLabel, ObjDefParseError> {
+        let _name = self.parse_ident()?;
+        let dummy = moor_var::program::names::Name(0, 0, 0);
+        self.skip_trivia();
+        let default = if self.eat_char('=') {
+            self.skip_trivia();
+            let _ = self.consume_expression_slice(&[Stopper::Char(','), Stopper::Char('}')])?;
+            Some(moor_var::program::labels::Label(0))
+        } else {
+            None
+        };
+        Ok(moor_var::program::opcode::ScatterLabel::Optional(dummy, default))
+        Ok(moor_var::program::opcode::ScatterLabel::Optional(
+            dummy, default,
+        ))
+
+    fn parse_rest_lambda_param(
+        &mut self,
+    ) -> Result<moor_var::program::opcode::ScatterLabel, ObjDefParseError> {
+        let _name = self.parse_ident()?;
+        Ok(moor_var::program::opcode::ScatterLabel::Rest(
+            moor_var::program::names::Name(0, 0, 0),
+        ))
+    }
+
+    fn parse_required_lambda_param(
+        &mut self,
+    ) -> Result<moor_var::program::opcode::ScatterLabel, ObjDefParseError> {
+        let _name = self.parse_ident()?;
+        Ok(moor_var::program::opcode::ScatterLabel::Required(
+            moor_var::program::names::Name(0, 0, 0),
+        ))
+    }
+
+    /// `lambda-captured-env = '[' '{' name ':' literal { ',' name ':' literal } '}' { ',' ... } ']'`
     fn parse_lambda_captured_env(&mut self) -> Result<Vec<Vec<Var>>, ObjDefParseError> {
         let mut frames = Vec::new();
         self.skip_trivia();
@@ -610,6 +632,7 @@ impl<'a> LiteralParser<'a> {
         Ok(Some(Name(1, 0, 0)))
     }
 
+    /// `lambda-literal = lambda-params '=>' expr ['with captured ...]`
     fn parse_literal_lambda(&mut self) -> Result<Var, ObjDefParseError> {
         let params = self.parse_lambda_params()?;
         self.skip_trivia();
@@ -636,16 +659,18 @@ impl<'a> LiteralParser<'a> {
         let mut self_var = None;
 
         self.skip_trivia();
-        if self.eat_keyword("with") {
+        if !self.eat_keyword("with") {
+            return Ok(Var::mk_lambda(params, body_program, captured_env, self_var));
+        }
+
+        self.skip_trivia();
+        if self.eat_keyword("captured") {
+            captured_env = self.parse_lambda_captured_env()?;
             self.skip_trivia();
-            if self.eat_keyword("captured") {
-                captured_env = self.parse_lambda_captured_env()?;
-                self.skip_trivia();
-            }
-            if self.eat_keyword("self") {
-                self.skip_trivia();
-                self_var = self.parse_lambda_self_ref()?;
-            }
+        }
+        if self.eat_keyword("self") {
+            self.skip_trivia();
+            self_var = self.parse_lambda_self_ref()?;
         }
 
         Ok(Var::mk_lambda(params, body_program, captured_env, self_var))
@@ -1177,6 +1202,7 @@ impl<'a> LiteralParser<'a> {
         Ok(objects)
     }
 
+    /// `literal = string | object | symbol | map | list | flyweight | lambda | number | binary | boolean | include | constant`
     fn parse_literal(&mut self) -> Result<Var, ObjDefParseError> {
         self.skip_trivia();
         let Some(ch) = self.peek_char() else {
@@ -1205,48 +1231,13 @@ impl<'a> LiteralParser<'a> {
                 if self.remaining().starts_with("b\"") {
                     return self.parse_binary_value();
                 }
+
                 let start = self.pos;
                 let ident = self.parse_ident()?;
-                if ident.eq_ignore_ascii_case("true") {
-                    return Ok(v_bool(true));
+                if let Some(value) = self.parse_keyword_literal(ident, start)? {
+                    return Ok(value);
                 }
-                if ident.eq_ignore_ascii_case("false") {
-                    return Ok(v_bool(false));
-                }
-                if ident.eq_ignore_ascii_case("include") && self.eat_char('!') {
-                    self.skip_trivia();
-                    self.expect_char('(', "expected '(' after include!")?;
-                    self.skip_trivia();
-                    let rel_path = self.parse_string_value()?;
-                    self.skip_trivia();
-                    self.expect_char(')', "expected ')' after include! path")?;
-                    let resolved = resolve_include_path(self.context, &rel_path)?;
-                    let contents = std::fs::read_to_string(&resolved).map_err(|e| {
-                        ObjDefParseError::IncludeError(resolved.display().to_string(), e.to_string())
-                    })?;
-                    return Ok(v_str(&contents));
-                }
-                if ident.eq_ignore_ascii_case("include_bin") && self.eat_char('!') {
-                    self.skip_trivia();
-                    self.expect_char('(', "expected '(' after include_bin!")?;
-                    self.skip_trivia();
-                    let rel_path = self.parse_string_value()?;
-                    self.skip_trivia();
-                    self.expect_char(')', "expected ')' after include_bin! path")?;
-                    let resolved = resolve_include_path(self.context, &rel_path)?;
-                    let bytes = std::fs::read(&resolved).map_err(|e| {
-                        ObjDefParseError::IncludeError(resolved.display().to_string(), e.to_string())
-                    })?;
-                    return Ok(v_binary(bytes));
-                }
-                if self.source[start..self.pos].len() >= 2
-                    && self.source[start..self.pos][..2].eq_ignore_ascii_case("e_")
-                {
-                    let Some(error) = ErrorCode::parse_str(&self.source[start..self.pos]) else {
-                        return Err(self.parse_error("invalid error value"));
-                    };
-                    return Ok(v_err(error));
-                }
+
                 let sym = Symbol::mk(ident);
                 let Some(value) = self.context.constants().get(&sym) else {
                     return Err(ObjDefParseError::ConstantNotFound(sym.to_string()));
@@ -1254,5 +1245,61 @@ impl<'a> LiteralParser<'a> {
                 Ok(value.clone())
             }
         }
+    }
+
+    fn parse_keyword_literal(
+        &mut self,
+        ident: &str,
+        start: usize,
+    ) -> Result<Option<Var>, ObjDefParseError> {
+        if ident.eq_ignore_ascii_case("true") {
+            return Ok(Some(v_bool(true)));
+        }
+        if ident.eq_ignore_ascii_case("false") {
+            return Ok(Some(v_bool(false)));
+        }
+        if ident.eq_ignore_ascii_case("include") && self.eat_char('!') {
+            return self.parse_include_text();
+        }
+        if ident.eq_ignore_ascii_case("include_bin") && self.eat_char('!') {
+            return self.parse_include_binary();
+        }
+        if self.source[start..self.pos].len() >= 2
+            && self.source[start..self.pos][..2].eq_ignore_ascii_case("e_")
+        {
+            let Some(error) = ErrorCode::parse_str(&self.source[start..self.pos]) else {
+                return Err(self.parse_error("invalid error value"));
+            };
+            return Ok(Some(v_err(error)));
+        }
+        Ok(None)
+    }
+
+    fn parse_include_text(&mut self) -> Result<Option<Var>, ObjDefParseError> {
+        self.skip_trivia();
+        self.expect_char('(', "expected '(' after include!")?;
+        self.skip_trivia();
+        let rel_path = self.parse_string_value()?;
+        self.skip_trivia();
+        self.expect_char(')', "expected ')' after include! path")?;
+        let resolved = resolve_include_path(self.context, &rel_path)?;
+        let contents = std::fs::read_to_string(&resolved).map_err(|e| {
+            ObjDefParseError::IncludeError(resolved.display().to_string(), e.to_string())
+        })?;
+        Ok(Some(v_str(&contents)))
+    }
+
+    fn parse_include_binary(&mut self) -> Result<Option<Var>, ObjDefParseError> {
+        self.skip_trivia();
+        self.expect_char('(', "expected '(' after include_bin!")?;
+        self.skip_trivia();
+        let rel_path = self.parse_string_value()?;
+        self.skip_trivia();
+        self.expect_char(')', "expected ')' after include_bin! path")?;
+        let resolved = resolve_include_path(self.context, &rel_path)?;
+        let bytes = std::fs::read(&resolved).map_err(|e| {
+            ObjDefParseError::IncludeError(resolved.display().to_string(), e.to_string())
+        })?;
+        Ok(Some(v_binary(bytes)))
     }
 }

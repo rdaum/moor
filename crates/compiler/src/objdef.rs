@@ -213,13 +213,15 @@ pub(crate) fn offset_compile_error(error: CompileError, line_offset: usize) -> C
         }
     }
 }
-/// Parse a single MOO literal value from a string
-/// Example: "123", "\"hello\"", "{1, 2, 3}", "[1 -> \"a\"]"
+/// Parse a single MOO literal value from a string.
+///
+/// Examples: `"123"`, `"\"hello\""`, `"{1, 2, 3}"`, `"[1 -> \"a\"]"`.
 pub fn parse_literal_value(literal_str: &str) -> Result<Var, ObjDefParseError> {
     let mut context = ObjFileContext::new();
     objdef_literal::parse_literal_value(literal_str, &mut context)
 }
 
+/// Compile an object-definition file into object definitions.
 pub fn compile_object_definitions(
     objdef: &str,
     options: &CompileOptions,
@@ -238,6 +240,15 @@ mod tests {
         E_INVIND, List, NOTHING, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_obj, v_str,
     };
 
+    fn compile_single_object(spec: &str) -> ObjectDefinition {
+        let mut context = ObjFileContext::new();
+        compile_object_definitions(spec, &CompileOptions::default(), &mut context)
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap()
+    }
+
     /// Just a simple objdef no verbs or props
     #[test]
     fn simple_object_def() {
@@ -254,9 +265,7 @@ mod tests {
         endobject
         "#;
 
-        let mut context = ObjFileContext::new();
-        let odef =
-            &compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap()[0];
+        let odef = compile_single_object(spec);
         assert_eq!(odef.oid, Obj::mk_id(1));
         assert_eq!(odef.name, "Test Object");
         assert_eq!(odef.parent, Obj::mk_id(1));
@@ -291,9 +300,7 @@ mod tests {
                         player:tell("here is something");
                     endverb
                 endobject"#;
-        let mut context = ObjFileContext::new();
-        let odef =
-            &compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap()[0];
+        let odef = compile_single_object(spec);
 
         assert_eq!(odef.verbs.len(), 2);
 
@@ -338,9 +345,7 @@ mod tests {
                     property other (owner: #2, flags: "");
                 endobject"#;
 
-        let mut context = ObjFileContext::new();
-        let odef =
-            &compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap()[0];
+        let odef = compile_single_object(spec);
 
         assert_eq!(odef.property_definitions.len(), 2);
         assert_eq!(odef.property_definitions[0].name, Symbol::mk("description"));
@@ -379,9 +384,7 @@ mod tests {
                     override description = "This is a test object";
                     override other (owner: #2, flags: "rc") = "test";
                 endobject"#;
-        let mut context = ObjFileContext::new();
-        let odef =
-            &compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap()[0];
+        let odef = compile_single_object(spec);
 
         assert_eq!(odef.property_overrides.len(), 2);
         assert_eq!(odef.property_overrides[0].name, Symbol::mk("description"));
@@ -441,8 +444,12 @@ mod tests {
 
 
                 endobject"#;
-        let mut context = ObjFileContext::new();
-        compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
+        let _ = compile_object_definitions(
+            spec,
+            &CompileOptions::default(),
+            &mut ObjFileContext::new(),
+        )
+        .unwrap();
     }
 
     #[test]
@@ -470,9 +477,12 @@ mod tests {
                     override nested_map = [ 1 -> [ 2 -> 3, 4 -> 5 ], 6 -> 7 ];
                     override flyweight = <#1, .a = 1, .b = 2, { 1,2, 3}>;
                 endobject"#;
-        let mut context = ObjFileContext::new();
-        let odef =
-            &compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
+        let odef = compile_object_definitions(
+            spec,
+            &CompileOptions::default(),
+            &mut ObjFileContext::new(),
+        )
+        .unwrap();
 
         assert_eq!(
             odef[0].property_overrides[0]
@@ -592,8 +602,12 @@ mod tests {
                         player:tell("here is something");
                     endverb
                 endobject"#;
-        let mut context = ObjFileContext::new();
-        compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
+        let _ = compile_object_definitions(
+            spec,
+            &CompileOptions::default(),
+            &mut ObjFileContext::new(),
+        )
+        .unwrap();
     }
 
     #[test]
@@ -621,8 +635,12 @@ mod tests {
                     endverb
                 endobject"#;
 
-        let mut context = ObjFileContext::new();
-        compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
+        let _ = compile_object_definitions(
+            spec,
+            &CompileOptions::default(),
+            &mut ObjFileContext::new(),
+        )
+        .unwrap();
     }
 
     /// Regression on quoted string constants for property names
