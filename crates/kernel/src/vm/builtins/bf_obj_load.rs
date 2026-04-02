@@ -92,14 +92,13 @@ fn bf_dump_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
     task_perms.check_wizard().map_err(world_state_bf_err)?;
 
-    // Use the task scheduler client to request the dump from the scheduler
+    // Use the task scheduler client to request the dump from the scheduler.
+    // The scheduler already returns string Vars, so there is no reason to bounce
+    // through an intermediate Vec<String> here.
     let lines = current_task_scheduler_client()
         .dump_object(obj, use_constants)
         .map_err(|e| BfErr::ErrValue(E_INVARG.msg(format!("Failed to dump object: {e}"))))?;
-
-    // Convert to MOO list of strings
-    let string_vars: Vec<_> = lines.iter().map(|line| v_str(line)).collect();
-    Ok(Ret(v_list(&string_vars)))
+    Ok(Ret(v_list(&lines)))
 }
 
 /// Usage: `map parse_objdef_constants(str|list lines)`

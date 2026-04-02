@@ -12,16 +12,12 @@
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use crate::{import_export_hierarchy, import_export_id};
-use moor_common::model::{
-    HasUuid, Named, ObjFlag, PrepSpec, PropFlag, ValSet, loader::SnapshotInterface,
-    prop_flags_string, verb_perms_string,
-};
-use moor_compiler::{
-    ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition, program_to_tree, to_literal,
-    to_literal_objsub, unparse,
-};
-use moor_var::{NOTHING, Obj, Symbol, program::ProgramType, v_arc_str, v_str, v_string};
-use std::{collections::HashMap, io::Write, path::Path};
+use moor_common::model::{HasUuid, Named, ObjFlag, PropFlag, ValSet, loader::SnapshotInterface};
+use moor_compiler::{ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition};
+use moor_var::{NOTHING, Obj, Var};
+use std::collections::HashMap;
+use std::io::Write;
+use std::path::Path;
 use thiserror::Error;
 use tracing::info;
 
@@ -166,35 +162,6 @@ pub fn collect_object(
     od.property_overrides
         .sort_by(|a, b| a.name.as_arc_str().cmp(&b.name.as_arc_str()));
     Ok((num_verbdefs, num_propdefs, num_propoverrides, od))
-}
-
-// Return the object number and if this is $nameable thing, put a // $comment
-// For anonymous objects, show the full internal ID in objdef context
-fn canon_name(oid: &Obj, index_names: &HashMap<Obj, String>) -> String {
-    if let Some(name) = index_names.get(oid) {
-        return name.clone();
-    };
-
-    // For anonymous objects, show the internal ID in objdef format
-    if oid.is_anonymous()
-        && let Some(anon_id) = oid.anonymous_objid()
-    {
-        let (autoincrement, rng, epoch_ms) = anon_id.components();
-        let first_group = ((autoincrement as u64) << 6) | (rng as u64);
-        return format!("#anon_{first_group:06X}-{epoch_ms:010X}");
-    }
-
-    format!("{oid}")
-}
-
-fn propname(pname: Symbol) -> String {
-    let s = pname.as_arc_str();
-    if !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-        s.to_string()
-    } else {
-        let name = v_arc_str(s);
-        to_literal(&name)
-    }
 }
 
 /// Extract the object->constant name mapping from object definitions.
@@ -345,62 +312,6 @@ fn extract_hierarchy_path(od: &ObjectDefinition) -> Vec<String> {
     Vec::new()
 }
 
-fn generate_constants_file(
-    index_names: &HashMap<Obj, String>,
-    hierarchies: &HashMap<Obj, Vec<String>>,
-    directory_path: &Path,
-) -> Result<(), ObjectDumpError> {
-    // Group constants by their hierarchy path
-    let mut grouped: HashMap<String, Vec<(Obj, String)>> = HashMap::new();
-
-    for (obj, constant_name) in index_names.iter() {
-        let hierarchy_path = hierarchies
-            .get(obj)
-            .map(|h| h.join("/"))
-            .unwrap_or_default();
-        grouped
-            .entry(hierarchy_path)
-            .or_default()
-            .push((*obj, constant_name.clone()));
-    }
-
-    // Sort hierarchy groups
-    let mut sorted_groups: Vec<_> = grouped.into_iter().collect();
-    sorted_groups.sort_by(|a, b| a.0.cmp(&b.0));
-
-    let mut lines = Vec::new();
-
-    for (hierarchy_path, mut objects) in sorted_groups {
-        // Sort objects within each group by object id
-        objects.sort_by(|a, b| a.0.as_u64().cmp(&b.0.as_u64()));
-
-        // Add comment header for this group (skip for root level)
-        if !hierarchy_path.is_empty() {
-            if !lines.is_empty() {
-                lines.push(String::new()); // Empty line before group
-            }
-            lines.push(format!("// {}", hierarchy_path));
-        }
-
-        // Add constants for this group
-        for (obj, constant_name) in objects {
-            let obj_ref = canon_name(&obj, &HashMap::new());
-            lines.push(format!(
-                "define {} = {};",
-                constant_name.to_ascii_uppercase(),
-                obj_ref
-            ));
-        }
-    }
-
-    let constants = lines.join("\n");
-    let constants_file = directory_path.join("constants.moo");
-    let mut constants_file = std::fs::File::create(constants_file)?;
-    constants_file.write_all(constants.as_bytes())?;
-    constants_file.write_all(b"\n")?;
-    Ok(())
-}
-
 pub fn dump_object_definitions(
     object_defs: &[ObjectDefinition],
     directory_path: &Path,
@@ -426,7 +337,7 @@ pub fn dump_object_definitions(
     std::fs::create_dir_all(directory_path)?;
 
     // Constants index, for friendlier names (only for regular objects)
-    generate_constants_file(&index_names, &hierarchies, directory_path)?;
+    crate::write::generate_constants_file(&index_names, &hierarchies, directory_path)?;
 
     // Dump regular objects - one file per object in their respective subdirectories
     for o in regular_objects {
@@ -460,10 +371,7 @@ pub fn dump_object_definitions(
         let file_path = target_dir.join(file_name);
         let mut file = std::fs::File::create(file_path)?;
 
-        let lines = dump_object(&index_names, o)?;
-        let objstr = lines.join("\n");
-        file.write_all(objstr.as_bytes())?;
-        file.write_all(b"\n")?;
+        crate::write::write_dump_object(&index_names, o, &mut file)?;
     }
 
     // Dump anonymous objects - group by hierarchy
@@ -491,18 +399,14 @@ pub fn dump_object_definitions(
             let anon_file_path = target_dir.join("_anonymous_objects.moo");
             let mut anon_file = std::fs::File::create(anon_file_path)?;
 
-            let mut all_anon_lines = Vec::new();
-            for (i, o) in objects.iter().enumerate() {
-                if i > 0 {
-                    all_anon_lines.push(String::new()); // Empty line between objects
+            let mut first = true;
+            for o in objects {
+                if !first {
+                    writeln!(anon_file)?;
                 }
-                let lines = dump_object(&index_names, o)?;
-                all_anon_lines.extend(lines);
+                crate::write::write_dump_object(&index_names, o, &mut anon_file)?;
+                first = false;
             }
-
-            let anon_objstr = all_anon_lines.join("\n");
-            anon_file.write_all(anon_objstr.as_bytes())?;
-            anon_file.write_all(b"\n")?;
         }
     }
 
@@ -516,181 +420,8 @@ pub fn dump_object_definitions(
 pub fn dump_object(
     index_names: &HashMap<Obj, String>,
     o: &ObjectDefinition,
-) -> Result<Vec<String>, ObjectDumpError> {
-    let mut lines = Vec::new();
-    let indent = "  ";
-    lines.push(format!("object {}", canon_name(&o.oid, index_names)));
-    let header_lines = dump_object_header(index_names, o, indent);
-    lines.extend_from_slice(&header_lines);
-    if !o.property_definitions.is_empty() {
-        lines.push(String::new());
-    }
-    for pd in &o.property_definitions {
-        let base = dump_property_definition(index_names, indent, pd);
-        lines.push(base);
-    }
-    if !o.property_overrides.is_empty() {
-        lines.push(String::new());
-    }
-    for ps in &o.property_overrides {
-        let base = dump_property_override(index_names, indent, ps);
-        lines.push(base);
-    }
-
-    for v in &o.verbs {
-        lines.push(String::new());
-        let verb_lines = dump_verb(index_names, indent, v, &o.oid)?;
-        lines.extend_from_slice(&verb_lines);
-    }
-    lines.push("endobject".to_string());
-    Ok(lines)
-}
-
-fn dump_object_header(
-    index_names: &HashMap<Obj, String>,
-    o: &ObjectDefinition,
-    indent: &str,
-) -> Vec<String> {
-    let mut header_lines = Vec::with_capacity(8);
-    let parent = canon_name(&o.parent, index_names);
-    let location = canon_name(&o.location, index_names);
-    let owner = canon_name(&o.owner, index_names);
-    let name = v_str(&o.name);
-
-    header_lines.push(format!("{indent}name: {}", to_literal(&name)));
-    if o.parent != NOTHING {
-        header_lines.push(format!("{indent}parent: {parent}"));
-    }
-    if o.location != NOTHING {
-        header_lines.push(format!("{indent}location: {location}"));
-    }
-    header_lines.push(format!("{indent}owner: {owner}"));
-    if o.flags.contains(ObjFlag::User) {
-        header_lines.push(format!("{indent}player: true"));
-    }
-    if o.flags.contains(ObjFlag::Wizard) {
-        header_lines.push(format!("{indent}wizard: true"));
-    }
-    if o.flags.contains(ObjFlag::Programmer) {
-        header_lines.push(format!("{indent}programmer: true"));
-    }
-    if o.flags.contains(ObjFlag::Fertile) {
-        header_lines.push(format!("{indent}fertile: true"));
-    }
-    if o.flags.contains(ObjFlag::Read) {
-        header_lines.push(format!("{indent}readable: true"));
-    }
-    if o.flags.contains(ObjFlag::Write) {
-        header_lines.push(format!("{indent}writeable: true"));
-    }
-    header_lines
-}
-
-fn dump_verb(
-    index_names: &HashMap<Obj, String>,
-    indent: &str,
-    v: &ObjVerbDef,
-    obj: &Obj,
-) -> Result<Vec<String>, ObjectDumpError> {
-    let mut verb_lines = vec![];
-    let owner = canon_name(&v.owner, index_names);
-    let vflags = verb_perms_string(v.flags);
-
-    let prepspec = match v.argspec.prep {
-        PrepSpec::Any => "any".to_string(),
-        PrepSpec::None => "none".to_string(),
-        PrepSpec::Other(p) => p.to_string_single().to_string(),
-    };
-    let verbargsspec = format!(
-        "{} {} {}",
-        v.argspec.dobj.to_string(),
-        prepspec,
-        v.argspec.iobj.to_string(),
-    );
-
-    // Build the space-joined verb name (used for error messages and multi-name output).
-    let joined_names: String = v
-        .names
-        .iter()
-        .map(|s| s.to_string())
-        .collect::<Vec<String>>()
-        .join(" ");
-
-    // If there's only a single name, and it doesn't contain any funky characters, we can
-    // output just it, without any escaping. Otherwise, use a standard string literal.
-    let names = if v.names.len() == 1
-        && v.names[0]
-            .as_arc_str()
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-    {
-        v.names[0].as_arc_str().to_string()
-    } else {
-        to_literal(&v_string(joined_names.clone()))
-    };
-
-    // decompile the verb
-    let ProgramType::MooR(program) = &v.program;
-    let decompiled = program_to_tree(program).map_err(|e| ObjectDumpError::DecompileError {
-        obj: *obj,
-        verb_name: joined_names.clone(),
-        reason: e.to_string(),
-    })?;
-    let unparsed =
-        unparse(&decompiled, false, true).map_err(|e| ObjectDumpError::UnparseError {
-            obj: *obj,
-            verb_name: joined_names.clone(),
-            reason: e.to_string(),
-        })?;
-
-    verb_lines.push(format!(
-        "{indent}verb {names} ({verbargsspec}) owner: {owner} flags: \"{vflags}\""
-    ));
-    for line in unparsed {
-        verb_lines.push(format!("{indent}{indent}{line}"));
-    }
-    verb_lines.push(format!("{indent}endverb"));
-    Ok(verb_lines)
-}
-
-fn dump_property_definition(
-    index_names: &HashMap<Obj, String>,
-    indent: &str,
-    pd: &ObjPropDef,
-) -> String {
-    let owner = canon_name(&pd.perms.owner(), index_names);
-    let flags = prop_flags_string(pd.perms.flags());
-
-    // If the name contains funny business, use string literal form.
-    let name = propname(pd.name);
-
-    let mut base = format!("{indent}property {name} (owner: {owner}, flags: \"{flags}\")");
-    if let Some(value) = &pd.value {
-        let value = to_literal_objsub(value, index_names, 2);
-        base.push_str(&format!(" = {value}"));
-    }
-    base.push(';');
-    base
-}
-
-fn dump_property_override(
-    index_names: &HashMap<Obj, String>,
-    indent: &str,
-    ps: &ObjPropOverride,
-) -> String {
-    let name = propname(ps.name);
-    let mut base = format!("{indent}override {name}");
-    if let Some(perms) = &ps.perms_update {
-        let flags = prop_flags_string(perms.flags());
-        let owner = canon_name(&perms.owner(), index_names);
-        base.push_str(&format!(" (owner: {owner}, flags: \"{flags}\")"));
-    }
-    if let Some(value) = &ps.value {
-        let value = to_literal_objsub(value, index_names, 2);
-        base.push_str(&format!(" = {value}"));
-    }
-    base.push(';');
-    base
+) -> Result<Vec<Var>, ObjectDumpError> {
+    Ok(crate::write::collect_dump_object_lines(index_names, o)?.lines)
 }
 
 #[cfg(test)]

@@ -237,7 +237,7 @@ impl TaskSchedulerClient {
             .handle_switch_player_from_task(self.task_id, new_player)
     }
 
-    pub fn dump_object(&self, obj: Obj, use_constants: bool) -> Result<Vec<String>, Error> {
+    pub fn dump_object(&self, obj: Obj, use_constants: bool) -> Result<Vec<Var>, Error> {
         self.scheduler
             .handle_dump_object_from_task(obj, use_constants)
     }

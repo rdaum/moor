@@ -1109,7 +1109,6 @@ mod manual_tests {
             "simple begin/end should parse: {:?}",
             result2
         );
-
     }
 
     #[test]

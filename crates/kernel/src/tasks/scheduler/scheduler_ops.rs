@@ -25,12 +25,12 @@ impl Scheduler {
     /// * `use_constants` - If true, builds index names from all object definitions
     ///
     /// # Returns
-    /// A vector of strings representing the object's definition, or an error
+    /// A vector of string Vars representing the object's definition, or an error
     pub(crate) fn handle_dump_object(
         &self,
         obj: Obj,
         use_constants: bool,
-    ) -> Result<Vec<String>, Error> {
+    ) -> Result<Vec<Var>, Error> {
         // Create a snapshot to avoid blocking ongoing operations
         let snapshot = self.database.create_snapshot().map_err(|e| {
             E_INVARG.with_msg(|| format!("Failed to create database snapshot: {e:?}"))

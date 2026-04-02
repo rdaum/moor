@@ -510,8 +510,8 @@ impl<'a> LiteralParser<'a> {
     fn parse_lambda_params(
         &mut self,
     ) -> Result<moor_var::program::opcode::ScatterArgs, ObjDefParseError> {
-        use moor_var::program::{
         use moor_var::program::{labels::Label, opcode::ScatterArgs};
+
         self.expect_char('{', "expected '{' to start lambda params")?;
         self.skip_trivia();
         let mut labels = Vec::new();
@@ -559,10 +559,10 @@ impl<'a> LiteralParser<'a> {
         } else {
             None
         };
-        Ok(moor_var::program::opcode::ScatterLabel::Optional(dummy, default))
         Ok(moor_var::program::opcode::ScatterLabel::Optional(
             dummy, default,
         ))
+    }
 
     fn parse_rest_lambda_param(
         &mut self,

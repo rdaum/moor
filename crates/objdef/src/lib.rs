@@ -15,6 +15,7 @@
 
 mod dump;
 mod load;
+mod write;
 
 use moor_var::Symbol;
 use std::sync::OnceLock;

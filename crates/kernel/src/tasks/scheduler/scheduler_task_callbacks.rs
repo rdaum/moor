@@ -830,7 +830,7 @@ impl Scheduler {
         &self,
         obj: Obj,
         use_constants: bool,
-    ) -> Result<Vec<String>, Error> {
+    ) -> Result<Vec<Var>, Error> {
         self.handle_dump_object(obj, use_constants)
     }
 
