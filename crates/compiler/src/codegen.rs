@@ -14,7 +14,6 @@
 //! Takes the AST and turns it into a list of opcodes.
 
 use tracing::warn;
-use triomphe::Arc;
 
 use moor_var::{ErrorCode, Symbol, Var, Variant, v_arc_str, v_int, v_sym};
 
@@ -27,6 +26,10 @@ use crate::{
         Arg, BinaryOp, CallTarget, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
         UnaryOp,
     },
+    backend::control::{ControlState, LoopFrame},
+    backend::emitter::EmitterState,
+    backend::operands::OperandState,
+    backend::stack::StackState,
     compile_options::CompileOptions,
     frontend::lower::parse_program_frontend,
     parse_tree::Parse,
@@ -36,49 +39,26 @@ use moor_common::{
     model::{CompileContext, CompileError, CompileError::InvalidAssignmentTarget},
 };
 use moor_var::program::{
-    labels::{JumpLabel, Label, Offset},
+    labels::{Label, Offset},
     names::{Name, Names, Variable},
     opcode::{
         ComprehensionType, ForRangeOperand, ForSequenceOperand, ListComprehend, Op, Op::Jump,
-        RangeComprehend, ScatterArgs, ScatterLabel,
+        RangeComprehend, ScatterLabel,
     },
-    program::{PrgInner, Program},
+    program::Program,
 };
-
-pub struct Loop {
-    loop_name: Option<Name>,
-    top_label: Label,
-    top_stack: Offset,
-    bottom_label: Label,
-    bottom_stack: Offset,
-}
 
 // Compiler code generation state.
 pub struct CodegenState {
-    pub(crate) ops: Vec<Op>,
-    pub(crate) jumps: Vec<JumpLabel>,
+    pub(crate) emitter: EmitterState,
     pub(crate) var_names: Names,
     pub(crate) name_for_variable: Vec<Option<Name>>,
-    pub(crate) literals: Vec<Var>,
-    pub(crate) loops: Vec<Loop>,
-    pub(crate) saved_stack: Option<Offset>,
-    pub(crate) scatter_tables: Vec<ScatterArgs>,
-    pub(crate) for_sequence_operands: Vec<ForSequenceOperand>,
-    pub(crate) for_range_operands: Vec<ForRangeOperand>,
-    pub(crate) range_comprehensions: Vec<RangeComprehend>,
-    pub(crate) list_comprehensions: Vec<ListComprehend>,
-    pub(crate) error_operands: Vec<ErrorCode>,
-    pub(crate) lambda_programs: Vec<Program>,
-    pub(crate) cur_stack: usize,
-    pub(crate) max_stack: usize,
-    pub(crate) fork_vectors: Vec<(usize, Vec<Op>)>,
+    pub(crate) operands: OperandState,
+    pub(crate) control: ControlState,
+    pub(crate) stack: StackState,
     pub(crate) line_number_spans: Vec<(usize, usize)>,
-    pub(crate) fork_line_number_spans: Vec<Vec<(usize, usize)>>,
     pub(crate) current_line_col: (usize, usize),
     pub(crate) compile_options: CompileOptions,
-    /// Current scope depth for lambda capture analysis.
-    /// Tracks nesting level when entering lambda bodies.
-    pub(crate) lambda_scope_depth: u8,
 }
 
 impl CodegenState {
@@ -94,114 +74,61 @@ impl CodegenState {
             name_for_variable[decl.identifier.id as usize] = Some(*name);
         }
         Self {
-            ops: vec![],
-            jumps: vec![],
+            emitter: EmitterState::new(),
             var_names,
             name_for_variable,
-            literals: vec![],
-            loops: vec![],
-            saved_stack: None,
-            cur_stack: 0,
-            max_stack: 0,
-            fork_vectors: vec![],
-            scatter_tables: vec![],
-            for_sequence_operands: vec![],
-            for_range_operands: vec![],
-            range_comprehensions: vec![],
+            operands: OperandState::new(),
+            control: ControlState::new(),
+            stack: StackState::new(),
             line_number_spans: vec![],
-            fork_line_number_spans: vec![],
             current_line_col: (0, 0),
             compile_options,
-            list_comprehensions: vec![],
-            error_operands: vec![],
-            lambda_programs: vec![],
-            lambda_scope_depth: 0,
         }
     }
 
     // Create an anonymous jump label at the current position and return its unique ID.
     fn make_jump_label(&mut self, name: Option<Name>) -> Label {
-        let id = Label(self.jumps.len() as u16);
-        let position = self.ops.len().into();
-        self.jumps.push(JumpLabel { id, name, position });
-        id
+        self.emitter.new_jump_label(name)
     }
 
     // Adjust the position of a jump label to the current position.
     fn commit_jump_label(&mut self, id: Label) {
-        let position = self.ops.len();
-        let jump = &mut self
-            .jumps
-            .get_mut(id.0 as usize)
-            .expect("Invalid jump fixup");
-        let npos = position;
-        jump.position = npos.into();
+        self.emitter.bind_jump_label(id);
     }
 
     fn add_literal(&mut self, v: &Var) -> Label {
-        // This comparison needs to be done with case sensitivity for strings.
-        let lv_pos = self.literals.iter().position(|lv| lv.eq_case_sensitive(v));
-        let pos = lv_pos.unwrap_or_else(|| {
-            let idx = self.literals.len();
-            self.literals.push(v.clone());
-            idx
-        });
-        Label(pos as u16)
+        self.operands.add_literal(v)
     }
 
     fn add_error_code_operand(&mut self, code: ErrorCode) -> Offset {
-        let err_pos = self.error_operands.len();
-        self.error_operands.push(code);
-        Offset(err_pos as u16)
+        self.operands.add_error_code_operand(code)
     }
     fn add_scatter_table(&mut self, labels: Vec<ScatterLabel>, done: Label) -> Offset {
-        let st_pos = self.scatter_tables.len();
-        self.scatter_tables.push(ScatterArgs { labels, done });
-        Offset(st_pos as u16)
+        self.operands.add_scatter_table(labels, done)
     }
 
-    fn add_lambda_program(&mut self, mut program: Program, base_line_offset: usize) -> Offset {
-        // Adjust lambda's line number spans to be relative to parent source
-        let adjusted_spans: Vec<(usize, usize)> = program
-            .line_number_spans()
-            .iter()
-            .map(|(offset, line_num)| (*offset, line_num + base_line_offset))
-            .collect();
-
-        // Update the lambda program's line number spans
-        Arc::make_mut(&mut program.0).line_number_spans = adjusted_spans;
-
-        let lp_pos = self.lambda_programs.len();
-        self.lambda_programs.push(program);
-        Offset(lp_pos as u16)
+    fn add_lambda_program(&mut self, program: Program, base_line_offset: usize) -> Offset {
+        self.operands.add_lambda_program(program, base_line_offset)
     }
 
     fn add_range_comprehension(&mut self, range_comprehension: RangeComprehend) -> Offset {
-        let rc_pos = self.range_comprehensions.len();
-        self.range_comprehensions.push(range_comprehension);
-        Offset(rc_pos as u16)
+        self.operands.add_range_comprehension(range_comprehension)
     }
 
     fn add_list_comprehension(&mut self, list_comprehension: ListComprehend) -> Offset {
-        let lc_pos = self.list_comprehensions.len();
-        self.list_comprehensions.push(list_comprehension);
-        Offset(lc_pos as u16)
+        self.operands.add_list_comprehension(list_comprehension)
     }
 
     fn add_for_sequence_operand(&mut self, operand: ForSequenceOperand) -> Offset {
-        let fs_pos = self.for_sequence_operands.len();
-        self.for_sequence_operands.push(operand);
-        Offset(fs_pos as u16)
+        self.operands.add_for_sequence_operand(operand)
     }
 
     fn add_for_range_operand(&mut self, operand: ForRangeOperand) -> Offset {
-        let fr_pos = self.for_range_operands.len();
-        self.for_range_operands.push(operand);
-        Offset(fr_pos as u16)
+        self.operands.add_for_range_operand(operand)
     }
 
     fn emit(&mut self, op: Op) {
-        self.ops.push(op);
+        self.emitter.emit(op);
     }
 
     fn is_assignable_expr(expr: &Expr) -> bool {
@@ -211,11 +138,9 @@ impl CodegenState {
         )
     }
 
-    fn find_loop(&self, loop_label: &Name) -> Result<&Loop, CompileError> {
-        for l in self.loops.iter().rev() {
-            if l.loop_name.as_ref() == Some(loop_label) {
-                return Ok(l);
-            }
+    fn find_loop(&self, loop_label: &Name) -> Result<&LoopFrame, CompileError> {
+        if let Some(loop_frame) = self.control.find_loop(loop_label) {
+            return Ok(loop_frame);
         }
         // If we don't find a loop with the given name, that's an error.as
         let loop_name = self.var_names.ident_for_name(loop_label).unwrap();
@@ -226,34 +151,23 @@ impl CodegenState {
     }
 
     fn push_stack(&mut self, n: usize) {
-        self.cur_stack += n;
-        if self.cur_stack > self.max_stack {
-            self.max_stack = self.cur_stack;
-        }
+        self.stack.push(n);
     }
 
     fn pop_stack(&mut self, n: usize) {
-        if self.cur_stack < n {
-            panic!(
-                "Stack underflow: trying to pop {} items but stack only has {} items",
-                n, self.cur_stack
-            );
-        }
-        self.cur_stack -= n;
+        self.stack.pop(n);
     }
 
     fn saved_stack_top(&self) -> Option<Offset> {
-        self.saved_stack
+        self.stack.saved_top()
     }
 
     fn save_stack_top(&mut self) -> Option<Offset> {
-        let old = self.saved_stack;
-        self.saved_stack = Some((self.cur_stack - 1).into());
-        old
+        self.stack.save_top()
     }
 
     fn restore_stack_top(&mut self, old: Option<Offset>) {
-        self.saved_stack = old
+        self.stack.restore_saved_top(old)
     }
 
     fn add_fork_vector(
@@ -262,10 +176,7 @@ impl CodegenState {
         opcodes: Vec<Op>,
         line_spans: Vec<(usize, usize)>,
     ) -> Offset {
-        let fv = self.fork_vectors.len();
-        self.fork_vectors.push((offset, opcodes));
-        self.fork_line_number_spans.push(line_spans);
-        Offset(fv as u16)
+        self.operands.add_fork_vector(offset, opcodes, line_spans)
     }
 
     fn lvalue_stack_footprint(expr: &Expr, indexed_above: bool) -> usize {
@@ -358,7 +269,7 @@ impl CodegenState {
                             prop_short_circuit_blocks.push((
                                 jump_if_object,
                                 cleanup_slots,
-                                self.cur_stack,
+                                self.stack.depth(),
                             ));
                         }
                         e = location;
@@ -383,10 +294,10 @@ impl CodegenState {
         if !prop_short_circuit_blocks.is_empty() {
             let done_label = self.make_jump_label(None);
             self.emit(Op::Jump { label: done_label });
-            let normal_path_stack = self.cur_stack;
+            let normal_path_stack = self.stack.depth();
             for (label, cleanup_slots, entry_stack) in prop_short_circuit_blocks {
                 self.commit_jump_label(label);
-                self.cur_stack = entry_stack;
+                self.stack.set_depth(entry_stack);
                 self.emit(Op::PutTemp);
                 for _ in 0..=cleanup_slots {
                     self.emit(Op::Pop);
@@ -395,7 +306,7 @@ impl CodegenState {
                 self.emit(Op::PushTemp);
                 self.push_stack(1);
                 self.emit(Op::Jump { label: done_label });
-                self.cur_stack = normal_path_stack;
+                self.stack.set_depth(normal_path_stack);
             }
             self.commit_jump_label(done_label);
         }
@@ -913,11 +824,11 @@ impl CodegenState {
                         program_offset,
                         self_var: _,
                         num_captured,
-                    }) = self.ops.last_mut()
+                    }) = self.emitter.last_op_mut()
                     {
                         *self
-                            .ops
-                            .last_mut()
+                            .emitter
+                            .last_op_mut()
                             .expect("expected last opcode to be MakeLambda") = Op::MakeLambda {
                             scatter_offset: *scatter_offset,
                             program_offset: *program_offset,
@@ -965,7 +876,8 @@ impl CodegenState {
         //   where the user is looking at their own not-decompiled copy of the source.
         let line_number = stmt.tree_line_no;
         self.current_line_col = stmt.line_col;
-        self.line_number_spans.push((self.ops.len(), line_number));
+        self.line_number_spans
+            .push((self.emitter.pc(), line_number));
         match &stmt.node {
             StmtNode::Cond { arms, otherwise } => {
                 let end_label = self.make_jump_label(None);
@@ -1045,12 +957,12 @@ impl CodegenState {
                 self.emit(Op::IterateForSequence);
 
                 // Track loop for break/continue
-                self.loops.push(Loop {
+                self.control.push_loop(LoopFrame {
                     loop_name: Some(value_bind),
                     top_label: loop_top,
-                    top_stack: self.cur_stack.into(),
+                    top_stack: self.stack.depth().into(),
                     bottom_label: end_label,
-                    bottom_stack: self.cur_stack.into(), // No stack items to unwind
+                    bottom_stack: self.stack.depth().into(), // No stack items to unwind
                 });
 
                 // Generate loop body
@@ -1066,7 +978,7 @@ impl CodegenState {
                     num_bindings: *environment_width as u16,
                 });
                 self.commit_jump_label(end_label);
-                self.loops.pop();
+                self.control.pop_loop();
             }
             StmtNode::ForRange {
                 from,
@@ -1097,12 +1009,12 @@ impl CodegenState {
                 self.commit_jump_label(loop_top);
                 self.emit(Op::IterateForRange);
 
-                self.loops.push(Loop {
+                self.control.push_loop(LoopFrame {
                     loop_name: Some(self.find_name(id)),
                     top_label: loop_top,
-                    top_stack: self.cur_stack.into(),
+                    top_stack: self.stack.depth().into(),
                     bottom_label: end_label,
-                    bottom_stack: self.cur_stack.into(),
+                    bottom_stack: self.stack.depth().into(),
                 });
 
                 // Generate loop body
@@ -1118,7 +1030,7 @@ impl CodegenState {
                     num_bindings: *environment_width as u16,
                 });
                 self.commit_jump_label(end_label);
-                self.loops.pop();
+                self.control.pop_loop();
             }
             StmtNode::While {
                 id,
@@ -1144,12 +1056,12 @@ impl CodegenState {
                     }),
                 }
                 self.pop_stack(1);
-                self.loops.push(Loop {
+                self.control.push_loop(LoopFrame {
                     loop_name: id.as_ref().map(|id| self.find_name(id)),
                     top_label: loop_start_label,
-                    top_stack: self.cur_stack.into(),
+                    top_stack: self.stack.depth().into(),
                     bottom_label: loop_end_label,
-                    bottom_stack: self.cur_stack.into(),
+                    bottom_stack: self.stack.depth().into(),
                 });
                 for s in body {
                     self.generate_stmt(s)?;
@@ -1161,15 +1073,15 @@ impl CodegenState {
                     label: loop_start_label,
                 });
                 self.commit_jump_label(loop_end_label);
-                self.loops.pop();
+                self.control.pop_loop();
             }
             StmtNode::Fork { id, body, time } => {
                 self.generate_expr(time)?;
                 // Record the position in main vector where the fork starts
-                let fork_main_position = self.ops.len();
+                let fork_main_position = self.emitter.pc();
 
                 // Stash current ops and line number spans to generate fork vector separately
-                let stashed_ops = std::mem::take(&mut self.ops);
+                let stashed_ops = self.emitter.take_ops();
                 let stashed_line_spans = std::mem::take(&mut self.line_number_spans);
 
                 // Generate fork body into separate vector
@@ -1177,11 +1089,11 @@ impl CodegenState {
                     self.generate_stmt(stmt)?;
                 }
                 self.emit(Op::Done);
-                let forked_ops = std::mem::take(&mut self.ops);
+                let forked_ops = self.emitter.take_ops();
                 let fork_line_spans = std::mem::take(&mut self.line_number_spans);
 
                 // Restore main vector and continue from where we left off
-                self.ops = stashed_ops;
+                self.emitter.replace_ops(stashed_ops);
                 self.line_number_spans = stashed_line_spans;
 
                 let fv_id = self.add_fork_vector(fork_main_position, forked_ops, fork_line_spans);
@@ -1274,7 +1186,7 @@ impl CodegenState {
                 self.commit_jump_label(end_label);
             }
             StmtNode::Break { exit: None } => {
-                let l = self.loops.last().expect("No loop to break/continue from");
+                let l = self.control.current_loop().expect("No loop to break/continue from");
                 self.emit(Op::Exit {
                     stack: l.bottom_stack,
                     label: l.bottom_label,
@@ -1286,7 +1198,7 @@ impl CodegenState {
                 self.emit(Op::ExitId(l.bottom_label));
             }
             StmtNode::Continue { exit: None } => {
-                let l = self.loops.last().expect("No loop to break/continue from");
+                let l = self.control.current_loop().expect("No loop to break/continue from");
                 self.emit(Op::Exit {
                     stack: l.top_stack,
                     label: l.top_label,
@@ -1349,11 +1261,11 @@ impl CodegenState {
     ) -> Result<(), CompileError> {
         // Save the current scope depth - this is the depth at which the lambda is defined.
         // Variables at this depth or lower are from the outer context and can be captured.
-        let outer_scope_depth = self.lambda_scope_depth;
+        let outer_scope_depth = self.control.lambda_scope_depth();
 
         // Increment scope depth by 2 for the lambda's param isolation scope and body scope.
         // This ensures nested lambdas have the correct outer scope level.
-        self.lambda_scope_depth = self.lambda_scope_depth.saturating_add(2);
+        self.control.push_lambda_scope_depth(2);
 
         // Create scatter specification for lambda parameters
         let labels: Vec<ScatterLabel> = params
@@ -1372,35 +1284,15 @@ impl CodegenState {
         let scatter_offset = self.add_scatter_table(labels, done);
 
         // Stash current compilation state (following fork vector pattern)
-        let stashed_ops = std::mem::take(&mut self.ops);
-        let stashed_literals = std::mem::take(&mut self.literals);
+        let stashed_ops = self.emitter.take_ops();
         let stashed_var_names = self.var_names.clone();
-        let stashed_jumps = std::mem::take(&mut self.jumps);
-        let stashed_scatter_tables = std::mem::take(&mut self.scatter_tables);
-        let stashed_for_sequence_operands = std::mem::take(&mut self.for_sequence_operands);
-        let stashed_for_range_operands = std::mem::take(&mut self.for_range_operands);
-        let stashed_range_comprehensions = std::mem::take(&mut self.range_comprehensions);
-        let stashed_list_comprehensions = std::mem::take(&mut self.list_comprehensions);
-        let stashed_error_operands = std::mem::take(&mut self.error_operands);
-        let stashed_lambda_programs = std::mem::take(&mut self.lambda_programs);
-        let stashed_fork_vectors = std::mem::take(&mut self.fork_vectors);
+        let stashed_jumps = self.emitter.take_jumps();
+        let stashed_operands = self.operands.snapshot_and_reset();
         let stashed_line_number_spans = std::mem::take(&mut self.line_number_spans);
-        let stashed_fork_line_number_spans = std::mem::take(&mut self.fork_line_number_spans);
 
         // Reset state for lambda compilation
-        self.ops = vec![];
-        self.literals = vec![];
-        self.jumps = vec![];
-        self.scatter_tables = vec![];
-        self.for_sequence_operands = vec![];
-        self.for_range_operands = vec![];
-        self.range_comprehensions = vec![];
-        self.list_comprehensions = vec![];
-        self.error_operands = vec![];
-        self.lambda_programs = vec![];
-        self.fork_vectors = vec![];
+        self.emitter.reset();
         self.line_number_spans = vec![];
-        self.fork_line_number_spans = vec![];
 
         // Generate code to check optional parameters and evaluate defaults if needed
         // This is done at the start of the lambda body, not through scatter jump labels
@@ -1439,44 +1331,25 @@ impl CodegenState {
         self.generate_stmt(body)?;
 
         // Build standalone Program from compiled state
-        let lambda_program = Program(Arc::new(PrgInner {
-            literals: std::mem::take(&mut self.literals),
-            jump_labels: std::mem::take(&mut self.jumps),
-            var_names: self.var_names.clone(),
-            scatter_tables: std::mem::take(&mut self.scatter_tables),
-            for_sequence_operands: std::mem::take(&mut self.for_sequence_operands),
-            for_range_operands: std::mem::take(&mut self.for_range_operands),
-            range_comprehensions: std::mem::take(&mut self.range_comprehensions),
-            list_comprehensions: std::mem::take(&mut self.list_comprehensions),
-            error_operands: std::mem::take(&mut self.error_operands),
-            lambda_programs: std::mem::take(&mut self.lambda_programs),
-            main_vector: std::mem::take(&mut self.ops),
-            fork_vectors: std::mem::take(&mut self.fork_vectors),
-            line_number_spans: std::mem::take(&mut self.line_number_spans),
-            fork_line_number_spans: std::mem::take(&mut self.fork_line_number_spans),
-        }));
+        let lambda_program = self.operands.take_program_parts().build_program(
+            self.var_names.clone(),
+            self.emitter.take_jumps(),
+            self.emitter.take_ops(),
+            std::mem::take(&mut self.line_number_spans),
+        );
 
         // Restore main compilation context
-        self.ops = stashed_ops;
-        self.literals = stashed_literals;
+        self.emitter.replace_ops(stashed_ops);
         self.var_names = stashed_var_names;
-        self.jumps = stashed_jumps;
-        self.scatter_tables = stashed_scatter_tables;
-        self.for_sequence_operands = stashed_for_sequence_operands;
-        self.for_range_operands = stashed_for_range_operands;
-        self.range_comprehensions = stashed_range_comprehensions;
-        self.list_comprehensions = stashed_list_comprehensions;
-        self.error_operands = stashed_error_operands;
-        self.lambda_programs = stashed_lambda_programs;
-        self.fork_vectors = stashed_fork_vectors;
+        self.emitter.replace_jumps(stashed_jumps);
+        self.operands.restore(stashed_operands);
         self.line_number_spans = stashed_line_number_spans;
-        self.fork_line_number_spans = stashed_fork_line_number_spans;
 
         // Store compiled Program in lambda_programs table with adjusted line numbers
         let program_offset = self.add_lambda_program(lambda_program, base_line_offset);
 
         // Restore scope depth after lambda compilation
-        self.lambda_scope_depth = outer_scope_depth;
+        self.control.set_lambda_scope_depth(outer_scope_depth);
 
         // Analyze which variables this lambda captures
         // Pass outer_scope_depth so parameterless lambdas know what depth they're at
@@ -1511,31 +1384,20 @@ fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, 
     }
     cg_state.emit(Op::Done);
 
-    if cg_state.cur_stack != 0 || cg_state.saved_stack.is_some() {
+    if cg_state.stack.depth() != 0 || cg_state.stack.saved_top().is_some() {
         panic!(
             "Stack is not empty at end of compilation: cur_stack#: {} stack: {:?}",
-            cg_state.cur_stack, cg_state.saved_stack
+            cg_state.stack.depth(),
+            cg_state.stack.saved_top()
         )
     }
 
-    let program = Arc::new(PrgInner {
-        literals: cg_state.literals,
-        jump_labels: cg_state.jumps,
-        var_names: cg_state.var_names,
-        scatter_tables: cg_state.scatter_tables,
-        range_comprehensions: cg_state.range_comprehensions,
-        list_comprehensions: cg_state.list_comprehensions,
-        for_sequence_operands: cg_state.for_sequence_operands,
-        for_range_operands: cg_state.for_range_operands,
-        error_operands: cg_state.error_operands,
-        lambda_programs: cg_state.lambda_programs,
-        main_vector: cg_state.ops,
-        fork_vectors: cg_state.fork_vectors,
-        line_number_spans: cg_state.line_number_spans,
-        fork_line_number_spans: cg_state.fork_line_number_spans,
-    });
-    let program = Program(program);
-    Ok(program)
+    Ok(cg_state.operands.take_program_parts().build_program(
+        cg_state.var_names,
+        cg_state.emitter.take_jumps(),
+        cg_state.emitter.take_ops(),
+        cg_state.line_number_spans,
+    ))
 }
 
 /// Compile from a program string using the handwritten frontend parser and lowering path.

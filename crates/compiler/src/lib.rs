@@ -14,6 +14,7 @@
 pub use moor_var::program::names::Names;
 
 mod ast;
+mod backend;
 mod codegen;
 mod compile_options;
 mod decompile;
