@@ -314,42 +314,32 @@ impl<'a> Lexer<'a> {
                 '\\' => {
                     self.bump();
                     match self.peek() {
-                        Some('b' | 't' | 'n' | 'f' | 'r' | '"' | '\\' | '\n' | '\r') => {
-                            self.bump();
-                            if self.peek_prev_was('\r') && self.peek() == Some('\n') {
-                                self.bump();
-                            }
-                        }
                         Some('x') => {
                             self.bump();
                             if !self.consume_hex_digits(2) {
-                                self.consume_string_error_tail();
-                                return SyntaxKind::Error;
+                                self.consume_string_escaped_char_tail();
                             }
                         }
                         Some('u') => {
                             self.bump();
                             if !self.consume_hex_digits(4) {
-                                self.consume_string_error_tail();
-                                return SyntaxKind::Error;
+                                self.consume_string_escaped_char_tail();
                             }
                         }
                         Some('U') => {
                             self.bump();
                             if !self.consume_hex_digits(8) {
-                                self.consume_string_error_tail();
-                                return SyntaxKind::Error;
+                                self.consume_string_escaped_char_tail();
                             }
                         }
-                        Some(_) | None => {
-                            self.consume_string_error_tail();
-                            return SyntaxKind::Error;
+                        Some(_) => {
+                            self.bump();
+                            if self.peek_prev_was('\r') && self.peek() == Some('\n') {
+                                self.bump();
+                            }
                         }
+                        None => return SyntaxKind::Error,
                     }
-                }
-                '\u{0000}'..='\u{001F}' => {
-                    self.consume_string_error_tail();
-                    return SyntaxKind::Error;
                 }
                 _ => {
                     self.bump();
@@ -358,6 +348,18 @@ impl<'a> Lexer<'a> {
         }
 
         SyntaxKind::Error
+    }
+
+    fn consume_string_escaped_char_tail(&mut self) {
+        while let Some(ch) = self.peek() {
+            match ch {
+                '"' => return,
+                '\\' => return,
+                _ => {
+                    self.bump();
+                }
+            }
+        }
     }
 
     fn lex_binary_literal(&mut self) -> SyntaxKind {
@@ -612,18 +614,6 @@ impl<'a> Lexer<'a> {
             }
         }
         true
-    }
-
-    fn consume_string_error_tail(&mut self) {
-        while let Some(ch) = self.peek() {
-            if matches!(ch, '\n' | '\r') {
-                break;
-            }
-            self.bump();
-            if ch == '"' {
-                break;
-            }
-        }
     }
 
     fn peek(&self) -> Option<char> {

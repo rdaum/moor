@@ -1537,16 +1537,16 @@ fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, 
     Ok(program)
 }
 
-/// Compile from a program string, starting at the "program" rule.
+/// Compile from a program string using the handwritten frontend parser and lowering path.
 pub fn compile(program: &str, options: CompileOptions) -> Result<Program, CompileError> {
-    let parse = parse_program(program, options.clone())?;
+    let parse = parse_program_frontend(program, options.clone())?;
 
     do_compile(parse, options)
 }
 
-/// Compile from a program string using the handwritten frontend parser and lowering path.
-pub fn compile_frontend(program: &str, options: CompileOptions) -> Result<Program, CompileError> {
-    let parse = parse_program_frontend(program, options.clone())?;
+/// Compile from a program string using the classic pest parser path.
+pub fn compile_classic(program: &str, options: CompileOptions) -> Result<Program, CompileError> {
+    let parse = parse_program(program, options.clone())?;
 
     do_compile(parse, options)
 }

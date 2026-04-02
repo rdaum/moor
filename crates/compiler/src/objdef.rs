@@ -14,7 +14,7 @@
 use crate::{
     CompileOptions,
     ObjDefParseError::VerbCompileError,
-    codegen::compile_frontend,
+    codegen::compile,
     diagnostics::build_parse_error_details,
     parse::objdef::{ObjDefParser, Rule},
 };
@@ -288,7 +288,7 @@ fn parse_literal_lambda(
     // For now, convert the body expression back to source and compile it
     // This is not ideal but works for the objdef format
     let body_source = format!("return {};", body_pair.as_str());
-    let body_program = crate::compile_frontend(&body_source, crate::CompileOptions::default())
+    let body_program = crate::compile(&body_source, crate::CompileOptions::default())
         .map_err(|e| VerbCompileError(e, body_source.clone()))?;
 
     // Parse optional metadata
@@ -1177,7 +1177,7 @@ fn parse_verb_decl(
             let statements_inner = verb_body.into_inner();
             let statements_text = statements_inner.as_str();
 
-            compile_frontend(statements_text, compile_options.clone()).map_err(|e| {
+            compile(statements_text, compile_options.clone()).map_err(|e| {
                 // Offset the error's line number by the verb's starting line in the file
                 let adjusted_error = offset_compile_error(e, verb_start_line - 1);
                 VerbCompileError(adjusted_error, statements_text.to_string())

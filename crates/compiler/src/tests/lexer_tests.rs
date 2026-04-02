@@ -91,6 +91,19 @@ fn hex_and_unicode_string_escapes_lex_as_strings() {
 }
 
 #[test]
+fn legacy_null_and_raw_tab_strings_lex_as_strings() {
+    assert_eq!(
+        kinds("\"\\0\" \"[^\t]\""),
+        vec![
+            SyntaxKind::StringLit,
+            SyntaxKind::Whitespace,
+            SyntaxKind::StringLit,
+            SyntaxKind::Eof,
+        ]
+    );
+}
+
+#[test]
 fn malformed_block_comment_becomes_error_token() {
     assert_eq!(kinds("/* nope"), vec![SyntaxKind::Error, SyntaxKind::Eof]);
 }

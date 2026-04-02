@@ -15,7 +15,7 @@
 mod tests {
     use crate::{
         CompileOptions,
-        codegen::{compile, compile_frontend},
+        codegen::{compile, compile_classic},
     };
     use moor_common::builtins::BUILTINS;
     use moor_var::{
@@ -37,8 +37,8 @@ mod tests {
     }
 
     fn assert_frontend_compiles_same(program: &str) {
-        let classic = compile(program, CompileOptions::default()).unwrap();
-        let frontend = compile_frontend(program, CompileOptions::default()).unwrap();
+        let classic = compile_classic(program, CompileOptions::default()).unwrap();
+        let frontend = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(classic, frontend);
     }
 
@@ -93,6 +93,18 @@ mod tests {
   endif
   return `player:(verb)(@args) ! ANY';
 endif"#;
+        assert_frontend_compiles_same(program);
+    }
+
+    #[test]
+    fn frontend_codegen_matches_classic_for_match_with_raw_tab_string() {
+        let program = "return match(args[1], \"[^ \t]\") ? args[1] | \"\";";
+        assert_frontend_compiles_same(program);
+    }
+
+    #[test]
+    fn frontend_codegen_matches_classic_for_null_escape_string() {
+        let program = "return \"\\0\" && \"yes\" || \"no\";";
         assert_frontend_compiles_same(program);
     }
 
