@@ -229,9 +229,7 @@ where
             .record_elapsed_from_with(PerfIntensity::HotPath, start.instant());
         Ok(guard)
     }
-
 }
-
 
 impl<Domain, Codomain> FjallProvider<Domain, Codomain>
 where

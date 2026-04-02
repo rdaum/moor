@@ -137,10 +137,10 @@ impl<'a> Unparse<'a> {
                 }
                 Ok(())
             }
+            Expr::Value(value) => write_literal(value, writer),
             Expr::TypeConstant(typ) => write!(writer, "{}", typ.to_literal()).map_err(Into::into),
             Expr::Id(id) => {
                 write!(writer, "{}", self.unparse_variable(id).as_arc_str()).map_err(Into::into)
-                write!(writer, "{}", typ.to_literal()).map_err(Into::into)
             }
             Expr::Return(expr) => {
                 write!(writer, "return")?;
@@ -409,15 +409,15 @@ fn write_member_access<W: std::fmt::Write>(
 /// Try to write a property/verb name directly. Returns true if the expression was
 /// a simple name that was written, false if the caller should fall back to general
 /// expression formatting.
-fn try_write_name<W: std::fmt::Write>(
-    expr: &Expr,
-    writer: &mut W,
-) -> Result<bool, DecompileError> {
+fn try_write_name<W: std::fmt::Write>(expr: &Expr, writer: &mut W) -> Result<bool, DecompileError> {
     match expr {
         Expr::Value(value) => {
             if let Ok(symbol) = value.as_symbol() {
                 write_name_fragment(symbol.as_arc_str().as_ref(), writer)?;
-fn try_write_name<W: std::fmt::Write>(expr: &Expr, writer: &mut W) -> Result<bool, DecompileError> {
+                return Ok(true);
+            }
+            if let Some(s) = value.as_string() {
+                write_name_fragment(s, writer)?;
                 return Ok(true);
             }
             Ok(false)

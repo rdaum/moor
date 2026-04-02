@@ -385,14 +385,10 @@ impl<'a> ObjectDefinitionLoader<'a> {
     ) -> Result<(), ObjdefLoaderError> {
         context.set_base_path(path);
         let path_str = path.to_string_lossy().into_owned();
-        let compiled_defs = compile_object_definitions(
-            object_file_contents,
-            compile_options,
-            context,
-        )
-        .map_err(|e| {
-            ObjdefLoaderError::ObjectDefParseError(path_str.clone(), Box::new(e))
-        })?;
+        let compiled_defs =
+            compile_object_definitions(object_file_contents, compile_options, context).map_err(
+                |e| ObjdefLoaderError::ObjectDefParseError(path_str.clone(), Box::new(e)),
+            )?;
 
         for compiled_def in compiled_defs {
             let oid = compiled_def.oid;
@@ -427,9 +423,10 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
         for (obj, (path, def)) in &self.object_definitions {
             // Check if object already exists
-            let existing_attrs = self.loader.get_existing_object(obj).map_err(|e| {
-                ObjdefLoaderError::CouldNotSetObjectParent(path.clone(), e)
-            })?;
+            let existing_attrs = self
+                .loader
+                .get_existing_object(obj)
+                .map_err(|e| ObjdefLoaderError::CouldNotSetObjectParent(path.clone(), e))?;
 
             if let Some(existing) = existing_attrs {
                 // Check parent conflict (always check if existing parent differs)
@@ -446,7 +443,12 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         self.conflicts.push(conflict);
                     }
                     if should_proceed {
-                        attribute_actions.push((*obj, AttributeKind::Parent, def.parent, path.clone()));
+                        attribute_actions.push((
+                            *obj,
+                            AttributeKind::Parent,
+                            def.parent,
+                            path.clone(),
+                        ));
                     }
                 }
 
@@ -469,7 +471,12 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         self.conflicts.push(conflict);
                     }
                     if should_proceed {
-                        attribute_actions.push((*obj, AttributeKind::Location, def.location, path.clone()));
+                        attribute_actions.push((
+                            *obj,
+                            AttributeKind::Location,
+                            def.location,
+                            path.clone(),
+                        ));
                     }
                 }
 
@@ -492,7 +499,12 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         self.conflicts.push(conflict);
                     }
                     if should_proceed {
-                        attribute_actions.push((*obj, AttributeKind::Owner, def.owner, path.clone()));
+                        attribute_actions.push((
+                            *obj,
+                            AttributeKind::Owner,
+                            def.owner,
+                            path.clone(),
+                        ));
                     }
                 }
 
@@ -511,22 +523,12 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 if should_proceed {
                     self.loader
                         .update_object_flags(obj, def.flags)
-                        .map_err(|e| {
-                            ObjdefLoaderError::CouldNotSetObjectParent(
-                                path.clone(),
-                                e,
-                            )
-                        })?;
+                        .map_err(|e| ObjdefLoaderError::CouldNotSetObjectParent(path.clone(), e))?;
                 } else {
                     // In Skip mode, restore the original flags (since object was created with empty flags)
                     self.loader
                         .update_object_flags(obj, existing.flags())
-                        .map_err(|e| {
-                            ObjdefLoaderError::CouldNotSetObjectParent(
-                                path.clone(),
-                                e,
-                            )
-                        })?;
+                        .map_err(|e| ObjdefLoaderError::CouldNotSetObjectParent(path.clone(), e))?;
                 }
             } else {
                 // Object doesn't exist yet, add all non-nothing attributes
@@ -534,7 +536,12 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     attribute_actions.push((*obj, AttributeKind::Parent, def.parent, path.clone()));
                 }
                 if def.location != NOTHING {
-                    attribute_actions.push((*obj, AttributeKind::Location, def.location, path.clone()));
+                    attribute_actions.push((
+                        *obj,
+                        AttributeKind::Location,
+                        def.location,
+                        path.clone(),
+                    ));
                 }
                 if def.owner != NOTHING {
                     attribute_actions.push((*obj, AttributeKind::Owner, def.owner, path.clone()));
@@ -548,9 +555,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 AttributeKind::Parent => {
                     self.loader
                         .set_object_parent(&obj, &value, options.validate_parent_changes)
-                        .map_err(|e| {
-                            ObjdefLoaderError::CouldNotSetObjectParent(path.clone(), e)
-                        })?;
+                        .map_err(|e| ObjdefLoaderError::CouldNotSetObjectParent(path.clone(), e))?;
                 }
                 AttributeKind::Location => {
                     self.loader.set_object_location(&obj, &value).map_err(|e| {
@@ -558,9 +563,9 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     })?;
                 }
                 AttributeKind::Owner => {
-                    self.loader.set_object_owner(&obj, &value).map_err(|e| {
-                        ObjdefLoaderError::CouldNotSetObjectOwner(path.clone(), e)
-                    })?;
+                    self.loader
+                        .set_object_owner(&obj, &value)
+                        .map_err(|e| ObjdefLoaderError::CouldNotSetObjectOwner(path.clone(), e))?;
                 }
             }
         }

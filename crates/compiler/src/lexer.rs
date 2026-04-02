@@ -465,7 +465,8 @@ impl<'a> Lexer<'a> {
 
     fn lex_signed_number_or_operator(&mut self) -> SyntaxKind {
         if matches!(self.peek_next(), Some('0'..='9'))
-            || (self.peek_next() == Some('.') && self.peek_nth(2).is_some_and(|ch| ch.is_ascii_digit()))
+            || (self.peek_next() == Some('.')
+                && self.peek_nth(2).is_some_and(|ch| ch.is_ascii_digit()))
         {
             return self.lex_number();
         }

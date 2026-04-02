@@ -146,11 +146,8 @@ fn run_single_object_workload(
                                     &value,
                                 );
                             } else {
-                                let _ = tx.retrieve_property(
-                                    &SYSTEM_OBJECT,
-                                    &SYSTEM_OBJECT,
-                                    prop_name,
-                                );
+                                let _ =
+                                    tx.retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, prop_name);
                             }
                         }
                         match tx.commit() {
@@ -215,11 +212,7 @@ fn run_multi_object_workload(
                             } else {
                                 // Reads can go to any object
                                 let read_obj = objects[rng.random_range(0..objects.len())];
-                                let _ = tx.retrieve_property(
-                                    &read_obj,
-                                    &SYSTEM_OBJECT,
-                                    prop_name,
-                                );
+                                let _ = tx.retrieve_property(&read_obj, &SYSTEM_OBJECT, prop_name);
                             }
                         }
                         match tx.commit() {

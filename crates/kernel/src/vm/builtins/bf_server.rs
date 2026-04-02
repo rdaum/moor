@@ -46,8 +46,8 @@ use moor_common::{
     util::PerfCounter,
 };
 use moor_compiler::{
-    ArgCount, ArgType, BUILTINS, Builtin, compile, compile_error_to_map,
-    format_compile_error, offset_for_builtin,
+    ArgCount, ArgType, BUILTINS, Builtin, compile, compile_error_to_map, format_compile_error,
+    offset_for_builtin,
 };
 use moor_db::{ANCESTRY_CACHE_STATS, PROP_CACHE_STATS, VERB_CACHE_STATS, db_counters};
 use moor_var::{
@@ -626,8 +626,7 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     match tramp {
         BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE => {
-            let program =
-                match compile(&program_code_string, bf_args.config.compile_options()) {
+            let program = match compile(&program_code_string, bf_args.config.compile_options()) {
                 Ok(program) => program,
                 Err(e) => {
                     let error_result = match diagnostic_output {

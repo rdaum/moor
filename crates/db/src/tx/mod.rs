@@ -20,8 +20,8 @@ mod resolve;
 mod transaction;
 
 pub use apply::PersistOp;
-pub use commit_bloom::{AtomicBloom, CommitBloom};
 pub use check::{CheckRelation, PotentialConflict, ProposedOp};
+pub use commit_bloom::{AtomicBloom, CommitBloom};
 pub use indexes::RelationIndex;
 pub use relation::Relation;
 pub use resolve::{AcceptIdentical, ConflictResolver, FailOnConflict, SmartMergeResolver};

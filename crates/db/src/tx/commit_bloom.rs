@@ -148,8 +148,7 @@ impl AtomicBloom {
         let b1 = h1 % ATOMIC_BLOOM_BITS;
         let b2 = h2 % ATOMIC_BLOOM_BITS;
         (self.bits[b1 / 8].load(std::sync::atomic::Ordering::Relaxed) & (1 << (b1 % 8)) != 0)
-            && (self.bits[b2 / 8].load(std::sync::atomic::Ordering::Relaxed) & (1 << (b2 % 8))
-                != 0)
+            && (self.bits[b2 / 8].load(std::sync::atomic::Ordering::Relaxed) & (1 << (b2 % 8)) != 0)
     }
 }
 
@@ -198,7 +197,10 @@ mod tests {
                 false_positives += 1;
             }
         }
-        assert!(false_positives < 50, "Too many false positives: {false_positives}/1000");
+        assert!(
+            false_positives < 50,
+            "Too many false positives: {false_positives}/1000"
+        );
     }
 
     #[test]

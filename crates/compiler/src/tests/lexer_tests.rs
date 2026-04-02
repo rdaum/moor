@@ -110,10 +110,7 @@ fn malformed_block_comment_becomes_error_token() {
 
 #[test]
 fn malformed_binary_literal_becomes_error_token() {
-    assert_eq!(
-        kinds("b\"%%%\""),
-        vec![SyntaxKind::Error, SyntaxKind::Eof]
-    );
+    assert_eq!(kinds("b\"%%%\""), vec![SyntaxKind::Error, SyntaxKind::Eof]);
 }
 
 #[test]
