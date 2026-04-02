@@ -13,10 +13,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        CompileOptions,
-        codegen::{compile, compile_classic},
-    };
+    use crate::{CompileOptions, codegen::compile};
     use moor_common::builtins::BUILTINS;
     use moor_var::{
         E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, Obj, SYSTEM_OBJECT, Symbol, UuObjid,
@@ -36,76 +33,91 @@ mod tests {
         );
     }
 
-    fn assert_frontend_compiles_same(program: &str) {
-        let classic = compile_classic(program, CompileOptions::default()).unwrap();
-        let frontend = compile(program, CompileOptions::default()).unwrap();
-        assert_eq!(classic, frontend);
-    }
-
     #[test]
-    fn frontend_codegen_matches_classic_for_control_flow() {
-        let program = "while loop (a) if (b) break loop; elseif (c) return d; else for x, y in (items) return x; endfor endif endwhile";
-        assert_frontend_compiles_same(program);
-    }
-
-    #[test]
-    fn frontend_codegen_matches_classic_for_lambda_and_fn_forms() {
-        let program = "fn add(a, ?b = 1, @rest) return a + b; endfn value = fn(x) return x; endfn; let f = {?x = 1, @rest} => x + 1; return f;";
-        assert_frontend_compiles_same(program);
-    }
-
-    #[test]
-    fn frontend_codegen_matches_classic_for_specialized_expressions() {
-        let program = "return foo:bar(1, @args) + `x ! E_PERM, @codes => y ' + <#1, .name = \"x\", .value = 1, {1, 2}> + {item * 2 for item in (items)};";
-        assert_frontend_compiles_same(program);
-    }
-
-    #[test]
-    fn frontend_codegen_matches_classic_for_return_in_short_circuit_expr() {
-        let program = "typeof(description) == TYPE_STR || return description;";
-        assert_frontend_compiles_same(program);
-    }
-
-    #[test]
-    fn frontend_codegen_matches_classic_for_keyword_named_verb_call() {
+    fn regression_keyword_named_verb_call_codegen_shape() {
         let program = "result = {1, 2, 3}:any({x} => x > 2);";
-        assert_frontend_compiles_same(program);
+        let binary = compile(program, CompileOptions::default()).unwrap();
+
+        let result = binary.find_var("result");
+        let x = binary.lambda_program(Offset(0)).find_var("x");
+
+        assert_eq!(
+            binary.main_vector().to_vec(),
+            vec![
+                ImmInt(1),
+                MakeSingletonList,
+                ImmInt(2),
+                ListAddTail,
+                ImmInt(3),
+                ListAddTail,
+                ImmSymbol(Symbol::mk("any")),
+                MakeLambda {
+                    scatter_offset: Offset(0),
+                    program_offset: Offset(0),
+                    self_var: None,
+                    num_captured: 0,
+                },
+                MakeSingletonList,
+                CallVerb,
+                Put(result),
+                Pop,
+                Done,
+            ]
+        );
+        assert_eq!(
+            binary.lambda_program(Offset(0)).main_vector().to_vec(),
+            vec![Push(x), ImmInt(2), Gt, Return, Pop]
+        );
+        assert_eq!(
+            binary.scatter_table(Offset(0)),
+            &ScatterArgs {
+                labels: vec![ScatterLabel::Required(x)],
+                done: Label(0),
+            }
+        );
     }
 
     #[test]
-    fn frontend_codegen_matches_classic_for_builtin_call_followed_by_index() {
+    fn regression_builtin_call_followed_by_index_codegen_shape() {
         let program = "return callers()[1];";
-        assert_frontend_compiles_same(program);
+        let binary = compile(program, CompileOptions::default()).unwrap();
+        let callers_id = BUILTINS.find_builtin(Symbol::mk("callers")).unwrap();
+
+        assert_eq!(
+            binary.main_vector().to_vec(),
+            vec![
+                ImmEmptyList,
+                FuncCall { id: callers_id },
+                ImmInt(1),
+                Ref,
+                Return,
+                Pop,
+                Done
+            ]
+        );
     }
 
     #[test]
-    fn frontend_codegen_matches_classic_for_negated_builtin_call_condition() {
+    fn regression_negated_builtin_call_condition_codegen_shape() {
         let program = "if (!callers()) return 1; endif";
-        assert_frontend_compiles_same(program);
-    }
+        let binary = compile(program, CompileOptions::default()).unwrap();
+        let callers_id = BUILTINS.find_builtin(Symbol::mk("callers")).unwrap();
 
-    #[test]
-    fn frontend_codegen_matches_classic_for_sysobj_handle_uncaught_error_prefix() {
-        let program = r#"if (!callers())
-  {code, msg, value, stack, traceback} = args;
-  if (!$object_utils:connected(player))
-    $mail_agent:send_message(#0, player, {"traceback", $gripe_recipients}, traceback);
-  endif
-  return `player:(verb)(@args) ! ANY';
-endif"#;
-        assert_frontend_compiles_same(program);
-    }
-
-    #[test]
-    fn frontend_codegen_matches_classic_for_match_with_raw_tab_string() {
-        let program = "return match(args[1], \"[^ \t]\") ? args[1] | \"\";";
-        assert_frontend_compiles_same(program);
-    }
-
-    #[test]
-    fn frontend_codegen_matches_classic_for_null_escape_string() {
-        let program = "return \"\\0\" && \"yes\" || \"no\";";
-        assert_frontend_compiles_same(program);
+        assert_eq!(binary.main_vector()[0], ImmEmptyList);
+        assert_eq!(binary.main_vector()[1], FuncCall { id: callers_id });
+        assert_eq!(binary.main_vector()[2], Not);
+        assert!(matches!(binary.main_vector()[3], If(_, 0)));
+        assert_eq!(
+            &binary.main_vector()[4..],
+            &[
+                ImmInt(1),
+                Return,
+                Pop,
+                EndScope { num_bindings: 0 },
+                Jump { label: Label(0) },
+                Done,
+            ]
+        );
     }
 
     #[test]

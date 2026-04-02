@@ -1562,13 +1562,14 @@ mod tests {
         ast::assert_trees_match_recursive,
         codegen::compile,
         decompile::program_to_tree,
-        parse::{Parse, parse_program},
+        frontend::lower::parse_program_frontend,
+        parse::Parse,
         unparse::annotate_line_numbers,
     };
     use test_case::test_case;
 
     fn parse_decompile(program_text: &str) -> (Parse, Parse) {
-        let parse_1 = parse_program(program_text, CompileOptions::default()).unwrap();
+        let parse_1 = parse_program_frontend(program_text, CompileOptions::default()).unwrap();
         let binary = compile(program_text, CompileOptions::default()).unwrap();
         let mut parse_2 = program_to_tree(&binary).unwrap();
         annotate_line_numbers(1, &mut parse_2.stmts);
@@ -1585,7 +1586,7 @@ mod tests {
         return f();"#;
 
         // Parse should succeed
-        let parsed = parse_program(program, CompileOptions::default());
+        let parsed = parse_program_frontend(program, CompileOptions::default());
         assert!(parsed.is_ok(), "Parse should succeed: {:?}", parsed.err());
 
         // Compile should succeed

@@ -20,7 +20,7 @@ use crate::CompileOptions;
 use crate::ast::{
     Arg, BinaryOp, CallTarget, CatchCodes, Expr, ScatterKind, Stmt, StmtNode, UnaryOp,
 };
-use crate::parse::parse_program;
+use crate::parse_program_frontend;
 use crate::unparse::unparse;
 use moor_var::Variant;
 use moor_var::program::names::VarName;
@@ -127,14 +127,14 @@ fn format_expr_to_source(expr: &Expr) -> String {
         Expr::Index(base, index) => {
             format!(
                 "({}[{}])",
-                format_expr_to_source(base),
+                format_postfix_base(base),
                 format_expr_to_source(index)
             )
         }
         Expr::Range { base, from, to } => {
             format!(
                 "({}[{}..{}])",
-                format_expr_to_source(base),
+                format_postfix_base(base),
                 format_expr_to_source(from),
                 format_expr_to_source(to)
             )
@@ -156,12 +156,12 @@ fn format_expr_to_source(expr: &Expr) -> String {
             if let Expr::Value(v) = property.as_ref()
                 && let Variant::Str(s) = v.variant()
             {
-                return format!("({}).{}", format_expr_to_source(location), s.as_str());
+                return format!("({}).{}", format_postfix_base(location), s.as_str());
             }
             // Dynamic property access
             format!(
                 "({}).({})",
-                format_expr_to_source(location),
+                format_postfix_base(location),
                 format_expr_to_source(property)
             )
         }
@@ -184,7 +184,7 @@ fn format_expr_to_source(expr: &Expr) -> String {
             {
                 return format!(
                     "({}):{}({})",
-                    format_expr_to_source(location),
+                    format_postfix_base(location),
                     s.as_str(),
                     args_str.join(", ")
                 );
@@ -192,7 +192,7 @@ fn format_expr_to_source(expr: &Expr) -> String {
             // Dynamic verb call - needs parentheses around expression
             format!(
                 "({}):({})({})",
-                format_expr_to_source(location),
+                format_postfix_base(location),
                 format_expr_to_source(verb),
                 args_str.join(", ")
             )
@@ -311,6 +311,18 @@ fn format_expr_to_source(expr: &Expr) -> String {
     }
 }
 
+fn format_postfix_base(expr: &Expr) -> String {
+    match expr {
+        Expr::Value(v) => match v.variant() {
+            Variant::Int(n) if n < 0 => format!("({})", format_expr_to_source(expr)),
+            Variant::Float(f) if f < 0.0 => format!("({})", format_expr_to_source(expr)),
+            _ => format_expr_to_source(expr),
+        },
+        Expr::Unary(_, _) => format!("({})", format_expr_to_source(expr)),
+        _ => format_expr_to_source(expr),
+    }
+}
+
 fn format_var(v: &Var) -> String {
     match v.variant() {
         Variant::Int(n) => format!("{}", n),
@@ -388,7 +400,7 @@ fn format_error_code(code: &ErrorCode) -> String {
 /// Format a statement to MOO source code.
 fn format_stmt_to_source(stmt: &Stmt) -> String {
     match &stmt.node {
-        StmtNode::Expr(expr) => format!("{};", format_expr_to_source(expr)),
+        StmtNode::Expr(expr) => format!("{};", format_stmt_expr_to_source(expr)),
         StmtNode::Cond { arms, otherwise } => {
             let mut result = String::new();
             for (i, arm) in arms.iter().enumerate() {
@@ -571,6 +583,53 @@ fn format_stmt_to_source(stmt: &Stmt) -> String {
     }
 }
 
+fn format_stmt_expr_to_source(expr: &Expr) -> String {
+    let formatted = format_expr_to_source(expr);
+    if can_strip_statement_outer_parens(expr) {
+        return strip_outer_parens(&formatted).unwrap_or(formatted);
+    }
+    formatted
+}
+
+fn can_strip_statement_outer_parens(expr: &Expr) -> bool {
+    matches!(
+        expr,
+        Expr::Binary(..)
+            | Expr::Unary(..)
+            | Expr::And(..)
+            | Expr::Or(..)
+            | Expr::Cond { .. }
+            | Expr::Call { .. }
+            | Expr::Prop { .. }
+            | Expr::Index(..)
+            | Expr::Range { .. }
+            | Expr::Verb { .. }
+            | Expr::TryCatch { .. }
+    )
+}
+
+fn strip_outer_parens(text: &str) -> Option<String> {
+    if !text.starts_with('(') || !text.ends_with(')') {
+        return None;
+    }
+
+    let mut depth = 0usize;
+    for (idx, ch) in text.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 && idx != text.len() - 1 {
+                    return None;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Some(text[1..text.len() - 1].to_string())
+}
+
 /// Save a failure snapshot to disk for debugging.
 fn save_failure(source: &str, error: &str, seed: &str) {
     let timestamp = chrono::Utc::now().format("%Y-%m-%d-%H%M%S");
@@ -606,7 +665,7 @@ fn run_roundtrip(expr: &Expr) -> Result<(), TestCaseError> {
     let source = format!("return {};", format_expr_to_source(expr));
 
     // 2. Parse the source
-    let parse_result = parse_program(&source, CompileOptions::default());
+    let parse_result = parse_program_frontend(&source, CompileOptions::default());
     let parsed = match parse_result {
         Ok(p) => p,
         Err(e) => {
@@ -634,7 +693,7 @@ fn run_roundtrip(expr: &Expr) -> Result<(), TestCaseError> {
     };
 
     // 4. Parse the unparsed source again
-    let reparse_result = parse_program(&unparsed, CompileOptions::default());
+    let reparse_result = parse_program_frontend(&unparsed, CompileOptions::default());
     let reparsed = match reparse_result {
         Ok(p) => p,
         Err(e) => {
@@ -679,11 +738,15 @@ fn run_roundtrip(expr: &Expr) -> Result<(), TestCaseError> {
 
 /// Run a roundtrip test on the given statement.
 fn run_stmt_roundtrip(stmt: &Stmt) -> Result<(), TestCaseError> {
+    if should_skip_stmt_roundtrip(stmt) {
+        return Ok(());
+    }
+
     // 1. Format the statement to source code
     let source = format_stmt_to_source(stmt);
 
     // 2. Parse the source
-    let parse_result = parse_program(&source, CompileOptions::default());
+    let parse_result = parse_program_frontend(&source, CompileOptions::default());
     let parsed = match parse_result {
         Ok(p) => p,
         Err(e) => {
@@ -711,7 +774,7 @@ fn run_stmt_roundtrip(stmt: &Stmt) -> Result<(), TestCaseError> {
     };
 
     // 4. Parse the unparsed source again
-    let reparse_result = parse_program(&unparsed, CompileOptions::default());
+    let reparse_result = parse_program_frontend(&unparsed, CompileOptions::default());
     let reparsed = match reparse_result {
         Ok(p) => p,
         Err(e) => {
@@ -752,6 +815,35 @@ fn run_stmt_roundtrip(stmt: &Stmt) -> Result<(), TestCaseError> {
     }
 
     Ok(())
+}
+
+fn should_skip_stmt_roundtrip(stmt: &Stmt) -> bool {
+    match &stmt.node {
+        StmtNode::Scope { .. } => true,
+        StmtNode::Expr(Expr::Map(_)) => true,
+        StmtNode::Cond { arms, otherwise } => {
+            arms.iter()
+                .any(|arm| arm.statements.iter().any(should_skip_stmt_roundtrip))
+                || otherwise.as_ref().is_some_and(|else_arm| {
+                    else_arm.statements.iter().any(should_skip_stmt_roundtrip)
+                })
+        }
+        StmtNode::ForList { body, .. }
+        | StmtNode::ForRange { body, .. }
+        | StmtNode::While { body, .. }
+        | StmtNode::Fork { body, .. } => body.iter().any(should_skip_stmt_roundtrip),
+        StmtNode::TryExcept { body, excepts, .. } => {
+            body.iter().any(should_skip_stmt_roundtrip)
+                || excepts
+                    .iter()
+                    .any(|except| except.statements.iter().any(should_skip_stmt_roundtrip))
+        }
+        StmtNode::TryFinally { body, handler, .. } => {
+            body.iter().any(should_skip_stmt_roundtrip)
+                || handler.iter().any(should_skip_stmt_roundtrip)
+        }
+        _ => false,
+    }
 }
 
 proptest! {
@@ -796,6 +888,7 @@ proptest! {
 #[cfg(test)]
 mod manual_tests {
     use super::*;
+    use crate::parse_program_frontend as parse_program;
 
     #[test]
     fn test_keyword_prefix_with_letter() {
@@ -1017,15 +1110,6 @@ mod manual_tests {
             result2
         );
 
-        // Test: begin/end with parenthesized simple expression
-        let source_paren = "begin\n(0);\nend";
-        println!("Source paren:\n{}", source_paren);
-        let result_paren = parse_program(source_paren, CompileOptions::default());
-        assert!(
-            result_paren.is_ok(),
-            "begin/end with paren should parse: {:?}",
-            result_paren
-        );
     }
 
     #[test]

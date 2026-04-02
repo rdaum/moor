@@ -213,16 +213,14 @@ impl<'a> Unparse<'a> {
                     return Ok(());
                 }
 
-                let location_needs_parens =
-                    self.fully_paren || expr_precedence_level(location) < PrecedenceLevel::Postfix;
+                let location_needs_parens = self.fully_paren || postfix_base_needs_parens(location);
                 write_maybe_parenthesized_expr(self, location, writer, location_needs_parens)?;
                 write!(writer, ".")?;
                 write_member_access(self, property, writer)?;
                 Ok(())
             }
             Expr::Index(base, index) => {
-                let base_needs_parens =
-                    self.fully_paren || expr_precedence_level(base) < PrecedenceLevel::Postfix;
+                let base_needs_parens = self.fully_paren || postfix_base_needs_parens(base);
                 write_maybe_parenthesized_expr(self, base, writer, base_needs_parens)?;
                 write!(writer, "[")?;
                 self.write_expr(index, writer)?;
@@ -243,8 +241,7 @@ impl<'a> Unparse<'a> {
                     return Ok(());
                 }
 
-                let location_needs_parens =
-                    self.fully_paren || expr_precedence_level(location) < PrecedenceLevel::Postfix;
+                let location_needs_parens = self.fully_paren || postfix_base_needs_parens(location);
                 write_maybe_parenthesized_expr(self, location, writer, location_needs_parens)?;
                 write!(writer, ":")?;
                 write_member_access(self, verb, writer)?;
@@ -254,8 +251,7 @@ impl<'a> Unparse<'a> {
                 Ok(())
             }
             Expr::Range { base, from, to } => {
-                let base_needs_parens =
-                    self.fully_paren || expr_precedence_level(base) < PrecedenceLevel::Postfix;
+                let base_needs_parens = self.fully_paren || postfix_base_needs_parens(base);
                 write_maybe_parenthesized_expr(self, base, writer, base_needs_parens)?;
                 write!(writer, "[")?;
                 self.write_expr(from, writer)?;
@@ -484,6 +480,22 @@ fn unary_operand_needs_parens(expr: &Expr) -> bool {
         | Expr::Decl { .. }
         | Expr::Return(..) => true,
         Expr::Call { function, .. } => matches!(function, CallTarget::Expr(..)),
+        _ => false,
+    }
+}
+
+fn postfix_base_needs_parens(expr: &Expr) -> bool {
+    if expr_precedence_level(expr) < PrecedenceLevel::Postfix {
+        return true;
+    }
+
+    matches!(expr, Expr::Value(value) if is_negative_number_literal(value))
+}
+
+fn is_negative_number_literal(value: &moor_var::Var) -> bool {
+    match value.variant() {
+        moor_var::Variant::Int(n) => n < 0,
+        moor_var::Variant::Float(f) => f < 0.0,
         _ => false,
     }
 }

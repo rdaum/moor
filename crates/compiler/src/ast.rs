@@ -531,6 +531,509 @@ pub fn assert_trees_match_recursive(a: &[Stmt], b: &[Stmt]) {
     }
 }
 
+#[cfg(test)]
+pub fn render_parse_shape(parse: &crate::parse::Parse) -> String {
+    use moor_var::program::names::VarName;
+
+    struct ShapeRenderer<'a> {
+        parse: &'a crate::parse::Parse,
+        out: String,
+    }
+
+    impl<'a> ShapeRenderer<'a> {
+        fn new(parse: &'a crate::parse::Parse) -> Self {
+            Self {
+                parse,
+                out: String::new(),
+            }
+        }
+
+        fn var_name(&self, variable: &Variable) -> String {
+            let decl = self.parse.variables.decl_for(variable);
+            match decl.identifier.nr {
+                VarName::Named(sym) => {
+                    if self
+                        .parse
+                        .variables
+                        .find_named(sym.as_arc_str().as_ref())
+                        .len()
+                        > 1
+                    {
+                        format!("{sym}@{}", variable.scope_id)
+                    } else {
+                        sym.as_arc_str().to_string()
+                    }
+                }
+                VarName::Register(register) => format!("<register_{register}>"),
+            }
+        }
+
+        fn line(&mut self, indent: usize, text: impl AsRef<str>) {
+            for _ in 0..indent {
+                self.out.push_str("  ");
+            }
+            self.out.push_str(text.as_ref());
+            self.out.push('\n');
+        }
+
+        fn write_stmts(&mut self, stmts: &[Stmt], indent: usize) {
+            self.line(indent, "(stmts");
+            for stmt in stmts {
+                self.write_stmt(stmt, indent + 1);
+            }
+            self.line(indent, ")");
+        }
+
+        fn write_stmt(&mut self, stmt: &Stmt, indent: usize) {
+            match &stmt.node {
+                StmtNode::Expr(expr) => {
+                    self.line(indent, "(expr");
+                    self.write_expr(expr, indent + 1);
+                    self.line(indent, ")");
+                }
+                StmtNode::Break { exit } => {
+                    let label = exit
+                        .as_ref()
+                        .map(|v| self.var_name(v))
+                        .unwrap_or_else(|| "_".to_string());
+                    self.line(indent, format!("(break {label})"));
+                }
+                StmtNode::Continue { exit } => {
+                    let label = exit
+                        .as_ref()
+                        .map(|v| self.var_name(v))
+                        .unwrap_or_else(|| "_".to_string());
+                    self.line(indent, format!("(continue {label})"));
+                }
+                StmtNode::Scope { num_bindings, body } => {
+                    self.line(indent, format!("(scope bindings={num_bindings}"));
+                    self.write_stmts(body, indent + 1);
+                    self.line(indent, ")");
+                }
+                StmtNode::While {
+                    id,
+                    condition,
+                    body,
+                    environment_width,
+                } => {
+                    let label = id
+                        .as_ref()
+                        .map(|v| self.var_name(v))
+                        .unwrap_or_else(|| "_".to_string());
+                    self.line(
+                        indent,
+                        format!("(while label={label} env={environment_width}"),
+                    );
+                    self.write_expr(condition, indent + 1);
+                    self.write_stmts(body, indent + 1);
+                    self.line(indent, ")");
+                }
+                StmtNode::ForRange {
+                    id,
+                    from,
+                    to,
+                    body,
+                    environment_width,
+                } => {
+                    self.line(
+                        indent,
+                        format!(
+                            "(for-range id={} env={environment_width}",
+                            self.var_name(id)
+                        ),
+                    );
+                    self.line(indent + 1, "(from");
+                    self.write_expr(from, indent + 2);
+                    self.line(indent + 1, ")");
+                    self.line(indent + 1, "(to");
+                    self.write_expr(to, indent + 2);
+                    self.line(indent + 1, ")");
+                    self.write_stmts(body, indent + 1);
+                    self.line(indent, ")");
+                }
+                StmtNode::ForList {
+                    value_binding,
+                    key_binding,
+                    expr,
+                    body,
+                    environment_width,
+                } => {
+                    let key = key_binding
+                        .as_ref()
+                        .map(|v| self.var_name(v))
+                        .unwrap_or_else(|| "_".to_string());
+                    self.line(
+                        indent,
+                        format!(
+                            "(for-list value={} key={key} env={environment_width}",
+                            self.var_name(value_binding)
+                        ),
+                    );
+                    self.write_expr(expr, indent + 1);
+                    self.write_stmts(body, indent + 1);
+                    self.line(indent, ")");
+                }
+                StmtNode::Fork { id, time, body } => {
+                    let label = id
+                        .as_ref()
+                        .map(|v| self.var_name(v))
+                        .unwrap_or_else(|| "_".to_string());
+                    self.line(indent, format!("(fork label={label}"));
+                    self.write_expr(time, indent + 1);
+                    self.write_stmts(body, indent + 1);
+                    self.line(indent, ")");
+                }
+                StmtNode::TryExcept {
+                    body,
+                    excepts,
+                    environment_width,
+                } => {
+                    self.line(indent, format!("(try-except env={environment_width}"));
+                    self.write_stmts(body, indent + 1);
+                    for except in excepts {
+                        let id = except
+                            .id
+                            .as_ref()
+                            .map(|v| self.var_name(v))
+                            .unwrap_or_else(|| "_".to_string());
+                        self.line(indent + 1, format!("(except id={id}"));
+                        self.write_catch_codes(&except.codes, indent + 2);
+                        self.write_stmts(&except.statements, indent + 2);
+                        self.line(indent + 1, ")");
+                    }
+                    self.line(indent, ")");
+                }
+                StmtNode::TryFinally {
+                    body,
+                    handler,
+                    environment_width,
+                } => {
+                    self.line(indent, format!("(try-finally env={environment_width}"));
+                    self.line(indent + 1, "(body");
+                    self.write_stmts(body, indent + 2);
+                    self.line(indent + 1, ")");
+                    self.line(indent + 1, "(handler");
+                    self.write_stmts(handler, indent + 2);
+                    self.line(indent + 1, ")");
+                    self.line(indent, ")");
+                }
+                StmtNode::Cond { arms, otherwise } => {
+                    self.line(indent, "(if");
+                    for arm in arms {
+                        self.line(indent + 1, format!("(arm env={}", arm.environment_width));
+                        self.write_expr(&arm.condition, indent + 2);
+                        self.write_stmts(&arm.statements, indent + 2);
+                        self.line(indent + 1, ")");
+                    }
+                    if let Some(otherwise) = otherwise {
+                        self.line(
+                            indent + 1,
+                            format!("(else env={}", otherwise.environment_width),
+                        );
+                        self.write_stmts(&otherwise.statements, indent + 2);
+                        self.line(indent + 1, ")");
+                    }
+                    self.line(indent, ")");
+                }
+            }
+        }
+
+        fn write_args(&mut self, args: &[Arg], indent: usize) {
+            self.line(indent, "(args");
+            for arg in args {
+                match arg {
+                    Arg::Normal(expr) => {
+                        self.line(indent + 1, "(arg");
+                        self.write_expr(expr, indent + 2);
+                        self.line(indent + 1, ")");
+                    }
+                    Arg::Splice(expr) => {
+                        self.line(indent + 1, "(splice");
+                        self.write_expr(expr, indent + 2);
+                        self.line(indent + 1, ")");
+                    }
+                }
+            }
+            self.line(indent, ")");
+        }
+
+        fn write_scatter_items(&mut self, items: &[ScatterItem], indent: usize) {
+            self.line(indent, "(scatter-items");
+            for item in items {
+                let kind = match item.kind {
+                    ScatterKind::Required => "required",
+                    ScatterKind::Optional => "optional",
+                    ScatterKind::Rest => "rest",
+                };
+                self.line(
+                    indent + 1,
+                    format!("(item kind={kind} id={}", self.var_name(&item.id)),
+                );
+                if let Some(expr) = &item.expr {
+                    self.write_expr(expr, indent + 2);
+                }
+                self.line(indent + 1, ")");
+            }
+            self.line(indent, ")");
+        }
+
+        fn write_catch_codes(&mut self, codes: &CatchCodes, indent: usize) {
+            match codes {
+                CatchCodes::Any => self.line(indent, "(codes any)"),
+                CatchCodes::Codes(args) => {
+                    self.line(indent, "(codes");
+                    self.write_args(args, indent + 1);
+                    self.line(indent, ")");
+                }
+            }
+        }
+
+        fn write_expr(&mut self, expr: &Expr, indent: usize) {
+            match expr {
+                Expr::Assign { left, right } => {
+                    self.line(indent, "(assign");
+                    self.write_expr(left, indent + 1);
+                    self.write_expr(right, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::Pass { args } => {
+                    self.line(indent, "(pass");
+                    self.write_args(args, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::TypeConstant(typ) => {
+                    self.line(indent, format!("(type {})", typ.to_literal()))
+                }
+                Expr::Value(value) => self.line(
+                    indent,
+                    format!("(value {})", crate::unparse::to_literal(value)),
+                ),
+                Expr::Error(code, message) => {
+                    self.line(indent, format!("(error {code}"));
+                    if let Some(message) = message {
+                        self.write_expr(message, indent + 1);
+                    }
+                    self.line(indent, ")");
+                }
+                Expr::Id(id) => self.line(indent, format!("(id {})", self.var_name(id))),
+                Expr::Binary(op, left, right) => {
+                    self.line(indent, format!("(binary {op}"));
+                    self.write_expr(left, indent + 1);
+                    self.write_expr(right, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::And(left, right) => {
+                    self.line(indent, "(and");
+                    self.write_expr(left, indent + 1);
+                    self.write_expr(right, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::Or(left, right) => {
+                    self.line(indent, "(or");
+                    self.write_expr(left, indent + 1);
+                    self.write_expr(right, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::Unary(op, operand) => {
+                    self.line(indent, format!("(unary {op}"));
+                    self.write_expr(operand, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::Prop { location, property } => {
+                    self.line(indent, "(prop");
+                    self.write_expr(location, indent + 1);
+                    self.write_expr(property, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::Call { function, args } => {
+                    self.line(indent, "(call");
+                    match function {
+                        CallTarget::Builtin(name) => {
+                            self.line(indent + 1, format!("(builtin {name})"));
+                        }
+                        CallTarget::Expr(expr) => {
+                            self.line(indent + 1, "(target");
+                            self.write_expr(expr, indent + 2);
+                            self.line(indent + 1, ")");
+                        }
+                    }
+                    self.write_args(args, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::Verb {
+                    location,
+                    verb,
+                    args,
+                } => {
+                    self.line(indent, "(verb");
+                    self.write_expr(location, indent + 1);
+                    self.write_expr(verb, indent + 1);
+                    self.write_args(args, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::Range { base, from, to } => {
+                    self.line(indent, "(range");
+                    self.write_expr(base, indent + 1);
+                    self.write_expr(from, indent + 1);
+                    self.write_expr(to, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::Cond {
+                    condition,
+                    consequence,
+                    alternative,
+                } => {
+                    self.line(indent, "(cond");
+                    self.write_expr(condition, indent + 1);
+                    self.write_expr(consequence, indent + 1);
+                    self.write_expr(alternative, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::TryCatch {
+                    trye,
+                    codes,
+                    except,
+                } => {
+                    self.line(indent, "(try-expr");
+                    self.write_expr(trye, indent + 1);
+                    self.write_catch_codes(codes, indent + 1);
+                    if let Some(except) = except {
+                        self.line(indent + 1, "(except");
+                        self.write_expr(except, indent + 2);
+                        self.line(indent + 1, ")");
+                    }
+                    self.line(indent, ")");
+                }
+                Expr::Index(base, index) => {
+                    self.line(indent, "(index");
+                    self.write_expr(base, indent + 1);
+                    self.write_expr(index, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::List(args) => {
+                    self.line(indent, "(list");
+                    self.write_args(args, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::Map(entries) => {
+                    self.line(indent, "(map");
+                    for (key, value) in entries {
+                        self.line(indent + 1, "(entry");
+                        self.write_expr(key, indent + 2);
+                        self.write_expr(value, indent + 2);
+                        self.line(indent + 1, ")");
+                    }
+                    self.line(indent, ")");
+                }
+                Expr::Flyweight(delegate, slots, contents) => {
+                    self.line(indent, "(flyweight");
+                    self.write_expr(delegate, indent + 1);
+                    for (slot, value) in slots {
+                        self.line(indent + 1, format!("(slot {slot}"));
+                        self.write_expr(value, indent + 2);
+                        self.line(indent + 1, ")");
+                    }
+                    if let Some(contents) = contents {
+                        self.line(indent + 1, "(contents");
+                        self.write_expr(contents, indent + 2);
+                        self.line(indent + 1, ")");
+                    }
+                    self.line(indent, ")");
+                }
+                Expr::Scatter(items, value) => {
+                    self.line(indent, "(scatter");
+                    self.write_scatter_items(items, indent + 1);
+                    self.write_expr(value, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::Length => self.line(indent, "(length)"),
+                Expr::ComprehendList {
+                    variable,
+                    position_register,
+                    list_register,
+                    producer_expr,
+                    list,
+                } => {
+                    self.line(
+                        indent,
+                        format!(
+                            "(comprehend-list var={} pos={} list-reg={}",
+                            self.var_name(variable),
+                            self.var_name(position_register),
+                            self.var_name(list_register)
+                        ),
+                    );
+                    self.write_expr(producer_expr, indent + 1);
+                    self.write_expr(list, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::ComprehendRange {
+                    variable,
+                    end_of_range_register,
+                    producer_expr,
+                    from,
+                    to,
+                } => {
+                    self.line(
+                        indent,
+                        format!(
+                            "(comprehend-range var={} end-reg={}",
+                            self.var_name(variable),
+                            self.var_name(end_of_range_register)
+                        ),
+                    );
+                    self.write_expr(producer_expr, indent + 1);
+                    self.write_expr(from, indent + 1);
+                    self.write_expr(to, indent + 1);
+                    self.line(indent, ")");
+                }
+                Expr::Decl { id, is_const, expr } => {
+                    self.line(
+                        indent,
+                        format!(
+                            "(decl kind={} id={}",
+                            if *is_const { "const" } else { "let" },
+                            self.var_name(id)
+                        ),
+                    );
+                    if let Some(expr) = expr {
+                        self.write_expr(expr, indent + 1);
+                    }
+                    self.line(indent, ")");
+                }
+                Expr::Return(expr) => {
+                    self.line(indent, "(return");
+                    if let Some(expr) = expr {
+                        self.write_expr(expr, indent + 1);
+                    }
+                    self.line(indent, ")");
+                }
+                Expr::Lambda {
+                    params,
+                    body,
+                    self_name,
+                } => {
+                    let self_name = self_name
+                        .as_ref()
+                        .map(|v| self.var_name(v))
+                        .unwrap_or_else(|| "_".to_string());
+                    self.line(indent, format!("(lambda self={self_name}"));
+                    self.write_scatter_items(params, indent + 1);
+                    self.write_stmt(body, indent + 1);
+                    self.line(indent, ")");
+                }
+            }
+        }
+    }
+
+    let mut renderer = ShapeRenderer::new(parse);
+    renderer.write_stmts(&parse.stmts, 0);
+    while renderer.out.ends_with('\n') {
+        renderer.out.pop();
+    }
+    renderer.out
+}
+
 // AST Visitor Pattern for traversing the entire AST
 pub trait AstVisitor {
     fn visit_expr(&mut self, expr: &Expr);

@@ -656,7 +656,7 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CompileOptions, ast::assert_trees_match_recursive};
+    use crate::{CompileOptions, ast::assert_trees_match_recursive, parse_program_frontend};
 
     use pretty_assertions::assert_eq;
     use test_case::test_case;
@@ -771,10 +771,8 @@ end"#; "complex scatter declaration with optional and rest")]
 
         // Now parse both again, and verify that the complete ASTs match, ignoring the parser line
         // numbers, but validating everything else.
-        let parsed_original =
-            crate::parse::parse_program(&stripped, CompileOptions::default()).unwrap();
-        let parsed_decompiled =
-            crate::parse::parse_program(&result, CompileOptions::default()).unwrap();
+        let parsed_original = parse_program_frontend(&stripped, CompileOptions::default()).unwrap();
+        let parsed_decompiled = parse_program_frontend(&result, CompileOptions::default()).unwrap();
         assert_trees_match_recursive(&parsed_original.stmts, &parsed_decompiled.stmts)
     }
 
@@ -910,7 +908,7 @@ end"#; "complex scatter declaration with optional and rest")]
     }
 
     pub fn parse_and_unparse(original: &str) -> Result<String, DecompileError> {
-        let tree = crate::parse::parse_program(original, CompileOptions::default()).unwrap();
+        let tree = parse_program_frontend(original, CompileOptions::default()).unwrap();
         Ok(unparse(&tree, false, true)?.join("\n"))
     }
 
@@ -934,8 +932,6 @@ end"#; "complex scatter declaration with optional and rest")]
     fn test_legacy_type_literals_migration() {
         // Test that legacy type constants (INT, OBJ, STR, etc.) are parsed correctly
         // when legacy_type_constants is enabled, and that they output as TYPE_* forms.
-        use crate::parse::{CompileOptions, parse_program};
-
         let legacy_options = CompileOptions {
             legacy_type_constants: true,
             ..Default::default()
@@ -943,7 +939,7 @@ end"#; "complex scatter declaration with optional and rest")]
 
         // Parse with legacy mode - should parse INT as type constant
         let legacy_program = r#"return typeof(x) == INT;"#;
-        let tree = parse_program(legacy_program, legacy_options.clone());
+        let tree = parse_program_frontend(legacy_program, legacy_options.clone());
         assert!(
             tree.is_ok(),
             "Legacy type constant should parse: {:?}",
@@ -963,7 +959,7 @@ end"#; "complex scatter declaration with optional and rest")]
 
         // Without legacy mode, INT should be treated as a variable
         let normal_options = CompileOptions::default();
-        let normal_tree = parse_program(legacy_program, normal_options);
+        let normal_tree = parse_program_frontend(legacy_program, normal_options);
         assert!(normal_tree.is_ok(), "INT as variable should parse");
         let unparsed = unparse(&normal_tree.unwrap(), false, true)
             .expect("Unparse")
@@ -1081,7 +1077,7 @@ end"#; "complex scatter declaration with optional and rest")]
     #[test]
     fn test_fully_paren_formatting() {
         let program = r#"return 1 + 2 * 3;"#;
-        let tree = crate::parse::parse_program(program, CompileOptions::default()).unwrap();
+        let tree = parse_program_frontend(program, CompileOptions::default()).unwrap();
 
         // Test normal precedence (should be: 1 + 2 * 3)
         let normal = unparse(&tree, false, true).unwrap().join("\n");
@@ -1097,7 +1093,7 @@ end"#; "complex scatter declaration with optional and rest")]
         let program = r#"if (1)
   return 2;
 endif"#;
-        let tree = crate::parse::parse_program(program, CompileOptions::default()).unwrap();
+        let tree = parse_program_frontend(program, CompileOptions::default()).unwrap();
 
         // Test normal indented (should have indentation)
         let indented = unparse(&tree, false, true).unwrap().join("\n");
@@ -1114,7 +1110,7 @@ endif"#;
     #[test]
     fn test_indented_vs_unindented() {
         let program = "if (1)\n  a = 2;\nendif";
-        let tree = crate::parse::parse_program(program, CompileOptions::default()).unwrap();
+        let tree = parse_program_frontend(program, CompileOptions::default()).unwrap();
 
         let indented = unparse(&tree, false, true).unwrap().join("\n");
         let unindented = unparse(&tree, false, false).unwrap().join("\n");
@@ -1129,7 +1125,7 @@ endif"#;
     #[test]
     fn test_simple_fully_paren() {
         let program = "a + b;";
-        let tree = crate::parse::parse_program(program, CompileOptions::default()).unwrap();
+        let tree = parse_program_frontend(program, CompileOptions::default()).unwrap();
 
         let normal = unparse(&tree, false, true).unwrap().join("\n");
         let fully_paren = unparse(&tree, true, true).unwrap().join("\n");
@@ -1144,11 +1140,11 @@ endif"#;
         // In MOO, || and && have the same precedence and are left-associative
         // So: a || b && c should parse as: (a || b) && c
         let program = "ticks_left() < 5000 || seconds_left() < 2 && suspend(1);";
-        let tree = crate::parse::parse_program(program, CompileOptions::default()).unwrap();
+        let tree = parse_program_frontend(program, CompileOptions::default()).unwrap();
         let result = unparse(&tree, false, true).unwrap().join("\n");
 
         // Test that roundtrip is stable
-        let reparsed = crate::parse::parse_program(&result, CompileOptions::default()).unwrap();
+        let reparsed = parse_program_frontend(&result, CompileOptions::default()).unwrap();
         let result2 = unparse(&reparsed, false, true).unwrap().join("\n");
 
         // The roundtrip should be stable
@@ -1161,7 +1157,7 @@ endif"#;
         // Simple case that exposes the difference
         let program = "a || b && c;";
 
-        let tree = crate::parse::parse_program(program, CompileOptions::default()).unwrap();
+        let tree = parse_program_frontend(program, CompileOptions::default()).unwrap();
         let result = unparse(&tree, false, true).unwrap().join("\n");
 
         // Should roundtrip correctly
@@ -1170,7 +1166,7 @@ endif"#;
         // Let's also check with parentheses to verify the parsing
         let program_with_parens = "(a || b) && c;";
         let tree_with_parens =
-            crate::parse::parse_program(program_with_parens, CompileOptions::default()).unwrap();
+            parse_program_frontend(program_with_parens, CompileOptions::default()).unwrap();
         let result_with_parens = unparse(&tree_with_parens, false, true).unwrap().join("\n");
 
         // With MOO left-to-right precedence, "a || b && c" should parse the same as "(a || b) && c"
@@ -1189,11 +1185,11 @@ endif"#;
   return 1;
 endif"#;
 
-        let tree = crate::parse::parse_program(program, CompileOptions::default()).unwrap();
+        let tree = parse_program_frontend(program, CompileOptions::default()).unwrap();
         let result = unparse(&tree, false, true).unwrap().join("\n");
 
         // Test that roundtrip is stable
-        let reparsed = crate::parse::parse_program(&result, CompileOptions::default()).unwrap();
+        let reparsed = parse_program_frontend(&result, CompileOptions::default()).unwrap();
         let result2 = unparse(&reparsed, false, true).unwrap().join("\n");
 
         assert_eq!(result.trim(), result2.trim(), "Roundtrip should be stable");
@@ -1204,7 +1200,7 @@ endif"#;
         // Test that IN operator has same precedence as comparison operators
         let program = "a == b in c;";
 
-        let tree = crate::parse::parse_program(program, CompileOptions::default()).unwrap();
+        let tree = parse_program_frontend(program, CompileOptions::default()).unwrap();
         let result = unparse(&tree, false, true).unwrap().join("\n");
 
         // Should roundtrip correctly
@@ -1220,7 +1216,7 @@ endif"#;
         // Test that ^ operator is right associative
         let program = "a ^ b ^ c;";
 
-        let tree = crate::parse::parse_program(program, CompileOptions::default()).unwrap();
+        let tree = parse_program_frontend(program, CompileOptions::default()).unwrap();
         let result = unparse(&tree, false, true).unwrap().join("\n");
 
         // Should roundtrip correctly
@@ -1236,7 +1232,7 @@ endif"#;
         // Test that ^ has higher precedence than *
         let program = "a ^ b * c;";
 
-        let tree = crate::parse::parse_program(program, CompileOptions::default()).unwrap();
+        let tree = parse_program_frontend(program, CompileOptions::default()).unwrap();
         let result = unparse(&tree, false, true).unwrap().join("\n");
 
         // Should roundtrip correctly
