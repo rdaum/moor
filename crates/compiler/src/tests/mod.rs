@@ -11,7 +11,9 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
+pub mod frontend_sharp_edges;
 pub mod lexer_tests;
+pub mod literal_tests;
 pub mod operand_parsing_tests;
 pub mod proptest;
 pub mod test_macros;

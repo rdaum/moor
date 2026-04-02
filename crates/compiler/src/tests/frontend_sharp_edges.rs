@@ -553,3 +553,708 @@ fn preserves_bitwise_precedence_shape() {
 )"#;
     assert_eq!(shape, expected.trim());
 }
+
+#[test]
+fn preserves_pass_expression_forms() {
+    let shape = parse_shape(
+        r#"
+result = pass(@args);
+result = pass();
+result = pass(1,2,3,4);
+pass = blop;
+return pass;
+"#,
+    );
+    let expected = r#"
+(stmts
+  (expr
+    (assign
+      (id result)
+      (pass
+        (args
+          (splice
+            (id args)
+          )
+        )
+      )
+    )
+  )
+  (expr
+    (assign
+      (id result)
+      (pass
+        (args
+        )
+      )
+    )
+  )
+  (expr
+    (assign
+      (id result)
+      (pass
+        (args
+          (arg
+            (value 1)
+          )
+          (arg
+            (value 2)
+          )
+          (arg
+            (value 3)
+          )
+          (arg
+            (value 4)
+          )
+        )
+      )
+    )
+  )
+  (expr
+    (assign
+      (id pass)
+      (id blop)
+    )
+  )
+  (expr
+    (return
+      (id pass)
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_begin_scope_shape() {
+    let shape = parse_shape(
+        r#"
+begin
+  return 5;
+end
+"#,
+    );
+    let expected = r#"
+(stmts
+  (scope bindings=0
+    (stmts
+      (expr
+        (return
+          (value 5)
+        )
+      )
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_scoped_variable_binding_shape() {
+    let shape = parse_shape(
+        r#"
+begin
+  let x = 5;
+  let y = 6;
+  x = x + 6;
+  let z = 7;
+  let o;
+  global a = 1;
+end
+return x;
+"#,
+    );
+    let expected = r#"
+(stmts
+  (scope bindings=4
+    (stmts
+      (expr
+        (decl kind=let id=x@1
+          (value 5)
+        )
+      )
+      (expr
+        (decl kind=let id=y
+          (value 6)
+        )
+      )
+      (expr
+        (assign
+          (id x@1)
+          (binary +
+            (id x@1)
+            (value 6)
+          )
+        )
+      )
+      (expr
+        (decl kind=let id=z
+          (value 7)
+        )
+      )
+      (expr
+        (decl kind=let id=o
+        )
+      )
+      (expr
+        (assign
+          (id a)
+          (value 1)
+        )
+      )
+    )
+  )
+  (expr
+    (return
+      (id x@0)
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_error_literals_without_arguments() {
+    let shape =
+        parse_shape(r#"return {e_invarg, e_propnf, e_custom, e__ultra_long_custom, e_unknown};"#);
+    let expected = r#"
+(stmts
+  (expr
+    (return
+      (list
+        (args
+          (arg
+            (error E_INVARG
+            )
+          )
+          (arg
+            (error E_PROPNF
+            )
+          )
+          (arg
+            (error E_CUSTOM
+            )
+          )
+          (arg
+            (error E__ULTRA_LONG_CUSTOM
+            )
+          )
+          (arg
+            (error E_UNKNOWN
+            )
+          )
+        )
+      )
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_exponent_float_literal_shape() {
+    let shape = parse_shape("return 1e-09;");
+    let expected = r#"
+(stmts
+  (expr
+    (return
+      (value 1e-9)
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_direct_sysverb_call_shape() {
+    let shape = parse_shape(r#"#0:test_verb(1,2,3,"test");"#);
+    let expected = r#"
+(stmts
+  (expr
+    (verb
+      (value #0)
+      (value "test_verb")
+      (args
+        (arg
+          (value 1)
+        )
+        (arg
+          (value 2)
+        )
+        (arg
+          (value 3)
+        )
+        (arg
+          (value "test")
+        )
+      )
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_indexed_range_end_shape() {
+    let shape = parse_shape("a = {1, 2, 3}; b = a[2..$];");
+    let expected = r#"
+(stmts
+  (expr
+    (assign
+      (id a)
+      (list
+        (args
+          (arg
+            (value 1)
+          )
+          (arg
+            (value 2)
+          )
+          (arg
+            (value 3)
+          )
+        )
+      )
+    )
+  )
+  (expr
+    (assign
+      (id b)
+      (range
+        (id a)
+        (value 2)
+        (length)
+      )
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_underscore_prefixed_identifier_shape() {
+    let shape = parse_shape("_house == home;");
+    let expected = r#"
+(stmts
+  (expr
+    (binary ==
+      (id _house)
+      (id home)
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_comparison_assignment_chain_shape() {
+    let shape = parse_shape("(2 <= (len = length(player)));");
+    let expected = r#"
+(stmts
+  (expr
+    (binary <=
+      (value 2)
+      (assign
+        (id len)
+        (call
+          (builtin length)
+          (args
+            (arg
+              (id player)
+            )
+          )
+        )
+      )
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_try_catch_expression_shapes() {
+    let shape = parse_shape("return {`x ! e_varnf => 666'};");
+    let expected = r#"
+(stmts
+  (expr
+    (return
+      (list
+        (args
+          (arg
+            (try-expr
+              (id x)
+              (codes
+                (args
+                  (arg
+                    (error E_VARNF
+                    )
+                  )
+                )
+              )
+              (except
+                (value 666)
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+
+    let shape = parse_shape(r#"`raise(E_INVARG) ! ANY';"#);
+    let expected = r#"
+(stmts
+  (expr
+    (try-expr
+      (call
+        (builtin raise)
+        (args
+          (arg
+            (error E_INVARG
+            )
+          )
+        )
+      )
+      (codes any)
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+
+    let shape = parse_shape(r#"`$ftp_client:finish_get(this.connection) ! ANY';"#);
+    let expected = r#"
+(stmts
+  (expr
+    (try-expr
+      (verb
+        (prop
+          (value #0)
+          (value "ftp_client")
+        )
+        (value "finish_get")
+        (args
+          (arg
+            (prop
+              (id this)
+              (value "connection")
+            )
+          )
+        )
+      )
+      (codes any)
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_parenthesized_grouping_shape() {
+    let shape = parse_shape("1 && (2 || 3);");
+    let expected = r#"
+(stmts
+  (expr
+    (and
+      (value 1)
+      (or
+        (value 2)
+        (value 3)
+      )
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_simple_map_shape() {
+    let shape = parse_shape("[ 1 -> 2, 3 -> 4 ];");
+    let expected = r#"
+(stmts
+  (expr
+    (map
+      (entry
+        (value 1)
+        (value 2)
+      )
+      (entry
+        (value 3)
+        (value 4)
+      )
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_additional_flyweight_forms() {
+    let shape = parse_shape("<#1>;");
+    let expected = r#"
+(stmts
+  (expr
+    (flyweight
+      (value #1)
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+
+    let shape = parse_shape("<#1, a_list>;");
+    let expected = r#"
+(stmts
+  (expr
+    (flyweight
+      (value #1)
+      (contents
+        (id a_list)
+      )
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_additional_lambda_forms() {
+    let shape = parse_shape("let f = {x} => 5;");
+    let expected = r#"
+(stmts
+  (expr
+    (decl kind=let id=f
+      (lambda self=_
+        (scatter-items
+          (item kind=required id=x
+          )
+        )
+        (expr
+          (return
+            (value 5)
+          )
+        )
+      )
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_bitwise_operator_shapes() {
+    let shape = parse_shape("return 3 &. 1;");
+    let expected = r#"
+(stmts
+  (expr
+    (return
+      (binary &.
+        (value 3)
+        (value 1)
+      )
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+
+    let shape = parse_shape("return 16 >> 2;");
+    let expected = r#"
+(stmts
+  (expr
+    (return
+      (binary >>
+        (value 16)
+        (value 2)
+      )
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+
+    let shape = parse_shape("return ~5;");
+    let expected = r#"
+(stmts
+  (expr
+    (return
+      (unary ~
+        (value 5)
+      )
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_not_precedence_on_verb_call_shape() {
+    let shape = parse_shape("return !(#2:move(5));");
+    let expected = r#"
+(stmts
+  (expr
+    (return
+      (unary !
+        (verb
+          (value #2)
+          (value "move")
+          (args
+            (arg
+              (value 5)
+            )
+          )
+        )
+      )
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn preserves_keyword_ambiguous_assignment_after_endfor() {
+    let shape = parse_shape(
+        r#"
+for a in ({1,2,3})
+endfor
+info = 5;
+forgotten = 3;
+"#,
+    );
+    let expected = r#"
+(stmts
+  (for-list value=a key=_ env=0
+    (list
+      (args
+        (arg
+          (value 1)
+        )
+        (arg
+          (value 2)
+        )
+        (arg
+          (value 3)
+        )
+      )
+    )
+    (stmts
+    )
+  )
+  (expr
+    (assign
+      (id info)
+      (value 5)
+    )
+  )
+  (expr
+    (assign
+      (id forgotten)
+      (value 3)
+    )
+  )
+)"#;
+    assert_eq!(shape, expected.trim());
+}
+
+#[test]
+fn parses_scope_regression_program() {
+    parse_program_frontend(
+        r#"
+{dude, chamber, chamber_index} = args;
+if (chamber.mode == "package")
+  reagent = $player_drug_reagent:create(chamber.product_name, chamber.reagents, chamber.quality);
+  this.reagents[reagent] = `this.reagents[reagent] ! ANY => 0' + 5;
+endif
+for quantity, reagent in (received_reagents)
+  this.reagents[reagent] = `this.reagents[reagent] ! ANY => 0' + quantity;
+endfor
+"#,
+        CompileOptions::default(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn parses_begin_prefix_regression_program() {
+    parse_program_frontend(
+        r#"if (iobjstr == "")
+  player:tell("Nothing to do.");
+  return;
+elseif (iobjstr == "next")
+  if (this.last_read == length(this.notice_desc))
+    player:tell("End of notices: Start with the first one?");
+    if ($command_utils:yes_or_no())
+      beginning = 1;
+    else
+      player:tell("No more jumps to make.");
+      return;
+    endif
+  else
+    beginning = this.last_read + 1;
+    what = this.last_scan;
+  endif
+else
+  beginning = 1;
+  what = iobjstr;
+  this.last_scan = what;
+endif"#,
+        CompileOptions::default(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn parses_auditdb_regression_program() {
+    parse_program_frontend(
+        r#""Usage:  @auditDB [player] [from <start>] [to <end>] [for <matching string>]";
+set_task_perms(player);
+dobj = player:my_match_player(dobjstr);
+if (!dobjstr)
+dobj = player;
+elseif ($command_utils:player_match_failed(dobj, dobjstr) && (!(valid(dobj = $string_utils:literal_object(dobjstr)) && $command_utils:yes_or_no("Continue?"))))
+return;
+endif
+dobjwords = $string_utils:words(dobjstr);
+if (args[1..length(dobjwords)] == dobjwords)
+args = args[length(dobjwords) + 1..length(args)];
+endif
+if (!(parse_result = $code_utils:_parse_audit_args(@args)))
+player:notify(tostr("Usage:  ", verb, " [player] [from <start>] [to <end>] [for <match>]"));
+return;
+endif
+start = parse_result[1];
+end = parse_result[2];
+match = parse_result[3];
+player:notify(tostr("Objects owned by ", valid(dobj) ? dobj:name() | dobj, ((" (from #" + tostr(start)) + " to #") + tostr(end), match ? " matching " + match | "", ")", ":"));
+player:notify("");
+count = 0;
+"Only print every third suspension";
+do_print = 0;
+for i in [start..end]
+o = toobj(i);
+if ($command_utils:running_out_of_time())
+(do_print = (do_print + 1) % 3) || player:notify(tostr("... ", o));
+suspend(5);
+endif
+if (valid(o) && (o.owner == dobj))
+found = 0;
+names = {o:name(), @o.aliases};
+while (names && (!found))
+if (index(names[1], match) == 1)
+found = 1;
+endif
+names = listdelete(names, 1);
+endwhile
+if (found)
+player:notify(tostr(o:name(), " (", o, ")"));
+count = count + 1;
+do_print = 0;
+endif
+endif
+endfor
+if (count)
+player:notify("");
+endif
+player:notify(tostr("Total: ", count, " object", (count == 1) ? "." | "s."));
+return 0 && "Automatically Added Return";"#,
+        CompileOptions::default(),
+    )
+    .unwrap();
+}

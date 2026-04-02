@@ -53,6 +53,27 @@ fn begin_and_end_are_not_reserved_keywords() {
 }
 
 #[test]
+fn elseif_fork_and_endfork_are_lexed_as_full_keywords() {
+    assert_eq!(
+        kinds("elseif fork endfork elseifx forklift endformat"),
+        vec![
+            SyntaxKind::ElseIfKw,
+            SyntaxKind::Whitespace,
+            SyntaxKind::ForkKw,
+            SyntaxKind::Whitespace,
+            SyntaxKind::EndForkKw,
+            SyntaxKind::Whitespace,
+            SyntaxKind::Ident,
+            SyntaxKind::Whitespace,
+            SyntaxKind::Ident,
+            SyntaxKind::Whitespace,
+            SyntaxKind::Ident,
+            SyntaxKind::Eof,
+        ]
+    );
+}
+
+#[test]
 fn preserves_comment_and_newline_trivia() {
     assert_eq!(
         kinds("// hi\n/* lo */\nfoo"),
