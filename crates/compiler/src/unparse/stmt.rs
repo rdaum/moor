@@ -358,7 +358,7 @@ impl<'a> Unparse<'a> {
     ) -> Result<(), DecompileError> {
         self.write_indent(indent, writer)?;
         write!(writer, "fn {name}(")?;
-        self.write_lambda_params(params, writer)?;
+        self.write_scatter_items(params, writer)?;
         writeln!(writer, ")")?;
 
         match &body.node {

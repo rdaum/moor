@@ -18,13 +18,13 @@ use crate::{
     precedence::{PrecedenceLevel, expr_precedence_level},
 };
 use moor_common::util::quote_str;
-use moor_var::{Obj, VarType};
-pub(super) enum ParenPosition {
+use moor_var::Obj;
+enum ParenPosition {
     Left,
     Right,
 }
 
-pub(super) fn needs_parens(
+fn needs_parens(
     expr: &Expr,
     parent: &Expr,
     fully_paren: bool,
@@ -137,9 +137,10 @@ impl<'a> Unparse<'a> {
                 }
                 Ok(())
             }
-            Expr::Value(value) => write_literal(value, writer),
-            Expr::TypeConstant(typ) => {
-                write!(writer, "{}", unparse_type_constant(*typ)).map_err(Into::into)
+            Expr::TypeConstant(typ) => write!(writer, "{}", typ.to_literal()).map_err(Into::into),
+            Expr::Id(id) => {
+                write!(writer, "{}", self.unparse_variable(id).as_arc_str()).map_err(Into::into)
+                write!(writer, "{}", typ.to_literal()).map_err(Into::into)
             }
             Expr::Return(expr) => {
                 write!(writer, "return")?;
@@ -206,17 +207,17 @@ impl<'a> Unparse<'a> {
                 Ok(())
             }
             Expr::Prop { location, property } => {
-                if is_system_object(location)
-                    && let Some(name) = literal_property_name(property)
-                {
-                    write!(writer, "${name}")?;
+                if is_system_object(location) && is_literal_name(property) {
+                    write!(writer, "$")?;
+                    write_literal_name(property, writer)?;
                     return Ok(());
                 }
 
                 let location_needs_parens =
                     self.fully_paren || expr_precedence_level(location) < PrecedenceLevel::Postfix;
                 write_maybe_parenthesized_expr(self, location, writer, location_needs_parens)?;
-                write!(writer, ".{}", unparse_property_access(self, property)?)?;
+                write!(writer, ".")?;
+                write_member_access(self, property, writer)?;
                 Ok(())
             }
             Expr::Index(base, index) => {
@@ -233,10 +234,10 @@ impl<'a> Unparse<'a> {
                 verb,
                 args,
             } => {
-                if is_system_object(location)
-                    && let Some(name) = system_verb_name(self, verb)
-                {
-                    write!(writer, "${name}(")?;
+                if is_system_object(location) && is_system_verb_name(verb) {
+                    write!(writer, "$")?;
+                    write_system_verb_name(self, verb, writer)?;
+                    write!(writer, "(")?;
                     self.write_args(args, writer)?;
                     write!(writer, ")")?;
                     return Ok(());
@@ -245,7 +246,9 @@ impl<'a> Unparse<'a> {
                 let location_needs_parens =
                     self.fully_paren || expr_precedence_level(location) < PrecedenceLevel::Postfix;
                 write_maybe_parenthesized_expr(self, location, writer, location_needs_parens)?;
-                write!(writer, ":{}(", unparse_verb_access(self, verb)?)?;
+                write!(writer, ":")?;
+                write_member_access(self, verb, writer)?;
+                write!(writer, "(")?;
                 self.write_args(args, writer)?;
                 write!(writer, ")")?;
                 Ok(())
@@ -355,14 +358,14 @@ impl<'a> Unparse<'a> {
 
                 if let ast::StmtNode::Expr(Expr::Return(Some(expr))) = &body.node {
                     write!(writer, "{{")?;
-                    self.write_lambda_params(params, writer)?;
+                    self.write_scatter_items(params, writer)?;
                     write!(writer, "}} => ")?;
                     self.write_expr(expr, writer)?;
                     return Ok(());
                 }
 
                 write!(writer, "fn (")?;
-                self.write_lambda_params(params, writer)?;
+                self.write_scatter_items(params, writer)?;
                 write!(writer, ") ")?;
                 self.write_lambda_body_inline(std::slice::from_ref(body), writer)?;
                 write!(writer, "endfn")?;
@@ -388,67 +391,81 @@ fn write_maybe_parenthesized_expr<W: std::fmt::Write>(
     Ok(())
 }
 
-fn unparse_property_access(unparse: &Unparse<'_>, property: &Expr) -> Result<String, DecompileError> {
-    if let Some(name) = property_name(unparse, property) {
-        return Ok(name);
+/// Write a property or verb name: bare identifier when possible, parenthesized expression otherwise.
+fn write_member_access<W: std::fmt::Write>(
+    unparse: &Unparse<'_>,
+    expr: &Expr,
+    writer: &mut W,
+) -> Result<(), DecompileError> {
+    if try_write_name(expr, writer)? {
+        return Ok(());
     }
-
-    let mut buffer = String::from("(");
-    unparse.write_expr(property, &mut buffer)?;
-    buffer.push(')');
-    Ok(buffer)
+    write!(writer, "(")?;
+    unparse.write_expr(expr, writer)?;
+    write!(writer, ")")?;
+    Ok(())
 }
 
-fn unparse_verb_access(unparse: &Unparse<'_>, verb: &Expr) -> Result<String, DecompileError> {
-    if let Some(name) = property_name(unparse, verb) {
-        return Ok(name);
-    }
-
-    let mut buffer = String::from("(");
-    unparse.write_expr(verb, &mut buffer)?;
-    buffer.push(')');
-    Ok(buffer)
-}
-
-fn property_name(_unparse: &Unparse<'_>, expr: &Expr) -> Option<String> {
+/// Try to write a property/verb name directly. Returns true if the expression was
+/// a simple name that was written, false if the caller should fall back to general
+/// expression formatting.
+fn try_write_name<W: std::fmt::Write>(
+    expr: &Expr,
+    writer: &mut W,
+) -> Result<bool, DecompileError> {
     match expr {
         Expr::Value(value) => {
             if let Ok(symbol) = value.as_symbol() {
-                return Some(format_name_fragment(symbol.as_arc_str().as_ref()));
+                write_name_fragment(symbol.as_arc_str().as_ref(), writer)?;
+fn try_write_name<W: std::fmt::Write>(expr: &Expr, writer: &mut W) -> Result<bool, DecompileError> {
+                return Ok(true);
             }
-            value
-                .as_string()
-                .map(|s| format_name_fragment(s.as_ref()))
+            Ok(false)
         }
-        _ => None,
+        _ => Ok(false),
     }
 }
 
-fn literal_property_name(expr: &Expr) -> Option<String> {
-    match expr {
-        Expr::Value(value) => {
-            if let Ok(symbol) = value.as_symbol() {
-                return Some(symbol.as_arc_str().to_string());
-            }
-            value.as_string().map(|s| s.to_string())
-        }
-        _ => None,
-    }
+/// Check whether an expression is a literal string or symbol name (for system object sugar).
+fn is_literal_name(expr: &Expr) -> bool {
+    matches!(expr, Expr::Value(value) if value.as_symbol().is_ok() || value.as_string().is_some())
 }
 
-fn system_verb_name(unparse: &Unparse<'_>, expr: &Expr) -> Option<String> {
-    match expr {
-        Expr::Id(id) => Some(unparse.unparse_variable(id).as_arc_str().to_string()),
-        _ => literal_property_name(expr),
+/// Write a literal property/verb name without quoting (for `$name` sugar).
+fn write_literal_name<W: std::fmt::Write>(
+    expr: &Expr,
+    writer: &mut W,
+) -> Result<(), DecompileError> {
+    if let Expr::Value(value) = expr {
+        if let Ok(symbol) = value.as_symbol() {
+            write!(writer, "{}", symbol.as_arc_str())?;
+        } else if let Some(s) = value.as_string() {
+            write!(writer, "{s}")?;
+        }
     }
+    Ok(())
+}
+
+/// Check whether an expression can be rendered as a system verb name (`$name()`).
+fn is_system_verb_name(expr: &Expr) -> bool {
+    matches!(expr, Expr::Id(_)) || is_literal_name(expr)
+}
+
+/// Write a system verb name (variable identifier or literal name).
+fn write_system_verb_name<W: std::fmt::Write>(
+    unparse: &Unparse<'_>,
+    expr: &Expr,
+    writer: &mut W,
+) -> Result<(), DecompileError> {
+    match expr {
+        Expr::Id(id) => write!(writer, "{}", unparse.unparse_variable(id).as_arc_str())?,
+        _ => write_literal_name(expr, writer)?,
+    }
+    Ok(())
 }
 
 fn is_system_object(expr: &Expr) -> bool {
     matches!(expr, Expr::Value(value) if value.as_object() == Some(Obj::mk_id(0)))
-}
-
-fn unparse_type_constant(typ: VarType) -> String {
-    typ.to_literal().to_string()
 }
 
 fn unary_operand_needs_parens(expr: &Expr) -> bool {
@@ -471,12 +488,16 @@ fn unary_operand_needs_parens(expr: &Expr) -> bool {
     }
 }
 
-fn format_name_fragment(name: &str) -> String {
+fn write_name_fragment<W: std::fmt::Write>(
+    name: &str,
+    writer: &mut W,
+) -> Result<(), DecompileError> {
     let needs_quotes = name.chars().any(|c| !c.is_alphanumeric() && c != '_')
         || (name.chars().next().is_some_and(|c| c.is_numeric()) && !name.starts_with('_'));
     if needs_quotes {
-        format!("({})", quote_str(name))
+        write!(writer, "({})", quote_str(name))?;
     } else {
-        name.to_string()
+        write!(writer, "{name}")?;
     }
+    Ok(())
 }

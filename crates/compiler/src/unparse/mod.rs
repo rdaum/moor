@@ -85,34 +85,8 @@ impl<'a> Unparse<'a> {
         }
     }
 
-    /// Format lambda parameters as a comma-separated string with proper prefixes.
-    /// Used by both simple (`{params} => expr`) and complex (`fn (params) ... endfn`) lambda syntax.
-    fn write_lambda_params<W: std::fmt::Write>(
-        &self,
-        params: &[ast::ScatterItem],
-        writer: &mut W,
-    ) -> Result<(), DecompileError> {
-        for (i, param) in params.iter().enumerate() {
-            if i > 0 {
-                write!(writer, ", ")?;
-            }
-
-            let prefix = match param.kind {
-                ast::ScatterKind::Required => "",
-                ast::ScatterKind::Optional => "?",
-                ast::ScatterKind::Rest => "@",
-            };
-            let name = self.unparse_variable(&param.id);
-            if let Some(default) = &param.expr {
-                write!(writer, "{}{} = ", prefix, name.as_arc_str())?;
-                self.write_expr(default, writer)?;
-            } else {
-                write!(writer, "{}{}", prefix, name.as_arc_str())?;
-            }
-        }
-        Ok(())
-    }
-
+    /// Format scatter items (parameters, destructuring bindings) as a comma-separated list
+    /// with kind prefixes (`?` for optional, `@` for rest) and optional default expressions.
     fn write_scatter_items<W: std::fmt::Write>(
         &self,
         items: &[ast::ScatterItem],
