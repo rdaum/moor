@@ -532,16 +532,16 @@ pub fn assert_trees_match_recursive(a: &[Stmt], b: &[Stmt]) {
 }
 
 #[cfg(test)]
-pub fn render_parse_shape(parse: &crate::parse::Parse) -> String {
+pub fn render_parse_shape(parse: &crate::parse_tree::Parse) -> String {
     use moor_var::program::names::VarName;
 
     struct ShapeRenderer<'a> {
-        parse: &'a crate::parse::Parse,
+        parse: &'a crate::parse_tree::Parse,
         out: String,
     }
 
     impl<'a> ShapeRenderer<'a> {
-        fn new(parse: &'a crate::parse::Parse) -> Self {
+        fn new(parse: &'a crate::parse_tree::Parse) -> Self {
             Self {
                 parse,
                 out: String::new(),

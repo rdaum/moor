@@ -30,6 +30,7 @@ use crate::{
         BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr,
         ScatterItem as AstScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
     },
+    compile_options::CompileOptions,
     frontend::{
         cst::{
             BeginStmt, BreakStmt, ConstStmt, ContinueStmt, ExprStmt, Expression, FnStmt, ForInStmt,
@@ -39,7 +40,7 @@ use crate::{
         parser::parse_to_syntax_node,
         syntax::{SyntaxElement, SyntaxNode, SyntaxToken},
     },
-    parse::{CompileOptions, Parse},
+    parse_tree::Parse,
     unparse::annotate_line_numbers,
 };
 

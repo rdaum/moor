@@ -17,12 +17,14 @@ pub use moor_var::program::names::Names;
 
 mod ast;
 mod codegen;
+mod compile_options;
 mod decompile;
 mod diagnostics;
 pub mod frontend;
 mod lexer;
-mod parse;
+mod parse_tree;
 mod precedence;
+mod pest_grammar;
 mod syntax_kind;
 mod unparse;
 
@@ -38,7 +40,8 @@ pub use crate::diagnostics::{
     format_compile_error,
 };
 pub use crate::{
-    codegen::{compile, compile_classic},
+    codegen::compile,
+    compile_options::CompileOptions,
     decompile::program_to_tree,
     frontend::cst::{
         AssignExpr, BeginStmt, BinExpr, BreakStmt, CallExpr, ComprehensionExpr, CondExpr,
@@ -57,7 +60,6 @@ pub use crate::{
         ObjDefParseError, ObjFileContext, ObjPropDef, ObjPropOverride, ObjVerbDef,
         ObjectDefinition, compile_object_definitions, parse_literal_value,
     },
-    parse::CompileOptions,
     precedence::{PrecedenceLevel, expr_precedence_level},
     syntax_kind::SyntaxKind,
     unparse::{to_literal, to_literal_objsub, unparse},

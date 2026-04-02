@@ -18,7 +18,7 @@ use crate::{
         ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
     },
     decompile::DecompileError::{BuiltinNotFound, MalformedProgram},
-    parse::Parse,
+    parse_tree::Parse,
     var_scope::VarScope,
 };
 use moor_common::builtins::BuiltinId;
@@ -1558,12 +1558,8 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        CompileOptions,
-        ast::assert_trees_match_recursive,
-        codegen::compile,
-        decompile::program_to_tree,
-        frontend::lower::parse_program_frontend,
-        parse::Parse,
+        CompileOptions, ast::assert_trees_match_recursive, codegen::compile,
+        decompile::program_to_tree, frontend::lower::parse_program_frontend, parse_tree::Parse,
         unparse::annotate_line_numbers,
     };
     use test_case::test_case;

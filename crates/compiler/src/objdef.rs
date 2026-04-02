@@ -16,7 +16,7 @@ use crate::{
     ObjDefParseError::VerbCompileError,
     codegen::compile,
     diagnostics::build_parse_error_details,
-    parse::objdef::{ObjDefParser, Rule},
+    pest_grammar::objdef::{ObjDefParser, Rule},
 };
 use base64::{Engine, engine::general_purpose};
 use moor_common::{

@@ -18,7 +18,7 @@ use crate::{
     ast,
     ast::{Stmt, StmtNode},
     decompile::DecompileError,
-    parse::Parse,
+    parse_tree::Parse,
 };
 use base64::{Engine, engine::general_purpose};
 use moor_common::util::quote_str;
