@@ -1035,6 +1035,23 @@ impl<'a> Lowerer<'a> {
         let args = self.lower_args(&elements[2..elements.len().saturating_sub(1)])?;
 
         match callee {
+            NodeOrToken::Token(token) if token.kind() == SyntaxKind::ErrorLit => {
+                let Expr::Error(error, None) = self.lower_error_literal_token(&token)? else {
+                    unreachable!("error literal token did not lower to Expr::Error");
+                };
+                let message = match args.as_slice() {
+                    [] => None,
+                    [Normal(expr)] => Some(Box::new(expr.clone())),
+                    _ => {
+                        return Err(self.make_parse_error(
+                            token.text_range(),
+                            "frontend lowering error literal",
+                            "error literals accept at most one non-spliced argument",
+                        ));
+                    }
+                };
+                Ok(Expr::Error(error, message))
+            }
             NodeOrToken::Token(token) if token.kind() == SyntaxKind::Ident => {
                 let function_name = Symbol::mk(token.text());
                 let function = if BUILTINS.find_builtin(function_name).is_some() {
@@ -1592,24 +1609,7 @@ impl<'a> Lowerer<'a> {
                 })?;
                 Ok(Expr::Value(v_binary(decoded)))
             }
-            SyntaxKind::ErrorLit => {
-                let Some(error) = moor_var::ErrorCode::parse_str(token.text()) else {
-                    return Err(self.make_parse_error(
-                        token.text_range(),
-                        "frontend lowering error literal",
-                        "invalid error literal",
-                    ));
-                };
-                if let moor_var::ErrorCode::ErrCustom(_) = &error
-                    && !self.options.custom_errors
-                {
-                    return Err(CompileError::DisabledFeature(
-                        self.compile_context(token.text_range()),
-                        "CustomErrors".to_string(),
-                    ));
-                }
-                Ok(Expr::Error(error, None))
-            }
+            SyntaxKind::ErrorLit => self.lower_error_literal_token(&token),
             SyntaxKind::ObjectLit => self.lower_object_literal(token),
             SyntaxKind::TypeConstant => {
                 let type_id = VarType::parse(token.text()).ok_or_else(|| {
@@ -1661,6 +1661,25 @@ impl<'a> Lowerer<'a> {
             }
             _ => Err(self.unsupported_token(&token, "frontend atom lowering")),
         }
+    }
+
+    fn lower_error_literal_token(&self, token: &SyntaxToken) -> Result<Expr, CompileError> {
+        let Some(error) = moor_var::ErrorCode::parse_str(token.text()) else {
+            return Err(self.make_parse_error(
+                token.text_range(),
+                "frontend lowering error literal",
+                "invalid error literal",
+            ));
+        };
+        if let moor_var::ErrorCode::ErrCustom(_) = &error
+            && !self.options.custom_errors
+        {
+            return Err(CompileError::DisabledFeature(
+                self.compile_context(token.text_range()),
+                "CustomErrors".to_string(),
+            ));
+        }
+        Ok(Expr::Error(error, None))
     }
 
     fn lower_object_literal(&self, token: SyntaxToken) -> Result<Expr, CompileError> {
@@ -1870,95 +1889,387 @@ fn expect_token(elements: &[SyntaxElement], idx: usize) -> Result<SyntaxToken, C
 #[cfg(test)]
 mod tests {
     use super::parse_program_frontend;
-    use crate::{CompileOptions, ast::assert_trees_match_recursive, parse::parse_program};
+    use crate::{CompileOptions, ast::render_parse_shape};
 
     #[test]
-    fn lowers_expression_and_declaration_subset_with_old_parser_parity() {
-        let source = "let x = 1 + 2; const y = [\"a\" -> x]; global z = x; x = y[\"a\"]; return x;";
-        let old = parse_program(source, CompileOptions::default()).unwrap();
-        let new = parse_program_frontend(source, CompileOptions::default()).unwrap();
-        assert_eq!(old.variables, new.variables);
-        assert_eq!(old.names, new.names);
-        assert_trees_match_recursive(&old.stmts, &new.stmts);
+    fn lowers_declarations_and_scope_to_canonical_shape() {
+        let source = r#"let x = 1 + 2;
+const y = ["a" -> x];
+global z = x;
+x = y["a"];
+begin
+  let xs = {1, @rest};
+  return $foo[1..$];
+end"#;
+        let parse = parse_program_frontend(source, CompileOptions::default()).unwrap();
+        let shape = render_parse_shape(&parse);
+        let expected = r#"
+(stmts
+  (expr
+    (decl kind=let id=x
+      (binary +
+        (value 1)
+        (value 2)
+      )
+    )
+  )
+  (expr
+    (decl kind=const id=y
+      (map
+        (entry
+          (value "a")
+          (id x)
+        )
+      )
+    )
+  )
+  (expr
+    (assign
+      (id z)
+      (id x)
+    )
+  )
+  (expr
+    (assign
+      (id x)
+      (index
+        (id y)
+        (value "a")
+      )
+    )
+  )
+  (scope bindings=1
+    (stmts
+      (expr
+        (decl kind=let id=xs
+          (list
+            (args
+              (arg
+                (value 1)
+              )
+              (splice
+                (id rest)
+              )
+            )
+          )
+        )
+      )
+      (expr
+        (return
+          (range
+            (prop
+              (value #0)
+              (value "foo")
+            )
+            (value 1)
+            (length)
+          )
+        )
+      )
+    )
+  )
+)"#;
+        assert_eq!(shape, expected.trim());
     }
 
     #[test]
-    fn lowers_begin_scope_and_range_end_with_old_parser_parity() {
-        let source = "begin let xs = {1, @rest}; return $foo[1..$]; end";
-        let old = parse_program(source, CompileOptions::default()).unwrap();
-        let new = parse_program_frontend(source, CompileOptions::default()).unwrap();
-        assert_eq!(old.variables, new.variables);
-        assert_eq!(old.names, new.names);
-        assert_trees_match_recursive(&old.stmts, &new.stmts);
-    }
-
-    #[test]
-    fn lowers_if_while_and_for_subset_with_old_parser_parity() {
+    fn lowers_control_flow_to_canonical_shape() {
         let source = "if (a) while loop (b) break loop; endwhile elseif (c) continue; else for x, y in (items) return x; endfor endif";
-        let old = parse_program(source, CompileOptions::default()).unwrap();
-        let new = parse_program_frontend(source, CompileOptions::default()).unwrap();
-        assert_eq!(old.variables, new.variables);
-        assert_eq!(old.names, new.names);
-        assert_trees_match_recursive(&old.stmts, &new.stmts);
+        let parse = parse_program_frontend(source, CompileOptions::default()).unwrap();
+        let shape = render_parse_shape(&parse);
+        let expected = r#"
+(stmts
+  (if
+    (arm env=1
+      (id a)
+      (stmts
+        (while label=loop env=0
+          (id b)
+          (stmts
+            (break loop)
+          )
+        )
+      )
+    )
+    (arm env=0
+      (id c)
+      (stmts
+        (continue _)
+      )
+    )
+    (else env=2
+      (stmts
+        (for-list value=x key=y env=0
+          (id items)
+          (stmts
+            (expr
+              (return
+                (id x)
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)"#;
+        assert_eq!(shape, expected.trim());
     }
 
     #[test]
-    fn lowers_fork_and_try_subset_with_old_parser_parity() {
-        let source = "fork timer (5) return x; endfork try return x; except err (ANY) return y; except (codes) return z; endtry";
-        let old = parse_program(source, CompileOptions::default()).unwrap();
-        let new = parse_program_frontend(source, CompileOptions::default()).unwrap();
-        assert_eq!(old.variables, new.variables);
-        assert_eq!(old.names, new.names);
-        assert_trees_match_recursive(&old.stmts, &new.stmts);
+    fn lowers_fork_and_try_forms_to_canonical_shape() {
+        let source = "fork timer (5) return x; endfork try return x; except err (ANY) return y; except (codes) return z; endtry try return x; finally return y; endtry";
+        let parse = parse_program_frontend(source, CompileOptions::default()).unwrap();
+        let shape = render_parse_shape(&parse);
+        let expected = r#"
+(stmts
+  (fork label=timer
+    (value 5)
+    (stmts
+      (expr
+        (return
+          (id x)
+        )
+      )
+    )
+  )
+  (try-except env=0
+    (stmts
+      (expr
+        (return
+          (id x)
+        )
+      )
+    )
+    (except id=err
+      (codes any)
+      (stmts
+        (expr
+          (return
+            (id y)
+          )
+        )
+      )
+    )
+    (except id=_
+      (codes
+        (args
+          (arg
+            (id codes)
+          )
+        )
+      )
+      (stmts
+        (expr
+          (return
+            (id z)
+          )
+        )
+      )
+    )
+  )
+  (try-finally env=0
+    (body
+      (stmts
+        (expr
+          (return
+            (id x)
+          )
+        )
+      )
+    )
+    (handler
+      (stmts
+        (expr
+          (return
+            (id y)
+          )
+        )
+      )
+    )
+  )
+)"#;
+        assert_eq!(shape, expected.trim());
     }
 
     #[test]
-    fn lowers_try_finally_subset_with_old_parser_parity() {
-        let source = "try return x; finally return y; endtry";
-        let old = parse_program(source, CompileOptions::default()).unwrap();
-        let new = parse_program_frontend(source, CompileOptions::default()).unwrap();
-        assert_eq!(old.variables, new.variables);
-        assert_eq!(old.names, new.names);
-        assert_trees_match_recursive(&old.stmts, &new.stmts);
+    fn lowers_fn_and_lambda_forms_to_canonical_shape() {
+        let source = "fn add(a, ?b = 1, @rest) return a + b; endfn value = fn(x) return x; endfn; let f = {?x = 1, @rest} => x + 1; return f;";
+        let parse = parse_program_frontend(source, CompileOptions::default()).unwrap();
+        let shape = render_parse_shape(&parse);
+        let expected = r#"
+(stmts
+  (expr
+    (decl kind=let id=add
+      (lambda self=add
+        (scatter-items
+          (item kind=required id=a
+          )
+          (item kind=optional id=b
+            (value 1)
+          )
+          (item kind=rest id=rest@1
+          )
+        )
+        (scope bindings=0
+          (stmts
+            (expr
+              (return
+                (binary +
+                  (id a)
+                  (id b)
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+  (expr
+    (decl kind=let id=value
+      (lambda self=_
+        (scatter-items
+          (item kind=required id=x@3
+          )
+        )
+        (scope bindings=0
+          (stmts
+            (expr
+              (return
+                (id x@3)
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+  (expr
+    (decl kind=let id=f
+      (lambda self=_
+        (scatter-items
+          (item kind=optional id=x@5
+            (value 1)
+          )
+          (item kind=rest id=rest@5
+          )
+        )
+        (expr
+          (return
+            (binary +
+              (id x@5)
+              (value 1)
+            )
+          )
+        )
+      )
+    )
+  )
+  (expr
+    (return
+      (id f)
+    )
+  )
+)"#;
+        assert_eq!(shape, expected.trim());
     }
 
     #[test]
-    fn lowers_named_fn_and_fn_assignment_with_old_parser_parity() {
-        let source = "fn add(a, ?b = 1, @rest) return a + b; endfn value = fn(x) return x; endfn;";
-        let old = parse_program(source, CompileOptions::default()).unwrap();
-        let new = parse_program_frontend(source, CompileOptions::default()).unwrap();
-        assert_eq!(old.variables, new.variables);
-        assert_eq!(old.names, new.names);
-        assert_trees_match_recursive(&old.stmts, &new.stmts);
-    }
-
-    #[test]
-    fn lowers_arrow_lambda_with_old_parser_parity() {
-        let source = "let f = {?x = 1, @rest} => x + 1; return f;";
-        let old = parse_program(source, CompileOptions::default()).unwrap();
-        let new = parse_program_frontend(source, CompileOptions::default()).unwrap();
-        assert_eq!(old.variables, new.variables);
-        assert_eq!(old.names, new.names);
-        assert_trees_match_recursive(&old.stmts, &new.stmts);
-    }
-
-    #[test]
-    fn lowers_specialized_expressions_with_old_parser_parity() {
+    fn lowers_specialized_expressions_to_canonical_shape() {
         let source = "return foo:bar(1, @args) + `x ! E_PERM, @codes => y ' + <#1, .name = \"x\", .value = 1, {1, 2}>;";
-        let old = parse_program(source, CompileOptions::default()).unwrap();
-        let new = parse_program_frontend(source, CompileOptions::default()).unwrap();
-        assert_eq!(old.variables, new.variables);
-        assert_eq!(old.names, new.names);
-        assert_trees_match_recursive(&old.stmts, &new.stmts);
+        let parse = parse_program_frontend(source, CompileOptions::default()).unwrap();
+        let shape = render_parse_shape(&parse);
+        let expected = r#"
+(stmts
+  (expr
+    (return
+      (binary +
+        (binary +
+          (verb
+            (id foo)
+            (value "bar")
+            (args
+              (arg
+                (value 1)
+              )
+              (splice
+                (id args)
+              )
+            )
+          )
+          (try-expr
+            (id x)
+            (codes
+              (args
+                (arg
+                  (error E_PERM
+                  )
+                )
+                (splice
+                  (id codes)
+                )
+              )
+            )
+            (except
+              (id y)
+            )
+          )
+        )
+        (flyweight
+          (value #1)
+          (slot name
+            (value "x")
+          )
+          (slot value
+            (value 1)
+          )
+          (contents
+            (list
+              (args
+                (arg
+                  (value 1)
+                )
+                (arg
+                  (value 2)
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)"#;
+        assert_eq!(shape, expected.trim());
     }
 
     #[test]
-    fn lowers_comprehensions_with_old_parser_parity() {
+    fn lowers_comprehensions_to_canonical_shape() {
         let source = "return {item * 2 for item in (items)} + {n for n in [1..limit]};";
-        let old = parse_program(source, CompileOptions::default()).unwrap();
-        let new = parse_program_frontend(source, CompileOptions::default()).unwrap();
-        assert_eq!(old.variables, new.variables);
-        assert_eq!(old.names, new.names);
-        assert_trees_match_recursive(&old.stmts, &new.stmts);
+        let parse = parse_program_frontend(source, CompileOptions::default()).unwrap();
+        let shape = render_parse_shape(&parse);
+        let expected = r#"
+(stmts
+  (expr
+    (return
+      (binary +
+        (comprehend-list var=item pos=<register_0> list-reg=<register_1>
+          (binary *
+            (id item)
+            (value 2)
+          )
+          (id items)
+        )
+        (comprehend-range var=n end-reg=<register_2>
+          (id n)
+          (value 1)
+          (id limit)
+        )
+      )
+    )
+  )
+)"#;
+        assert_eq!(shape, expected.trim());
     }
 }

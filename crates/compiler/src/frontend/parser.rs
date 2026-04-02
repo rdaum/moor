@@ -724,13 +724,13 @@ impl<'a> Parser<'a> {
                 self.parse_try_expr();
             }
             SyntaxKind::Dollar => {
-                if self.cursor.nth_kind(1) == SyntaxKind::Ident {
+                if is_name_like_token(self.cursor.nth_kind(1)) {
                     self.builder.start_node(SyntaxKind::SysPropExpr);
                     self.bump_significant();
-                    if !self.cursor.bump_if(SyntaxKind::Ident) {
-                        self.cursor.push_error("expected identifier after '$'");
-                    } else {
+                    if self.bump_ident_like_name() {
                         self.emit_to_cursor();
+                    } else {
+                        self.cursor.push_error("expected identifier after '$'");
                     }
                     self.builder.finish_node();
                 } else {
