@@ -227,3 +227,91 @@ impl ProgramOperandParts {
         }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use moor_var::{
+        v_int,
+        program::{
+            labels::{JumpLabel, Label, Offset},
+            names::{Name, Names},
+            opcode::Op,
+            program::Program,
+        },
+    };
+
+    use super::OperandState;
+
+    #[test]
+    fn deduplicates_literals_case_sensitively() {
+        let mut operands = OperandState::new();
+
+        let first = operands.add_literal(&v_int(7));
+        let second = operands.add_literal(&v_int(7));
+        let third = operands.add_literal(&v_int(8));
+
+        assert_eq!(first, Label(0));
+        assert_eq!(second, Label(0));
+        assert_eq!(third, Label(1));
+
+        let parts = operands.take_program_parts();
+        assert_eq!(parts.literals, vec![v_int(7), v_int(8)]);
+    }
+
+    #[test]
+    fn snapshot_restore_roundtrips_operand_tables() {
+        let mut operands = OperandState::new();
+        operands.add_literal(&v_int(7));
+        operands.add_error_code_operand(moor_var::E_INVARG);
+        operands.add_fork_vector(4, vec![Op::ImmInt(1)], vec![(0, 12)]);
+
+        let snapshot = operands.snapshot_and_reset();
+        assert!(operands.take_program_parts().literals.is_empty());
+
+        operands.restore(snapshot);
+        let parts = operands.take_program_parts();
+        assert_eq!(parts.literals, vec![v_int(7)]);
+        assert_eq!(parts.error_operands, vec![moor_var::E_INVARG]);
+        assert_eq!(parts.fork_vectors, vec![(4, vec![Op::ImmInt(1)])]);
+        assert_eq!(parts.fork_line_number_spans, vec![vec![(0, 12)]]);
+    }
+
+    #[test]
+    fn lambda_program_offsets_line_numbers() {
+        let mut operands = OperandState::new();
+        let lambda = Program::new();
+        let mut lambda = lambda;
+        triomphe::Arc::make_mut(&mut lambda.0).line_number_spans = vec![(0, 1), (3, 4)];
+
+        let offset = operands.add_lambda_program(lambda, 10);
+        let stored = operands.take_program_parts().lambda_programs;
+
+        assert_eq!(offset, Offset(0));
+        assert_eq!(stored[0].line_number_spans(), &[(0, 11), (3, 14)]);
+    }
+
+    #[test]
+    fn build_program_preserves_vectors_and_metadata() {
+        let mut operands = OperandState::new();
+        operands.add_literal(&v_int(7));
+        operands.add_fork_vector(2, vec![Op::ImmInt(9)], vec![(0, 5)]);
+
+        let program = operands.take_program_parts().build_program(
+            Names::new(0),
+            vec![JumpLabel {
+                id: Label(0),
+                name: Some(Name(1, 0, 1)),
+                position: Offset(1),
+            }],
+            vec![Op::ImmInt(7), Op::Done],
+            vec![(0, 1)],
+        );
+
+        assert_eq!(program.literals(), &[v_int(7)]);
+        assert_eq!(program.main_vector(), &vec![Op::ImmInt(7), Op::Done]);
+        assert_eq!(program.jump_label(Label(0)).position, Offset(1));
+        assert_eq!(program.fork_vector(Offset(0)), &vec![Op::ImmInt(9)]);
+        assert_eq!(program.fork_line_num_for_position(Offset(0), 0), 1);
+        assert_eq!(program.line_number_spans(), &[(0, 1)]);
+    }
+}

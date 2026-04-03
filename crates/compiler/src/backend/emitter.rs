@@ -77,3 +77,56 @@ impl EmitterState {
         self.jumps.clear();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use moor_var::program::{
+        labels::Label,
+        names::Name,
+        opcode::Op,
+    };
+
+    use super::EmitterState;
+
+    #[test]
+    fn label_binding_tracks_program_counter() {
+        let mut emitter = EmitterState::new();
+        let named = Name(7, 2, 3);
+        let start = emitter.new_jump_label(Some(named));
+
+        emitter.emit(Op::ImmInt(1));
+        emitter.emit(Op::ImmInt(2));
+        let end = emitter.new_jump_label(None);
+        emitter.bind_jump_label(start);
+
+        let jumps = emitter.take_jumps();
+        assert_eq!(start, Label(0));
+        assert_eq!(end, Label(1));
+        assert_eq!(jumps[0].name, Some(named));
+        assert_eq!(jumps[0].position.0, 2);
+        assert_eq!(jumps[1].position.0, 2);
+    }
+
+    #[test]
+    fn reset_clears_ops_and_jumps() {
+        let mut emitter = EmitterState::new();
+        emitter.emit(Op::ImmInt(1));
+        emitter.new_jump_label(None);
+        assert_eq!(emitter.pc(), 1);
+
+        emitter.reset();
+
+        assert_eq!(emitter.pc(), 0);
+        assert!(emitter.take_ops().is_empty());
+        assert!(emitter.take_jumps().is_empty());
+    }
+
+    #[test]
+    fn last_op_mut_updates_recent_opcode() {
+        let mut emitter = EmitterState::new();
+        emitter.emit(Op::ImmInt(1));
+        *emitter.last_op_mut().unwrap() = Op::ImmInt(9);
+
+        assert_eq!(emitter.take_ops(), vec![Op::ImmInt(9)]);
+    }
+}

@@ -69,3 +69,55 @@ impl ControlState {
         outer
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use moor_var::program::{
+        labels::{Label, Offset},
+        names::Name,
+    };
+
+    use super::{ControlState, LoopFrame};
+
+    #[test]
+    fn current_and_named_loop_lookup_use_innermost_frame() {
+        let mut control = ControlState::new();
+        let outer_name = Name(1, 0, 1);
+        let inner_name = Name(2, 0, 2);
+        let outer = LoopFrame {
+            loop_name: Some(outer_name),
+            top_label: Label(1),
+            top_stack: Offset(0),
+            bottom_label: Label(2),
+            bottom_stack: Offset(0),
+        };
+        let inner = LoopFrame {
+            loop_name: Some(inner_name),
+            top_label: Label(3),
+            top_stack: Offset(1),
+            bottom_label: Label(4),
+            bottom_stack: Offset(1),
+        };
+
+        control.push_loop(outer);
+        control.push_loop(inner);
+
+        assert_eq!(control.current_loop().unwrap().top_label, Label(3));
+        assert_eq!(control.find_loop(&outer_name).unwrap().bottom_label, Label(2));
+        assert_eq!(control.find_loop(&inner_name).unwrap().bottom_label, Label(4));
+        assert!(control.find_loop(&Name(9, 0, 9)).is_none());
+        assert_eq!(control.pop_loop().unwrap().top_label, Label(3));
+        assert_eq!(control.current_loop().unwrap().top_label, Label(1));
+    }
+
+    #[test]
+    fn lambda_depth_push_saturates() {
+        let mut control = ControlState::new();
+        control.set_lambda_scope_depth(250);
+
+        let outer = control.push_lambda_scope_depth(10);
+
+        assert_eq!(outer, 250);
+        assert_eq!(control.lambda_scope_depth(), u8::MAX);
+    }
+}
