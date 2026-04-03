@@ -1768,6 +1768,52 @@ mod tests {
     }
 
     #[test]
+    fn test_lambda_line_numbers_multiline_traceback() {
+        let program_text = "let f = fn(x)\n  y = x + 1;\n  return y / 0;\nendfn;\nreturn f(1);";
+
+        let program = compile(program_text, CompileOptions::default()).unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state,
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.error, E_DIV);
+
+        let lambda_stack = err.stack.first().expect("Expected a lambda stack frame");
+        let line_no = lambda_stack
+            .get(&v_int(6), IndexMode::OneBased)
+            .unwrap()
+            .as_integer()
+            .expect("Expected line number to be an integer");
+        assert_eq!(
+            line_no, 3,
+            "Expected lambda traceback line number to be 3, but got {line_no}"
+        );
+
+        let has_lambda_frame = err.backtrace.iter().any(|frame| {
+            if let Some(frame_str) = frame.as_string() {
+                frame_str.contains("test.<fn>") && frame_str.contains("(line 3)")
+            } else {
+                false
+            }
+        });
+
+        assert!(
+            has_lambda_frame,
+            "Should have lambda frame in stack trace with the correct line number"
+        );
+    }
+
+    #[test]
     fn test_lambda_named_function_stack_trace() {
         let program_text = r#"
             fn factorial(n)

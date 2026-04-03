@@ -373,8 +373,7 @@ impl CodegenState {
                 body,
                 self_name,
             } => {
-                let lambda_start_line = body.line_col.0;
-                self.compile_lambda_body(params, body, lambda_start_line)?;
+                self.compile_lambda_body(params, body)?;
                 if let Some(var) = self_name {
                     let self_var_name = self.find_name(var);
                     if let Some(Op::MakeLambda {

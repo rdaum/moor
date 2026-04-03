@@ -78,6 +78,16 @@ mod tests {
     }
 
     #[test]
+    fn test_lambda_line_number_spans_offset_to_source_lines() {
+        let program = "f = fn (x)\n  y = x + 1;\n  return y;\nendfn;";
+        let binary = compile(program, CompileOptions::default()).unwrap();
+        let lambda = binary.lambda_program(Offset(0));
+
+        assert_eq!(lambda.line_num_for_position(1, 0), 2);
+        assert_eq!(lambda.line_num_for_position(7, 0), 3);
+    }
+
+    #[test]
     fn regression_builtin_call_followed_by_index_codegen_shape() {
         let program = "return callers()[1];";
         let binary = compile(program, CompileOptions::default()).unwrap();
@@ -372,6 +382,15 @@ mod tests {
                 Done
             ]
         );
+    }
+
+    #[test]
+    fn test_fork_line_number_spans_track_body_lines() {
+        let program = "fork (5)\n  a = 1;\n  b = 2;\nendfork";
+        let binary = compile(program, CompileOptions::default()).unwrap();
+
+        assert_eq!(binary.fork_line_num_for_position(Offset(0), 1), 2);
+        assert_eq!(binary.fork_line_num_for_position(Offset(0), 4), 3);
     }
 
     #[test]

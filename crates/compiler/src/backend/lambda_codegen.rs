@@ -28,8 +28,8 @@ impl CodegenState {
         &mut self,
         params: &[ScatterItem],
         body: &Stmt,
-        base_line_offset: usize,
     ) -> Result<(), CompileError> {
+        let base_line_offset = body.line_col.0;
         let outer_scope_depth = self.control.lambda_scope_depth();
         self.control.push_lambda_scope_depth(2);
 
@@ -52,6 +52,9 @@ impl CodegenState {
 
         self.emitter.reset();
         self.line_number_spans = vec![];
+
+        let mut body = body.clone();
+        assign_stmt_source_line_numbers(&mut body);
 
         for param in params {
             if let ScatterKind::Optional = param.kind
@@ -78,7 +81,7 @@ impl CodegenState {
             }
         }
 
-        self.generate_stmt(body)?;
+        self.generate_stmt(&body)?;
 
         let lambda_program = self.operands.take_program_parts().build_program(
             self.var_names.clone(),
@@ -96,7 +99,7 @@ impl CodegenState {
         let program_offset = self.add_lambda_program(lambda_program, base_line_offset);
         self.control.set_lambda_scope_depth(outer_scope_depth);
 
-        let captured_symbols = analyze_lambda_captures(params, body, outer_scope_depth)?;
+        let captured_symbols = analyze_lambda_captures(params, &body, outer_scope_depth)?;
         let captured_names: Vec<Name> = captured_symbols
             .iter()
             .filter_map(|sym| self.var_names.name_for_ident(*sym))
@@ -115,6 +118,223 @@ impl CodegenState {
         self.push_stack(1);
 
         Ok(())
+    }
+}
+
+fn assign_stmt_source_line_numbers(stmt: &mut Stmt) {
+    stmt.tree_line_no = stmt.line_col.0;
+    match &mut stmt.node {
+        StmtNode::Cond { arms, otherwise } => {
+            for arm in arms {
+                for stmt in &mut arm.statements {
+                    assign_stmt_source_line_numbers(stmt);
+                }
+            }
+            if let Some(otherwise) = otherwise {
+                for stmt in &mut otherwise.statements {
+                    assign_stmt_source_line_numbers(stmt);
+                }
+            }
+        }
+        StmtNode::ForList { expr, body, .. }
+        | StmtNode::While {
+            condition: expr,
+            body,
+            ..
+        } => {
+            assign_expr_lambda_source_lines(expr);
+            for stmt in body {
+                assign_stmt_source_line_numbers(stmt);
+            }
+        }
+        StmtNode::ForRange { from, to, body, .. } => {
+            assign_expr_lambda_source_lines(from);
+            assign_expr_lambda_source_lines(to);
+            for stmt in body {
+                assign_stmt_source_line_numbers(stmt);
+            }
+        }
+        StmtNode::Fork { id: _, time, body } => {
+            assign_expr_lambda_source_lines(time);
+            for stmt in body {
+                assign_stmt_source_line_numbers(stmt);
+            }
+        }
+        StmtNode::TryExcept { body, excepts, .. } => {
+            for stmt in body {
+                assign_stmt_source_line_numbers(stmt);
+            }
+            for except in excepts {
+                assign_catch_codes_lambda_source_lines(&mut except.codes);
+                for stmt in &mut except.statements {
+                    assign_stmt_source_line_numbers(stmt);
+                }
+            }
+        }
+        StmtNode::TryFinally { body, handler, .. } => {
+            for stmt in body {
+                assign_stmt_source_line_numbers(stmt);
+            }
+            for stmt in handler {
+                assign_stmt_source_line_numbers(stmt);
+            }
+        }
+        StmtNode::Scope { body, .. } => {
+            for stmt in body {
+                assign_stmt_source_line_numbers(stmt);
+            }
+        }
+        StmtNode::Expr(expr) => assign_expr_lambda_source_lines(expr),
+        StmtNode::Break { .. } | StmtNode::Continue { .. } => {}
+    }
+}
+
+fn assign_arg_lambda_source_lines(arg: &mut crate::ast::Arg) {
+    match arg {
+        crate::ast::Arg::Normal(expr) | crate::ast::Arg::Splice(expr) => {
+            assign_expr_lambda_source_lines(expr)
+        }
+    }
+}
+
+fn assign_catch_codes_lambda_source_lines(codes: &mut crate::ast::CatchCodes) {
+    match codes {
+        crate::ast::CatchCodes::Codes(args) => {
+            for arg in args {
+                assign_arg_lambda_source_lines(arg);
+            }
+        }
+        crate::ast::CatchCodes::Any => {}
+    }
+}
+
+fn assign_expr_lambda_source_lines(expr: &mut Expr) {
+    match expr {
+        Expr::Assign { left, right } => {
+            assign_expr_lambda_source_lines(left);
+            assign_expr_lambda_source_lines(right);
+        }
+        Expr::Pass { args } | Expr::List(args) => {
+            for arg in args {
+                assign_arg_lambda_source_lines(arg);
+            }
+        }
+        Expr::Error(_, maybe_expr) | Expr::Return(maybe_expr) => {
+            if let Some(expr) = maybe_expr {
+                assign_expr_lambda_source_lines(expr);
+            }
+        }
+        Expr::Binary(_, left, right)
+        | Expr::And(left, right)
+        | Expr::Or(left, right)
+        | Expr::Index(left, right) => {
+            assign_expr_lambda_source_lines(left);
+            assign_expr_lambda_source_lines(right);
+        }
+        Expr::Unary(_, expr)
+        | Expr::Decl {
+            expr: Some(expr), ..
+        } => assign_expr_lambda_source_lines(expr),
+        Expr::Decl { expr: None, .. }
+        | Expr::TypeConstant(_)
+        | Expr::Value(_)
+        | Expr::Id(_)
+        | Expr::Length => {}
+        Expr::Prop { location, property } => {
+            assign_expr_lambda_source_lines(location);
+            assign_expr_lambda_source_lines(property);
+        }
+        Expr::Call { function, args } => {
+            if let crate::ast::CallTarget::Expr(expr) = function {
+                assign_expr_lambda_source_lines(expr);
+            }
+            for arg in args {
+                assign_arg_lambda_source_lines(arg);
+            }
+        }
+        Expr::Verb {
+            location,
+            verb,
+            args,
+        } => {
+            assign_expr_lambda_source_lines(location);
+            assign_expr_lambda_source_lines(verb);
+            for arg in args {
+                assign_arg_lambda_source_lines(arg);
+            }
+        }
+        Expr::Range { base, from, to } => {
+            assign_expr_lambda_source_lines(base);
+            assign_expr_lambda_source_lines(from);
+            assign_expr_lambda_source_lines(to);
+        }
+        Expr::Cond {
+            condition,
+            consequence,
+            alternative,
+        } => {
+            assign_expr_lambda_source_lines(condition);
+            assign_expr_lambda_source_lines(consequence);
+            assign_expr_lambda_source_lines(alternative);
+        }
+        Expr::TryCatch {
+            trye,
+            codes,
+            except,
+        } => {
+            assign_expr_lambda_source_lines(trye);
+            assign_catch_codes_lambda_source_lines(codes);
+            if let Some(expr) = except {
+                assign_expr_lambda_source_lines(expr);
+            }
+        }
+        Expr::Map(entries) => {
+            for (key, value) in entries {
+                assign_expr_lambda_source_lines(key);
+                assign_expr_lambda_source_lines(value);
+            }
+        }
+        Expr::Flyweight(delegate, slots, contents) => {
+            assign_expr_lambda_source_lines(delegate);
+            for (_, value) in slots {
+                assign_expr_lambda_source_lines(value);
+            }
+            if let Some(expr) = contents {
+                assign_expr_lambda_source_lines(expr);
+            }
+        }
+        Expr::Scatter(items, right) => {
+            for item in items {
+                if let Some(expr) = &mut item.expr {
+                    assign_expr_lambda_source_lines(expr);
+                }
+            }
+            assign_expr_lambda_source_lines(right);
+        }
+        Expr::ComprehendList {
+            producer_expr, list, ..
+        } => {
+            assign_expr_lambda_source_lines(producer_expr);
+            assign_expr_lambda_source_lines(list);
+        }
+        Expr::ComprehendRange {
+            producer_expr,
+            from,
+            to,
+            ..
+        } => {
+            assign_expr_lambda_source_lines(producer_expr);
+            assign_expr_lambda_source_lines(from);
+            assign_expr_lambda_source_lines(to);
+        }
+        Expr::Lambda { params, body, .. } => {
+            for param in params {
+                if let Some(expr) = &mut param.expr {
+                    assign_expr_lambda_source_lines(expr);
+                }
+            }
+            assign_stmt_source_line_numbers(body);
+        }
     }
 }
 

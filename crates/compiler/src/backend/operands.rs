@@ -311,7 +311,7 @@ mod tests {
         assert_eq!(program.main_vector(), &vec![Op::ImmInt(7), Op::Done]);
         assert_eq!(program.jump_label(Label(0)).position, Offset(1));
         assert_eq!(program.fork_vector(Offset(0)), &vec![Op::ImmInt(9)]);
-        assert_eq!(program.fork_line_num_for_position(Offset(0), 0), 1);
+        assert_eq!(program.fork_line_num_for_position(Offset(0), 0), 5);
         assert_eq!(program.line_number_spans(), &[(0, 1)]);
     }
 }

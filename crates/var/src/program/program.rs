@@ -175,7 +175,7 @@ impl Program {
         let position = position + offset;
         let mut last_line_num = 1;
         for (off, line_no) in &self.0.line_number_spans {
-            if *off >= position {
+            if *off > position {
                 return last_line_num;
             }
             last_line_num = *line_no
@@ -187,7 +187,7 @@ impl Program {
         let fork_spans = &self.0.fork_line_number_spans[fork_offset.0 as usize];
         let mut last_line_num = 1;
         for (off, line_no) in fork_spans {
-            if *off >= position {
+            if *off > position {
                 return last_line_num;
             }
             last_line_num = *line_no
