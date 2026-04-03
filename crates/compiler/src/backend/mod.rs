@@ -13,5 +13,9 @@
 
 pub mod control;
 pub mod emitter;
+pub mod expr_codegen;
+pub mod lambda_codegen;
 pub mod operands;
 pub mod stack;
+pub mod state;
+pub mod stmt_codegen;
