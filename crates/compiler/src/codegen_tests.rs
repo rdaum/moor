@@ -1286,22 +1286,79 @@ mod tests {
     }
 
     #[test]
-    fn test_nested_property_assignment_emits_short_circuit_jump() {
+    fn test_nested_property_assignment_emits_short_circuit_cleanup_block() {
         let program = r#"this.location.inventory = setremove(this.location.inventory, this);"#;
         let binary = compile(program, CompileOptions::default()).unwrap();
-        let mut saw_short_circuit = false;
-        for op in binary.main_vector() {
-            if let PutPropAt {
-                jump_if_object: _, ..
-            } = op
-            {
-                saw_short_circuit = true;
-                break;
-            }
-        }
-        assert!(
-            saw_short_circuit,
-            "expected PutPropAt with jump_if_object for nested property assignment"
+        let put_prop_count = binary
+            .main_vector()
+            .iter()
+            .filter(|op| matches!(op, PutPropAt { .. }))
+            .count();
+        assert_eq!(put_prop_count, 2, "expected inner and outer property writes");
+
+        let put_temp_index = binary
+            .main_vector()
+            .iter()
+            .position(|op| matches!(op, PutTemp))
+            .expect("expected nested property assignment cleanup block");
+        assert!(matches!(binary.main_vector()[put_temp_index + 1], Pop));
+        assert!(matches!(binary.main_vector()[put_temp_index + 2], Pop));
+        assert!(matches!(binary.main_vector()[put_temp_index + 3], Pop));
+        assert!(matches!(binary.main_vector()[put_temp_index + 4], Pop));
+        assert!(matches!(binary.main_vector()[put_temp_index + 5], PushTemp));
+
+        let jump_labels: Vec<_> = binary
+            .main_vector()
+            .iter()
+            .filter_map(|op| match op {
+                Jump { label } => Some(*label),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(jump_labels.len(), 2, "expected normal-path and cleanup-path jumps");
+        assert_eq!(jump_labels[0], jump_labels[1], "cleanup should rejoin the same done label");
+    }
+
+    #[test]
+    fn test_deeply_nested_property_assignment_emits_cleanup_per_nested_layer() {
+        let program = r#"this.a.b.c = 1;"#;
+        let binary = compile(program, CompileOptions::default()).unwrap();
+
+        assert_eq!(
+            binary
+                .main_vector()
+                .iter()
+                .filter(|op| matches!(op, PutPropAt { .. }))
+                .count(),
+            3,
+            "expected one property write per layer"
+        );
+        assert_eq!(
+            binary
+                .main_vector()
+                .iter()
+                .filter(|op| matches!(op, PutTemp))
+                .count(),
+            2,
+            "expected one cleanup block per nested property layer"
+        );
+        assert_eq!(
+            binary
+                .main_vector()
+                .iter()
+                .filter(|op| matches!(op, PushTemp))
+                .count(),
+            2,
+            "cleanup blocks should restore the assigned value"
+        );
+        assert_eq!(
+            binary
+                .main_vector()
+                .iter()
+                .filter(|op| matches!(op, Jump { .. }))
+                .count(),
+            3,
+            "expected one normal-path jump plus one cleanup jump per nested layer"
         );
     }
 
