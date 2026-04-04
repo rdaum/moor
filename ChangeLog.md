@@ -108,6 +108,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - SDK publish job fixed (missing build step, incorrect relative dirs)
 
+## [1.0.0-rc2] - Forthcoming (`v1.0-release` branch)
+
+### Fixed
+
+`kernel`:
+
+- `parse_command()` result map: `argstr` key/value types were swapped and `prep` key used wrong
+  string type
+
 ## [1.0.0-rc1] - 2026-03-05 (`v1.0-release` branch)
 
 ### BREAKING: Database Migration Required
@@ -284,8 +293,6 @@ Databases from beta7 and earlier cannot be loaded directly.
 - `complex_match()` now returns `E_INVARG` when keys and targets lengths differ
 - `pcre_match()` now handles unmatched optional capture groups without panicking
 - Fixed replacement behavior in `pcre_replace()` and avoided cascading failures after regex errors
-- `parse_command()` result map: `argstr` key/value types were swapped and `prep` key used wrong
-  string type
 
 `compiler`:
 
