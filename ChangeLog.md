@@ -91,6 +91,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 `kernel`:
 
+- `parse_command()` result map: `argstr` key/value types were swapped (key used `v_str`, value used
+  `use_sym_or_str`) and `prep` key used `v_str` instead of `use_sym_or_str`
 - Stale timer wheel entries no longer cause spurious task wakes; added monotonic generation counter
   to `TimerEntry` and `SuspendedTask` so that re-suspended tasks discard leftover timer entries from
   previous suspensions
@@ -282,6 +284,8 @@ Databases from beta7 and earlier cannot be loaded directly.
 - `complex_match()` now returns `E_INVARG` when keys and targets lengths differ
 - `pcre_match()` now handles unmatched optional capture groups without panicking
 - Fixed replacement behavior in `pcre_replace()` and avoided cascading failures after regex errors
+- `parse_command()` result map: `argstr` key/value types were swapped and `prep` key used wrong
+  string type
 
 `compiler`:
 
