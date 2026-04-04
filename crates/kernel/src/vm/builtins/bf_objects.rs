@@ -1597,7 +1597,7 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let mut result_map = vec![];
 
     result_map.push((use_sym_or_str("verb"), mk_sym_or_str(parsed.verb)));
-    result_map.push((v_str("argstr"), use_sym_or_str(&parsed.argstr)));
+    result_map.push((use_sym_or_str("argstr"), v_str(&parsed.argstr)));
     result_map.push((use_sym_or_str("args"), v_list(&parsed.args)));
 
     // dobjstr: string or ""
@@ -1646,7 +1646,7 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         PrepSpec::None => -1,
         PrepSpec::Other(p) => p as i64,
     };
-    result_map.push((v_str("prep"), v_int(prep_value)));
+    result_map.push((use_sym_or_str("prep"), v_int(prep_value)));
 
     // iobjstr: string or 0
     result_map.push((
