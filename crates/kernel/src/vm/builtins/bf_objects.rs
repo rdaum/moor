@@ -1461,13 +1461,6 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         None
     };
     let use_symbols = bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type;
-    let mk_sym_or_str = |s: Symbol| {
-        if use_symbols {
-            v_sym(s)
-        } else {
-            v_str(s.as_arc_str().as_ref())
-        }
-    };
     let use_sym_or_str = |sym| {
         if use_symbols { v_sym(sym) } else { v_str(sym) }
     };
@@ -1617,7 +1610,7 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Convert the parsed command to a map
     let mut result_map = vec![];
 
-    result_map.push((use_sym_or_str("verb"), mk_sym_or_str(parsed.verb)));
+    result_map.push((use_sym_or_str("verb"), v_str(parsed.verb.as_str())));
     result_map.push((use_sym_or_str("argstr"), v_str(&parsed.argstr)));
     result_map.push((use_sym_or_str("args"), v_list(&parsed.args)));
 
