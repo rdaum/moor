@@ -116,6 +116,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `parse_command()` result map: `argstr` key/value types were swapped and `prep` key used wrong
   string type
+- `parse_command()` behaviour for matching "here" was broken for dobj/iobj matching. 
+  Now defaults to player location with an optional new argument to override.
 
 ## [1.0.0-rc1] - 2026-03-05 (`v1.0-release` branch)
 
