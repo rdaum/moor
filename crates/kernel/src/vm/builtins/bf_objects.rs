@@ -1426,9 +1426,9 @@ fn bf_is_uuobjid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 ///
 /// Defaults to 0.5 when complex matching is enabled.
 fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 5 {
         return Err(BfErr::ErrValue(
-            E_ARGS.msg("parse_command() takes 2 to 4 arguments"),
+            E_ARGS.msg("parse_command() takes 2 to 5 arguments"),
         ));
     }
 
@@ -1449,6 +1449,16 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         bf_args.args[3].as_float().unwrap_or(0.5)
     } else {
         0.5 // Default fuzzy threshold when complex matching is enabled
+    };
+    let location_override = if bf_args.args.len() >= 5 {
+        let Some(loc) = bf_args.args[4].as_object() else {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("parse_command() fifth argument must be an object"),
+            ));
+        };
+        Some(loc)
+    } else {
+        None
     };
     let use_symbols = bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type;
     let mk_sym_or_str = |s: Symbol| {
@@ -1472,12 +1482,21 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Create a custom MatchEnvironment that uses the provided environment list
     struct ListMatchEnvironment {
         who: Obj,
+        location_override: Option<Obj>,
         name_map: std::collections::HashMap<Obj, Vec<String>>,
     }
 
     impl ListMatchEnvironment {
-        pub fn new(who: Obj, name_map: HashMap<Obj, Vec<String>>) -> Result<Self, WorldStateError> {
-            Ok(Self { who, name_map })
+        pub fn new(
+            who: Obj,
+            location_override: Option<Obj>,
+            name_map: HashMap<Obj, Vec<String>>,
+        ) -> Result<Self, WorldStateError> {
+            Ok(Self {
+                who,
+                location_override,
+                name_map,
+            })
         }
     }
 
@@ -1511,9 +1530,11 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Ok(surroundings)
         }
 
-        fn location_of(&self, _player: &Obj) -> Result<Obj, WorldStateError> {
-            // We don't have a real location in this environment, return #-1
-            Ok(NOTHING)
+        fn location_of(&self, player: &Obj) -> Result<Obj, WorldStateError> {
+            if let Some(loc) = self.location_override {
+                return Ok(loc);
+            }
+            with_current_transaction(|world_state| world_state.location_of(&self.who, player))
         }
     }
 
@@ -1567,7 +1588,7 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
         name_map.insert(obj, names);
     }
-    let env = ListMatchEnvironment::new(bf_args.player(), name_map).map_err(|e| {
+    let env = ListMatchEnvironment::new(bf_args.player(), location_override, name_map).map_err(|e| {
         BfErr::ErrValue(
             E_INVARG.with_msg(|| format!("parse_command() error creating environment: {e}")),
         )
