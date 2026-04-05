@@ -11,7 +11,7 @@
     "web-sdk:build": "npm run build --prefix ./clients/web-sdk",
     "web-mcp:build": "npm run build --prefix ./clients/moor-web-mcp",
     "web-mcp:typecheck": "npm run typecheck --prefix ./clients/moor-web-mcp",
-    "daemon:dev": "RUST_BACKTRACE=1 cargo run -p moor-daemon -- ./moor-data --db development.db --import-format objdef --import ${MOOR_CORE:-cores/cowbell/src} --export development-export --export-format objdef --use-boolean-returns true --custom-errors true --use-uuobjids true --enable-eventlog true --generate-keypair --anonymous-objects true",
+    "daemon:dev": "RUST_BACKTRACE=1 cargo run -p moor-daemon -- ./moor-data --db development.db --import-format objdef --import ${MOOR_CORE:-cores/cowbell/src} --export development-export --export-format objdef --use-boolean-returns true --custom-errors true --use-uuobjids true --enable-eventlog true --generate-keypair --anonymous-objects true --use-symbols-in-builtins true",
     "daemon:traced": "RUST_BACKTRACE=1 cargo run --features trace_events -p moor-daemon -- ./moor-data --db development.db --import-format objdef --import ${MOOR_CORE:-cores/cowbell/src} --export development-export --export-format objdef --use-boolean-returns true --custom-errors true --use-uuobjids true --enable-eventlog true --trace-output moor-trace.json  --anonymous-objects true",
     "web-host:dev": "cargo run --bin moor-web-host -- --enable-webhooks",
     "web-host:dev:oauth2": "cargo run --bin moor-web-host -- --config-file ${MOOR_OAUTH2_CONFIG:-web-host-oauth2.yaml} --enable-webhooks",
