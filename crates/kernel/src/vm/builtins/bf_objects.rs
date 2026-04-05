@@ -1739,21 +1739,24 @@ fn bf_find_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     // Extract parsed command components from the map
-    let verb_sym = match parsed_command_spec.get(&v_str("verb")) {
-        Ok(verb_var) => verb_var.as_symbol().map_err(|_| {
-            BfErr::ErrValue(
-                E_TYPE.msg("find_command_verb() parsed_command_spec.verb must be a symbol"),
-            )
-        })?,
+    let use_symbols = bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type;
+    let sym_or_str = |sym| {
+        if use_symbols { v_sym(sym) } else { v_str(sym) }
+    };
+    let verb_sym = match parsed_command_spec.get(&sym_or_str("verb")) {
+        Ok(verb_var) => {
+            let verb_str = verb_var.as_string().ok_or_else(|| {
+                BfErr::ErrValue(
+                    E_TYPE.msg("find_command_verb() parsed_command_spec.verb must be a string"),
+                )
+            })?;
+            Symbol::mk(verb_str)
+        }
         _ => {
             return Err(BfErr::ErrValue(
                 E_INVARG.msg("find_command_verb() parsed_command_spec missing 'verb' key"),
             ));
         }
-    };
-    let use_symbols = bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type;
-    let sym_or_str = |sym| {
-        if use_symbols { v_sym(sym) } else { v_str(sym) }
     };
     let dobj = parsed_command_spec
         .get(&sym_or_str("dobj"))
