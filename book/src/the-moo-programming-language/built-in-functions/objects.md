@@ -778,7 +778,7 @@ than the naive builtin one, while still using its components.
 ### `parse_command`
 
 ```
-map parse_command(str command, list environment [, bool complex [, float fuzzy_threshold]])
+map parse_command(str command, list environment [, bool complex [, float fuzzy_threshold [, obj location]]])
 ```
 
 Parses a command string into its components (verb, objects, preposition) and returns a map with the results.
@@ -795,6 +795,8 @@ Parses a command string into its components (verb, objects, preposition) and ret
     - `0.0` = disabled (exact, prefix, and substring matching only)
     - `0.5` = reasonable default (allows minor typos)
     - `1.0` = very permissive
+- `location`: (Optional) Override the object that `"here"` resolves to. By default, `"here"` resolves to the player's
+  current location in the world state.
 
 **Returns:** A map with the following keys:
 
@@ -815,6 +817,8 @@ Parses a command string into its components (verb, objects, preposition) and ret
 **Notes:**
 
 - Object matching searches through the provided environment list
+- The special names `"me"` and `"here"` resolve to the player and the player's location, respectively
+- The optional `location` argument overrides what `"here"` resolves to
 - Multiple matching objects are reported in `ambiguous_dobj` or `ambiguous_iobj`
 - The `complex` parameter enables the enhanced matching system with ordinals and fuzzy matching
 - Fuzzy matching uses Damerau-Levenshtein distance to tolerate typos (e.g., "lammp" matches "lamp")
