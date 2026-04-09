@@ -47,7 +47,8 @@ jobs:
           DEV_VERSION="${BASE_VERSION}.$(date -u +%Y%m%d%H%M%S%N).${{ github.run_id }}.${SHORT_SHA}"
           echo "Publishing version $DEV_VERSION"
 
-          npm pkg set dependencies.@moor/schema=dev
+          SCHEMA_VERSION="$(npm view @moor/schema@dev version --registry="$REGISTRY")"
+          npm pkg set dependencies.@moor/schema="$SCHEMA_VERSION"
           npm version "$DEV_VERSION" --no-git-tag-version
 
           PUBLISH_LOG="$(mktemp)"
