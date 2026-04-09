@@ -44,7 +44,7 @@ jobs:
           REGISTRY="https://codeberg.org/api/packages/timbran/npm/"
           BASE_VERSION=$(node -p "require('./package.json').version")
           SHORT_SHA="$(echo '${{ github.sha }}' | cut -c1-8)"
-          DEV_VERSION="${BASE_VERSION}-dev.$(date -u +%Y%m%d%H%M%S%N).${{ github.run_id }}.${SHORT_SHA}"
+          DEV_VERSION="${BASE_VERSION}.$(date -u +%Y%m%d%H%M%S%N).${{ github.run_id }}.${SHORT_SHA}"
           echo "Publishing version $DEV_VERSION"
 
           npm pkg set dependencies.@moor/schema=dev
