@@ -69,5 +69,6 @@ export CUSTOM_ERRORS=true
 export USE_UUOBJIDS=true
 export ANONYMOUS_OBJECTS=true
 export ENABLE_EVENTLOG=true
+export USE_SYMBOLS_IN_BUILTINS=true
 
 docker compose up --build

@@ -42,6 +42,7 @@ services:
         --use-uuobjids=${USE_UUOBJIDS:-false}
         --anonymous-objects=${ANONYMOUS_OBJECTS:-false}
         --enable-eventlog=${ENABLE_EVENTLOG:-true}
+        --use-symbols-in-builtins=${USE_SYMBOLS_IN_BUILTINS:-false}
         --export=/db/${RUN_DIR}/export
     ports:
       - "7899:7899"
