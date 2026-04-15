@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use moor_bench_utils::{BenchContext, NoContext, black_box};
+use micromeasure::{BenchContext, NoContext, black_box};
 use moor_var::{
     IndexMode, Obj, Symbol, Var, v_arc_str, v_bool, v_float, v_int, v_list, v_none, v_obj, v_str,
     v_string, v_sym, v_symbol_str,
@@ -631,23 +631,8 @@ fn var_drop_mixed(ctx: &mut DropContext, chunk_size: usize, _chunk_num: usize) {
 }
 
 pub fn main() {
-    use moor_bench_utils::{
-        BenchmarkDef, NoContext, generate_session_summary, run_benchmark_group,
-    };
+    use micromeasure::{BenchmarkRunner, NoContext};
     use std::env;
-
-    #[cfg(target_os = "linux")]
-    {
-        use moor_bench_utils::perf_event::{Builder, events::Hardware};
-        // Check if we can do perf events, and if not warn but continue with timing-only benchmarks
-        if Builder::new(Hardware::INSTRUCTIONS).build().is_err() {
-            eprintln!(
-                "⚠️  Perf events are not available on this system (insufficient permissions or kernel support)."
-            );
-            eprintln!("   Continuing with timing-only benchmarks (performance counters disabled).");
-            eprintln!();
-        }
-    }
 
     let args: Vec<String> = env::args().collect();
     // Look for filter arguments after "--"
@@ -670,311 +655,112 @@ pub fn main() {
         eprintln!();
     }
 
-    // Define all benchmark groups declaratively
-    let int_benchmarks = [
-        BenchmarkDef {
-            name: "int_add",
-            group: "int",
-            func: int_add,
-        },
-        BenchmarkDef {
-            name: "mixed_add",
-            group: "int",
-            func: mixed_add,
-        },
-        BenchmarkDef {
-            name: "int_eq",
-            group: "int",
-            func: int_eq,
-        },
-        BenchmarkDef {
-            name: "int_cmp",
-            group: "int",
-            func: int_cmp,
-        },
-    ];
+    let runner = BenchmarkRunner::new().with_filter(filter);
 
-    let float_benchmarks = [BenchmarkDef {
-        name: "float_add",
-        group: "float",
-        func: float_add,
-    }];
+    runner.group::<IntContext>("Integer Operations", |g| {
+        g.bench("int_add", int_add);
+        g.bench("mixed_add", mixed_add);
+        g.bench("int_eq", int_eq);
+        g.bench("int_cmp", int_cmp);
+    });
 
-    let small_list_benchmarks = [BenchmarkDef {
-        name: "list_push",
-        group: "list",
-        func: list_push,
-    }];
+    runner.group::<FloatContext>("Float Operations", |g| {
+        g.bench("float_add", float_add);
+    });
 
-    let large_list_benchmarks = [
-        BenchmarkDef {
-            name: "list_index_pos",
-            group: "list",
-            func: list_index_pos,
-        },
-        BenchmarkDef {
-            name: "list_index_assign",
-            group: "list",
-            func: list_index_assign,
-        },
-    ];
+    runner.group::<SmallListContext>("Small List Operations", |g| {
+        g.bench("list_push", list_push);
+    });
 
-    let construct_benchmarks = [
-        BenchmarkDef {
-            name: "var_construct_ints",
-            group: "construct",
-            func: var_construct_ints,
-        },
-        BenchmarkDef {
-            name: "var_construct_strings",
-            group: "construct",
-            func: var_construct_strings,
-        },
-        BenchmarkDef {
-            name: "var_construct_small_lists",
-            group: "construct",
-            func: var_construct_small_lists,
-        },
-        BenchmarkDef {
-            name: "var_construct_nested_lists",
-            group: "construct",
-            func: var_construct_nested_lists,
-        },
-    ];
+    runner.group::<LargeListContext>("Large List Operations", |g| {
+        g.bench("list_index_pos", list_index_pos);
+        g.bench("list_index_assign", list_index_assign);
+    });
 
-    let construct_variant_benchmarks = [
-        BenchmarkDef {
-            name: "var_construct_variant_int",
-            group: "construct",
-            func: var_construct_variant_int,
-        },
-        BenchmarkDef {
-            name: "var_construct_variant_obj",
-            group: "construct",
-            func: var_construct_variant_obj,
-        },
-        BenchmarkDef {
-            name: "var_construct_variant_str_ascii",
-            group: "construct",
-            func: var_construct_variant_str_ascii,
-        },
-        BenchmarkDef {
-            name: "var_construct_variant_str_unicode",
-            group: "construct",
-            func: var_construct_variant_str_unicode,
-        },
-        BenchmarkDef {
-            name: "var_construct_variant_string_owned_ascii",
-            group: "construct",
-            func: var_construct_variant_string_owned_ascii,
-        },
-        BenchmarkDef {
-            name: "var_construct_variant_arc_str_ascii",
-            group: "construct",
-            func: var_construct_variant_arc_str_ascii,
-        },
-        BenchmarkDef {
-            name: "var_construct_variant_symbol_str_cached",
-            group: "construct",
-            func: var_construct_variant_symbol_str_cached,
-        },
-        BenchmarkDef {
-            name: "var_construct_variant_sym_from_hot_str",
-            group: "construct",
-            func: var_construct_variant_sym_from_hot_str,
-        },
-    ];
+    runner.group::<NoContext>("Var Construction Benchmarks", |g| {
+        g.bench("var_construct_ints", var_construct_ints);
+        g.bench("var_construct_strings", var_construct_strings);
+        g.bench("var_construct_small_lists", var_construct_small_lists);
+        g.bench("var_construct_nested_lists", var_construct_nested_lists);
+    });
 
-    let construct_hot_set_benchmarks = [
-        BenchmarkDef {
-            name: "var_construct_variant_str_ascii_hot",
-            group: "construct",
-            func: var_construct_variant_str_ascii_hot,
-        },
-        BenchmarkDef {
-            name: "var_construct_variant_str_unicode_hot",
-            group: "construct",
-            func: var_construct_variant_str_unicode_hot,
-        },
-        BenchmarkDef {
-            name: "var_construct_variant_string_owned_ascii_hot",
-            group: "construct",
-            func: var_construct_variant_string_owned_ascii_hot,
-        },
-        BenchmarkDef {
-            name: "var_construct_variant_arc_str_ascii_hot",
-            group: "construct",
-            func: var_construct_variant_arc_str_ascii_hot,
-        },
-        BenchmarkDef {
-            name: "var_construct_variant_symbol_str_cached_hot",
-            group: "construct",
-            func: var_construct_variant_symbol_str_cached_hot,
-        },
-    ];
+    runner.group::<VarConstructInputsContext>("Var Constructor Variant Benchmarks", |g| {
+        g.bench("var_construct_variant_int", var_construct_variant_int);
+        g.bench("var_construct_variant_obj", var_construct_variant_obj);
+        g.bench("var_construct_variant_str_ascii", var_construct_variant_str_ascii);
+        g.bench("var_construct_variant_str_unicode", var_construct_variant_str_unicode);
+        g.bench(
+            "var_construct_variant_string_owned_ascii",
+            var_construct_variant_string_owned_ascii,
+        );
+        g.bench("var_construct_variant_arc_str_ascii", var_construct_variant_arc_str_ascii);
+        g.bench(
+            "var_construct_variant_symbol_str_cached",
+            var_construct_variant_symbol_str_cached,
+        );
+        g.bench("var_construct_variant_sym_from_hot_str", var_construct_variant_sym_from_hot_str);
+    });
 
-    let drop_benchmarks = [
-        BenchmarkDef {
-            name: "var_drop_ints",
-            group: "drop",
-            func: var_drop_ints,
-        },
-        BenchmarkDef {
-            name: "var_drop_strings",
-            group: "drop",
-            func: var_drop_strings,
-        },
-        BenchmarkDef {
-            name: "var_drop_lists",
-            group: "drop",
-            func: var_drop_lists,
-        },
-        BenchmarkDef {
-            name: "var_drop_mixed",
-            group: "drop",
-            func: var_drop_mixed,
-        },
-    ];
+    runner.group::<VarConstructHotSetContext>("Var Constructor Hot-Set Benchmarks", |g| {
+        g.bench("var_construct_variant_str_ascii_hot", var_construct_variant_str_ascii_hot);
+        g.bench("var_construct_variant_str_unicode_hot", var_construct_variant_str_unicode_hot);
+        g.bench(
+            "var_construct_variant_string_owned_ascii_hot",
+            var_construct_variant_string_owned_ascii_hot,
+        );
+        g.bench("var_construct_variant_arc_str_ascii_hot", var_construct_variant_arc_str_ascii_hot);
+        g.bench(
+            "var_construct_variant_symbol_str_cached_hot",
+            var_construct_variant_symbol_str_cached_hot,
+        );
+    });
 
-    let clone_int_benchmarks = [BenchmarkDef {
-        name: "var_clone_ints",
-        group: "clone",
-        func: var_clone_ints,
-    }];
+    runner.group::<DropContext>("Var Drop Benchmarks", |g| {
+        g.bench("var_drop_ints", var_drop_ints);
+        g.bench("var_drop_strings", var_drop_strings);
+        g.bench("var_drop_lists", var_drop_lists);
+        g.bench("var_drop_mixed", var_drop_mixed);
+    });
 
-    let clone_string_benchmarks = [BenchmarkDef {
-        name: "var_clone_strings",
-        group: "clone",
-        func: var_clone_strings,
-    }];
+    runner.group::<IntCloneContext>("Var Clone (Int) Benchmarks", |g| {
+        g.bench("var_clone_ints", var_clone_ints);
+    });
 
-    let clone_list_benchmarks = [BenchmarkDef {
-        name: "var_clone_lists",
-        group: "clone",
-        func: var_clone_lists,
-    }];
+    runner.group::<StringCloneContext>("Var Clone (String) Benchmarks", |g| {
+        g.bench("var_clone_strings", var_clone_strings);
+    });
 
-    // Run benchmark groups
-    run_benchmark_group::<IntContext>(&int_benchmarks, "Integer Operations", filter);
-    run_benchmark_group::<FloatContext>(&float_benchmarks, "Float Operations", filter);
-    run_benchmark_group::<SmallListContext>(
-        &small_list_benchmarks,
-        "Small List Operations",
-        filter,
-    );
-    run_benchmark_group::<LargeListContext>(
-        &large_list_benchmarks,
-        "Large List Operations",
-        filter,
-    );
-    run_benchmark_group::<NoContext>(&construct_benchmarks, "Var Construction Benchmarks", filter);
-    run_benchmark_group::<VarConstructInputsContext>(
-        &construct_variant_benchmarks,
-        "Var Constructor Variant Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<VarConstructHotSetContext>(
-        &construct_hot_set_benchmarks,
-        "Var Constructor Hot-Set Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<DropContext>(&drop_benchmarks, "Var Drop Benchmarks", filter);
+    runner.group::<ListCloneContext>("Var Clone (List) Benchmarks", |g| {
+        g.bench("var_clone_lists", var_clone_lists);
+    });
 
-    run_benchmark_group::<IntCloneContext>(
-        &clone_int_benchmarks,
-        "Var Clone (Int) Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<StringCloneContext>(
-        &clone_string_benchmarks,
-        "Var Clone (String) Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<ListCloneContext>(
-        &clone_list_benchmarks,
-        "Var Clone (List) Benchmarks",
-        filter,
-    );
+    runner.group::<IntCloneContext>("Var.as_integer() Benchmarks", |g| {
+        g.bench("var_as_integer", var_as_integer);
+    });
 
-    // as_integer() benchmarks
-    let var_as_int_benchmarks = [BenchmarkDef {
-        name: "var_as_integer",
-        group: "accessor",
-        func: var_as_integer,
-    }];
-    run_benchmark_group::<IntCloneContext>(
-        &var_as_int_benchmarks,
-        "Var.as_integer() Benchmarks",
-        filter,
-    );
+    runner.group::<AsciiStringSearchContext>("String Search (ASCII)", |g| {
+        g.bench("str_find_ascii_cs", str_find_ascii_cs);
+        g.bench("str_find_ascii_ci", str_find_ascii_ci);
+        g.bench("str_rfind_ascii_cs", str_rfind_ascii_cs);
+        g.bench("str_rfind_ascii_ci", str_rfind_ascii_ci);
+        g.bench("str_replace_ascii_cs", str_replace_ascii_cs);
+        g.bench("str_replace_ascii_ci", str_replace_ascii_ci);
+    });
 
-    // String search benchmarks - ASCII fast path
-    let ascii_string_benchmarks = [
-        BenchmarkDef {
-            name: "str_find_ascii_cs",
-            group: "string",
-            func: str_find_ascii_cs,
-        },
-        BenchmarkDef {
-            name: "str_find_ascii_ci",
-            group: "string",
-            func: str_find_ascii_ci,
-        },
-        BenchmarkDef {
-            name: "str_rfind_ascii_cs",
-            group: "string",
-            func: str_rfind_ascii_cs,
-        },
-        BenchmarkDef {
-            name: "str_rfind_ascii_ci",
-            group: "string",
-            func: str_rfind_ascii_ci,
-        },
-        BenchmarkDef {
-            name: "str_replace_ascii_cs",
-            group: "string",
-            func: str_replace_ascii_cs,
-        },
-        BenchmarkDef {
-            name: "str_replace_ascii_ci",
-            group: "string",
-            func: str_replace_ascii_ci,
-        },
-    ];
-    run_benchmark_group::<AsciiStringSearchContext>(
-        &ascii_string_benchmarks,
-        "String Search (ASCII)",
-        filter,
-    );
-
-    // String search benchmarks - Unicode fallback
-    let unicode_string_benchmarks = [
-        BenchmarkDef {
-            name: "str_find_unicode_ci",
-            group: "string",
-            func: str_find_unicode_ci,
-        },
-        BenchmarkDef {
-            name: "str_rfind_unicode_ci",
-            group: "string",
-            func: str_rfind_unicode_ci,
-        },
-        BenchmarkDef {
-            name: "str_replace_unicode_ci",
-            group: "string",
-            func: str_replace_unicode_ci,
-        },
-    ];
-    run_benchmark_group::<UnicodeStringSearchContext>(
-        &unicode_string_benchmarks,
-        "String Search (Unicode)",
-        filter,
-    );
+    runner.group::<UnicodeStringSearchContext>("String Search (Unicode)", |g| {
+        g.bench("str_find_unicode_ci", str_find_unicode_ci);
+        g.bench("str_rfind_unicode_ci", str_rfind_unicode_ci);
+        g.bench("str_replace_unicode_ci", str_replace_unicode_ci);
+    });
 
     if filter.is_some() {
         eprintln!("\nBenchmark filtering complete.");
     }
 
-    // Generate session summary with regression analysis
-    generate_session_summary();
+    let report = runner.report();
+    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
+    match report.save_to_default_location() {
+        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
+        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
+    }
 }

@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use moor_bench_utils::{BenchContext, black_box};
+use micromeasure::{BenchContext, black_box};
 use moor_var::{Flyweight, List, Obj, Symbol, v_int};
 
 // Context for flyweight benchmarks
@@ -99,20 +99,8 @@ fn flyweight_remove_slot(ctx: &mut FlyweightContext, chunk_size: usize, _chunk_n
 }
 
 pub fn main() {
-    use moor_bench_utils::{BenchmarkDef, generate_session_summary, run_benchmark_group};
+    use micromeasure::BenchmarkRunner;
     use std::env;
-
-    #[cfg(target_os = "linux")]
-    {
-        use moor_bench_utils::perf_event::{Builder, events::Hardware};
-        if Builder::new(Hardware::INSTRUCTIONS).build().is_err() {
-            eprintln!(
-                "⚠️  Perf events are not available on this system (insufficient permissions or kernel support)."
-            );
-            eprintln!("   Continuing with timing-only benchmarks (performance counters disabled).");
-            eprintln!();
-        }
-    }
 
     let args: Vec<String> = env::args().collect();
     let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
@@ -128,49 +116,26 @@ pub fn main() {
         eprintln!("Running benchmarks matching filter: '{f}'");
     }
 
-    let flyweight_benchmarks = [
-        BenchmarkDef {
-            name: "flyweight_clone",
-            group: "flyweight",
-            func: flyweight_clone,
-        },
-        BenchmarkDef {
-            name: "flyweight_get_slot",
-            group: "flyweight",
-            func: flyweight_get_slot,
-        },
-        BenchmarkDef {
-            name: "flyweight_slots_vec",
-            group: "flyweight",
-            func: flyweight_slots_vec,
-        },
-        BenchmarkDef {
-            name: "flyweight_get_contents",
-            group: "flyweight",
-            func: flyweight_get_contents,
-        },
-        BenchmarkDef {
-            name: "flyweight_get_delegate",
-            group: "flyweight",
-            func: flyweight_get_delegate,
-        },
-        BenchmarkDef {
-            name: "flyweight_add_slot",
-            group: "flyweight",
-            func: flyweight_add_slot,
-        },
-        BenchmarkDef {
-            name: "flyweight_remove_slot",
-            group: "flyweight",
-            func: flyweight_remove_slot,
-        },
-    ];
+    let runner = BenchmarkRunner::new().with_filter(filter);
 
-    run_benchmark_group::<FlyweightContext>(&flyweight_benchmarks, "Flyweight Operations", filter);
+    runner.group::<FlyweightContext>("Flyweight Operations", |g| {
+        g.bench("flyweight_clone", flyweight_clone);
+        g.bench("flyweight_get_slot", flyweight_get_slot);
+        g.bench("flyweight_slots_vec", flyweight_slots_vec);
+        g.bench("flyweight_get_contents", flyweight_get_contents);
+        g.bench("flyweight_get_delegate", flyweight_get_delegate);
+        g.bench("flyweight_add_slot", flyweight_add_slot);
+        g.bench("flyweight_remove_slot", flyweight_remove_slot);
+    });
 
     if filter.is_some() {
         eprintln!("\nBenchmark filtering complete.");
     }
 
-    generate_session_summary();
+    let report = runner.report();
+    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
+    match report.save_to_default_location() {
+        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
+        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
+    }
 }

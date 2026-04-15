@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use moor_bench_utils::{BenchContext, black_box};
+use micromeasure::{BenchContext, black_box};
 use moor_var::Symbol;
 use std::collections::HashMap;
 
@@ -444,20 +444,8 @@ fn symbol_hot_path_compare_id(ctx: &mut HotSymbolContext, chunk_size: usize, _ch
 // ============================================================================
 
 pub fn main() {
-    use moor_bench_utils::{BenchmarkDef, generate_session_summary, run_benchmark_group};
+    use micromeasure::BenchmarkRunner;
     use std::env;
-
-    #[cfg(target_os = "linux")]
-    {
-        use moor_bench_utils::perf_event::{Builder, events::Hardware};
-        if Builder::new(Hardware::INSTRUCTIONS).build().is_err() {
-            eprintln!(
-                "⚠️  Perf events are not available on this system (insufficient permissions or kernel support)."
-            );
-            eprintln!("   Continuing with timing-only benchmarks (performance counters disabled).");
-            eprintln!();
-        }
-    }
 
     let args: Vec<String> = env::args().collect();
     let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
@@ -473,185 +461,72 @@ pub fn main() {
         eprintln!("Running benchmarks matching filter: '{f}'");
     }
 
-    // Symbol creation benchmarks
-    let creation_unique_benchmarks = [BenchmarkDef {
-        name: "symbol_create_unique",
-        group: "symbol_create",
-        func: symbol_create_unique,
-    }];
+    let runner = BenchmarkRunner::new().with_filter(filter);
 
-    let creation_cached_benchmarks = [BenchmarkDef {
-        name: "symbol_lookup_cached",
-        group: "symbol_create",
-        func: symbol_lookup_cached,
-    }];
+    runner.group::<UniqueStringsContext>("Symbol Creation (Unique)", |g| {
+        g.bench("symbol_create_unique", symbol_create_unique);
+    });
 
-    let creation_case_benchmarks = [BenchmarkDef {
-        name: "symbol_lookup_case_variants",
-        group: "symbol_create",
-        func: symbol_lookup_case_variants,
-    }];
+    runner.group::<RepeatedSymbolContext>("Symbol Creation (Cached)", |g| {
+        g.bench("symbol_lookup_cached", symbol_lookup_cached);
+    });
 
-    // Symbol retrieval benchmarks
-    let retrieval_benchmarks = [
-        BenchmarkDef {
-            name: "symbol_as_string",
-            group: "symbol_retrieval",
-            func: symbol_as_string,
-        },
-        BenchmarkDef {
-            name: "symbol_as_arc_str",
-            group: "symbol_retrieval",
-            func: symbol_as_arc_str,
-        },
-        BenchmarkDef {
-            name: "symbol_display",
-            group: "symbol_retrieval",
-            func: symbol_display,
-        },
-        BenchmarkDef {
-            name: "symbol_debug",
-            group: "symbol_retrieval",
-            func: symbol_debug,
-        },
-    ];
+    runner.group::<CaseVariantContext>("Symbol Creation (Case Variants)", |g| {
+        g.bench("symbol_lookup_case_variants", symbol_lookup_case_variants);
+    });
 
-    // Symbol comparison benchmarks
-    let compare_benchmarks = [
-        BenchmarkDef {
-            name: "symbol_eq_same",
-            group: "symbol_compare",
-            func: symbol_eq_same,
-        },
-        BenchmarkDef {
-            name: "symbol_eq_case_variant",
-            group: "symbol_compare",
-            func: symbol_eq_case_variant,
-        },
-        BenchmarkDef {
-            name: "symbol_eq_different",
-            group: "symbol_compare",
-            func: symbol_eq_different,
-        },
-    ];
+    runner.group::<SymbolRetrievalContext>("Symbol Retrieval", |g| {
+        g.bench("symbol_as_string", symbol_as_string);
+        g.bench("symbol_as_arc_str", symbol_as_arc_str);
+        g.bench("symbol_display", symbol_display);
+        g.bench("symbol_debug", symbol_debug);
+    });
 
-    // Symbol hash benchmarks
-    let hash_benchmarks = [
-        BenchmarkDef {
-            name: "symbol_hash_lookup",
-            group: "symbol_hash",
-            func: symbol_hash_lookup,
-        },
-        BenchmarkDef {
-            name: "symbol_hash_insert",
-            group: "symbol_hash",
-            func: symbol_hash_insert,
-        },
-    ];
+    runner.group::<SymbolCompareContext>("Symbol Comparison", |g| {
+        g.bench("symbol_eq_same", symbol_eq_same);
+        g.bench("symbol_eq_case_variant", symbol_eq_case_variant);
+        g.bench("symbol_eq_different", symbol_eq_different);
+    });
 
-    // Symbol clone benchmarks
-    let clone_benchmarks = [BenchmarkDef {
-        name: "symbol_clone",
-        group: "symbol_clone",
-        func: symbol_clone,
-    }];
+    runner.group::<SymbolHashContext>("Symbol Hashing", |g| {
+        g.bench("symbol_hash_lookup", symbol_hash_lookup);
+        g.bench("symbol_hash_insert", symbol_hash_insert);
+    });
 
-    // Serialization benchmarks
-    let serialize_benchmarks = [
-        BenchmarkDef {
-            name: "symbol_serialize",
-            group: "symbol_serde",
-            func: symbol_serialize,
-        },
-        BenchmarkDef {
-            name: "symbol_deserialize",
-            group: "symbol_serde",
-            func: symbol_deserialize,
-        },
-    ];
+    runner.group::<SymbolCloneContext>("Symbol Clone", |g| {
+        g.bench("symbol_clone", symbol_clone);
+    });
 
-    // String length benchmarks
-    let short_string_benchmarks = [BenchmarkDef {
-        name: "symbol_lookup_short",
-        group: "symbol_length",
-        func: symbol_lookup_short,
-    }];
+    runner.group::<SymbolSerializeContext>("Symbol Serialization", |g| {
+        g.bench("symbol_serialize", symbol_serialize);
+        g.bench("symbol_deserialize", symbol_deserialize);
+    });
 
-    let medium_string_benchmarks = [BenchmarkDef {
-        name: "symbol_lookup_medium",
-        group: "symbol_length",
-        func: symbol_lookup_medium,
-    }];
+    runner.group::<ShortStringContext>("Symbol Lookup (Short Strings)", |g| {
+        g.bench("symbol_lookup_short", symbol_lookup_short);
+    });
 
-    let long_string_benchmarks = [BenchmarkDef {
-        name: "symbol_lookup_long",
-        group: "symbol_length",
-        func: symbol_lookup_long,
-    }];
+    runner.group::<MediumStringContext>("Symbol Lookup (Medium Strings)", |g| {
+        g.bench("symbol_lookup_medium", symbol_lookup_medium);
+    });
 
-    // Hot path benchmarks
-    let hot_path_benchmarks = [
-        BenchmarkDef {
-            name: "symbol_hot_path_lookup",
-            group: "symbol_hot",
-            func: symbol_hot_path_lookup,
-        },
-        BenchmarkDef {
-            name: "symbol_hot_path_compare_id",
-            group: "symbol_hot",
-            func: symbol_hot_path_compare_id,
-        },
-    ];
+    runner.group::<LongStringContext>("Symbol Lookup (Long Strings)", |g| {
+        g.bench("symbol_lookup_long", symbol_lookup_long);
+    });
 
-    // Run all benchmark groups
-    run_benchmark_group::<UniqueStringsContext>(
-        &creation_unique_benchmarks,
-        "Symbol Creation (Unique)",
-        filter,
-    );
-    run_benchmark_group::<RepeatedSymbolContext>(
-        &creation_cached_benchmarks,
-        "Symbol Creation (Cached)",
-        filter,
-    );
-    run_benchmark_group::<CaseVariantContext>(
-        &creation_case_benchmarks,
-        "Symbol Creation (Case Variants)",
-        filter,
-    );
-    run_benchmark_group::<SymbolRetrievalContext>(
-        &retrieval_benchmarks,
-        "Symbol Retrieval",
-        filter,
-    );
-    run_benchmark_group::<SymbolCompareContext>(&compare_benchmarks, "Symbol Comparison", filter);
-    run_benchmark_group::<SymbolHashContext>(&hash_benchmarks, "Symbol Hashing", filter);
-    run_benchmark_group::<SymbolCloneContext>(&clone_benchmarks, "Symbol Clone", filter);
-    run_benchmark_group::<SymbolSerializeContext>(
-        &serialize_benchmarks,
-        "Symbol Serialization",
-        filter,
-    );
-    run_benchmark_group::<ShortStringContext>(
-        &short_string_benchmarks,
-        "Symbol Lookup (Short Strings)",
-        filter,
-    );
-    run_benchmark_group::<MediumStringContext>(
-        &medium_string_benchmarks,
-        "Symbol Lookup (Medium Strings)",
-        filter,
-    );
-    run_benchmark_group::<LongStringContext>(
-        &long_string_benchmarks,
-        "Symbol Lookup (Long Strings)",
-        filter,
-    );
-    run_benchmark_group::<HotSymbolContext>(&hot_path_benchmarks, "Symbol Hot Path", filter);
+    runner.group::<HotSymbolContext>("Symbol Hot Path", |g| {
+        g.bench("symbol_hot_path_lookup", symbol_hot_path_lookup);
+        g.bench("symbol_hot_path_compare_id", symbol_hot_path_compare_id);
+    });
 
     if filter.is_some() {
         eprintln!("\nBenchmark filtering complete.");
     }
 
-    generate_session_summary();
+    let report = runner.report();
+    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
+    match report.save_to_default_location() {
+        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
+        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
+    }
 }

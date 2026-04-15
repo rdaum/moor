@@ -3083,6 +3083,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "micromeasure"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4044007d1b217b12347566abd9c9a305bdb4379a66cbd80941492db7dc2afc87"
+dependencies = [
+ "libc",
+ "perf-event2",
+ "serde",
+ "serde_json",
+ "unicode-width",
+]
+
+[[package]]
 name = "mimalloc"
 version = "0.1.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3149,17 +3162,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "moor-bench-utils"
-version = "1.1.0-dev"
-dependencies = [
- "libc",
- "moor-common",
- "perf-event2",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "moor-builtin-docs-macro"
 version = "1.1.0-dev"
 dependencies = [
@@ -3176,7 +3178,7 @@ dependencies = [
  "eyre",
  "itertools 0.14.0",
  "libc",
- "moor-bench-utils",
+ "micromeasure",
  "moor-var",
  "serde",
  "serde_json",
@@ -3299,7 +3301,7 @@ dependencies = [
  "fjall",
  "flume",
  "imbl",
- "moor-bench-utils",
+ "micromeasure",
  "moor-common",
  "moor-schema",
  "moor-var",
@@ -3368,7 +3370,7 @@ dependencies = [
  "iana-time-zone",
  "libc",
  "md-5",
- "moor-bench-utils",
+ "micromeasure",
  "moor-builtin-docs-macro",
  "moor-common",
  "moor-compiler",
@@ -3587,10 +3589,9 @@ dependencies = [
  "boxcar",
  "byteview",
  "imbl",
- "moor-bench-utils",
+ "micromeasure",
  "papaya",
  "paste",
- "perf-event2",
  "rand 0.9.2",
  "serde",
  "serde_json",

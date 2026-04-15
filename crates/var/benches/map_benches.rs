@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use moor_bench_utils::{BenchContext, black_box};
+use micromeasure::{BenchContext, black_box};
 use moor_var::{IndexMode, Symbol, Var, v_int, v_sym};
 
 const BASE_MAP_SIZE: usize = 4096;
@@ -181,20 +181,8 @@ fn map_remove_case_sensitive_hit_steady(
 }
 
 pub fn main() {
-    use moor_bench_utils::{BenchmarkDef, generate_session_summary, run_benchmark_group};
+    use micromeasure::BenchmarkRunner;
     use std::env;
-
-    #[cfg(target_os = "linux")]
-    {
-        use moor_bench_utils::perf_event::{Builder, events::Hardware};
-        if Builder::new(Hardware::INSTRUCTIONS).build().is_err() {
-            eprintln!(
-                "⚠️  Perf events are not available on this system (insufficient permissions or kernel support)."
-            );
-            eprintln!("   Continuing with timing-only benchmarks (performance counters disabled).");
-            eprintln!();
-        }
-    }
 
     let args: Vec<String> = env::args().collect();
     let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
@@ -210,64 +198,32 @@ pub fn main() {
         eprintln!("Running benchmarks matching filter: '{f}'");
     }
 
-    let map_benchmarks = [
-        BenchmarkDef {
-            name: "map_get_hit",
-            group: "map",
-            func: map_get_hit,
-        },
-        BenchmarkDef {
-            name: "map_get_miss",
-            group: "map",
-            func: map_get_miss,
-        },
-        BenchmarkDef {
-            name: "map_set_existing",
-            group: "map",
-            func: map_set_existing,
-        },
-        BenchmarkDef {
-            name: "map_set_new_insert_destructive",
-            group: "map",
-            func: map_set_new_insert_destructive,
-        },
-        BenchmarkDef {
-            name: "map_set_new_insert_steady",
-            group: "map",
-            func: map_set_new_insert_steady,
-        },
-        BenchmarkDef {
-            name: "map_set_owned_existing",
-            group: "map",
-            func: map_set_owned_existing,
-        },
-        BenchmarkDef {
-            name: "map_remove_hit_destructive",
-            group: "map",
-            func: map_remove_hit_destructive,
-        },
-        BenchmarkDef {
-            name: "map_remove_hit_steady",
-            group: "map",
-            func: map_remove_hit_steady,
-        },
-        BenchmarkDef {
-            name: "map_remove_miss",
-            group: "map",
-            func: map_remove_miss,
-        },
-        BenchmarkDef {
-            name: "map_remove_case_sensitive_hit_destructive",
-            group: "map",
-            func: map_remove_case_sensitive_hit_destructive,
-        },
-        BenchmarkDef {
-            name: "map_remove_case_sensitive_hit_steady",
-            group: "map",
-            func: map_remove_case_sensitive_hit_steady,
-        },
-    ];
+    let runner = BenchmarkRunner::new().with_filter(filter);
 
-    run_benchmark_group::<MapContext>(&map_benchmarks, "Map Operations", filter);
-    generate_session_summary();
+    runner.group::<MapContext>("Map Operations", |g| {
+        g.bench("map_get_hit", map_get_hit);
+        g.bench("map_get_miss", map_get_miss);
+        g.bench("map_set_existing", map_set_existing);
+        g.bench("map_set_new_insert_destructive", map_set_new_insert_destructive);
+        g.bench("map_set_new_insert_steady", map_set_new_insert_steady);
+        g.bench("map_set_owned_existing", map_set_owned_existing);
+        g.bench("map_remove_hit_destructive", map_remove_hit_destructive);
+        g.bench("map_remove_hit_steady", map_remove_hit_steady);
+        g.bench("map_remove_miss", map_remove_miss);
+        g.bench(
+            "map_remove_case_sensitive_hit_destructive",
+            map_remove_case_sensitive_hit_destructive,
+        );
+        g.bench(
+            "map_remove_case_sensitive_hit_steady",
+            map_remove_case_sensitive_hit_steady,
+        );
+    });
+
+    let report = runner.report();
+    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
+    match report.save_to_default_location() {
+        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
+        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
+    }
 }

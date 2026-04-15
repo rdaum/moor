@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use moor_bench_utils::{BenchContext, black_box};
+use micromeasure::{BenchContext, black_box};
 use moor_common::util::verbcasecmp;
 
 // Context for exact match benchmarks
@@ -269,21 +269,8 @@ fn mixed_workload_bench(ctx: &mut MixedWorkloadContext, chunk_size: usize, _chun
 }
 
 pub fn main() {
-    use moor_bench_utils::{BenchmarkDef, generate_session_summary, run_benchmark_group};
+    use micromeasure::BenchmarkRunner;
     use std::env;
-
-    #[cfg(target_os = "linux")]
-    {
-        use moor_bench_utils::perf_event::{Builder, events::Hardware};
-        // Check if we can do perf events, and if not warn but continue with timing-only benchmarks
-        if Builder::new(Hardware::INSTRUCTIONS).build().is_err() {
-            eprintln!(
-                "⚠️  Perf events are not available on this system (insufficient permissions or kernel support)."
-            );
-            eprintln!("   Continuing with timing-only benchmarks (performance counters disabled).");
-            eprintln!();
-        }
-    }
 
     let args: Vec<String> = env::args().collect();
     // Look for filter arguments after "--"
@@ -306,89 +293,48 @@ pub fn main() {
         eprintln!();
     }
 
-    // Define all benchmark groups declaratively
-    let exact_benchmarks = [BenchmarkDef {
-        name: "exact_match",
-        group: "exact",
-        func: exact_match_bench,
-    }];
+    let runner = BenchmarkRunner::new().with_filter(filter);
 
-    let case_benchmarks = [BenchmarkDef {
-        name: "case_insensitive_match",
-        group: "case",
-        func: case_insensitive_match_bench,
-    }];
+    runner.group::<ExactMatchContext>("Exact Match Benchmarks", |g| {
+        g.bench("exact_match", exact_match_bench);
+    });
 
-    let wildcard_benchmarks = [BenchmarkDef {
-        name: "wildcard_match",
-        group: "wildcard",
-        func: wildcard_match_bench,
-    }];
+    runner.group::<CaseMatchContext>("Case Insensitive Match Benchmarks", |g| {
+        g.bench("case_insensitive_match", case_insensitive_match_bench);
+    });
 
-    let pronoun_benchmarks = [BenchmarkDef {
-        name: "pronoun_match",
-        group: "pronoun",
-        func: pronoun_match_bench,
-    }];
+    runner.group::<WildcardMatchContext>("Wildcard Match Benchmarks", |g| {
+        g.bench("wildcard_match", wildcard_match_bench);
+    });
 
-    let mismatch_benchmarks = [BenchmarkDef {
-        name: "mismatch",
-        group: "mismatch",
-        func: mismatch_bench,
-    }];
+    runner.group::<PronounMatchContext>("Pronoun Pattern Benchmarks", |g| {
+        g.bench("pronoun_match", pronoun_match_bench);
+    });
 
-    let leading_benchmarks = [BenchmarkDef {
-        name: "leading_asterisk",
-        group: "leading",
-        func: leading_asterisk_bench,
-    }];
+    runner.group::<MismatchContext>("Mismatch Benchmarks", |g| {
+        g.bench("mismatch", mismatch_bench);
+    });
 
-    let long_benchmarks = [BenchmarkDef {
-        name: "long_string_match",
-        group: "long",
-        func: long_string_bench,
-    }];
+    runner.group::<LeadingAsteriskContext>("Leading Asterisk Benchmarks", |g| {
+        g.bench("leading_asterisk", leading_asterisk_bench);
+    });
 
-    let mixed_benchmarks = [BenchmarkDef {
-        name: "mixed_workload",
-        group: "mixed",
-        func: mixed_workload_bench,
-    }];
+    runner.group::<LongStringContext>("Long String Benchmarks", |g| {
+        g.bench("long_string_match", long_string_bench);
+    });
 
-    // Run benchmark groups
-    run_benchmark_group::<ExactMatchContext>(&exact_benchmarks, "Exact Match Benchmarks", filter);
-    run_benchmark_group::<CaseMatchContext>(
-        &case_benchmarks,
-        "Case Insensitive Match Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<WildcardMatchContext>(
-        &wildcard_benchmarks,
-        "Wildcard Match Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<PronounMatchContext>(
-        &pronoun_benchmarks,
-        "Pronoun Pattern Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<MismatchContext>(&mismatch_benchmarks, "Mismatch Benchmarks", filter);
-    run_benchmark_group::<LeadingAsteriskContext>(
-        &leading_benchmarks,
-        "Leading Asterisk Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<LongStringContext>(&long_benchmarks, "Long String Benchmarks", filter);
-    run_benchmark_group::<MixedWorkloadContext>(
-        &mixed_benchmarks,
-        "Mixed Workload Benchmarks",
-        filter,
-    );
+    runner.group::<MixedWorkloadContext>("Mixed Workload Benchmarks", |g| {
+        g.bench("mixed_workload", mixed_workload_bench);
+    });
 
     if filter.is_some() {
         eprintln!("\nVerbcasecmp benchmark filtering complete.");
     }
 
-    // Generate session summary with regression analysis
-    generate_session_summary();
+    let report = runner.report();
+    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
+    match report.save_to_default_location() {
+        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
+        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
+    }
 }

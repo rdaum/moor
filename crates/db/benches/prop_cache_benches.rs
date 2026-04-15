@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use moor_bench_utils::{BenchContext, black_box};
+use micromeasure::{BenchContext, black_box};
 use moor_common::model::PropDef;
 use moor_db::PropResolutionCache;
 use moor_var::{Obj, Symbol};
@@ -458,20 +458,8 @@ fn prop_cache_mixed_workload(
 }
 
 pub fn main() {
-    use moor_bench_utils::{BenchmarkDef, generate_session_summary, run_benchmark_group};
+    use micromeasure::BenchmarkRunner;
     use std::env;
-
-    #[cfg(target_os = "linux")]
-    {
-        use moor_bench_utils::perf_event::{Builder, events::Hardware};
-        if Builder::new(Hardware::INSTRUCTIONS).build().is_err() {
-            eprintln!(
-                "⚠️  Perf events are not available on this system (insufficient permissions or kernel support)."
-            );
-            eprintln!("   Continuing with timing-only benchmarks (performance counters disabled).");
-            eprintln!();
-        }
-    }
 
     let args: Vec<String> = env::args().collect();
     let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
@@ -491,115 +479,48 @@ pub fn main() {
         eprintln!();
     }
 
-    // Define benchmark groups
-    let lookup_benchmarks = [
-        BenchmarkDef {
-            name: "prop_cache_lookup_hits",
-            group: "lookup",
-            func: prop_cache_lookup_hits,
-        },
-        BenchmarkDef {
-            name: "prop_cache_lookup_misses",
-            group: "lookup",
-            func: prop_cache_lookup_misses,
-        },
-        BenchmarkDef {
-            name: "prop_cache_lookup_cold",
-            group: "lookup",
-            func: prop_cache_lookup_cold,
-        },
-    ];
+    let runner = BenchmarkRunner::new().with_filter(filter);
 
-    let fill_benchmarks = [
-        BenchmarkDef {
-            name: "prop_cache_fill_hits",
-            group: "fill",
-            func: prop_cache_fill_hits,
-        },
-        BenchmarkDef {
-            name: "prop_cache_fill_misses",
-            group: "fill",
-            func: prop_cache_fill_misses,
-        },
-    ];
+    runner.group::<PopulatedPropCacheContext>("Prop Cache Lookup Benchmarks", |g| {
+        g.bench("prop_cache_lookup_hits", prop_cache_lookup_hits);
+        g.bench("prop_cache_lookup_misses", prop_cache_lookup_misses);
+        g.bench("prop_cache_lookup_cold", prop_cache_lookup_cold);
+    });
 
-    let flush_benchmarks = [BenchmarkDef {
-        name: "prop_cache_flush",
-        group: "flush",
-        func: prop_cache_flush,
-    }];
+    runner.group::<SmallPropCacheContext>("Prop Cache Fill Benchmarks", |g| {
+        g.bench("prop_cache_fill_hits", prop_cache_fill_hits);
+        g.bench("prop_cache_fill_misses", prop_cache_fill_misses);
+    });
 
-    let fork_benchmarks = [BenchmarkDef {
-        name: "prop_cache_fork",
-        group: "fork",
-        func: prop_cache_fork,
-    }];
+    runner.group::<SmallPropCacheContext>("Prop Cache Flush Benchmarks", |g| {
+        g.bench("prop_cache_flush", prop_cache_flush);
+    });
 
-    let parent_benchmarks = [
-        BenchmarkDef {
-            name: "prop_cache_parent_lookup",
-            group: "parent",
-            func: prop_cache_parent_lookup,
-        },
-        BenchmarkDef {
-            name: "prop_cache_parent_fill",
-            group: "parent",
-            func: prop_cache_parent_fill,
-        },
-    ];
+    runner.group::<SmallPropCacheContext>("Prop Cache Fork Benchmarks", |g| {
+        g.bench("prop_cache_fork", prop_cache_fork);
+    });
 
-    let mixed_benchmarks = [BenchmarkDef {
-        name: "prop_cache_mixed_workload",
-        group: "mixed",
-        func: prop_cache_mixed_workload,
-    }];
+    runner.group::<PopulatedPropCacheContext>("Prop Parent Cache Benchmarks", |g| {
+        g.bench("prop_cache_parent_lookup", prop_cache_parent_lookup);
+        g.bench("prop_cache_parent_fill", prop_cache_parent_fill);
+    });
 
-    let realistic_benchmarks = [BenchmarkDef {
-        name: "prop_cache_realistic_workload",
-        group: "realistic",
-        func: prop_cache_realistic_workload,
-    }];
+    runner.group::<LargePropCacheContext>("Mixed Workload Benchmarks", |g| {
+        g.bench("prop_cache_mixed_workload", prop_cache_mixed_workload);
+    });
 
-    // Run benchmark groups
-    run_benchmark_group::<PopulatedPropCacheContext>(
-        &lookup_benchmarks,
-        "Prop Cache Lookup Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<SmallPropCacheContext>(
-        &fill_benchmarks,
-        "Prop Cache Fill Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<SmallPropCacheContext>(
-        &flush_benchmarks,
-        "Prop Cache Flush Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<SmallPropCacheContext>(
-        &fork_benchmarks,
-        "Prop Cache Fork Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<PopulatedPropCacheContext>(
-        &parent_benchmarks,
-        "Prop Parent Cache Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<LargePropCacheContext>(
-        &mixed_benchmarks,
-        "Mixed Workload Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<RealisticPropCacheContext>(
-        &realistic_benchmarks,
-        "Realistic Workload Benchmarks",
-        filter,
-    );
+    runner.group::<RealisticPropCacheContext>("Realistic Workload Benchmarks", |g| {
+        g.bench("prop_cache_realistic_workload", prop_cache_realistic_workload);
+    });
 
     if filter.is_some() {
         eprintln!("\nProp cache benchmark filtering complete.");
     }
 
-    generate_session_summary();
+    let report = runner.report();
+    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
+    match report.save_to_default_location() {
+        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
+        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
+    }
 }

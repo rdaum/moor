@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use moor_bench_utils::{BenchContext, black_box};
+use micromeasure::{BenchContext, black_box};
 use moor_common::model::{VerbArgsSpec, VerbDef, VerbFlag};
 use moor_db::{AncestryCache, VerbResolutionCache};
 use moor_var::{Obj, Symbol};
@@ -575,20 +575,8 @@ fn verb_cache_mixed_workload(ctx: &mut LargeCacheContext, chunk_size: usize, _ch
 }
 
 pub fn main() {
-    use moor_bench_utils::{BenchmarkDef, generate_session_summary, run_benchmark_group};
+    use micromeasure::BenchmarkRunner;
     use std::env;
-
-    #[cfg(target_os = "linux")]
-    {
-        use moor_bench_utils::perf_event::{Builder, events::Hardware};
-        if Builder::new(Hardware::INSTRUCTIONS).build().is_err() {
-            eprintln!(
-                "⚠️  Perf events are not available on this system (insufficient permissions or kernel support)."
-            );
-            eprintln!("   Continuing with timing-only benchmarks (performance counters disabled).");
-            eprintln!();
-        }
-    }
 
     let args: Vec<String> = env::args().collect();
     let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
@@ -608,133 +596,53 @@ pub fn main() {
         eprintln!();
     }
 
-    // Define benchmark groups
-    let lookup_benchmarks = [
-        BenchmarkDef {
-            name: "verb_cache_lookup_hits",
-            group: "lookup",
-            func: verb_cache_lookup_hits,
-        },
-        BenchmarkDef {
-            name: "verb_cache_lookup_misses",
-            group: "lookup",
-            func: verb_cache_lookup_misses,
-        },
-        BenchmarkDef {
-            name: "verb_cache_lookup_cold",
-            group: "lookup",
-            func: verb_cache_lookup_cold,
-        },
-    ];
+    let runner = BenchmarkRunner::new().with_filter(filter);
 
-    let fill_benchmarks = [
-        BenchmarkDef {
-            name: "verb_cache_fill_hits",
-            group: "fill",
-            func: verb_cache_fill_hits,
-        },
-        BenchmarkDef {
-            name: "verb_cache_fill_misses",
-            group: "fill",
-            func: verb_cache_fill_misses,
-        },
-    ];
+    runner.group::<PopulatedCacheContext>("Verb Cache Lookup Benchmarks", |g| {
+        g.bench("verb_cache_lookup_hits", verb_cache_lookup_hits);
+        g.bench("verb_cache_lookup_misses", verb_cache_lookup_misses);
+        g.bench("verb_cache_lookup_cold", verb_cache_lookup_cold);
+    });
 
-    let flush_benchmarks = [BenchmarkDef {
-        name: "verb_cache_flush",
-        group: "flush",
-        func: verb_cache_flush,
-    }];
+    runner.group::<SmallCacheContext>("Verb Cache Fill Benchmarks", |g| {
+        g.bench("verb_cache_fill_hits", verb_cache_fill_hits);
+        g.bench("verb_cache_fill_misses", verb_cache_fill_misses);
+    });
 
-    let fork_benchmarks = [BenchmarkDef {
-        name: "verb_cache_fork",
-        group: "fork",
-        func: verb_cache_fork,
-    }];
+    runner.group::<SmallCacheContext>("Verb Cache Flush Benchmarks", |g| {
+        g.bench("verb_cache_flush", verb_cache_flush);
+    });
 
-    let ancestry_benchmarks = [
-        BenchmarkDef {
-            name: "ancestry_cache_lookup",
-            group: "ancestry",
-            func: ancestry_cache_lookup,
-        },
-        BenchmarkDef {
-            name: "ancestry_cache_fill",
-            group: "ancestry",
-            func: ancestry_cache_fill,
-        },
-    ];
+    runner.group::<SmallCacheContext>("Verb Cache Fork Benchmarks", |g| {
+        g.bench("verb_cache_fork", verb_cache_fork);
+    });
 
-    let concurrent_benchmarks = [BenchmarkDef {
-        name: "concurrent_cache_access",
-        group: "concurrent",
-        func: concurrent_cache_access,
-    }];
+    runner.group::<PopulatedCacheContext>("Ancestry Cache Benchmarks", |g| {
+        g.bench("ancestry_cache_lookup", ancestry_cache_lookup);
+        g.bench("ancestry_cache_fill", ancestry_cache_fill);
+    });
 
-    let mixed_benchmarks = [BenchmarkDef {
-        name: "verb_cache_mixed_workload",
-        group: "mixed",
-        func: verb_cache_mixed_workload,
-    }];
+    runner.group::<ConcurrentCacheContext>("Concurrent Cache Benchmarks", |g| {
+        g.bench("concurrent_cache_access", concurrent_cache_access);
+    });
 
-    let realistic_benchmarks = [
-        BenchmarkDef {
-            name: "verb_cache_realistic_workload",
-            group: "realistic",
-            func: verb_cache_realistic_workload,
-        },
-        BenchmarkDef {
-            name: "ancestry_cache_realistic_workload",
-            group: "realistic",
-            func: ancestry_cache_realistic_workload,
-        },
-    ];
+    runner.group::<LargeCacheContext>("Mixed Workload Benchmarks", |g| {
+        g.bench("verb_cache_mixed_workload", verb_cache_mixed_workload);
+    });
 
-    // Run benchmark groups
-    run_benchmark_group::<PopulatedCacheContext>(
-        &lookup_benchmarks,
-        "Verb Cache Lookup Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<SmallCacheContext>(
-        &fill_benchmarks,
-        "Verb Cache Fill Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<SmallCacheContext>(
-        &flush_benchmarks,
-        "Verb Cache Flush Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<SmallCacheContext>(
-        &fork_benchmarks,
-        "Verb Cache Fork Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<PopulatedCacheContext>(
-        &ancestry_benchmarks,
-        "Ancestry Cache Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<ConcurrentCacheContext>(
-        &concurrent_benchmarks,
-        "Concurrent Cache Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<LargeCacheContext>(
-        &mixed_benchmarks,
-        "Mixed Workload Benchmarks",
-        filter,
-    );
-    run_benchmark_group::<RealisticCacheContext>(
-        &realistic_benchmarks,
-        "Realistic Workload Benchmarks",
-        filter,
-    );
+    runner.group::<RealisticCacheContext>("Realistic Workload Benchmarks", |g| {
+        g.bench("verb_cache_realistic_workload", verb_cache_realistic_workload);
+        g.bench("ancestry_cache_realistic_workload", ancestry_cache_realistic_workload);
+    });
 
     if filter.is_some() {
         eprintln!("\nVerb cache benchmark filtering complete.");
     }
 
-    generate_session_summary();
+    let report = runner.report();
+    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
+    match report.save_to_default_location() {
+        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
+        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
+    }
 }

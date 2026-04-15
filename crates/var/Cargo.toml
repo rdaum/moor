@@ -11,12 +11,8 @@ repository.workspace = true
 rust-version.workspace = true
 description = "The set of primitive MOO value types across the system"
 
-# dev dependencies only for linux...
-[target.'cfg(all(target_os = "linux"))'.dev-dependencies]
-perf_event.workspace = true
-
 [dev-dependencies]
-moor-bench-utils = { path = "../testing/bench-utils" }
+micromeasure.workspace = true
 serde_json.workspace = true
 shuttle.workspace = true
 

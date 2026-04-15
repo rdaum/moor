@@ -50,7 +50,7 @@ libc.workspace = true
 strsim.workspace = true
 
 [dev-dependencies]
-moor-bench-utils = { path = "../testing/bench-utils" }
+micromeasure.workspace = true
 
 [features]
 default = []

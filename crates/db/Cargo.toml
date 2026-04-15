@@ -31,7 +31,7 @@ harness = false
 criterion.workspace = true
 edn-format.workspace = true
 eyre.workspace = true
-moor-bench-utils = { path = "../testing/bench-utils" }
+micromeasure.workspace = true
 shuttle.workspace = true
 tempfile.workspace = true
 

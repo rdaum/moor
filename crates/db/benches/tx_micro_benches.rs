@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use moor_bench_utils::{BenchContext, black_box};
+use micromeasure::{BenchContext, black_box};
 use moor_db::{
     CheckRelation, Error, Provider, Relation, RelationCodomain, RelationIndex, RelationTransaction,
     Timestamp, Tx, WorkingSet,
@@ -749,20 +749,8 @@ fn tx_op_bulk_get_local_mixed(ctx: &mut TxOpsContext, chunk_size: usize, _chunk_
 }
 
 pub fn main() {
-    use moor_bench_utils::{BenchmarkDef, generate_session_summary, run_benchmark_group};
+    use micromeasure::BenchmarkRunner;
     use std::env;
-
-    #[cfg(target_os = "linux")]
-    {
-        use moor_bench_utils::perf_event::{Builder, events::Hardware};
-        if Builder::new(Hardware::INSTRUCTIONS).build().is_err() {
-            eprintln!(
-                "⚠️  Perf events are not available on this system (insufficient permissions or kernel support)."
-            );
-            eprintln!("   Continuing with timing-only benchmarks (performance counters disabled).");
-            eprintln!();
-        }
-    }
 
     let args: Vec<String> = env::args().collect();
     let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
@@ -780,167 +768,69 @@ pub fn main() {
         eprintln!();
     }
 
-    let check_no_conflict_core_benchmarks = [BenchmarkDef {
-        name: "tx_check_no_conflict_core",
-        group: "check",
-        func: check_no_conflict_core,
-    }];
-    let check_identical_core_benchmarks = [BenchmarkDef {
-        name: "tx_check_conflict_identical_accept_core",
-        group: "check",
-        func: check_conflict_identical_accept_core,
-    }];
-    let check_fail_core_benchmarks = [BenchmarkDef {
-        name: "tx_check_conflict_unresolvable_fail_core",
-        group: "check",
-        func: check_conflict_unresolvable_fail_core,
-    }];
+    let runner = BenchmarkRunner::new().with_filter(filter);
 
-    let check_merge_benchmarks = [BenchmarkDef {
-        name: "tx_check_conflict_merge_rewrite",
-        group: "check",
-        func: check_conflict_merge_rewrite,
-    }];
+    runner.group::<CheckNoConflictCoreContext>("TX Check Benchmarks (Core No Conflict)", |g| {
+        g.bench("tx_check_no_conflict_core", check_no_conflict_core);
+    });
 
-    let apply_benchmarks = [BenchmarkDef {
-        name: "tx_apply_mixed_batch",
-        group: "apply",
-        func: apply_mixed_batch,
-    }];
-    let tx_ops_benchmarks = [
-        BenchmarkDef {
-            name: "tx_op_get_hit_master",
-            group: "tx_ops",
-            func: tx_op_get_hit_master,
-        },
-        BenchmarkDef {
-            name: "tx_op_get_miss",
-            group: "tx_ops",
-            func: tx_op_get_miss,
-        },
-        BenchmarkDef {
-            name: "tx_op_get_hit_local_update",
-            group: "tx_ops",
-            func: tx_op_get_hit_local_update,
-        },
-        BenchmarkDef {
-            name: "tx_op_get_miss_local_delete",
-            group: "tx_ops",
-            func: tx_op_get_miss_local_delete,
-        },
-        BenchmarkDef {
-            name: "tx_op_update_hit_master",
-            group: "tx_ops",
-            func: tx_op_update_hit_master,
-        },
-        BenchmarkDef {
-            name: "tx_op_update_miss_none",
-            group: "tx_ops",
-            func: tx_op_update_miss_none,
-        },
-        BenchmarkDef {
-            name: "tx_op_update_local_insert",
-            group: "tx_ops",
-            func: tx_op_update_local_insert,
-        },
-        BenchmarkDef {
-            name: "tx_op_update_local_delete_none",
-            group: "tx_ops",
-            func: tx_op_update_local_delete_none,
-        },
-        BenchmarkDef {
-            name: "tx_op_upsert_hit_master",
-            group: "tx_ops",
-            func: tx_op_upsert_hit_master,
-        },
-        BenchmarkDef {
-            name: "tx_op_upsert_miss_insert",
-            group: "tx_ops",
-            func: tx_op_upsert_miss_insert,
-        },
-        BenchmarkDef {
-            name: "tx_op_upsert_local_delete_to_update",
-            group: "tx_ops",
-            func: tx_op_upsert_local_delete_to_update,
-        },
-        BenchmarkDef {
-            name: "tx_op_upsert_local_delete_to_insert",
-            group: "tx_ops",
-            func: tx_op_upsert_local_delete_to_insert,
-        },
-        BenchmarkDef {
-            name: "tx_op_delete_hit_master",
-            group: "tx_ops",
-            func: tx_op_delete_hit_master,
-        },
-        BenchmarkDef {
-            name: "tx_op_delete_miss_none",
-            group: "tx_ops",
-            func: tx_op_delete_miss_none,
-        },
-        BenchmarkDef {
-            name: "tx_op_delete_local_insert",
-            group: "tx_ops",
-            func: tx_op_delete_local_insert,
-        },
-        BenchmarkDef {
-            name: "tx_op_delete_local_delete_none",
-            group: "tx_ops",
-            func: tx_op_delete_local_delete_none,
-        },
-        BenchmarkDef {
-            name: "tx_op_insert_miss",
-            group: "tx_ops",
-            func: tx_op_insert_miss,
-        },
-        BenchmarkDef {
-            name: "tx_op_insert_duplicate_err",
-            group: "tx_ops",
-            func: tx_op_insert_duplicate_err,
-        },
-        BenchmarkDef {
-            name: "tx_op_insert_after_local_delete",
-            group: "tx_ops",
-            func: tx_op_insert_after_local_delete,
-        },
-        BenchmarkDef {
-            name: "tx_op_bulk_get_master",
-            group: "tx_ops",
-            func: tx_op_bulk_get_master,
-        },
-        BenchmarkDef {
-            name: "tx_op_bulk_get_local_mixed",
-            group: "tx_ops",
-            func: tx_op_bulk_get_local_mixed,
-        },
-    ];
-
-    run_benchmark_group::<CheckNoConflictCoreContext>(
-        &check_no_conflict_core_benchmarks,
-        "TX Check Benchmarks (Core No Conflict)",
-        filter,
-    );
-    run_benchmark_group::<CheckConflictIdenticalCoreContext>(
-        &check_identical_core_benchmarks,
+    runner.group::<CheckConflictIdenticalCoreContext>(
         "TX Check Benchmarks (Core Identical Accept)",
-        filter,
+        |g| {
+            g.bench(
+                "tx_check_conflict_identical_accept_core",
+                check_conflict_identical_accept_core,
+            );
+        },
     );
-    run_benchmark_group::<CheckMergeContext>(
-        &check_merge_benchmarks,
-        "TX Check Benchmarks (Merge, End-to-End)",
-        filter,
-    );
-    run_benchmark_group::<CheckConflictUnresolvableCoreContext>(
-        &check_fail_core_benchmarks,
-        "TX Check Benchmarks (Core Fail)",
-        filter,
-    );
-    run_benchmark_group::<TxOpsContext>(&tx_ops_benchmarks, "TX Operation Benchmarks", filter);
-    run_benchmark_group::<ApplyContext>(&apply_benchmarks, "TX Apply Benchmarks", filter);
+
+    runner.group::<CheckMergeContext>("TX Check Benchmarks (Merge, End-to-End)", |g| {
+        g.bench("tx_check_conflict_merge_rewrite", check_conflict_merge_rewrite);
+    });
+
+    runner.group::<CheckConflictUnresolvableCoreContext>("TX Check Benchmarks (Core Fail)", |g| {
+        g.bench(
+            "tx_check_conflict_unresolvable_fail_core",
+            check_conflict_unresolvable_fail_core,
+        );
+    });
+
+    runner.group::<TxOpsContext>("TX Operation Benchmarks", |g| {
+        g.bench("tx_op_get_hit_master", tx_op_get_hit_master);
+        g.bench("tx_op_get_miss", tx_op_get_miss);
+        g.bench("tx_op_get_hit_local_update", tx_op_get_hit_local_update);
+        g.bench("tx_op_get_miss_local_delete", tx_op_get_miss_local_delete);
+        g.bench("tx_op_update_hit_master", tx_op_update_hit_master);
+        g.bench("tx_op_update_miss_none", tx_op_update_miss_none);
+        g.bench("tx_op_update_local_insert", tx_op_update_local_insert);
+        g.bench("tx_op_update_local_delete_none", tx_op_update_local_delete_none);
+        g.bench("tx_op_upsert_hit_master", tx_op_upsert_hit_master);
+        g.bench("tx_op_upsert_miss_insert", tx_op_upsert_miss_insert);
+        g.bench("tx_op_upsert_local_delete_to_update", tx_op_upsert_local_delete_to_update);
+        g.bench("tx_op_upsert_local_delete_to_insert", tx_op_upsert_local_delete_to_insert);
+        g.bench("tx_op_delete_hit_master", tx_op_delete_hit_master);
+        g.bench("tx_op_delete_miss_none", tx_op_delete_miss_none);
+        g.bench("tx_op_delete_local_insert", tx_op_delete_local_insert);
+        g.bench("tx_op_delete_local_delete_none", tx_op_delete_local_delete_none);
+        g.bench("tx_op_insert_miss", tx_op_insert_miss);
+        g.bench("tx_op_insert_duplicate_err", tx_op_insert_duplicate_err);
+        g.bench("tx_op_insert_after_local_delete", tx_op_insert_after_local_delete);
+        g.bench("tx_op_bulk_get_master", tx_op_bulk_get_master);
+        g.bench("tx_op_bulk_get_local_mixed", tx_op_bulk_get_local_mixed);
+    });
+
+    runner.group::<ApplyContext>("TX Apply Benchmarks", |g| {
+        g.bench("tx_apply_mixed_batch", apply_mixed_batch);
+    });
 
     if filter.is_some() {
         eprintln!("\nTX micro benchmark filtering complete.");
     }
 
-    generate_session_summary();
+    let report = runner.report();
+    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
+    match report.save_to_default_location() {
+        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
+        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
+    }
 }

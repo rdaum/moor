@@ -16,7 +16,7 @@
 
 use std::{cmp::max, sync::Arc};
 
-use moor_bench_utils::{BenchContext, black_box};
+use micromeasure::{BenchContext, black_box};
 use uuid::Uuid;
 
 use moor_common::{
@@ -699,19 +699,7 @@ fn bench_command_activation_with_args(
 }
 
 pub fn main() {
-    use moor_bench_utils::{generate_session_summary, op_bench_with_factory_filtered};
-
-    #[cfg(target_os = "linux")]
-    {
-        use moor_bench_utils::perf_event::{Builder, events::Hardware};
-        if Builder::new(Hardware::INSTRUCTIONS).build().is_err() {
-            eprintln!(
-                "⚠️  Perf events are not available on this system (insufficient permissions or kernel support)."
-            );
-            eprintln!("   Continuing with timing-only benchmarks (performance counters disabled).");
-            eprintln!();
-        }
-    }
+    use micromeasure::BenchmarkRunner;
 
     let args: Vec<String> = std::env::args().collect();
     let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
@@ -732,200 +720,169 @@ pub fn main() {
     }
 
     let fixture = Arc::new(ActivationFixture::new());
+    let runner = BenchmarkRunner::new().with_filter(filter);
+    let context_factory = || ActivationBenchContext::from_fixture(Arc::clone(&fixture));
 
-    op_bench_with_factory_filtered(
-        "activation_verbdef_new",
-        "activation_inputs",
-        bench_verbdef_new,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_primitive_clone_verbdef",
-        "activation_primitives",
-        bench_primitive_clone_verbdef,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_primitive_clone_args_empty",
-        "activation_primitives",
-        bench_primitive_clone_args_empty,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_primitive_args_to_var",
-        "activation_primitives",
-        bench_primitive_args_to_var,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_primitive_clone_this",
-        "activation_primitives",
-        bench_primitive_clone_this,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_primitive_v_symbol_str",
-        "activation_primitives",
-        bench_primitive_v_symbol_str,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_primitive_clone_program",
-        "activation_primitives",
-        bench_primitive_clone_program,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_input_clone_materialization",
-        "activation_inputs",
-        bench_input_clone_materialization,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_input_clone_frame_top_simple",
-        "activation_inputs",
-        bench_input_clone_frame_top_simple,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_input_clone_frame_nested_simple",
-        "activation_inputs",
-        bench_input_clone_frame_nested_simple,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_input_clone_activation_top_simple",
-        "activation_inputs",
-        bench_input_clone_activation_top_simple,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_input_clone_activation_nested_simple",
-        "activation_inputs",
-        bench_input_clone_activation_nested_simple,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_environment_top_level_simple",
-        "activation_environment",
-        bench_environment_top_level_simple,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_environment_nested_simple",
-        "activation_environment",
-        bench_environment_nested_simple,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_frame_top_level_simple",
-        "activation_frame",
-        bench_frame_top_level_simple,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_frame_nested_simple",
-        "activation_frame",
-        bench_frame_nested_simple,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_assembly_top_level_simple_direct",
-        "activation_assembly",
-        bench_activation_assembly_top_level_simple_direct,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_assembly_top_level_simple_overhead",
-        "activation_assembly",
-        bench_activation_assembly_top_level_simple_overhead,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_assembly_nested_simple_direct",
-        "activation_assembly",
-        bench_activation_assembly_nested_simple_direct,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_assembly_nested_simple_overhead",
-        "activation_assembly",
-        bench_activation_assembly_nested_simple_overhead,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_for_call_top_level_simple",
-        "activation_for_call",
-        bench_activation_top_level_simple,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_for_call_top_level_complex",
-        "activation_for_call",
-        bench_activation_top_level_complex,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_for_call_with_args",
-        "activation_for_call",
-        bench_activation_with_args,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_for_call_with_argstr",
-        "activation_for_call",
-        bench_activation_with_argstr,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_for_call_nested_simple",
-        "activation_for_call",
-        bench_activation_nested_simple,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_command_request_top_level_simple",
-        "activation_command",
-        bench_command_activation_empty,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
-    op_bench_with_factory_filtered(
-        "activation_command_request_with_args",
-        "activation_command",
-        bench_command_activation_with_args,
-        &|| ActivationBenchContext::from_fixture(Arc::clone(&fixture)),
-        filter,
-    );
+    runner.group::<ActivationBenchContext>("activation_inputs", |g| {
+        g.bench_with_factory("activation_verbdef_new", &context_factory, bench_verbdef_new);
+        g.bench_with_factory(
+            "activation_input_clone_materialization",
+            &context_factory,
+            bench_input_clone_materialization,
+        );
+        g.bench_with_factory(
+            "activation_input_clone_frame_top_simple",
+            &context_factory,
+            bench_input_clone_frame_top_simple,
+        );
+        g.bench_with_factory(
+            "activation_input_clone_frame_nested_simple",
+            &context_factory,
+            bench_input_clone_frame_nested_simple,
+        );
+        g.bench_with_factory(
+            "activation_input_clone_activation_top_simple",
+            &context_factory,
+            bench_input_clone_activation_top_simple,
+        );
+        g.bench_with_factory(
+            "activation_input_clone_activation_nested_simple",
+            &context_factory,
+            bench_input_clone_activation_nested_simple,
+        );
+    });
+
+    runner.group::<ActivationBenchContext>("activation_primitives", |g| {
+        g.bench_with_factory(
+            "activation_primitive_clone_verbdef",
+            &context_factory,
+            bench_primitive_clone_verbdef,
+        );
+        g.bench_with_factory(
+            "activation_primitive_clone_args_empty",
+            &context_factory,
+            bench_primitive_clone_args_empty,
+        );
+        g.bench_with_factory(
+            "activation_primitive_args_to_var",
+            &context_factory,
+            bench_primitive_args_to_var,
+        );
+        g.bench_with_factory(
+            "activation_primitive_clone_this",
+            &context_factory,
+            bench_primitive_clone_this,
+        );
+        g.bench_with_factory(
+            "activation_primitive_v_symbol_str",
+            &context_factory,
+            bench_primitive_v_symbol_str,
+        );
+        g.bench_with_factory(
+            "activation_primitive_clone_program",
+            &context_factory,
+            bench_primitive_clone_program,
+        );
+    });
+
+    runner.group::<ActivationBenchContext>("activation_environment", |g| {
+        g.bench_with_factory(
+            "activation_environment_top_level_simple",
+            &context_factory,
+            bench_environment_top_level_simple,
+        );
+        g.bench_with_factory(
+            "activation_environment_nested_simple",
+            &context_factory,
+            bench_environment_nested_simple,
+        );
+    });
+
+    runner.group::<ActivationBenchContext>("activation_frame", |g| {
+        g.bench_with_factory(
+            "activation_frame_top_level_simple",
+            &context_factory,
+            bench_frame_top_level_simple,
+        );
+        g.bench_with_factory(
+            "activation_frame_nested_simple",
+            &context_factory,
+            bench_frame_nested_simple,
+        );
+    });
+
+    runner.group::<ActivationBenchContext>("activation_assembly", |g| {
+        g.bench_with_factory(
+            "activation_assembly_top_level_simple_direct",
+            &context_factory,
+            bench_activation_assembly_top_level_simple_direct,
+        );
+        g.bench_with_factory(
+            "activation_assembly_top_level_simple_overhead",
+            &context_factory,
+            bench_activation_assembly_top_level_simple_overhead,
+        );
+        g.bench_with_factory(
+            "activation_assembly_nested_simple_direct",
+            &context_factory,
+            bench_activation_assembly_nested_simple_direct,
+        );
+        g.bench_with_factory(
+            "activation_assembly_nested_simple_overhead",
+            &context_factory,
+            bench_activation_assembly_nested_simple_overhead,
+        );
+    });
+
+    runner.group::<ActivationBenchContext>("activation_for_call", |g| {
+        g.bench_with_factory(
+            "activation_for_call_top_level_simple",
+            &context_factory,
+            bench_activation_top_level_simple,
+        );
+        g.bench_with_factory(
+            "activation_for_call_top_level_complex",
+            &context_factory,
+            bench_activation_top_level_complex,
+        );
+        g.bench_with_factory(
+            "activation_for_call_with_args",
+            &context_factory,
+            bench_activation_with_args,
+        );
+        g.bench_with_factory(
+            "activation_for_call_with_argstr",
+            &context_factory,
+            bench_activation_with_argstr,
+        );
+        g.bench_with_factory(
+            "activation_for_call_nested_simple",
+            &context_factory,
+            bench_activation_nested_simple,
+        );
+    });
+
+    runner.group::<ActivationBenchContext>("activation_command", |g| {
+        g.bench_with_factory(
+            "activation_command_request_top_level_simple",
+            &context_factory,
+            bench_command_activation_empty,
+        );
+        g.bench_with_factory(
+            "activation_command_request_with_args",
+            &context_factory,
+            bench_command_activation_with_args,
+        );
+    });
 
     if filter.is_some() {
         eprintln!("\nActivation benchmark filtering complete.");
     }
 
-    generate_session_summary();
+    let report = runner.report();
+    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
+    match report.save_to_default_location() {
+        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
+        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
+    }
 }

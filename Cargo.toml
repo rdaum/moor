@@ -15,7 +15,6 @@ members = [
     "crates/schema",
     "crates/schema-macros",
     "crates/telnet-host",
-    "crates/testing/bench-utils",
     "crates/testing/lambdamoo-harness",
     "crates/testing/load-tools",
     "crates/testing/moot",
@@ -42,7 +41,6 @@ default-members = [
     "crates/telnet-host",
     "crates/web-host",
     "crates/mcp-host",
-    "crates/testing/bench-utils",
     "crates/testing/moot",
     "crates/testing/load-tools",
     "crates/curl-worker",
@@ -177,6 +175,7 @@ regex = "1.11"
 scraper = "0.25"
 strsim = "0.11"
 unicase = "2.8"
+unicode-width = "0.2"
 
 # Compiler & Language Processing
 ariadne = "0.6"
@@ -207,6 +206,7 @@ bytes = "1.10"
 byteview = "0.10"
 diffy = "0.4"
 hostname = "0.4"
+micromeasure = "0.1"
 paste = "1.0"
 perf_event = { package = "perf-event2", version = "0.7" }
 rand = "0.9"
