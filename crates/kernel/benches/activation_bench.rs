@@ -16,7 +16,7 @@
 
 use std::{cmp::max, sync::Arc};
 
-use micromeasure::{BenchContext, black_box};
+use micromeasure::{BenchContext, BenchmarkMainOptions, benchmark_main, black_box};
 use uuid::Uuid;
 
 use moor_common::{
@@ -698,29 +698,15 @@ fn bench_command_activation_with_args(
     }
 }
 
-pub fn main() {
-    use micromeasure::BenchmarkRunner;
-
-    let args: Vec<String> = std::env::args().collect();
-    let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
-        args.get(separator_pos + 1).map(|s| s.as_str())
-    } else {
-        args.iter()
-            .skip(1)
-            .find(|arg| !arg.starts_with("--") && !args[0].contains(arg.as_str()))
-            .map(|s| s.as_str())
-    };
-
-    if let Some(f) = filter {
-        eprintln!("Running activation benchmarks matching filter: '{f}'");
-        eprintln!(
-            "Available filters: all, activation, primitives, environment, frame, assembly, inputs, for_call, command, or any benchmark name substring"
-        );
-        eprintln!();
-    }
-
+benchmark_main!(
+    BenchmarkMainOptions {
+        filter_help: Some(
+            "all, activation, primitives, environment, frame, assembly, inputs, for_call, command, or any benchmark name substring".to_string()
+        ),
+        ..BenchmarkMainOptions::default()
+    },
+    |runner| {
     let fixture = Arc::new(ActivationFixture::new());
-    let runner = BenchmarkRunner::new().with_filter(filter);
     let context_factory = || ActivationBenchContext::from_fixture(Arc::clone(&fixture));
 
     runner.group::<ActivationBenchContext>("activation_inputs", |g| {
@@ -874,15 +860,5 @@ pub fn main() {
             bench_command_activation_with_args,
         );
     });
-
-    if filter.is_some() {
-        eprintln!("\nActivation benchmark filtering complete.");
     }
-
-    let report = runner.report();
-    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
-    match report.save_to_default_location() {
-        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
-        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
-    }
-}
+);

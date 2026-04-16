@@ -12,7 +12,7 @@ rust-version.workspace = true
 description = "Interfaces for describing the worldstate of a moor database"
 
 [[bench]]
-name = "txdb_benches"
+name = "tx_worldstate_benches"
 harness = false
 
 [[bench]]
@@ -24,11 +24,10 @@ name = "prop_cache_benches"
 harness = false
 
 [[bench]]
-name = "tx_micro_benches"
+name = "tx_relation_benches"
 harness = false
 
 [dev-dependencies]
-criterion.workspace = true
 edn-format.workspace = true
 eyre.workspace = true
 micromeasure.workspace = true

@@ -11,10 +11,15 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use micromeasure::{BenchContext, black_box};
+use micromeasure::{
+    BenchContext, BenchmarkMainOptions, ConcurrentBenchContext, ConcurrentBenchControl, ConcurrentWorker,
+    ConcurrentWorkerResult, black_box,
+    benchmark_main,
+};
 use moor_common::model::{VerbArgsSpec, VerbDef, VerbFlag};
 use moor_db::{AncestryCache, VerbResolutionCache};
 use moor_var::{Obj, Symbol};
+use std::{sync::RwLock, time::Duration};
 use uuid::Uuid;
 
 // Small cache context - simulates light usage
@@ -342,6 +347,77 @@ impl BenchContext for ConcurrentCacheContext {
     }
 }
 
+struct SharedVerbCacheContext {
+    verb_cache: RwLock<VerbResolutionCache>,
+    ancestry_cache: RwLock<AncestryCache>,
+    test_objs: Vec<Obj>,
+    test_verbs: Vec<Symbol>,
+    test_verbdefs: Vec<VerbDef>,
+}
+
+impl ConcurrentBenchContext for SharedVerbCacheContext {
+    fn prepare(num_threads: usize) -> Self {
+        let test_objs: Vec<Obj> = (1..=(num_threads.max(4) * 32) as i32)
+            .map(Obj::mk_id)
+            .collect();
+        let test_verbs: Vec<Symbol> = [
+            "look",
+            "get",
+            "drop",
+            "give",
+            "examine",
+            "inventory",
+            "who",
+            "score",
+            "tell",
+            "say",
+            "emote",
+            "pose",
+        ]
+        .iter()
+        .map(|&s| Symbol::mk(s))
+        .collect();
+        let test_verbdefs: Vec<VerbDef> = test_verbs
+            .iter()
+            .enumerate()
+            .map(|(i, verb)| {
+                let obj = test_objs[i % test_objs.len()];
+                VerbDef::new(
+                    Uuid::new_v4(),
+                    obj,
+                    obj,
+                    &[*verb],
+                    VerbFlag::rwx(),
+                    VerbArgsSpec::this_none_this(),
+                )
+            })
+            .collect();
+
+        let mut verb_cache = VerbResolutionCache::new();
+        let mut ancestry_cache = AncestryCache::default();
+        for (i, obj) in test_objs.iter().enumerate() {
+            for (j, verb) in test_verbs.iter().enumerate() {
+                if (i + j) % 5 != 4 {
+                    let verbdef = test_verbdefs[j % test_verbdefs.len()].clone();
+                    verb_cache.fill_hit(obj, verb, verbdef.as_resolved());
+                }
+            }
+            if i % 2 == 0 {
+                let ancestors: Vec<Obj> = (0..=(i.min(4))).map(|k| Obj::mk_id(k as i32)).collect();
+                ancestry_cache.fill(obj, &ancestors);
+            }
+        }
+
+        Self {
+            verb_cache: RwLock::new(verb_cache),
+            ancestry_cache: RwLock::new(ancestry_cache),
+            test_objs,
+            test_verbs,
+            test_verbdefs,
+        }
+    }
+}
+
 // === BENCHMARK FUNCTIONS ===
 
 fn verb_cache_lookup_hits(ctx: &mut PopulatedCacheContext, chunk_size: usize, _chunk_num: usize) {
@@ -483,6 +559,104 @@ fn concurrent_cache_access(ctx: &mut ConcurrentCacheContext, chunk_size: usize, 
     }
 }
 
+fn shared_verb_lookup_reader(
+    ctx: &SharedVerbCacheContext,
+    control: &ConcurrentBenchControl,
+) -> ConcurrentWorkerResult {
+    let mut operations = 0_u64;
+    let mut blocked_reads = 0_u64;
+    while !control.should_stop() {
+        if let Ok(cache) = ctx.verb_cache.try_read() {
+            let slot = (operations as usize + control.thread_index()) % ctx.test_objs.len();
+            let verb_slot =
+                (operations as usize + control.role_thread_index()) % ctx.test_verbs.len();
+            let result = cache.lookup(&ctx.test_objs[slot], &ctx.test_verbs[verb_slot]);
+            black_box(result);
+            operations = operations.wrapping_add(1);
+        } else {
+            blocked_reads = blocked_reads.wrapping_add(1);
+        }
+    }
+    ConcurrentWorkerResult::operations(operations).with_counter("blocked_reads", blocked_reads)
+}
+
+fn shared_verb_mutator(
+    ctx: &SharedVerbCacheContext,
+    control: &ConcurrentBenchControl,
+) -> ConcurrentWorkerResult {
+    let mut operations = 0_u64;
+    let mut negative_fills = 0_u64;
+    while !control.should_stop() {
+        let obj_idx = (operations as usize + control.thread_index()) % ctx.test_objs.len();
+        let verb_idx = (operations as usize + control.role_thread_index()) % ctx.test_verbs.len();
+        let verbdef_idx = (operations as usize + control.thread_index()) % ctx.test_verbdefs.len();
+        let mut cache = ctx.verb_cache.write().expect("verb cache rwlock poisoned");
+        if operations % 5 == 4 {
+            cache.fill_miss(&ctx.test_objs[obj_idx], &ctx.test_verbs[verb_idx]);
+            negative_fills = negative_fills.wrapping_add(1);
+        } else {
+            cache.fill_hit(
+                &ctx.test_objs[obj_idx],
+                &ctx.test_verbs[verb_idx],
+                ctx.test_verbdefs[verbdef_idx].as_resolved(),
+            );
+        }
+        operations = operations.wrapping_add(1);
+    }
+    ConcurrentWorkerResult::operations(operations).with_counter("negative_fills", negative_fills)
+}
+
+fn ancestry_lookup_reader(
+    ctx: &SharedVerbCacheContext,
+    control: &ConcurrentBenchControl,
+) -> ConcurrentWorkerResult {
+    let mut operations = 0_u64;
+    let mut blocked_reads = 0_u64;
+    while !control.should_stop() {
+        if let Ok(cache) = ctx.ancestry_cache.try_read() {
+            let obj_idx = (operations as usize + control.thread_index()) % ctx.test_objs.len();
+            let result = cache.lookup(&ctx.test_objs[obj_idx]);
+            black_box(result);
+            operations = operations.wrapping_add(1);
+        } else {
+            blocked_reads = blocked_reads.wrapping_add(1);
+        }
+    }
+    ConcurrentWorkerResult::operations(operations).with_counter("blocked_reads", blocked_reads)
+}
+
+fn ancestry_invalidator(
+    ctx: &SharedVerbCacheContext,
+    control: &ConcurrentBenchControl,
+) -> ConcurrentWorkerResult {
+    let mut operations = 0_u64;
+    let mut flushes = 0_u64;
+    while !control.should_stop() {
+        let mut cache = ctx
+            .ancestry_cache
+            .write()
+            .expect("ancestry cache rwlock poisoned");
+        if operations % 32 == 0 {
+            cache.flush();
+            flushes = flushes.wrapping_add(1);
+            for refill in 0..ctx.test_objs.len().min(16) {
+                let obj = ctx.test_objs[(refill + control.thread_index()) % ctx.test_objs.len()];
+                let ancestors: Vec<Obj> =
+                    (0..=((refill % 4) + 1)).map(|k| Obj::mk_id(k as i32)).collect();
+                cache.fill(&obj, &ancestors);
+            }
+        } else {
+            let obj_idx = (operations as usize + control.thread_index()) % ctx.test_objs.len();
+            let ancestors: Vec<Obj> = (0..=((obj_idx % 4) + 1))
+                .map(|k| Obj::mk_id(k as i32))
+                .collect();
+            cache.fill(&ctx.test_objs[obj_idx], &ancestors);
+        }
+        operations = operations.wrapping_add(1);
+    }
+    ConcurrentWorkerResult::operations(operations).with_counter("flushes", flushes)
+}
+
 // Realistic workload - matches real-world usage patterns
 fn verb_cache_realistic_workload(
     ctx: &mut RealisticCacheContext,
@@ -574,30 +748,14 @@ fn verb_cache_mixed_workload(ctx: &mut LargeCacheContext, chunk_size: usize, _ch
     }
 }
 
-pub fn main() {
-    use micromeasure::BenchmarkRunner;
-    use std::env;
-
-    let args: Vec<String> = env::args().collect();
-    let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
-        args.get(separator_pos + 1).map(|s| s.as_str())
-    } else {
-        args.iter()
-            .skip(1)
-            .find(|arg| !arg.starts_with("--") && !args[0].contains(arg.as_str()))
-            .map(|s| s.as_str())
-    };
-
-    if let Some(f) = filter {
-        eprintln!("Running verb cache benchmarks matching filter: '{f}'");
-        eprintln!(
-            "Available filters: all, lookup, fill, flush, fork, ancestry, concurrent, mixed, realistic, or any benchmark name substring"
-        );
-        eprintln!();
-    }
-
-    let runner = BenchmarkRunner::new().with_filter(filter);
-
+benchmark_main!(
+    BenchmarkMainOptions {
+        filter_help: Some(
+            "all, lookup, fill, flush, fork, ancestry, concurrent, mixed, realistic, or any benchmark name substring".to_string()
+        ),
+        ..BenchmarkMainOptions::default()
+    },
+    |runner| {
     runner.group::<PopulatedCacheContext>("Verb Cache Lookup Benchmarks", |g| {
         g.bench("verb_cache_lookup_hits", verb_cache_lookup_hits);
         g.bench("verb_cache_lookup_misses", verb_cache_lookup_misses);
@@ -626,6 +784,54 @@ pub fn main() {
         g.bench("concurrent_cache_access", concurrent_cache_access);
     });
 
+    let max_threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .min(8);
+    for &threads in &[2usize, 4, 8] {
+        if threads > max_threads {
+            continue;
+        }
+        let reader_threads = threads.saturating_sub(1).max(1);
+        let lookup_vs_mutation = [
+            ConcurrentWorker {
+                name: "lookup_reader",
+                threads: reader_threads,
+                run: shared_verb_lookup_reader,
+            },
+            ConcurrentWorker {
+                name: "mutator",
+                threads: 1,
+                run: shared_verb_mutator,
+            },
+        ];
+        let ancestry_lookup_vs_invalidation = [
+            ConcurrentWorker {
+                name: "ancestry_reader",
+                threads: reader_threads,
+                run: ancestry_lookup_reader,
+            },
+            ConcurrentWorker {
+                name: "ancestry_invalidator",
+                threads: 1,
+                run: ancestry_invalidator,
+            },
+        ];
+
+        runner.concurrent_group::<SharedVerbCacheContext>("Verb Cache Concurrent Scenarios", |g| {
+            g.bench(
+                &format!("verb_cache_lookup_vs_mutation_{threads}t"),
+                Duration::from_millis(100),
+                &lookup_vs_mutation,
+            );
+            g.bench(
+                &format!("ancestry_lookup_vs_invalidation_{threads}t"),
+                Duration::from_millis(100),
+                &ancestry_lookup_vs_invalidation,
+            );
+        });
+    }
+
     runner.group::<LargeCacheContext>("Mixed Workload Benchmarks", |g| {
         g.bench("verb_cache_mixed_workload", verb_cache_mixed_workload);
     });
@@ -634,15 +840,5 @@ pub fn main() {
         g.bench("verb_cache_realistic_workload", verb_cache_realistic_workload);
         g.bench("ancestry_cache_realistic_workload", ancestry_cache_realistic_workload);
     });
-
-    if filter.is_some() {
-        eprintln!("\nVerb cache benchmark filtering complete.");
     }
-
-    let report = runner.report();
-    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
-    match report.save_to_default_location() {
-        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
-        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
-    }
-}
+);

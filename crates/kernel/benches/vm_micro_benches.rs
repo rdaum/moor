@@ -14,7 +14,7 @@
 //! VM opcode dispatch micro-benchmarks using the bench-utils framework
 //! Measures CPU-level performance characteristics (IPC, frontend stalls, branch prediction)
 
-use micromeasure::{BenchContext, black_box};
+use micromeasure::{BenchContext, BenchmarkMainOptions, benchmark_main, black_box};
 use moor_common::{
     model::{
         CommitResult, DispatchFlagsSource, ObjFlag, ObjectKind, VerbArgsSpec, VerbDispatch,
@@ -267,28 +267,12 @@ fn execute_until_ticks_with_features(
     }
 }
 
-pub fn main() {
-    use micromeasure::BenchmarkRunner;
-    use std::env;
-
-    let args: Vec<String> = env::args().collect();
-    let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
-        args.get(separator_pos + 1).map(|s| s.as_str())
-    } else {
-        args.iter()
-            .skip(1)
-            .find(|arg| !arg.starts_with("--") && !args[0].contains(arg.as_str()))
-            .map(|s| s.as_str())
-    };
-
-    if let Some(f) = filter {
-        eprintln!("Running benchmarks matching filter: '{f}'");
-        eprintln!("Available filters: all, dispatch, or any benchmark name substring");
-        eprintln!();
-    }
-
-    let runner = BenchmarkRunner::new().with_filter(filter);
-
+benchmark_main!(
+    BenchmarkMainOptions {
+        filter_help: Some("all, dispatch, or any benchmark name substring".to_string()),
+        ..BenchmarkMainOptions::default()
+    },
+    |runner| {
     runner.group::<DispatchContext>("dispatch", |g| {
         g.bench_with_factory(
             "dispatch_constant_discard",
@@ -340,15 +324,5 @@ pub fn main() {
             |ctx: &mut DispatchContext, _chunk_size, _chunk_num| dispatch_binary_chain(ctx, 1, 0),
         );
     });
-
-    if filter.is_some() {
-        eprintln!("\nBenchmark filtering complete.");
     }
-
-    let report = runner.report();
-    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
-    match report.save_to_default_location() {
-        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
-        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
-    }
-}
+);

@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use micromeasure::{BenchContext, black_box};
+use micromeasure::{BenchContext, benchmark_main, black_box};
 use moor_var::{IndexMode, Symbol, Var, v_int, v_sym};
 
 const BASE_MAP_SIZE: usize = 4096;
@@ -180,26 +180,7 @@ fn map_remove_case_sensitive_hit_steady(
     black_box(map);
 }
 
-pub fn main() {
-    use micromeasure::BenchmarkRunner;
-    use std::env;
-
-    let args: Vec<String> = env::args().collect();
-    let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
-        args.get(separator_pos + 1).map(|s| s.as_str())
-    } else {
-        args.iter()
-            .skip(1)
-            .find(|arg| !arg.starts_with("--") && !args[0].contains(arg.as_str()))
-            .map(|s| s.as_str())
-    };
-
-    if let Some(f) = filter {
-        eprintln!("Running benchmarks matching filter: '{f}'");
-    }
-
-    let runner = BenchmarkRunner::new().with_filter(filter);
-
+benchmark_main!(|runner| {
     runner.group::<MapContext>("Map Operations", |g| {
         g.bench("map_get_hit", map_get_hit);
         g.bench("map_get_miss", map_get_miss);
@@ -219,11 +200,4 @@ pub fn main() {
             map_remove_case_sensitive_hit_steady,
         );
     });
-
-    let report = runner.report();
-    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
-    match report.save_to_default_location() {
-        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
-        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
-    }
-}
+});

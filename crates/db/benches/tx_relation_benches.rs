@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use micromeasure::{BenchContext, black_box};
+use micromeasure::{BenchContext, BenchmarkMainOptions, benchmark_main, black_box};
 use moor_db::{
     CheckRelation, Error, Provider, Relation, RelationCodomain, RelationIndex, RelationTransaction,
     Timestamp, Tx, WorkingSet,
@@ -748,28 +748,12 @@ fn tx_op_bulk_get_local_mixed(ctx: &mut TxOpsContext, chunk_size: usize, _chunk_
     }
 }
 
-pub fn main() {
-    use micromeasure::BenchmarkRunner;
-    use std::env;
-
-    let args: Vec<String> = env::args().collect();
-    let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
-        args.get(separator_pos + 1).map(|s| s.as_str())
-    } else {
-        args.iter()
-            .skip(1)
-            .find(|arg| !arg.starts_with("--") && !args[0].contains(arg.as_str()))
-            .map(|s| s.as_str())
-    };
-
-    if let Some(f) = filter {
-        eprintln!("Running tx micro benchmarks matching filter: '{f}'");
-        eprintln!("Available filters: all, check, tx_ops, apply, or benchmark name substring");
-        eprintln!();
-    }
-
-    let runner = BenchmarkRunner::new().with_filter(filter);
-
+benchmark_main!(
+    BenchmarkMainOptions {
+        filter_help: Some("all, check, tx_ops, apply, or benchmark name substring".to_string()),
+        ..BenchmarkMainOptions::default()
+    },
+    |runner| {
     runner.group::<CheckNoConflictCoreContext>("TX Check Benchmarks (Core No Conflict)", |g| {
         g.bench("tx_check_no_conflict_core", check_no_conflict_core);
     });
@@ -822,15 +806,5 @@ pub fn main() {
     runner.group::<ApplyContext>("TX Apply Benchmarks", |g| {
         g.bench("tx_apply_mixed_batch", apply_mixed_batch);
     });
-
-    if filter.is_some() {
-        eprintln!("\nTX micro benchmark filtering complete.");
     }
-
-    let report = runner.report();
-    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
-    match report.save_to_default_location() {
-        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
-        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
-    }
-}
+);

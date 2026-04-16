@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use micromeasure::{BenchContext, NoContext, black_box};
+use micromeasure::{BenchContext, BenchmarkMainOptions, NoContext, benchmark_main, black_box};
 use moor_var::{
     IndexMode, Obj, Symbol, Var, v_arc_str, v_bool, v_float, v_int, v_list, v_none, v_obj, v_str,
     v_string, v_sym, v_symbol_str,
@@ -630,33 +630,14 @@ fn var_drop_mixed(ctx: &mut DropContext, chunk_size: usize, _chunk_num: usize) {
     ctx.mixed_vars.truncate(ctx.mixed_vars.len() - chunk_size);
 }
 
-pub fn main() {
-    use micromeasure::{BenchmarkRunner, NoContext};
-    use std::env;
-
-    let args: Vec<String> = env::args().collect();
-    // Look for filter arguments after "--"
-    let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
-        // Filter is the first argument after "--"
-        args.get(separator_pos + 1).map(|s| s.as_str())
-    } else {
-        // Fallback: look for any non-flag argument that's not our binary name
-        args.iter()
-            .skip(1)
-            .find(|arg| !arg.starts_with("--") && !args[0].contains(arg.as_str()))
-            .map(|s| s.as_str())
-    };
-
-    if let Some(f) = filter {
-        eprintln!("Running benchmarks matching filter: '{f}'");
-        eprintln!(
-            "Available filters: all, int, list, scope, construct, drop, clone, or any benchmark name substring"
-        );
-        eprintln!();
-    }
-
-    let runner = BenchmarkRunner::new().with_filter(filter);
-
+benchmark_main!(
+    BenchmarkMainOptions {
+        filter_help: Some(
+            "all, int, list, scope, construct, drop, clone, or any benchmark name substring".to_string()
+        ),
+        ..BenchmarkMainOptions::default()
+    },
+    |runner| {
     runner.group::<IntContext>("Integer Operations", |g| {
         g.bench("int_add", int_add);
         g.bench("mixed_add", mixed_add);
@@ -752,15 +733,5 @@ pub fn main() {
         g.bench("str_rfind_unicode_ci", str_rfind_unicode_ci);
         g.bench("str_replace_unicode_ci", str_replace_unicode_ci);
     });
-
-    if filter.is_some() {
-        eprintln!("\nBenchmark filtering complete.");
     }
-
-    let report = runner.report();
-    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
-    match report.save_to_default_location() {
-        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
-        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
-    }
-}
+);

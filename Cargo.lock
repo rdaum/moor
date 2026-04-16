@@ -3291,7 +3291,6 @@ dependencies = [
  "ahash",
  "arc-swap",
  "byteview",
- "criterion",
  "edn-format",
  "eyre",
  "fjall",

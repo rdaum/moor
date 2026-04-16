@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use micromeasure::{BenchContext, black_box};
+use micromeasure::{BenchContext, BenchmarkMainOptions, benchmark_main, black_box};
 use moor_common::util::verbcasecmp;
 
 // Context for exact match benchmarks
@@ -268,32 +268,14 @@ fn mixed_workload_bench(ctx: &mut MixedWorkloadContext, chunk_size: usize, _chun
     }
 }
 
-pub fn main() {
-    use micromeasure::BenchmarkRunner;
-    use std::env;
-
-    let args: Vec<String> = env::args().collect();
-    // Look for filter arguments after "--"
-    let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
-        // Filter is the first argument after "--"
-        args.get(separator_pos + 1).map(|s| s.as_str())
-    } else {
-        // Fallback: look for any non-flag argument that's not our binary name
-        args.iter()
-            .skip(1)
-            .find(|arg| !arg.starts_with("--") && !args[0].contains(arg.as_str()))
-            .map(|s| s.as_str())
-    };
-
-    if let Some(f) = filter {
-        eprintln!("Running verbcasecmp benchmarks matching filter: '{f}'");
-        eprintln!(
-            "Available filters: all, exact, case, wildcard, pronoun, mismatch, leading, long, mixed, or any benchmark name substring"
-        );
-        eprintln!();
-    }
-
-    let runner = BenchmarkRunner::new().with_filter(filter);
+benchmark_main!(
+    BenchmarkMainOptions {
+        filter_help: Some(
+            "all, exact, case, wildcard, pronoun, mismatch, leading, long, mixed, or any benchmark name substring".to_string()
+        ),
+        ..BenchmarkMainOptions::default()
+    },
+    |runner| {
 
     runner.group::<ExactMatchContext>("Exact Match Benchmarks", |g| {
         g.bench("exact_match", exact_match_bench);
@@ -326,15 +308,5 @@ pub fn main() {
     runner.group::<MixedWorkloadContext>("Mixed Workload Benchmarks", |g| {
         g.bench("mixed_workload", mixed_workload_bench);
     });
-
-    if filter.is_some() {
-        eprintln!("\nVerbcasecmp benchmark filtering complete.");
     }
-
-    let report = runner.report();
-    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
-    match report.save_to_default_location() {
-        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
-        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
-    }
-}
+);

@@ -11,10 +11,15 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use micromeasure::{BenchContext, black_box};
+use micromeasure::{
+    BenchContext, BenchmarkMainOptions, ConcurrentBenchContext, ConcurrentBenchControl, ConcurrentWorker,
+    ConcurrentWorkerResult, black_box,
+    benchmark_main,
+};
 use moor_common::model::PropDef;
 use moor_db::PropResolutionCache;
 use moor_var::{Obj, Symbol};
+use std::{sync::RwLock, time::Duration};
 use uuid::Uuid;
 
 // Small cache context - simulates light usage
@@ -240,6 +245,64 @@ impl BenchContext for PopulatedPropCacheContext {
     }
 }
 
+struct SharedPropCacheContext {
+    prop_cache: RwLock<PropResolutionCache>,
+    test_objs: Vec<Obj>,
+    test_props: Vec<Symbol>,
+    test_propdefs: Vec<PropDef>,
+}
+
+impl ConcurrentBenchContext for SharedPropCacheContext {
+    fn prepare(num_threads: usize) -> Self {
+        let test_objs: Vec<Obj> = (1..=(num_threads.max(4) * 32) as i32)
+            .map(Obj::mk_id)
+            .collect();
+        let test_props: Vec<Symbol> = [
+            "name",
+            "description",
+            "location",
+            "owner",
+            "aliases",
+            "contents",
+            "parent",
+            "wizard",
+            "programmer",
+            "player",
+        ]
+        .iter()
+        .map(|&s| Symbol::mk(s))
+        .collect();
+        let test_propdefs: Vec<PropDef> = test_props
+            .iter()
+            .enumerate()
+            .map(|(i, prop)| {
+                let obj = test_objs[i % test_objs.len()];
+                PropDef::new(Uuid::new_v4(), obj, obj, *prop)
+            })
+            .collect();
+
+        let mut prop_cache = PropResolutionCache::new();
+        for (i, obj) in test_objs.iter().enumerate() {
+            for (j, prop) in test_props.iter().enumerate() {
+                if (i + j) % 4 != 3 {
+                    let propdef = &test_propdefs[j % test_propdefs.len()];
+                    prop_cache.fill_hit(obj, prop, propdef);
+                }
+            }
+            if i % 2 == 0 {
+                prop_cache.fill_first_parent_with_props(obj, Some(Obj::mk_id(0)));
+            }
+        }
+
+        Self {
+            prop_cache: RwLock::new(prop_cache),
+            test_objs,
+            test_props,
+            test_propdefs,
+        }
+    }
+}
+
 // === BENCHMARK FUNCTIONS ===
 
 fn prop_cache_lookup_hits(
@@ -457,30 +520,94 @@ fn prop_cache_mixed_workload(
     }
 }
 
-pub fn main() {
-    use micromeasure::BenchmarkRunner;
-    use std::env;
-
-    let args: Vec<String> = env::args().collect();
-    let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
-        args.get(separator_pos + 1).map(|s| s.as_str())
-    } else {
-        args.iter()
-            .skip(1)
-            .find(|arg| !arg.starts_with("--") && !args[0].contains(arg.as_str()))
-            .map(|s| s.as_str())
-    };
-
-    if let Some(f) = filter {
-        eprintln!("Running prop cache benchmarks matching filter: '{f}'");
-        eprintln!(
-            "Available filters: all, lookup, fill, flush, fork, parent, mixed, realistic, or any benchmark name substring"
-        );
-        eprintln!();
+fn shared_prop_lookup_reader(
+    ctx: &SharedPropCacheContext,
+    control: &ConcurrentBenchControl,
+) -> ConcurrentWorkerResult {
+    let mut operations = 0_u64;
+    let mut blocked_reads = 0_u64;
+    while !control.should_stop() {
+        if let Ok(cache) = ctx.prop_cache.try_read() {
+            let obj_idx = (operations as usize + control.thread_index()) % ctx.test_objs.len();
+            let prop_idx =
+                (operations as usize + control.role_thread_index()) % ctx.test_props.len();
+            let result = cache.lookup(&ctx.test_objs[obj_idx], &ctx.test_props[prop_idx]);
+            black_box(result);
+            operations = operations.wrapping_add(1);
+        } else {
+            blocked_reads = blocked_reads.wrapping_add(1);
+        }
     }
+    ConcurrentWorkerResult::operations(operations).with_counter("blocked_reads", blocked_reads)
+}
 
-    let runner = BenchmarkRunner::new().with_filter(filter);
+fn shared_prop_mutator(
+    ctx: &SharedPropCacheContext,
+    control: &ConcurrentBenchControl,
+) -> ConcurrentWorkerResult {
+    let mut operations = 0_u64;
+    let mut negative_fills = 0_u64;
+    while !control.should_stop() {
+        let obj_idx = (operations as usize + control.thread_index()) % ctx.test_objs.len();
+        let prop_idx = (operations as usize + control.role_thread_index()) % ctx.test_props.len();
+        let propdef_idx = (operations as usize + control.thread_index()) % ctx.test_propdefs.len();
+        let mut cache = ctx.prop_cache.write().expect("prop cache rwlock poisoned");
+        match operations % 8 {
+            0 => cache.fill_first_parent_with_props(
+                &ctx.test_objs[obj_idx],
+                Some(ctx.test_objs[(obj_idx + 1) % ctx.test_objs.len()]),
+            ),
+            1 => {
+                cache.fill_miss(&ctx.test_objs[obj_idx], &ctx.test_props[prop_idx]);
+                negative_fills = negative_fills.wrapping_add(1);
+            }
+            _ => cache.fill_hit(
+                &ctx.test_objs[obj_idx],
+                &ctx.test_props[prop_idx],
+                &ctx.test_propdefs[propdef_idx],
+            ),
+        }
+        operations = operations.wrapping_add(1);
+    }
+    ConcurrentWorkerResult::operations(operations).with_counter("negative_fills", negative_fills)
+}
 
+fn shared_prop_flush_invalidator(
+    ctx: &SharedPropCacheContext,
+    control: &ConcurrentBenchControl,
+) -> ConcurrentWorkerResult {
+    let mut operations = 0_u64;
+    let mut flushes = 0_u64;
+    while !control.should_stop() {
+        let mut cache = ctx.prop_cache.write().expect("prop cache rwlock poisoned");
+        if operations % 32 == 0 {
+            cache.flush();
+            flushes = flushes.wrapping_add(1);
+            for refill in 0..ctx.test_objs.len().min(16) {
+                let obj = ctx.test_objs[(refill + control.thread_index()) % ctx.test_objs.len()];
+                let prop = ctx.test_props[refill % ctx.test_props.len()];
+                let propdef = &ctx.test_propdefs[refill % ctx.test_propdefs.len()];
+                cache.fill_hit(&obj, &prop, propdef);
+            }
+        } else {
+            let obj_idx = (operations as usize + control.thread_index()) % ctx.test_objs.len();
+            let prop_idx =
+                (operations as usize + control.role_thread_index()) % ctx.test_props.len();
+            cache.fill_miss(&ctx.test_objs[obj_idx], &ctx.test_props[prop_idx]);
+        }
+        operations = operations.wrapping_add(1);
+    }
+    ConcurrentWorkerResult::operations(operations).with_counter("flushes", flushes)
+}
+
+benchmark_main!(
+    BenchmarkMainOptions {
+        filter_help: Some(
+            "all, lookup, fill, flush, fork, parent, mixed, realistic, or any benchmark name substring".to_string()
+        ),
+        ..BenchmarkMainOptions::default()
+    },
+    |runner| {
     runner.group::<PopulatedPropCacheContext>("Prop Cache Lookup Benchmarks", |g| {
         g.bench("prop_cache_lookup_hits", prop_cache_lookup_hits);
         g.bench("prop_cache_lookup_misses", prop_cache_lookup_misses);
@@ -505,6 +632,54 @@ pub fn main() {
         g.bench("prop_cache_parent_fill", prop_cache_parent_fill);
     });
 
+    let max_threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .min(8);
+    for &threads in &[2usize, 4, 8] {
+        if threads > max_threads {
+            continue;
+        }
+        let reader_threads = threads.saturating_sub(1).max(1);
+        let lookup_vs_mutation = [
+            ConcurrentWorker {
+                name: "lookup_reader",
+                threads: reader_threads,
+                run: shared_prop_lookup_reader,
+            },
+            ConcurrentWorker {
+                name: "mutator",
+                threads: 1,
+                run: shared_prop_mutator,
+            },
+        ];
+        let lookup_vs_flush = [
+            ConcurrentWorker {
+                name: "lookup_reader",
+                threads: reader_threads,
+                run: shared_prop_lookup_reader,
+            },
+            ConcurrentWorker {
+                name: "flush_invalidator",
+                threads: 1,
+                run: shared_prop_flush_invalidator,
+            },
+        ];
+
+        runner.concurrent_group::<SharedPropCacheContext>("Prop Cache Concurrent Scenarios", |g| {
+            g.bench(
+                &format!("prop_cache_lookup_vs_mutation_{threads}t"),
+                Duration::from_millis(100),
+                &lookup_vs_mutation,
+            );
+            g.bench(
+                &format!("prop_cache_lookup_vs_flush_{threads}t"),
+                Duration::from_millis(100),
+                &lookup_vs_flush,
+            );
+        });
+    }
+
     runner.group::<LargePropCacheContext>("Mixed Workload Benchmarks", |g| {
         g.bench("prop_cache_mixed_workload", prop_cache_mixed_workload);
     });
@@ -512,15 +687,5 @@ pub fn main() {
     runner.group::<RealisticPropCacheContext>("Realistic Workload Benchmarks", |g| {
         g.bench("prop_cache_realistic_workload", prop_cache_realistic_workload);
     });
-
-    if filter.is_some() {
-        eprintln!("\nProp cache benchmark filtering complete.");
     }
-
-    let report = runner.report();
-    report.print_summary_with(micromeasure::ComparisonPolicy::LatestCompatible);
-    match report.save_to_default_location() {
-        Ok(path) => println!("\n💾 Results saved to: {}", path.display()),
-        Err(error) => println!("\n⚠️  Failed to save results: {error}"),
-    }
-}
+);
