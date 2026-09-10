@@ -80,7 +80,8 @@ By participating in this project, you are expected to uphold our community stand
 
 ### Prerequisites
 
-- **Rust**: Version 1.92.0 or later
+- **Rust**: Version 1.98.1 or later
+  - `rust-toolchain.toml` selects Rust 1.98.1 automatically when using rustup
   - We generally avoid nightly/unstable features in production code
   - We aim to keep up with stable Rust releases as they become available
   - The nightly toolchain is only used for formatting (rustfmt features)

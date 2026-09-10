@@ -33,10 +33,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes clang-16 libclang-16-dev swig python3-dev cmake libsodium-dev pkg-config libssl-dev
 
-      - name: Install Rust 1.95.0
+      - name: Install Rust 1.98.1
         run: |
-          rustup toolchain install 1.95.0 --profile minimal
-          rustup default 1.95.0
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup default 1.98.1
 
       - name: Build workspace
         run: cargo build --workspace --exclude lambdamoo-harness --all-features --all-targets
@@ -62,9 +62,9 @@ jobs:
 
       - name: Install Rust toolchains
         run: |
-          rustup toolchain install 1.95.0 --profile minimal --component clippy
+          rustup toolchain install 1.98.1 --profile minimal --component clippy
           rustup toolchain install nightly --profile minimal --component rustfmt
-          rustup default 1.95.0
+          rustup default 1.98.1
 
       - name: Check Rust formatting
         run: cargo +nightly fmt --all -- --check --config reorder_imports=true,imports_indent=Block,imports_layout=Mixed
@@ -117,10 +117,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install Rust 1.95.0
+      - name: Install Rust 1.98.1
         run: |
-          rustup toolchain install 1.95.0 --profile minimal
-          rustup default 1.95.0
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup default 1.98.1
 
       - name: Build Cowbell
         run: make -C cores/cowbell
@@ -136,10 +136,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install Rust 1.95.0
+      - name: Install Rust 1.98.1
         run: |
-          rustup toolchain install 1.95.0 --profile minimal
-          rustup default 1.95.0
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup default 1.98.1
 
       - name: Install licensure
         run: cargo install licensure --version 0.8.1 --locked

@@ -74,7 +74,7 @@ keywords = [
 license = "AGPL-3.0-only"
 readme = "README.md"
 repository = "https://github.com/timbran-project/moor.git"
-rust-version = "1.95.0"
+rust-version = "1.98.1"
 
 [profile.release]
 # The Rust compiler splits crates into multiple codegen units to parallelize (and thus speed up)
@@ -230,7 +230,7 @@ vergen-gitcl = { version = "10", default-features = false }
 zerocopy = { version = "0.8", features = ["derive"] }
 
 # Telemetry
-fast-telemetry = "0.5"
+fast-telemetry = "0.9"
 
 # Testing & Development
 escargot = "0.5"

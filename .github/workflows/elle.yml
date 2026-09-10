@@ -40,10 +40,10 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Install Rust 1.95.0
+      - name: Install Rust 1.98.1
         run: |
-          rustup toolchain install 1.95.0 --profile minimal
-          rustup default 1.95.0
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup default 1.98.1
 
       - name: Build elle-cli
         run: |

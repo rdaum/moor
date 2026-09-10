@@ -30,7 +30,7 @@ This approach is ideal for:
 ## Prerequisites
 
 - Debian-based Linux (Debian 12+, Ubuntu 22.04+, or similar)
-- Rust toolchain 1.95.0 or later
+- Rust toolchain 1.98.1 or later
 - Node.js 20+ (for web client)
 - cargo-deb tool
 - Standard build tools (gcc, make, pkg-config)

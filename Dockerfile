@@ -19,7 +19,7 @@ RUN npm ci
 RUN npm run web:build
 
 # Backend build stage
-FROM rust:1.95-bookworm AS backend-build
+FROM rust:1.98.1-bookworm AS backend-build
 
 WORKDIR /moor-build
 RUN apt update

@@ -26,7 +26,7 @@
     `web-host`
 
 * For more details there is a mdbook under book/, which can be explored
-* The backend uses Rust 1.88.0, the frontend uses modern TypeScript/Node.js/Vite
+* The backend uses Rust 1.98.1, the frontend uses modern TypeScript/Node.js/Vite
 * We aim for concise, clean, and poetic code, with plenty of comments describing intent / desire as
   breadcrumbs for our futureselves
 * Our MOO dialect has a number of powerful additions to bring it up to 21st century standards:

@@ -82,7 +82,7 @@ impl CaptureAccumulator {
     pub fn take(&self) -> Vec<(Obj, Box<NarrativeEvent>)> {
         let mut buffer = self.buffer.lock().unwrap();
         buffer.bytes = 0;
-        buffer.events.drain(..).collect()
+        std::mem::take(&mut buffer.events)
     }
 }
 
