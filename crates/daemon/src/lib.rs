@@ -659,8 +659,6 @@ pub fn run(runtime_config: DaemonRuntimeConfig, runtime: DaemonRuntime) -> Resul
 
                 return Err(import_error);
             }
-            // Import succeeded - mark all relations as fully loaded to skip provider I/O
-            database.mark_all_fully_loaded();
         }
     }
 

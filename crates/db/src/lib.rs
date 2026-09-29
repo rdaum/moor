@@ -52,7 +52,7 @@ pub use model::{
     AnonymousObjectMetadata, BytesHolder, EntityMetadataKey, ObjAndUUIDHolder, StringHolder,
     SystemTimeHolder, UUIDHolder,
 };
-pub use provider::Provider;
+
 pub use provider::coordinator::PersistenceStatus;
 pub use provider::logical::{PersistenceError, PersistenceReceipt, PublicationId, WriterEpoch};
 pub use tx::{
@@ -271,12 +271,6 @@ impl TxDB {
         self.storage.wait_durable(publication, timeout)
     }
 
-    /// Mark all relations as fully loaded from their backing providers.
-    /// Call this after bulk import operations to enable optimized reads.
-    pub fn mark_all_fully_loaded(&self) {
-        self.storage.mark_all_fully_loaded();
-    }
-
     /// Wait until the current published state has been applied to storage.
     ///
     /// This does not request an fsync or wait for LSM maintenance.
@@ -385,3 +379,5 @@ impl Database for TxDB {
         Some(self.storage.storage_maintenance_stats())
     }
 }
+
+mod relation_registry;

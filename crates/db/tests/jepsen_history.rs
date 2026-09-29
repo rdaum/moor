@@ -138,9 +138,7 @@ mod tests {
     use arc_swap::ArcSwap;
     use eyre::{bail, ensure};
     use moor_common::model::WorldStateError;
-    use moor_db::{
-        Error, Provider, Relation, RelationCodomain, RelationIndex, Timestamp, Tx, WorkingSet,
-    };
+    use moor_db::{Error, Relation, RelationCodomain, RelationIndex, Timestamp, Tx, WorkingSet};
     use moor_var::Symbol;
     use std::{
         collections::{HashMap, HashSet},
@@ -166,16 +164,7 @@ mod tests {
         data: Arc<Mutex<HashMap<TestDomain, TestCodomain>>>,
     }
 
-    impl Provider<TestDomain, TestCodomain> for TestProvider {
-        fn get(&self, domain: &TestDomain) -> Result<Option<(Timestamp, TestCodomain)>, Error> {
-            let data = self.data.lock().unwrap();
-            if let Some(codomain) = data.get(domain) {
-                Ok(Some((Timestamp(0), codomain.clone())))
-            } else {
-                Ok(None)
-            }
-        }
-
+    impl TestProvider {
         fn put(
             &self,
             _timestamp: Timestamp,
@@ -207,10 +196,6 @@ mod tests {
                 .map(|(k, v)| (Timestamp(0), k.clone(), v.clone()))
                 .collect())
         }
-
-        fn stop(&self) -> Result<(), Error> {
-            Ok(())
-        }
     }
 
     /// Persist a working set into an in-memory test provider, surfacing errors.
@@ -233,11 +218,12 @@ mod tests {
         let backing = HashMap::new();
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let backing_store = Arc::new(Relation::new(Symbol::mk("test"), provider));
+        let backing_store = Arc::new(Relation::new(Symbol::mk("test")));
         let root_index: Arc<ArcSwap<Box<dyn RelationIndex<TestDomain, TestCodomain>>>> =
             Arc::new(ArcSwap::new(Arc::new(
                 backing_store
-                    .seeded_index()
+                    .seeded_index(provider.scan(&|_, _| true).unwrap().into_iter().map(Ok))
+                    .map(|(index, _)| index)
                     .map_err(|e| eyre::eyre!("seeded_index failed: {e:?}"))?,
             )));
         let mut transactions = HashMap::new();
@@ -318,7 +304,7 @@ mod tests {
                     match (entry.r#type.clone(), cr.check(&mut ws)) {
                         (Type::Ok, Ok(())) => {
                             cr.prepare_indexes(&ws);
-                            persist_working_set(backing_store.provider(), &ws).map_err(|e| {
+                            persist_working_set(&provider, &ws).map_err(|e| {
                                 eyre::eyre!("persist at index {}: {e:?}", entry.index)
                             })?;
                             cr.commit(&root_index);
@@ -359,9 +345,13 @@ mod tests {
         let provider = Arc::new(TestProvider {
             data: Arc::new(Mutex::new(HashMap::new())),
         });
-        let relation = Arc::new(Relation::new(Symbol::mk("full_history"), provider));
+        let relation = Arc::new(Relation::new(Symbol::mk("full_history")));
         let root_index: Arc<ArcSwap<Box<dyn RelationIndex<TestDomain, TestCodomain>>>> =
-            Arc::new(ArcSwap::new(Arc::new(relation.seeded_index()?)));
+            Arc::new(ArcSwap::new(Arc::new(
+                relation
+                    .seeded_index(provider.scan(&|_, _| true).unwrap().into_iter().map(Ok))
+                    .map(|(index, _)| index)?,
+            )));
         let mut active = HashMap::new();
         let mut values: HashMap<usize, Vec<i32>> = HashMap::new();
         let mut versions: HashMap<usize, usize> = HashMap::new();
@@ -464,7 +454,7 @@ mod tests {
                     }
                     check.map_err(|error| eyre::eyre!("check at row {row}: {error:?}"))?;
                     checker.prepare_indexes(&working_set);
-                    persist_working_set(relation.provider(), &working_set)?;
+                    persist_working_set(&provider, &working_set)?;
                     checker.commit(&root_index);
                     commits += 1;
                     for key in model.writes {

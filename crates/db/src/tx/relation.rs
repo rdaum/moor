@@ -11,281 +11,141 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-//! Global cache is a cache that acts as an origin for all local caches.
+//! Resident relation indexes and transaction construction.
 
-use crate::{
-    provider::Provider,
-    tx::{Error, RelationCodomain, RelationCodomainHashable, RelationDomain, Timestamp, Tx},
+use crate::tx::{
+    CheckRelation, Error, RelationCodomain, RelationCodomainHashable, RelationDomain,
+    RelationIndex, RelationTransaction, Timestamp, Tx,
+    indexes::{HashRelationIndex, SecondaryIndexRelation},
 };
+#[cfg(test)]
+use crate::{provider::Provider, tx::Canonical};
+#[cfg(test)]
+use arc_swap::ArcSwap;
 use moor_var::Symbol;
 use std::sync::Arc;
 
-#[cfg(test)]
-use crate::tx::Canonical;
-use crate::tx::{
-    CheckRelation, RelationIndex, RelationTransaction,
-    indexes::{HashRelationIndex, SecondaryIndexRelation},
-};
+type SeededIndex<K, V> = (Box<dyn RelationIndex<K, V>>, Timestamp);
+type IndexFactory<K, V> = fn() -> Box<dyn RelationIndex<K, V>>;
 
-type SeededIndex<Domain, Codomain> = (Box<dyn RelationIndex<Domain, Codomain>>, Timestamp);
-#[cfg(test)]
-use arc_swap::ArcSwap;
-
-/// Represents the current "canonical" state of a relation.
-type IndexFactory<Domain, Codomain> = fn() -> Box<dyn RelationIndex<Domain, Codomain>>;
-fn primary_index_factory<Domain, Codomain>() -> Box<dyn RelationIndex<Domain, Codomain>>
-where
-    Domain: RelationDomain,
-    Codomain: RelationCodomain,
-{
-    Box::new(HashRelationIndex::new())
-}
-
-fn secondary_index_factory<Domain, Codomain>() -> Box<dyn RelationIndex<Domain, Codomain>>
-where
-    Domain: RelationDomain,
-    Codomain: RelationCodomainHashable,
-{
-    Box::new(SecondaryIndexRelation::new())
-}
-
+/// Index policy for a fully resident relation. Storage resources belong to the adapter.
 #[derive(Clone)]
-pub struct Relation<Domain, Codomain, Source>
-where
-    Domain: RelationDomain,
-    Codomain: RelationCodomain,
-{
+pub struct Relation<K: RelationDomain, V: RelationCodomain> {
     relation_name: Symbol,
-    source: Arc<Source>,
-    index_factory: IndexFactory<Domain, Codomain>,
+    index_factory: IndexFactory<K, V>,
     #[cfg(test)]
-    test_index: Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>>,
+    test_index: Arc<ArcSwap<Box<dyn RelationIndex<K, V>>>>,
 }
 
-impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
-where
-    Source: Provider<Domain, Codomain>,
-    Domain: RelationDomain,
-    Codomain: RelationCodomain,
-{
-    pub fn new(relation_name: Symbol, source: Arc<Source>) -> Self {
-        Self {
-            relation_name,
-            source,
-            index_factory: primary_index_factory::<Domain, Codomain>,
-            #[cfg(test)]
-            test_index: Arc::new(ArcSwap::new(Arc::new(primary_index_factory::<
-                Domain,
-                Codomain,
-            >()))),
-        }
+impl<K: RelationDomain, V: RelationCodomain> Relation<K, V> {
+    pub fn new(relation_name: Symbol) -> Self {
+        Self::with_factory(relation_name, || Box::new(HashRelationIndex::new()))
     }
-
-    pub fn new_with_secondary(relation_name: Symbol, source: Arc<Source>) -> Self
+    pub fn new_with_secondary(relation_name: Symbol) -> Self
     where
-        Codomain: RelationCodomainHashable,
+        V: RelationCodomainHashable,
     {
+        Self::with_factory(relation_name, || Box::new(SecondaryIndexRelation::new()))
+    }
+    fn with_factory(relation_name: Symbol, index_factory: IndexFactory<K, V>) -> Self {
         Self {
             relation_name,
-            source,
-            index_factory: secondary_index_factory::<Domain, Codomain>,
+            index_factory,
             #[cfg(test)]
-            test_index: Arc::new(ArcSwap::new(Arc::new(secondary_index_factory::<
-                Domain,
-                Codomain,
-            >()))),
+            test_index: Arc::new(ArcSwap::from_pointee(index_factory())),
         }
     }
-
-    pub fn source(&self) -> &Arc<Source> {
-        &self.source
-    }
-
-    pub fn seeded_index(&self) -> Result<Box<dyn RelationIndex<Domain, Codomain>>, Error> {
-        self.seeded_index_with_max_timestamp()
-            .map(|(index, _)| index)
-    }
-
-    pub(crate) fn seeded_index_with_max_timestamp(
+    /// Build a complete index only after the snapshot cursor reaches its end without error.
+    pub fn seeded_index(
         &self,
-    ) -> Result<SeededIndex<Domain, Codomain>, Error> {
+        tuples: impl IntoIterator<Item = Result<(Timestamp, K, V), Error>>,
+    ) -> Result<SeededIndex<K, V>, Error> {
         let mut index = (self.index_factory)();
-        let tuples = self.source.scan(&|_, _| true)?;
         let mut max_timestamp = Timestamp(0);
-        for (timestamp, domain, codomain) in tuples {
+        for tuple in tuples {
+            let (timestamp, key, value) = tuple?;
             max_timestamp = max_timestamp.max(timestamp);
-            index.insert_entry(timestamp, domain, codomain);
+            index.insert_entry(timestamp, key, value);
         }
-        index.set_provider_fully_loaded(true);
+        index.set_fully_resident(true);
         Ok((index, max_timestamp))
     }
-
     pub fn start_from_index(
         &self,
         tx: &Tx,
-        index: &dyn RelationIndex<Domain, Codomain>,
-    ) -> RelationTransaction<Domain, Codomain, Source> {
-        RelationTransaction::new(
-            *tx,
-            self.relation_name,
-            index.fork(),
-            (*self.source).clone(),
-        )
+        index: &dyn RelationIndex<K, V>,
+    ) -> RelationTransaction<K, V> {
+        RelationTransaction::new(*tx, self.relation_name, index.fork())
     }
-
     pub(crate) fn start_from_snapshot(
         &self,
         tx: &Tx,
-        index: Arc<dyn RelationIndex<Domain, Codomain>>,
-    ) -> RelationTransaction<Domain, Codomain, Source> {
-        RelationTransaction::new_shared(*tx, self.relation_name, index, self.source.clone())
+        index: Arc<dyn RelationIndex<K, V>>,
+    ) -> RelationTransaction<K, V> {
+        RelationTransaction::new_shared(*tx, self.relation_name, index)
     }
-
-    pub fn begin_check_from_index(
-        &self,
-        index: &dyn RelationIndex<Domain, Codomain>,
-    ) -> CheckRelation<Domain, Codomain, Source> {
+    pub fn begin_check_from_index(&self, index: &dyn RelationIndex<K, V>) -> CheckRelation<K, V> {
         CheckRelation {
             index: index.fork(),
             relation_name: self.relation_name,
-            source: self.source.clone(),
             dirty: false,
         }
     }
-
     #[cfg(test)]
-    pub fn index(&self) -> &Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>> {
+    pub fn with_fixture(self, fixture: &impl Provider<K, V>) -> Self {
+        let (index, _) = self
+            .seeded_index(fixture.scan(&|_, _| true).unwrap().into_iter().map(Ok))
+            .unwrap();
+        self.test_index.store(Arc::new(index));
+        self
+    }
+    #[cfg(test)]
+    pub fn index(&self) -> &Arc<ArcSwap<Box<dyn RelationIndex<K, V>>>> {
         &self.test_index
     }
-
     #[cfg(test)]
-    pub fn start(&self, tx: &Tx) -> RelationTransaction<Domain, Codomain, Source> {
-        let index = self.test_index.load();
-        self.start_from_index(tx, index.as_ref().as_ref())
+    pub fn start(&self, tx: &Tx) -> RelationTransaction<K, V> {
+        self.start_from_index(tx, self.test_index.load().as_ref().as_ref())
     }
-
     #[cfg(test)]
-    pub fn begin_check(&self) -> CheckRelation<Domain, Codomain, Source> {
-        let index = self.test_index.load();
-        self.begin_check_from_index(index.as_ref().as_ref())
-    }
-
-    #[cfg(test)]
-    /// Mark this relation as fully loaded from its backing provider.
-    /// After this call, scans will skip provider I/O and use only cached data.
-    pub fn mark_fully_loaded(&self) {
-        let index = self.test_index.load();
-        let mut new_index = (**index).fork();
-        new_index.set_provider_fully_loaded(true);
-        self.test_index.store(Arc::new(new_index));
+    pub fn begin_check(&self) -> CheckRelation<K, V> {
+        self.begin_check_from_index(self.test_index.load().as_ref().as_ref())
     }
 }
-
 #[cfg(test)]
-impl<Domain, Codomain, Source> Canonical<Domain, Codomain> for Relation<Domain, Codomain, Source>
-where
-    Domain: RelationDomain,
-    Codomain: RelationCodomain,
-    Source: Provider<Domain, Codomain>,
-{
-    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
-        // Try read path first
+impl<K: RelationDomain, V: RelationCodomain> Canonical<K, V> for Relation<K, V> {
+    fn get(&self, key: &K) -> Result<Option<(Timestamp, V)>, Error> {
         let index = self.test_index.load();
-        if let Some(entry) = index.index_lookup(domain) {
-            return Ok(Some((entry.ts, entry.value.clone())));
+        if !index.is_fully_resident() {
+            return Err(Error::IncompleteIndex(self.relation_name));
         }
-
-        // If provider is fully loaded, not being in index means it doesn't exist
-        if index.is_provider_fully_loaded() {
-            return Ok(None);
-        }
-
-        // Provider not fully loaded - need to check backing store
-        // Fork the index, insert the new entry, and swap it in
-        let mut new_index = (**index).fork();
-        if let Some((ts, codomain)) = self.source.get(domain)? {
-            new_index.insert_entry(ts, domain.clone(), codomain.clone());
-            self.test_index.store(Arc::new(new_index));
-            Ok(Some((ts, codomain)))
-        } else {
-            Ok(None)
-        }
+        Ok(index
+            .index_lookup(key)
+            .map(|entry| (entry.ts, entry.value.clone())))
     }
-
-    fn scan<F>(&self, predicate: &F) -> Result<Vec<(Timestamp, Domain, Codomain)>, Error>
+    fn scan<F>(&self, predicate: &F) -> Result<Vec<(Timestamp, K, V)>, Error>
     where
-        F: Fn(&Domain, &Codomain) -> bool,
+        F: Fn(&K, &V) -> bool,
     {
         let index = self.test_index.load();
-
-        // If provider is fully loaded, scan directly from index
-        if index.is_provider_fully_loaded() {
-            let results: Vec<_> = index
-                .iter()
-                .filter_map(|(domain, entry)| {
-                    if predicate(domain, &entry.value) {
-                        Some((entry.ts, domain.clone(), entry.value.clone()))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            return Ok(results);
+        if !index.is_fully_resident() {
+            return Err(Error::IncompleteIndex(self.relation_name));
         }
-
-        // Provider not fully loaded - need to scan backing source
-        let results = self.source.scan(&predicate)?;
-        let mut new_index = (**index).fork();
-
-        for (ts, domain, codomain) in &results {
-            new_index.insert_entry(*ts, domain.clone(), codomain.clone());
-        }
-
-        // If we're scanning with a predicate that accepts everything, mark as fully loaded
-        if self.is_full_scan_predicate(predicate) {
-            new_index.set_provider_fully_loaded(true);
-        }
-
-        self.test_index.store(Arc::new(new_index));
-        Ok(results)
+        Ok(index
+            .iter()
+            .filter(|(key, entry)| predicate(key, &entry.value))
+            .map(|(key, entry)| (entry.ts, key.clone(), entry.value.clone()))
+            .collect())
     }
-
-    fn get_by_codomain(&self, codomain: &Codomain) -> Vec<Domain> {
-        let index = self.test_index.load();
-        index.get_by_codomain(codomain)
-    }
-}
-impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
-where
-    Domain: RelationDomain,
-    Codomain: RelationCodomain,
-    Source: Provider<Domain, Codomain>,
-{
-    pub fn provider(&self) -> &Source {
-        &self.source
-    }
-
-    pub fn stop_provider(&self) -> Result<(), Error> {
-        self.source.stop()
-    }
-
-    /// Check if a predicate represents a full scan (accepts everything)
-    /// We can detect this by testing with dummy values, but for now we'll use a simpler approach
-    #[cfg(test)]
-    #[allow(dead_code)]
-    fn is_full_scan_predicate<F>(&self, _predicate: &F) -> bool
-    where
-        F: Fn(&Domain, &Codomain) -> bool,
-    {
-        // For now, we'll be conservative and only mark as fully loaded when
-        // explicitly called through get_all() in RelationTransaction
-        false
+    fn get_by_codomain(&self, value: &V) -> Vec<K> {
+        self.test_index.load().get_by_codomain(value)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::Provider;
 
     use crate::tx::Tx;
     use std::{
@@ -373,12 +233,84 @@ mod tests {
     }
 
     #[test]
+    fn incomplete_seed_is_an_invariant_error() {
+        let relation = Relation::<TestDomain, TestCodomain>::new(Symbol::mk("incomplete"));
+        let tx = Tx {
+            ts: Timestamp(1),
+            visible_ts: Timestamp(0),
+            snapshot_version: 0,
+        };
+        let mut transaction = relation.start(&tx);
+        let key = TestDomain(0);
+        assert!(matches!(
+            transaction.get(&key),
+            Err(Error::IncompleteIndex(_))
+        ));
+        assert!(matches!(
+            transaction.with_domain_value(&key, |value| value.clone()),
+            Err(Error::IncompleteIndex(_))
+        ));
+        assert!(matches!(
+            transaction.scan(&|_, _| true),
+            Err(Error::IncompleteIndex(_))
+        ));
+        assert!(matches!(
+            transaction.get_all(),
+            Err(Error::IncompleteIndex(_))
+        ));
+        assert!(matches!(
+            transaction.insert(key.clone(), TestCodomain(0)),
+            Err(Error::IncompleteIndex(_))
+        ));
+        let mut working_set = transaction.working_set().unwrap();
+        assert!(matches!(
+            relation.begin_check().check(&mut working_set),
+            Err(Error::IncompleteIndex(_))
+        ));
+        let result = relation.seeded_index([
+            Ok((Timestamp(0), key, TestCodomain(0))),
+            Err(Error::EncodingFailure),
+        ]);
+        assert!(matches!(result, Err(Error::EncodingFailure)));
+        assert!(!relation.index().load().is_fully_resident());
+    }
+
+    #[test]
+    fn predicate_scan_shadows_a_base_value_with_a_nonmatching_update() {
+        let relation = Relation::<TestDomain, TestCodomain>::new(Symbol::mk("predicate"));
+        let (index, _) = relation
+            .seeded_index([Ok((Timestamp(1), TestDomain(1), TestCodomain(10)))])
+            .unwrap();
+        let mut transaction = relation.start_from_index(
+            &Tx {
+                ts: Timestamp(2),
+                visible_ts: Timestamp(1),
+                snapshot_version: 0,
+            },
+            &*index,
+        );
+        transaction
+            .update(&TestDomain(1), TestCodomain(20))
+            .unwrap();
+        assert!(
+            transaction
+                .scan(&|_, value| value.0 == 10)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            transaction.scan(&|_, value| value.0 == 20).unwrap(),
+            vec![(TestDomain(1), TestCodomain(20))]
+        );
+    }
+
+    #[test]
     fn test_basic() {
         let mut backing = HashMap::new();
         backing.insert(TestDomain(0), TestCodomain(0));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+        let relation = Arc::new(Relation::new(Symbol::mk("test")).with_fixture(&*provider));
 
         let domain = TestDomain(1);
         let codomain = TestCodomain(1);
@@ -397,7 +329,8 @@ mod tests {
         let mut cr = relation.begin_check();
         cr.check(&mut ws).unwrap();
         cr.prepare_indexes(&ws);
-        persist_working_set(relation.provider(), &ws).unwrap();
+        persist_working_set(&provider, &ws).unwrap();
+        cr.commit(relation.index());
         assert_eq!(relation.get(&domain).unwrap().unwrap().1, codomain.clone());
     }
 
@@ -407,7 +340,7 @@ mod tests {
         backing.insert(TestDomain(0), TestCodomain(0));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+        let relation = Arc::new(Relation::new(Symbol::mk("test")).with_fixture(&*provider));
 
         let domain = TestDomain(1);
         let codomain_a = TestCodomain(1);
@@ -435,7 +368,7 @@ mod tests {
             let mut cr_a = relation.begin_check();
             cr_a.check(&mut ws_a).unwrap();
             cr_a.prepare_indexes(&ws_a);
-            persist_working_set(relation.provider(), &ws_a).unwrap();
+            persist_working_set(&provider, &ws_a).unwrap();
             cr_a.commit(relation.index());
         }
         {
@@ -454,7 +387,7 @@ mod tests {
         backing.insert(TestDomain(1), TestCodomain(10));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+        let relation = Arc::new(Relation::new(Symbol::mk("test")).with_fixture(&*provider));
 
         let domain = TestDomain(1);
 
@@ -484,7 +417,7 @@ mod tests {
             let mut cr_2 = relation.begin_check();
             cr_2.check(&mut ws_2).unwrap();
             cr_2.prepare_indexes(&ws_2);
-            persist_working_set(relation.provider(), &ws_2).unwrap();
+            persist_working_set(&provider, &ws_2).unwrap();
             cr_2.commit(relation.index());
         }
 
@@ -503,7 +436,7 @@ mod tests {
         backing.insert(TestDomain(1), TestCodomain(10));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+        let relation = Arc::new(Relation::new(Symbol::mk("test")).with_fixture(&*provider));
 
         let domain = TestDomain(1);
 
@@ -533,7 +466,7 @@ mod tests {
             let mut cr_1 = relation.begin_check();
             cr_1.check(&mut ws_1).unwrap();
             cr_1.prepare_indexes(&ws_1);
-            persist_working_set(relation.provider(), &ws_1).unwrap();
+            persist_working_set(&provider, &ws_1).unwrap();
             cr_1.commit(relation.index());
         }
 
@@ -549,7 +482,7 @@ mod tests {
         let backing = HashMap::new();
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+        let relation = Arc::new(Relation::new(Symbol::mk("test")).with_fixture(&*provider));
 
         let domain_1 = TestDomain(1);
         let domain_2 = TestDomain(2);
@@ -580,7 +513,7 @@ mod tests {
             let mut cr_2 = relation.begin_check();
             cr_2.check(&mut ws_2).unwrap();
             cr_2.prepare_indexes(&ws_2);
-            persist_working_set(relation.provider(), &ws_2).unwrap();
+            persist_working_set(&provider, &ws_2).unwrap();
             cr_2.commit(relation.index());
         }
 
@@ -591,7 +524,7 @@ mod tests {
         let mut cr_1 = relation.begin_check();
         cr_1.check(&mut ws_1).unwrap(); // Should not conflict
         cr_1.prepare_indexes(&ws_1);
-        persist_working_set(relation.provider(), &ws_1).unwrap();
+        persist_working_set(&provider, &ws_1).unwrap();
     }
 
     #[test]
@@ -601,7 +534,7 @@ mod tests {
         backing.insert(TestDomain(1), TestCodomain(10));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+        let relation = Arc::new(Relation::new(Symbol::mk("test")).with_fixture(&*provider));
 
         let domain = TestDomain(1);
 
@@ -626,7 +559,7 @@ mod tests {
             let mut cr_1 = relation.begin_check();
             cr_1.check(&mut ws_1).unwrap();
             cr_1.prepare_indexes(&ws_1);
-            persist_working_set(relation.provider(), &ws_1).unwrap();
+            persist_working_set(&provider, &ws_1).unwrap();
             cr_1.commit(relation.index());
         }
 
@@ -638,8 +571,9 @@ mod tests {
         let mut cr_2 = relation.begin_check();
         cr_2.check(&mut ws_2).unwrap();
         cr_2.prepare_indexes(&ws_2);
-        persist_working_set(relation.provider(), &ws_2).unwrap();
+        persist_working_set(&provider, &ws_2).unwrap();
 
+        cr_2.commit(relation.index());
         // Verify final state
         assert_eq!(relation.get(&domain).unwrap().unwrap().1, TestCodomain(20));
     }
@@ -650,7 +584,7 @@ mod tests {
         backing.insert(TestDomain(1), TestCodomain(10));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+        let relation = Arc::new(Relation::new(Symbol::mk("test")).with_fixture(&*provider));
 
         let domain = TestDomain(1);
         let tx = Tx {
@@ -667,7 +601,7 @@ mod tests {
         let mut cr = relation.begin_check();
         cr.check(&mut ws).unwrap();
         cr.prepare_indexes(&ws);
-        persist_working_set(relation.provider(), &ws).unwrap();
+        persist_working_set(&provider, &ws).unwrap();
         cr.commit(relation.index());
 
         assert_eq!(relation.get(&domain).unwrap().unwrap().1, TestCodomain(20));
@@ -679,7 +613,7 @@ mod tests {
         let backing = HashMap::new();
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+        let relation = Arc::new(Relation::new(Symbol::mk("test")).with_fixture(&*provider));
 
         let domain = TestDomain(1);
         let tx = Tx {
@@ -704,7 +638,7 @@ mod tests {
         backing.insert(TestDomain(1), TestCodomain(0));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+        let relation = Arc::new(Relation::new(Symbol::mk("test")).with_fixture(&*provider));
 
         let domain = TestDomain(1);
 
@@ -725,7 +659,7 @@ mod tests {
             let mut cr = relation.begin_check();
             cr.check(&mut ws).unwrap();
             cr.prepare_indexes(&ws);
-            persist_working_set(relation.provider(), &ws).unwrap();
+            persist_working_set(&provider, &ws).unwrap();
             cr.commit(relation.index());
         }
 
@@ -740,7 +674,7 @@ mod tests {
         backing.insert(TestDomain(1), TestCodomain(100));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+        let relation = Arc::new(Relation::new(Symbol::mk("test")).with_fixture(&*provider));
 
         let tx_1 = Tx {
             ts: Timestamp(10),
@@ -775,7 +709,7 @@ mod tests {
             let mut cr_1 = relation.begin_check();
             cr_1.check(&mut ws_1).unwrap();
             cr_1.prepare_indexes(&ws_1);
-            persist_working_set(relation.provider(), &ws_1).unwrap();
+            persist_working_set(&provider, &ws_1).unwrap();
             cr_1.commit(relation.index());
         }
 
@@ -799,7 +733,7 @@ mod tests {
             let mut cr_3 = relation.begin_check();
             cr_3.check(&mut ws_3).unwrap();
             cr_3.prepare_indexes(&ws_3);
-            persist_working_set(relation.provider(), &ws_3).unwrap();
+            persist_working_set(&provider, &ws_3).unwrap();
             cr_3.commit(relation.index());
         }
 
@@ -822,7 +756,7 @@ mod tests {
         backing.insert(TestDomain(1), TestCodomain(100));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+        let relation = Arc::new(Relation::new(Symbol::mk("test")).with_fixture(&*provider));
 
         let domain = TestDomain(1);
 
@@ -850,7 +784,7 @@ mod tests {
             let mut cr_newer = relation.begin_check();
             cr_newer.check(&mut ws_newer).unwrap();
             cr_newer.prepare_indexes(&ws_newer);
-            persist_working_set(relation.provider(), &ws_newer).unwrap();
+            persist_working_set(&provider, &ws_newer).unwrap();
             cr_newer.commit(relation.index());
         }
 
@@ -870,7 +804,7 @@ mod tests {
         backing.insert(TestDomain(2), TestCodomain(200));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+        let relation = Arc::new(Relation::new(Symbol::mk("test")).with_fixture(&*provider));
 
         let tx = Tx {
             ts: Timestamp(10),
@@ -894,7 +828,7 @@ mod tests {
         let mut cr = relation.begin_check();
         cr.check(&mut ws).unwrap();
         cr.prepare_indexes(&ws);
-        persist_working_set(relation.provider(), &ws).unwrap();
+        persist_working_set(&provider, &ws).unwrap();
 
         // Commit the changes to the relation
         cr.commit(relation.index());
@@ -908,21 +842,12 @@ mod tests {
 
     #[test]
     fn test_secondary_index_transaction_integration() {
-        use crate::tx::indexes::SecondaryIndexRelation;
-
         let backing = HashMap::new();
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
 
-        // Create relation with secondary index support
-        let relation = Arc::new(Relation {
-            relation_name: Symbol::mk("test"),
-            index_factory: secondary_index_factory::<TestDomain, TestCodomain>,
-            test_index: Arc::new(ArcSwap::new(Arc::new(Box::new(
-                SecondaryIndexRelation::new(),
-            )))),
-            source: provider,
-        });
+        let relation =
+            Arc::new(Relation::new_with_secondary(Symbol::mk("test")).with_fixture(&*provider));
 
         let domain1 = TestDomain(1);
         let domain2 = TestDomain(2);
@@ -957,7 +882,7 @@ mod tests {
         let mut cr = relation.begin_check();
         cr.check(&mut ws).unwrap();
         cr.prepare_indexes(&ws);
-        persist_working_set(relation.provider(), &ws).unwrap();
+        persist_working_set(&provider, &ws).unwrap();
         cr.commit(relation.index());
 
         // Test that committed secondary index state is visible in new transaction
@@ -982,7 +907,7 @@ mod tests {
         let provider = TestProvider {
             data: Arc::new(Mutex::new(HashMap::new())),
         };
-        let relation = Relation::new_with_secondary(Symbol::mk("test"), Arc::new(provider));
+        let relation = Relation::new_with_secondary(Symbol::mk("test")).with_fixture(&provider);
         let tx = Tx {
             ts: Timestamp(10),
             visible_ts: Timestamp(0),

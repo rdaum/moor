@@ -34,11 +34,10 @@ type IndexOps<Domain, Codomain> = (
     Vec<IndexTombstone<Domain>>,
 );
 
-impl<Domain, Codomain, P> CheckRelation<Domain, Codomain, P>
+impl<Domain, Codomain> CheckRelation<Domain, Codomain>
 where
     Domain: RelationDomain,
     Codomain: RelationCodomain,
-    P: crate::provider::Provider<Domain, Codomain>,
 {
     /// Partition a working set into insert and tombstone vectors for apply_batch.
     fn collect_index_ops(working_set: &WorkingSet<Domain, Codomain>) -> IndexOps<Domain, Codomain> {
@@ -80,10 +79,6 @@ where
 
     /// Update the imbl index from the working set without touching the provider.
     pub fn prepare_indexes(&mut self, working_set: &WorkingSet<Domain, Codomain>) {
-        if working_set.provider_fully_loaded() {
-            self.index.set_provider_fully_loaded(true);
-        }
-
         if working_set.is_empty() {
             return;
         }
@@ -132,9 +127,6 @@ where
         }
 
         let mut rebased = existing.fork();
-        if working_set.provider_fully_loaded() {
-            rebased.set_provider_fully_loaded(true);
-        }
 
         let (inserts, tombstones) = Self::collect_index_ops(working_set);
         rebased.apply_batch(inserts, tombstones);
@@ -251,7 +243,7 @@ mod tests {
         let provider = Arc::new(TestProvider {
             data: Arc::new(Mutex::new(HashMap::new())),
         });
-        let relation = crate::tx::Relation::new(Symbol::mk("test"), provider.clone());
+        let relation = crate::tx::Relation::new(Symbol::mk("test")).with_fixture(&*provider);
         let tx = Tx {
             ts: Timestamp(10),
             visible_ts: Timestamp(10),
@@ -289,10 +281,6 @@ mod tests {
 
     #[test]
     fn test_rebased_snapshot_preserves_winner_unrelated_writes() {
-        let provider = Arc::new(TestProvider {
-            data: Arc::new(Mutex::new(HashMap::new())),
-        });
-
         let base_key = TestDomain(1);
         let winner_key = TestDomain(2);
         let our_key = TestDomain(3);
@@ -311,7 +299,6 @@ mod tests {
         let checker = CheckRelation {
             index: checker_index,
             relation_name: Symbol::mk("test"),
-            source: provider,
             dirty: true,
         };
 

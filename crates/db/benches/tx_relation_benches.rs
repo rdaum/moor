@@ -16,7 +16,7 @@ use micromeasure::{
     black_box,
 };
 use moor_db::{
-    CheckRelation, Error, Provider, Relation, RelationCodomain, RelationIndex, RelationTransaction,
+    CheckRelation, Error, Relation, RelationCodomain, RelationIndex, RelationTransaction,
     Timestamp, Tx, WorkingSet,
 };
 use moor_var::Symbol;
@@ -64,15 +64,10 @@ impl<C> InMemoryProvider<C> {
     }
 }
 
-impl<C> Provider<Domain, C> for InMemoryProvider<C>
+impl<C> InMemoryProvider<C>
 where
     C: RelationCodomain,
 {
-    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, C)>, Error> {
-        let data = self.data.lock().unwrap();
-        Ok(data.get(domain).cloned().map(|v| (Timestamp(1), v)))
-    }
-
     fn put(&self, _timestamp: Timestamp, domain: &Domain, codomain: &C) -> Result<(), Error> {
         let mut data = self.data.lock().unwrap();
         data.insert(domain.clone(), codomain.clone());
@@ -96,14 +91,10 @@ where
             .map(|(k, v)| (Timestamp(1), k.clone(), v.clone()))
             .collect())
     }
-
-    fn stop(&self) -> Result<(), Error> {
-        Ok(())
-    }
 }
 
 struct CheckConflictContext {
-    relation: Relation<Domain, ConflictCodomain, InMemoryProvider<ConflictCodomain>>,
+    relation: Relation<Domain, ConflictCodomain>,
     base_index: Box<dyn RelationIndex<Domain, ConflictCodomain>>,
     check_index: Box<dyn RelationIndex<Domain, ConflictCodomain>>,
     domain: Domain,
@@ -115,8 +106,11 @@ impl BenchContext for CheckConflictContext {
         let mut data = HashMap::new();
         data.insert(domain.clone(), ConflictCodomain(10));
         let provider = Arc::new(InMemoryProvider::new(data));
-        let relation = Relation::new(Symbol::mk("tx-check-conflict"), provider);
-        let base_index = relation.seeded_index().unwrap();
+        let relation = Relation::new(Symbol::mk("tx-check-conflict"));
+        let base_index = relation
+            .seeded_index(provider.scan(&|_, _| true).unwrap().into_iter().map(Ok))
+            .map(|(index, _)| index)
+            .unwrap();
         let check_index = base_index.fork();
         Self {
             relation,
@@ -132,16 +126,21 @@ impl BenchContext for CheckConflictContext {
 }
 
 struct ApplyContext {
-    relation: Relation<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>,
+    sink: Arc<InMemoryProvider<PlainCodomain>>,
+    relation: Relation<Domain, PlainCodomain>,
     base_index: Box<dyn RelationIndex<Domain, PlainCodomain>>,
 }
 
 impl BenchContext for ApplyContext {
     fn prepare(_num_chunks: usize) -> Self {
         let provider = Arc::new(InMemoryProvider::new(HashMap::new()));
-        let relation = Relation::new(Symbol::mk("tx-apply"), provider);
-        let base_index = relation.seeded_index().unwrap();
+        let relation = Relation::new(Symbol::mk("tx-apply"));
+        let base_index = relation
+            .seeded_index(provider.scan(&|_, _| true).unwrap().into_iter().map(Ok))
+            .map(|(index, _)| index)
+            .unwrap();
         Self {
+            sink: provider,
             relation,
             base_index,
         }
@@ -157,7 +156,7 @@ impl BenchContext for ApplyContext {
 }
 
 struct CheckNoConflictCoreContext {
-    checker: CheckRelation<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>,
+    checker: CheckRelation<Domain, PlainCodomain>,
     ws: WorkingSet<Domain, PlainCodomain>,
 }
 
@@ -167,8 +166,11 @@ impl BenchContext for CheckNoConflictCoreContext {
         let mut data = HashMap::new();
         data.insert(domain.clone(), PlainCodomain(10));
         let provider = Arc::new(InMemoryProvider::new(data));
-        let relation = Relation::new(Symbol::mk("tx-check-core-no-conflict"), provider);
-        let base_index = relation.seeded_index().unwrap();
+        let relation = Relation::new(Symbol::mk("tx-check-core-no-conflict"));
+        let base_index = relation
+            .seeded_index(provider.scan(&|_, _| true).unwrap().into_iter().map(Ok))
+            .map(|(index, _)| index)
+            .unwrap();
         let tx = Tx {
             ts: Timestamp(BASE_TS),
             visible_ts: Timestamp(BASE_TS),
@@ -183,7 +185,7 @@ impl BenchContext for CheckNoConflictCoreContext {
 }
 
 struct CheckConflictIdenticalCoreContext {
-    checker: CheckRelation<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>,
+    checker: CheckRelation<Domain, PlainCodomain>,
     ws: WorkingSet<Domain, PlainCodomain>,
 }
 
@@ -193,8 +195,11 @@ impl BenchContext for CheckConflictIdenticalCoreContext {
         let mut data = HashMap::new();
         data.insert(domain.clone(), PlainCodomain(10));
         let provider = Arc::new(InMemoryProvider::new(data));
-        let relation = Relation::new(Symbol::mk("tx-check-core-identical"), provider);
-        let base_index = relation.seeded_index().unwrap();
+        let relation = Relation::new(Symbol::mk("tx-check-core-identical"));
+        let base_index = relation
+            .seeded_index(provider.scan(&|_, _| true).unwrap().into_iter().map(Ok))
+            .map(|(index, _)| index)
+            .unwrap();
         let tx = Tx {
             ts: Timestamp(BASE_TS),
             visible_ts: Timestamp(BASE_TS),
@@ -212,7 +217,7 @@ impl BenchContext for CheckConflictIdenticalCoreContext {
 }
 
 struct CheckConflictUnresolvableCoreContext {
-    checker: CheckRelation<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>,
+    checker: CheckRelation<Domain, PlainCodomain>,
     ws: WorkingSet<Domain, PlainCodomain>,
 }
 
@@ -222,8 +227,11 @@ impl BenchContext for CheckConflictUnresolvableCoreContext {
         let mut data = HashMap::new();
         data.insert(domain.clone(), PlainCodomain(10));
         let provider = Arc::new(InMemoryProvider::new(data));
-        let relation = Relation::new(Symbol::mk("tx-check-core-fail"), provider);
-        let base_index = relation.seeded_index().unwrap();
+        let relation = Relation::new(Symbol::mk("tx-check-core-fail"));
+        let base_index = relation
+            .seeded_index(provider.scan(&|_, _| true).unwrap().into_iter().map(Ok))
+            .map(|(index, _)| index)
+            .unwrap();
         let tx = Tx {
             ts: Timestamp(BASE_TS),
             visible_ts: Timestamp(BASE_TS),
@@ -241,47 +249,27 @@ impl BenchContext for CheckConflictUnresolvableCoreContext {
 }
 
 struct TxOpsContext {
-    get_hit_master_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    get_miss_txs: Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    get_local_update_hit_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    get_local_delete_miss_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    update_hit_master_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    update_miss_none_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    update_local_insert_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    update_local_delete_none_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    upsert_hit_master_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    upsert_miss_insert_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    upsert_local_delete_to_update_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    upsert_local_delete_to_insert_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    delete_hit_master_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    delete_miss_none_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    delete_local_insert_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    delete_local_delete_none_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    insert_miss_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    insert_duplicate_err_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    insert_after_local_delete_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    bulk_get_master_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
-    bulk_get_local_mixed_txs:
-        Vec<RelationTransaction<Domain, PlainCodomain, InMemoryProvider<PlainCodomain>>>,
+    get_hit_master_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    get_miss_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    get_local_update_hit_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    get_local_delete_miss_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    update_hit_master_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    update_miss_none_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    update_local_insert_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    update_local_delete_none_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    upsert_hit_master_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    upsert_miss_insert_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    upsert_local_delete_to_update_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    upsert_local_delete_to_insert_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    delete_hit_master_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    delete_miss_none_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    delete_local_insert_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    delete_local_delete_none_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    insert_miss_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    insert_duplicate_err_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    insert_after_local_delete_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    bulk_get_master_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
+    bulk_get_local_mixed_txs: Vec<RelationTransaction<Domain, PlainCodomain>>,
     present_domain: Domain,
     missing_domain: Domain,
     resurrect_domain: Domain,
@@ -305,8 +293,11 @@ impl BenchContext for TxOpsContext {
         }
 
         let provider = Arc::new(InMemoryProvider::new(data));
-        let relation = Relation::new(Symbol::mk("tx-ops"), provider);
-        let base_index = relation.seeded_index().unwrap();
+        let relation = Relation::new(Symbol::mk("tx-ops"));
+        let base_index = relation
+            .seeded_index(provider.scan(&|_, _| true).unwrap().into_iter().map(Ok))
+            .map(|(index, _)| index)
+            .unwrap();
         let bulk_get_domains: Vec<_> = (0..16).map(|i| Domain(100 + i)).collect();
         let chunk_size = TX_OPS_CHUNK_SIZE.unwrap_or(preferred_chunk_size).max(1);
 
@@ -498,7 +489,7 @@ fn apply_mixed_batch(ctx: &mut ApplyContext, chunk_size: usize, chunk_num: usize
         let ws = rt.working_set().unwrap();
         let mut checker = ctx.relation.begin_check_from_index(ctx.base_index.as_ref());
         checker.prepare_indexes(&ws);
-        let provider = ctx.relation.provider().clone();
+        let provider = ctx.sink.clone();
         for (write_ts, domain, value) in ws.mutations() {
             match value {
                 Some(value) => provider.put(write_ts, domain, value).unwrap(),

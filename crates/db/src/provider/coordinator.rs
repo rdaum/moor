@@ -523,13 +523,14 @@ impl PersistenceCoordinator {
         &self,
         through_version: u64,
         deadline: Duration,
-    ) -> Result<fjall::Snapshot, PersistenceError> {
+    ) -> Result<super::backend::StorageSnapshot, PersistenceError> {
         if self.shutdown.load(Ordering::Acquire) {
             return Err(PersistenceError::ShutDown);
         }
         self.ensure_writer_healthy()?;
         self.writer
             .snapshot(through_version, deadline)
+            .map(super::backend::StorageSnapshot::Fjall)
             .map_err(|error| self.map_wait_error(through_version, error))
     }
 

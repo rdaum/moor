@@ -27,10 +27,8 @@ use crate::{
     EntityMetadataKey, Error, ObjAndUUIDHolder, StringHolder,
     api::world_state::db_counters,
     engine::moor_db::{Caches, SEQUENCE_MAX_OBJECT, WorldStateEdit, WorldStateTransaction},
-    provider::fjall_provider::{EncodeFjallValue, FjallCodec, FjallProvider},
-    tx::{EncodeFor, RelationTransaction},
+    tx::RelationTransaction,
 };
-use byteview::ByteView;
 use moor_common::util::Instant;
 use moor_common::{
     model::{
@@ -50,7 +48,7 @@ use std::fmt::Display;
 use std::{collections::VecDeque, hash::Hash};
 use uuid::Uuid;
 
-type RTx<Domain, Codomain> = RelationTransaction<Domain, Codomain, FjallProvider<Domain, Codomain>>;
+type RTx<Domain, Codomain> = RelationTransaction<Domain, Codomain>;
 
 pub(crate) struct PropertyPermMemo {
     known_propflags: HashSet<ObjAndUUIDHolder>,
@@ -122,9 +120,6 @@ fn upsert<Domain, Codomain>(
 where
     Domain: Clone + Eq + Hash + Send + Sync + std::fmt::Debug + Display + 'static,
     Codomain: crate::tx::RelationCodomain,
-    FjallProvider<Domain, Codomain>:
-        EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
-    FjallCodec: EncodeFjallValue<Codomain>,
 {
     table.upsert(d, c)
 }
@@ -138,9 +133,6 @@ fn insert_guaranteed_unique<Domain, Codomain>(
 where
     Domain: Clone + Eq + Hash + Send + Sync + std::fmt::Debug + Display + 'static,
     Codomain: crate::tx::RelationCodomain,
-    FjallProvider<Domain, Codomain>:
-        EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
-    FjallCodec: EncodeFjallValue<Codomain>,
 {
     table.insert_guaranteed_unique(d, c)
 }

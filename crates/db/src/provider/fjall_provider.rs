@@ -13,9 +13,9 @@
 
 //! Fjall-backed persistence provider with per-type encoding strategies.
 //!
-//! This module implements a `Provider` using Fjall (an embedded LSM-tree database) as the backing
-//! store. The key architectural feature is **per-type encoding**: each data type can use its own
-//! optimal serialization strategy via the `EncodeFor` trait.
+//! This adapter binds logical mutations to Fjall keyspaces. Each stored type has an
+//! encoding through `EncodeFor`. Snapshot reads use `fjall_reader`; CRUD helpers
+//! are available only to unit-test fixtures.
 //!
 //! ## Encoding Strategies
 //!
@@ -40,14 +40,16 @@
 //! transaction batch. A single background writer commits those batches to Fjall
 //! atomically and in publication order.
 
+#[cfg(test)]
+use crate::{db_counters, provider::Provider};
 use crate::{
-    db_counters,
     provider::batch_writer::{BatchEncoder, BatchValue},
     tx::{EncodeFor, Error, RelationCodomain, RelationDomain, Timestamp},
 };
 use ahash::AHashMap;
 use byteview::ByteView;
 use fjall::Slice;
+#[cfg(test)]
 use moor_common::model::WorldStateTimerOp;
 use moor_var::Var;
 use planus::{ReadAsRoot, WriteAsOffset};
@@ -190,27 +192,29 @@ impl FjallProvider<crate::ObjAndUUIDHolder, Var> {
             .collect()
     }
 
-    pub(crate) fn seeded_property_value_index(&self) -> Result<SeededPropertyValueIndex, Error> {
+    pub(crate) fn seeded_property_value_index(
+        &self,
+        snapshot: &fjall::Snapshot,
+        relation: &crate::tx::Relation<crate::ObjAndUUIDHolder, Var>,
+    ) -> Result<SeededPropertyValueIndex, Error> {
         use super::property_value_store::{PROPERTY_VALUE_CHAIN_LIMITS, PropertyValueScan};
-        use crate::tx::{HashRelationIndex, RelationIndex};
-
-        let mut index = HashRelationIndex::new();
         let mut chains = AHashMap::new();
-        let mut max_timestamp = Timestamp(0);
-        for entry in PropertyValueScan::new(self.fjall_keyspace.iter(), PROPERTY_VALUE_CHAIN_LIMITS)
-        {
+        let tuples = PropertyValueScan::new(
+            fjall::Readable::iter(snapshot, &self.fjall_keyspace),
+            PROPERTY_VALUE_CHAIN_LIMITS,
+        )
+        .map(|entry| {
             let (property, reconstructed) =
                 entry.map_err(|error| Error::RetrievalFailure(error.to_string()))?;
-            max_timestamp = max_timestamp.max(reconstructed.logical_timestamp);
             chains.insert(property.clone(), reconstructed.chain);
-            index.insert_entry(
+            Ok((
                 reconstructed.logical_timestamp,
                 property,
                 reconstructed.value,
-            );
-        }
-        index.set_provider_fully_loaded(true);
-        Ok((Box::new(index), max_timestamp, chains))
+            ))
+        });
+        let (index, max_timestamp) = relation.seeded_index(tuples)?;
+        Ok((index, max_timestamp, chains))
     }
 }
 
@@ -279,6 +283,7 @@ where
     }
 }
 
+#[cfg(test)]
 impl<Domain, Codomain> Provider<Domain, Codomain> for FjallProvider<Domain, Codomain>
 where
     Domain: RelationDomain,
@@ -364,9 +369,7 @@ pub(crate) struct FjallCodec;
 // ============================================================================
 // Each type gets its own EncodeFor impl, allowing custom encoding logic
 
-use crate::{
-    AnonymousObjectMetadata, EntityMetadataKey, ObjAndUUIDHolder, StringHolder, provider::Provider,
-};
+use crate::{AnonymousObjectMetadata, EntityMetadataKey, ObjAndUUIDHolder, StringHolder};
 use moor_common::{
     model::{ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs},
     util::BitEnum,

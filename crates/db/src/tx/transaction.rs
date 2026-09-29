@@ -11,23 +11,12 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::{
-    provider::Provider,
-    tx::{
-        ConflictInfo, ConflictType, Error, RelationCodomain, RelationDomain, RelationIndex,
-        Timestamp, Tx,
-    },
-};
+use crate::tx::{Error, RelationCodomain, RelationDomain, RelationIndex, Timestamp, Tx};
 use ahash::AHasher;
 use moor_common::model::WorldStateError;
 use moor_var::Symbol;
 use std::collections::HashSet;
-use std::{
-    collections::HashMap,
-    hash::BuildHasherDefault,
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
+use std::{collections::HashMap, hash::BuildHasherDefault, sync::Arc};
 
 mod local_operations;
 use local_operations::LocalOperations;
@@ -35,9 +24,8 @@ use local_operations::LocalOperations;
 /// A key-value caching store that is scoped for the lifetime of a transaction.
 /// When the transaction is completed, it collapses into a WorkingSet which can be applied to the
 /// global transactional cache.
-pub struct RelationTransaction<Domain, Codomain, Source>
+pub struct RelationTransaction<Domain, Codomain>
 where
-    Source: Provider<Domain, Codomain>,
     Domain: RelationDomain,
     Codomain: RelationCodomain,
 {
@@ -45,7 +33,6 @@ where
     relation_name: Symbol,
 
     index: Inner<Domain, Codomain>,
-    backing_source: Arc<Source>,
 }
 
 struct Inner<Domain, Codomain>
@@ -54,61 +41,8 @@ where
     Codomain: RelationCodomain,
 {
     local_operations: LocalOperations<Domain, Codomain>,
-    master_entries: TransactionIndex<Domain, Codomain>,
-    provider_fully_loaded: bool,
-}
-
-enum TransactionIndex<Domain, Codomain>
-where
-    Domain: RelationDomain,
-    Codomain: RelationCodomain,
-{
-    Shared(Arc<dyn RelationIndex<Domain, Codomain>>),
-    Owned(Box<dyn RelationIndex<Domain, Codomain>>),
-}
-
-impl<Domain, Codomain> TransactionIndex<Domain, Codomain>
-where
-    Domain: RelationDomain,
-    Codomain: RelationCodomain,
-{
-    fn into_shared(self) -> Arc<dyn RelationIndex<Domain, Codomain>> {
-        match self {
-            Self::Shared(index) => index,
-            Self::Owned(index) => Arc::from(index),
-        }
-    }
-}
-
-impl<Domain, Codomain> Deref for TransactionIndex<Domain, Codomain>
-where
-    Domain: RelationDomain,
-    Codomain: RelationCodomain,
-{
-    type Target = dyn RelationIndex<Domain, Codomain>;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Shared(index) => &**index,
-            Self::Owned(index) => &**index,
-        }
-    }
-}
-
-impl<Domain, Codomain> DerefMut for TransactionIndex<Domain, Codomain>
-where
-    Domain: RelationDomain,
-    Codomain: RelationCodomain,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        if let Self::Shared(index) = self {
-            *self = Self::Owned(index.fork());
-        }
-        let Self::Owned(index) = self else {
-            unreachable!();
-        };
-        &mut **index
-    }
+    master_entries: Arc<dyn RelationIndex<Domain, Codomain>>,
+    fully_resident: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -170,7 +104,6 @@ where
     /// - mine = our operation in tuples
     /// - theirs = current canonical state at commit time
     base_index: Arc<dyn RelationIndex<Domain, Codomain>>,
-    provider_fully_loaded: bool,
 }
 
 impl<Domain, Codomain> WorkingSet<Domain, Codomain>
@@ -182,19 +115,14 @@ where
         tuples: WorkingSetTuples<Domain, Codomain>,
         base_index: Box<dyn RelationIndex<Domain, Codomain>>,
     ) -> WorkingSet<Domain, Codomain> {
-        Self::new_shared(tuples, Arc::from(base_index), false)
+        Self::new_shared(tuples, Arc::from(base_index))
     }
 
     fn new_shared(
         tuples: WorkingSetTuples<Domain, Codomain>,
         base_index: Arc<dyn RelationIndex<Domain, Codomain>>,
-        provider_fully_loaded: bool,
     ) -> WorkingSet<Domain, Codomain> {
-        WorkingSet {
-            tuples,
-            base_index,
-            provider_fully_loaded,
-        }
+        WorkingSet { tuples, base_index }
     }
 
     pub fn len(&self) -> usize {
@@ -261,16 +189,11 @@ where
             .index_lookup(domain)
             .map(|entry| (entry.ts, entry.value.clone()))
     }
-
-    pub fn provider_fully_loaded(&self) -> bool {
-        self.provider_fully_loaded
-    }
 }
 
 /// Represents the state of a relation in the context of a current transaction.
-impl<Domain, Codomain, Source> RelationTransaction<Domain, Codomain, Source>
+impl<Domain, Codomain> RelationTransaction<Domain, Codomain>
 where
-    Source: Provider<Domain, Codomain>,
     Domain: RelationDomain,
     Codomain: RelationCodomain,
 {
@@ -288,39 +211,26 @@ where
         tx: Tx,
         relation_name: Symbol,
         canonical: Box<dyn RelationIndex<Domain, Codomain>>,
-        backing_source: Source,
-    ) -> RelationTransaction<Domain, Codomain, Source> {
-        Self::new_shared(
-            tx,
-            relation_name,
-            Arc::from(canonical),
-            Arc::new(backing_source),
-        )
+    ) -> RelationTransaction<Domain, Codomain> {
+        Self::new_shared(tx, relation_name, Arc::from(canonical))
     }
 
     pub(crate) fn new_shared(
         tx: Tx,
         relation_name: Symbol,
         canonical: Arc<dyn RelationIndex<Domain, Codomain>>,
-        backing_source: Arc<Source>,
-    ) -> RelationTransaction<Domain, Codomain, Source> {
-        let provider_fully_loaded = canonical.is_provider_fully_loaded();
+    ) -> RelationTransaction<Domain, Codomain> {
+        let fully_resident = canonical.is_fully_resident();
         let inner = Inner {
             local_operations: LocalOperations::new(),
-            master_entries: TransactionIndex::Shared(canonical),
-            provider_fully_loaded,
+            master_entries: canonical,
+            fully_resident,
         };
         RelationTransaction {
             tx,
             relation_name,
             index: inner,
-            backing_source,
         }
-    }
-
-    /// Helper to create a ConflictInfo for this relation.
-    fn make_conflict_info(&self, domain: &Domain, conflict_type: ConflictType) -> ConflictInfo {
-        crate::tx::make_conflict_info(self.relation_name, domain, conflict_type)
     }
 
     pub fn insert(&mut self, domain: Domain, value: Codomain) -> Result<(), Error> {
@@ -334,17 +244,8 @@ where
                 return Err(Error::Duplicate);
             }
 
-            // If provider is fully loaded, a miss in master_entries means it does not exist.
-            if !self.index.provider_fully_loaded {
-                // Not in the index, check the backing source.
-                if let Some((read_ts, _)) = self.backing_source.get(&domain)?
-                    && read_ts <= visible_ts
-                {
-                    return Err(Error::Duplicate);
-                }
-            }
+            self.require_complete()?;
 
-            // Not in the index, not in the backing source, we can insert freely.
             self.index.local_operations.insert(
                 domain,
                 Op {
@@ -378,22 +279,12 @@ where
             return Err(Error::Duplicate);
         }
 
-        // If we or upstream has already inserted this domain, we can't insert it again.
         if self.index.master_entries.index_lookup(&domain).is_some() {
             return Err(Error::Duplicate);
         }
 
-        // If provider is fully loaded, a miss in master_entries means it does not exist.
-        if !self.index.provider_fully_loaded {
-            // Not in the index, check the backing source.
-            if let Some((read_ts, _)) = self.backing_source.get(&domain)?
-                && read_ts <= visible_ts
-            {
-                return Err(Error::Duplicate);
-            }
-        }
+        self.require_complete()?;
 
-        // Not in the index, not in the backing source, we can insert freely.
         // Local index + also the operations log.
         self.index.local_operations.insert(
             domain,
@@ -481,45 +372,8 @@ where
             return Ok(Some(old_value));
         }
 
-        // We had nothing in our local index, so let's ask upstream to attempt to pull in an "old"
-        // value for it. We'll then update our own copy, and create an operations log entry for the
-        // update
-
-        // If provider is fully loaded, not being in master means it doesn't exist
-        if self.index.provider_fully_loaded {
-            return Ok(None);
-        }
-
-        // Provider not fully loaded - check the backing source
-        let Some((read_ts, backing_value)) = self.backing_source.get(domain)? else {
-            // Not in the backing source, we can't update it.
-            return Ok(None);
-        };
-
-        // If the timestamp is greater than our own, we won't be able to update it when we actually
-        // commit, so we may as well mark it as a conflict *now*.
-        // (Let's just hope the "upper layers" try to do the right thing here)
-        if read_ts > visible_ts {
-            return Err(Error::Conflict(
-                self.make_conflict_info(domain, ConflictType::ConcurrentWrite),
-            ));
-        }
-
-        // Put in operations log
-        // Copy into the local cache, but with updated value.
-        self.index.local_operations.insert(
-            domain.clone(),
-            Op {
-                read_ts,
-                write_ts,
-                operation: OpType::Update(value),
-                guaranteed_unique: false,
-            },
-        );
-
-        // Update local secondary index
-
-        Ok(Some(backing_value))
+        self.require_complete()?;
+        Ok(None)
     }
 
     pub fn upsert(&mut self, domain: Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
@@ -582,27 +436,8 @@ where
             return Ok(Some(old_value));
         }
 
-        // If provider not fully loaded, check backing source for existing data
-        if !self.index.provider_fully_loaded
-            && let Some((read_ts, backing_value)) = self.backing_source.get(&domain)?
-            && read_ts <= visible_ts
-        {
-            // Existing entry in backing - do update via local operation
-            self.index.local_operations.insert(
-                domain,
-                Op {
-                    read_ts,
-                    write_ts,
-                    operation: OpType::Update(value),
-                    guaranteed_unique: false,
-                },
-            );
+        self.require_complete()?;
 
-            // Update local secondary index
-            return Ok(Some(backing_value));
-        }
-
-        // No existing entry anywhere (or provider fully loaded) - do insert via local operation
         self.index.local_operations.insert(
             domain,
             Op {
@@ -676,23 +511,7 @@ where
             return Ok(Some(old_value));
         }
 
-        if !self.index.provider_fully_loaded
-            && let Some((read_ts, backing_value)) = self.backing_source.get(&domain)?
-            && read_ts <= self.visible_ts()
-        {
-            if let Some(new_value) = f(Some(&backing_value)) {
-                self.index.local_operations.insert(
-                    domain,
-                    Op {
-                        read_ts,
-                        write_ts: self.write_ts(),
-                        operation: OpType::Update(new_value),
-                        guaranteed_unique: false,
-                    },
-                );
-            }
-            return Ok(Some(backing_value));
-        }
+        self.require_complete()?;
 
         if let Some(new_value) = f(None) {
             self.index.local_operations.insert(
@@ -732,14 +551,11 @@ where
             return Ok(true);
         }
 
-        if self.index.provider_fully_loaded {
+        if self.index.fully_resident {
             return Ok(false);
         }
 
-        Ok(matches!(
-            self.backing_source.get(domain)?,
-            Some((ts, _)) if ts <= self.visible_ts()
-        ))
+        Err(Error::IncompleteIndex(self.relation_name))
     }
 
     /// Bulk check existence of multiple domains efficiently
@@ -770,17 +586,11 @@ where
                 continue;
             }
 
-            // If provider fully loaded, not being in master means it doesn't exist
-            if self.index.provider_fully_loaded {
+            if self.index.fully_resident {
                 continue;
             }
 
-            // Provider not fully loaded - check backing source
-            if let Some((ts, _)) = self.backing_source.get(&domain)?
-                && ts <= self.visible_ts()
-            {
-                valid_domains.insert(domain.clone());
-            }
+            return Err(Error::IncompleteIndex(self.relation_name));
         }
 
         Ok(valid_domains)
@@ -824,14 +634,11 @@ where
                 return Ok(Some(entry.value.clone()));
             }
 
-            if self.index.provider_fully_loaded {
+            if self.index.fully_resident {
                 return Ok(None);
             }
 
-            return match self.backing_source.get(domain)? {
-                Some((read_ts, value)) if read_ts <= self.visible_ts() => Ok(Some(value)),
-                _ => Ok(None),
-            };
+            return Err(Error::IncompleteIndex(self.relation_name));
         }
 
         if let Some(op) = self.index.local_operations.get(domain) {
@@ -847,14 +654,11 @@ where
             return Ok(Some(entry.value.clone()));
         }
 
-        if self.index.provider_fully_loaded {
+        if self.index.fully_resident {
             return Ok(None);
         }
 
-        match self.backing_source.get(domain)? {
-            Some((read_ts, value)) if read_ts <= self.visible_ts() => Ok(Some(value)),
-            _ => Ok(None),
-        }
+        Err(Error::IncompleteIndex(self.relation_name))
     }
 
     /// Invoke `f` with the tuple value for `domain` if one is visible to this transaction.
@@ -871,14 +675,11 @@ where
                 return Ok(Some(f(&entry.value)));
             }
 
-            if self.index.provider_fully_loaded {
+            if self.index.fully_resident {
                 return Ok(None);
             }
 
-            return match self.backing_source.get(domain)? {
-                Some((read_ts, value)) if read_ts <= self.visible_ts() => Ok(Some(f(&value))),
-                _ => Ok(None),
-            };
+            return Err(Error::IncompleteIndex(self.relation_name));
         }
 
         if let Some(op) = self.index.local_operations.get(domain) {
@@ -894,18 +695,14 @@ where
             return Ok(Some(f(&entry.value)));
         }
 
-        if self.index.provider_fully_loaded {
+        if self.index.fully_resident {
             return Ok(None);
         }
 
-        match self.backing_source.get(domain)? {
-            Some((read_ts, value)) if read_ts <= self.visible_ts() => Ok(Some(f(&value))),
-            _ => Ok(None),
-        }
+        Err(Error::IncompleteIndex(self.relation_name))
     }
 
     pub fn delete(&mut self, domain: &Domain) -> Result<Option<Codomain>, Error> {
-        let visible_ts = self.visible_ts();
         let write_ts = self.write_ts();
 
         // This is like update, but we're removing.
@@ -948,41 +745,8 @@ where
             return Ok(Some(old_value));
         }
 
-        // We had nothing in our local index, so let's ask upstream to attempt to pull in an "old"
-        // value for it. We'll then update our own copy, and create an operations log entry for the
-        // update
-
-        // If provider is fully loaded, not being in master means it doesn't exist
-        if self.index.provider_fully_loaded {
-            return Ok(None);
-        }
-
-        // Provider not fully loaded - check the backing source
-        let Some((read_ts, backing_value)) = self.backing_source.get(domain)? else {
-            // Not in the backing source, we can't update it.
-            return Ok(None);
-        };
-
-        // Pretend we didn't see it, it's too new.
-        if read_ts > visible_ts {
-            return Ok(None);
-        }
-
-        // It's there upstream, so log a delete for it in the operations log as something we need
-        // to do.
-        self.index.local_operations.insert(
-            domain.clone(),
-            Op {
-                read_ts,
-                write_ts,
-                operation: OpType::Delete,
-                guaranteed_unique: false,
-            },
-        );
-
-        // Update local secondary index (remove from old codomain)
-
-        Ok(Some(backing_value))
+        self.require_complete()?;
+        Ok(None)
     }
 
     pub fn scan<F>(&self, predicate: &F) -> Result<Vec<(Domain, Codomain)>, Error>
@@ -991,37 +755,10 @@ where
     {
         let mut results: HashMap<_, _> = HashMap::new();
 
-        // If we've already fully loaded from the provider, we can skip the expensive backing source scan
-        if self.index.provider_fully_loaded {
-            // Just use the master entries - they already contain all the provider data
-            for (domain, entry) in self.index.master_entries.iter() {
-                if entry.ts <= self.visible_ts() && predicate(domain, &entry.value) {
-                    results.insert(domain.clone(), entry.value.clone());
-                }
-            }
-        } else {
-            // Need to hit the backing source to get data not yet loaded into master entries
-            let backing_results: HashMap<_, _> = self
-                .backing_source
-                .scan(predicate)?
-                .iter()
-                .filter_map(|(ts, domain, value)| {
-                    if *ts <= self.visible_ts() && predicate(domain, value) {
-                        return Some((domain.clone(), value.clone()));
-                    }
-                    None
-                })
-                .collect();
-            results.extend(backing_results);
-
-            // Also merge in the master entries from the index
-            for (domain, entry) in self.index.master_entries.iter() {
-                if !results.contains_key(domain)
-                    && entry.ts <= self.visible_ts()
-                    && predicate(domain, &entry.value)
-                {
-                    results.insert(domain.clone(), entry.value.clone());
-                }
+        self.require_complete()?;
+        for (domain, entry) in self.index.master_entries.iter() {
+            if entry.ts <= self.visible_ts() && predicate(domain, &entry.value) {
+                results.insert(domain.clone(), entry.value.clone());
             }
         }
 
@@ -1031,6 +768,8 @@ where
                 OpType::Insert(value) | OpType::Update(value) => {
                     if predicate(domain, value) {
                         results.insert(domain.clone(), value.clone());
+                    } else {
+                        results.remove(domain);
                     }
                 }
                 OpType::Delete => {
@@ -1043,16 +782,10 @@ where
     }
 
     /// Optimized method to get all tuples without filtering
-    /// Loads from provider once and caches the result for subsequent calls
     pub fn get_all(&mut self) -> Result<Vec<(Domain, Codomain)>, Error> {
-        // If we haven't loaded from provider yet, do it now
-        if !self.index.provider_fully_loaded {
-            self.fully_load_from_provider()?;
-            self.index.provider_fully_loaded = true;
-        }
+        self.require_complete()?;
 
         // Now we can just merge master_entries + local_operations
-        // without touching the provider again
         let mut results = HashMap::new();
 
         // Add all master entries that are visible to this transaction
@@ -1103,35 +836,23 @@ where
                 continue;
             }
 
-            // If provider fully loaded, not being in master means it doesn't exist
-            if self.index.provider_fully_loaded {
+            if self.index.fully_resident {
                 continue;
             }
 
-            // Provider not fully loaded - check backing source as fallback
-            if let Some((ts, value)) = self.backing_source.get(domain)?
-                && ts <= self.visible_ts()
-            {
-                results.insert(domain.clone(), value);
-            }
+            return Err(Error::IncompleteIndex(self.relation_name));
         }
 
         Ok(results.into_iter().collect())
     }
 
-    /// Helper method to fully load all data from the provider into the master index
-    fn fully_load_from_provider(&mut self) -> Result<(), Error> {
-        // Scan all data from the provider that's visible to this transaction
-        let provider_data = self.backing_source.scan(&|_domain, _codomain| true)?;
-        for (ts, domain, codomain) in provider_data {
-            if ts <= self.visible_ts() {
-                self.index.master_entries.insert_entry(ts, domain, codomain);
-            }
+    /// The fault insertion point for a future version-aware pager. Until then a
+    /// missing resident seed is an invariant failure, never a latest-store read.
+    #[inline]
+    fn require_complete(&self) -> Result<(), Error> {
+        if !self.index.fully_resident {
+            return Err(Error::IncompleteIndex(self.relation_name));
         }
-
-        // Mark the master entries as fully loaded
-        self.index.master_entries.set_provider_fully_loaded(true);
-
         Ok(())
     }
 
@@ -1143,13 +864,11 @@ where
         let Inner {
             local_operations,
             master_entries,
-            provider_fully_loaded,
             ..
         } = self.index;
         Ok(WorkingSet::new_shared(
             local_operations.into_map(),
-            master_entries.into_shared(),
-            provider_fully_loaded,
+            master_entries,
         ))
     }
 }

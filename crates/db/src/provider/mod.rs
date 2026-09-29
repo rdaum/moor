@@ -11,6 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
+#[cfg(test)]
 use crate::{Error, Timestamp};
 
 pub mod batch_writer;
@@ -18,14 +19,15 @@ pub(crate) mod coordinator;
 pub mod fjall_format;
 pub(crate) mod fjall_maintenance;
 pub mod fjall_provider;
-pub mod fjall_snapshot_loader;
 pub(crate) mod logical;
 pub(crate) mod property_value_store;
+pub(crate) mod snapshot_loader;
 
 /// The `Provider` trait is a generic interface for a value store that backs the transactional
 /// front.
 /// The source of canonical values, and the place where durable writes go.
 /// E.g. a key-value store or some other database.
+#[cfg(test)]
 pub trait Provider<Domain, Codomain>: Clone {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error>;
 
@@ -41,3 +43,8 @@ pub trait Provider<Domain, Codomain>: Clone {
     // Stop any background processing that is running on this provider.
     fn stop(&self) -> Result<(), Error>;
 }
+
+pub(crate) mod backend;
+pub(crate) mod fjall_reader;
+pub(crate) mod fjall_relations;
+pub(crate) mod read;

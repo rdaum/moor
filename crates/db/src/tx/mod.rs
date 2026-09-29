@@ -21,7 +21,6 @@ mod transaction;
 
 pub use check::{CheckRelation, PotentialConflict, ProposedOp};
 pub use commit_bloom::CommitBloom;
-pub(crate) use indexes::HashRelationIndex;
 pub use indexes::RelationIndex;
 pub use relation::Relation;
 pub(crate) use resolve::Resolution;
@@ -155,6 +154,8 @@ pub(crate) fn make_conflict_info<Domain: RelationDomain>(
 
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum Error {
+    #[error("Incomplete resident index: {0}")]
+    IncompleteIndex(moor_var::Symbol),
     #[error("Duplicate key")]
     Duplicate,
     #[error("Conflict detected: {0}")]

@@ -34,7 +34,7 @@ where
 {
     // Snapshot indexes are normally fully loaded. If that invariant is ever
     // relaxed, absence is not authoritative and exact rebase must fail safe.
-    if !checked.is_provider_fully_loaded() || !winner.is_provider_fully_loaded() {
+    if !checked.is_fully_resident() || !winner.is_fully_resident() {
         return false;
     }
 
@@ -43,122 +43,34 @@ where
     checked_ts == winner_ts
 }
 
-/// Generates database relation boilerplate code.
-///
-/// This macro takes a list of relation definitions and generates all the necessary
-/// boilerplate code including:
-/// - `Relations` wrapper struct with helper methods
-/// - `RelationCheckers` for transaction commit processing
-/// - `WorkingSets` for transaction working sets
-/// - `RelationWorkingSets` for separating caches from working sets
-/// - `WorldStateTransaction` struct definition
-///
-/// # Syntax
-///
-/// ```rust,ignore
-/// define_relations! {
-///     field_name => DomainType, CodomainType,      // Normal relation (primary index only)
-///     field_name == DomainType, CodomainType,      // Bidirectional secondary indexed relation
-///     // ... more relations
-/// }
-/// ```
-///
-/// # Generated Code
-///
-/// For each relation `field_name: Domain => Codomain`, the macro generates:
-/// - A field in the `Relations` struct of type `Relation<Domain, Codomain, FjallProvider<Domain, Codomain>>`
-/// - A field in the `RelationCheckers` struct for commit checking
-/// - A field in the `WorkingSets` struct for transaction working sets
-/// - A field in the `WorldStateTransaction` struct for relation transactions
-///
-/// # Generated Methods
-///
-/// ## Relations
-/// - `init(keyspace, config)` - Initialize all relations from keyspace and config
-/// - `stop_all()` - Stop all relation providers
-/// - `begin_check_all()` - Begin checking phase for all relations
-/// - `start_transaction(...)` - Create a new WorldStateTransaction
-///
-/// ## RelationCheckers
-/// - `check_all(ws)` - Check all relations for conflicts
-/// - `all_clean()` - Check if any relations are dirty
-/// - `apply_all(ws)` - Apply all working sets to relations
-/// - `commit_all(relations)` - Commit all changes with appropriate locking
-///
-/// ## WorkingSets
-/// - `total_tuples()` - Count total tuples across all working sets
-/// - `extract_relation_working_sets()` - Separate relation working sets from caches
-///
-/// # Example
-///
-/// ```rust,ignore
-/// define_relations! {
-///     object_location == Obj, Obj,
-///     object_contents => Obj, ObjSet,
-///     object_flags => Obj, BitEnum<ObjFlag>,
-/// }
-/// ```
-///
-/// This generates all the necessary boilerplate for three relations, eliminating
-/// hundreds of lines of repetitive code that would otherwise need to be maintained
-/// manually.
-///
-/// # Type Aliases
-///
-/// The macro uses `R<Domain, Codomain>` as a type alias for
-/// `Relation<Domain, Codomain, FjallProvider<Domain, Codomain>`.
-///
-/// # Dependencies
-///
-/// The macro requires the `pastey` crate for token concatenation to generate
-/// unique variable names for each relation during initialization.
+/// Generate resident transactions, indexes, and logical mutations from the relation registry.
+/// Storage resources are bound separately by each adapter.
 macro_rules! define_relations {
-    (@seed_relation object_propvalues, $this:expr, $db_path:ident, $committed_ts:ident, $index:ident, $max_timestamp:ident) => {};
-
-    (@seed_relation $field:ident, $this:expr, $db_path:ident, $committed_ts:ident, $index:ident, $max_timestamp:ident) => {
-        let ($index, $max_timestamp) = $this.$field
-            .seeded_index_with_max_timestamp()
-            .map_err(|e| crate::DatabaseOpenError::SeedRelation {
-                path: $db_path.to_path_buf(),
-                relation: stringify!($field),
-                detail: e.to_string(),
-            })?;
-        $committed_ts = $committed_ts.max($max_timestamp);
-    };
-
-    (@change_type object_propvalues, $domain:ty, $codomain:ty) => {
+    (@change_type PropertyValueChain, $domain:ty, $codomain:ty) => {
         Vec<crate::provider::logical::PreparedPropertyValueOp>
     };
-    (@change_type $field:ident, $domain:ty, $codomain:ty) => {
+    (@change_type Ordinary, $domain:ty, $codomain:ty) => {
         crate::tx::WorkingSetTuples<$domain, $codomain>
     };
-    (@prepare_changes object_propvalues, $ws:expr) => {
+    (@prepare_changes PropertyValueChain, $ws:expr) => {
         crate::provider::logical::prepare_property_value_working_set($ws)
     };
-    (@prepare_changes $field:ident, $ws:expr) => { $ws.tuples() };
-
-    (@encode_working_set object_propvalues, $provider:expr, $working_set:expr) => {
-        Ok::<_, crate::tx::Error>($provider.encode_property_value_changes($working_set))
-    };
-
-    (@encode_working_set $field:ident, $provider:expr, $working_set:expr) => {
-        $provider.encode_changes($working_set)
-    };
+    (@prepare_changes Ordinary, $ws:expr) => { $ws.tuples() };
 
     // Entry point: parse all items
     (
         $(
-            $field:ident $arrow:tt $domain:ty, $codomain:ty
+            $field:ident $category:ident $policy:ident $arrow:tt $domain:ty, $codomain:ty
         ),* $(,)?
     ) => {
-        define_relations!(@process [ $( ($field, $domain, $codomain, $arrow) ),* ]);
+        define_relations!(@process [ $( ($field, $domain, $codomain, $arrow, $category, $policy) ),* ]);
     };
 
     // Main processing rule
-    (@process [ $( ($field:ident, $domain:ty, $codomain:ty, $arrow:tt) ),* ]) => {
+    (@process [ $( ($field:ident, $domain:ty, $codomain:ty, $arrow:tt, $category:ident, $policy:ident) ),* ]) => {
         pastey::paste! {
             /// Type alias for Relations to reduce verbosity in macro.
-            type R<Domain, Codomain> = Relation<Domain, Codomain, FjallProvider<Domain, Codomain>>;
+            type R<Domain, Codomain> = Relation<Domain, Codomain>;
 
             /// Stable identifier for a persisted database relation.
             #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -192,7 +104,7 @@ macro_rules! define_relations {
             /// This struct groups all relations together and provides convenience
             /// methods for operations that need to be performed across all relations.
             pub(crate) struct Relations {
-                $( $field: R<$domain, $codomain>, )*
+                $( pub(crate) $field: R<$domain, $codomain>, )*
             }
 
             /// Wrapper struct for relation checkers during transaction commit.
@@ -200,7 +112,7 @@ macro_rules! define_relations {
             /// This struct holds the checking state for all relations during the
             /// commit process, allowing batch operations across all relations.
             pub(crate) struct RelationCheckers {
-                $( $field: Option<CheckRelation<$domain, $codomain, FjallProvider<$domain, $codomain>>>, )*
+                $( $field: Option<CheckRelation<$domain, $codomain>>, )*
             }
 
             #[derive(Clone)]
@@ -247,22 +159,12 @@ macro_rules! define_relations {
                         /// Check all relations for conflicts with the given working sets.
                         ///
                         /// Returns `Ok(())` if all relations pass conflict checking,
-                        /// `Err(ConflictInfo)` if any relation has a conflict.
-                        fn check_all(&mut self, ws: &mut RelationWorkingSets) -> Result<(), moor_common::model::ConflictInfo> {
+                        /// An invariant error is distinct from a retryable conflict.
+                        fn check_all(&mut self, ws: &mut RelationWorkingSets) -> Result<(), crate::tx::Error> {
                             $(
                                 if !ws.$field.is_empty() {
                                     let checker = self.$field.as_mut().expect("nonempty working set must have a checker");
-                                    if let Err(e) = define_relations!(@check_relation $field, checker, ws) {
-                                        if let crate::tx::Error::Conflict(info) = e {
-                                            return Err(info);
-                                        }
-                                        // For other errors, create a generic conflict info
-                                        return Err($crate::tx::make_conflict_info(
-                                            checker.relation_name(),
-                                            &format!("<unknown>"),
-                                            moor_common::model::ConflictType::ConcurrentWrite,
-                                        ));
-                                    }
+                                    define_relations!(@check_relation $policy, $field, checker, ws)?;
                                 }
                             )*
                             Ok(())
@@ -368,7 +270,7 @@ macro_rules! define_relations {
 
                             $(
                                 for key in ws.$field.tuples_ref().keys() {
-                                    if define_relations!(@can_clobber $field, ws, key) {
+                                    if define_relations!(@can_clobber $policy, ws, key) {
                                         continue;
                                     }
                                     if !$crate::engine::relation_defs::relation_key_unchanged(
@@ -442,179 +344,8 @@ macro_rules! define_relations {
             }
 
             impl Relations {
-                /// Initialize all relations from the given keyspace and configuration.
-                ///
-                /// This method creates keyspaces, providers, and relations for each
-                /// defined relation, and seeds them by scanning for existing data.
-                ///
-                /// # Parameters
-                /// - `keyspace`: The fjall database to create keyspaces in
-                /// - `config`: Database configuration containing keyspace options
-                fn init(
-                    keyspace: &fjall::Database,
-                    config: &DatabaseConfig,
-                    db_path: &std::path::Path,
-                ) -> Result<Self, crate::DatabaseOpenError> {
-                    $(
-                        // Create keyspace using field name as keyspace name
-                        let [<$field _partition>] = keyspace
-                            .keyspace(
-                                stringify!($field),
-                                || config
-                                    .$field
-                                    .clone()
-                                    .unwrap_or_default()
-                                    .keyspace_options(),
-                            )
-                            .map_err(|e| crate::DatabaseOpenError::Keyspace {
-                                path: db_path.to_path_buf(),
-                                keyspace: stringify!($field),
-                                detail: e.to_string(),
-                            })?;
-
-                        // Create the provider for this relation keyspace.
-                        let [<$field _provider>] = FjallProvider::new(
-                            stringify!($field),
-                            [<$field _partition>],
-                        );
-
-                        // Create relation with symbolized field name
-                        let [<$field _relation>] = define_relations!(@create_relation $arrow, $field, [<$field _provider>]);
-
-                    )*
-
-                    let relations = Relations {
-                        $( $field: [<$field _relation>], )*
-                    };
-                    Ok(relations)
-                }
-
-                fn snapshot(
-                    &self,
-                    version: u64,
-                    committed_ts: crate::tx::Timestamp,
-                    caches: std::sync::Arc<crate::engine::moor_db::Caches>,
-                    db_path: &std::path::Path,
-                ) -> Result<
-                    (
-                        WorldStateSnapshot,
-                        ahash::AHashMap<
-                            crate::ObjAndUUIDHolder,
-                            crate::provider::property_value_store::PropertyValueChain,
-                        >,
-                    ),
-                    crate::DatabaseOpenError,
-                > {
-                    let mut committed_ts = committed_ts;
-                    let (
-                        object_propvalues_index,
-                        object_propvalues_max_timestamp,
-                        property_value_chains,
-                    ) = self
-                        .object_propvalues
-                        .provider()
-                        .seeded_property_value_index()
-                        .map_err(|e| crate::DatabaseOpenError::SeedRelation {
-                            path: db_path.to_path_buf(),
-                            relation: "object_propvalues",
-                            detail: e.to_string(),
-                        })?;
-                    committed_ts = committed_ts.max(object_propvalues_max_timestamp);
-                    $(
-                        define_relations!(@seed_relation
-                            $field,
-                            self,
-                            db_path,
-                            committed_ts,
-                            [<$field _index>],
-                            [<$field _max_timestamp>]
-                        );
-                    )*
-
-                    Ok((
-                        WorldStateSnapshot {
-                            version,
-                            committed_ts,
-                            caches,
-                            $( $field: std::sync::Arc::from([<$field _index>]), )*
-                            commit_bloom: None,
-                            bloom_since_version: 0,
-                        },
-                        property_value_chains,
-                    ))
-                }
-
-                fn snapshot_with_all_fully_loaded(
-                    &self,
-                    current_root: &std::sync::Arc<WorldStateSnapshot>,
-                ) -> std::sync::Arc<WorldStateSnapshot> {
-                    std::sync::Arc::new(WorldStateSnapshot {
-                        version: current_root.version,
-                        committed_ts: current_root.committed_ts,
-                        caches: current_root.caches.clone(),
-                        $(
-                            $field: {
-                                let mut index = current_root.$field.fork();
-                                index.set_provider_fully_loaded(true);
-                                std::sync::Arc::from(index)
-                            },
-                        )*
-                        commit_bloom: None,
-                        bloom_since_version: 0,
-                    })
-                }
-
-                fn compact_relations(
-                    &self,
-                    relations: &[DatabaseRelation],
-                ) -> Vec<crate::RelationCompactionResult> {
-                    relations
-                        .iter()
-                        .copied()
-                        .map(|relation| match relation {
-                            $(
-                                DatabaseRelation::[<$field:camel>] =>
-                                    crate::provider::fjall_maintenance::major_compact(
-                                        relation,
-                                        self.$field.provider().partition(),
-                                    ),
-                            )*
-                        })
-                        .collect()
-                }
-
-                /// Consume published relation changes into a Fjall commit batch.
-                pub(crate) fn working_sets_to_batch(
-                    &self,
-                    working_sets: RelationChanges,
-                    version: u64,
-                    timestamp: crate::tx::Timestamp,
-                ) -> Result<crate::provider::batch_writer::CommitBatch, crate::tx::Error> {
-                    let mut all_ops = Vec::new();
-                    $(
-                        if !working_sets.$field.is_empty() {
-                            all_ops.extend(
-                                define_relations!(@encode_working_set
-                                    $field,
-                                    self.$field.provider(),
-                                    working_sets.$field
-                                )?,
-                            );
-                        }
-                    )*
-                    Ok(crate::provider::batch_writer::CommitBatch::from_ops(
-                        version,
-                        timestamp,
-                        all_ops,
-                    ))
-                }
-
-                /// Stop all relation providers.
-                ///
-                /// This method stops background processing for all relation providers.
-                /// Should be called during database shutdown.
-                fn stop_all(&self) {
-                    $( self.$field.stop_provider().unwrap(); )*
+                pub(crate) fn init() -> Self {
+                    Self { $( $field: define_relations!(@create_relation $arrow, $field), )* }
                 }
 
                 /// Begin the checking phase for all relations.
@@ -743,7 +474,7 @@ macro_rules! define_relations {
                 /// Database handle used for direct commit processing.
                 pub(crate) db: std::sync::Arc<dyn TransactionContext>,
                 /// Relation transactions for each defined relation
-                $( pub(crate) $field: RelationTransaction<$domain, $codomain, FjallProvider<$domain, $codomain>>, )*
+                $( pub(crate) $field: RelationTransaction<$domain, $codomain>, )*
                 /// Array of sequence counters for object ID generation
                 pub(crate) sequences: Arc<crate::engine::moor_db::SequenceState>,
                 /// Local fork of the verb resolution cache
@@ -759,7 +490,7 @@ macro_rules! define_relations {
             /// A mutation view cannot perform cached resolution while its caches are borrowed.
             pub(crate) struct WorldStateEdit<'a> {
                 // Generate the whole relation view, including relations without cached readers.
-                $( #[allow(dead_code)] pub(crate) $field: &'a mut RelationTransaction<$domain, $codomain, FjallProvider<$domain, $codomain>>, )*
+                $( #[allow(dead_code)] pub(crate) $field: &'a mut RelationTransaction<$domain, $codomain>, )*
                 _invalidation: crate::engine::ws_transaction::edit::EditInvalidation<'a>,
             }
 
@@ -820,14 +551,14 @@ macro_rules! define_relations {
 
             /// Accepted logical mutations, without transaction indexes or backend resources.
             pub(crate) struct RelationChanges {
-                $( pub(crate) $field: define_relations!(@change_type $field, $domain, $codomain), )*
+                $( pub(crate) $field: define_relations!(@change_type $category, $domain, $codomain), )*
             }
 
             impl RelationWorkingSets {
                 /// Prove append candidates and release base indexes before asynchronous encoding.
                 pub(crate) fn into_changes(self) -> RelationChanges {
                     RelationChanges {
-                        $( $field: define_relations!(@prepare_changes $field, self.$field), )*
+                        $( $field: define_relations!(@prepare_changes $category, self.$field), )*
                     }
                 }
             }
@@ -841,9 +572,9 @@ macro_rules! define_relations {
     };
 
     // Only property values can opt out of write-conflict rejection.
-    (@check_relation object_propvalues, $checker:ident, $ws:ident) => {{
+    (@check_relation PropertyPermissions, $field:ident, $checker:ident, $ws:ident) => {{
         let flags = &$ws.object_propflags;
-        $checker.check_with_resolver(&mut $ws.object_propvalues, |conflict: &$crate::tx::PotentialConflict<crate::model::ObjAndUUIDHolder, moor_var::Var>| {
+        $checker.check_with_resolver(&mut $ws.$field, |conflict: &$crate::tx::PotentialConflict<crate::model::ObjAndUUIDHolder, moor_var::Var>| {
             if property_can_clobber(flags, &conflict.domain) {
                 Ok($crate::tx::Resolution::Accept)
             } else {
@@ -851,23 +582,22 @@ macro_rules! define_relations {
             }
         })
     }};
-    (@check_relation $field:ident, $checker:ident, $ws:ident) => {
+    (@check_relation Strict, $field:ident, $checker:ident, $ws:ident) => {
         $checker.check(&mut $ws.$field)
     };
-    (@can_clobber object_propvalues, $ws:ident, $key:ident) => {
+    (@can_clobber PropertyPermissions, $ws:ident, $key:ident) => {
         property_can_clobber(&$ws.object_propflags, $key)
     };
-    (@can_clobber $field:ident, $ws:ident, $key:ident) => { false };
+    (@can_clobber Strict, $ws:ident, $key:ident) => { false };
 
     // Helper rule to create a relation based on arrow type
-    (@create_relation =>, $field:ident, $provider:ident) => {
-        Relation::new(Symbol::mk(stringify!($field)), Arc::new($provider))
+    (@create_relation =>, $field:ident) => {
+        Relation::new(Symbol::mk(stringify!($field)))
     };
 
-    (@create_relation ==, $field:ident, $provider:ident) => {
+    (@create_relation ==, $field:ident) => {
         Relation::new_with_secondary(
-            Symbol::mk(stringify!($field)),
-            Arc::new($provider)
+            Symbol::mk(stringify!($field))
         )
     };
 }

@@ -83,13 +83,13 @@ where
         false
     }
 
-    /// Whether the provider has been fully loaded into this index
-    fn is_provider_fully_loaded(&self) -> bool {
+    /// Whether every tuple in the seed snapshot is resident in this index.
+    fn is_fully_resident(&self) -> bool {
         false
     }
 
-    /// Mark the provider as fully loaded
-    fn set_provider_fully_loaded(&mut self, loaded: bool);
+    /// Set completeness after a successful seed scan.
+    fn set_fully_resident(&mut self, loaded: bool);
 }
 
 /// Hash-based implementation of RelationIndex using imbl::HashMap
@@ -106,8 +106,8 @@ where
     /// Only present if secondary indexing is enabled
     secondary_index: Option<ImblHashMap<Codomain, ImblHashSet<Domain>>>,
 
-    /// Whether the provider has been fully loaded
-    provider_fully_loaded: bool,
+    /// Whether the seed snapshot is fully resident.
+    fully_resident: bool,
 }
 
 // Basic constructor for any Domain that supports Hash
@@ -120,7 +120,7 @@ where
         Self {
             entries: Default::default(),
             secondary_index: None,
-            provider_fully_loaded: false,
+            fully_resident: false,
         }
     }
 }
@@ -135,7 +135,7 @@ where
         Self {
             entries: Default::default(),
             secondary_index: Some(Default::default()),
-            provider_fully_loaded: false,
+            fully_resident: false,
         }
     }
 }
@@ -213,12 +213,12 @@ where
         self.secondary_index.is_some()
     }
 
-    fn is_provider_fully_loaded(&self) -> bool {
-        self.provider_fully_loaded
+    fn is_fully_resident(&self) -> bool {
+        self.fully_resident
     }
 
-    fn set_provider_fully_loaded(&mut self, loaded: bool) {
-        self.provider_fully_loaded = loaded;
+    fn set_fully_resident(&mut self, loaded: bool) {
+        self.fully_resident = loaded;
     }
 }
 
@@ -417,12 +417,12 @@ where
         true
     }
 
-    fn is_provider_fully_loaded(&self) -> bool {
-        self.inner.provider_fully_loaded
+    fn is_fully_resident(&self) -> bool {
+        self.inner.fully_resident
     }
 
-    fn set_provider_fully_loaded(&mut self, loaded: bool) {
-        self.inner.provider_fully_loaded = loaded;
+    fn set_fully_resident(&mut self, loaded: bool) {
+        self.inner.fully_resident = loaded;
     }
 }
 
@@ -445,7 +445,7 @@ mod tests {
 
     fn fully_loaded_index() -> HashRelationIndex<TestDomain, TestCodomain> {
         let mut index = HashRelationIndex::new();
-        index.set_provider_fully_loaded(true);
+        index.set_fully_resident(true);
         index
     }
 

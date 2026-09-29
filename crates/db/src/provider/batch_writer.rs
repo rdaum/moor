@@ -44,9 +44,9 @@ use uuid::Uuid;
 
 use crate::{
     ObjAndUUIDHolder, db_counters,
-    engine::moor_db::Relations,
     engine::property_definitions::PropertyDefinitionChange,
     provider::coordinator::{COMMIT_ADMISSION_CAPACITY, CommitAdmission},
+    provider::fjall_relations::FjallRelations,
     provider::logical::{
         LogicalCommit, PreparedPropertyValueMutation, PreparedPropertyValueOp, SequenceUpdate,
     },
@@ -546,7 +546,7 @@ impl BatchWriter {
         db: fjall::Database,
         sequences_partition: fjall::Keyspace,
         initial_sequences: Vec<i64>,
-        relations: Option<Arc<Relations>>,
+        relations: Option<Arc<FjallRelations>>,
         property_names: AHashMap<Uuid, Symbol>,
         property_value_chains: AHashMap<ObjAndUUIDHolder, PropertyValueChain>,
         property_value_limits: PropertyValueChainLimits,
@@ -640,7 +640,7 @@ impl BatchWriter {
     fn encoder_loop(
         receiver: Receiver<EncoderMsg>,
         sender: Sender<WriterMsg>,
-        relations: Option<Arc<Relations>>,
+        relations: Option<Arc<FjallRelations>>,
     ) -> Result<(), String> {
         let mut encoder = BatchEncoder::new();
         loop {
@@ -1133,7 +1133,7 @@ impl BatchWriter {
     fn encode_logical(
         commit: LogicalCommit,
         encoder: &mut BatchEncoder,
-        relations: &Relations,
+        relations: &FjallRelations,
     ) -> Result<EncodedCommitBatch, String> {
         let LogicalCommit {
             publication,
