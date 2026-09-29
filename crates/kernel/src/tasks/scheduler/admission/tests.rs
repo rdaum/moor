@@ -61,7 +61,7 @@ fn fresh_task_ids_exclude_zero_sentinel() {
 
 #[test]
 fn restored_task_ids_advance_allocator() {
-    let (database, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+    let (database, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
     let tasks = vec![suspended_task(4), suspended_task(81)];
     let scheduler = Scheduler::new(
         semver::Version::new(0, 0, 0),

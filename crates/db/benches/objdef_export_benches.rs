@@ -39,7 +39,7 @@ struct PropertyChainExportContext {
 }
 
 fn create_db() -> TxDB {
-    let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+    let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
     let permissions = TaskPermissions::new(SYSTEM_OBJECT, BitEnum::new());
     let mut tx = db.new_world_state().unwrap();
     let system = tx
@@ -107,7 +107,7 @@ fn create_deep_db() -> TxDB {
 }
 
 fn create_property_chain_db() -> TxDB {
-    let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+    let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
     let permissions = TaskPermissions::new(SYSTEM_OBJECT, BitEnum::new());
     let property = Symbol::mk("history");
     let entry_text = "x".repeat(PROPERTY_CHAIN_ENTRY_BYTES);

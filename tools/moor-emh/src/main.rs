@@ -737,7 +737,7 @@ fn main() -> Result<(), Report> {
     let resolved_db_path = args.resolved_db_path();
     info!("Opening database at {:?}", resolved_db_path);
     let (database, _freshly_made) =
-        TxDB::try_open(Some(&resolved_db_path), DatabaseConfig::default()).map_err(|e| {
+        TxDB::try_open_fjall(&resolved_db_path, DatabaseConfig::default()).map_err(|e| {
             eyre!(
                 "Unable to open database at {}: {e}",
                 resolved_db_path.display()

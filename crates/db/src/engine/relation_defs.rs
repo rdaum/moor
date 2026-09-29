@@ -126,12 +126,23 @@ macro_rules! define_relations {
         $committed_ts = $committed_ts.max($max_timestamp);
     };
 
+    (@change_type object_propvalues, $domain:ty, $codomain:ty) => {
+        Vec<crate::provider::logical::PreparedPropertyValueOp>
+    };
+    (@change_type $field:ident, $domain:ty, $codomain:ty) => {
+        crate::tx::WorkingSetTuples<$domain, $codomain>
+    };
+    (@prepare_changes object_propvalues, $ws:expr) => {
+        crate::provider::logical::prepare_property_value_working_set($ws)
+    };
+    (@prepare_changes $field:ident, $ws:expr) => { $ws.tuples() };
+
     (@encode_working_set object_propvalues, $provider:expr, $working_set:expr) => {
-        Ok::<_, crate::tx::Error>($provider.encode_property_value_working_set($working_set))
+        Ok::<_, crate::tx::Error>($provider.encode_property_value_changes($working_set))
     };
 
     (@encode_working_set $field:ident, $provider:expr, $working_set:expr) => {
-        $provider.encode_working_set($working_set)
+        $provider.encode_changes($working_set)
     };
 
     // Entry point: parse all items
@@ -572,10 +583,10 @@ macro_rules! define_relations {
                         .collect()
                 }
 
-                /// Consume published working sets into a Fjall commit batch.
-                fn working_sets_to_batch(
+                /// Consume published relation changes into a Fjall commit batch.
+                pub(crate) fn working_sets_to_batch(
                     &self,
-                    working_sets: RelationWorkingSets,
+                    working_sets: RelationChanges,
                     version: u64,
                     timestamp: crate::tx::Timestamp,
                 ) -> Result<crate::provider::batch_writer::CommitBatch, crate::tx::Error> {
@@ -804,6 +815,20 @@ macro_rules! define_relations {
                     });
 
                     Ok(ws)
+                }
+            }
+
+            /// Accepted logical mutations, without transaction indexes or backend resources.
+            pub(crate) struct RelationChanges {
+                $( pub(crate) $field: define_relations!(@change_type $field, $domain, $codomain), )*
+            }
+
+            impl RelationWorkingSets {
+                /// Prove append candidates and release base indexes before asynchronous encoding.
+                pub(crate) fn into_changes(self) -> RelationChanges {
+                    RelationChanges {
+                        $( $field: define_relations!(@prepare_changes $field, self.$field), )*
+                    }
                 }
             }
 

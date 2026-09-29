@@ -47,7 +47,7 @@ fn system_permissions() -> TaskPermissions {
 }
 
 fn create_db_with_verbs(inner_verb_code: &str, outer_verb_code: &str) -> TxDB {
-    let (ws_source, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+    let (ws_source, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
     let mut tx = ws_source.new_world_state().unwrap();
 
     let _sysobj = tx

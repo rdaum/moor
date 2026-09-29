@@ -102,7 +102,7 @@ pub fn setup_test_db_with_core() -> (Box<dyn Database>, TempDir) {
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
     let db_path = temp_dir.path().join("test.db");
 
-    let (db, _) = TxDB::try_open(Some(&db_path), DatabaseConfig::default()).unwrap();
+    let (db, _) = TxDB::try_open_fjall(&db_path, DatabaseConfig::default()).unwrap();
     let db = Box::new(db) as Box<dyn Database>;
 
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -165,11 +165,9 @@ where
 
     let (db, temp_dir) = if let Some(core) = core {
         let temp_dir = tempfile::tempdir().unwrap();
-        let (db, _) = TxDB::try_open(
-            Some(&temp_dir.path().join("test.db")),
-            DatabaseConfig::default(),
-        )
-        .unwrap();
+        let (db, _) =
+            TxDB::try_open_fjall(temp_dir.path().join("test.db"), DatabaseConfig::default())
+                .unwrap();
         let mut loader = db.loader_client().unwrap();
         moor_objdef::ObjectDefinitionLoader::new(loader.as_mut())
             .load_objdef_directory(

@@ -136,7 +136,13 @@ mod tests {
 
     #[test]
     fn failed_initial_value_leaves_definition_visible_to_warm_descendant_cache() {
-        let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = MoorDB::try_open(
+            crate::StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            crate::PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let mut tx = db.start_transaction();
         let parent = create(&mut tx, NOTHING);
         let child = create(&mut tx, parent);
@@ -186,7 +192,13 @@ mod tests {
 
     #[test]
     fn failed_property_permissions_do_not_hide_an_earlier_value_write() {
-        let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = MoorDB::try_open(
+            crate::StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            crate::PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let mut tx = db.start_transaction();
         let object = create(&mut tx, NOTHING);
         tx.commit().unwrap();
@@ -206,7 +218,13 @@ mod tests {
 
     #[test]
     fn rename_stays_visible_after_a_later_permissions_error() {
-        let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = MoorDB::try_open(
+            crate::StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            crate::PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let mut tx = db.start_transaction();
         let parent = create(&mut tx, NOTHING);
         let child = create(&mut tx, parent);
@@ -239,7 +257,13 @@ mod tests {
 
     #[test]
     fn permissions_follow_canonical_edits_and_new_ancestry() {
-        let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = MoorDB::try_open(
+            crate::StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            crate::PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let mut tx = db.start_transaction();
         let parent = create(&mut tx, NOTHING);
         let other = create(&mut tx, NOTHING);
@@ -284,7 +308,13 @@ mod tests {
 
     #[test]
     fn no_op_setters_preserve_read_only_commit_and_cache_generations() {
-        let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = MoorDB::try_open(
+            crate::StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            crate::PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let mut tx = db.start_transaction();
         let parent = create(&mut tx, NOTHING);
         let child = create(&mut tx, parent);
@@ -338,7 +368,13 @@ mod tests {
 
     #[test]
     fn renumber_and_removal_invalidate_old_new_and_descendant_entries() {
-        let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = MoorDB::try_open(
+            crate::StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            crate::PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let mut tx = db.start_transaction();
         let parent = create(&mut tx, NOTHING);
         let child = create(&mut tx, parent);
@@ -374,7 +410,13 @@ mod tests {
 
     #[test]
     fn unwind_after_relation_edit_invalidates_cached_ancestry() {
-        let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = MoorDB::try_open(
+            crate::StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            crate::PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let mut tx = db.start_transaction();
         let parent = create(&mut tx, NOTHING);
         let other = create(&mut tx, NOTHING);

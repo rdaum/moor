@@ -44,12 +44,17 @@ pub use cache::{ANCESTRY_CACHE_STATS, PROP_CACHE_STATS, VERB_CACHE_STATS};
 pub use cache::{
     ancestry_cache::AncestryCache, prop_cache::PropResolutionCache, verb_cache::VerbResolutionCache,
 };
-pub use config::{DatabaseConfig, TableConfig};
+pub use config::{
+    AdmissionPolicy, DatabaseConfig, FjallStorageConfig, PersistenceConfig, StorageConfig,
+    TableConfig,
+};
 pub use model::{
     AnonymousObjectMetadata, BytesHolder, EntityMetadataKey, ObjAndUUIDHolder, StringHolder,
     SystemTimeHolder, UUIDHolder,
 };
 pub use provider::Provider;
+pub use provider::coordinator::PersistenceStatus;
+pub use provider::logical::{PersistenceError, PersistenceReceipt, PublicationId, WriterEpoch};
 pub use tx::{
     CheckRelation, ConflictResolver, Error, FailOnConflict, PotentialConflict, ProposedOp,
     Relation, RelationCodomain, RelationCodomainHashable, RelationDomain, RelationIndex,
@@ -205,12 +210,65 @@ pub struct TxDB {
 }
 
 impl TxDB {
+    /// Open a database with an explicit storage backend and persistence policy.
     pub fn try_open(
-        path: Option<&Path>,
+        storage: StorageConfig,
+        database_config: DatabaseConfig,
+        persistence: PersistenceConfig,
+    ) -> Result<(Self, bool), DatabaseOpenError> {
+        let (storage, fresh) = MoorDB::try_open(storage, database_config, persistence)?;
+        Ok((Self { storage }, fresh))
+    }
+
+    /// Open a Fjall world at `path` with the default persistence policy.
+    pub fn try_open_fjall(
+        path: impl AsRef<Path>,
         database_config: DatabaseConfig,
     ) -> Result<(Self, bool), DatabaseOpenError> {
-        let (storage, fresh) = MoorDB::try_open(path, database_config)?;
-        Ok((Self { storage }, fresh))
+        Self::try_open(
+            StorageConfig::fjall(path.as_ref()),
+            database_config,
+            PersistenceConfig::default(),
+        )
+    }
+
+    /// Open a temporary Fjall world with the default persistence policy.
+    pub fn try_open_temporary(
+        database_config: DatabaseConfig,
+    ) -> Result<(Self, bool), DatabaseOpenError> {
+        Self::try_open(
+            StorageConfig::temporary_fjall(),
+            database_config,
+            PersistenceConfig::default(),
+        )
+    }
+
+    /// Capture the current published world. The token is valid only for this database open.
+    pub fn publication(&self) -> PublicationId {
+        self.storage.publication()
+    }
+
+    /// Read the current persistence progress, admission usage, and writer health.
+    pub fn persistence_status(&self) -> PersistenceStatus {
+        self.storage.persistence_status()
+    }
+
+    /// Wait for application through a captured publication, without requesting a durable flush.
+    pub fn wait_applied(
+        &self,
+        publication: PublicationId,
+        timeout: Duration,
+    ) -> Result<PersistenceReceipt, PersistenceError> {
+        self.storage.wait_applied(publication, timeout)
+    }
+
+    /// Establish a local durable fence through a captured publication.
+    pub fn wait_durable(
+        &self,
+        publication: PublicationId,
+        timeout: Duration,
+    ) -> Result<PersistenceReceipt, PersistenceError> {
+        self.storage.wait_durable(publication, timeout)
     }
 
     /// Mark all relations as fully loaded from their backing providers.
@@ -219,13 +277,44 @@ impl TxDB {
         self.storage.mark_all_fully_loaded();
     }
 
-    /// Wait until the current published state has been committed into Fjall.
+    /// Wait until the current published state has been applied to storage.
     ///
     /// This does not request an fsync or wait for LSM maintenance.
     pub fn wait_for_persistence(&self) -> Result<(), WorldStateError> {
         self.storage
             .wait_for_persistence()
             .map_err(WorldStateError::DatabaseError)
+    }
+
+    /// Deadline-bounded variant of [`Self::wait_for_persistence`].
+    pub fn wait_for_persistence_with_deadline(
+        &self,
+        deadline: Duration,
+    ) -> Result<(), WorldStateError> {
+        self.storage
+            .wait_for_persistence_with_deadline(deadline)
+            .map_err(WorldStateError::DatabaseError)
+    }
+
+    /// Wait until the current published state has crossed the local durable-storage fence.
+    pub fn wait_for_durability(&self, deadline: Duration) -> Result<(), WorldStateError> {
+        self.storage
+            .wait_for_durability(deadline)
+            .map_err(WorldStateError::DatabaseError)
+    }
+
+    /// Create a snapshot with an explicit acquisition deadline.
+    ///
+    /// The deadline covers the applied barrier, queue submission, and snapshot receipt. Unlike
+    /// [`Self::wait_for_persistence_with_deadline`], a returned snapshot is not silently expired
+    /// halfway through an export; query deadlines are the loader's own responsibility.
+    pub fn create_snapshot_with_timeout(
+        &self,
+        timeout: Duration,
+    ) -> Result<Box<dyn SnapshotInterface>, WorldStateError> {
+        self.storage
+            .create_snapshot_with_timeout(timeout)
+            .map_err(|error| WorldStateError::DatabaseError(error.to_string()))
     }
 }
 

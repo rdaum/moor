@@ -13,7 +13,7 @@
 
 //! Own workers from startup through ordered shutdown, including partial startup.
 
-use super::{EncoderMsg, RollupMsg, WriterMsg};
+use super::{EncoderMsg, RollupMsg, WriterMsg, remaining};
 use flume::Sender;
 use parking_lot::{Condvar, Mutex};
 use std::{
@@ -22,6 +22,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread::JoinHandle,
+    time::{Duration, Instant},
 };
 use tracing::error;
 
@@ -70,33 +71,73 @@ impl WorkerGroup {
         self.rollup = Some(handle);
     }
 
-    fn shutdown(mut self) -> Result<(), String> {
-        self.stop_and_join()
+    #[cfg(test)]
+    fn shutdown(self) -> Result<(), String> {
+        self.shutdown_until(Instant::now() + Duration::from_secs(30))
     }
 
-    fn stop_and_join(&mut self) -> Result<(), String> {
+    fn shutdown_until(mut self, deadline: Instant) -> Result<(), String> {
+        self.stop_and_join(Some(deadline))
+    }
+
+    fn stop_and_join(&mut self, deadline: Option<Instant>) -> Result<(), String> {
         let mut first_error = None;
         for _ in 0..self.encoders.len() {
-            self.encoder_sender.send(EncoderMsg::Stop).ok();
+            if self
+                .encoder_sender
+                .send_timeout(EncoderMsg::Stop, remaining(deadline))
+                .is_err()
+            {
+                first_error
+                    .get_or_insert("failed to stop encoders before shutdown deadline".to_string());
+                break;
+            }
         }
         for handle in self.encoders.drain(..) {
-            join(handle, "batch encoder", &mut first_error);
+            join(handle, "batch encoder", deadline, &mut first_error);
         }
         // The writer can finish its drain only after every encoder has sent its output.
         self.kill_switch.store(true, Ordering::SeqCst);
         if let Some(handle) = self.writer.take() {
-            join(handle, "batch writer", &mut first_error);
+            join(handle, "batch writer", deadline, &mut first_error);
         }
         // Foreground rollups remain available until the writer has finished.
         if let Some(handle) = self.rollup.take() {
-            self.rollup_sender.send(RollupMsg::Stop).ok();
-            join(handle, "property-value rollup encoder", &mut first_error);
+            if self
+                .rollup_sender
+                .send_timeout(RollupMsg::Stop, remaining(deadline))
+                .is_err()
+            {
+                first_error.get_or_insert(
+                    "failed to stop rollup encoder before shutdown deadline".to_string(),
+                );
+            }
+            join(
+                handle,
+                "property-value rollup encoder",
+                deadline,
+                &mut first_error,
+            );
         }
         first_error.map_or(Ok(()), Err)
     }
 }
 
-fn join(handle: WorkerHandle, name: &str, first_error: &mut Option<String>) {
+fn join(
+    handle: WorkerHandle,
+    name: &str,
+    deadline: Option<Instant>,
+    first_error: &mut Option<String>,
+) {
+    while !handle.is_finished() {
+        if remaining(deadline).is_zero() {
+            first_error.get_or_insert_with(|| {
+                format!("{name} thread did not stop before the persistence shutdown deadline")
+            });
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(1));
+    }
     let result = handle
         .join()
         .unwrap_or_else(|_| Err(format!("{name} thread panicked")));
@@ -107,7 +148,8 @@ fn join(handle: WorkerHandle, name: &str, first_error: &mut Option<String>) {
 
 impl Drop for WorkerGroup {
     fn drop(&mut self) {
-        if let Err(error) = self.stop_and_join() {
+        if let Err(error) = self.stop_and_join(Instant::now().checked_add(Duration::from_secs(30)))
+        {
             error!("Failed to stop batch writer workers: {error}");
         }
     }
@@ -132,13 +174,28 @@ impl Workers {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn stop(&self) -> Result<(), String> {
+        self.stop_until(Instant::now() + Duration::from_secs(30))
+    }
+
+    pub(super) fn stop_until(&self, deadline: Instant) -> Result<(), String> {
         let group = {
-            let mut state = self.state.lock();
+            let Some(mut state) = self.state.try_lock_for(remaining(Some(deadline))) else {
+                return Err("timed out waiting for persistence shutdown".to_string());
+            };
             loop {
                 match &*state {
                     WorkerState::Stopped(result) => return result.clone(),
-                    WorkerState::Stopping => self.stopped.wait(&mut state),
+                    WorkerState::Stopping => {
+                        if self
+                            .stopped
+                            .wait_for(&mut state, remaining(Some(deadline)))
+                            .timed_out()
+                        {
+                            return Err("timed out waiting for persistence shutdown".to_string());
+                        }
+                    }
                     WorkerState::Running(_) => {
                         let WorkerState::Running(group) =
                             std::mem::replace(&mut *state, WorkerState::Stopping)
@@ -151,7 +208,7 @@ impl Workers {
             }
         };
         // One caller owns all joins; other callers wait without holding this mutex.
-        let result = group.shutdown();
+        let result = group.shutdown_until(deadline);
         *self.state.lock() = WorkerState::Stopped(result.clone());
         self.stopped.notify_all();
         result

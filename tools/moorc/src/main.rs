@@ -14,6 +14,7 @@
 #![recursion_limit = "256"]
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 mod feature_args;
+mod persistence_probe;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod testrun;
 
@@ -181,6 +182,10 @@ pub struct Args {
         help = "Arguments to pass to test verbs, as a MOO literal (e.g., '{300}' or '300' for a single value)"
     )]
     test_args: Option<String>,
+
+    #[clap(long, value_parser = clap::value_parser!(u16).range(1..),
+        help = "Run each test verb in N phases, appending phase number and previous result to its arguments; wait for application and durability between phases")]
+    test_phases: Option<u16>,
 }
 
 fn emit_objdef_compile_error(
@@ -391,8 +396,10 @@ fn main() -> Result<(), eyre::Report> {
         _temp_dir_guard.path()
     };
 
-    let (database, _) = TxDB::try_open(Some(db_path), DatabaseConfig::default())
+    let (database, _) = TxDB::try_open_fjall(db_path, DatabaseConfig::default())
         .map_err(|e| eyre::eyre!("Unable to open database at {}: {e}", db_path.display()))?;
+    // Retain a handle for persistence boundaries around test/benchmark runs.
+    let persistence_handle = database.clone();
     let mut loader_interface = match database.loader_client() {
         Ok(loader) => loader,
         Err(e) => {
@@ -563,6 +570,14 @@ fn main() -> Result<(), eyre::Report> {
 
     let tasks_db = Box::new(NoopTasksDb {});
     let test_version = semver::Version::new(0, 1, 0);
+
+    // Qualification boundary: ensure the imported world has applied to storage before tests or
+    // benchmark producers run, so seed work cannot bleed into the measured section.
+    persistence_handle
+        .wait_for_persistence_with_deadline(Duration::from_secs(args.test_timeout.max(60)))
+        .map_err(|e| eyre!("Initial world state did not apply to storage: {e}"))?;
+    info!("Initial world state applied before test run");
+
     let db = Box::new(database);
 
     // If running integration tests, we need to create a scratch property on #0 that is used for tests to stick transient
@@ -697,77 +712,116 @@ fn main() -> Result<(), eyre::Report> {
         'outer: for (o, verb) in unit_tests {
             let test_name = format!("{o}:{verb}");
             info!("Running {}:{}....", o, verb);
-            let session = test_session_factory
-                .clone()
-                .mk_background_session(&test_task_player)
-                .expect("Failed to create session");
-            let handle = scheduler_client
-                .submit_verb_task(
-                    &test_task_player,
-                    &ObjectRef::Id(o),
-                    verb,
-                    test_args_list.clone(),
-                    "".into(),
-                    &wizard,
-                    session,
-                )
-                .expect("Failed to submit task");
-            let result_value = loop {
-                let result = match handle
-                    .receiver()
-                    .recv_timeout(Duration::from_secs(args.test_timeout))
-                {
-                    Ok(result) => result,
-                    Err(e) => {
-                        let failure = format!("timed out after {}s: {e}", args.test_timeout);
-                        error!("Test {test_name} {failure}");
+            let mut previous_result = moor_var::v_none();
+            for phase in 1..=args.test_phases.unwrap_or(1) {
+                let _probe = args.test_phases.map(|_| {
+                    persistence_probe::PersistenceProbe::start(
+                        persistence_handle.clone(),
+                        test_name.clone(),
+                        phase,
+                    )
+                });
+                let phase_args = if args.test_phases.is_some() {
+                    let mut values: Vec<_> = test_args_list.iter().collect();
+                    values.extend([v_int(i64::from(phase)), previous_result.clone()]);
+                    List::mk_list(&values)
+                } else {
+                    test_args_list.clone()
+                };
+                let session = test_session_factory
+                    .clone()
+                    .mk_background_session(&test_task_player)
+                    .expect("Failed to create session");
+                let handle = scheduler_client
+                    .submit_verb_task(
+                        &test_task_player,
+                        &ObjectRef::Id(o),
+                        verb,
+                        phase_args,
+                        "".into(),
+                        &wizard,
+                        session,
+                    )
+                    .expect("Failed to submit task");
+                let result_value = loop {
+                    let result = match handle
+                        .receiver()
+                        .recv_timeout(Duration::from_secs(args.test_timeout))
+                    {
+                        Ok(result) => result,
+                        Err(e) => {
+                            let failure = format!("timed out after {}s: {e}", args.test_timeout);
+                            error!("Test {test_name} {failure}");
+                            test_failures.push(TestFailure {
+                                test: test_name,
+                                failure,
+                            });
+                            continue 'outer;
+                        }
+                    };
+                    match result {
+                        (_, Ok(TaskNotification::Result(rv))) => break rv,
+                        (_, Ok(TaskNotification::Suspended)) => continue,
+                        (_, Err(e)) => match e {
+                            SchedulerError::TaskAbortedException(e) => {
+                                let failure = format!("aborted: {}", e.error);
+                                error!("Test {test_name} {failure}");
+                                for l in e.backtrace {
+                                    let Some(s) = l.as_string() else {
+                                        continue;
+                                    };
+                                    error!("{s}");
+                                }
+                                test_failures.push(TestFailure {
+                                    test: test_name,
+                                    failure,
+                                });
+                                continue 'outer;
+                            }
+                            _ => {
+                                let failure = format!("failed: {e:?}");
+                                error!("Test {test_name} {failure}");
+                                test_failures.push(TestFailure {
+                                    test: test_name,
+                                    failure,
+                                });
+                                continue 'outer;
+                            }
+                        },
+                    }
+                };
+                // Result must be non-Error
+                if let Some(e) = result_value.as_error() {
+                    let failure = format!("returned error: {e:?}");
+                    error!("Test {test_name} {failure}");
+                    test_failures.push(TestFailure {
+                        test: test_name,
+                        failure,
+                    });
+                    continue 'outer;
+                }
+                previous_result = result_value;
+                if args.test_phases.is_some() {
+                    let started = std::time::Instant::now();
+                    let applied = persistence_handle
+                        .wait_for_persistence_with_deadline(Duration::from_secs(args.test_timeout));
+                    let applied_seconds = started.elapsed().as_secs_f64();
+                    let started = std::time::Instant::now();
+                    let durable = applied.as_ref().map_err(|e| e.to_string()).and_then(|_| {
+                        persistence_handle
+                            .wait_for_durability(Duration::from_secs(args.test_timeout))
+                            .map_err(|e| e.to_string())
+                    });
+                    let durable_seconds = started.elapsed().as_secs_f64();
+                    info!(%test_name, phase, applied_seconds, durable_seconds, "PERSISTENCE_BOUNDARY");
+                    if let Err(error) = durable {
                         test_failures.push(TestFailure {
                             test: test_name,
-                            failure,
+                            failure: format!("phase {phase} persistence: {error}"),
                         });
                         continue 'outer;
                     }
-                };
-                match result {
-                    (_, Ok(TaskNotification::Result(rv))) => break rv,
-                    (_, Ok(TaskNotification::Suspended)) => continue,
-                    (_, Err(e)) => match e {
-                        SchedulerError::TaskAbortedException(e) => {
-                            let failure = format!("aborted: {}", e.error);
-                            error!("Test {test_name} {failure}");
-                            for l in e.backtrace {
-                                let Some(s) = l.as_string() else {
-                                    continue;
-                                };
-                                error!("{s}");
-                            }
-                            test_failures.push(TestFailure {
-                                test: test_name,
-                                failure,
-                            });
-                            continue 'outer;
-                        }
-                        _ => {
-                            let failure = format!("failed: {e:?}");
-                            error!("Test {test_name} {failure}");
-                            test_failures.push(TestFailure {
-                                test: test_name,
-                                failure,
-                            });
-                            continue 'outer;
-                        }
-                    },
                 }
-            };
-            // Result must be non-Error
-            if let Some(e) = result_value.as_error() {
-                let failure = format!("returned error: {e:?}");
-                error!("Test {test_name} {failure}");
-                test_failures.push(TestFailure {
-                    test: test_name,
-                    failure,
-                });
-                continue;
             }
             info!("Test {}:{} passed", o, verb);
         }

@@ -30,6 +30,7 @@ HISTORY_SETTLE_SECONDS ?= 5
 HISTORY_APPEND_WIDTH ?= 1
 HISTORY_MUTATION_MODE ?= 0
 HISTORY_TIMEOUT ?= 360
+HISTORY_PHASES ?=
 FANOUT ?= 4
 CHECKS_PER_TICK ?= 2
 STATE_WRITES ?= 4
@@ -64,7 +65,7 @@ bench-write-stress: check-sources
 
 bench-string-history: check-sources
 	$(CORE_COMPILER) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
-	--test-wizard=2 --run-tests true --test-filter "#668:test_string_history_append" --test-timeout $(HISTORY_TIMEOUT) --test-args "{$(HISTORY_WRITERS), $(HISTORY_ENTRIES), $(HISTORY_ENTRY_BYTES), $(HISTORY_APPENDS), $(HISTORY_APPEND_DELAY), $(HISTORY_SETTLE_SECONDS), $(HISTORY_APPEND_WIDTH), $(HISTORY_MUTATION_MODE)}"
+	--test-wizard=2 --run-tests true --test-filter "#668:test_string_history_append" $(if $(HISTORY_PHASES),--test-phases $(HISTORY_PHASES)) --test-timeout $(HISTORY_TIMEOUT) --test-args "{$(HISTORY_WRITERS), $(HISTORY_ENTRIES), $(HISTORY_ENTRY_BYTES), $(HISTORY_APPENDS), $(HISTORY_APPEND_DELAY), $(HISTORY_SETTLE_SECONDS), $(HISTORY_APPEND_WIDTH), $(HISTORY_MUTATION_MODE)}"
 
 bench-combat-stress: check-sources
 	$(CORE_COMPILER) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \

@@ -22,7 +22,7 @@ use moor_var::{NOTHING, SYSTEM_OBJECT, Symbol, v_float, v_obj};
 
 #[test]
 fn commit_queue_policy_loads_from_server_options() {
-    let (database, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+    let (database, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
     let mut tx = database.new_world_state().unwrap();
     let system = tx
         .create_object(

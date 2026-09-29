@@ -13,6 +13,10 @@
 
 use fjall::KeyspaceCreateOptions;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use std::time::Duration;
+
+use crate::{DEFAULT_COMMIT_QUEUE_TIMEOUT, DEFAULT_COMMIT_QUEUE_WARN};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -62,6 +66,70 @@ impl Default for DatabaseConfig {
             object_last_move: None,
             anonymous_object_metadata: None,
         }
+    }
+}
+
+/// How long a transaction may wait for a persistence admission permit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AdmissionPolicy {
+    /// Log a warning once a wait has lasted this long.
+    pub warn_after: Duration,
+    /// Reject the commit once a wait has lasted this long.
+    pub timeout: Duration,
+}
+
+impl Default for AdmissionPolicy {
+    fn default() -> Self {
+        Self {
+            warn_after: DEFAULT_COMMIT_QUEUE_WARN,
+            timeout: DEFAULT_COMMIT_QUEUE_TIMEOUT,
+        }
+    }
+}
+
+/// Backend-independent persistence lifecycle configuration.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PersistenceConfig {
+    pub admission: AdmissionPolicy,
+    /// Finite deadline for draining and stopping persistence workers.
+    pub shutdown_timeout: Duration,
+}
+
+impl Default for PersistenceConfig {
+    fn default() -> Self {
+        Self {
+            admission: AdmissionPolicy::default(),
+            shutdown_timeout: Duration::from_secs(30),
+        }
+    }
+}
+
+/// Fjall storage selection.
+#[derive(Clone, Debug)]
+pub struct FjallStorageConfig {
+    /// Database directory, or `None` for a temporary directory.
+    pub path: Option<PathBuf>,
+}
+
+/// Selects the compiled-in persistence backend and its storage location.
+#[derive(Clone, Debug)]
+pub enum StorageConfig {
+    Fjall(FjallStorageConfig),
+}
+
+impl StorageConfig {
+    /// Select a Fjall database at `path`.
+    #[must_use]
+    pub fn fjall(path: impl Into<PathBuf>) -> Self {
+        Self::Fjall(FjallStorageConfig {
+            path: Some(path.into()),
+        })
+    }
+
+    /// Select a temporary Fjall database.
+    #[must_use]
+    pub fn temporary_fjall() -> Self {
+        Self::Fjall(FjallStorageConfig { path: None })
     }
 }
 

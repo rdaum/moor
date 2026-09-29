@@ -1,0 +1,391 @@
+--- a/tools/moorc/src/main.rs
++++ b/tools/moorc/src/main.rs
+@@ -14,6 +14,7 @@
+ #![recursion_limit = "256"]
+ #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+ mod feature_args;
++mod persistence_probe;
+ #[cfg_attr(coverage_nightly, coverage(off))]
+ mod testrun;
+
+@@ -161,6 +162,10 @@
+         help = "Arguments to pass to test verbs, as a MOO literal (e.g., '{300}' or '300' for a single value)"
+     )]
+     test_args: Option<String>,
++
++    #[clap(long, value_parser = clap::value_parser!(u16).range(1..),
++        help = "Run each test verb in N phases, appending phase number and previous result to its arguments; wait for application and durability between phases")]
++    test_phases: Option<u16>,
+ }
+
+ fn emit_objdef_compile_error(
+@@ -366,6 +371,8 @@
+
+     let (database, _) = TxDB::try_open(Some(db_path), DatabaseConfig::default())
+         .map_err(|e| eyre::eyre!("Unable to open database at {}: {e}", db_path.display()))?;
++    // Retain a handle for persistence boundaries around test/benchmark runs.
++    let persistence_handle = database.clone();
+     let mut loader_interface = match database.loader_client() {
+         Ok(loader) => loader,
+         Err(e) => {
+@@ -524,6 +531,14 @@
+
+     let tasks_db = Box::new(NoopTasksDb {});
+     let test_version = semver::Version::new(0, 1, 0);
++
++    // Qualification boundary: ensure the imported world has applied to storage before tests or
++    // benchmark producers run, so seed work cannot bleed into the measured section.
++    persistence_handle
++        .wait_for_persistence()
++        .map_err(|e| eyre!("Initial world state did not apply to storage: {e}"))?;
++    info!("Initial world state applied before test run");
++
+     let db = Box::new(database);
+
+     // If running integration tests, we need to create a scratch property on #0 that is used for tests to stick transient
+@@ -658,6 +673,20 @@
+         'outer: for (o, verb) in unit_tests {
+             let test_name = format!("{o}:{verb}");
+             info!("Running {}:{}....", o, verb);
++            let mut previous_result = moor_var::v_none();
++            for phase in 1..=args.test_phases.unwrap_or(1) {
++                let _probe = args.test_phases.map(|_| {
++                    persistence_probe::PersistenceProbe::start(
++                        persistence_handle.clone(), test_name.clone(), phase,
++                    )
++                });
++            let phase_args = if args.test_phases.is_some() {
++                let mut values: Vec<_> = test_args_list.iter().collect();
++                values.extend([v_int(i64::from(phase)), previous_result.clone()]);
++                List::mk_list(&values)
++            } else {
++                test_args_list.clone()
++            };
+             let session = test_session_factory
+                 .clone()
+                 .mk_background_session(&test_task_player)
+@@ -667,7 +696,7 @@
+                     &test_task_player,
+                     &ObjectRef::Id(o),
+                     verb,
+-                    test_args_list.clone(),
++                    phase_args,
+                     "".into(),
+                     &wizard,
+                     session,
+@@ -728,7 +757,24 @@
+                     test: test_name,
+                     failure,
+                 });
+-                continue;
++                continue 'outer;
++            }
++            previous_result = result_value;
++            if args.test_phases.is_some() {
++                let started = std::time::Instant::now();
++                let applied = persistence_handle.wait_for_persistence();
++                let applied_seconds = started.elapsed().as_secs_f64();
++                let started = std::time::Instant::now();
++                let durable = applied.as_ref().map_err(|e| e.to_string()).and_then(|_| {
++                    persistence_handle.wait_for_durability_for_benchmark().map_err(|e| e.to_string())
++                });
++                let durable_seconds = started.elapsed().as_secs_f64();
++                info!(%test_name, phase, applied_seconds, durable_seconds, "PERSISTENCE_BOUNDARY");
++                if let Err(error) = durable {
++                    test_failures.push(TestFailure { test: test_name, failure: format!("phase {phase} persistence: {error}") });
++                    continue 'outer;
++                }
++            }
+             }
+             info!("Test {}:{} passed", o, verb);
+         }
+--- /dev/null
++++ b/tools/moorc/src/persistence_probe.rs
+@@ -0,0 +1,56 @@
++// Copyright (C) 2026 Ryan Daum <ryan.daum@gmail.com> This program is free
++// software: you can redistribute it and/or modify it under the terms of the GNU
++// Affero General Public License as published by the Free Software Foundation,
++// version 3.
++//
++// This program is distributed in the hope that it will be useful, but WITHOUT
++// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
++// FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
++// details.
++//
++// You should have received a copy of the GNU Affero General Public License along
++// with this program. If not, see <https://www.gnu.org/licenses/>.
++
++//! Sample persistence occupancy during explicitly phased benchmark tests.
++
++use moor_db::TxDB;
++use std::{sync::mpsc, thread::JoinHandle, time::Duration};
++
++pub struct PersistenceProbe {
++    stop: mpsc::Sender<()>,
++    worker: Option<JoinHandle<()>>,
++}
++
++impl PersistenceProbe {
++    pub fn start(db: TxDB, test: String, phase: u16) -> Self {
++        let (stop, receiver) = mpsc::channel();
++        let worker = std::thread::spawn(move || {
++            let mut max_outstanding = 0;
++            let mut max_unapplied = 0;
++            let mut samples = 0_u64;
++            loop {
++                let status = db.persistence_status();
++                max_outstanding = max_outstanding.max(status.outstanding);
++                max_unapplied = max_unapplied.max(status.published.saturating_sub(status.applied));
++                samples += 1;
++                if !matches!(
++                    receiver.recv_timeout(Duration::from_millis(1)),
++                    Err(mpsc::RecvTimeoutError::Timeout)
++                ) {
++                    break;
++                }
++            }
++            tracing::info!(%test, phase, samples, max_outstanding, max_unapplied, "PERSISTENCE_OCCUPANCY");
++        });
++        Self { stop, worker: Some(worker) }
++    }
++}
++
++impl Drop for PersistenceProbe {
++    fn drop(&mut self) {
++        let _ = self.stop.send(());
++        if let Some(worker) = self.worker.take() {
++            let _ = worker.join();
++        }
++    }
++}
+--- a/crates/db/src/lib.rs
++++ b/crates/db/src/lib.rs
+@@ -204,13 +204,29 @@
+     storage: Arc<MoorDB>,
+ }
+
++pub struct PersistenceStatus {
++    pub published: u64,
++    pub applied: u64,
++    pub outstanding: usize,
++}
++
+ impl TxDB {
++    pub fn persistence_status(&self) -> PersistenceStatus {
++        self.storage.persistence_status_for_benchmark()
++    }
++
+     pub fn try_open(
+         path: Option<&Path>,
+         database_config: DatabaseConfig,
+     ) -> Result<(Self, bool), DatabaseOpenError> {
+         let (storage, fresh) = MoorDB::try_open(path, database_config)?;
+         Ok((Self { storage }, fresh))
++    }
++
++    /// Explicit benchmark fence; ordinary commits retain their original policy.
++    pub fn wait_for_durability_for_benchmark(&self) -> Result<(), WorldStateError> {
++        self.wait_for_persistence()?;
++        self.storage.flush_for_benchmark().map_err(WorldStateError::DatabaseError)
+     }
+
+     /// Mark all relations as fully loaded from their backing providers.
+--- a/crates/db/src/engine/moor_db.rs
++++ b/crates/db/src/engine/moor_db.rs
+@@ -227,6 +227,14 @@
+ }
+
+ impl MoorDB {
++    pub fn persistence_status_for_benchmark(&self) -> crate::PersistenceStatus {
++        crate::PersistenceStatus {
++            published: self.snapshot_planes.load_root().version,
++            applied: self.batch_writer.completed_version(),
++            outstanding: self.batch_writer.outstanding_for_benchmark(),
++        }
++    }
++
+     pub(crate) fn set_commit_queue_policy(&self, warn_after: Duration, timeout: Duration) {
+         self.batch_writer
+             .set_commit_queue_policy(warn_after, timeout);
+@@ -268,6 +276,10 @@
+     pub fn wait_for_persistence(&self) -> Result<(), String> {
+         let published_version = self.snapshot_planes.load_root().version;
+         self.batch_writer.wait_for_version(published_version)
++    }
++
++    pub fn flush_for_benchmark(&self) -> Result<(), String> {
++        self.keyspace.persist(fjall::PersistMode::SyncAll).map_err(|e| e.to_string())
+     }
+
+     /// Create a transaction bound to the current published snapshot.
+--- a/crates/db/src/provider/batch_writer.rs
++++ b/crates/db/src/provider/batch_writer.rs
+@@ -648,6 +648,10 @@
+ const ENCODE_WARNING_DURATION: Duration = Duration::from_secs(1);
+
+ impl BatchWriter {
++    pub fn outstanding_for_benchmark(&self) -> usize {
++        self.admission.capacity.saturating_sub(self.admission.available.len())
++    }
++
+     #[cfg(test)]
+     pub fn new(db: fjall::Database) -> Self {
+         Self::with_property_names(db, AHashMap::new())
+--- /dev/null
++++ b/crates/db/examples/persistence_baseline.rs
+@@ -0,0 +1,155 @@
++// Copyright (C) 2026 Ryan Daum <ryan.daum@gmail.com> This program is free
++// software: you can redistribute it and/or modify it under the terms of the GNU
++// Affero General Public License as published by the Free Software Foundation,
++// version 3.
++//
++// This program is distributed in the hope that it will be useful, but WITHOUT
++// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
++// FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
++// details.
++//
++// You should have received a copy of the GNU Affero General Public License along
++// with this program. If not, see <https://www.gnu.org/licenses/>.
++
++//! Foreground publication and applied-drain baseline. Run with THREADS COMMITS_PER_THREAD.
++//! Each worker writes its own property; shared roots still exercise CAS publication/rebase.
++
++use moor_common::{
++    model::{
++        CommitResult, ObjFlag, ObjectKind, PropFlag, TaskPermissions, WorldStateCountOp,
++        WorldStateSource,
++    },
++    threading::{spawn_worker_perf, worker_performance_core_ids},
++    util::BitEnum,
++};
++use moor_db::{Database, DatabaseConfig, TxDB, db_counters};
++use moor_var::{NOTHING, SYSTEM_OBJECT, Symbol, v_int};
++use std::{
++    sync::{Arc, Barrier},
++    time::Instant,
++};
++
++fn main() {
++    let args: Vec<_> = std::env::args().collect();
++    let threads: usize = args.get(1).map_or(4, |s| s.parse().unwrap());
++    let commits: usize = args.get(2).map_or(10_000, |s| s.parse().unwrap());
++    assert!(threads > 0 && commits > 0);
++    println!("worker_performance_cores={:?}", worker_performance_core_ids());
++    let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
++    let db = Arc::new(db);
++    let perms = TaskPermissions::new(SYSTEM_OBJECT, BitEnum::new());
++    let mut seed = db.new_world_state().unwrap();
++    seed.create_object(
++        &perms,
++        &NOTHING,
++        &SYSTEM_OBJECT,
++        ObjFlag::all_flags(),
++        ObjectKind::NextObjid,
++    )
++    .unwrap();
++    for worker in 0..threads {
++        seed.define_property(
++            &perms,
++            &SYSTEM_OBJECT,
++            &SYSTEM_OBJECT,
++            Symbol::mk(&format!("worker_{worker}")),
++            &SYSTEM_OBJECT,
++            PropFlag::rw(),
++            Some(v_int(0)),
++        )
++        .unwrap();
++    }
++    assert!(matches!(
++        seed.commit().unwrap(),
++        CommitResult::Success { .. }
++    ));
++    db.wait_for_persistence().unwrap();
++    let barrier = Arc::new(Barrier::new(threads + 1));
++    let mut workers = Vec::new();
++    for worker in 0..threads {
++        let db = db.clone();
++        let barrier = barrier.clone();
++        workers.push(spawn_worker_perf(format!("persistence-worker-{worker}"), move || {
++            let perms = TaskPermissions::new(SYSTEM_OBJECT, BitEnum::new());
++            let name = Symbol::mk(&format!("worker_{worker}"));
++            let mut samples = Vec::with_capacity(commits);
++            let mut retries = 0;
++            for index in 0..(commits + 1000) {
++                if index == 1000 {
++                    barrier.wait();
++                    barrier.wait();
++                }
++                let started = Instant::now();
++                loop {
++                    let mut tx = db.new_world_state().unwrap();
++                    let _ = tx.retrieve_property(&perms, &SYSTEM_OBJECT, name).unwrap();
++                    tx.update_property(&perms, &SYSTEM_OBJECT, name, &v_int(index as i64))
++                        .unwrap();
++                    match tx.commit().unwrap() {
++                        CommitResult::Success { .. } => break,
++                        CommitResult::ConflictRetry { .. } => retries += 1,
++                    }
++                }
++                if index >= 1000 {
++                    samples.push(started.elapsed().as_nanos() as u64);
++                }
++            }
++            (samples, retries)
++        }).unwrap());
++    }
++    // Workers finish warmup before the measurement starts.
++    barrier.wait();
++    db.wait_for_persistence().unwrap();
++    let admission_waits_before = db_counters()
++        .counters
++        .get(WorldStateCountOp::BatchWriterBackpressure);
++    let started = Instant::now();
++    barrier.wait();
++    let mut samples = Vec::with_capacity(threads * commits);
++    let mut retries = 0;
++    for worker in workers {
++        let (mut values, conflicts) = worker.join().unwrap();
++        samples.append(&mut values);
++        retries += conflicts;
++    }
++    let producer = started.elapsed();
++    let drain = Instant::now();
++    db.wait_for_persistence().unwrap();
++    let applied = drain.elapsed();
++    let admission_waits = db_counters()
++        .counters
++        .get(WorldStateCountOp::BatchWriterBackpressure)
++        - admission_waits_before;
++    samples.sort_unstable();
++    let percentile = |p: usize| samples[(samples.len() - 1) * p / 100];
++    println!(
++        "threads={threads} commits={} producer_seconds={} applied_drain_seconds={} commits_per_second={} p50_ns={} p95_ns={} p99_ns={} retries={retries} admission_waits={admission_waits}",
++        samples.len(),
++        producer.as_secs_f64(),
++        applied.as_secs_f64(),
++        samples.len() as f64 / producer.as_secs_f64(),
++        percentile(50),
++        percentile(95),
++        percentile(99)
++    );
++    // Verify the applied workload through an independent snapshot and the resident transaction.
++    let snapshot = db.create_snapshot().unwrap();
++    let properties = snapshot.get_property_snapshots(&SYSTEM_OBJECT).unwrap();
++    assert_eq!(properties.len(), threads);
++    for property in properties {
++        assert_eq!(property.value, Some(v_int((commits + 999) as i64)));
++    }
++    let tx = db.new_world_state().unwrap();
++    for worker in 0..threads {
++        assert_eq!(
++            tx.retrieve_property(
++                &perms,
++                &SYSTEM_OBJECT,
++                Symbol::mk(&format!("worker_{worker}"))
++            )
++            .unwrap(),
++            v_int((commits + 999) as i64)
++        );
++    }
++    drop(tx);
++}

@@ -497,7 +497,14 @@ fn apply_mixed_batch(ctx: &mut ApplyContext, chunk_size: usize, chunk_num: usize
 
         let ws = rt.working_set().unwrap();
         let mut checker = ctx.relation.begin_check_from_index(ctx.base_index.as_ref());
-        checker.apply(ws).unwrap();
+        checker.prepare_indexes(&ws);
+        let provider = ctx.relation.provider().clone();
+        for (write_ts, domain, value) in ws.mutations() {
+            match value {
+                Some(value) => provider.put(write_ts, domain, value).unwrap(),
+                None => provider.del(write_ts, domain).unwrap(),
+            }
+        }
         black_box(checker.dirty());
     }
 }

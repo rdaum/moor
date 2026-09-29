@@ -794,7 +794,7 @@ mod tests {
 
     #[test]
     fn objdef_metadata_load_dump_round_trip() {
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db = Arc::new(db);
 
         {
@@ -839,7 +839,7 @@ mod tests {
         assert!(text.contains(r#"verb look (this none none) owner: #42 flags: "rxd" ["#));
         assert!(text.contains("modified_by -> #42"));
 
-        let (reloaded, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (reloaded, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         {
             let mut loader = reloaded.loader_client().unwrap();
             ObjectDefinitionLoader::new(loader.as_mut())
@@ -875,7 +875,7 @@ mod tests {
 
     #[test]
     fn streaming_dump_preserves_explicit_inherited_overrides() {
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db = Arc::new(db);
         let child;
 
@@ -1051,7 +1051,7 @@ mod tests {
 
     #[test]
     fn streaming_dump_ignores_stale_property_rows() {
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db = Arc::new(db);
         let (old_parent, new_parent, child);
 
@@ -1159,7 +1159,7 @@ mod tests {
 
     #[test]
     fn snapshot_merge_handles_non_numeric_fjall_object_order() {
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db = Arc::new(db);
         let one = Obj::mk_id(1);
         let two_fifty_six = Obj::mk_id(256);
@@ -1249,7 +1249,7 @@ mod tests {
 
     #[test]
     fn object_metadata_controls_export_naming() {
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db = Arc::new(db);
 
         {
@@ -1296,7 +1296,7 @@ mod tests {
 
     #[test]
     fn object_metadata_is_multiline_with_import_export_id_first() {
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db = Arc::new(db);
 
         {
@@ -1350,7 +1350,7 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmpdir_path = tmpdir.path();
         let (exported_count, original_verbs, original_properties, original_name, original_parent) = {
-            let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+            let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
             let db = Arc::new(db);
             let mut loader_client = db.clone().loader_client().unwrap();
 
@@ -1394,7 +1394,7 @@ mod tests {
             )
         };
 
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db = Arc::new(db);
 
         // Now load
@@ -1467,7 +1467,7 @@ mod tests {
         let tmpdir_path = tmpdir.path();
 
         // Create database with lambda properties
-        let (db1, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db1, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db1 = Arc::new(db1);
 
         {
@@ -1564,7 +1564,7 @@ mod tests {
         );
 
         // Load objdef back into new database - should now work with literal_lambda support
-        let (db2, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db2, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db2 = Arc::new(db2);
 
         {
@@ -1630,7 +1630,7 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmpdir_path = tmpdir.path();
 
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db = Arc::new(db);
 
         // Create a simple hierarchy: #0 (system) -> #1 (parent) -> #2 (child)
@@ -1705,7 +1705,7 @@ mod tests {
 
     #[test]
     fn legacy_naming_properties_are_normalized_on_import() {
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db = Arc::new(db);
         let mut loader = db.loader_client().unwrap();
         let mut defloader = ObjectDefinitionLoader::new(loader.as_mut());
@@ -1763,7 +1763,7 @@ mod tests {
         let tmpdir_path = tmpdir.path();
 
         // Create database with anonymous objects and properties
-        let (db1, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db1, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db1 = Arc::new(db1);
 
         let anon_obj1;
@@ -1925,7 +1925,7 @@ mod tests {
         );
 
         // Load objdef back into new database
-        let (db2, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db2, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db2 = Arc::new(db2);
 
         {

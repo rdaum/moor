@@ -175,7 +175,9 @@ fn final_value<'a, D: crate::tx::RelationDomain, C: crate::tx::RelationCodomain>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{config::DatabaseConfig, engine::moor_db::MoorDB};
+    use crate::{
+        PersistenceConfig, StorageConfig, config::DatabaseConfig, engine::moor_db::MoorDB,
+    };
     use moor_common::{
         model::{CommitResult, ObjAttrs, ObjectKind},
         util::BitEnum,
@@ -223,7 +225,13 @@ mod tests {
             .unwrap()
     }
     fn db() -> Arc<MoorDB> {
-        MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0
+        MoorDB::try_open(
+            StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0
     }
 
     #[test]
@@ -401,9 +409,13 @@ mod tests {
     fn clobber_lists_persist_as_replacements_including_after_clear() {
         for clear in [false, true] {
             let dir = tempfile::tempdir().unwrap();
-            let db = MoorDB::try_open(Some(dir.path()), DatabaseConfig::default())
-                .unwrap()
-                .0;
+            let db = MoorDB::try_open(
+                StorageConfig::fjall(dir.path()),
+                DatabaseConfig::default(),
+                PersistenceConfig::default(),
+            )
+            .unwrap()
+            .0;
             let (obj, uuid) = fixture(
                 &db,
                 BitEnum::new_with(PropFlag::Clobber),
@@ -427,9 +439,13 @@ mod tests {
             db.wait_for_persistence().unwrap();
             db.stop().unwrap();
             drop(db);
-            let reopened = MoorDB::try_open(Some(dir.path()), DatabaseConfig::default())
-                .unwrap()
-                .0;
+            let reopened = MoorDB::try_open(
+                StorageConfig::fjall(dir.path()),
+                DatabaseConfig::default(),
+                PersistenceConfig::default(),
+            )
+            .unwrap()
+            .0;
             assert_eq!(value(&reopened, obj, uuid), expected);
             assert!(
                 reopened

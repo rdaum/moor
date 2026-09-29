@@ -135,7 +135,7 @@ object BENCH_CONTROLLER [
     entries = `after_hist[2] ! E_RANGE => 0';
     entries_delta = entries - `before_hist[2] ! E_RANGE => 0';
     total = hits + negative_hits + misses;
-    hit_rate = total > 0 ? (hits + negative_hits) * 100.0 / total | 0.0;
+    hit_rate = total > 0 ? tofloat(hits + negative_hits) * 100.0 / tofloat(total) | 0.0;
     server_log("CACHE_SUM label=" + label + ":prop_cache hits=" + tostr(hits) + " negative_hits=" + tostr(negative_hits) + " misses=" + tostr(misses) + " flushes=" + tostr(flushes) + " entries=" + tostr(entries) + " entries_delta=" + tostr(entries_delta) + " hit_rate=" + tostr(hit_rate));
   endmethod
 
@@ -151,7 +151,7 @@ object BENCH_CONTROLLER [
     entries = `after_hist[2] ! E_RANGE => 0';
     entries_delta = entries - `before_hist[2] ! E_RANGE => 0';
     total = hits + negative_hits + misses;
-    hit_rate = total > 0 ? (hits + negative_hits) * 100.0 / total | 0.0;
+    hit_rate = total > 0 ? tofloat(hits + negative_hits) * 100.0 / tofloat(total) | 0.0;
     server_log("CACHE_SUM label=" + label + ":verb_cache hits=" + tostr(hits) + " negative_hits=" + tostr(negative_hits) + " misses=" + tostr(misses) + " flushes=" + tostr(flushes) + " entries=" + tostr(entries) + " entries_delta=" + tostr(entries_delta) + " hit_rate=" + tostr(hit_rate));
   endmethod
 
@@ -304,10 +304,12 @@ object BENCH_CONTROLLER [
     server_log("Update Hz: " + tostr(update_hz));
     "Create subscribers";
     server_log("Creating " + tostr(target_subscribers) + " subscribers (append_mode=" + tostr(append_mode) + ")...");
+    this.subscribers = {};
     for i in [1..target_subscribers]
       sub = create($bench_subscriber, $arch_wizard);
       sub.work_iterations = work_per_tick;
       sub.append_mode = append_mode;
+      this.subscribers = {@this.subscribers, sub};
       $game_update:register(sub);
       if (i % 50 == 0)
         server_log("Created " + tostr(i) + " subscribers...");
@@ -320,7 +322,7 @@ object BENCH_CONTROLLER [
     prop_cache_before = this:capture_property_cache_stats();
     verb_cache_before = this:capture_verb_cache_stats();
     $game_update:start();
-    writes_per_second = target_subscribers * work_per_tick * update_hz;
+    writes_per_second = tofloat(target_subscribers * work_per_tick) * update_hz;
     server_log("=== WRITE STRESS TEST RUNNING ===");
     server_log("Subscribers: " + tostr(target_subscribers));
     server_log("Work per tick: " + tostr(work_per_tick));
@@ -337,6 +339,17 @@ object BENCH_CONTROLLER [
     this:log_perf_delta("write_stress", counter_before, counter_after);
     this:log_property_cache_delta("write_stress", prop_cache_before, prop_cache_after);
     this:log_verb_cache_delta("write_stress", verb_cache_before, verb_cache_after);
+    if ($game_update.loop_error || length($game_update.subscriber_faults))
+      raise(E_INVARG, "Write stress update loop failed", {$game_update.loop_error, $game_update.subscriber_faults});
+    endif
+    mutations = 0;
+    for sub in (this.subscribers)
+      if (sub.counter == 0)
+        raise(E_INVARG, "Write stress subscriber did no work", sub);
+      endif
+      mutations = mutations + sub.counter;
+    endfor
+    server_log("WRITE_STRESS_RESULT mode=" + tostr(append_mode) + " seconds=" + tostr(run_duration) + " mutations=" + tostr(mutations));
     this:cleanup();
     server_log("=== WRITE STRESS TEST COMPLETE ===");
   endmethod
@@ -388,48 +401,67 @@ object BENCH_CONTROLLER [
     total_appends = writer_count * appends_per_writer;
     server_log("Initial string bytes: " + tostr(total_initial_bytes));
     server_log("Total measured appends: " + tostr(total_appends));
-    entry = this:make_history_entry(entry_bytes);
-    this.subscribers = {};
-    for writer_number in [1..writer_count]
-      seed_history = { this:make_numbered_history_entry(entry, entry_bytes, writer_number, entry_number) for entry_number in [1..initial_entries] };
-      writer = create(#667, #2);
-      writer.history_entry = this:make_numbered_history_entry(entry, entry_bytes, writer_number, 0);
-      writer.history_append_width = append_width;
-      writer.history_mutation_mode = mutation_mode;
-      writer.history_running = 1;
-      writer.string_history = seed_history;
-      this.subscribers = {@this.subscribers, writer};
-      commit();
-    endfor
-    "Exclude initial property persistence from the measured counters.";
-    suspend(settle_seconds);
-    counter_before = this:capture_perf_counters();
-    started_at = ftime(true);
-    for writer in (this.subscribers)
-      writer:start_string_history_appends(appends_per_writer, append_delay);
-    endfor
-    deadline = time() + 300;
-    running = writer_count;
-    while (running > 0 && time() < deadline)
-      suspend(0.01);
-      running = 0;
+
+    "Phased moorc runs wait for applied and durable prefixes between seed, producers, and reporting.";
+    phase = length(args) > 8 ? toint(args[9]) | 0;
+    if (phase <= 1)
+      entry = this:make_history_entry(entry_bytes);
+      this.subscribers = {};
+      for writer_number in [1..writer_count]
+        seed_history = {this:make_numbered_history_entry(entry, entry_bytes, writer_number, entry_number) for entry_number in [1..initial_entries]};
+        writer = create(#667, #2);
+        writer.history_entry = this:make_numbered_history_entry(entry, entry_bytes, writer_number, 0);
+        writer.history_append_width = append_width;
+        writer.history_mutation_mode = mutation_mode;
+        writer.history_running = 1;
+        writer.string_history = seed_history;
+        this.subscribers = {@this.subscribers, writer};
+        commit();
+      endfor
+
+      if (phase == 1)
+        return 0;
+      endif
+    endif
+
+    if (phase <= 2)
+      "Phased runs drain seeding before these counters.";
+      suspend(settle_seconds);
+      counter_before = this:capture_perf_counters();
+      started_at = ftime(true);
       for writer in (this.subscribers)
-        if (writer.history_running)
-          running = running + 1;
+        writer:start_string_history_appends(appends_per_writer, append_delay);
+      endfor
+
+      deadline = time() + 300;
+      running = writer_count;
+      while (running > 0 && time() < deadline)
+        suspend(0.01);
+        running = 0;
+        for writer in (this.subscribers)
+          if (writer.history_running)
+            running = running + 1;
+          endif
+        endfor
+      endwhile
+      if (running > 0)
+        raise(E_QUOTA, "History benchmark did not complete within 300 seconds.");
+      endif
+      expected_entries = mutation_mode == 1 ? initial_entries | initial_entries + appends_per_writer * append_width;
+      for writer in (this.subscribers)
+        if (length(writer.string_history) != expected_entries)
+          raise(E_QUOTA, "A history writer did not complete all appends.");
         endif
       endfor
-    endwhile
-    if (running > 0)
-      raise(E_QUOTA, "History benchmark did not complete within 300 seconds.");
-    endif
-    expected_entries = mutation_mode == 1 ? initial_entries | initial_entries + appends_per_writer * append_width;
-    for writer in (this.subscribers)
-      if (length(writer.string_history) != expected_entries)
-        raise(E_QUOTA, "A history writer did not complete all appends.");
+
+      elapsed = ftime(true) - started_at;
+      if (phase == 2)
+        return {counter_before, elapsed};
       endif
-    endfor
-    elapsed = ftime(true) - started_at;
-    suspend(settle_seconds);
+      suspend(settle_seconds);
+    else
+      {counter_before, elapsed} = args[10];
+    endif
     counter_after = this:capture_perf_counters();
     this:log_perf_delta("string_history_append", counter_before, counter_after);
     server_log("HISTORY_APPEND_RESULT writers=" + tostr(writer_count) + " initial_entries=" + tostr(initial_entries) + " entry_bytes=" + tostr(entry_bytes) + " appends=" + tostr(total_appends) + " append_width=" + tostr(append_width) + " mutation_mode=" + tostr(mutation_mode) + " producer_elapsed_seconds=" + tostr(elapsed));

@@ -138,7 +138,9 @@ mod tests {
     use arc_swap::ArcSwap;
     use eyre::{bail, ensure};
     use moor_common::model::WorldStateError;
-    use moor_db::{Error, Provider, Relation, RelationCodomain, RelationIndex, Timestamp, Tx};
+    use moor_db::{
+        Error, Provider, Relation, RelationCodomain, RelationIndex, Timestamp, Tx, WorkingSet,
+    };
     use moor_var::Symbol;
     use std::{
         collections::{HashMap, HashSet},
@@ -209,6 +211,20 @@ mod tests {
         fn stop(&self) -> Result<(), Error> {
             Ok(())
         }
+    }
+
+    /// Persist a working set into an in-memory test provider, surfacing errors.
+    fn persist_working_set(
+        provider: &TestProvider,
+        working_set: &WorkingSet<TestDomain, TestCodomain>,
+    ) -> Result<(), Error> {
+        for (write_ts, domain, value) in working_set.mutations() {
+            match value {
+                Some(value) => provider.put(write_ts, domain, value)?,
+                None => provider.del(write_ts, domain)?,
+            }
+        }
+        Ok(())
     }
 
     /// Replay a history against one list-valued relation entry per key. The fixture's
@@ -301,8 +317,9 @@ mod tests {
                     let mut cr = backing_store.begin_check_from_index(snapshot.as_ref().as_ref());
                     match (entry.r#type.clone(), cr.check(&mut ws)) {
                         (Type::Ok, Ok(())) => {
-                            cr.apply(ws).map_err(|e| {
-                                eyre::eyre!("apply at index {}: {e:?}", entry.index)
+                            cr.prepare_indexes(&ws);
+                            persist_working_set(backing_store.provider(), &ws).map_err(|e| {
+                                eyre::eyre!("persist at index {}: {e:?}", entry.index)
                             })?;
                             cr.commit(&root_index);
                         }
@@ -446,7 +463,8 @@ mod tests {
                         continue;
                     }
                     check.map_err(|error| eyre::eyre!("check at row {row}: {error:?}"))?;
-                    checker.apply(working_set)?;
+                    checker.prepare_indexes(&working_set);
+                    persist_working_set(relation.provider(), &working_set)?;
                     checker.commit(&root_index);
                     commits += 1;
                     for key in model.writes {

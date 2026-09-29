@@ -55,7 +55,13 @@ fn create_object(tx: &mut WorldStateTransaction, name: &str) -> Obj {
 
 #[test]
 fn ownership_transfer_revalidates_an_empty_property_scan_after_cas_loss() {
-    let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let db = MoorDB::try_open(
+        crate::StorageConfig::temporary_fjall(),
+        DatabaseConfig::default(),
+        crate::PersistenceConfig::default(),
+    )
+    .unwrap()
+    .0;
     let mut tx = db.start_transaction();
     let parent = create_object(&mut tx, "parent");
     let child = create_object(&mut tx, "child");
@@ -93,7 +99,13 @@ fn ownership_transfer_revalidates_an_empty_property_scan_after_cas_loss() {
 
 #[test]
 fn repeated_cas_losses_advance_the_checked_root_and_preserve_winner_writes() {
-    let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let db = MoorDB::try_open(
+        crate::StorageConfig::temporary_fjall(),
+        DatabaseConfig::default(),
+        crate::PersistenceConfig::default(),
+    )
+    .unwrap()
+    .0;
     let obj = Obj::mk_id(1);
     let mut tx = db.start_transaction();
     tx.set_object_name(&obj, "ours".into()).unwrap();
@@ -152,7 +164,13 @@ fn repeated_cas_losses_advance_the_checked_root_and_preserve_winner_writes() {
 #[test]
 fn rebase_accepts_a_bloom_miss_and_falls_back_when_coverage_expires() {
     for expire_coverage in [false, true] {
-        let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = MoorDB::try_open(
+            crate::StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            crate::PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let mut tx = db.start_transaction();
         tx.set_object_name(&Obj::mk_id(1), "ours".into()).unwrap();
         let prepared = prepare(&db, tx);
@@ -206,7 +224,13 @@ fn rebase_accepts_a_bloom_miss_and_falls_back_when_coverage_expires() {
 
 #[test]
 fn overlap_after_a_successful_rebase_rejects_and_releases_admission() {
-    let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let db = MoorDB::try_open(
+        crate::StorageConfig::temporary_fjall(),
+        DatabaseConfig::default(),
+        crate::PersistenceConfig::default(),
+    )
+    .unwrap()
+    .0;
     let obj = Obj::mk_id(1);
     let mut tx = db.start_transaction();
     tx.set_object_name(&obj, "ours".into()).unwrap();
@@ -229,12 +253,18 @@ fn overlap_after_a_successful_rebase_rejects_and_releases_admission() {
     db.wait_for_persistence().unwrap();
     db.set_commit_queue_policy(Duration::ZERO, Duration::from_millis(10));
     // Any leaked permit makes the final reservation time out.
-    drop(db.batch_writer.hold_all_admission());
+    drop(db.coordinator.hold_all_admission());
 }
 
 #[test]
 fn dropping_an_exhausted_retry_releases_admission_without_publication() {
-    let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let db = MoorDB::try_open(
+        crate::StorageConfig::temporary_fjall(),
+        DatabaseConfig::default(),
+        crate::PersistenceConfig::default(),
+    )
+    .unwrap()
+    .0;
     let obj = Obj::mk_id(1);
     let mut tx = db.start_transaction();
     tx.set_object_name(&obj, "ours".into()).unwrap();
@@ -247,13 +277,19 @@ fn dropping_an_exhausted_retry_releases_admission_without_publication() {
     assert_eq!(db.snapshot_planes.load_root().version, version);
     db.wait_for_persistence().unwrap();
     db.set_commit_queue_policy(Duration::ZERO, Duration::from_millis(10));
-    drop(db.batch_writer.hold_all_admission());
+    drop(db.coordinator.hold_all_admission());
 }
 
 #[test]
 fn rebase_checks_clobber_policy_lifetime_and_other_writes() {
     for change in ["value", "policy", "delete", "other"] {
-        let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = MoorDB::try_open(
+            crate::StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            crate::PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let mut seed = db.start_transaction();
         let obj = create_object(&mut seed, "object");
         let uuid = seed
@@ -316,9 +352,13 @@ fn rebase_checks_clobber_policy_lifetime_and_other_writes() {
 #[test]
 fn rebased_publication_persists_its_version_operations_and_definition_changes() {
     let dir = tempfile::tempdir().unwrap();
-    let db = MoorDB::try_open(Some(dir.path()), DatabaseConfig::default())
-        .unwrap()
-        .0;
+    let db = MoorDB::try_open(
+        crate::StorageConfig::fjall(dir.path()),
+        DatabaseConfig::default(),
+        crate::PersistenceConfig::default(),
+    )
+    .unwrap()
+    .0;
     let mut seed = db.start_transaction();
     let ours_obj = create_object(&mut seed, "ours");
     let other_obj = create_object(&mut seed, "other");
@@ -376,9 +416,13 @@ fn rebased_publication_persists_its_version_operations_and_definition_changes() 
     db.stop().unwrap();
     drop(db);
 
-    let reopened = MoorDB::try_open(Some(dir.path()), DatabaseConfig::default())
-        .unwrap()
-        .0;
+    let reopened = MoorDB::try_open(
+        crate::StorageConfig::fjall(dir.path()),
+        DatabaseConfig::default(),
+        crate::PersistenceConfig::default(),
+    )
+    .unwrap()
+    .0;
     let tx = reopened.start_transaction();
     assert!(
         tx.get_properties(&ours_obj)
@@ -410,9 +454,15 @@ fn rebased_publication_persists_its_version_operations_and_definition_changes() 
 
 #[test]
 fn rebase_reuses_admission_when_the_queue_has_no_free_permits() {
-    let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let db = MoorDB::try_open(
+        crate::StorageConfig::temporary_fjall(),
+        DatabaseConfig::default(),
+        crate::PersistenceConfig::default(),
+    )
+    .unwrap()
+    .0;
     db.set_commit_queue_policy(Duration::ZERO, Duration::from_millis(10));
-    let mut reserved = db.batch_writer.hold_all_admission();
+    let mut reserved = db.coordinator.hold_all_admission();
     drop(reserved.pop().unwrap());
     drop(reserved.pop().unwrap());
     let obj = Obj::mk_id(1);
@@ -423,9 +473,9 @@ fn rebase_reuses_admission_when_the_queue_has_no_free_permits() {
     winner.set_object_flags(&obj, BitEnum::new()).unwrap();
     success(winner.commit().unwrap());
     db.wait_for_persistence().unwrap();
-    reserved.push(db.batch_writer.admit_commit(Timestamp(999)).unwrap());
+    reserved.push(db.coordinator.admit(Timestamp(999)).unwrap());
     assert!(matches!(
-        db.batch_writer.admit_commit(Timestamp(1000)),
+        db.coordinator.admit(Timestamp(1000)),
         Err(CommitAdmissionError::Timeout { .. })
     ));
 
@@ -433,5 +483,5 @@ fn rebase_reuses_admission_when_the_queue_has_no_free_permits() {
     success(publish(lose(prepared).rebase().unwrap()).enqueue_persistence());
     drop(reserved);
     db.wait_for_persistence().unwrap();
-    drop(db.batch_writer.hold_all_admission());
+    drop(db.coordinator.hold_all_admission());
 }

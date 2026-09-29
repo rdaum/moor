@@ -596,10 +596,8 @@ pub fn run(runtime_config: DaemonRuntimeConfig, runtime: DaemonRuntime) -> Resul
         configured_service_perf_cores = config.runtime.service_perf_cores,
         "Thread core reservations initialized"
     );
-    let (database, freshly_made) = TxDB::try_open(
-        Some(&paths.db_path),
-        config.database.clone().unwrap_or_default(),
-    )?;
+    let (database, freshly_made) =
+        TxDB::try_open_fjall(&paths.db_path, config.database.clone().unwrap_or_default())?;
     let database = Box::new(database);
     info!(path = ?paths.db_path, "Opened database");
 
@@ -1057,7 +1055,7 @@ mod import_tests {
         config.import_export.import_format = ImportFormat::Objdef;
         config.import_export.baseline_objdef_dir = Some(baseline.path().to_path_buf());
         config.validate().unwrap();
-        let db = TxDB::try_open(None, Default::default()).unwrap().0;
+        let db = TxDB::try_open_temporary(Default::default()).unwrap().0;
         assert!(
             perform_import(
                 &config,

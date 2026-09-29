@@ -358,6 +358,20 @@ mod tests {
         }
     }
 
+    /// Persist a working set into an in-memory test provider, surfacing errors.
+    fn persist_working_set(
+        provider: &TestProvider,
+        working_set: &crate::tx::WorkingSet<TestDomain, TestCodomain>,
+    ) -> Result<(), Error> {
+        for (write_ts, domain, value) in working_set.mutations() {
+            match value {
+                Some(value) => provider.put(write_ts, domain, value)?,
+                None => provider.del(write_ts, domain)?,
+            }
+        }
+        Ok(())
+    }
+
     #[test]
     fn test_basic() {
         let mut backing = HashMap::new();
@@ -382,7 +396,8 @@ mod tests {
 
         let mut cr = relation.begin_check();
         cr.check(&mut ws).unwrap();
-        cr.apply(ws).unwrap();
+        cr.prepare_indexes(&ws);
+        persist_working_set(relation.provider(), &ws).unwrap();
         assert_eq!(relation.get(&domain).unwrap().unwrap().1, codomain.clone());
     }
 
@@ -419,7 +434,8 @@ mod tests {
         {
             let mut cr_a = relation.begin_check();
             cr_a.check(&mut ws_a).unwrap();
-            cr_a.apply(ws_a).unwrap();
+            cr_a.prepare_indexes(&ws_a);
+            persist_working_set(relation.provider(), &ws_a).unwrap();
             cr_a.commit(relation.index());
         }
         {
@@ -467,7 +483,8 @@ mod tests {
         {
             let mut cr_2 = relation.begin_check();
             cr_2.check(&mut ws_2).unwrap();
-            cr_2.apply(ws_2).unwrap();
+            cr_2.prepare_indexes(&ws_2);
+            persist_working_set(relation.provider(), &ws_2).unwrap();
             cr_2.commit(relation.index());
         }
 
@@ -515,7 +532,8 @@ mod tests {
         {
             let mut cr_1 = relation.begin_check();
             cr_1.check(&mut ws_1).unwrap();
-            cr_1.apply(ws_1).unwrap();
+            cr_1.prepare_indexes(&ws_1);
+            persist_working_set(relation.provider(), &ws_1).unwrap();
             cr_1.commit(relation.index());
         }
 
@@ -561,7 +579,8 @@ mod tests {
         {
             let mut cr_2 = relation.begin_check();
             cr_2.check(&mut ws_2).unwrap();
-            cr_2.apply(ws_2).unwrap();
+            cr_2.prepare_indexes(&ws_2);
+            persist_working_set(relation.provider(), &ws_2).unwrap();
             cr_2.commit(relation.index());
         }
 
@@ -571,7 +590,8 @@ mod tests {
 
         let mut cr_1 = relation.begin_check();
         cr_1.check(&mut ws_1).unwrap(); // Should not conflict
-        cr_1.apply(ws_1).unwrap();
+        cr_1.prepare_indexes(&ws_1);
+        persist_working_set(relation.provider(), &ws_1).unwrap();
     }
 
     #[test]
@@ -605,7 +625,8 @@ mod tests {
         {
             let mut cr_1 = relation.begin_check();
             cr_1.check(&mut ws_1).unwrap();
-            cr_1.apply(ws_1).unwrap();
+            cr_1.prepare_indexes(&ws_1);
+            persist_working_set(relation.provider(), &ws_1).unwrap();
             cr_1.commit(relation.index());
         }
 
@@ -616,7 +637,8 @@ mod tests {
 
         let mut cr_2 = relation.begin_check();
         cr_2.check(&mut ws_2).unwrap();
-        cr_2.apply(ws_2).unwrap();
+        cr_2.prepare_indexes(&ws_2);
+        persist_working_set(relation.provider(), &ws_2).unwrap();
 
         // Verify final state
         assert_eq!(relation.get(&domain).unwrap().unwrap().1, TestCodomain(20));
@@ -644,7 +666,8 @@ mod tests {
         let mut ws = r_tx.working_set().unwrap();
         let mut cr = relation.begin_check();
         cr.check(&mut ws).unwrap();
-        cr.apply(ws).unwrap();
+        cr.prepare_indexes(&ws);
+        persist_working_set(relation.provider(), &ws).unwrap();
         cr.commit(relation.index());
 
         assert_eq!(relation.get(&domain).unwrap().unwrap().1, TestCodomain(20));
@@ -701,7 +724,8 @@ mod tests {
             let mut ws = r_tx.working_set().unwrap();
             let mut cr = relation.begin_check();
             cr.check(&mut ws).unwrap();
-            cr.apply(ws).unwrap();
+            cr.prepare_indexes(&ws);
+            persist_working_set(relation.provider(), &ws).unwrap();
             cr.commit(relation.index());
         }
 
@@ -750,7 +774,8 @@ mod tests {
         {
             let mut cr_1 = relation.begin_check();
             cr_1.check(&mut ws_1).unwrap();
-            cr_1.apply(ws_1).unwrap();
+            cr_1.prepare_indexes(&ws_1);
+            persist_working_set(relation.provider(), &ws_1).unwrap();
             cr_1.commit(relation.index());
         }
 
@@ -773,7 +798,8 @@ mod tests {
         {
             let mut cr_3 = relation.begin_check();
             cr_3.check(&mut ws_3).unwrap();
-            cr_3.apply(ws_3).unwrap();
+            cr_3.prepare_indexes(&ws_3);
+            persist_working_set(relation.provider(), &ws_3).unwrap();
             cr_3.commit(relation.index());
         }
 
@@ -823,7 +849,8 @@ mod tests {
         {
             let mut cr_newer = relation.begin_check();
             cr_newer.check(&mut ws_newer).unwrap();
-            cr_newer.apply(ws_newer).unwrap();
+            cr_newer.prepare_indexes(&ws_newer);
+            persist_working_set(relation.provider(), &ws_newer).unwrap();
             cr_newer.commit(relation.index());
         }
 
@@ -866,7 +893,8 @@ mod tests {
         let mut ws = r_tx.working_set().unwrap();
         let mut cr = relation.begin_check();
         cr.check(&mut ws).unwrap();
-        cr.apply(ws).unwrap();
+        cr.prepare_indexes(&ws);
+        persist_working_set(relation.provider(), &ws).unwrap();
 
         // Commit the changes to the relation
         cr.commit(relation.index());
@@ -928,7 +956,8 @@ mod tests {
         let mut ws = r_tx.working_set().unwrap();
         let mut cr = relation.begin_check();
         cr.check(&mut ws).unwrap();
-        cr.apply(ws).unwrap();
+        cr.prepare_indexes(&ws);
+        persist_working_set(relation.provider(), &ws).unwrap();
         cr.commit(relation.index());
 
         // Test that committed secondary index state is visible in new transaction

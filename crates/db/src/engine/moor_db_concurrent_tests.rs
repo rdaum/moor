@@ -13,7 +13,10 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{api::world_state::DbWorldState, config::DatabaseConfig, engine::moor_db::MoorDB};
+    use crate::{
+        PersistenceConfig, StorageConfig, api::world_state::DbWorldState, config::DatabaseConfig,
+        engine::moor_db::MoorDB,
+    };
     use moor_common::{
         model::{
             ArgSpec, CommitResult, ObjectKind, PrepSpec, PropFlag, TaskPermissions, ValSet,
@@ -49,7 +52,12 @@ mod tests {
     }
 
     fn setup_test_db() -> Arc<MoorDB> {
-        let (db, _) = MoorDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = MoorDB::try_open(
+            StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap();
 
         // Create a few initial objects for testing
         let tx = db.start_transaction();

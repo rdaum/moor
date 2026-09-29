@@ -166,16 +166,13 @@ where
 }
 
 impl FjallProvider<crate::ObjAndUUIDHolder, Var> {
-    pub(crate) fn encode_property_value_working_set(
+    pub(crate) fn encode_property_value_changes(
         &self,
-        working_set: crate::tx::WorkingSet<crate::ObjAndUUIDHolder, Var>,
+        changes: Vec<super::logical::PreparedPropertyValueOp>,
     ) -> Vec<super::batch_writer::BatchOp> {
-        use super::{
-            batch_writer::{BatchOp, BatchOpSource, BatchOpType},
-            property_value_store::prepare_property_value_working_set,
-        };
+        use super::batch_writer::{BatchOp, BatchOpSource, BatchOpType};
 
-        prepare_property_value_working_set(working_set)
+        changes
             .into_iter()
             .map(|prepared| {
                 let object = prepared.property.obj();
@@ -225,15 +222,15 @@ where
     FjallCodec: EncodeFjallValue<Codomain>,
 {
     /// Consume a published working set into operations for the BatchWriter.
-    pub fn encode_working_set(
+    pub(crate) fn encode_changes(
         &self,
-        working_set: crate::tx::WorkingSet<Domain, Codomain>,
+        changes: crate::tx::WorkingSetTuples<Domain, Codomain>,
     ) -> Result<Vec<super::batch_writer::BatchOp>, Error> {
         use super::batch_writer::{BatchOp, BatchOpType};
         use crate::tx::OpType;
 
-        let mut batch_ops = Vec::with_capacity(working_set.len());
-        for (domain, op) in working_set.tuples() {
+        let mut batch_ops = Vec::with_capacity(changes.len());
+        for (domain, op) in changes {
             match op.operation {
                 OpType::Insert(codomain) | OpType::Update(codomain) => {
                     let key_bytes = <Self as EncodeFor<Domain>>::encode(self, &domain)?;

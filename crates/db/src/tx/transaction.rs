@@ -222,6 +222,21 @@ where
         &self.tuples
     }
 
+    /// Iterate this working set's mutations as explicit writes.
+    ///
+    /// `None` means the key is deleted; `Some` means it is inserted or updated.
+    /// Persistence adapters and test sinks use this typed view instead of
+    /// reaching into tuple internals.
+    pub fn mutations(&self) -> impl Iterator<Item = (Timestamp, &Domain, Option<&Codomain>)> + '_ {
+        self.tuples.iter().map(|(domain, op)| {
+            let value = match &op.operation {
+                OpType::Insert(value) | OpType::Update(value) => Some(value),
+                OpType::Delete => None,
+            };
+            (op.write_ts, domain, value)
+        })
+    }
+
     pub fn tuples_mut(&mut self) -> &mut WorkingSetTuples<Domain, Codomain> {
         &mut self.tuples
     }

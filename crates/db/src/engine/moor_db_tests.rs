@@ -13,7 +13,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{DatabaseConfig, ObjAndUUIDHolder};
+    use crate::{DatabaseConfig, ObjAndUUIDHolder, PersistenceConfig, StorageConfig};
     use std::collections::HashSet;
 
     use crate::engine::moor_db::MoorDB;
@@ -37,7 +37,13 @@ mod tests {
     }
 
     fn test_db() -> Arc<MoorDB> {
-        MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0
+        MoorDB::try_open(
+            StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0
     }
 
     #[test]

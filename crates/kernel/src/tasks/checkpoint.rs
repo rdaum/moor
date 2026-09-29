@@ -264,7 +264,7 @@ mod tests {
     use moor_var::{Obj, SYSTEM_OBJECT, Symbol, program::ProgramType, v_int};
 
     fn database_with_export_data() -> TxDB {
-        let (database, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (database, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let permissions = TaskPermissions::new(SYSTEM_OBJECT, BitEnum::new());
         let mut world_state = database.new_world_state().unwrap();
         let system = world_state
@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn failed_export_keeps_only_the_in_progress_directory() {
-        let (database, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (database, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let permissions = TaskPermissions::new(SYSTEM_OBJECT, BitEnum::new());
         let mut world_state = database.new_world_state().unwrap();
         world_state

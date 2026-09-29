@@ -25,6 +25,7 @@ pub(super) struct PreparedPersistence<'a> {
     property_value_changes: Vec<PropertyValueChainChange>,
     next_property_value_record_version: Option<u64>,
     encoding: EncodingStats,
+    sequences: Vec<SequenceUpdate>,
 }
 
 /// Only a successful storage commit can create a completion capability.
@@ -52,6 +53,8 @@ impl<'a> PreparedPersistence<'a> {
             timestamp,
             operations,
             property_definition_changes,
+            sequences,
+            admission: _,
             mut encoding,
         } = batch;
         let transaction = timestamp.0;
@@ -176,6 +179,25 @@ impl<'a> PreparedPersistence<'a> {
             }
         }
 
+        // Sequence observations are applied monotonically: a reordered submission must never
+        // lower a stored high-water mark.
+        for update in &sequences {
+            let Some(current) = state.confirmed_sequences.get(update.slot).copied() else {
+                return Err(format!(
+                    "sequence update names out-of-range slot {}",
+                    update.slot
+                ));
+            };
+            let next = current.max(update.value);
+            if next != current {
+                write_batch.insert(
+                    &state.sequences_partition,
+                    update.slot.to_le_bytes(),
+                    next.to_le_bytes(),
+                );
+            }
+        }
+
         let next_property_value_record_version = if property_value_changes.is_empty() {
             None
         } else {
@@ -196,6 +218,7 @@ impl<'a> PreparedPersistence<'a> {
             property_value_changes,
             next_property_value_record_version,
             encoding,
+            sequences,
         })
     }
 
@@ -221,6 +244,7 @@ impl<'a> PreparedPersistence<'a> {
             property_value_changes,
             next_property_value_record_version,
             encoding,
+            sequences,
         } = self;
         let op_count = write_batch.len();
         let outstanding_flushes_before = db.outstanding_flushes();
@@ -231,6 +255,13 @@ impl<'a> PreparedPersistence<'a> {
         db_counters()
             .timers_rare
             .record_elapsed(WorldStateTimerOp::BatchWriterCommit, commit_elapsed);
+        for update in sequences {
+            let current = state
+                .confirmed_sequences
+                .get_mut(update.slot)
+                .expect("validated sequence slot");
+            *current = (*current).max(update.value);
+        }
         state.property_names.apply(property_definition_changes);
         for change in property_value_changes {
             match change {
@@ -304,8 +335,13 @@ impl<'a> PreparedPersistence<'a> {
 }
 
 impl PersistedBatch<'_> {
-    pub(super) fn complete(self, completed_version: &AtomicU64) {
+    pub(super) fn complete(
+        self,
+        completed_version: &AtomicU64,
+        admission: Option<CommitAdmission>,
+    ) {
         completed_version.store(self.version, Ordering::Release);
+        drop(admission);
         self.state.next_version += 1;
         BatchWriter::reply_ready_barriers(self.state, self.version);
         BatchWriter::reply_ready_snapshots(self.db, self.state, self.version);
@@ -328,7 +364,14 @@ mod tests {
         let property = ObjAndUUIDHolder::new(&Obj::mk_id(42), Uuid::from_u128(7));
         let mut names = AHashMap::new();
         names.insert(property.uuid(), Symbol::mk("before"));
-        let mut state = WriterState::new(names, AHashMap::new(), PROPERTY_VALUE_CHAIN_LIMITS);
+        let mut state = WriterState::new(
+            names,
+            AHashMap::new(),
+            PROPERTY_VALUE_CHAIN_LIMITS,
+            db.keyspace("sequences", KeyspaceCreateOptions::default)
+                .unwrap(),
+            Vec::new(),
+        );
         let completed = AtomicU64::new(0);
         let (sender, _receiver) = flume::bounded(1);
         let rollup = RollupEncoder { sender };
@@ -346,6 +389,8 @@ mod tests {
                     },
                 }),
             }],
+            sequences: Vec::new(),
+            admission: None,
             property_definition_changes: vec![PropertyDefinitionChange::Remove(property.uuid())]
                 .into_boxed_slice(),
             encoding: EncodingStats {
@@ -380,7 +425,7 @@ mod tests {
         // Acceptance and metadata updates precede publication to waiters.
         assert_eq!(completed.load(Ordering::Acquire), 0);
         assert!(barrier.try_recv().is_err());
-        persisted.complete(&completed);
+        persisted.complete(&completed, None);
         assert_eq!(completed.load(Ordering::Acquire), 1);
         assert_eq!(state.next_version, 2);
         assert_eq!(state.next_property_value_record_version, 2);

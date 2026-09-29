@@ -13,10 +13,7 @@
 
 //! Physical record codec and bounded reconstruction for incremental property values.
 
-use crate::{
-    ObjAndUUIDHolder, db_counters,
-    tx::{OpType, Timestamp, WorkingSet},
-};
+use crate::{ObjAndUUIDHolder, db_counters, tx::Timestamp};
 use moor_common::{
     model::{WorldStateCountOp, WorldStateTimerOp},
     util::Instant,
@@ -27,6 +24,13 @@ use planus::ReadAsRoot;
 use smallvec::{SmallVec, smallvec};
 use zerocopy::{FromBytes, IntoBytes};
 
+#[cfg(test)]
+use super::logical::PreparedPropertyValueMutation;
+#[cfg(test)]
+use super::logical::prepare_property_value_mutation;
+#[cfg(test)]
+use crate::tx::OpType;
+
 const RECORD_MAGIC: [u8; 4] = *b"MPRV";
 const RECORD_FORMAT_VERSION: u8 = 1;
 const RECORD_HEADER_BYTES: usize = 16;
@@ -35,117 +39,9 @@ pub(crate) const PROPERTY_RECORD_KEY_BYTES: usize = PROPERTY_KEY_BYTES + size_of
 
 const FULL_RECORD_KIND: u8 = 0;
 const LIST_APPEND_RECORD_KIND: u8 = 1;
-const LIST_APPEND_COMPARISON_BUDGET: usize = 128;
 
 pub(crate) const PROPERTY_VALUE_CHAIN_LIMITS: PropertyValueChainLimits =
     PropertyValueChainLimits::new(64, 4 * 1024 * 1024);
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct PreparedPropertyValueOp {
-    pub property: ObjAndUUIDHolder,
-    pub mutation: PreparedPropertyValueMutation,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum PreparedPropertyValueMutation {
-    Replace { value: Var },
-    AppendList { suffix: List, final_value: Var },
-    Delete,
-}
-
-pub(crate) fn prepare_property_value_working_set(
-    working_set: WorkingSet<ObjAndUUIDHolder, Var>,
-) -> Vec<PreparedPropertyValueOp> {
-    let operation_count = working_set.len();
-    let (operations, base_index) = working_set.into_parts();
-    let mut prepared = Vec::with_capacity(operation_count);
-
-    for (property, operation) in operations {
-        let base = base_index.index_lookup(&property).map(|entry| &entry.value);
-        prepared.push(PreparedPropertyValueOp {
-            property,
-            mutation: prepare_property_value_mutation(base, operation.operation),
-        });
-    }
-    prepared
-}
-
-fn prepare_property_value_mutation(
-    base: Option<&Var>,
-    operation: OpType<Var>,
-) -> PreparedPropertyValueMutation {
-    let value = match operation {
-        OpType::Delete => return PreparedPropertyValueMutation::Delete,
-        OpType::Insert(value) => {
-            db_counters()
-                .counters
-                .inc(WorldStateCountOp::PropertyValueCompleteReplacement);
-            return PreparedPropertyValueMutation::Replace { value };
-        }
-        OpType::Update(value) => value,
-    };
-
-    if value.op_hint() != moor_var::OP_HINT_LIST_APPEND {
-        db_counters()
-            .counters
-            .inc(WorldStateCountOp::PropertyValueCompleteReplacement);
-        return PreparedPropertyValueMutation::Replace { value };
-    }
-
-    let counters = &db_counters().counters;
-    counters.inc(WorldStateCountOp::PropertyListAppendCandidate);
-    let _classification_timer = db_counters()
-        .timers_rare
-        .start(WorldStateTimerOp::PropertyListAppendClassify);
-    let Some(base) = base else {
-        counters.inc(WorldStateCountOp::PropertyListAppendMissingBase);
-        counters.inc(WorldStateCountOp::PropertyValueCompleteReplacement);
-        return PreparedPropertyValueMutation::Replace { value };
-    };
-    let (Some(base), Some(final_value)) = (base.as_list(), value.as_list()) else {
-        counters.inc(WorldStateCountOp::PropertyListAppendNonList);
-        counters.inc(WorldStateCountOp::PropertyValueCompleteReplacement);
-        return PreparedPropertyValueMutation::Replace { value };
-    };
-
-    let suffix = match base.append_suffix(final_value, LIST_APPEND_COMPARISON_BUDGET) {
-        Ok(suffix) => suffix,
-        Err(reason) => {
-            let counter = match reason {
-                moor_var::ListAppendError::NotLonger => {
-                    WorldStateCountOp::PropertyListAppendNotLonger
-                }
-                moor_var::ListAppendError::PrefixMismatch => {
-                    WorldStateCountOp::PropertyListAppendPrefixMismatch
-                }
-                moor_var::ListAppendError::ComparisonBudgetExceeded => {
-                    WorldStateCountOp::PropertyListAppendComparisonBudget
-                }
-            };
-            counters.inc(counter);
-            counters.inc(WorldStateCountOp::PropertyValueCompleteReplacement);
-            return PreparedPropertyValueMutation::Replace { value };
-        }
-    };
-
-    let suffix_bytes = suffix
-        .iter_ref()
-        .map(moor_var::ByteSized::size_bytes)
-        .sum::<usize>();
-    counters.inc(WorldStateCountOp::PropertyListAppendAccepted);
-    counters.add(
-        WorldStateCountOp::PropertyListAppendSuffixElements,
-        isize::try_from(suffix.len()).unwrap_or(isize::MAX),
-    );
-    counters.add(
-        WorldStateCountOp::PropertyListAppendSuffixBytes,
-        isize::try_from(suffix_bytes).unwrap_or(isize::MAX),
-    );
-    PreparedPropertyValueMutation::AppendList {
-        suffix,
-        final_value: value,
-    }
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum PropertyValueRecordKind {

@@ -14,10 +14,12 @@
 use crate::{Error, Timestamp};
 
 pub mod batch_writer;
+pub(crate) mod coordinator;
 pub mod fjall_format;
 pub(crate) mod fjall_maintenance;
 pub mod fjall_provider;
 pub mod fjall_snapshot_loader;
+pub(crate) mod logical;
 pub(crate) mod property_value_store;
 
 /// The `Provider` trait is a generic interface for a value store that backs the transactional

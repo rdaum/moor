@@ -44,7 +44,7 @@ mod tests {
 
     /// Create an in-memory db with a single object (#0) containing verbs.
     fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> TxDB {
-        let (state, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (state, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let mut tx = state.new_world_state().unwrap();
         let sysobj = tx
             .create_object(
@@ -338,6 +338,50 @@ mod tests {
     }
 
     #[test]
+    fn test_lambda_literal_is_canonical_text_fixed_point() {
+        let value = run_moo(
+            r#"
+                const base = 42;
+                return {x, y} => x + y + base;
+            "#,
+        )
+        .unwrap();
+        let literal = to_literal(&value);
+        let reparsed = parse_literal_value(&literal).unwrap();
+        assert_eq!(to_literal(&reparsed), literal);
+    }
+
+    /// §8.2: `ScatterLabel::Optional(name, _)` discards the default-expression information when
+    /// formatting a lambda value. The formatter re-emits the default as a body assignment, which
+    /// preserves the omitted-argument case but overrides an explicitly supplied argument.
+    #[test]
+    #[ignore = "pending the fallible persistence codec (§8.2); un-ignore in §16 step 4"]
+    fn test_lambda_parameter_default_preserves_explicit_arguments() {
+        let value = run_moo(r#"return fn (x, ?y = 5) return y; endfn;"#).unwrap();
+        let literal = to_literal(&value);
+        let result = run_moo_with_args(
+            "f = fromliteral(args[1]); return {f(0), f(0, 7)};",
+            List::mk_list(&[v_str(&literal)]),
+        );
+        assert_eq!(
+            result,
+            Ok(v_list(&[v_int(5), v_int(7)])),
+            "literal was {literal:?}"
+        );
+    }
+
+    #[test]
+    fn test_lambda_parameter_default_survives_for_omitted_arguments() {
+        let value = run_moo(r#"return fn (x, ?y = 5) return y; endfn;"#).unwrap();
+        let literal = to_literal(&value);
+        let result = run_moo_with_args(
+            "f = fromliteral(args[1]); return f(0);",
+            List::mk_list(&[v_str(&literal)]),
+        );
+        assert_eq!(result, Ok(v_int(5)), "literal was {literal:?}");
+    }
+
+    #[test]
     fn test_objdef_lambda_export_preserves_executable_body() {
         let expression_lambda = run_moo("return {value} => value + 1;").unwrap();
         let stored_lambda = run_moo(
@@ -411,7 +455,7 @@ mod tests {
         assert!(exported.contains("value == SYSTEM"));
         assert!(!exported.contains("} => 1"));
 
-        let (db2, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db2, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         {
             let mut loader = db2.loader_client().unwrap();
             let mut defloader = ObjectDefinitionLoader::new(loader.as_mut());
@@ -2818,7 +2862,7 @@ mod tests {
     fn test_eval_initial_env() {
         // Compile a program that references variable 'x'
         let program = compile("return x;", CompileOptions::default()).unwrap();
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         {
             let mut tx = db.new_world_state().unwrap();
             tx.create_object(
@@ -2859,7 +2903,7 @@ mod tests {
     #[test]
     fn test_eval_initial_env_multiple_vars() {
         let program = compile("return x + y;", CompileOptions::default()).unwrap();
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         {
             let mut tx = db.new_world_state().unwrap();
             tx.create_object(
@@ -2901,7 +2945,7 @@ mod tests {
     fn test_eval_initial_env_object_var() {
         // Note: can't use "obj" as it's a type constant (OBJ)
         let program = compile("return target;", CompileOptions::default()).unwrap();
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         {
             let mut tx = db.new_world_state().unwrap();
             tx.create_object(
@@ -2942,7 +2986,7 @@ mod tests {
     #[test]
     fn test_eval_initial_env_unused_var() {
         let program = compile("return 42;", CompileOptions::default()).unwrap();
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         {
             let mut tx = db.new_world_state().unwrap();
             tx.create_object(

@@ -528,7 +528,7 @@ fn main() -> Result<(), eyre::Error> {
         args.db_path.clone()
     };
 
-    let (db, _) = TxDB::try_open(Some(&db_path), Default::default()).unwrap();
+    let (db, _) = TxDB::try_open_fjall(&db_path, Default::default()).unwrap();
     let db = Arc::new(db);
 
     // Setup database

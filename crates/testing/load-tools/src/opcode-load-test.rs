@@ -438,7 +438,7 @@ async fn main() -> Result<(), eyre::Error> {
 
     let (db_path, _temp_dir) = setup_db_path(&args.db_path, "opcode_test_db")?;
 
-    let (database, _) = TxDB::try_open(Some(&db_path), Default::default()).unwrap();
+    let (database, _) = TxDB::try_open_fjall(&db_path, Default::default()).unwrap();
     let (player, opcodes_per_invocation) =
         setup_database(&database, args.loop_iterations, args.max_ticks)?;
 
