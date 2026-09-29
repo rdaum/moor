@@ -1,0 +1,125 @@
+{
+  "iterations_per_sample": 1000,
+  "unit": "us/op",
+  "measurements": [
+    {
+      "case": "scalar",
+      "bytes": 2,
+      "render": [
+        0.010752,
+        0.01072,
+        0.010736
+      ],
+      "decode": [
+        0.06975999999999999,
+        0.069648,
+        0.070128
+      ],
+      "validated_encode": [
+        0.109984,
+        0.10462400000000001,
+        0.104704
+      ],
+      "median_us": {
+        "render": 0.010736,
+        "decode": 0.06975999999999999,
+        "validated_encode": 0.104704
+      }
+    },
+    {
+      "case": "list_1024",
+      "bytes": 5034,
+      "render": [
+        8.400120999999999,
+        8.343098,
+        8.365322
+      ],
+      "decode": [
+        72.9741,
+        72.93107699999999,
+        72.963381
+      ],
+      "validated_encode": [
+        86.112628,
+        86.117076,
+        86.187988
+      ],
+      "median_us": {
+        "render": 8.365322,
+        "decode": 72.963381,
+        "validated_encode": 86.117076
+      }
+    },
+    {
+      "case": "closure",
+      "bytes": 238,
+      "render": [
+        2.115714,
+        2.114275,
+        2.1109780000000002
+      ],
+      "decode": [
+        21.630217000000002,
+        21.415817,
+        21.397833000000002
+      ],
+      "validated_encode": [
+        24.307085,
+        25.047757,
+        24.957245
+      ],
+      "median_us": {
+        "render": 2.114275,
+        "decode": 21.415817,
+        "validated_encode": 24.957245
+      }
+    },
+    {
+      "case": "program",
+      "bytes": 130,
+      "render": [
+        2.3018270000000003,
+        2.310339,
+        2.3003379999999995
+      ],
+      "decode": [
+        11.714461000000002,
+        11.582334,
+        11.585517
+      ],
+      "validated_encode": [
+        14.369376999999998,
+        14.471744999999999,
+        14.293537
+      ],
+      "median_us": {
+        "render": 2.3018270000000003,
+        "decode": 11.585517,
+        "validated_encode": 14.369376999999998
+      }
+    }
+  ],
+  "command": "taskset -c 5 target/release/examples/persistence-codec-cost",
+  "build_command": "cargo build --release -p moor-compiler --example persistence-codec-cost",
+  "scope": "In-process codec CPU costs; not database throughput, SQL cost, or durability latency.",
+  "machine": "aarch64",
+  "warmup_operations": 20,
+  "samples": 3,
+  "binary_sha256": "97b643e5efe074cdc150211dacf539f7b30657c6ffaec8269f0389103fe6eccf",
+  "source_sha256": {
+    "crates/compiler/examples/persistence-codec-cost.rs": "9a0793d0d225b93476f88fb8d5fa3e82780b696a7bcfebd5ff6ce645be278a2b",
+    "crates/compiler/src/ast.rs": "1b968cfcbd614c3a49f6dc18a0fd12e7e173c79212bb75c627b6e57107855c76",
+    "crates/compiler/src/backend/control.rs": "0cc840e7cb86b1f35948599270bec147a5e3dff08c089868a03a95a0e976baa2",
+    "crates/compiler/src/backend/expr_codegen.rs": "895aa87f9113eda368470c2e04a26f86fa63a9b7e6a65c3fd2e350bda55aa9c3",
+    "crates/compiler/src/backend/lambda_codegen.rs": "34c2056284139f5b4225d7628ef6b54643f86196650113eb99e40539c868c577",
+    "crates/compiler/src/capture.rs": "33dda085cf2a9bc4aa1b973e015787edfeb6d21944d9b1d290bf10f8479a2f4e",
+    "crates/compiler/src/decompile/mod.rs": "c6627a4e6df48b0c556239617e50c4897fdd711ffe1967b7d9ef4c658888600a",
+    "crates/compiler/src/frontend/lower.rs": "2d1e6fabf713627705b7f6fb1a75a22835dded4afa37798c9751b7637f5c2537",
+    "crates/compiler/src/lexer.rs": "a56faa718b4867505ac43a4989b11292af7379be6575e8adb9ca864ea72e8a82",
+    "crates/compiler/src/objdef_literal.rs": "f44a9eb2c9e4ef6064ec47d7c8e0fc50f92f37b01613bc4e3111594206c7e1fb",
+    "crates/compiler/src/persistent.rs": "2e33b75b871506a102614f5398bce5ddcde975c43029c51c85b0f4573a5c37d1",
+    "crates/compiler/src/unparse/expr.rs": "2c5b4381edecf649a3ae8e0ad005fd7ea2b4b84f28669395d97ed3a71dba8a25",
+    "crates/compiler/src/unparse/mod.rs": "9f20fc0cad7f6cc9c472a2de1f4ff09fb595640da3d194a3805ce3c4b2986281",
+    "crates/compiler/src/unparse/stmt.rs": "fd68ef641eea3e5cba0e34d67d9049dd1d5ef5ab2a71fd62b8764d3337a42c87"
+  }
+}

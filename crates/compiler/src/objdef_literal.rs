@@ -55,6 +55,22 @@ pub(crate) fn parse_literal_value(
     Ok(value)
 }
 
+pub(crate) fn parse_persistent_literal(
+    text: &str,
+    options: &CompileOptions,
+) -> Result<Var, ObjDefParseError> {
+    let mut context = ObjFileContext::new();
+    let mut parser = LiteralParser::new(text, &mut context);
+    parser.persistence_options = Some(options.clone());
+    parser.skip_trivia();
+    let value = parser.parse_literal()?;
+    parser.skip_trivia();
+    if !parser.is_eof() {
+        return Err(parser.parse_error("unexpected trailing input"));
+    }
+    Ok(value)
+}
+
 pub(crate) fn compile_object_definitions(
     objdef: &str,
     options: &CompileOptions,
@@ -94,6 +110,7 @@ struct LiteralParser<'a> {
     context: &'a mut ObjFileContext,
     depth: usize,
     line_starts: OnceCell<Vec<usize>>,
+    persistence_options: Option<CompileOptions>,
 }
 
 impl<'a> LiteralParser<'a> {
@@ -104,6 +121,7 @@ impl<'a> LiteralParser<'a> {
             context,
             depth: 0,
             line_starts: OnceCell::new(),
+            persistence_options: None,
         }
     }
 
@@ -223,8 +241,9 @@ impl<'a> LiteralParser<'a> {
 
     fn starts_with_keyword(&self, keyword: &str) -> bool {
         let remaining = self.remaining();
-        if remaining.len() < keyword.len()
-            || !remaining[..keyword.len()].eq_ignore_ascii_case(keyword)
+        if !remaining
+            .get(..keyword.len())
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case(keyword))
         {
             return false;
         }
@@ -502,8 +521,15 @@ impl<'a> LiteralParser<'a> {
             if self.peek_char() == Some('.') {
                 self.bump_char();
                 let slot_start = self.pos;
-                let slot_name = Symbol::mk(self.parse_ident()?);
-                if slot_name == Symbol::mk("delegate") || slot_name == Symbol::mk("slots") {
+                let quoted = self.peek_char() == Some('"');
+                let slot_name = if quoted {
+                    Symbol::mk(&self.parse_string_value()?)
+                } else {
+                    Symbol::mk(self.parse_ident()?)
+                };
+                if !quoted
+                    && (slot_name == Symbol::mk("delegate") || slot_name == Symbol::mk("slots"))
+                {
                     return Err(ObjDefParseError::VerbCompileError(
                         CompileError::BadSlotName(
                             CompileContext::new(self.line_col(slot_start)),
@@ -630,6 +656,8 @@ impl<'a> LiteralParser<'a> {
     fn compile_lambda_value(
         &self,
         lambda_source: &str,
+        frames: &LambdaCaptureFrames,
+        self_symbol: Option<Symbol>,
     ) -> Result<
         (
             moor_var::program::opcode::ScatterArgs,
@@ -638,10 +666,43 @@ impl<'a> LiteralParser<'a> {
         ),
         ObjDefParseError,
     > {
-        let lambda_source_with_constants = self.resolve_lambda_constants(lambda_source);
-        let source = format!("return {lambda_source_with_constants};");
-        let program = compile(&source, crate::CompileOptions::default())
-            .map_err(|e| ObjDefParseError::VerbCompileError(e, lambda_source.to_string()))?;
+        let lambda_source_with_constants = if self.persistence_options.is_some() {
+            lambda_source.to_owned()
+        } else {
+            self.resolve_lambda_constants(lambda_source)
+        };
+        let mut source = String::new();
+        let mut seen = std::collections::HashSet::new();
+        for (depth, frame) in frames.iter().enumerate() {
+            if depth != 0 {
+                source.push_str("begin\n");
+            }
+            for (symbol, _) in frame {
+                if !seen.insert((depth, *symbol)) {
+                    return Err(self.parse_error("duplicate captured binding"));
+                }
+                if depth != 0 {
+                    source.push_str("let ");
+                }
+                source.push_str(symbol.as_str());
+                source.push_str(" = None;\n");
+            }
+        }
+        if let Some(symbol) = self_symbol
+            && !frames.iter().flatten().any(|(name, _)| *name == symbol)
+        {
+            source.push_str(symbol.as_str());
+            source.push_str(" = None;\n");
+        }
+        source.push_str(&format!("return {lambda_source_with_constants};"));
+        for _ in 1..frames.len() {
+            source.push_str("\nend");
+        }
+        let program = compile(
+            &source,
+            self.persistence_options.clone().unwrap_or_default(),
+        )
+        .map_err(|e| ObjDefParseError::VerbCompileError(e, lambda_source.to_string()))?;
 
         let Some((scatter_offset, program_offset, self_var)) =
             program.main_vector().iter().find_map(|op| match op {
@@ -691,7 +752,8 @@ impl<'a> LiteralParser<'a> {
         frames: LambdaCaptureFrames,
         body: &Program,
     ) -> Result<Vec<Vec<Var>>, ObjDefParseError> {
-        let mut captured_env: Vec<Vec<Var>> = Vec::new();
+        let mut captured_env: Vec<Vec<Var>> = vec![Vec::new(); frames.len()];
+        let mut assigned = std::collections::HashSet::new();
         let names = body.var_names();
 
         for (source_depth, frame) in frames.into_iter().enumerate() {
@@ -707,7 +769,13 @@ impl<'a> LiteralParser<'a> {
                     .iter()
                     .find(|name| name.1 as usize == source_depth)
                     .copied()
-                    .or_else(|| (candidates.len() == 1).then_some(candidates[0]))
+                    .or_else(|| {
+                        if candidates.len() == 1 {
+                            candidates.first().copied()
+                        } else {
+                            None
+                        }
+                    })
                     .ok_or_else(|| {
                         self.parse_error(&format!(
                             "captured variable '{}' does not identify one lambda variable",
@@ -724,7 +792,7 @@ impl<'a> LiteralParser<'a> {
                 if frame.len() <= var_offset {
                     frame.resize(var_offset + 1, v_none());
                 }
-                if !frame[var_offset].is_none() {
+                if !assigned.insert(name) {
                     return Err(self.parse_error(&format!(
                         "captured variable '{}' is specified more than once",
                         symbol.as_arc_str()
@@ -737,21 +805,9 @@ impl<'a> LiteralParser<'a> {
         Ok(captured_env)
     }
 
-    fn parse_lambda_self_ref(
-        &mut self,
-    ) -> Result<Option<moor_var::program::names::Name>, ObjDefParseError> {
-        use moor_var::program::names::Name;
-        self.skip_trivia();
-        let _ = self.parse_literal()?;
-        Ok(Some(Name(1, 0, 0)))
-    }
-
     fn finish_lambda_value(&mut self, lambda_source: &str) -> Result<Var, ObjDefParseError> {
-        let (params, body_program, compiled_self_var) = self.compile_lambda_value(lambda_source)?;
-
         let mut capture_frames = Vec::new();
-        let mut self_var = compiled_self_var;
-
+        let mut self_symbol = None;
         self.skip_trivia();
         if self.eat_keyword("with") {
             self.skip_trivia();
@@ -761,10 +817,27 @@ impl<'a> LiteralParser<'a> {
             }
             if self.eat_keyword("self") {
                 self.skip_trivia();
-                self_var = self.parse_lambda_self_ref()?;
+                self_symbol = Some(Symbol::mk(self.parse_ident()?));
             }
         }
-
+        let (params, body_program, compiled_self_var) =
+            self.compile_lambda_value(lambda_source, &capture_frames, self_symbol)?;
+        let self_var = if let Some(symbol) = self_symbol {
+            let names = body_program.var_names();
+            let mut candidates = names
+                .names()
+                .into_iter()
+                .filter(|name| names.ident_for_name(name) == Some(symbol));
+            let name = candidates
+                .next()
+                .ok_or_else(|| self.parse_error("unknown lambda self binding"))?;
+            if candidates.next().is_some() {
+                return Err(self.parse_error("ambiguous lambda self binding"));
+            }
+            Some(name)
+        } else {
+            compiled_self_var
+        };
         let captured_env = self.bind_lambda_captures(capture_frames, &body_program)?;
         Ok(Var::mk_lambda(params, body_program, captured_env, self_var))
     }
@@ -1525,8 +1598,13 @@ impl<'a> LiteralParser<'a> {
         self.skip_trivia();
         // Only container literals recurse; count their entry so scalar leaves
         // and map keys do not inflate the nesting depth.
-        let is_container =
-            matches!(self.peek_char(), Some('[' | '{' | '<')) || self.starts_with_keyword("fn");
+        let is_container = matches!(self.peek_char(), Some('[' | '{' | '<'))
+            || self.starts_with_keyword("fn")
+            || self.remaining().starts_with("e\"")
+            || self
+                .remaining()
+                .get(..2)
+                .is_some_and(|prefix| prefix.eq_ignore_ascii_case("e_"));
         if is_container {
             self.depth += 1;
             if self.depth > crate::objdef::MAX_LITERAL_NESTING {
@@ -1552,6 +1630,9 @@ impl<'a> LiteralParser<'a> {
             '#' => self.parse_object_value(),
             '\'' => {
                 self.bump_char();
+                if self.peek_char() == Some('"') {
+                    return Ok(v_sym(&self.parse_string_value()?));
+                }
                 let name = self.parse_ident()?;
                 Ok(v_sym(name))
             }
@@ -1567,6 +1648,19 @@ impl<'a> LiteralParser<'a> {
             '+' | '-' => self.parse_number_value(),
             c if c.is_ascii_digit() => self.parse_number_value(),
             _ => {
+                if self.remaining().starts_with("f\"") {
+                    let start = self.pos;
+                    self.bump_char();
+                    self.parse_quoted()?;
+                    return crate::persistent::parse_float(&self.source[start..self.pos])
+                        .map(v_float)
+                        .map_err(|error| self.parse_error(&error));
+                }
+                if self.remaining().starts_with("e\"") {
+                    self.bump_char();
+                    let code = ErrorCode::ErrCustom(Symbol::mk(&self.parse_string_value()?));
+                    return self.parse_error_value(code);
+                }
                 if self.remaining().starts_with("b\"") {
                     return self.parse_binary_value();
                 }
@@ -1594,6 +1688,9 @@ impl<'a> LiteralParser<'a> {
         ident: &str,
         start: usize,
     ) -> Result<Option<Var>, ObjDefParseError> {
+        if ident.eq_ignore_ascii_case("none") {
+            return Ok(Some(v_none()));
+        }
         if ident.eq_ignore_ascii_case("true") {
             return Ok(Some(v_bool(true)));
         }
@@ -1624,13 +1721,26 @@ impl<'a> LiteralParser<'a> {
         }
 
         self.skip_trivia();
-        let message = self.parse_string_value()?;
+        let message = if self.eat_keyword("None") {
+            None
+        } else {
+            Some(self.parse_string_value()?)
+        };
+        self.skip_trivia();
+        let value = if self.eat_char(',') {
+            Some(self.parse_literal()?)
+        } else {
+            None
+        };
         self.skip_trivia();
         self.expect_char(')', "expected ')' after error literal")?;
-        Ok(v_error(error.msg(message)))
+        Ok(v_error(moor_var::Error::new(error, message, value)))
     }
 
     fn parse_include_text(&mut self) -> Result<Option<Var>, ObjDefParseError> {
+        if self.persistence_options.is_some() {
+            return Err(self.parse_error("include macros are disabled in persistent literals"));
+        }
         self.skip_trivia();
         self.expect_char('(', "expected '(' after include!")?;
         self.skip_trivia();
@@ -1645,6 +1755,9 @@ impl<'a> LiteralParser<'a> {
     }
 
     fn parse_include_binary(&mut self) -> Result<Option<Var>, ObjDefParseError> {
+        if self.persistence_options.is_some() {
+            return Err(self.parse_error("include macros are disabled in persistent literals"));
+        }
         self.skip_trivia();
         self.expect_char('(', "expected '(' after include_bin!")?;
         self.skip_trivia();

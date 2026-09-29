@@ -73,6 +73,17 @@ impl<'a> Lexer<'a> {
                 }
                 '/' if self.peek_next() == Some('*') => self.lex_block_comment(),
                 '"' => self.lex_string(),
+                'f' | 'e' if self.peek_next() == Some('"') => {
+                    self.bump();
+                    let kind = self.lex_string();
+                    if kind == SyntaxKind::Error {
+                        kind
+                    } else if ch == 'f' {
+                        SyntaxKind::FloatLit
+                    } else {
+                        SyntaxKind::ErrorLit
+                    }
+                }
                 'b' if self.peek_next() == Some('"') => self.lex_binary_literal(),
                 '\'' => self.lex_symbol_or_apostrophe(),
                 '#' => self.lex_object_or_hash(),
@@ -398,6 +409,13 @@ impl<'a> Lexer<'a> {
     fn lex_symbol_or_apostrophe(&mut self) -> SyntaxKind {
         let start = self.pos;
         self.bump();
+        if self.peek() == Some('"') {
+            return if self.lex_string() == SyntaxKind::StringLit {
+                SyntaxKind::SymbolLit
+            } else {
+                SyntaxKind::Error
+            };
+        }
         if let Some(ch) = self.peek()
             && is_ident_start(ch)
         {
@@ -644,7 +662,10 @@ impl<'a> Lexer<'a> {
     }
 }
 
-fn keyword_kind(text: &str) -> Option<SyntaxKind> {
+pub(crate) fn keyword_kind(text: &str) -> Option<SyntaxKind> {
+    if text.eq_ignore_ascii_case("none") {
+        return Some(SyntaxKind::NoneLit);
+    }
     if text.eq_ignore_ascii_case("if") {
         return Some(SyntaxKind::IfKw);
     }

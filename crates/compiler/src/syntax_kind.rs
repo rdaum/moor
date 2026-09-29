@@ -38,6 +38,7 @@ pub enum SyntaxKind {
     ErrorLit,
     SymbolLit,
     BinaryLit,
+    NoneLit,
     TypeConstant,
 
     // Keywords reserved in normal MOO mode.
@@ -185,6 +186,7 @@ impl SyntaxKind {
                 | Self::ObjectLit
                 | Self::ErrorLit
                 | Self::SymbolLit
+                | Self::NoneLit
                 | Self::BinaryLit
                 | Self::TypeConstant
                 | Self::TrueKw

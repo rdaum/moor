@@ -405,7 +405,10 @@ fn extract_object_constants_from_identities(
 
         let constant_name = id_str.to_ascii_uppercase();
         let file_name = id_str.to_lowercase();
-        index_names.insert(identity.oid, constant_name);
+        // Literal keywords cannot also identify object constants.
+        if !matches!(constant_name.as_str(), "NONE" | "TRUE" | "FALSE") {
+            index_names.insert(identity.oid, constant_name);
+        }
         file_names.insert(identity.oid, file_name);
     }
 

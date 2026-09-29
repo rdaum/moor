@@ -28,7 +28,6 @@ pub struct LoopFrame {
 #[derive(Debug, Default)]
 pub struct ControlState {
     loops: Vec<LoopFrame>,
-    lambda_scope_depth: u8,
 }
 
 impl ControlState {
@@ -53,20 +52,6 @@ impl ControlState {
             .iter()
             .rev()
             .find(|frame| frame.loop_name.as_ref() == Some(loop_label))
-    }
-
-    pub fn lambda_scope_depth(&self) -> u8 {
-        self.lambda_scope_depth
-    }
-
-    pub fn set_lambda_scope_depth(&mut self, depth: u8) {
-        self.lambda_scope_depth = depth;
-    }
-
-    pub fn push_lambda_scope_depth(&mut self, levels: u8) -> u8 {
-        let outer = self.lambda_scope_depth;
-        self.lambda_scope_depth = self.lambda_scope_depth.saturating_add(levels);
-        outer
     }
 }
 
@@ -114,16 +99,5 @@ mod tests {
         assert!(control.find_loop(&Name(9, 0, 9)).is_none());
         assert_eq!(control.pop_loop().unwrap().top_label, Label(3));
         assert_eq!(control.current_loop().unwrap().top_label, Label(1));
-    }
-
-    #[test]
-    fn lambda_depth_push_saturates() {
-        let mut control = ControlState::new();
-        control.set_lambda_scope_depth(250);
-
-        let outer = control.push_lambda_scope_depth(10);
-
-        assert_eq!(outer, 250);
-        assert_eq!(control.lambda_scope_depth(), u8::MAX);
     }
 }

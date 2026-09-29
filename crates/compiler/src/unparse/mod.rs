@@ -14,6 +14,7 @@
 mod expr;
 mod stmt;
 
+use crate::persistent::write_quoted_string as write_quoted_str;
 use crate::{
     ast,
     ast::{Stmt, StmtNode},
@@ -21,11 +22,10 @@ use crate::{
     parse_tree::Parse,
 };
 use base64::{Engine, engine::general_purpose};
-use moor_common::util::{write_i64_decimal, write_quoted_str};
+use moor_common::util::write_i64_decimal;
 use moor_var::{Lambda, Obj, Var, Variant, program::opcode::ScatterLabel};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::Write as _;
 
 /// This could probably be combined with the structure for Parse.
 #[derive(Debug)]
@@ -35,6 +35,7 @@ pub(crate) struct Unparse<'a> {
     indent_width: usize,
     name_subs: Option<&'a HashMap<Obj, String>>,
     comparison_literals: Option<RefCell<Vec<Var>>>,
+    binding_names: HashMap<moor_var::program::names::Variable, moor_var::Symbol>,
 }
 
 const INDENT_LEVEL: usize = 2;
@@ -48,6 +49,7 @@ impl<'a> Unparse<'a> {
             indent_width,
             name_subs: None,
             comparison_literals: None,
+            binding_names: HashMap::new(),
         }
     }
 
@@ -158,6 +160,31 @@ impl<'a> Unparse<'a> {
         write_literal_objsub(value, name_subs, indent_depth, writer)
     }
 
+    /// Disambiguate lexical bindings before recompiling a detached closure.
+    fn with_binding_names(mut self) -> Self {
+        let names = &self.tree.names;
+        for variable in names.decls.values().map(|decl| decl.identifier) {
+            let symbol = variable.to_symbol();
+            let ambiguous = names
+                .decls
+                .values()
+                .any(|decl| decl.identifier != variable && decl.identifier.to_symbol() == symbol);
+            if !ambiguous
+                && crate::persistent::is_identifier(symbol.as_str())
+                && crate::lexer::keyword_kind(symbol.as_str()).is_none()
+            {
+                continue;
+            }
+            let mut spelling = format!("_binding_{}_{}", variable.scope_id, variable.id);
+            while names.symbols().contains(&moor_var::Symbol::mk(&spelling)) {
+                spelling.push('_');
+            }
+            self.binding_names
+                .insert(variable, moor_var::Symbol::mk(&spelling));
+        }
+        self
+    }
+
     fn write_lambda_literal<W: std::fmt::Write>(
         &self,
         lambda: &Lambda,
@@ -167,7 +194,7 @@ impl<'a> Unparse<'a> {
         let is_simple_expr = self.tree.stmts.len() == 1
             && matches!(
                 &self.tree.stmts[0].node,
-                crate::ast::StmtNode::Expr(crate::ast::Expr::Return(Some(_)))
+                crate::ast::StmtNode::Expr(crate::ast::Expr::Return(Some(expr))) if !matches!(expr.as_ref(), crate::ast::Expr::Lambda { .. })
             );
 
         if is_simple_expr {
@@ -180,29 +207,18 @@ impl<'a> Unparse<'a> {
             if i > 0 {
                 write!(writer, ", ")?;
             }
-            match label {
-                ScatterLabel::Required(name) => {
-                    if let Some(var) = lambda.0.body.var_names().find_variable(name) {
-                        write!(writer, "{}", var.to_symbol().as_arc_str())?;
-                    } else {
-                        write!(writer, "param_{}", name.0)?;
-                    }
-                }
-                ScatterLabel::Optional(name, _) => {
-                    if let Some(var) = lambda.0.body.var_names().find_variable(name) {
-                        write!(writer, "?{}", var.to_symbol().as_arc_str())?;
-                    } else {
-                        write!(writer, "?param_{}", name.0)?;
-                    }
-                }
-                ScatterLabel::Rest(name) => {
-                    if let Some(var) = lambda.0.body.var_names().find_variable(name) {
-                        write!(writer, "@{}", var.to_symbol().as_arc_str())?;
-                    } else {
-                        write!(writer, "@param_{}", name.0)?;
-                    }
-                }
-            }
+            let (prefix, name) = match label {
+                ScatterLabel::Required(name) => ("", name),
+                ScatterLabel::Optional(name, _) => ("?", name),
+                ScatterLabel::Rest(name) => ("@", name),
+            };
+            let variable = lambda
+                .0
+                .body
+                .var_names()
+                .find_variable(name)
+                .ok_or(DecompileError::NameNotFound(*name))?;
+            write!(writer, "{prefix}{}", self.unparse_variable(variable))?;
         }
 
         if is_simple_expr {
@@ -221,65 +237,88 @@ impl<'a> Unparse<'a> {
 
         let mut wrote_metadata = false;
         if !lambda.0.captured_env.is_empty() {
-            let var_names = lambda.0.body.var_names();
-            for (scope_depth, frame) in lambda.0.captured_env.iter().enumerate() {
-                let mut scope_buf = String::new();
-
-                for (var_offset, var_value) in frame.iter().enumerate() {
-                    if var_value.is_none() {
-                        continue;
-                    }
-
-                    let maybe_name = var_names.names().iter().find_map(|name| {
-                        if name.1 as usize == scope_depth && name.0 as usize == var_offset {
-                            var_names.ident_for_name(name)
-                        } else {
-                            None
-                        }
-                    });
-
-                    let Some(symbol) = maybe_name else {
-                        continue;
-                    };
-
-                    if !scope_buf.is_empty() {
-                        write!(scope_buf, ", ")?;
-                    }
-                    write!(scope_buf, "{}: ", symbol.as_arc_str())?;
-                    self.write_value_literal(
-                        var_value,
-                        indent_depth + INDENT_LEVEL,
-                        &mut scope_buf,
-                    )?;
-                }
-
-                if scope_buf.is_empty() {
-                    continue;
-                }
-                if !wrote_metadata {
-                    write!(writer, " with captured [")?;
-                    wrote_metadata = true;
-                } else {
+            write!(writer, " with captured [")?;
+            wrote_metadata = true;
+            let names = lambda.0.body.var_names();
+            let mut ordered = names.names();
+            ordered.sort_unstable();
+            for (depth, frame) in lambda.0.captured_env.iter().enumerate() {
+                if depth != 0 {
                     write!(writer, ", ")?;
                 }
-                write!(writer, "{{{scope_buf}}}")?;
+                write!(writer, "{{")?;
+                let mut first = true;
+                for (offset, value) in frame.iter().enumerate() {
+                    let bindings = ordered
+                        .iter()
+                        .filter(|name| name.1 as usize == depth && name.0 as usize == offset)
+                        .collect::<Vec<_>>();
+                    let mut symbols = bindings
+                        .iter()
+                        .filter_map(|name| names.find_variable(name))
+                        .map(|var| self.unparse_variable(var))
+                        .collect::<Vec<_>>();
+                    if symbols.is_empty() {
+                        let mut spelling = format!("_capture_{depth}_{offset}");
+                        while names.symbols().contains(&moor_var::Symbol::mk(&spelling))
+                            || self
+                                .binding_names
+                                .values()
+                                .any(|symbol| symbol.as_str() == spelling)
+                        {
+                            spelling.push('_');
+                        }
+                        symbols.push(moor_var::Symbol::mk(&spelling));
+                    }
+                    for symbol in symbols {
+                        if !first {
+                            write!(writer, ", ")?;
+                        }
+                        first = false;
+                        write!(writer, "{symbol}: ")?;
+                        self.write_value_literal(value, indent_depth + INDENT_LEVEL, writer)?;
+                    }
+                }
+                write!(writer, "}}")?;
             }
-
-            if wrote_metadata {
-                write!(writer, "]")?;
-            }
+            write!(writer, "]")?;
         }
-
-        if lambda.0.self_var.is_some() {
-            if !wrote_metadata {
-                write!(writer, " with ")?;
-            } else {
-                write!(writer, " ")?;
-            }
-            write!(writer, "self 1")?;
+        if let Some(name) = lambda.0.self_var {
+            let variable = lambda
+                .0
+                .body
+                .var_names()
+                .find_variable(&name)
+                .ok_or_else(|| {
+                    DecompileError::MalformedProgram(
+                        "lambda self binding has no declaration".into(),
+                    )
+                })?;
+            write!(
+                writer,
+                "{}self {}",
+                if wrote_metadata { " " } else { " with " },
+                self.unparse_variable(variable)
+            )?;
         }
 
         Ok(())
+    }
+}
+
+pub(super) fn write_slot_name(
+    writer: &mut impl std::fmt::Write,
+    name: moor_var::Symbol,
+) -> std::fmt::Result {
+    if crate::persistent::is_identifier(name.as_str())
+        && crate::lexer::keyword_kind(name.as_str()).is_none()
+        && !["delegate", "slots"]
+            .iter()
+            .any(|s| name.as_str().eq_ignore_ascii_case(s))
+    {
+        writer.write_str(name.as_str())
+    } else {
+        write_quoted_str(writer, name.as_str())
     }
 }
 
@@ -405,10 +444,16 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
 pub fn write_literal<W: std::fmt::Write>(v: &Var, writer: &mut W) -> Result<(), DecompileError> {
     match v.variant() {
         Variant::None => writer.write_str("None")?,
-        Variant::Obj(oid) => write!(writer, "{oid}")?,
+        Variant::Obj(oid) => writer.write_str(&oid.to_literal())?,
         Variant::Bool(b) => writer.write_str(if b { "true" } else { "false" })?,
         Variant::Int(i) => write_i64_decimal(writer, i)?,
-        Variant::Float(f) => write!(writer, "{f:?}")?,
+        Variant::Float(f) => {
+            if f.is_finite() {
+                write!(writer, "{f:?}")?;
+            } else {
+                write!(writer, "f\"{:016X}\"", f.to_bits())?;
+            }
+        }
         Variant::List(l) => {
             writer.write_char('{')?;
             for (i, v) in l.iter_ref().enumerate() {
@@ -433,14 +478,24 @@ pub fn write_literal<W: std::fmt::Write>(v: &Var, writer: &mut W) -> Result<(), 
             writer.write_char(']')?;
         }
         Variant::Err(e) => {
-            let err_name = e.name().to_string().to_uppercase();
-            if let Some(msg) = e.msg() {
-                writer.write_str(&err_name)?;
-                writer.write_char('(')?;
-                write_quoted_str(writer, msg)?;
-                writer.write_char(')')?;
+            if let moor_var::ErrorCode::ErrCustom(name) = e.err_type() {
+                writer.write_char('e')?;
+                write_quoted_str(writer, name.as_str())?;
             } else {
-                write!(writer, "{err_name}")?;
+                writer.write_str(&e.name().to_string())?;
+            }
+            if e.msg().is_some() || e.value().is_some() {
+                writer.write_char('(')?;
+                if let Some(message) = e.msg() {
+                    write_quoted_str(writer, message)?;
+                } else {
+                    writer.write_str("None")?;
+                }
+                if let Some(value) = e.value() {
+                    writer.write_str(", ")?;
+                    write_literal(value, writer)?;
+                }
+                writer.write_char(')')?;
             }
         }
         Variant::Flyweight(fl) => {
@@ -449,7 +504,9 @@ pub fn write_literal<W: std::fmt::Write>(v: &Var, writer: &mut W) -> Result<(), 
             let slots = fl.slots_storage();
             if !slots.is_empty() {
                 for (k, v) in slots.iter() {
-                    write!(writer, ", .{} = ", k.as_arc_str())?;
+                    write!(writer, ", .")?;
+                    write_slot_name(writer, *k)?;
+                    write!(writer, " = ")?;
                     write_literal(v, writer)?;
                 }
             }
@@ -466,7 +523,14 @@ pub fn write_literal<W: std::fmt::Write>(v: &Var, writer: &mut W) -> Result<(), 
             }
             write!(writer, ">")?;
         }
-        Variant::Sym(s) => write!(writer, "'{}", s.as_arc_str())?,
+        Variant::Sym(s) => {
+            writer.write_char('\'')?;
+            if crate::persistent::is_identifier(s.as_str()) {
+                writer.write_str(s.as_str())?;
+            } else {
+                write_quoted_str(writer, s.as_str())?;
+            }
+        }
         Variant::Binary(b) => {
             let encoded = general_purpose::URL_SAFE.encode(b.as_bytes());
             write!(writer, "b\"{encoded}\"")?;
@@ -474,8 +538,8 @@ pub fn write_literal<W: std::fmt::Write>(v: &Var, writer: &mut W) -> Result<(), 
         Variant::Lambda(l) => {
             use crate::decompile;
 
-            let decompiled_tree = decompile::program_to_tree(&l.0.body).unwrap();
-            let temp_unparse = Unparse::new(&decompiled_tree, false, true);
+            let decompiled_tree = decompile::program_to_tree(&l.0.body)?;
+            let temp_unparse = Unparse::new(&decompiled_tree, false, true).with_binding_names();
             temp_unparse.write_lambda_literal(l, 0, writer)?;
         }
     }
@@ -592,7 +656,9 @@ pub fn write_literal_objsub<W: std::fmt::Write>(
             let slots = fl.slots_storage();
             if !slots.is_empty() {
                 for (k, v) in slots.iter() {
-                    write!(writer, ", .{} = ", k.as_arc_str())?;
+                    write!(writer, ", .")?;
+                    write_slot_name(writer, *k)?;
+                    write!(writer, " = ")?;
                     write_literal_objsub(v, name_subs, indent_depth + INDENT_LEVEL, writer)?;
                 }
             }
@@ -615,8 +681,9 @@ pub fn write_literal_objsub<W: std::fmt::Write>(
         Variant::Lambda(l) => {
             use crate::decompile;
 
-            let decompiled_tree = decompile::program_to_tree(&l.0.body).unwrap();
-            let temp_unparse = Unparse::new_objsub(&decompiled_tree, false, true, name_subs);
+            let decompiled_tree = decompile::program_to_tree(&l.0.body)?;
+            let temp_unparse =
+                Unparse::new_objsub(&decompiled_tree, false, true, name_subs).with_binding_names();
             temp_unparse.write_lambda_literal(l, indent_depth, writer)?;
         }
         _ => {

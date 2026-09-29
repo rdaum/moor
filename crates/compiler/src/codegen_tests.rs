@@ -1826,6 +1826,23 @@ mod tests {
 
     /// Test that reading a captured variable (without assignment) still works.
     #[test]
+    fn parameterless_lambda_capture_assignment_after_sibling_scopes() {
+        use moor_common::model::CompileError;
+
+        for body in ["{} => x = 10", "fn () {x} = {10}; endfn"] {
+            let source = format!("begin let unused = 1; end begin let x = 5; return {body}; end");
+            assert!(matches!(
+                compile(&source, CompileOptions::default()),
+                Err(CompileError::AssignmentToCapturedVariable(_, sym)) if sym.as_string() == "x"
+            ));
+        }
+        compile(
+            "begin let unused = 1; end begin let x = 5; return fn () let x = 1; x = 2; return x; endfn; end",
+            CompileOptions::default(),
+        ).unwrap();
+    }
+
+    #[test]
     fn test_lambda_read_captured_variable_ok() {
         // Reading captured variable should be fine
         let program = r#"x = 5; let f = {} => x + 1;"#;

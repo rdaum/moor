@@ -221,6 +221,8 @@ pub enum Expr {
     Lambda {
         /// Lexical scopes present before the lambda body starts, including its parameter scope.
         entry_scope_count: u16,
+        /// Outer bindings resolved by lexical identity.
+        captures: Vec<Variable>,
         params: Vec<ScatterItem>,
         body: Box<Stmt>,
         self_name: Option<Variable>, // For recursive lambdas, the variable to assign self to
@@ -1106,7 +1108,10 @@ pub trait AstVisitor {
                 self.visit_expr(location);
                 self.visit_expr(property);
             }
-            Expr::Call { function: _, args } => {
+            Expr::Call { function, args } => {
+                if let CallTarget::Expr(function) = function {
+                    self.visit_expr(function);
+                }
                 for arg in args {
                     self.walk_arg(arg);
                 }

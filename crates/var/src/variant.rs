@@ -281,9 +281,7 @@ impl Var {
 
     #[inline(always)]
     pub fn mk_float(f: f64) -> Self {
-        // MOO floating-point values are always real (finite) numbers:
-        // infinities and NaNs are not representable.
-        debug_assert!(f.is_finite(), "non-real float in MOO value");
+        // Preserve IEEE bits for literals and persistence; arithmetic checks its own range.
         Self::from_header_and_data(Self::header(TAG_FLOAT), f.to_bits())
     }
 

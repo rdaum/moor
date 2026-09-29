@@ -11,18 +11,17 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-//! Conformance corpus for the persistence-oriented MOO literal codec.
-//!
-//! The codec contract is defined in `pluggable-persistence-and-postgresql.md` §8 and §15.2. The
-//! corpus is established now, before the codec is implemented, so the round-trip target is
-//! executable rather than prose. Cases that the current objdef formatter cannot represent are
-//! marked `#[ignore]` with the §8 item that must fix them; the fallible persistence codec (§16
-//! step 4) un-ignores them.
-//!
-//! This file deliberately exercises only `to_literal`/`parse_literal_value`. Lambdas and
-//! program source are covered by compiler unit tests when the source codec lands.
+//! Exact structural conformance for the versioned persistence literal codec.
 
-use moor_compiler::{parse_literal_value, to_literal};
+use moor_compiler::{SourceProfile, read_persistent_literal, write_persistent_literal};
+fn to_literal(value: &moor_var::Var) -> String {
+    let mut text = String::new();
+    write_persistent_literal(value, &SourceProfile::default(), &mut text).unwrap();
+    text
+}
+fn parse_literal_value(text: &str) -> Result<moor_var::Var, moor_compiler::LiteralDecodeError> {
+    read_persistent_literal(text, &SourceProfile::default())
+}
 use moor_var::{
     AnonymousObjid, Error, ErrorCode, List, NOTHING, Obj, Symbol, Var, Variant, v_binary, v_bool,
     v_err, v_error, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_str, v_symbol_str,
@@ -103,7 +102,7 @@ fn exact_comparison_detects_nested_storage_differences() {
     ));
 }
 
-/// Render with the current formatter and parse the result back.
+/// Validate through the persistence API in both directions.
 fn round_trip(value: &Var) -> Result<Var, String> {
     let text = to_literal(value);
     parse_literal_value(&text).map_err(|error| format!("{error:?}"))
@@ -149,6 +148,7 @@ fn scalars_round_trip() {
         v_symbol_str(Symbol::mk("foo")),
         v_symbol_str(Symbol::mk("MixedCase")),
         v_binary(vec![0x00, 0x01, 0x7f, 0x80, 0xff]),
+        v_binary((0..=255).collect()),
     ];
 
     for value in &values {
@@ -226,11 +226,8 @@ fn flyweights_round_trip() {
     }
 }
 
-/// §8.2: generic formatting emits `None`, but the objdef literal parser has no corresponding
-/// keyword case and resolves it as a missing constant. `None` must become a built-in literal,
-/// including inside captures and containers.
+/// None remains a distinct value inside containers.
 #[test]
-#[ignore = "pending the fallible persistence codec (§8); un-ignore in §16 step 4"]
 fn none_round_trips() {
     assert_round_trip(&v_none());
     assert_round_trip(&v_list(&[v_none()]));
@@ -240,17 +237,14 @@ fn none_round_trips() {
 /// §8.2: ordinary object display hides anonymous identity, so anonymous objects need an explicit
 /// identity-preserving literal spelling. §8.3: the value table requires complete identity.
 #[test]
-#[ignore = "pending the fallible persistence codec (§8); un-ignore in §16 step 4"]
 fn anonymous_objects_round_trip() {
     let anonymous = Obj::mk_anonymous(AnonymousObjid::generate(1));
     assert_round_trip(&v_obj(anonymous));
     assert_round_trip(&v_list(&[v_obj(anonymous)]));
 }
 
-/// §8.2: the flyweight formatter resolves the delegate through `to_literal()`, which omits `#`
-/// on UUID-style objects and hides anonymous identity.
+/// Flyweight delegates retain their complete object identity.
 #[test]
-#[ignore = "pending the fallible persistence codec (§8); un-ignore in §16 step 4"]
 fn flyweight_delegates_preserve_identity() {
     for delegate in [
         Obj::mk_uuobjid_generated(),
@@ -263,7 +257,6 @@ fn flyweight_delegates_preserve_identity() {
 /// §8.3: non-finite floats require an explicit scalar literal grammar extension preserving
 /// infinity sign and NaN sign/payload bits.
 #[test]
-#[ignore = "pending the fallible persistence codec (§8); un-ignore in §16 step 4"]
 fn non_finite_floats_round_trip_exactly() {
     for value in [
         f64::INFINITY,
@@ -276,9 +269,8 @@ fn non_finite_floats_round_trip_exactly() {
     }
 }
 
-/// §8.2/§8.3: the formatter emits the error name and message but not the attached value.
+/// Rich errors retain their optional attached value.
 #[test]
-#[ignore = "pending the fallible persistence codec (§8); un-ignore in §16 step 4"]
 fn rich_error_attached_values_round_trip() {
     let value = v_error(Error::new(
         ErrorCode::E_INVARG,
@@ -290,7 +282,6 @@ fn rich_error_attached_values_round_trip() {
 
 /// §8.3: canonical escaping writes NUL as the four characters `\x00`, not `\0`.
 #[test]
-#[ignore = "pending the fallible persistence codec (§8); un-ignore in §16 step 4"]
 fn nul_uses_canonical_hex_escape() {
     let text = to_literal(&v_str("a\0b"));
     assert!(text.contains("\\x00"), "expected \\x00 in {text:?}");
@@ -299,7 +290,6 @@ fn nul_uses_canonical_hex_escape() {
 
 /// §8.3: ordinary Unicode remains UTF-8; hex escapes cover C0 controls and DEL.
 #[test]
-#[ignore = "pending the fallible persistence codec (§8); un-ignore in §16 step 4"]
 fn unicode_is_emitted_as_utf8() {
     let text = to_literal(&v_str("\u{3b1}\u{1f404}"));
     assert!(text.contains('\u{3b1}'), "expected raw UTF-8 in {text:?}");
@@ -309,7 +299,266 @@ fn unicode_is_emitted_as_utf8() {
 /// §8.3: the lexer recognizes `\U` escapes but the unquoter has no eight-digit decode branch.
 /// The codec must reject unsupported escapes instead of silently passing them through.
 #[test]
-#[ignore = "pending the fallible persistence codec (§8); un-ignore in §16 step 4"]
 fn unsupported_unicode_escape_is_rejected() {
     assert!(parse_literal_value("\"\\U0001F404\"").is_err());
+}
+
+#[test]
+fn symbols_errors_and_slots_preserve_unrestricted_spelling() {
+    for spelling in [
+        "",
+        "with space",
+        "MixedCASE",
+        "E_TYPE",
+        "α\0🐄",
+        "none",
+        "x\"\\y",
+    ] {
+        let symbol = Symbol::mk(spelling);
+        assert_round_trip(&v_symbol_str(symbol));
+        for message in [None, Some("\0 detail 🐄".to_owned())] {
+            for value in [None, Some(v_none()), Some(v_list(&[v_float(-0.0)]))] {
+                assert_round_trip(&v_error(Error::new(
+                    ErrorCode::ErrCustom(symbol),
+                    message.clone(),
+                    value,
+                )));
+            }
+        }
+        assert_round_trip(&v_flyweight(
+            Obj::mk_id(1),
+            &[(symbol, v_none())],
+            List::mk_list(&[]),
+        ));
+    }
+    for spelling in ["delegate", "slots"] {
+        assert_round_trip(&v_flyweight(
+            Obj::mk_id(1),
+            &[(Symbol::mk(spelling), v_int(2))],
+            List::mk_list(&[]),
+        ));
+    }
+}
+
+#[test]
+fn deterministic_float_bit_corpus() {
+    let mut bits = 0x1234_5678_9abc_def0_u64;
+    for _ in 0..4096 {
+        bits ^= bits << 13;
+        bits ^= bits >> 7;
+        bits ^= bits << 17;
+        assert_round_trip(&v_float(f64::from_bits(bits)));
+    }
+    for bits in [
+        0x7ff0_0000_0000_0001,
+        0xfff0_0000_0000_0001,
+        0x7fff_ffff_ffff_ffff,
+    ] {
+        assert_round_trip(&v_float(f64::from_bits(bits)));
+    }
+}
+
+#[test]
+fn profile_is_checked_before_decoding_and_output() {
+    use moor_compiler::{CompileOptions, LiteralDecodeError, PersistentProgram, compile};
+    use moor_var::program::ProgramType;
+    let profile = SourceProfile::default();
+    let mut profiles = vec![];
+    let mut p = profile.clone();
+    p.language = "other".into();
+    profiles.push(p);
+    let mut p = profile.clone();
+    p.literal_version += 1;
+    profiles.push(p);
+    let mut p = profile.clone();
+    p.source_version += 1;
+    profiles.push(p);
+    let mut p = profile.clone();
+    p.compiler_profile_version += 1;
+    profiles.push(p);
+    let mut p = profile.clone();
+    p.options.bool_type = false;
+    profiles.push(p);
+    for p in profiles {
+        assert!(matches!(
+            read_persistent_literal("invalid", &p),
+            Err(LiteralDecodeError::Profile(_))
+        ));
+        let mut output = "prefix".to_owned();
+        assert!(write_persistent_literal(&v_int(1), &p, &mut output).is_err());
+        assert_eq!(output, "prefix");
+        assert!(moor_compiler::read_persistent_source("invalid", &p).is_err());
+    }
+    let program = ProgramType::MooR(compile("return 42;", CompileOptions::default()).unwrap());
+    let mut stored = PersistentProgram::encode(&program, &profile).unwrap();
+    stored.originating_compiler = "another-build".into();
+    assert!(stored.decode().is_ok());
+}
+
+#[test]
+fn persistence_rejects_external_inputs_malformed_bits_and_duplicate_captures() {
+    for text in [
+        "$external",
+        "EXTERNAL",
+        "include!(\"secret\")",
+        "include_bin!(\"secret\")",
+        "1; return 2;",
+        "f\"0000000000000000\"",
+        "f\"7FF\"",
+        "f\"GGGGGGGGGGGGGGGG\"",
+        "1e9999",
+        "#FFFFFF-1234567890",
+        "#anon_FFFFFF-1234567890",
+        "#2147483648",
+        "{} => x with captured [{x: None, x: 1}]",
+        "{} => 1 with self 1",
+        "\"\\q\"",
+        "\"raw\0nul\"",
+        "\"\\x0\"",
+    ] {
+        assert!(parse_literal_value(text).is_err(), "accepted {text}");
+    }
+    let nested = format!("{}None{}", "E_TYPE(None, ".repeat(100), ")".repeat(100));
+    assert!(parse_literal_value(&nested).is_err());
+}
+
+#[test]
+fn rich_error_nesting_limit_is_case_insensitive() {
+    for code in ["E_TYPE", "e_type", "e_TyPe", "E_tYpE", "e\"custom\""] {
+        for depth in [64, 65] {
+            let text = format!(
+                "{}None{}",
+                format!("{code}(None, ").repeat(depth),
+                ")".repeat(depth)
+            );
+            assert_eq!(
+                parse_literal_value(&text).is_ok(),
+                depth == 64,
+                "{code}: depth {depth}"
+            );
+        }
+    }
+}
+
+#[test]
+fn empty_frames_none_captures_and_invalid_lambda_metadata() {
+    let value = parse_literal_value("{} => 7 with captured [{}, {}, {}]").unwrap();
+    let loaded = parse_literal_value(&to_literal(&value)).unwrap();
+    assert_eq!(
+        loaded.as_lambda().unwrap().0.captured_env,
+        vec![vec![], vec![], vec![]]
+    );
+    let value = parse_literal_value("{} => x with captured [{x: None}]").unwrap();
+    let loaded = parse_literal_value(&to_literal(&value)).unwrap();
+    let lambda = loaded.as_lambda().unwrap();
+    let binding = lambda
+        .0
+        .body
+        .var_names()
+        .name_for_ident(Symbol::mk("x"))
+        .unwrap();
+    assert!(lambda.0.captured_env[binding.1 as usize][binding.0 as usize].is_none());
+    let body =
+        moor_compiler::compile("return 1;", moor_compiler::CompileOptions::default()).unwrap();
+    let params = moor_var::program::opcode::ScatterArgs {
+        labels: vec![moor_var::program::opcode::ScatterLabel::Required(
+            moor_var::program::names::Name(65535, 0, 0),
+        )],
+        done: moor_var::program::labels::Label(0),
+    };
+    let value = Var::mk_lambda(params, body, vec![], None);
+    let mut output = "prefix".to_owned();
+    assert!(write_persistent_literal(&value, &SourceProfile::default(), &mut output).is_err());
+    assert_eq!(output, "prefix");
+}
+
+#[test]
+fn source_accepts_literal_keywords_as_property_names_and_quoted_slots() {
+    let profile = SourceProfile::default();
+    for source in [
+        "return #0.none;",
+        "return $none;",
+        "f = 1; e = 2; inf = 3; nan = 4; return f + e + inf + nan;",
+    ] {
+        assert!(
+            moor_compiler::read_persistent_source(source, &profile).is_ok(),
+            "{source}"
+        );
+    }
+    for slot in [
+        "none", "if", "global", "false", "delegate", "slots", "α name",
+    ] {
+        let value = v_flyweight(
+            Obj::mk_id(1),
+            &[(Symbol::mk(slot), v_int(1))],
+            List::mk_list(&[]),
+        );
+        let source = format!("return {};", to_literal(&value));
+        assert!(
+            moor_compiler::read_persistent_source(&source, &profile).is_ok(),
+            "{source}"
+        );
+    }
+}
+
+fn value_strategy() -> impl proptest::strategy::Strategy<Value = Var> {
+    use proptest::prelude::*;
+    let scalar = prop_oneof![
+        Just(v_none()),
+        any::<bool>().prop_map(v_bool),
+        any::<i64>().prop_map(v_int),
+        any::<u64>().prop_map(|bits| v_float(f64::from_bits(bits))),
+        any::<String>().prop_map(|s| v_str(&s)),
+        any::<String>().prop_map(|s| v_symbol_str(Symbol::mk(&s))),
+        proptest::collection::vec(any::<u8>(), 0..64).prop_map(v_binary),
+        any::<i32>().prop_map(|id| v_obj(Obj::mk_id(id))),
+        (any::<u16>(), any::<u8>(), any::<u64>()).prop_map(|(counter, random, time)| v_obj(
+            Obj::mk_anonymous(AnonymousObjid::new(counter, random, time))
+        )),
+        (any::<u16>(), any::<u8>(), any::<u64>()).prop_map(|(counter, random, time)| v_obj(
+            Obj::mk_uuobjid(moor_var::UuObjid::new(counter, random, time))
+        )),
+        Just(v_err(ErrorCode::E_TYPE)),
+    ];
+    scalar.prop_recursive(5, 128, 8, |inner| {
+        prop_oneof![
+            proptest::collection::vec(inner.clone(), 0..8).prop_map(|values| v_list(&values)),
+            proptest::collection::vec((any::<i64>(), inner.clone()), 0..8).prop_map(|pairs| v_map(
+                &pairs
+                    .into_iter()
+                    .map(|(key, value)| (v_int(key), value))
+                    .collect::<Vec<_>>()
+            )),
+            (
+                any::<String>(),
+                proptest::option::of(any::<String>()),
+                proptest::option::of(inner.clone())
+            )
+                .prop_map(|(code, message, value)| v_error(Error::new(
+                    ErrorCode::ErrCustom(Symbol::mk(&code)),
+                    message,
+                    value
+                ))),
+            (
+                proptest::collection::vec((any::<String>(), inner.clone()), 0..4),
+                proptest::collection::vec(inner, 0..4)
+            )
+                .prop_map(|(slots, contents)| v_flyweight(
+                    Obj::mk_id(1),
+                    &slots
+                        .into_iter()
+                        .map(|(name, value)| (Symbol::mk(&name), value))
+                        .collect::<Vec<_>>(),
+                    List::mk_list(&contents)
+                )),
+        ]
+    })
+}
+
+proptest::proptest! {
+    #![proptest_config(proptest::test_runner::Config::with_cases(128))]
+    #[test]
+    fn nested_values_round_trip_exactly(value in value_strategy()) {
+        assert_round_trip(&value);
+    }
 }

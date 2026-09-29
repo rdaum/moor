@@ -132,7 +132,12 @@ impl<'a> Unparse<'a> {
                 Ok(())
             }
             Expr::Error(code, message) => {
-                write!(writer, "{code}")?;
+                if let moor_var::ErrorCode::ErrCustom(name) = code {
+                    write!(writer, "e")?;
+                    crate::persistent::write_quoted_string(writer, name.as_str())?;
+                } else {
+                    write!(writer, "{code}")?;
+                }
                 if let Some(message) = message {
                     write!(writer, "(")?;
                     self.write_expr(message, writer)?;
@@ -326,7 +331,9 @@ impl<'a> Unparse<'a> {
                 write!(writer, "<")?;
                 self.write_expr(delegate, writer)?;
                 for (slot, value) in slots {
-                    write!(writer, ", .{} = ", slot.as_arc_str())?;
+                    write!(writer, ", .")?;
+                    super::write_slot_name(writer, *slot)?;
+                    write!(writer, " = ")?;
                     self.write_expr(value, writer)?;
                 }
                 if let Some(contents) = contents {

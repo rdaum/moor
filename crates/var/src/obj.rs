@@ -210,11 +210,15 @@ impl Obj {
             OBJID_TYPE_CODE => format!("#{}", self.decode_as_objid()),
             UUOBJID_TYPE_CODE => {
                 let uuid = self.decode_as_uuobjid();
-                uuid.to_uuid_string()
+                format!("#{}", uuid.to_uuid_string())
             }
             ANONYMOUS_TYPE_CODE => {
-                // Anonymous objects show as "*anonymous*" in keeping with toaststunt
-                "*anonymous*".to_string()
+                let (counter, random, time) = self
+                    .anonymous_objid()
+                    .expect("anonymous object kind")
+                    .components();
+                let first = ((counter as u64) << 6) | (random as u64);
+                format!("#anon_{first:06X}-{time:010X}")
             }
             _ => format!("UnknownType:{}", self.object_type_code()),
         }
@@ -397,7 +401,7 @@ impl UuObjid {
     /// Parses a UUID-like string back to UuObjid
     pub fn from_uuid_string(s: &str) -> Result<Self, DecodingError> {
         let parts: Vec<&str> = s.split('-').collect();
-        if parts.len() != 2 {
+        if parts.len() != 2 || parts[0].len() != 6 || parts[1].len() != 10 {
             return Err(DecodingError::CouldNotDecode(
                 "Expected format FFFFFF-FFFFFFFFFF".to_string(),
             ));
@@ -409,6 +413,11 @@ impl UuObjid {
         let epoch_ms = u64::from_str_radix(parts[1], 16)
             .map_err(|e| DecodingError::CouldNotDecode(format!("Invalid epoch_ms: {e}")))?;
 
+        if first_group > 0x3f_ffff || epoch_ms > 0xff_ffff_ffff {
+            return Err(DecodingError::CouldNotDecode(
+                "Object identity exceeds 62 bits".into(),
+            ));
+        }
         let autoincrement = ((first_group >> 6) & 0xFFFF) as u16;
         let rng = (first_group & 0x3F) as u8;
 
@@ -503,7 +512,7 @@ mod tests {
         let obj = Obj::mk_uuobjid(uuid);
         assert!(obj.is_uuobjid());
         assert!(!obj.is_sysobj());
-        assert_eq!(obj.to_literal(), "048D05-1234567890");
+        assert_eq!(obj.to_literal(), "#048D05-1234567890");
         assert_eq!(obj.uuobjid(), Some(uuid));
 
         // Test string parsing
@@ -589,7 +598,7 @@ mod tests {
         assert_eq!(obj.uuobjid(), None);
 
         // Test literal representation
-        assert_eq!(obj.to_literal(), "*anonymous*");
+        assert_eq!(obj.to_literal(), "#anon_000000-0000003039");
 
         // Test Display implementation
         assert_eq!(format!("{obj}"), "*anonymous*");
@@ -661,9 +670,8 @@ mod tests {
         assert!(epoch1 <= now_truncated);
         assert!(epoch2 <= now_truncated);
 
-        // Both should display as *anonymous*
-        assert_eq!(obj1.to_literal(), "*anonymous*");
-        assert_eq!(obj2.to_literal(), "*anonymous*");
+        assert!(obj1.to_literal().starts_with("#anon_"));
+        assert_ne!(obj1.to_literal(), obj2.to_literal());
     }
 
     #[test]

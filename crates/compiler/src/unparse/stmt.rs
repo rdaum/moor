@@ -341,6 +341,9 @@ impl<'a> Unparse<'a> {
     }
 
     pub(super) fn unparse_variable(&self, variable: &Variable) -> Symbol {
+        if let Some(symbol) = self.binding_names.get(variable) {
+            return *symbol;
+        }
         self.tree
             .variables
             .variables
