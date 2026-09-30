@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Copyright (C) 2026 Ryan Daum <ryan.daum@gmail.com> This program is free
+# software: you can redistribute it and/or modify it under the terms of the GNU
+# Affero General Public License as published by the Free Software Foundation,
+# version 3.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+# details.
+#
+# You should have received a copy of the GNU Affero General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
+
+# Disposable TLS/SCRAM fixture. The caller supplies libpq 17+ through its build environment.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+version=${1:-17}
+case "$version" in 17|18) ;; *) echo "Expected PostgreSQL major 17 or 18" >&2; exit 2;; esac
+fixture=$(mktemp -d)
+chmod 755 "$fixture"
+mkdir "$fixture/socket"
+chmod 777 "$fixture/socket"
+container=""
+cleanup() {
+    if [[ -n "$container" ]]; then docker rm -f "$container" >/dev/null; fi
+    rm -rf "$fixture"
+}
+trap cleanup EXIT
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=localhost \
+    -addext subjectAltName=DNS:localhost,IP:127.0.0.1 \
+    -keyout "$fixture/server.key" -out "$fixture/server.crt" >/dev/null 2>&1
+# The container init process copies this key to a private file owned by postgres.
+chmod 644 "$fixture/server.key"
+cat >"$fixture/init.sh" <<'INIT'
+#!/usr/bin/env bash
+set -euo pipefail
+cp /fixture/server.key /fixture/server.crt "$PGDATA/"
+chmod 600 "$PGDATA/server.key"
+cat >>"$PGDATA/postgresql.conf" <<'CONFIG'
+ssl = on
+ssl_cert_file = 'server.crt'
+ssl_key_file = 'server.key'
+unix_socket_directories = '/moor-socket'
+CONFIG
+psql -v ON_ERROR_STOP=1 --username postgres --dbname postgres <<'SQL'
+CREATE DATABASE adapter_latin1 ENCODING 'LATIN1' LC_COLLATE 'C' LC_CTYPE 'C' TEMPLATE template0;
+SQL
+INIT
+chmod 755 "$fixture/init.sh"
+password=$(openssl rand -hex 24)
+# Do not put credentials in Docker arguments or test output.
+printf 'POSTGRES_PASSWORD=%s\nPOSTGRES_INITDB_ARGS=--auth-host=scram-sha-256\n' "$password" >"$fixture/docker.env"
+chmod 600 "$fixture/docker.env"
+data_path=/var/lib/postgresql
+if [[ "$version" == 17 ]]; then data_path=/var/lib/postgresql/data; fi
+container=$(docker run --detach --publish 127.0.0.1::5432 \
+    --env-file "$fixture/docker.env" --mount "type=bind,src=$fixture,dst=/fixture,readonly" \
+    --mount "type=bind,src=$fixture/init.sh,dst=/docker-entrypoint-initdb.d/10-adapter.sh,readonly" \
+    --mount "type=bind,src=$fixture/socket,dst=/moor-socket" \
+    --tmpfs "$data_path" "postgres:$version-bookworm")
+port=$(docker inspect --format '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' "$container")
+ready=false
+for ((attempt=0; attempt<60; attempt++)); do
+    if docker exec "$container" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then ready=true; break; fi
+    if [[ $(docker inspect --format '{{.State.Running}}' "$container") != true ]]; then break; fi
+    sleep 1
+done
+if [[ "$ready" != true ]]; then docker logs "$container" >&2; exit 1; fi
+cat >"$fixture/service.conf" <<SERVICE
+[moor_adapter]
+host=localhost
+port=$port
+user=postgres
+dbname=postgres
+sslmode=verify-full
+sslrootcert=$fixture/server.crt
+SERVICE
+printf 'localhost:%s:*:postgres:%s\n' "$port" "$password" >"$fixture/pgpass"
+chmod 600 "$fixture/pgpass"
+export PGSERVICEFILE="$fixture/service.conf" PGPASSFILE="$fixture/pgpass"
+export MOOR_PG_TEST_CONNINFO='service=moor_adapter' MOOR_PG_TEST_TLS=1
+export MOOR_PG_TEST_SOCKET="$fixture/socket"
+cargo test --locked -p moor-db --features postgres --test postgres_adapter -- --ignored

@@ -151,3 +151,70 @@ impl TableConfig {
         opts
     }
 }
+
+/// Backend selection remains parseable even when an adapter is not compiled in.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StorageBackendKind {
+    #[default]
+    Fjall,
+    Postgres,
+}
+
+impl std::fmt::Display for StorageBackendKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Fjall => "fjall",
+            Self::Postgres => "postgres",
+        })
+    }
+}
+
+impl std::str::FromStr for StorageBackendKind {
+    type Err = &'static str;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "fjall" => Ok(Self::Fjall),
+            "postgres" => Ok(Self::Postgres),
+            _ => Err("storage backend must be fjall or postgres"),
+        }
+    }
+}
+
+impl StorageBackendKind {
+    /// Check world-storage support before creating local directories, keys, or stores.
+    pub fn check_available(self) -> Result<(), crate::DatabaseOpenError> {
+        if self == Self::Fjall {
+            return Ok(());
+        }
+        if !cfg!(feature = "postgres") {
+            return Err(crate::DatabaseOpenError::PostgresFeatureDisabled);
+        }
+        Err(crate::DatabaseOpenError::PostgresWorldStorageUnavailable)
+    }
+}
+
+#[cfg(test)]
+mod backend_selection_tests {
+    use super::*;
+    #[test]
+    fn postgres_selection_never_falls_back_to_fjall() {
+        assert_eq!(
+            "postgres".parse::<StorageBackendKind>().unwrap(),
+            StorageBackendKind::Postgres
+        );
+        assert!(StorageBackendKind::Fjall.check_available().is_ok());
+        let error = StorageBackendKind::Postgres.check_available().unwrap_err();
+        if cfg!(feature = "postgres") {
+            assert!(matches!(
+                error,
+                crate::DatabaseOpenError::PostgresWorldStorageUnavailable
+            ));
+        } else {
+            assert!(matches!(
+                error,
+                crate::DatabaseOpenError::PostgresFeatureDisabled
+            ));
+        }
+    }
+}

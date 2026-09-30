@@ -72,4 +72,11 @@ tempfile.workspace = true
 tokio-rustls.workspace = true
 
 [features]
+postgres = ["moor-daemon/postgres"]
 trace_events = ["moor-daemon/trace_events"]
+
+# Keep the package identity and service paths when selecting client support.
+[package.metadata.deb.variants.postgres]
+name = "moor"
+features = ["postgres"]
+depends = "$auto, systemd, openssl, libpq5 (>= 17)"

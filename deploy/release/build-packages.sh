@@ -17,6 +17,15 @@
 
 set -e
 
+# PostgreSQL variants retain the default package names and add the libpq dependency.
+postgres_build=()
+postgres_deb=()
+case "${POSTGRES:-false}" in
+    true) postgres_build=(--features postgres); postgres_deb=(--variant postgres) ;;
+    false) ;;
+    *) echo 'POSTGRES must be true or false' >&2; exit 2 ;;
+esac
+
 REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$REPO_ROOT"
 
@@ -93,14 +102,18 @@ echo ""
 
 # Build native binaries
 echo "Building $ARTIFACT_ARCH binaries (release profile, limited to $BUILD_CORES cores)..."
-CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS cargo build --release -p moor-server -p moor-daemon -p moor-telnet-host -p moor-web-host -p moor-curl-worker -p moorc -p moor-emh -j $BUILD_CORES
+CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS cargo build --release -p moor-server -p moor-daemon -p moor-telnet-host -p moor-web-host -p moor-curl-worker -p moorc -p moor-emh -j $BUILD_CORES "${postgres_build[@]}"
 echo ""
 
 # Build native Debian packages
 echo "Building $ARTIFACT_ARCH Debian packages..."
 for pkg in moor-server moor-daemon moor-telnet-host moor-web-host moor-curl-worker moorc moor-emh; do
     echo "  Building $pkg..."
-    cargo deb -p "$pkg" --profile release --no-build
+    case "$pkg" in
+        moor-server|moor-daemon|moorc|moor-emh)
+            cargo deb -p "$pkg" --profile release --no-build "${postgres_deb[@]}" ;;
+        *) cargo deb -p "$pkg" --profile release --no-build ;;
+    esac
 done
 echo ""
 

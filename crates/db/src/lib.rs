@@ -45,8 +45,8 @@ pub use cache::{
     ancestry_cache::AncestryCache, prop_cache::PropResolutionCache, verb_cache::VerbResolutionCache,
 };
 pub use config::{
-    AdmissionPolicy, DatabaseConfig, FjallStorageConfig, PersistenceConfig, StorageConfig,
-    TableConfig,
+    AdmissionPolicy, DatabaseConfig, FjallStorageConfig, PersistenceConfig, StorageBackendKind,
+    StorageConfig, TableConfig,
 };
 pub use model::{
     AnonymousObjectMetadata, BytesHolder, EntityMetadataKey, ObjAndUUIDHolder, StringHolder,
@@ -136,6 +136,13 @@ pub use engine::SEQUENCE_MAX_OBJECT;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DatabaseOpenError {
+    #[error("PostgreSQL support is disabled; rebuild with the postgres Cargo feature")]
+    PostgresFeatureDisabled,
+    #[error(
+        "PostgreSQL client support is enabled, but PostgreSQL world storage is not available yet"
+    )]
+    PostgresWorldStorageUnavailable,
+
     #[error("failed to create temporary database directory: {source}")]
     TempDir { source: std::io::Error },
 
@@ -381,3 +388,9 @@ impl Database for TxDB {
 }
 
 mod relation_registry;
+
+#[cfg(feature = "postgres")]
+pub use provider::postgres::{
+    PostgresConnectOptions, PostgresConnection, PostgresEndpoint, PostgresError, PostgresParam,
+    PostgresRow, PostgresSchema, PostgresShutdown, PostgresStatementResult,
+};

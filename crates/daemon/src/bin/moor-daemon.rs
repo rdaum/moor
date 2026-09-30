@@ -40,6 +40,7 @@ fn main() -> Result<(), Report> {
     color_eyre::install()?;
 
     let args = Args::parse();
+    args.db_args.storage_backend.check_available()?;
     let enrollment_token_path = args.resolved_enrollment_token_path();
     let version = semver::Version::parse(build::PKG_VERSION)
         .map_err(|e| eyre!("Invalid moor version '{}': {}", build::PKG_VERSION, e))?;

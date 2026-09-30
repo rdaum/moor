@@ -55,3 +55,12 @@ tabled.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[features]
+postgres = ["moor-db/postgres"]
+
+# Keep the package identity and service paths when selecting client support.
+[package.metadata.deb.variants.postgres]
+name = "moor-emh"
+features = ["postgres"]
+depends = "$auto, libpq5 (>= 17)"

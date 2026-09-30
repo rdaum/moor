@@ -148,6 +148,13 @@ struct Args {
 struct DatabaseArgs {
     #[arg(
         long,
+        default_value = "fjall",
+        help = "World storage backend: fjall or postgres"
+    )]
+    storage_backend: moor_db::StorageBackendKind,
+
+    #[arg(
+        long,
         value_name = "db",
         help = "Main database filename (relative to data-dir if not absolute)",
         default_value = "world.db"
@@ -692,6 +699,7 @@ fn main() -> Result<(), Report> {
     color_eyre::install()?;
 
     let args = Args::parse();
+    args.db_args.storage_backend.check_available()?;
     let version = semver::Version::parse(build::PKG_VERSION)
         .map_err(|e| eyre!("Invalid moor version '{}': {}", build::PKG_VERSION, e))?;
 

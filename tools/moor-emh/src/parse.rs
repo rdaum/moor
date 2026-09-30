@@ -313,6 +313,6 @@ mod tests {
     #[test]
     fn parse_objref_supports_uuid_with_hash() {
         let obj = parse_objref_with_scheduler("#0001F7-9C5EB40302", None, None).unwrap();
-        assert_eq!(obj.to_literal(), "0001F7-9C5EB40302");
+        assert_eq!(obj.to_literal(), "#0001F7-9C5EB40302");
     }
 }

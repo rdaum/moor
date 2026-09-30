@@ -53,6 +53,10 @@ RUN dpkg --add-architecture arm64 && \
         libsodium23:arm64 && \
     rustup target add aarch64-unknown-linux-gnu
 
+ARG POSTGRES=false
+COPY scripts/install-libpq.sh /tmp/install-libpq.sh
+RUN case "$POSTGRES" in true) bash /tmp/install-libpq.sh build arm64 ;; false) ;; *) exit 2 ;; esac
+
 # Configure pkg-config for ARM64 cross-compilation
 ENV PKG_CONFIG_ALLOW_CROSS=1
 
@@ -76,6 +80,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/moor-build/target,sharing=locked \
     VERGEN_GIT_SHA="$(git rev-parse --verify HEAD)" && \
     export VERGEN_GIT_SHA && \
+    if [ "$POSTGRES" = "true" ]; then CARGO_BUILD_FLAGS="$CARGO_BUILD_FLAGS --features postgres"; fi && \
     export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig && \
     export PKG_CONFIG_SYSROOT_DIR=/ && \
     export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc && \

@@ -76,6 +76,13 @@ impl From<Format> for ImportFormat {
 #[command(version = build::PKG_VERSION)]
 struct Args {
     #[arg(
+        long,
+        default_value = "fjall",
+        help = "World storage backend: fjall or postgres"
+    )]
+    storage_backend: moor_db::StorageBackendKind,
+
+    #[arg(
         value_name = "data-dir",
         help = "Directory to store all database files under",
         value_hint = ValueHint::DirPath,
@@ -386,6 +393,7 @@ async fn run() -> Result<(), Report> {
     color_eyre::install()?;
 
     let args = Args::parse();
+    args.storage_backend.check_available()?;
     eprintln!("Initializing...\n{VERSION_BANNER_MSG}");
     tracing::init_tracing(args.debug).map_err(|e| eyre!("Unable to configure logging: {e}"))?;
 

@@ -48,3 +48,6 @@ pub(crate) mod backend;
 pub(crate) mod fjall_reader;
 pub(crate) mod fjall_relations;
 pub(crate) mod read;
+
+#[cfg(feature = "postgres")]
+pub(crate) mod postgres;

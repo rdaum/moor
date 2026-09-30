@@ -102,4 +102,11 @@ uuid.workspace = true
 tempfile.workspace = true
 
 [features]
+postgres = ["moor-db/postgres"]
 trace_events = ["moor-kernel/trace_events"]
+
+# Keep the package identity and service paths when selecting client support.
+[package.metadata.deb.variants.postgres]
+name = "moor-daemon"
+features = ["postgres"]
+depends = "$auto, systemd, openssl, libpq5 (>= 17)"

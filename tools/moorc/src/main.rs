@@ -62,6 +62,13 @@ static VERSION_STRING: LazyLock<String> = LazyLock::new(|| {
 #[derive(Parser, Debug)]
 #[command(version = VERSION_STRING.as_str())]
 pub struct Args {
+    #[arg(
+        long,
+        default_value = "fjall",
+        help = "World storage backend: fjall or postgres"
+    )]
+    storage_backend: moor_db::StorageBackendKind,
+
     #[clap(
         long,
         help = "If set, the source to compile lives in an objdef directory, and the compiler should run over the files contained in there."
@@ -348,6 +355,7 @@ fn run_tests(
 fn main() -> Result<(), eyre::Report> {
     color_eyre::install().unwrap();
     let args: Args = Args::parse();
+    args.storage_backend.check_available()?;
 
     moor_common::tracing::init_tracing_simple(args.debug).unwrap_or_else(|e| {
         eprintln!("Unable to configure logging: {e}");

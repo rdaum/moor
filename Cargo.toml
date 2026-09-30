@@ -105,6 +105,7 @@ debug = false # No debug symbols to save memory/disk during build
 cap-std = "4.0"
 libc = "0.2"
 mimalloc = "0.1"
+pq-sys = { version = "=0.7.6", default-features = false, features = ["pkg-config"] }
 signal-hook = "0.4"
 
 # Command Line & Configuration

@@ -46,6 +46,7 @@ fast-telemetry.workspace = true
 
 # Internal Dependencies
 moor-common = { path = "../common" }
+moor-compiler = { path = "../compiler", optional = true }
 moor-schema = { path = "../schema" }
 moor-var = { path = "../var" }
 
@@ -57,6 +58,9 @@ serde.workspace = true
 
 # Database & Persistence
 fjall.workspace = true
+libc = { workspace = true, optional = true }
+pq-sys = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 
 # Async Runtime & Concurrency
 arc-swap.workspace = true
@@ -85,4 +89,9 @@ zerocopy.workspace = true
 tempfile.workspace = true
 
 [features]
+postgres = ["dep:pq-sys", "dep:libc", "dep:moor-compiler", "dep:serde_json"]
 relbox = []
+
+[[example]]
+name = "postgres_probe"
+required-features = ["postgres"]

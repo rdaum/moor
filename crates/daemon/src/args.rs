@@ -377,6 +377,14 @@ impl RuntimeArgs {
 pub struct DatabaseArgs {
     #[arg(
         long,
+        default_value = "fjall",
+        help = "World storage backend: fjall or postgres"
+    )]
+    #[serde(default)]
+    pub storage_backend: moor_db::StorageBackendKind,
+
+    #[arg(
+        long,
         value_name = "db",
         help = "Main database filename (relative to data-dir if not absolute)",
         value_hint = ValueHint::FilePath,

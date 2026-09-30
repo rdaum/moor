@@ -29,6 +29,9 @@ RUN npm run web:build
 FROM rust:1.98.1-bookworm AS backend-build
 
 WORKDIR /moor-build
+ARG POSTGRES=false
+COPY scripts/install-libpq.sh /tmp/install-libpq.sh
+RUN case "$POSTGRES" in true) bash /tmp/install-libpq.sh build ;; false) ;; *) exit 2 ;; esac
 RUN apt update
 RUN apt -y install clang-16 libclang-16-dev swig python3-dev cmake libc6 git libsodium-dev pkg-config
 
@@ -54,6 +57,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/moor-build/target,sharing=locked \
     VERGEN_GIT_SHA="$(git rev-parse --verify HEAD)" && \
     export VERGEN_GIT_SHA && \
+    if [ "$POSTGRES" = "true" ]; then CARGO_BUILD_FLAGS="$CARGO_BUILD_FLAGS --features postgres"; fi && \
     if [ "$BUILD_PROFILE" = "release" ] || [ "$BUILD_PROFILE" = "release-fast" ]; then \
         PROFILE_FLAG="--profile $BUILD_PROFILE"; \
         if [ "$BUILD_PROFILE" = "release" ]; then PROFILE_FLAG="--release"; fi; \
@@ -76,6 +80,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
 
 # Runtime image - slim debian with just the essentials
 FROM debian:bookworm-slim AS backend
+ARG POSTGRES=false
+COPY scripts/install-libpq.sh /tmp/install-libpq.sh
+RUN case "$POSTGRES" in true) bash /tmp/install-libpq.sh runtime ;; false) ;; *) exit 2 ;; esac && \
+    rm /tmp/install-libpq.sh
 
 # Re-declare ARG to use it in this stage
 ARG BUILD_PROFILE=debug
