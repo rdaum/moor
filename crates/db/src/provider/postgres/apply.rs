@@ -54,6 +54,7 @@ pub(super) enum FailurePoint {
     AfterCommit,
 }
 
+type ChainChanges = ahash::AHashMap<ObjAndUUIDHolder, Option<PropertyValueChain>>;
 struct PropertyPlan {
     batch: RelationBatch,
     changes: Vec<(ObjAndUUIDHolder, Option<PropertyValueChain>)>,
@@ -80,6 +81,22 @@ impl Session {
             Instant::now() + config.query_timeout,
         )?;
         let loaded = seed::load(&mut connection, &config, relations, identity, &progress)?;
+        let info = connection.info()?;
+        tracing::info!(
+            database = %info.database,
+            schema = config.schema.as_str(),
+            user = %info.user,
+            host = %info.host,
+            port = %info.port,
+            server_version = %info.server_version,
+            database_id = %loaded.identity,
+            commit_policy = match config.commit_policy {
+                PostgresCommitPolicy::Synchronous => "synchronous",
+                PostgresCommitPolicy::Asynchronous => "asynchronous",
+            },
+            committed_transactions = loaded.progress.commits,
+            "Opened PostgreSQL world database"
+        );
         Ok((
             Self {
                 config,
@@ -95,51 +112,95 @@ impl Session {
         ))
     }
 
-    /// Retain the exact planned mutations across retries. Confirm chain metadata only after SQL.
+    #[cfg(test)]
     pub fn apply(
         &mut self,
         commit: &EncodedCommit,
-        mut rollup: impl FnMut(&ObjAndUUIDHolder, Var, Timestamp) -> Result<Value, PostgresError>,
+        rollup: impl FnMut(&ObjAndUUIDHolder, Var, Timestamp) -> Result<Value, PostgresError>,
     ) -> Result<(), PostgresError> {
-        if commit.publication.epoch().as_u64() != self.progress.epoch {
-            return Err(PostgresError::OwnershipLost);
+        self.apply_group(std::slice::from_ref(commit), usize::MAX, rollup)
+            .map(|_| ())
+    }
+
+    /// Apply a consecutive publication range atomically. Retries reuse the exact plan;
+    /// tentative chain state becomes visible only after the whole group is confirmed.
+    /// Return the confirmed prefix length; the caller retains all remaining commits and permits.
+    pub fn apply_group(
+        &mut self,
+        commits: &[EncodedCommit],
+        max_bytes: usize,
+        mut rollup: impl FnMut(&ObjAndUUIDHolder, Var, Timestamp) -> Result<Value, PostgresError>,
+    ) -> Result<usize, PostgresError> {
+        if commits.is_empty() {
+            return Ok(0);
         }
         let mut after = self.progress.clone();
-        after.applied = after
-            .applied
-            .checked_add(1)
-            .ok_or_else(|| invalid("applied_version", "counter exhausted"))?;
-        if after.applied != commit.publication.version() {
-            return Err(invalid("applied_version", "nonconsecutive publication"));
-        }
-        after.commits = after
-            .commits
-            .checked_add(1)
-            .ok_or_else(|| invalid("commit_sequence", "counter exhausted"))?;
-        after.max_timestamp = after.max_timestamp.max(commit.timestamp.0);
-        if !commit.properties.is_empty() {
-            after.property_sequence = after
-                .property_sequence
-                .checked_add(1)
-                .ok_or_else(|| invalid("property_record_sequence", "counter exhausted"))?;
-        }
-        let properties = self.plan_properties(commit, after.property_sequence, &mut rollup)?;
-        self.execute(&after, false, |connection, deadline| {
-            for relation in &commit.ordinary {
-                apply_relation(connection, relation, deadline)?;
+        let mut changes = ChainChanges::default();
+        let mut properties = Vec::with_capacity(commits.len());
+        let mut bytes = 0usize;
+        for commit in commits {
+            let before = after.clone();
+            if commit.publication.epoch().as_u64() != after.epoch {
+                return Err(PostgresError::OwnershipLost);
             }
-            apply_relation(connection, &properties.batch, deadline)?;
-            if let Some(sequences) = &commit.sequences {
-                connection.execute_prepared(
-                    "sequence_maxima",
-                    &[PostgresParam::Text(3802, sequences)],
-                    deadline,
-                    |_| unreachable!(),
-                )?;
+            after.applied = after
+                .applied
+                .checked_add(1)
+                .ok_or_else(|| invalid("applied_version", "counter exhausted"))?;
+            if after.applied != commit.publication.version() {
+                return Err(invalid("applied_version", "nonconsecutive publication"));
+            }
+            after.commits = after
+                .commits
+                .checked_add(1)
+                .ok_or_else(|| invalid("commit_sequence", "counter exhausted"))?;
+            after.max_timestamp = after.max_timestamp.max(commit.timestamp.0);
+            if !commit.properties.is_empty() {
+                after.property_sequence = after
+                    .property_sequence
+                    .checked_add(1)
+                    .ok_or_else(|| invalid("property_record_sequence", "counter exhausted"))?;
+            }
+            let plan =
+                self.plan_properties(commit, after.property_sequence, &changes, &mut rollup)?;
+            let member_bytes = commit
+                .ordinary
+                .iter()
+                .map(RelationBatch::encoded_bytes)
+                .sum::<usize>()
+                + plan.batch.encoded_bytes()
+                + commit.sequences.as_ref().map_or(0, String::len);
+            // A rollup can expand a small suffix into a large full value. Seal before
+            // that member; one indivisible commit may exceed the payload limit.
+            if !properties.is_empty() && bytes.saturating_add(member_bytes) > max_bytes {
+                after = before;
+                break;
+            }
+            bytes = bytes.saturating_add(member_bytes);
+            changes.extend(plan.changes);
+            properties.push(plan.batch);
+            if bytes >= max_bytes {
+                break;
+            }
+        }
+        self.execute(&after, false, |connection, deadline| {
+            for (commit, properties) in commits.iter().zip(&properties) {
+                for relation in &commit.ordinary {
+                    apply_relation(connection, relation, deadline)?;
+                }
+                apply_relation(connection, properties, deadline)?;
+                if let Some(sequences) = &commit.sequences {
+                    connection.execute_prepared(
+                        "sequence_maxima",
+                        &[PostgresParam::Text(3802, sequences)],
+                        deadline,
+                        |_| unreachable!(),
+                    )?;
+                }
             }
             Ok(())
         })?;
-        for (key, chain) in properties.changes {
+        for (key, chain) in changes {
             match chain {
                 Some(chain) => {
                     self.chains.insert(key, chain);
@@ -150,7 +211,7 @@ impl Session {
             }
         }
         self.progress = after;
-        Ok(())
+        Ok(properties.len())
     }
 
     /// Refresh the schema's physical size on the persistence worker, never on a task worker.
@@ -185,6 +246,7 @@ impl Session {
         &self,
         commit: &EncodedCommit,
         sequence: i64,
+        overlay: &ChainChanges,
         rollup: &mut impl FnMut(&ObjAndUUIDHolder, Var, Timestamp) -> Result<Value, PostgresError>,
     ) -> Result<PropertyPlan, PostgresError> {
         let mut puts = Vec::new();
@@ -208,7 +270,10 @@ impl Session {
                         "value_literal",
                     )?
                     .len();
-                    let previous = self.chains.get(key);
+                    let previous = match overlay.get(key) {
+                        Some(chain) => chain.as_ref(),
+                        None => self.chains.get(key),
+                    };
                     if previous
                         .is_none_or(|chain| chain.reaches_limit(bytes, PROPERTY_VALUE_CHAIN_LIMITS))
                     {

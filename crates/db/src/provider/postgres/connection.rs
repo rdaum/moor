@@ -14,7 +14,7 @@
 use super::{PostgresConnectOptions, PostgresEndpoint, PostgresError, PostgresShutdown};
 use pq_sys as pq;
 use std::{
-    ffi::{CStr, CString},
+    ffi::{CStr, CString, c_char},
     marker::PhantomData,
     ptr::{self, NonNull},
     rc::Rc,
@@ -44,6 +44,15 @@ pub struct PostgresStatementResult {
     pub affected_rows: Option<u64>,
 }
 
+/// Resolved connection details for diagnostics, without passwords or connection strings.
+pub(super) struct ConnectionDetails {
+    pub database: String,
+    pub user: String,
+    pub host: String,
+    pub port: String,
+    pub server_version: String,
+}
+
 /// A connection belongs to the thread that creates it; it is neither Send nor Sync.
 ///
 /// Query callbacks see bounded, owned rows and must return promptly. A timeout, shutdown,
@@ -68,6 +77,33 @@ pub struct PostgresConnection {
 }
 
 impl PostgresConnection {
+    /// Read metadata from the established libpq connection without additional SQL I/O.
+    pub(super) fn info(&self) -> Result<ConnectionDetails, PostgresError> {
+        let raw = self.raw.ok_or(PostgresError::Closed)?.as_ptr();
+        // SAFETY: self owns a live connection. These getters return connection-owned C
+        // strings, which we copy before any subsequent connection operation can change them.
+        unsafe {
+            let text = |value: *const c_char| {
+                if value.is_null() {
+                    return String::new();
+                }
+                CStr::from_ptr(value).to_string_lossy().into_owned()
+            };
+            let address = text(pq::PQhostaddr(raw));
+            Ok(ConnectionDetails {
+                database: text(pq::PQdb(raw)),
+                user: text(pq::PQuser(raw)),
+                host: if address.is_empty() {
+                    text(pq::PQhost(raw))
+                } else {
+                    address
+                },
+                port: text(pq::PQport(raw)),
+                server_version: text(pq::PQparameterStatus(raw, c"server_version".as_ptr())),
+            })
+        }
+    }
+
     /// Connect on a dedicated worker. The deadline covers setup and libpq polling.
     pub fn connect(
         options: &PostgresConnectOptions,

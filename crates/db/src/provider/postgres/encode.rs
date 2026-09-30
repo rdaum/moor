@@ -33,6 +33,11 @@ pub(super) struct RelationBatch {
     pub puts: Option<String>,
     pub deletes: Option<String>,
 }
+impl RelationBatch {
+    pub fn encoded_bytes(&self) -> usize {
+        self.puts.as_ref().map_or(0, String::len) + self.deletes.as_ref().map_or(0, String::len)
+    }
+}
 pub(super) enum PropertyMutation {
     Delete,
     Full(Value),
@@ -48,6 +53,9 @@ pub(super) struct EncodedCommit {
     pub ordinary: Vec<RelationBatch>,
     pub properties: Vec<PropertyMutationRow>,
     pub sequences: Option<String>,
+    /// Conservative encoded payload size, computed off the SQL writer thread.
+    pub group_bytes: usize,
+    pub group_operations: usize,
 }
 
 fn json_array(rows: Vec<Value>) -> Option<String> {
@@ -123,6 +131,9 @@ fn properties(
 
 macro_rules! define_encode {
     ($( $field:ident $category:ident $policy:ident $arrow:tt $domain:ty, $codomain:ty ),* $(,)?) => {
+        fn operation_count(changes: &RelationChanges) -> usize {
+            0 $(+ changes.$field.len())*
+        }
         fn relations(changes: RelationChanges, timestamp: Timestamp, profile: &SourceProfile) -> Result<(Vec<RelationBatch>, Vec<PropertyMutationRow>), PostgresError> {
             let mut ordinary = Vec::new();
             let mut properties = Vec::new();
@@ -143,6 +154,10 @@ pub(super) fn encode(
     commit: LogicalCommit,
     profile: &SourceProfile,
 ) -> Result<EncodedCommit, PostgresError> {
+    // Count both the delete and insert work of a property replacement or rollup.
+    let group_operations = operation_count(&commit.changes)
+        + commit.changes.object_propvalues.len()
+        + commit.sequences.len();
     let (ordinary, properties) = relations(commit.changes, commit.timestamp, profile)?;
     if commit
         .sequences
@@ -158,11 +173,43 @@ pub(super) fn encode(
             .map(|s| json!({"slot":s.slot,"high_water":s.value}))
             .collect(),
     );
+    let group_bytes = ordinary
+        .iter()
+        .map(RelationBatch::encoded_bytes)
+        .sum::<usize>()
+        + sequences.as_ref().map_or(0, String::len)
+        + properties
+            .iter()
+            .map(|property| match &property.mutation {
+                PropertyMutation::Delete => 128,
+                PropertyMutation::Full(row) | PropertyMutation::Append { row, .. } => {
+                    json_size_bound(row) + 128
+                }
+            })
+            .sum::<usize>();
     Ok(EncodedCommit {
         publication: commit.publication,
         timestamp: commit.timestamp,
         ordinary,
         properties,
         sequences,
+        group_bytes,
+        group_operations,
     })
+}
+
+// JSON escapes use at most six bytes per input byte. Avoid rendering large literals twice
+// just to bound a group; the allowance also covers record sequences added by the writer.
+fn json_size_bound(value: &Value) -> usize {
+    match value {
+        Value::String(text) => 2 + 6 * text.len(),
+        Value::Array(values) => 2 + values.iter().map(|v| 1 + json_size_bound(v)).sum::<usize>(),
+        Value::Object(values) => {
+            2 + values
+                .iter()
+                .map(|(k, v)| 4 + 6 * k.len() + json_size_bound(v))
+                .sum::<usize>()
+        }
+        _ => 32,
+    }
 }

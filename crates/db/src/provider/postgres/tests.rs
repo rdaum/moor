@@ -57,6 +57,8 @@ pub(super) fn empty(epoch: WriterEpoch, version: u64, timestamp: u64) -> Encoded
         ordinary: vec![],
         properties: vec![],
         sequences: None,
+        group_bytes: 0,
+        group_operations: 0,
     }
 }
 fn apply(session: &mut Session, config: &PostgresStorageConfig, batch: &EncodedCommit) {
@@ -511,6 +513,35 @@ fn out_of_order_encoders_hold_permits_and_rollups_have_an_independent_reply_path
     use std::{sync::Arc, time::Duration};
     let config = config();
     initialize_postgres_schema(&config).unwrap();
+    // Hold a later group member inside SQL, then inspect the last confirmed prefix.
+    let mut blocker = client(&config);
+    let mut lock_key = String::new();
+    blocker
+        .query(
+            "SELECT pg_backend_pid()::text",
+            &[],
+            Instant::now() + config.query_timeout,
+            |row| {
+                lock_key = String::from_utf8(row.columns[0].clone().unwrap()).unwrap();
+                Ok(())
+            },
+        )
+        .unwrap();
+    let function = config.schema.qualify("hold_group").unwrap();
+    let properties = config.schema.qualify("object_propvalues").unwrap();
+    for sql in [
+        format!("SELECT pg_advisory_lock(728694, {lock_key})"),
+        format!(
+            "CREATE FUNCTION {function}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.record_sequence=100 THEN PERFORM pg_advisory_lock(728694, {lock_key}); PERFORM pg_advisory_unlock(728694, {lock_key}); END IF; RETURN NEW; END $$"
+        ),
+        format!(
+            "CREATE TRIGGER hold_group BEFORE INSERT ON {properties} FOR EACH ROW EXECUTE FUNCTION {function}()"
+        ),
+    ] {
+        blocker
+            .query(&sql, &[], Instant::now() + config.query_timeout, |_| Ok(()))
+            .unwrap();
+    }
     let epoch = WriterEpoch::random();
     let (writer, _, _, _) =
         PostgresWriter::open(config.clone(), Arc::new(Relations::init()), epoch).unwrap();
@@ -523,12 +554,18 @@ fn out_of_order_encoders_hold_permits_and_rollups_have_an_independent_reply_path
         StorageWriter::Postgres(writer),
     );
     let key = ObjAndUUIDHolder::new(&Obj::mk_id(9), Uuid::new_v4());
+    // Full rollups exceed the group byte budget, so the writer must retain each unapplied tail.
+    let prefix = moor_var::v_str(&"x".repeat(1024 * 1024));
     let total = 200;
     let through = coordinator.published(total);
     let submit = |version| {
         let permit = coordinator.admit(Timestamp(version)).unwrap();
         let mut changes = changes();
-        let value = v_list(&(1..=version).map(|n| v_int(n as i64)).collect::<Vec<_>>());
+        let value = v_list(
+            &std::iter::once(prefix.clone())
+                .chain((1..=version).map(|n| v_int(n as i64)))
+                .collect::<Vec<_>>(),
+        );
         let mutation = if version == 1 {
             PreparedPropertyValueMutation::Replace { value }
         } else {
@@ -565,6 +602,40 @@ fn out_of_order_encoders_hold_permits_and_rollups_have_an_independent_reply_path
     assert_eq!(coordinator.status().applied, 0);
     assert_eq!(coordinator.status().outstanding, (total - 1) as usize);
     submit(1);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let mut blocked = false;
+        blocker.query(
+            &format!("SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND classid=728694 AND objid={lock_key} AND objsubid=2 AND NOT granted)::text"),
+            &[], deadline, |row| {
+                blocked = row.columns[0].as_deref() == Some(b"true");
+                Ok(())
+            },
+        ).unwrap();
+        if blocked {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "writer never reached the held group member"
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let status = coordinator.status();
+    assert!(status.applied > 0 && status.applied < 100);
+    assert_eq!(status.outstanding, (total - status.applied) as usize);
+    let stored = state::read_progress(&mut blocker, &config, deadline).unwrap();
+    assert_eq!(stored.applied, status.applied);
+    assert_eq!(stored.commits, status.applied);
+    assert_eq!(stored.property_sequence as u64, status.applied);
+    blocker
+        .query(
+            &format!("SELECT pg_advisory_unlock(728694, {lock_key})"),
+            &[],
+            deadline,
+            |_| Ok(()),
+        )
+        .unwrap();
     coordinator
         .wait_applied(through, Duration::from_secs(10))
         .unwrap();
@@ -578,7 +649,11 @@ fn out_of_order_encoders_hold_permits_and_rollups_have_an_independent_reply_path
             .index_lookup(&key)
             .unwrap()
             .value,
-        v_list(&(1..=total).map(|n| v_int(n as i64)).collect::<Vec<_>>())
+        v_list(
+            &std::iter::once(prefix)
+                .chain((1..=total).map(|n| v_int(n as i64)))
+                .collect::<Vec<_>>()
+        )
     );
 }
 
@@ -913,4 +988,229 @@ fn shutdown_timeout_fails_waiters_and_is_not_reported_as_success_on_retry() {
     assert!(coordinator.shutdown().is_err());
     assert_eq!(coordinator.status().applied, 0);
     assert!(!coordinator.status().healthy);
+}
+
+#[test]
+#[ignore = "requires PostgreSQL fixture"]
+fn grouped_commits_recover_with_ordered_chains_and_logical_counters() {
+    for policy in [
+        PostgresCommitPolicy::Synchronous,
+        PostgresCommitPolicy::Asynchronous,
+    ] {
+        for failure in [
+            None,
+            Some(FailurePoint::BeforeCommit),
+            Some(FailurePoint::AfterCommit),
+        ] {
+            let mut config = config();
+            config.commit_policy = policy;
+            initialize_postgres_schema(&config).unwrap();
+            let (mut session, _, epoch) = open(&config);
+            let object = Obj::mk_id(7);
+            let key = ObjAndUUIDHolder::new(&object, Uuid::new_v4());
+            let mut commits = Vec::new();
+            let mut values = Vec::new();
+            for version in 1..=70 {
+                let ts = 10000 - version;
+                let mut commit = empty(epoch, version, ts);
+                commit.sequences = Some(json!([{"slot":0, "high_water":1000-version}]).to_string());
+                commit.ordinary.push(RelationBatch {
+                    relation: "object_name",
+                    puts: (version != 66).then(|| {
+                        json!([rows::encode(
+                            "object_name",
+                            Timestamp(ts),
+                            &object,
+                            &StringHolder(format!("name {version}")),
+                            &config.profile,
+                        )
+                        .unwrap()])
+                        .to_string()
+                    }),
+                    deletes: (version == 66)
+                        .then(|| json!([object.encode_key("object_name")]).to_string()),
+                });
+                let property = match version {
+                    1 | 69 => {
+                        values = vec![v_int(version as i64)];
+                        full(&config, &key, &v_list(&values), ts)
+                    }
+                    66 => {
+                        values.clear();
+                        PropertyMutationRow {
+                            key: key.clone(),
+                            mutation: PropertyMutation::Delete,
+                        }
+                    }
+                    _ => {
+                        values.push(v_int(version as i64));
+                        append(
+                            &config,
+                            &key,
+                            &v_list(&[v_int(version as i64)]),
+                            &v_list(&values),
+                            ts,
+                        )
+                    }
+                };
+                commit.properties.push(property);
+                commits.push(commit);
+            }
+            apply(&mut session, &config, &commits[0]);
+            session.failure = failure;
+            let mut rollups = 0;
+            session
+                .apply_group(&commits[1..65], 1024 * 1024, |key, value, ts| {
+                    rollups += 1;
+                    encode::property_row(key, &value, ts, false, &config.profile)
+                })
+                .unwrap();
+            assert_eq!(rollups, 1);
+            assert_eq!(count(&config, "object_propvalues"), 1);
+            assert_eq!(session.progress.applied, 65);
+            assert_eq!(session.progress.commits, 65);
+            assert_eq!(session.progress.property_sequence, 65);
+            // Deletion hides the pre-group base; a later full replacement hides both appends.
+            session.failure = failure;
+            session
+                .apply_group(&commits[65..], 1024 * 1024, |key, value, ts| {
+                    rollups += 1;
+                    encode::property_row(key, &value, ts, false, &config.profile)
+                })
+                .unwrap();
+            assert_eq!(rollups, 2);
+            assert_eq!(count(&config, "object_propvalues"), 2);
+            assert_eq!(session.progress.applied, 70);
+            assert_eq!(session.progress.commits, 70);
+            assert_eq!(session.progress.property_sequence, 70);
+            session.fence().unwrap();
+            drop(session);
+            let (session, seed, _) = open(&config);
+            assert_eq!(session.progress.commits, 70);
+            assert_eq!(session.progress.property_sequence, 70);
+            assert_eq!(seed.root.committed_ts, Timestamp(9999));
+            assert_eq!(seed.sequences[0], 999);
+            assert_eq!(
+                seed.root.object_name.index_lookup(&object).unwrap().value.0,
+                "name 70"
+            );
+            assert_eq!(
+                seed.root
+                    .object_propvalues
+                    .index_lookup(&key)
+                    .unwrap()
+                    .value,
+                v_list(&values)
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires PostgreSQL fixture"]
+fn failure_in_a_later_group_member_rolls_back_every_member() {
+    let config = config();
+    initialize_postgres_schema(&config).unwrap();
+    let (mut session, _, epoch) = open(&config);
+    let key = ObjAndUUIDHolder::new(&Obj::mk_id(7), Uuid::new_v4());
+    let mut first = empty(epoch, 1, 1);
+    first
+        .properties
+        .push(full(&config, &key, &v_list(&[v_int(1)]), 1));
+    let mut second = empty(epoch, 2, 2);
+    second.ordinary.push(RelationBatch {
+        relation: "object_name",
+        puts: Some(
+            json!([{"object_ref":"#7", "logical_timestamp":"-1", "name":"invalid"}]).to_string(),
+        ),
+        deletes: None,
+    });
+    let error = session
+        .apply_group(&[first, second], 1024 * 1024, |_, _, _| unreachable!())
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        PostgresError::Operation {
+            relation: "object_name",
+            operation: "put",
+            ..
+        }
+    ));
+    assert_eq!(session.progress.applied, 0);
+    assert_eq!(session.progress.commits, 0);
+    assert_eq!(session.progress.property_sequence, 0);
+    assert_eq!(count(&config, "object_propvalues"), 0);
+    drop(session);
+    let (session, seed, _) = open(&config);
+    assert_eq!(session.progress.commits, 0);
+    assert!(seed.root.object_propvalues.index_lookup(&key).is_none());
+}
+
+#[test]
+#[ignore = "requires PostgreSQL fixture"]
+fn rollup_expansion_seals_the_group_without_publishing_tentative_chains() {
+    let config = config();
+    initialize_postgres_schema(&config).unwrap();
+    let (mut session, _, epoch) = open(&config);
+    let first_key = ObjAndUUIDHolder::new(&Obj::mk_id(7), Uuid::new_v4());
+    let large_key = ObjAndUUIDHolder::new(&Obj::mk_id(7), Uuid::new_v4());
+    let mut first = empty(epoch, 1, 1);
+    first
+        .properties
+        .push(full(&config, &first_key, &v_int(1), 1));
+    let large = moor_var::v_str(&"x".repeat(16 * 1024));
+    let mut second = empty(epoch, 2, 2);
+    second.properties.push(append(
+        &config,
+        &large_key,
+        &v_list(&[v_int(2)]),
+        &v_list(&[large.clone(), v_int(2)]),
+        2,
+    ));
+    let mut third = empty(epoch, 3, 3);
+    let expected = v_list(&[large, v_int(2), v_int(3)]);
+    third.properties.push(append(
+        &config,
+        &large_key,
+        &v_list(&[v_int(3)]),
+        &expected,
+        3,
+    ));
+    let commits = [first, second, third];
+    let mut rollups = 0;
+    let mut render = |key: &ObjAndUUIDHolder, value: Var, ts| {
+        rollups += 1;
+        encode::property_row(key, &value, ts, false, &config.profile)
+    };
+    assert_eq!(session.apply_group(&commits, 4096, &mut render).unwrap(), 1);
+    assert_eq!(session.progress.applied, 1);
+    assert_eq!(session.progress.property_sequence, 1);
+    assert_eq!(count(&config, "object_propvalues"), 1);
+    // The large member is retried alone. Its successor must use the confirmed full base.
+    assert_eq!(
+        session
+            .apply_group(&commits[1..], 4096, &mut render)
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        session
+            .apply_group(&commits[2..], 4096, &mut render)
+            .unwrap(),
+        1
+    );
+    assert_eq!(rollups, 2);
+    assert_eq!(session.progress.commits, 3);
+    assert_eq!(session.progress.property_sequence, 3);
+    assert_eq!(count(&config, "object_propvalues"), 3);
+    drop(session);
+    let (_, seed, _) = open(&config);
+    assert_eq!(
+        seed.root
+            .object_propvalues
+            .index_lookup(&large_key)
+            .unwrap()
+            .value,
+        expected
+    );
 }

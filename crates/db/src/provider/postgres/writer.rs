@@ -42,6 +42,11 @@ use std::{
 };
 
 const POLL: Duration = Duration::from_millis(10);
+// Drain only work already available; a light workload never waits to fill a group.
+const GROUP_COMMITS: usize = 64;
+const GROUP_BYTES: usize = 1024 * 1024;
+const GROUP_OPERATIONS: usize = 4096;
+const GROUP_AGE: Duration = Duration::from_millis(1);
 type EncodingJob = (LogicalCommit, CommitAdmission);
 type EncodedJob = (u64, Result<EncodedCommit, PostgresError>, CommitAdmission);
 struct RollupJob {
@@ -482,28 +487,41 @@ fn writer_loop(
             .applied
             .checked_add(1)
             .ok_or_else(|| super::codec::invalid("applied_version", "counter exhausted"))?;
-        let poll = if pending.contains_key(&next_version) {
-            Duration::ZERO
-        } else {
-            POLL
-        };
-        match ready.recv_timeout(poll) {
-            Ok((version, commit, permit)) => {
-                if version <= session.progress.applied
-                    || pending.insert(version, (commit, permit)).is_some()
-                {
-                    return Err(super::codec::invalid(
-                        "applied_version",
-                        "duplicate publication",
-                    ));
+        if !pending.contains_key(&next_version) {
+            match wait_for_work(&ready, &fences, POLL) {
+                Ok(WriterEvent::Commit(job)) => {
+                    insert_pending(
+                        &mut pending,
+                        job.map_err(|_| PostgresError::Closed)?,
+                        session.progress.applied,
+                    )?;
                 }
+                Ok(WriterEvent::Fence(through)) => {
+                    fence_requests.insert(through.map_err(|_| PostgresError::Closed)?);
+                    continue;
+                }
+                Err(flume::select::SelectError::Timeout) => continue,
             }
-            Err(flume::RecvTimeoutError::Timeout) => {}
-            Err(flume::RecvTimeoutError::Disconnected) => return Err(PostgresError::Closed),
         }
-        if let Some((commit, permit)) = pending.remove(&next_version) {
-            let commit = commit?;
-            session.apply(&commit, |key, value, timestamp| {
+        // Bound channel draining too, so an encoder stream cannot starve fences or SQL.
+        for job in ready.try_iter().take(GROUP_COMMITS) {
+            insert_pending(&mut pending, job, session.progress.applied)?;
+        }
+        fence_requests.extend(fences.try_iter());
+        if fence_requests.iter().any(|through| {
+            *through > shared.durable.load(Ordering::Acquire)
+                && *through <= session.progress.applied
+        }) {
+            continue;
+        }
+        let (commits, permits) = take_group(
+            &mut pending,
+            next_version,
+            fence_requests.range(next_version..).next().copied(),
+            Instant::now() + GROUP_AGE,
+        )?;
+        if !commits.is_empty() {
+            let applied = session.apply_group(&commits, GROUP_BYTES, |key, value, timestamp| {
                 let (reply, response) = flume::bounded(1);
                 rollup
                     .try_send(RollupJob {
@@ -526,7 +544,13 @@ fn writer_loop(
                 }
             })?;
             // The publication watermark becomes visible only after chain state is confirmed.
-            drop(permit);
+            for (index, (commit, permit)) in commits.into_iter().zip(permits).enumerate() {
+                if index < applied {
+                    drop(permit);
+                } else {
+                    pending.insert(commit.publication.version(), (Ok(commit), permit));
+                }
+            }
             shared
                 .applied
                 .store(session.progress.applied, Ordering::Release);
@@ -539,4 +563,164 @@ fn writer_loop(
         }
     }
     Ok(())
+}
+
+enum WriterEvent<T> {
+    Commit(Result<T, flume::RecvError>),
+    Fence(Result<u64, flume::RecvError>),
+}
+
+fn wait_for_work<T>(
+    ready: &Receiver<T>,
+    fences: &Receiver<u64>,
+    timeout: Duration,
+) -> Result<WriterEvent<T>, flume::select::SelectError> {
+    flume::Selector::new()
+        .recv(ready, WriterEvent::Commit)
+        .recv(fences, WriterEvent::Fence)
+        .wait_timeout(timeout)
+}
+
+type Pending<P> = BTreeMap<u64, (Result<EncodedCommit, PostgresError>, P)>;
+
+fn insert_pending<P>(
+    pending: &mut Pending<P>,
+    (version, commit, permit): (u64, Result<EncodedCommit, PostgresError>, P),
+    applied: u64,
+) -> Result<(), PostgresError> {
+    if version <= applied || pending.insert(version, (commit, permit)).is_some() {
+        return Err(super::codec::invalid(
+            "applied_version",
+            "duplicate publication",
+        ));
+    }
+    Ok(())
+}
+
+/// A single large logical commit stays indivisible. All other members fit within
+/// count, payload, operation and collection-time limits, and stop at a known fence.
+fn take_group<P>(
+    pending: &mut Pending<P>,
+    mut next: u64,
+    fence: Option<u64>,
+    deadline: Instant,
+) -> Result<(Vec<EncodedCommit>, Vec<P>), PostgresError> {
+    let mut commits = Vec::new();
+    let mut permits = Vec::new();
+    let mut bytes = 0usize;
+    let mut operations = 0usize;
+    while let Some((commit, _)) = pending.get(&next) {
+        if !commits.is_empty() {
+            if commits.len() >= GROUP_COMMITS || Instant::now() >= deadline {
+                break;
+            }
+            if let Ok(commit) = commit
+                && (bytes.saturating_add(commit.group_bytes) > GROUP_BYTES
+                    || operations.saturating_add(commit.group_operations) > GROUP_OPERATIONS)
+            {
+                break;
+            }
+        }
+        let (commit, permit) = pending.remove(&next).unwrap();
+        let commit = commit?;
+        bytes = bytes.saturating_add(commit.group_bytes);
+        operations = operations.saturating_add(commit.group_operations);
+        commits.push(commit);
+        permits.push(permit);
+        if fence == Some(next) || next == u64::MAX {
+            break;
+        }
+        next += 1;
+    }
+    Ok((commits, permits))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::provider::postgres::tests::empty;
+
+    #[test]
+    fn idle_writer_wakes_for_a_fence_without_a_commit() {
+        let (_send_commit, ready) = flume::bounded::<()>(1);
+        let (send_fence, fences) = flume::bounded(1);
+        let (started, start) = flume::bounded(1);
+        let (completed, completion) = flume::bounded(1);
+        let worker = thread::spawn(move || {
+            started.send(()).unwrap();
+            let result = wait_for_work(&ready, &fences, Duration::from_secs(30));
+            completed
+                .send(matches!(result, Ok(WriterEvent::Fence(Ok(42)))))
+                .unwrap();
+        });
+        start.recv().unwrap();
+        send_fence.send(42).unwrap();
+        // A wide deadline tests channel wakeup rather than sub-millisecond scheduling.
+        assert!(completion.recv_timeout(Duration::from_secs(2)).unwrap());
+        worker.join().unwrap();
+    }
+
+    fn pending(count: u64, bytes: usize, operations: usize) -> Pending<()> {
+        let epoch = WriterEpoch::random();
+        (1..=count)
+            .map(|version| {
+                let mut commit = empty(epoch, version, version);
+                commit.group_bytes = bytes;
+                commit.group_operations = operations;
+                (version, (Ok(commit), ()))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn groups_stop_at_gaps_fences_and_work_limits() {
+        for (bytes, operations, expected) in [
+            (0, 0, GROUP_COMMITS),
+            (GROUP_BYTES / 3, 0, 3),
+            (0, GROUP_OPERATIONS / 3, 3),
+            (GROUP_BYTES + 1, GROUP_OPERATIONS + 1, 1),
+        ] {
+            let mut pending = pending(100, bytes, operations);
+            let (group, permits) = take_group(
+                &mut pending,
+                1,
+                None,
+                Instant::now() + Duration::from_secs(2),
+            )
+            .unwrap();
+            assert_eq!(group.len(), expected);
+            assert_eq!(permits.len(), expected);
+            assert_eq!(pending.len(), 100 - expected);
+        }
+        let mut gap = pending(5, 0, 0);
+        gap.remove(&3);
+        assert_eq!(
+            take_group(&mut gap, 1, None, Instant::now() + GROUP_AGE)
+                .unwrap()
+                .0
+                .len(),
+            2
+        );
+        let mut barrier = pending(5, 0, 0);
+        assert_eq!(
+            take_group(
+                &mut barrier,
+                1,
+                Some(3),
+                Instant::now() + Duration::from_secs(2)
+            )
+            .unwrap()
+            .0
+            .len(),
+            3
+        );
+        let mut aged = pending(5, 0, 0);
+        assert_eq!(
+            take_group(&mut aged, 1, None, Instant::now())
+                .unwrap()
+                .0
+                .len(),
+            1
+        );
+    }
 }

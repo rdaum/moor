@@ -17,20 +17,32 @@ chains. Tuple timestamps and property record numbers cannot exceed their persist
 
 The runtime uses bounded encoder queues and one ordered SQL writer. An admission permit remains held
 until the commit is applied. Encoders render readable values and programs. Prepared statements apply
-rows in batches by relation. The writer updates relations and progress in one transaction per
-logical commit. Publication order determines the result when timestamps arrive out of order.
+rows in batches by relation. The writer groups consecutive ready commits into one SQL transaction.
+Publication order determines the result when timestamps arrive out of order.
+
+Groups contain at most 64 logical commits, 1 MiB of estimated encoded payload, and 4,096 mutation
+operations. Property payload estimates allow for JSON escaping. Group collection stops after 1 ms or
+at a known durable fence. The writer never waits for more commits to fill a group. A single large
+logical commit can exceed these limits and remains indivisible. After rollup encoding, the writer
+checks actual payload bytes again. If a member exceeds the remaining budget, the writer retains it
+for the next group.
+
+Each member applies its mutations in order. Tentative chain metadata lets later members see earlier
+appends, replacements, and deletions. Persistent commit and property-record counters still advance
+per logical commit. All group permits remain held until SQL confirms the complete group.
 
 List appends store only their suffix. The shared reconstruction checks enforce the 64-record and 4
 MiB append bounds. A separate encoder handles full-value rollups. Chain metadata changes only after
 SQL application is confirmed. Deletion-only property commits also advance the record counter.
 
-Recovery retains the planned batch. It reconnects, reacquires ownership, and compares database
-identity, epoch, and progress. It replays only when the stored progress proves the batch did not
+Recovery retains the complete group plan. It reconnects, reacquires ownership, and compares database
+identity, epoch, and progress. It replays only when the stored progress proves the group did not
 commit. Recovery uses one finite deadline. An unexpected epoch or watermark causes terminal failure.
 
 Synchronous SQL commit is the default. Asynchronous mode requires explicit configuration. A durable
-fence updates persistent bookkeeping with synchronous commit enabled. Graceful shutdown drains
-published work within its deadline. A timeout reports incomplete persistence.
+fence updates persistent bookkeeping with synchronous commit enabled. The idle writer waits on both
+commit and fence channels, so a fence wakes it immediately. Graceful shutdown drains published work
+within its deadline. A timeout reports incomplete persistence.
 
 Storage size is sampled on the writer and read from a cached counter by runtime tasks. PostgreSQL
 does not expose Fjall maintenance statistics or implement Fjall compaction. Snapshot export remains
@@ -55,6 +67,10 @@ The live tests cover:
 - Two hundred commits submitted in reverse order, retained admission permits, and independent rollup
   replies.
 - Ownership takeover, bounded recovery failure, and property-record counter exhaustion.
+- Group rollback and lost-COMMIT recovery, including rollups and delete/reinsert sequences within a
+  group.
+- A group paused inside SQL, with progress and admission permits held until commit.
+- Group size limits, publication gaps, fence boundaries, and idle fence wakeups.
 
 The default database unit suite also passes. These checks do not complete the step 6 acceptance
 gate.
@@ -85,6 +101,38 @@ and drained in milliseconds. An 80-append burst took about 64.4 ms through durab
 PostgreSQL, versus 12.7 ms with Fjall. These are individual observations, not repeated performance
 qualification or evidence of a passed gate. PostgreSQL encoder and SQL timing instrumentation
 remains incomplete.
+
+## Writer tuning measurements (2026-09-30)
+
+A separate native PostgreSQL 17.11 cluster supplied the before/after comparison. Each run used a
+fresh schema. The comparison used release builds, with `fsync` and `full_page_writes` enabled. No
+builds or tests ran during the timed workloads. The baseline used the saved release binary from
+before this tuning pass.
+
+| Measurement                                   |   Before |    After |
+| --------------------------------------------- | -------: | -------: |
+| Synchronous history burst through durability  | 45.76 ms | 10.54 ms |
+| Synchronous write mutations/s                 |  207,531 |  204,288 |
+| Synchronous peak outstanding commits          |    1,000 |    1,000 |
+| Synchronous admission blocking events         |    3,629 |      157 |
+| Asynchronous history burst through durability | 41.87 ms | 13.15 ms |
+| Asynchronous write mutations/s                |  213,931 |  199,857 |
+| Asynchronous peak outstanding commits         |    1,000 |    1,000 |
+| Asynchronous admission blocking events        |      601 |      157 |
+| Asynchronous explicit fence wait              | 12.00 ms |  1.37 ms |
+
+History values are medians of three 80-append runs, with three phases and zero settle delay. Burst
+completion adds producer time to phase-2 application and durability waits. It excludes intervening
+harness work. Write results come from one 60-second run per policy, with 256 subscribers and 20
+mutations per subscriber tick. These results do not establish maximum sustained throughput or
+complete the Fjall regression gate.
+
+All 31 PostgreSQL-focused tests passed against the native server, including grouped recovery,
+retained permits, and oversized rollups. Workspace Clippy passed with all targets and features.
+Scoped Rust formatting checks also passed.
+
+The [measurement data](benchmarks/postgresql-writer-grouping-results.json) includes server settings,
+binary hashes, per-run results, and tick samples.
 
 ## Remaining acceptance work
 
