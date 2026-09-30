@@ -23,6 +23,8 @@ baseline_dir=${MOOR_BASELINE_OBJDEF_DIR:-}
 export RUN_DIR="${RUN_DIR:-run-cowbell}"
 export BUILD_PROFILE="release-fast"
 COMPOSE_ARGS=()
+POSTGRES=false
+COMPOSE=(docker compose)
 
 usage() {
     cat <<'USAGE'
@@ -32,6 +34,7 @@ Usage: scripts/start-moor-cowbell.sh [options] [docker compose up options]
   --git-upstream REF          Prepare baselines from local Git ancestry
   --baseline-objdef-dir PATH   Prepare baselines from an explicit source directory
   --debug / --release         Select the server build profile
+  --postgres                  Use a local PostgreSQL world in a persistent Docker volume
   --help                      Show this help
 
 Source directories must be inside this checkout, mounted at /db in Docker.
@@ -55,6 +58,7 @@ while [[ "$#" -gt 0 ]]; do
                 --baseline-objdef-dir) baseline_dir=$2 ;;
             esac
             shift 2 ;;
+        --postgres) POSTGRES=true; shift ;;
         --help|-h) usage; exit 0 ;;
         *) COMPOSE_ARGS+=("$1"); shift ;;
     esac
@@ -85,6 +89,11 @@ if [[ -n $baseline_dir ]]; then
 fi
 cd -- "$project_dir"
 
+if [[ "$POSTGRES" == true ]]; then
+    export RUN_DIR="run-cowbell-postgres"
+    COMPOSE+=(-f docker-compose.yml -f docker-compose.cowbell-postgres.yml)
+fi
+
 # Check for root-owned directory
 if [ -d "$RUN_DIR" ] && [ "$(stat -c '%u' "$RUN_DIR" 2>/dev/null)" == "0" ]; then
     echo "Error: $RUN_DIR is owned by root. Run: sudo chown -R $(id -u):$(id -g) $RUN_DIR"
@@ -112,6 +121,22 @@ if docker info --format '{{.SecurityOptions}}' 2>/dev/null | grep -q 'name=rootl
     export USER_ID=0
     export GROUP_ID=0
 fi
-export MOOR_CONFIG_FILE="${MOOR_CONFIG_FILE:-moor-dev.yaml}"
+if [[ "$POSTGRES" == true ]]; then
+    export MOOR_CONFIG_FILE="${MOOR_CONFIG_FILE:-moor-dev-postgres.yaml}"
+    "${COMPOSE[@]}" up -d --wait postgres
+    schema_exists=$("${COMPOSE[@]}" exec -T postgres psql -U moor -d moor -At \
+        -v ON_ERROR_STOP=1 -c "SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname = 'cowbell'")
+    if [[ "$schema_exists" != 1 ]]; then
+        echo "Initializing PostgreSQL world schema..."
+        "${COMPOSE[@]}" build moor
+        "${COMPOSE[@]}" run --rm --no-deps moor /moor/moor \
+            --config-file="/db/$MOOR_CONFIG_FILE" \
+            --storage-backend=postgres --pg-service=cowbell --pg-schema=cowbell \
+            --pg-socket-dir=/var/run/postgresql --init-storage
+    fi
+    echo "World storage: PostgreSQL (schema cowbell; checkpoint export disabled)"
+else
+    export MOOR_CONFIG_FILE="${MOOR_CONFIG_FILE:-moor-dev.yaml}"
+fi
 
-docker compose up --build "${COMPOSE_ARGS[@]}"
+"${COMPOSE[@]}" up --build "${COMPOSE_ARGS[@]}"

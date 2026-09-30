@@ -41,6 +41,8 @@ shuttle.workspace = true
 tempfile.workspace = true
 
 [dependencies]
+clap = { workspace = true, optional = true }
+clap_derive = { workspace = true, optional = true }
 # Telemetry
 fast-telemetry.workspace = true
 
@@ -89,6 +91,7 @@ zerocopy.workspace = true
 tempfile.workspace = true
 
 [features]
+cli = ["dep:clap", "dep:clap_derive"]
 postgres = ["dep:pq-sys", "dep:libc", "dep:moor-compiler", "dep:serde_json"]
 relbox = []
 

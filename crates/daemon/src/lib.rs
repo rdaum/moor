@@ -90,7 +90,6 @@ pub(crate) fn signal_ready(ready_signal: &Option<ReadySignal>) {
 #[derive(Clone)]
 pub struct DaemonPaths {
     pub data_dir: PathBuf,
-    pub db_path: PathBuf,
     pub connections_db_path: Option<PathBuf>,
     pub tasks_db_path: PathBuf,
     pub events_db_path: PathBuf,
@@ -118,6 +117,7 @@ pub struct DaemonKeys {
 pub struct DaemonRuntimeConfig {
     pub version: semver::Version,
     pub config: Arc<Config>,
+    pub storage: moor_db::StorageConfig,
     pub paths: DaemonPaths,
     pub endpoints: DaemonEndpoints,
     pub keys: DaemonKeys,
@@ -518,6 +518,7 @@ pub fn run(runtime_config: DaemonRuntimeConfig, runtime: DaemonRuntime) -> Resul
     let DaemonRuntimeConfig {
         version,
         config,
+        storage,
         paths,
         endpoints,
         keys,
@@ -585,7 +586,7 @@ pub fn run(runtime_config: DaemonRuntimeConfig, runtime: DaemonRuntime) -> Resul
     }
 
     info!(
-        db_path = ?paths.db_path,
+        storage_backend = %storage.kind(),
         commit = build::short_commit(),
         "moor {version} daemon starting. {phys_cores} physical cores; {logical_cores} logical cores."
     );
@@ -596,10 +597,27 @@ pub fn run(runtime_config: DaemonRuntimeConfig, runtime: DaemonRuntime) -> Resul
         configured_service_perf_cores = config.runtime.service_perf_cores,
         "Thread core reservations initialized"
     );
-    let (database, freshly_made) =
-        TxDB::try_open_fjall(&paths.db_path, config.database.clone().unwrap_or_default())?;
+    let fjall_path = match &storage {
+        moor_db::StorageConfig::Fjall(fjall) => {
+            info!(path = ?fjall.path, "Opening Fjall world");
+            fjall.path.clone()
+        }
+        #[cfg(feature = "postgres")]
+        moor_db::StorageConfig::Postgres(postgres) => {
+            info!(
+                schema = postgres.schema.as_str(),
+                "Opening PostgreSQL world"
+            );
+            None
+        }
+    };
+    let (database, freshly_made) = TxDB::try_open(
+        storage,
+        config.database.clone().unwrap_or_default(),
+        moor_db::PersistenceConfig::default(),
+    )?;
     let database = Box::new(database);
-    info!(path = ?paths.db_path, "Opened database");
+    info!("Opened world database");
 
     if let Some(import_path) = config.import_export.input_path.as_ref() {
         // If the database already existed, do not try to import the textdump...
@@ -625,36 +643,31 @@ pub fn run(runtime_config: DaemonRuntimeConfig, runtime: DaemonRuntime) -> Resul
                 if !committed {
                     return Ok(());
                 }
-                info!("Waiting for imported world state to be committed into Fjall");
+                info!("Waiting for imported world state to be applied to storage");
                 database.wait_for_persistence().map_err(|error| {
-                    eyre!("Failed to commit imported world state into Fjall: {error}")
+                    eyre!("Failed to apply imported world state to storage: {error}")
                 })?;
-                info!("Imported world state committed into Fjall");
+                info!("Imported world state applied to storage");
                 Ok(())
             });
 
             if let Err(import_error) = import_result {
                 error!("Import failed: {}", import_error);
 
-                // Delete only the database file/directory if the import fails since it was freshly created.
-                // We don't want to delete the entire data directory as it may contain other databases
-                // (connections, tasks, event logs) and system data (keys, enrollment tokens).
-                let cleanup_result = if paths.db_path.is_dir() {
-                    fs::remove_dir_all(&paths.db_path)
-                } else {
-                    fs::remove_file(&paths.db_path)
-                };
-
-                if let Err(e) = cleanup_result {
-                    panic!(
-                        "Failed to remove database {:?} after import failure: {}",
-                        paths.db_path, e
-                    );
-                } else {
-                    info!(
-                        "Removed failed database {:?} after import failure",
-                        paths.db_path
-                    );
+                drop(database);
+                // Only a newly created Fjall world belongs to this local cleanup path.
+                if let Some(path) = fjall_path {
+                    let cleanup_result = if path.is_dir() {
+                        fs::remove_dir_all(&path)
+                    } else {
+                        fs::remove_file(&path)
+                    };
+                    if let Err(error) = cleanup_result {
+                        return Err(import_error.wrap_err(format!(
+                            "Failed to remove newly created world {path:?}: {error}"
+                        )));
+                    }
+                    info!(?path, "Removed world after failed initial import");
                 }
 
                 return Err(import_error);

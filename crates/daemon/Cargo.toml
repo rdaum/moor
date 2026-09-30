@@ -46,7 +46,7 @@ path = "src/bin/moor-daemon.rs"
 # Internal Dependencies
 moor-common = { path = "../common" }
 moor-compiler = { path = "../compiler" }
-moor-db = { path = "../db" }
+moor-db = { path = "../db", features = ["cli"] }
 moor-kernel = { path = "../kernel" }
 moor-objdef = { path = "../objdef" }
 moor-runtime-api = { path = "../runtime-api", default-features = false }

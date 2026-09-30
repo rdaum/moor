@@ -304,6 +304,20 @@ impl std::fmt::Display for ObjAndUUIDHolder {
 }
 
 impl AnonymousObjectMetadata {
+    /// Preserve full counter widths when mapping metadata to readable storage.
+    #[cfg(feature = "postgres")]
+    pub(crate) fn from_micros(created_micros: u128, last_accessed_micros: u128) -> Self {
+        Self {
+            created_micros,
+            last_accessed_micros,
+        }
+    }
+
+    #[cfg(feature = "postgres")]
+    pub(crate) fn micros(&self) -> (u128, u128) {
+        (self.created_micros, self.last_accessed_micros)
+    }
+
     pub fn new() -> Result<Self, EncodingError> {
         let now = std::time::SystemTime::now();
         let micros = now

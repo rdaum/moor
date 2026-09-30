@@ -51,3 +51,5 @@ pub(crate) mod read;
 
 #[cfg(feature = "postgres")]
 pub(crate) mod postgres;
+
+pub(crate) mod writer;

@@ -32,10 +32,12 @@ use tracing::warn;
 
 use crate::api::world_state::db_counters;
 use crate::config::{AdmissionPolicy, PersistenceConfig};
+#[cfg(test)]
 use crate::provider::batch_writer::BatchWriter;
 use crate::provider::logical::{
     LogicalCommit, PersistenceError, PersistenceReceipt, PublicationId, WriterEpoch,
 };
+use crate::provider::writer::StorageWriter;
 use crate::tx::Timestamp;
 
 /// Bounded number of admitted-but-unapplied write commits, and the size of the encoder queue.
@@ -368,7 +370,7 @@ pub struct PersistenceStatus {
 pub(crate) struct PersistenceCoordinator {
     epoch: WriterEpoch,
     admission: Arc<CommitAdmissionGate>,
-    writer: BatchWriter,
+    writer: StorageWriter,
     last_submitted: AtomicU64,
     published: AtomicU64,
     shutdown: AtomicBool,
@@ -376,7 +378,12 @@ pub(crate) struct PersistenceCoordinator {
 }
 
 impl PersistenceCoordinator {
-    pub(crate) fn new(epoch: WriterEpoch, config: PersistenceConfig, writer: BatchWriter) -> Self {
+    pub(crate) fn new(
+        epoch: WriterEpoch,
+        config: PersistenceConfig,
+        writer: impl Into<StorageWriter>,
+    ) -> Self {
+        let writer = writer.into();
         Self {
             epoch,
             admission: Arc::new(CommitAdmissionGate::new(
@@ -530,7 +537,6 @@ impl PersistenceCoordinator {
         self.ensure_writer_healthy()?;
         self.writer
             .snapshot(through_version, deadline)
-            .map(super::backend::StorageSnapshot::Fjall)
             .map_err(|error| self.map_wait_error(through_version, error))
     }
 

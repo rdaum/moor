@@ -16,11 +16,24 @@
 //! Connections must be created and used on persistence or administrative workers.
 //! This module does not implement world storage or run SQL on transaction workers.
 
+mod apply;
+mod codec;
+mod config;
 mod connection;
+mod encode;
 mod options;
+mod rows;
+mod schema;
+mod seed;
+mod sql;
+mod state;
+mod writer;
+pub(crate) use writer::PostgresWriter;
 
+pub use config::{PostgresCommitPolicy, PostgresStorageConfig};
 pub use connection::{PostgresConnection, PostgresParam, PostgresRow, PostgresStatementResult};
 pub use options::{PostgresConnectOptions, PostgresEndpoint, PostgresSchema};
+pub use schema::initialize_postgres_schema;
 
 use std::{
     sync::{
@@ -33,6 +46,27 @@ use std::{
 /// Redacted adapter errors. Server messages can contain credentials or application values.
 #[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
 pub enum PostgresError {
+    #[error("PostgreSQL {operation} on {relation}: {source}")]
+    Operation {
+        relation: &'static str,
+        operation: &'static str,
+        source: Box<PostgresError>,
+    },
+    #[error("PostgreSQL relation {relation}, {key}: {source}")]
+    Row {
+        relation: &'static str,
+        key: String,
+        source: Box<PostgresError>,
+    },
+    #[error("PostgreSQL {field} codec: {detail}")]
+    Codec { field: &'static str, detail: String },
+    #[error("PostgreSQL writer ownership is unavailable or was lost")]
+    OwnershipLost,
+    #[error("invalid PostgreSQL stored {field}: {reason}")]
+    Format {
+        field: &'static str,
+        reason: &'static str,
+    },
     #[error("invalid PostgreSQL configuration: {0}")]
     Configuration(&'static str),
     #[error("PostgreSQL operation exceeded its deadline")]
@@ -73,3 +107,6 @@ impl PostgresShutdown {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

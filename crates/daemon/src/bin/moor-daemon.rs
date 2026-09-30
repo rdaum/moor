@@ -40,7 +40,17 @@ fn main() -> Result<(), Report> {
     color_eyre::install()?;
 
     let args = Args::parse();
-    args.db_args.storage_backend.check_available()?;
+    let config = args.load_config()?;
+    let storage = args.db_args.storage_args.resolve(
+        &config.storage,
+        || Some(args.resolved_db_path()),
+        args.db_args.db.is_some(),
+        config.database.is_some(),
+    )?;
+    if let Some(identity) = args.db_args.storage_args.initialize(&storage)? {
+        println!("Initialized PostgreSQL database {identity}");
+        return Ok(());
+    }
     let enrollment_token_path = args.resolved_enrollment_token_path();
     let version = semver::Version::parse(build::PKG_VERSION)
         .map_err(|e| eyre!("Invalid moor version '{}': {}", build::PKG_VERSION, e))?;
@@ -87,7 +97,6 @@ fn main() -> Result<(), Report> {
     info!("Daemon CURVE keys are initialized");
     let _enrollment_token = ensure_enrollment_token(&enrollment_token_path)?;
 
-    let config = args.load_config()?;
     let kill_switch = Arc::new(AtomicBool::new(false));
     let emergency_checkpoint = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(signal_hook::consts::SIGTERM, kill_switch.clone())?;
@@ -97,9 +106,9 @@ fn main() -> Result<(), Report> {
     let runtime_config = DaemonRuntimeConfig {
         version,
         config,
+        storage,
         paths: DaemonPaths {
             data_dir: args.resolved_data_dir(),
-            db_path: args.resolved_db_path(),
             connections_db_path: args.resolved_connections_db_path(),
             tasks_db_path: args.resolved_tasks_db_path(),
             events_db_path: args.resolved_events_db_path(),

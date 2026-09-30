@@ -62,12 +62,8 @@ static VERSION_STRING: LazyLock<String> = LazyLock::new(|| {
 #[derive(Parser, Debug)]
 #[command(version = VERSION_STRING.as_str())]
 pub struct Args {
-    #[arg(
-        long,
-        default_value = "fjall",
-        help = "World storage backend: fjall or postgres"
-    )]
-    storage_backend: moor_db::StorageBackendKind,
+    #[command(flatten)]
+    storage_args: moor_db::StorageArgs,
 
     #[clap(
         long,
@@ -164,8 +160,9 @@ pub struct Args {
     debug: bool,
 
     #[clap(
-        long,
-        help = "Path to database directory (if not specified, uses a temporary directory)"
+        long = "db",
+        visible_alias = "db-path",
+        help = "Fjall world directory (default: a temporary directory)"
     )]
     db_path: Option<PathBuf>,
 
@@ -355,7 +352,16 @@ fn run_tests(
 fn main() -> Result<(), eyre::Report> {
     color_eyre::install().unwrap();
     let args: Args = Args::parse();
-    args.storage_backend.check_available()?;
+    let storage = args.storage_args.resolve(
+        &moor_db::StorageSettings::default(),
+        || args.db_path.clone(),
+        args.db_path.is_some(),
+        false,
+    )?;
+    if let Some(identity) = args.storage_args.initialize(&storage)? {
+        println!("Initialized PostgreSQL database {identity}");
+        return Ok(());
+    }
 
     moor_common::tracing::init_tracing_simple(args.debug).unwrap_or_else(|e| {
         eprintln!("Unable to configure logging: {e}");
@@ -383,35 +389,18 @@ fn main() -> Result<(), eyre::Report> {
         bail!("baseline preparation requires --include-baselines=true for objdef output");
     }
 
-    // Actual binary database is either in a specified path or tmpdir.
-    // Keep the TempDir alive for the entire scope if we're using a temp directory.
-    let _temp_dir_guard;
-    let db_path = if let Some(ref path) = args.db_path {
-        info!("Using specified database path: {}", path.display());
-        path.as_path()
-    } else {
-        _temp_dir_guard = match tempfile::tempdir() {
-            Ok(dir) => dir,
-            Err(e) => {
-                error!("Failed to create temporary directory: {}", e);
-                std::process::exit(1);
-            }
-        };
-        info!(
-            "Using temporary database at {}",
-            _temp_dir_guard.path().display()
-        );
-        _temp_dir_guard.path()
-    };
-
-    let (database, _) = TxDB::try_open_fjall(db_path, DatabaseConfig::default())
-        .map_err(|e| eyre::eyre!("Unable to open database at {}: {e}", db_path.display()))?;
+    info!(storage_backend = %storage.kind(), "Opening world database");
+    let (database, _) = TxDB::try_open(
+        storage,
+        DatabaseConfig::default(),
+        moor_db::PersistenceConfig::default(),
+    )?;
     // Retain a handle for persistence boundaries around test/benchmark runs.
     let persistence_handle = database.clone();
     let mut loader_interface = match database.loader_client() {
         Ok(loader) => loader,
         Err(e) => {
-            error!("Unable to open database at {}: {}", db_path.display(), e);
+            error!("Unable to open world database: {e}");
             std::process::exit(1);
         }
     };
@@ -533,12 +522,9 @@ fn main() -> Result<(), eyre::Report> {
             );
         };
 
-        let loader_interface = database.create_snapshot().map_err(|e| {
-            eyre!(
-                "Unable to create database snapshot for {}: {e}",
-                db_path.display()
-            )
-        })?;
+        let loader_interface = database
+            .create_snapshot()
+            .map_err(|e| eyre!("Unable to create database snapshot: {e}"))?;
         info!(path = ?in_progress_path, "Dumping objects");
         let stats = dump_snapshot_object_definitions_with_options(
             loader_interface.as_ref(),

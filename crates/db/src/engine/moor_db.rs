@@ -350,7 +350,8 @@ impl MoorDB {
         persistence: PersistenceConfig,
     ) -> Result<(Arc<Self>, bool), DatabaseOpenError> {
         let relations = Arc::new(Relations::init());
-        let opened = StorageBackend::open(storage, config, &relations)?;
+        let epoch = WriterEpoch::random();
+        let opened = StorageBackend::open(storage, config, &relations, epoch)?;
         let sequences = Arc::new(SequenceState::new());
         for (index, value) in opened.seed.sequences.iter().copied().enumerate() {
             sequences.set_initial(index, value);
@@ -360,7 +361,7 @@ impl MoorDB {
         let writer = opened.writer;
         let fresh = opened.fresh;
         let shutdown_timeout = persistence.shutdown_timeout;
-        let coordinator = PersistenceCoordinator::new(WriterEpoch::random(), persistence, writer);
+        let coordinator = PersistenceCoordinator::new(epoch, persistence, writer);
         info!(
             writer_epoch = coordinator.epoch().as_u64(),
             "Persistence coordinator started"
@@ -385,7 +386,7 @@ impl MoorDB {
     }
 
     /// Return a point-in-time view of Fjall's background maintenance state.
-    pub fn storage_maintenance_stats(&self) -> StorageMaintenanceStats {
+    pub fn storage_maintenance_stats(&self) -> Option<StorageMaintenanceStats> {
         self.backend.maintenance_stats()
     }
 

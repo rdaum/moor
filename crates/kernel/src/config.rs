@@ -24,6 +24,8 @@ pub use moor_vm::FeaturesConfig;
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
+    #[serde(default)]
+    pub storage: moor_db::StorageSettings,
     pub database: Option<DatabaseConfig>,
     pub features: Arc<FeaturesConfig>,
     pub import_export: ImportExportConfig,

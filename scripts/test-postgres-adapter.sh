@@ -58,7 +58,8 @@ container=$(docker run --detach --publish 127.0.0.1::5432 \
     --env-file "$fixture/docker.env" --mount "type=bind,src=$fixture,dst=/fixture,readonly" \
     --mount "type=bind,src=$fixture/init.sh,dst=/docker-entrypoint-initdb.d/10-adapter.sh,readonly" \
     --mount "type=bind,src=$fixture/socket,dst=/moor-socket" \
-    --tmpfs "$data_path" "postgres:$version-bookworm")
+    --tmpfs "$data_path" --entrypoint bash "postgres:$version-bookworm" -c \
+    'while true; do /usr/local/bin/docker-entrypoint.sh postgres & wait "$!"; sleep 0.1; done')
 port=$(docker inspect --format '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' "$container")
 ready=false
 for ((attempt=0; attempt<60; attempt++)); do
@@ -81,4 +82,11 @@ chmod 600 "$fixture/pgpass"
 export PGSERVICEFILE="$fixture/service.conf" PGPASSFILE="$fixture/pgpass"
 export MOOR_PG_TEST_CONNINFO='service=moor_adapter' MOOR_PG_TEST_TLS=1
 export MOOR_PG_TEST_SOCKET="$fixture/socket"
-cargo test --locked -p moor-db --features postgres --test postgres_adapter -- --ignored
+export MOOR_PG_TEST_CONTAINER_ID="$container"
+cargo test --locked -p moor-db --features postgres --test postgres_adapter --test postgres_storage -- --ignored
+cargo test --locked -p moor-db --features postgres --lib provider::postgres:: -- --ignored
+cargo test --locked -p moor-db --features postgres --test postgres_restart -- --ignored --test-threads=1
+if [[ ${MOOR_PG_TEST_CLI:-0} == 1 ]]; then
+    cargo build --locked -p moor-daemon -p moor-server -p moorc -p moor-emh --features postgres
+    python3 scripts/test-postgres-cli.py
+fi

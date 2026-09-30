@@ -4446,6 +4446,8 @@ dependencies = [
  "ahash",
  "arc-swap",
  "byteview",
+ "clap",
+ "clap_derive",
  "edn-format",
  "eyre",
  "fast-telemetry",

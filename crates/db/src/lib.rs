@@ -25,6 +25,12 @@ use std::{
 mod api;
 mod cache;
 mod config;
+mod storage_settings;
+pub use storage_settings::{PostgresCommitSetting, PostgresSettings, StorageSettings};
+#[cfg(feature = "cli")]
+mod storage_args;
+#[cfg(feature = "cli")]
+pub use storage_args::StorageArgs;
 mod engine;
 mod model;
 mod provider;
@@ -136,12 +142,13 @@ pub use engine::SEQUENCE_MAX_OBJECT;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DatabaseOpenError {
+    #[error("invalid storage configuration: {0}")]
+    StorageConfiguration(&'static str),
+    #[cfg(feature = "postgres")]
+    #[error("failed to open PostgreSQL world: {0}")]
+    Postgres(#[from] PostgresError),
     #[error("PostgreSQL support is disabled; rebuild with the postgres Cargo feature")]
     PostgresFeatureDisabled,
-    #[error(
-        "PostgreSQL client support is enabled, but PostgreSQL world storage is not available yet"
-    )]
-    PostgresWorldStorageUnavailable,
 
     #[error("failed to create temporary database directory: {source}")]
     TempDir { source: std::io::Error },
@@ -383,7 +390,7 @@ impl Database for TxDB {
     }
 
     fn storage_maintenance_stats(&self) -> Option<StorageMaintenanceStats> {
-        Some(self.storage.storage_maintenance_stats())
+        self.storage.storage_maintenance_stats()
     }
 }
 
@@ -391,6 +398,7 @@ mod relation_registry;
 
 #[cfg(feature = "postgres")]
 pub use provider::postgres::{
-    PostgresConnectOptions, PostgresConnection, PostgresEndpoint, PostgresError, PostgresParam,
-    PostgresRow, PostgresSchema, PostgresShutdown, PostgresStatementResult,
+    PostgresCommitPolicy, PostgresConnectOptions, PostgresConnection, PostgresEndpoint,
+    PostgresError, PostgresParam, PostgresRow, PostgresSchema, PostgresShutdown,
+    PostgresStatementResult, PostgresStorageConfig, initialize_postgres_schema,
 };

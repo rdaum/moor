@@ -43,6 +43,8 @@ impl std::ops::Deref for FjallReadSnapshot {
 }
 pub(crate) enum StorageBackend {
     Fjall(FjallStorage),
+    #[cfg(feature = "postgres")]
+    Postgres(Arc<std::sync::atomic::AtomicU64>),
 }
 pub(crate) struct FjallStorage {
     pub(crate) database: Database,
@@ -56,7 +58,7 @@ pub(crate) struct SeededWorld {
 pub(crate) struct OpenedStorage {
     pub(crate) backend: StorageBackend,
     pub(crate) seed: SeededWorld,
-    pub(crate) writer: BatchWriter,
+    pub(crate) writer: super::writer::StorageWriter,
     pub(crate) fresh: bool,
     pub(crate) start_tx_num: u64,
 }
@@ -64,9 +66,29 @@ impl StorageBackend {
     pub(crate) fn open(
         storage: StorageConfig,
         config: DatabaseConfig,
-        relations: &Relations,
+        relations: &Arc<Relations>,
+        _epoch: super::logical::WriterEpoch,
     ) -> Result<OpenedStorage, DatabaseOpenError> {
-        let StorageConfig::Fjall(fjall) = storage;
+        let fjall = match storage {
+            StorageConfig::Fjall(fjall) => fjall,
+            #[cfg(feature = "postgres")]
+            StorageConfig::Postgres(postgres) => {
+                if config != DatabaseConfig::default() {
+                    return Err(DatabaseOpenError::StorageConfiguration(
+                        "Fjall table tuning is not supported by PostgreSQL storage",
+                    ));
+                }
+                let (writer, seed, fresh, start_tx_num) =
+                    super::postgres::PostgresWriter::open(*postgres, relations.clone(), _epoch)?;
+                return Ok(OpenedStorage {
+                    backend: Self::Postgres(writer.storage_bytes()),
+                    seed,
+                    writer: super::writer::StorageWriter::Postgres(writer),
+                    fresh,
+                    start_tx_num,
+                });
+            }
+        };
         let tmpdir = Arc::new(if fjall.path.is_none() {
             Some(TempDir::new().map_err(|source| DatabaseOpenError::TempDir { source })?)
         } else {
@@ -146,7 +168,7 @@ impl StorageBackend {
                 root: initial_root,
                 sequences: initial_sequences,
             },
-            writer,
+            writer: writer.into(),
             fresh,
             start_tx_num,
         })
@@ -162,11 +184,20 @@ impl StorageBackend {
                     readers: storage.relations.readers(&lease),
                 })
             }
+            #[cfg(feature = "postgres")]
+            (Self::Postgres(_), _) => {
+                unreachable!("PostgreSQL writer cannot issue a Fjall snapshot")
+            }
         }
     }
     pub(crate) fn usage_bytes(&self) -> usize {
         match self {
             Self::Fjall(storage) => storage.database.disk_space().unwrap_or_default() as usize,
+            #[cfg(feature = "postgres")]
+            Self::Postgres(bytes) => {
+                usize::try_from(bytes.load(std::sync::atomic::Ordering::Acquire))
+                    .unwrap_or(usize::MAX)
+            }
         }
     }
     pub(crate) fn compact_relations(
@@ -175,13 +206,25 @@ impl StorageBackend {
     ) -> Vec<crate::RelationCompactionResult> {
         match self {
             Self::Fjall(storage) => storage.relations.compact_relations(relations),
+            #[cfg(feature = "postgres")]
+            Self::Postgres(_) => relations
+                .iter()
+                .map(|relation| {
+                    crate::RelationCompactionResult::failed(
+                        *relation,
+                        0,
+                        0,
+                        "PostgreSQL does not support Fjall relation compaction".into(),
+                    )
+                })
+                .collect(),
         }
     }
-    pub(crate) fn maintenance_stats(&self) -> StorageMaintenanceStats {
+    pub(crate) fn maintenance_stats(&self) -> Option<StorageMaintenanceStats> {
         match self {
             Self::Fjall(storage) => {
                 let db = &storage.database;
-                StorageMaintenanceStats {
+                Some(StorageMaintenanceStats {
                     write_buffer_bytes: db.write_buffer_size(),
                     outstanding_flushes: db.outstanding_flushes(),
                     active_compactions: db.active_compactions(),
@@ -190,14 +233,19 @@ impl StorageBackend {
                     journal_count: db.journal_count(),
                     journal_bytes: db.journal_disk_space().unwrap_or_default(),
                     disk_bytes: db.disk_space().unwrap_or_default(),
-                }
+                })
             }
+            #[cfg(feature = "postgres")]
+            Self::Postgres(_) => None,
         }
     }
     #[cfg(test)]
     pub(crate) fn fjall(&self) -> &FjallStorage {
-        let Self::Fjall(storage) = self;
-        storage
+        match self {
+            Self::Fjall(storage) => storage,
+            #[cfg(feature = "postgres")]
+            Self::Postgres(_) => panic!("Fjall fixture required"),
+        }
     }
 }
 

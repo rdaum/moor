@@ -18,7 +18,7 @@ use std::time::Duration;
 
 use crate::{DEFAULT_COMMIT_QUEUE_TIMEOUT, DEFAULT_COMMIT_QUEUE_WARN};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DatabaseConfig {
     /// Per-table configurations
@@ -115,9 +115,25 @@ pub struct FjallStorageConfig {
 #[derive(Clone, Debug)]
 pub enum StorageConfig {
     Fjall(FjallStorageConfig),
+    #[cfg(feature = "postgres")]
+    Postgres(Box<crate::PostgresStorageConfig>),
 }
 
 impl StorageConfig {
+    pub fn kind(&self) -> StorageBackendKind {
+        match self {
+            Self::Fjall(_) => StorageBackendKind::Fjall,
+            #[cfg(feature = "postgres")]
+            Self::Postgres(_) => StorageBackendKind::Postgres,
+        }
+    }
+
+    /// Select an explicitly initialized PostgreSQL world schema.
+    #[cfg(feature = "postgres")]
+    pub fn postgres(config: crate::PostgresStorageConfig) -> Self {
+        Self::Postgres(Box::new(config))
+    }
+
     /// Select a Fjall database at `path`.
     #[must_use]
     pub fn fjall(path: impl Into<PathBuf>) -> Self {
@@ -134,7 +150,7 @@ impl StorageConfig {
 }
 
 /// Per-table configuration.
-#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TableConfig {
     /// Various fjall keyspace creation options.
@@ -190,7 +206,7 @@ impl StorageBackendKind {
         if !cfg!(feature = "postgres") {
             return Err(crate::DatabaseOpenError::PostgresFeatureDisabled);
         }
-        Err(crate::DatabaseOpenError::PostgresWorldStorageUnavailable)
+        Ok(())
     }
 }
 
@@ -204,16 +220,13 @@ mod backend_selection_tests {
             StorageBackendKind::Postgres
         );
         assert!(StorageBackendKind::Fjall.check_available().is_ok());
-        let error = StorageBackendKind::Postgres.check_available().unwrap_err();
+        let result = StorageBackendKind::Postgres.check_available();
         if cfg!(feature = "postgres") {
-            assert!(matches!(
-                error,
-                crate::DatabaseOpenError::PostgresWorldStorageUnavailable
-            ));
+            assert!(result.is_ok());
         } else {
             assert!(matches!(
-                error,
-                crate::DatabaseOpenError::PostgresFeatureDisabled
+                result,
+                Err(crate::DatabaseOpenError::PostgresFeatureDisabled)
             ));
         }
     }

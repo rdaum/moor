@@ -70,6 +70,23 @@ impl<K: RelationDomain, V: RelationCodomain> Relation<K, V> {
         index.set_fully_resident(true);
         Ok((index, max_timestamp))
     }
+    /// Build from a push cursor without buffering a second copy of the relation.
+    /// The index becomes resident only after the producer finishes successfully.
+    #[cfg(feature = "postgres")]
+    pub(crate) fn seeded_index_with<E>(
+        &self,
+        produce: impl FnOnce(&mut dyn FnMut(Timestamp, K, V)) -> Result<(), E>,
+    ) -> Result<SeededIndex<K, V>, E> {
+        let mut index = (self.index_factory)();
+        let mut max_timestamp = Timestamp(0);
+        produce(&mut |timestamp, key, value| {
+            max_timestamp = max_timestamp.max(timestamp);
+            index.insert_entry(timestamp, key, value);
+        })?;
+        index.set_fully_resident(true);
+        Ok((index, max_timestamp))
+    }
+
     pub fn start_from_index(
         &self,
         tx: &Tx,

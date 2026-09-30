@@ -347,6 +347,25 @@ impl PropertyValueReconstructor {
         record_version: u64,
         record: &[u8],
     ) -> Result<(), PropertyValueRecordError> {
+        let record = decode_property_value_record(record)?;
+        self.push_decoded(
+            record_version,
+            record.kind,
+            record.logical_timestamp,
+            record.payload.len(),
+            decode_var(record.payload)?,
+        )
+    }
+
+    /// Apply a decoded record with backend-specific payload size accounting.
+    pub(crate) fn push_decoded(
+        &mut self,
+        record_version: u64,
+        kind: PropertyValueRecordKind,
+        logical_timestamp: Timestamp,
+        payload_bytes: usize,
+        decoded: Var,
+    ) -> Result<(), PropertyValueRecordError> {
         if self
             .last_version
             .is_some_and(|last_version| record_version <= last_version)
@@ -354,10 +373,9 @@ impl PropertyValueReconstructor {
             return Err(PropertyValueRecordError::RecordOrder);
         }
 
-        let record = decode_property_value_record(record)?;
-        match (&self.value, record.kind) {
+        match (&self.value, kind) {
             (None, PropertyValueRecordKind::Full) => {
-                self.value = Some(decode_var(record.payload)?);
+                self.value = Some(decoded);
                 self.record_versions.push(record_version);
             }
             (None, PropertyValueRecordKind::ListAppend) => {
@@ -372,13 +390,13 @@ impl PropertyValueReconstructor {
                 }
                 let append_bytes = self
                     .append_bytes
-                    .checked_add(record.payload.len())
+                    .checked_add(payload_bytes)
                     .ok_or(PropertyValueRecordError::AppendByteLimit)?;
                 if append_bytes > self.limits.max_append_bytes {
                     return Err(PropertyValueRecordError::AppendByteLimit);
                 }
 
-                let suffix = decode_var(record.payload)?;
+                let suffix = decoded;
                 let Some(suffix) = suffix.as_list() else {
                     return Err(PropertyValueRecordError::InvalidListAppend);
                 };
@@ -399,7 +417,7 @@ impl PropertyValueReconstructor {
             }
         }
 
-        self.logical_timestamp = record.logical_timestamp;
+        self.logical_timestamp = logical_timestamp;
         self.last_version = Some(record_version);
         self.record_count += 1;
         Ok(())

@@ -109,13 +109,16 @@ jobs:
           PQ_LIB_DIR: /nonexistent/libpq-must-not-be-used
         run: |
           python3 scripts/check-postgres-dependencies.py
-          cargo build --locked -p moor-daemon
-          if ldd target/debug/moor-daemon | grep -q libpq; then exit 1; fi
-          output=$(target/debug/moor-daemon --storage-backend postgres 2>&1) && exit 1
-          grep -q 'PostgreSQL support is disabled' <<<"$output"
+          cargo build --locked -p moor-daemon -p moor-server -p moorc -p moor-emh
+          for binary in moor-daemon moor moorc moor-emh; do
+            if ldd "target/debug/$binary" | grep -q libpq; then exit 1; fi
+          done
+          python3 scripts/test-postgres-cli.py --disabled
       - name: Install minimum supported client
         run: sudo bash scripts/install-libpq.sh build
-      - name: Run TLS and adapter contracts
+      - name: Run PostgreSQL adapter, storage, and CLI contracts
+        env:
+          MOOR_PG_TEST_CLI: '1'
         run: scripts/test-postgres-adapter.sh ${{ matrix.server }}
       - name: Check feature forwarding and thread ownership
         run: |

@@ -75,12 +75,8 @@ impl From<Format> for ImportFormat {
 #[derive(Parser, Debug)]
 #[command(version = build::PKG_VERSION)]
 struct Args {
-    #[arg(
-        long,
-        default_value = "fjall",
-        help = "World storage backend: fjall or postgres"
-    )]
-    storage_backend: moor_db::StorageBackendKind,
+    #[command(flatten)]
+    storage_args: moor_db::StorageArgs,
 
     #[arg(
         value_name = "data-dir",
@@ -102,10 +98,9 @@ struct Args {
         long,
         value_name = "db",
         help = "Main database filename (relative to data-dir if not absolute)",
-        value_hint = ValueHint::FilePath,
-        default_value = "world.db"
+        value_hint = ValueHint::FilePath
     )]
-    db: PathBuf,
+    db: Option<PathBuf>,
 
     #[arg(
         short,
@@ -244,6 +239,7 @@ struct Args {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 struct CombinedConfig {
+    storage: moor_db::StorageSettings,
     database: Option<DatabaseConfig>,
     features: Arc<FeaturesConfig>,
     import_export: ImportExportConfig,
@@ -255,6 +251,7 @@ impl Default for CombinedConfig {
     fn default() -> Self {
         let config = Config::default();
         Self {
+            storage: config.storage,
             database: config.database,
             features: config.features,
             import_export: config.import_export,
@@ -270,6 +267,7 @@ impl CombinedConfig {
         features.normalize_deprecated_flags();
 
         let config = Config {
+            storage: self.storage,
             database: self.database,
             features: Arc::new(features),
             import_export: self.import_export,
@@ -393,7 +391,6 @@ async fn run() -> Result<(), Report> {
     color_eyre::install()?;
 
     let args = Args::parse();
-    args.storage_backend.check_available()?;
     eprintln!("Initializing...\n{VERSION_BANNER_MSG}");
     tracing::init_tracing(args.debug).map_err(|e| eyre!("Unable to configure logging: {e}"))?;
 
@@ -406,6 +403,21 @@ async fn run() -> Result<(), Report> {
     apply_cli_overrides(&args, &mut combined_config);
     let (config, services_config) = combined_config.into_parts();
     config.validate().map_err(|e| eyre!(e))?;
+    let storage = args.storage_args.resolve(
+        &config.storage,
+        || {
+            Some(resolve_data_path(
+                &args.data_dir,
+                args.db.as_deref().unwrap_or_else(|| Path::new("world.db")),
+            ))
+        },
+        args.db.is_some(),
+        config.database.is_some(),
+    )?;
+    if let Some(identity) = args.storage_args.initialize(&storage)? {
+        println!("Initialized PostgreSQL database {identity}");
+        return Ok(());
+    }
 
     prepare_config_dir()?;
     std::fs::create_dir_all(&args.data_dir)?;
@@ -448,9 +460,9 @@ async fn run() -> Result<(), Report> {
     let runtime_config = DaemonRuntimeConfig {
         version,
         config,
+        storage,
         paths: DaemonPaths {
             data_dir: args.data_dir.clone(),
-            db_path: resolve_data_path(&args.data_dir, &args.db),
             connections_db_path: Some(resolve_optional_data_path(
                 &args.data_dir,
                 args.connections_file.as_ref(),
@@ -600,6 +612,7 @@ async fn run() -> Result<(), Report> {
 }
 
 fn apply_cli_overrides(args: &Args, config: &mut CombinedConfig) {
+    config.storage = args.storage_args.merge(&config.storage);
     if let Some(import) = args.import.as_ref() {
         config.import_export.input_path = Some(import.clone());
     }

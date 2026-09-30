@@ -1,0 +1,50 @@
+# Local PostgreSQL world storage for scripts/start-moor-cowbell.sh --postgres.
+# Connections use a shared Unix socket; PostgreSQL does not listen on TCP.
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: moor
+      POSTGRES_DB: moor
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_INITDB_ARGS: --encoding=UTF8
+    command: ["postgres", "-c", "listen_addresses=", "-c", "unix_socket_directories=/var/run/postgresql"]
+    volumes:
+      - cowbell-pg-data:/var/lib/postgresql/data
+      - cowbell-pg-socket:/var/run/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h /var/run/postgresql -U moor -d moor"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  moor:
+    build:
+      args:
+        POSTGRES: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGSERVICEFILE: /db/scripts/cowbell-pg-service.conf
+    volumes:
+      - cowbell-pg-socket:/var/run/postgresql
+    command: >
+      /moor/moor
+        /db/${RUN_DIR:-run-cowbell-postgres}/moor-data
+        --storage-backend=postgres
+        --pg-service=cowbell
+        --pg-schema=cowbell
+        --pg-socket-dir=/var/run/postgresql
+        --config-file=/db/${MOOR_CONFIG_FILE:-moor-dev-postgres.yaml}
+        --import=${IMPORT_PATH:-/db/cores/cowbell/src}
+        --import-format=objdef
+        --generate-keypair
+        --public-key=/db/${RUN_DIR:-run-cowbell-postgres}/config/moor.key.pub
+        --private-key=/db/${RUN_DIR:-run-cowbell-postgres}/config/moor.key.pem
+        --enable-curl-worker
+        --web-listen-address=0.0.0.0:8081
+
+volumes:
+  cowbell-pg-data:
+  cowbell-pg-socket:
