@@ -455,8 +455,9 @@ impl PersistenceCoordinator {
         changes: &crate::engine::moor_db::RelationWorkingSets,
         timestamp: Timestamp,
         admission: &mut CommitAdmission,
-    ) -> Result<(), String> {
-        self.writer.prepare(changes, timestamp, admission)
+    ) -> Result<(), moor_common::model::WorldStateError> {
+        self.writer
+            .prepare(changes, timestamp, admission, self.admission.policy())
     }
 
     /// Transfer a published logical commit and its permit to the backend.

@@ -285,6 +285,7 @@ def main():
                         "--pg-schema", "cli_" + uuid.uuid4().hex]
             for extra in [["--db", "world.db"], ["--pg-query-timeout-seconds", "0"],
                           ["--pg-max-exports", "0"], ["--pg-max-exports", "65"],
+                          ["--pg-max-pending-bytes", "0"],
                           ["--persistence-shutdown-timeout-seconds", "0"],
                           ["--persistence-shutdown-timeout-seconds", "18446744073709551615"]]:
                 run(binary, [*selected, *postgres, *extra, "--init-storage"], env, False)
@@ -321,6 +322,11 @@ def main():
             assert "persistence shutdown timeout" in output, output
             run(binary, [*invocation, "--pg-schema", schema + "_shutdown_override",
                          "--persistence-shutdown-timeout-seconds", "9"], env, True)
+            config.write_text(valid_config + "    max_pending_bytes: 0\n", encoding="utf8")
+            output = run(binary, invocation, env, False)
+            assert "max_pending_bytes must be positive" in output, output
+            run(binary, [*invocation, "--pg-schema", schema + "_bytes_override",
+                         "--pg-max-pending-bytes", "8192"], env, True)
             config.write_text(valid_config, encoding="utf8")
             config.write_text(config.read_text(encoding="utf8") + "database: {}\n", encoding="utf8")
             output = run(binary, invocation, env, False)

@@ -61,6 +61,9 @@ pub struct StorageArgs {
     /// Maximum concurrent PostgreSQL snapshot readers (default: 2, range: 1..64).
     #[arg(long)]
     pub pg_max_exports: Option<usize>,
+    /// Target bytes for admitted PostgreSQL payloads (default: 64 MiB).
+    #[arg(long)]
+    pub pg_max_pending_bytes: Option<usize>,
     /// SQL commit policy: synchronous or asynchronous (default: synchronous).
     #[arg(long)]
     pub pg_commit_policy: Option<PostgresCommitSetting>,
@@ -98,6 +101,7 @@ impl StorageArgs {
         override_field!(pg_retry_interval_ms, retry_interval_ms);
         override_field!(pg_max_row_bytes, max_row_bytes);
         override_field!(pg_max_exports, max_exports);
+        override_field!(pg_max_pending_bytes, max_pending_bytes);
         override_field!(pg_commit_policy, commit_policy);
         settings
     }
@@ -296,18 +300,27 @@ mod tests {
 
     #[test]
     fn explicit_export_limit_overrides_yaml_without_changing_the_endpoint() {
-        let command = Command::try_parse_from(["test", "--pg-max-exports", "3"]).unwrap();
+        let command = Command::try_parse_from([
+            "test",
+            "--pg-max-exports",
+            "3",
+            "--pg-max-pending-bytes",
+            "8192",
+        ])
+        .unwrap();
         let configured = StorageSettings {
             backend: StorageBackendKind::Postgres,
             postgres: Some(crate::PostgresSettings {
                 service: Some("world".into()),
                 max_exports: Some(1),
+                max_pending_bytes: Some(4096),
                 ..Default::default()
             }),
             ..Default::default()
         };
         let merged = command.storage.merge(&configured).postgres.unwrap();
         assert_eq!(merged.max_exports, Some(3));
+        assert_eq!(merged.max_pending_bytes, Some(8192));
         assert_eq!(merged.service.as_deref(), Some("world"));
     }
     #[test]

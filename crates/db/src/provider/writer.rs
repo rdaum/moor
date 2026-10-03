@@ -46,13 +46,14 @@ impl StorageWriter {
         _changes: &crate::engine::moor_db::RelationWorkingSets,
         _timestamp: crate::Timestamp,
         _admission: &mut CommitAdmission,
-    ) -> Result<(), String> {
+        _policy: crate::AdmissionPolicy,
+    ) -> Result<(), moor_common::model::WorldStateError> {
         match self {
             Self::Fjall(_) => Ok(()),
             #[cfg(feature = "postgres")]
             Self::Postgres(writer) => {
                 _admission.preparation.postgres =
-                    Some(Box::new(writer.prepare(_changes, _timestamp)?));
+                    Some(Box::new(writer.prepare(_changes, _timestamp, _policy)?));
                 Ok(())
             }
         }

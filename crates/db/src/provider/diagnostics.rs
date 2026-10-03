@@ -17,6 +17,11 @@
 /// Durations are nanoseconds unless the field explicitly says microseconds.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PostgresPersistenceStats {
+    pub admission_bytes: u64,
+    pub admission_limit_bytes: u64,
+    pub admission_waiters: u64,
+    pub admission_wait_ns: u64,
+    pub admission_timeouts: u64,
     pub active_exports: u64,
     pub oldest_export_micros: u64,
     pub export_limit: u64,
@@ -71,6 +76,23 @@ pub enum PostgresGroupEnd {
 impl PostgresPersistenceStats {
     pub(crate) fn operator_metrics(&self) -> Vec<(&'static str, u64)> {
         let mut metrics = vec![
+            ("persistence_postgres_admission_bytes", self.admission_bytes),
+            (
+                "persistence_postgres_admission_limit_bytes",
+                self.admission_limit_bytes,
+            ),
+            (
+                "persistence_postgres_admission_waiters",
+                self.admission_waiters,
+            ),
+            (
+                "persistence_postgres_admission_wait_ns",
+                self.admission_wait_ns,
+            ),
+            (
+                "persistence_postgres_admission_timeouts",
+                self.admission_timeouts,
+            ),
             ("persistence_postgres_active_exports", self.active_exports),
             (
                 "persistence_postgres_oldest_export_micros",

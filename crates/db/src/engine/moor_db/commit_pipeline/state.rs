@@ -195,7 +195,7 @@ impl<'db> PreparedCommit<'db> {
 
         db.coordinator
             .prepare(&relation_ws, tx_timestamp, &mut admission)
-            .map_err(|error| PrepareError::Database(WorldStateError::DatabaseError(error)))?;
+            .map_err(PrepareError::Database)?;
 
         Ok(Self {
             data: CommitData {

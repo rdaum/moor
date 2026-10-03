@@ -141,6 +141,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 `db`:
 
+- Bound PostgreSQL prepared payloads with a configurable byte target, in addition to the commit
+  count limit. Byte admission timeouts reject writes before publication with `E_QUOTA`.
+
 - Configure the persistence shutdown budget through `storage.shutdown_timeout_seconds` or
   `--persistence-shutdown-timeout-seconds`. The default remains 30 seconds for both backends.
 

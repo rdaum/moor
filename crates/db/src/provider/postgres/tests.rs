@@ -53,6 +53,8 @@ pub(super) fn open(
 pub(super) fn empty(epoch: WriterEpoch, version: u64, timestamp: u64) -> EncodedCommit {
     EncodedCommit {
         payload_lease: None,
+        byte_lease: None,
+        admission_bytes: 0,
         publication: PublicationId::new(epoch, version),
         timestamp: Timestamp(timestamp),
         ordinary: vec![],
@@ -103,6 +105,7 @@ fn append(
             row: encode::property_row(key, suffix, Timestamp(ts), true, &config.profile).unwrap(),
             final_value: final_value.clone(),
             retained_bytes: moor_var::ByteSized::size_bytes(final_value),
+            retained_serialized_bytes: 0,
         },
     }
 }
@@ -1647,6 +1650,7 @@ fn concurrent_preparations_persist_the_rows_of_successful_publications() {
     db.wait_for_durability(Duration::from_secs(20)).unwrap();
     assert_eq!(db.publication().version(), 100);
     assert_eq!(db.persistence_status().outstanding, 0);
+    assert_eq!(db.persistence_status().postgres.unwrap().admission_bytes, 0);
     drop(db);
     let (db, _) = TxDB::try_open(
         StorageConfig::postgres(config),

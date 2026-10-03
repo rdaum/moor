@@ -18,6 +18,7 @@
 //! asynchronously; transaction workers never access a libpq connection.
 
 mod apply;
+mod byte_budget;
 mod codec;
 mod config;
 mod connection;

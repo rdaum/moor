@@ -46,6 +46,7 @@ pub(super) enum PropertyMutation {
         row: Value,
         final_value: Var,
         retained_bytes: usize,
+        retained_serialized_bytes: usize,
     },
 }
 pub(super) struct PropertyMutationRow {
@@ -54,6 +55,8 @@ pub(super) struct PropertyMutationRow {
 }
 pub(crate) struct EncodedCommit {
     pub(super) payload_lease: Option<super::metrics::PayloadLease>,
+    pub(super) byte_lease: Option<super::byte_budget::ByteLease>,
+    pub(super) admission_bytes: usize,
     pub(super) publication: PublicationId,
     pub(super) timestamp: Timestamp,
     pub(super) ordinary: Vec<RelationBatch>,
@@ -66,7 +69,7 @@ pub(crate) struct EncodedCommit {
 
 impl EncodedCommit {
     /// Rendered bytes before SQL adds record sequences. Counting serialization retains no copy.
-    pub(super) fn payload_sizes(&self) -> (usize, usize) {
+    pub(super) fn payload_sizes(&self) -> (usize, usize, usize) {
         struct Count(usize);
         impl std::io::Write for Count {
             fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
@@ -84,16 +87,22 @@ impl EncodedCommit {
             .sum::<usize>()
             + self.sequences.as_ref().map_or(0, String::len);
         let mut retained = 0;
+        let mut additional_charge = 0;
         for property in &self.properties {
             let row = match &property.mutation {
-                PropertyMutation::Delete => continue,
+                PropertyMutation::Delete => {
+                    additional_charge += 192;
+                    continue;
+                }
                 PropertyMutation::Full(row) => row,
                 PropertyMutation::Append {
                     row,
                     retained_bytes,
+                    retained_serialized_bytes,
                     ..
                 } => {
                     retained += retained_bytes;
+                    additional_charge += retained_bytes.max(retained_serialized_bytes);
                     row
                 }
             };
@@ -101,7 +110,11 @@ impl EncodedCommit {
             serde_json::to_writer(&mut count, row).expect("JSON value serialization is infallible");
             bytes += count.0;
         }
-        (bytes, retained)
+        (
+            bytes,
+            retained,
+            bytes.saturating_add(additional_charge).saturating_add(1024),
+        )
     }
 }
 
@@ -214,6 +227,7 @@ fn properties(
                             row,
                             final_value,
                             retained_bytes: full_measurement.logical_bytes,
+                            retained_serialized_bytes: full_measurement.json_bytes,
                         },
                         suffix_size.max(full_size),
                     )
@@ -307,6 +321,8 @@ pub(super) fn prepare(
             .sum::<usize>();
     Ok(EncodedCommit {
         payload_lease: None,
+        byte_lease: None,
+        admission_bytes: 0,
         publication: commit.publication,
         timestamp: commit.timestamp,
         ordinary,

@@ -49,7 +49,11 @@ const GROUP_BYTES: usize = 1024 * 1024;
 const GROUP_OPERATIONS: usize = 4096;
 const GROUP_AGE: Duration = Duration::from_millis(1);
 enum EncodingJob {
-    Prepare(LogicalCommit, Sender<Result<EncodedCommit, PostgresError>>),
+    Prepare(
+        LogicalCommit,
+        Sender<Result<EncodedCommit, PostgresError>>,
+        Receiver<()>,
+    ),
     Submit(LogicalCommit, CommitAdmission),
 }
 type EncodedJob = (u64, Result<EncodedCommit, PostgresError>, CommitAdmission);
@@ -62,6 +66,7 @@ struct RollupJob {
 struct Shared {
     metrics: Arc<Metrics>,
     validation_cache: super::validation_cache::ValidationCache,
+    byte_budget: Arc<super::byte_budget::ByteBudget>,
     healthy: Arc<AtomicBool>,
     stopping: AtomicBool,
     failure_reported: AtomicBool,
@@ -159,6 +164,7 @@ impl PostgresWriter {
         let shared = Arc::new(Shared {
             metrics: Arc::new(Metrics::default()),
             validation_cache: super::validation_cache::ValidationCache::default(),
+            byte_budget: super::byte_budget::ByteBudget::new(config.max_pending_bytes),
             healthy: Arc::new(AtomicBool::new(true)),
             stopping: AtomicBool::new(false),
             failure_reported: AtomicBool::new(false),
@@ -289,10 +295,10 @@ impl PostgresWriter {
                                         Err(flume::RecvTimeoutError::Disconnected) => return Ok(()),
                                     };
                                     let (commit, mut permit) = match job {
-                                        EncodingJob::Prepare(commit, reply) => {
+                                        EncodingJob::Prepare(commit, reply, encoding_slot) => {
                                             let timer = shared.metrics.timer(moor_common::model::WorldStateTimerOp::PostgresEncode);
                                             let mut result = encode::prepare(commit, &profile, max_row_bytes, &shared.validation_cache);
-                                            let (bytes, retained) = result.as_ref().map_or((0, 0), EncodedCommit::payload_sizes);
+                                            let (bytes, retained, admission_bytes) = result.as_ref().map_or((0, 0, 0), EncodedCommit::payload_sizes);
                                             shared.metrics.update(|m| {
                                                 m.encoding_calls += 1;
                                                 m.encoding_failures += u64::from(result.is_err());
@@ -300,9 +306,16 @@ impl PostgresWriter {
                                             });
                                             if let Ok(commit) = &mut result {
                                                 commit.payload_lease = Some(shared.metrics.retain(bytes, retained));
+                                                commit.admission_bytes = admission_bytes;
                                             }
                                             drop(timer);
                                             let _ = reply.send(result);
+                                            // Keep this encoder slot occupied until the caller admits
+                                            // or abandons the payload. At most one unadmitted encoded
+                                            // payload per encoder can wait outside the byte budget.
+                                            while !encoding_slot.is_disconnected() && shared.running() {
+                                                let _ = encoding_slot.recv_timeout(POLL);
+                                            }
                                             continue;
                                         }
                                         EncodingJob::Submit(commit, permit) => (commit, permit),
@@ -371,8 +384,11 @@ impl PostgresWriter {
         &self,
         changes: &RelationWorkingSets,
         timestamp: Timestamp,
-    ) -> Result<EncodedCommit, String> {
+        policy: crate::AdmissionPolicy,
+    ) -> Result<EncodedCommit, moor_common::model::WorldStateError> {
+        use moor_common::model::WorldStateError;
         let (reply, result) = flume::bounded(1);
+        let (_encoding_slot, encoding_slot) = flume::bounded(1);
         let commit = LogicalCommit {
             // The actual publication is assigned only after validation and a successful CAS.
             publication: PublicationId::new(WriterEpoch::random(), 0),
@@ -383,20 +399,52 @@ impl PostgresWriter {
         };
         let deadline = Instant::now() + self.preparation_timeout;
         self.encoder
-            .send_deadline(EncodingJob::Prepare(commit, reply), deadline)
-            .map_err(|_| "PostgreSQL preparation queue unavailable".to_owned())?;
+            .send_deadline(EncodingJob::Prepare(commit, reply, encoding_slot), deadline)
+            .map_err(|_| {
+                WorldStateError::DatabaseError(
+                    "PostgreSQL preparation queue unavailable".to_owned(),
+                )
+            })?;
         loop {
             if !self.shared.running() {
-                return Err("PostgreSQL writer is unavailable".into());
+                return Err(WorldStateError::DatabaseError(
+                    "PostgreSQL writer is unavailable".into(),
+                ));
             }
             if Instant::now() >= deadline {
-                return Err("PostgreSQL encoding exceeded its preparation deadline".into());
+                return Err(WorldStateError::DatabaseError(
+                    "PostgreSQL encoding exceeded its preparation deadline".into(),
+                ));
             }
             match result.recv_timeout(POLL) {
-                Ok(result) => return result.map_err(|error| error.to_string()),
+                Ok(result) => {
+                    let mut commit = result
+                        .map_err(|error| WorldStateError::DatabaseError(error.to_string()))?;
+                    commit.byte_lease = Some(
+                        self.shared
+                            .byte_budget
+                            .reserve(commit.admission_bytes, policy, || {
+                                self.shared.running()
+                                    && !self.shared.cancelled.load(Ordering::Acquire)
+                            })
+                            .map_err(|error| match error {
+                                crate::provider::coordinator::CommitAdmissionError::Timeout {
+                                    waited,
+                                } => WorldStateError::DatabaseOverloaded(waited),
+                                crate::provider::coordinator::CommitAdmissionError::Unavailable => {
+                                    WorldStateError::DatabaseError(
+                                        "PostgreSQL byte admission is unavailable".into(),
+                                    )
+                                }
+                            })?,
+                    );
+                    return Ok(commit);
+                }
                 Err(flume::RecvTimeoutError::Timeout) => continue,
                 Err(flume::RecvTimeoutError::Disconnected) => {
-                    return Err("PostgreSQL encoder stopped".into());
+                    return Err(WorldStateError::DatabaseError(
+                        "PostgreSQL encoder stopped".into(),
+                    ));
                 }
             }
         }
@@ -434,6 +482,7 @@ impl PostgresWriter {
     }
     pub(crate) fn diagnostics(&self) -> crate::PostgresPersistenceStats {
         let mut stats = self.shared.metrics.snapshot();
+        self.shared.byte_budget.diagnostics(&mut stats);
         (
             stats.append_validation_cache_hits,
             stats.append_validation_cache_misses,
@@ -578,6 +627,14 @@ fn is_shutdown(error: &PostgresError) -> bool {
         _ => false,
     }
 }
+
+fn fail_before_releasing_payloads(shared: &Shared, error: &PostgresError) {
+    if !(shared.stopping.load(Ordering::Acquire) && is_shutdown(error)) {
+        // The outer worker guard records the error. Close admission first, before
+        // unwinding releases payload credit and wakes blocked preparations.
+        shared.healthy.store(false, Ordering::Release);
+    }
+}
 fn writer_loop(
     session: &mut Session,
     config: &PostgresStorageConfig,
@@ -603,7 +660,9 @@ fn writer_loop(
             .first()
             .is_some_and(|through| *through <= session.progress.applied)
         {
-            session.fence()?;
+            session
+                .fence()
+                .inspect_err(|error| fail_before_releasing_payloads(shared, error))?;
             shared
                 .durable
                 .store(session.progress.applied, Ordering::Release);
@@ -649,28 +708,30 @@ fn writer_loop(
         )?;
         if !commits.is_empty() {
             session.group_end = reason;
-            let applied = session.apply_group(&commits, GROUP_BYTES, |key, value, timestamp| {
-                let (reply, response) = flume::bounded(1);
-                rollup
-                    .try_send(RollupJob {
-                        key: key.clone(),
-                        value,
-                        timestamp,
-                        reply,
-                    })
-                    .map_err(|_| PostgresError::Closed)?;
-                let deadline = Instant::now() + config.query_timeout;
-                loop {
-                    shared.io_shutdown.check(deadline)?;
-                    match response.recv_timeout(POLL) {
-                        Ok(result) => return result,
-                        Err(flume::RecvTimeoutError::Timeout) => continue,
-                        Err(flume::RecvTimeoutError::Disconnected) => {
-                            return Err(PostgresError::Closed);
+            let applied = session
+                .apply_group(&commits, GROUP_BYTES, |key, value, timestamp| {
+                    let (reply, response) = flume::bounded(1);
+                    rollup
+                        .try_send(RollupJob {
+                            key: key.clone(),
+                            value,
+                            timestamp,
+                            reply,
+                        })
+                        .map_err(|_| PostgresError::Closed)?;
+                    let deadline = Instant::now() + config.query_timeout;
+                    loop {
+                        shared.io_shutdown.check(deadline)?;
+                        match response.recv_timeout(POLL) {
+                            Ok(result) => return result,
+                            Err(flume::RecvTimeoutError::Timeout) => continue,
+                            Err(flume::RecvTimeoutError::Disconnected) => {
+                                return Err(PostgresError::Closed);
+                            }
                         }
                     }
-                }
-            })?;
+                })
+                .inspect_err(|error| fail_before_releasing_payloads(shared, error))?;
             // The publication watermark becomes visible only after chain state is confirmed.
             for (index, (commit, permit)) in commits.into_iter().zip(permits).enumerate() {
                 if index < applied {

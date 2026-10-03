@@ -41,6 +41,7 @@ pub struct PostgresSettings {
     pub retry_interval_ms: Option<u64>,
     pub max_row_bytes: Option<usize>,
     pub max_exports: Option<usize>,
+    pub max_pending_bytes: Option<usize>,
     pub commit_policy: Option<PostgresCommitSetting>,
 }
 
@@ -163,6 +164,9 @@ impl PostgresSettings {
         }
         if let Some(limit) = self.max_exports {
             config.max_exports = limit;
+        }
+        if let Some(limit) = self.max_pending_bytes {
+            config.max_pending_bytes = limit;
         }
         if let Some(policy) = self.commit_policy {
             config.commit_policy = match policy {

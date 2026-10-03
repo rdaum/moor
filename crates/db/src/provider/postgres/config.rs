@@ -38,6 +38,8 @@ pub struct PostgresStorageConfig {
     pub retry_interval: Duration,
     pub commit_policy: PostgresCommitPolicy,
     pub max_exports: usize,
+    /// Target for admitted encoded payloads and retained append values; one commit is indivisible.
+    pub max_pending_bytes: usize,
 }
 impl PostgresStorageConfig {
     pub fn new(connection: PostgresConnectOptions, schema: PostgresSchema) -> Self {
@@ -51,10 +53,16 @@ impl PostgresStorageConfig {
             retry_interval: Duration::from_millis(50),
             commit_policy: PostgresCommitPolicy::default(),
             max_exports: 2,
+            max_pending_bytes: 64 * 1024 * 1024,
         }
     }
     pub(crate) fn validate(&self) -> Result<(), PostgresError> {
         self.connection.validate()?;
+        if self.max_pending_bytes == 0 {
+            return Err(PostgresError::Configuration(
+                "max_pending_bytes must be positive",
+            ));
+        }
         if !(1..=64).contains(&self.max_exports) {
             return Err(PostgresError::Configuration(
                 "max_exports must be between 1 and 64",
@@ -76,5 +84,25 @@ impl PostgresStorageConfig {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn pending_byte_target_is_positive_and_defaults_to_64_mib() {
+        let mut config = PostgresStorageConfig::new(
+            PostgresConnectOptions::new(
+                "",
+                super::super::PostgresEndpoint::Tcp("127.0.0.1".parse().unwrap()),
+            ),
+            PostgresSchema::new("moor").unwrap(),
+        );
+        assert_eq!(config.max_pending_bytes, 64 * 1024 * 1024);
+        config.max_pending_bytes = 0;
+        assert!(config.validate().is_err());
+        config.max_pending_bytes = 1;
+        assert!(config.validate().is_ok());
     }
 }

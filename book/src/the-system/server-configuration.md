@@ -217,11 +217,11 @@ Changing admission thresholds does not change SQL query or recovery deadlines.
 | `--pg-recovery-timeout-seconds` | `30`    | Reconnection, progress checks, and replay after a recoverable error |
 | `--pg-retry-interval-ms`        | `50`    | Delay between recovery attempts                                     |
 
-A transaction acquires admission before PostgreSQL preparation and publication. Its admission and
-preparation deadlines are separate. SQL application occurs after publication. Recovery begins after
-an application error; each connection or SQL attempt also respects the remaining recovery deadline.
-Snapshot acquisition has its own overall deadline, and subsequent reader requests use the query
-limit.
+A transaction reserves a commit slot, completes PostgreSQL encoding, then reserves payload bytes
+before publication. Each admission wait uses the current runtime policy; encoding has a separate
+deadline. SQL application occurs after publication. Recovery begins after an application error; each
+connection or SQL attempt also respects the remaining recovery deadline. Snapshot acquisition has
+its own overall deadline, and subsequent reader requests use the query limit.
 
 A shutdown budget can expire before recovery completes. That outcome is an error, not a successful
 drain. Size the service manager's stop allowance to include scheduler shutdown and the configured
@@ -230,9 +230,9 @@ as a complete backup boundary. Asynchronous SQL application still does not estab
 
 Writer groups currently retain their fixed defaults: 64 commits, 1 MiB, 4,096 operations, and a 1 ms
 collection window. An indivisible commit can exceed a normal group limit. Admission capacity is
-1,000 commits; this count is not a memory budget. More queue capacity cannot resolve sustained SQL
-application lag. Use the persistence diagnostics to measure the workload before changing these
-implementation limits.
+1,000 commits. PostgreSQL also has the payload byte target described below. More queue capacity
+cannot resolve sustained SQL application lag. Use the persistence diagnostics to measure the
+workload before changing these implementation limits.
 
 ### PostgreSQL write limits
 
@@ -260,8 +260,23 @@ caching its measurements. Rollups still encode the complete value.
 Each logical commit has a 256 MiB encoded payload budget. The budget includes possible complete
 property rollups, 128 bytes per mutation for keys and framing, and 1024 bytes for sequence updates.
 The writer can exceed its normal group budget for one indivisible commit, but this commit limit
-still applies. These limits do not establish a process memory ceiling: runtime values, compilation,
-transaction snapshots, and pending commits also consume memory.
+still applies.
+
+Set `--pg-max-pending-bytes` or YAML `storage.postgres.max_pending_bytes` to bound admitted payload
+estimates. The default is 67108864 bytes (64 MiB); zero is invalid. Credit covers encoded JSON,
+delete keys, and retained complete append values, including preparations waiting for publication.
+For append values, the estimate uses the larger of their logical size and serialized literal size.
+Shared allocations can be counted repeatedly. Each commit also reserves 1024 bytes for later
+sequence fields.
+
+A valid indivisible commit larger than the target can proceed alone when no credit is in use. Credit
+returns when SQL applies the commit or the transaction abandons publication. Byte waits use the
+admission policy captured for that preparation; a timeout returns `E_QUOTA` before publication.
+Writer failure and shutdown cancel blocked waits.
+
+Each encoder can hold one completed payload outside the byte target while waiting for admission.
+There are at most eight encoders. Resident data, transaction snapshots, queued values, scratch
+space, and allocation overhead also consume memory. The byte target is not a process memory ceiling.
 
 The PostgreSQL query timeout also bounds the wait for preparation before publication. Preparation
 errors and timeouts return a transaction error. They do not publish changes or disable the writer.
@@ -588,6 +603,9 @@ caller's transaction snapshot.
 | `persistence_postgres_retained_encoded_bytes`      | Retained encoded JSON bytes                                       |
 | `persistence_postgres_retained_append_value_bytes` | Logical size of retained complete append values                   |
 | `persistence_postgres_oldest_unapplied_micros`     | Age of the oldest retained published payload, in microseconds     |
+| `persistence_postgres_admission_bytes`             | Payload estimates currently holding byte credit                   |
+| `persistence_postgres_admission_limit_bytes`       | Configured byte target; one indivisible commit can exceed it      |
+| `persistence_postgres_admission_waiters`           | Prepared payloads waiting for byte credit                         |
 
 Subtract applied from published to estimate application lag. Subtract durable from published to
 estimate the number of publications without established durability. If
@@ -606,6 +624,8 @@ PostgreSQL also exposes cumulative values with the `persistence_postgres_` prefi
   including attempts that later conflict.
 - `append_validation_cache_hits` and `append_validation_cache_misses` count suffix-only and complete
   append validation. The cache starts empty each time the database opens.
+- `admission_wait_ns` sums completed byte waits. `admission_timeouts` counts byte admission timeouts
+  before publication.
 - `sql_application_ns`, `sql_commit_ns`, and `fence_ns` separate SQL execution, COMMIT, and complete
   durability-fence time. Failed attempts contribute time. Fence time includes its SQL stages.
 - `groups`, `group_commits`, `group_payload_bytes`, and `group_sql_statements` describe confirmed
