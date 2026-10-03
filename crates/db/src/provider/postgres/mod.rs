@@ -25,6 +25,7 @@ mod encode;
 mod inspection;
 mod metrics;
 mod options;
+mod plan;
 mod reader;
 mod rows;
 mod schema;
@@ -124,3 +125,6 @@ impl PostgresShutdown {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod schema_contract;

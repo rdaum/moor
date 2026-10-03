@@ -20,6 +20,23 @@ pub(super) struct RelationSql {
     pub keys: &'static [&'static str],
     pub payload: &'static [&'static str],
 }
+impl RelationSql {
+    pub fn columns(&self) -> impl Iterator<Item = &'static str> + '_ {
+        self.keys
+            .iter()
+            .copied()
+            .chain(["logical_timestamp"])
+            .chain(self.payload.iter().copied())
+    }
+
+    /// Property records have a physical sequence suffix, but deletion addresses the whole chain.
+    pub fn physical_keys(&self) -> impl Iterator<Item = &'static str> + '_ {
+        self.keys
+            .iter()
+            .copied()
+            .chain((self.name == "object_propvalues").then_some("record_sequence"))
+    }
+}
 macro_rules! relation {
     ($name:ident, [$($key:literal),*], [$($value:literal),*]) => {
         RelationSql { name: stringify!($name), keys: &[$($key),*], payload: &[$($value),*] }
@@ -91,15 +108,8 @@ pub(super) fn prepare(
     for relation in RELATIONS {
         let name = relation.name;
         let table = config.schema.qualify(name)?;
-        let columns: Vec<_> = relation
-            .keys
-            .iter()
-            .copied()
-            .chain(["logical_timestamp"])
-            .chain(relation.payload.iter().copied())
-            .collect();
-        let columns = columns.join(",");
-        let conflict = if name == "object_propvalues" {
+        let columns = relation.columns().collect::<Vec<_>>().join(",");
+        let conflict = if relation.physical_keys().count() != relation.keys.len() {
             String::new()
         } else {
             let updates = std::iter::once("logical_timestamp")
@@ -123,5 +133,59 @@ pub(super) fn prepare(
     }
     let slots = config.schema.qualify("sequence_slots")?;
     connection.prepare("sequence_maxima", &format!("INSERT INTO {slots} (slot,high_water) SELECT slot,high_water FROM pg_catalog.jsonb_populate_recordset(NULL::{slots},$1) ON CONFLICT(slot) DO UPDATE SET high_water=GREATEST({slots}.high_water,EXCLUDED.high_water)"), &[3802], deadline)?;
+    Ok(())
+}
+
+/// Compare the complete prior progress and install the exact planned result atomically.
+pub(super) fn advance_progress(
+    connection: &mut PostgresConnection,
+    config: &PostgresStorageConfig,
+    before: &super::state::Progress,
+    after: &super::state::Progress,
+    deadline: Instant,
+) -> Result<(), PostgresError> {
+    use super::PostgresParam;
+    let table = config.schema.qualify("writer_progress")?;
+    // Keep parameter positions adjacent to their names; recovery uses these same values.
+    let values = [
+        after.epoch.to_string(),              // $1
+        after.applied.to_string(),            // $2
+        after.commits.to_string(),            // $3
+        after.max_timestamp.to_string(),      // $4
+        after.durable_fence.to_string(),      // $5
+        before.applied.to_string(),           // $6
+        before.commits.to_string(),           // $7
+        before.max_timestamp.to_string(),     // $8
+        before.durable_fence.to_string(),     // $9
+        after.property_sequence.to_string(),  // $10
+        before.property_sequence.to_string(), // $11
+    ];
+    let params: Vec<_> = values
+        .iter()
+        .map(|v| PostgresParam::Text(1700, v))
+        .collect();
+    let result = connection
+        .query(
+            &format!(
+                "UPDATE {table}
+            SET applied_version=$2, commit_sequence=$3,
+                max_timestamp=GREATEST(max_timestamp,$4), durable_fence=$5,
+                property_record_sequence=$10::bigint
+            WHERE singleton AND writer_epoch=$1 AND applied_version=$6
+                AND commit_sequence=$7 AND max_timestamp=$8 AND durable_fence=$9
+                AND property_record_sequence=$11::bigint"
+            ),
+            &params,
+            deadline,
+            |_| unreachable!(),
+        )
+        .map_err(|source| PostgresError::Operation {
+            relation: "writer_progress",
+            operation: "advance",
+            source: Box::new(source),
+        })?;
+    if result.affected_rows != Some(1) {
+        return Err(PostgresError::OwnershipLost);
+    }
     Ok(())
 }

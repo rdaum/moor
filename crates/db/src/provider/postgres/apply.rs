@@ -16,9 +16,9 @@ use super::{
     PostgresCommitPolicy, PostgresConnection, PostgresError, PostgresParam, PostgresShutdown,
     PostgresStorageConfig,
     codec::invalid,
-    encode::{EncodedCommit, PropertyMutation, RelationBatch},
+    encode::{EncodedCommit, RelationBatch},
     metrics::Metrics,
-    rows::{self, RowKey},
+    plan::TransactionPlan,
     schema,
     seed::{self, Chains},
     sql,
@@ -27,15 +27,11 @@ use super::{
 use crate::{
     ObjAndUUIDHolder, PostgresGroupEnd, Timestamp,
     engine::moor_db::Relations,
-    provider::{
-        backend::SeededWorld,
-        logical::WriterEpoch,
-        property_value_store::{PROPERTY_VALUE_CHAIN_LIMITS, PropertyValueChain},
-    },
+    provider::{backend::SeededWorld, logical::WriterEpoch},
 };
 use moor_common::model::WorldStateTimerOp;
 use moor_var::Var;
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::{
     sync::Arc,
     time::{Duration, Instant},
@@ -59,12 +55,6 @@ pub(super) struct Session {
 pub(super) enum FailurePoint {
     BeforeCommit,
     AfterCommit,
-}
-
-type ChainChanges = ahash::AHashMap<ObjAndUUIDHolder, Option<PropertyValueChain>>;
-struct PropertyPlan {
-    batch: RelationBatch,
-    changes: Vec<(ObjAndUUIDHolder, Option<PropertyValueChain>)>,
 }
 
 impl Session {
@@ -138,112 +128,34 @@ impl Session {
         &mut self,
         commits: &[EncodedCommit],
         max_bytes: usize,
-        mut rollup: impl FnMut(&ObjAndUUIDHolder, Var, Timestamp) -> Result<Value, PostgresError>,
+        rollup: impl FnMut(&ObjAndUUIDHolder, Var, Timestamp) -> Result<Value, PostgresError>,
     ) -> Result<usize, PostgresError> {
         if commits.is_empty() {
             return Ok(0);
         }
-        let mut after = self.progress.clone();
-        let mut changes = ChainChanges::default();
-        let mut properties = Vec::with_capacity(commits.len());
-        let mut bytes = 0usize;
-        for commit in commits {
-            let before = after.clone();
-            if commit.publication.epoch().as_u64() != after.epoch {
-                return Err(PostgresError::OwnershipLost);
-            }
-            after.applied = after
-                .applied
-                .checked_add(1)
-                .ok_or_else(|| invalid("applied_version", "counter exhausted"))?;
-            if after.applied != commit.publication.version() {
-                return Err(invalid("applied_version", "nonconsecutive publication"));
-            }
-            after.commits = after
-                .commits
-                .checked_add(1)
-                .ok_or_else(|| invalid("commit_sequence", "counter exhausted"))?;
-            after.max_timestamp = after.max_timestamp.max(commit.timestamp.0);
-            if !commit.properties.is_empty() {
-                after.property_sequence = after
-                    .property_sequence
-                    .checked_add(1)
-                    .ok_or_else(|| invalid("property_record_sequence", "counter exhausted"))?;
-            }
-            let plan =
-                self.plan_properties(commit, after.property_sequence, &changes, &mut rollup)?;
-            let member_bytes = commit
-                .ordinary
-                .iter()
-                .map(RelationBatch::encoded_bytes)
-                .sum::<usize>()
-                + plan.batch.encoded_bytes()
-                + commit.sequences.as_ref().map_or(0, String::len);
-            // A rollup can expand a small suffix into a large full value. Seal before
-            // that member; one indivisible commit may exceed the payload limit.
-            if !properties.is_empty() && bytes.saturating_add(member_bytes) > max_bytes {
-                after = before;
-                break;
-            }
-            bytes = bytes.saturating_add(member_bytes);
-            changes.extend(plan.changes);
-            properties.push(plan.batch);
-            if bytes >= max_bytes {
-                break;
-            }
-        }
-        self.execute(&after, false, |connection, deadline| {
-            for (commit, properties) in commits.iter().zip(&properties) {
-                for relation in &commit.ordinary {
-                    apply_relation(connection, relation, deadline)?;
-                }
-                apply_relation(connection, properties, deadline)?;
-                if let Some(sequences) = &commit.sequences {
-                    connection
-                        .execute_prepared(
-                            "sequence_maxima",
-                            &[PostgresParam::Text(3802, sequences)],
-                            deadline,
-                            |_| unreachable!(),
-                        )
-                        .map_err(|source| operation("sequences", "sequence_maxima", source))?;
-                }
-            }
-            Ok(())
-        })?;
-        let statements = commits
-            .iter()
-            .zip(&properties)
-            .map(|(commit, properties)| {
-                commit
-                    .ordinary
-                    .iter()
-                    .chain(std::iter::once(properties))
-                    .map(|batch| {
-                        u64::from(batch.puts.is_some()) + u64::from(batch.deletes.is_some())
-                    })
-                    .sum::<u64>()
-                    + u64::from(commit.sequences.is_some())
-            })
-            .sum::<u64>();
+        let plan =
+            TransactionPlan::group(&self.progress, &self.chains, commits, max_bytes, rollup)?;
+        self.execute(&plan)?;
+        let count = plan.commits.len();
+        let statements = plan.statements();
         self.metrics.update(|m| {
-            let reason = if properties.len() < commits.len() {
+            let reason = if count < commits.len() {
                 PostgresGroupEnd::RollupExpansion
             } else {
                 self.group_end
             };
             m.group_end_reasons[reason as usize] += 1;
             m.groups += 1;
-            m.group_commits += properties.len() as u64;
-            m.group_payload_bytes += bytes as u64;
+            m.group_commits += count as u64;
+            m.group_payload_bytes += plan.bytes as u64;
             m.group_sql_statements += statements;
-            m.last_group_commits = properties.len() as u64;
-            m.last_group_payload_bytes = bytes as u64;
+            m.last_group_commits = count as u64;
+            m.last_group_payload_bytes = plan.bytes as u64;
             m.last_group_sql_statements = statements;
             m.last_group_first = commits[0].publication.version();
-            m.last_group_last = after.applied;
+            m.last_group_last = plan.after.applied;
         });
-        for (key, chain) in changes {
+        for (key, chain) in plan.changes {
             match chain {
                 Some(chain) => {
                     self.chains.insert(key, chain);
@@ -253,8 +165,8 @@ impl Session {
                 }
             }
         }
-        self.progress = after;
-        Ok(properties.len())
+        self.progress = plan.after;
+        Ok(count)
     }
 
     /// Refresh the schema's physical size on the persistence worker, never on a task worker.
@@ -276,93 +188,16 @@ impl Session {
     pub fn fence(&mut self) -> Result<(), PostgresError> {
         let _timer = self.metrics.timer(WorldStateTimerOp::PostgresFence);
         self.metrics.update(|m| m.fence_calls += 1);
-        let mut after = self.progress.clone();
-        after.durable_fence = after
-            .durable_fence
-            .checked_add(1)
-            .ok_or_else(|| invalid("durable_fence", "counter exhausted"))?;
         // A real WAL-producing update, even when no world changes follow an async commit.
-        self.execute(&after, true, |_, _| Ok(()))?;
-        self.progress = after;
+        let plan = TransactionPlan::fence(&self.progress)?;
+        self.execute(&plan)?;
+        self.progress = plan.after;
         Ok(())
     }
 
-    fn plan_properties(
-        &self,
-        commit: &EncodedCommit,
-        sequence: i64,
-        overlay: &ChainChanges,
-        rollup: &mut impl FnMut(&ObjAndUUIDHolder, Var, Timestamp) -> Result<Value, PostgresError>,
-    ) -> Result<PropertyPlan, PostgresError> {
-        let mut puts = Vec::new();
-        let mut deletes = Vec::new();
-        let mut changes = Vec::with_capacity(commit.properties.len());
-        for property in &commit.properties {
-            let key = &property.key;
-            let (mut row, chain, replace) = match &property.mutation {
-                PropertyMutation::Delete => {
-                    deletes.push(Value::Object(key.encode_key("object_propvalues")));
-                    changes.push((key.clone(), None));
-                    continue;
-                }
-                PropertyMutation::Full(row) => {
-                    (row.clone(), PropertyValueChain::full(sequence as u64), true)
-                }
-                PropertyMutation::Append { row, final_value } => {
-                    let bytes = rows::text(
-                        row.as_object()
-                            .ok_or_else(|| invalid("row", "invalid property row"))?,
-                        "value_literal",
-                    )?
-                    .len();
-                    let previous = match overlay.get(key) {
-                        Some(chain) => chain.as_ref(),
-                        None => self.chains.get(key),
-                    };
-                    if previous
-                        .is_none_or(|chain| chain.reaches_limit(bytes, PROPERTY_VALUE_CHAIN_LIMITS))
-                    {
-                        (
-                            rollup(key, final_value.clone(), commit.timestamp)?,
-                            PropertyValueChain::full(sequence as u64),
-                            true,
-                        )
-                    } else {
-                        let mut chain = previous.unwrap().clone();
-                        chain.push_append(sequence as u64, bytes);
-                        (row.clone(), chain, false)
-                    }
-                }
-            };
-            row["record_sequence"] = json!(sequence);
-            puts.push(row);
-            if replace {
-                deletes.push(Value::Object(key.encode_key("object_propvalues")));
-            }
-            changes.push((key.clone(), Some(chain)));
-        }
-        Ok(PropertyPlan {
-            batch: RelationBatch {
-                relation: "object_propvalues",
-                puts: array(puts),
-                deletes: array(deletes),
-            },
-            changes,
-        })
-    }
-
-    fn execute(
-        &mut self,
-        after: &Progress,
-        force_sync: bool,
-        apply: impl Fn(&mut PostgresConnection, Instant) -> Result<(), PostgresError>,
-    ) -> Result<(), PostgresError> {
-        let first = self.transaction(
-            after,
-            force_sync,
-            Instant::now() + self.config.query_timeout,
-            &apply,
-        );
+    fn execute(&mut self, plan: &TransactionPlan<'_>) -> Result<(), PostgresError> {
+        let after = &plan.after;
+        let first = self.transaction(plan, Instant::now() + self.config.query_timeout);
         match first {
             Ok(()) => return Ok(()),
             Err(error) if retryable(&error) => {}
@@ -371,8 +206,8 @@ impl Session {
         // Drop the failed session before trying to acquire its lock again.
         self.connection.take();
         let _timer = self.metrics.timer(WorldStateTimerOp::PostgresRecovery);
-        let first = if after.applied > self.progress.applied {
-            self.progress.applied + 1
+        let first = if after.applied > plan.before.applied {
+            plan.before.applied + 1
         } else {
             after.applied
         };
@@ -395,17 +230,15 @@ impl Session {
                     if observed == *after {
                         return Ok(());
                     }
-                    if observed != self.progress {
+                    if observed != plan.before {
                         return Err(invalid(
                             "writer_progress",
                             "unexpected progress after connection loss",
                         ));
                     }
                     match self.transaction(
-                        after,
-                        force_sync,
+                        plan,
                         deadline.min(Instant::now() + self.config.query_timeout),
-                        &apply,
                     ) {
                         Ok(()) => return Ok(()),
                         Err(error) if retryable(&error) => {}
@@ -449,50 +282,46 @@ impl Session {
 
     fn transaction(
         &mut self,
-        after: &Progress,
-        force_sync: bool,
+        plan: &TransactionPlan<'_>,
         deadline: Instant,
-        apply: &impl Fn(&mut PostgresConnection, Instant) -> Result<(), PostgresError>,
     ) -> Result<(), PostgresError> {
         let application_timer = self.metrics.timer(WorldStateTimerOp::PostgresApply);
         let connection = self.connection.as_mut().ok_or(PostgresError::Closed)?;
         connection
             .query("BEGIN", &[], deadline, |_| unreachable!())
             .map_err(|source| operation("writer_progress", "BEGIN", source))?;
-        let sync = if force_sync || self.config.commit_policy == PostgresCommitPolicy::Synchronous {
-            "SET LOCAL synchronous_commit=on"
-        } else {
-            "SET LOCAL synchronous_commit=off"
-        };
+        let sync =
+            if plan.force_sync || self.config.commit_policy == PostgresCommitPolicy::Synchronous {
+                "SET LOCAL synchronous_commit=on"
+            } else {
+                "SET LOCAL synchronous_commit=off"
+            };
         connection
             .query(sync, &[], deadline, |_| unreachable!())
             .map_err(|source| operation("writer_progress", "SET synchronous_commit", source))?;
-        let table = self.config.schema.qualify("writer_progress")?;
-        let before = &self.progress;
-        let numbers = [
-            after.epoch,
-            after.applied,
-            after.commits,
-            after.max_timestamp,
-            after.durable_fence,
-            before.applied,
-            before.commits,
-            before.max_timestamp,
-            before.durable_fence,
-        ];
-        let mut values: Vec<_> = numbers.iter().map(ToString::to_string).collect();
-        values.push(after.property_sequence.to_string());
-        values.push(before.property_sequence.to_string());
-        let params: Vec<_> = values
-            .iter()
-            .map(|value| PostgresParam::Text(1700, value))
-            .collect();
-        let result = connection.query(&format!("UPDATE {table} SET applied_version=$2,commit_sequence=$3,max_timestamp=GREATEST(max_timestamp,$4),durable_fence=$5,property_record_sequence=$10::bigint WHERE singleton AND writer_epoch=$1 AND applied_version=$6 AND commit_sequence=$7 AND max_timestamp=$8 AND durable_fence=$9 AND property_record_sequence=$11::bigint"), &params, deadline, |_| unreachable!())
-            .map_err(|source| operation("writer_progress", "advance", source))?;
-        if result.affected_rows != Some(1) {
-            return Err(PostgresError::OwnershipLost);
+        sql::advance_progress(
+            connection,
+            &self.config,
+            &plan.before,
+            &plan.after,
+            deadline,
+        )?;
+        for (commit, properties) in plan.commits.iter().zip(&plan.properties) {
+            for relation in &commit.ordinary {
+                apply_relation(connection, relation, deadline)?;
+            }
+            apply_relation(connection, properties, deadline)?;
+            if let Some(sequences) = &commit.sequences {
+                connection
+                    .execute_prepared(
+                        "sequence_maxima",
+                        &[PostgresParam::Text(3802, sequences)],
+                        deadline,
+                        |_| unreachable!(),
+                    )
+                    .map_err(|source| operation("sequences", "sequence_maxima", source))?;
+            }
         }
-        apply(connection, deadline)?;
         #[cfg(test)]
         if self.failure == Some(FailurePoint::BeforeCommit) {
             self.failure = None;
@@ -524,12 +353,6 @@ fn operation(
         operation,
         source: Box::new(source),
     }
-}
-fn array(rows: Vec<Value>) -> Option<String> {
-    if rows.is_empty() {
-        return None;
-    }
-    Some(Value::Array(rows).to_string())
 }
 fn apply_relation(
     connection: &mut PostgresConnection,
@@ -639,7 +462,7 @@ mod tests {
             .properties
             .push(super::super::encode::PropertyMutationRow {
                 key: ObjAndUUIDHolder::new(&moor_var::Obj::mk_id(1), Uuid::new_v4()),
-                mutation: PropertyMutation::Delete,
+                mutation: super::super::encode::PropertyMutation::Delete,
             });
         assert!(matches!(
             session.apply(&commit, |_, _, _| unreachable!()),
