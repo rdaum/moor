@@ -87,7 +87,14 @@ cancellation or chunk APIs added in later versions. See the PostgreSQL documenta
 
 The schema uses domains, JSONB, advisory locks, and conflict handling supported by PostgreSQL 16.
 The compatibility suite exercises schema creation, startup, prepared writes, recovery, and both SQL
-commit policies.
+commit policies. It also runs the shared engine, loader, garbage collection, and permission tests
+against PostgreSQL. The normal database unit suite runs those tests against Fjall. Each shared
+database fixture checks a durability fence before a successful test ends.
+
+The PostgreSQL fixture tests process and server crashes under both commit policies. The process test
+kills a writer after publication while SQL is blocked. Reopening must preserve the fenced prefix and
+permit new appends. Live tests are ignored in ordinary `cargo test` runs; the fixture script runs
+them explicitly. Shuttle scheduler tests retain their simulated Fjall fixture.
 
 For a disposable local fixture with TLS and SCRAM authentication, run:
 

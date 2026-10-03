@@ -119,6 +119,14 @@ export MOOR_PG_TEST_SOCKET="$fixture/socket"
 cargo test --locked -p moor-db --features postgres --test postgres_adapter --test postgres_storage --test snapshot_contract -- --ignored
 cargo test --locked -p moor-db --features postgres --lib provider::postgres:: -- --ignored
 cargo test --locked -p moor-db --features postgres --test postgres_restart -- --ignored --test-threads=1
+# The same semantic assertions also run on Fjall in the normal database unit suite.
+# Limit test concurrency: each PostgreSQL contract owns a writer and encoder workers.
+for policy in synchronous asynchronous; do
+    MOOR_DB_TEST_BACKEND=postgres MOOR_DB_TEST_COMMIT_POLICY="$policy" \
+        cargo test --locked -p moor-db --features postgres --lib engine::moor_db_tests:: -- --test-threads=4
+    MOOR_DB_TEST_BACKEND=postgres MOOR_DB_TEST_COMMIT_POLICY="$policy" \
+        cargo test --locked -p moor-db --features postgres --lib api:: -- --test-threads=4
+done
 if [[ ${MOOR_PG_TEST_CLI:-0} == 1 ]]; then
     cargo build --locked -p moor-daemon -p moor-server -p moorc -p moor-emh --features postgres
     python3 scripts/test-postgres-cli.py

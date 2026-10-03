@@ -34,6 +34,8 @@ pub use storage_args::StorageArgs;
 mod engine;
 mod model;
 mod provider;
+#[cfg(test)]
+mod test_support;
 mod tx;
 
 use crate::engine::MoorDB;

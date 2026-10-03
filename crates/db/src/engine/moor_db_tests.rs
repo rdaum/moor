@@ -13,7 +13,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{DatabaseConfig, ObjAndUUIDHolder, PersistenceConfig, StorageConfig};
+    use crate::ObjAndUUIDHolder;
     use std::collections::HashSet;
 
     use crate::engine::moor_db::MoorDB;
@@ -36,14 +36,8 @@ mod tests {
         TaskPermissions::new(principal, BitEnum::new())
     }
 
-    fn test_db() -> Arc<MoorDB> {
-        MoorDB::try_open(
-            StorageConfig::temporary_fjall(),
-            DatabaseConfig::default(),
-            PersistenceConfig::default(),
-        )
-        .unwrap()
-        .0
+    fn test_db() -> crate::test_support::Checked<Arc<MoorDB>> {
+        crate::test_support::engine()
     }
 
     #[test]

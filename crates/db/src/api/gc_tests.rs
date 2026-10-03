@@ -15,7 +15,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{Database, DatabaseConfig, TxDB};
+    use crate::{Database, TxDB};
     use moor_common::{
         model::{CommitResult, ObjAttrs, ObjFlag, ObjectKind, TaskPermissions, WorldStateSource},
         util::BitEnum,
@@ -28,10 +28,8 @@ mod tests {
         TaskPermissions::new(principal, BitEnum::new())
     }
 
-    fn test_db() -> TxDB {
-        let db = TxDB::try_open_temporary(DatabaseConfig::default())
-            .unwrap()
-            .0;
+    fn test_db() -> crate::test_support::Checked<TxDB> {
+        let db = crate::test_support::api();
         let mut loader = db.loader_client().unwrap();
         let wizard = Obj::mk_id(2);
         loader

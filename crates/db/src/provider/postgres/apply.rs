@@ -421,21 +421,27 @@ mod tests {
     #[test]
     #[ignore = "requires PostgreSQL fixture"]
     fn unavailable_server_exhausts_one_bounded_recovery_deadline() {
-        let config = config();
-        initialize_postgres_schema(&config).unwrap();
-        let (mut session, _, epoch) = open(&config);
-        session.connection.take();
-        session.config.connection.connection.push_str(" port=1");
-        session.config.connect_timeout = Duration::from_millis(50);
-        session.config.recovery_timeout = Duration::from_millis(150);
-        session.config.retry_interval = Duration::from_millis(5);
-        let started = Instant::now();
-        let error = session
-            .apply(&empty(epoch, 1, 1), |_, _, _| unreachable!())
-            .unwrap_err();
-        assert_eq!(error, PostgresError::Timeout);
-        assert!(started.elapsed() < Duration::from_secs(2));
-        assert_eq!(session.progress.applied, 0);
+        for policy in [
+            PostgresCommitPolicy::Synchronous,
+            PostgresCommitPolicy::Asynchronous,
+        ] {
+            let mut config = config();
+            config.commit_policy = policy;
+            initialize_postgres_schema(&config).unwrap();
+            let (mut session, _, epoch) = open(&config);
+            session.connection.take();
+            session.config.connection.connection.push_str(" port=1");
+            session.config.connect_timeout = Duration::from_millis(50);
+            session.config.recovery_timeout = Duration::from_millis(150);
+            session.config.retry_interval = Duration::from_millis(5);
+            let started = Instant::now();
+            let error = session
+                .apply(&empty(epoch, 1, 1), |_, _, _| unreachable!())
+                .unwrap_err();
+            assert_eq!(error, PostgresError::Timeout);
+            assert!(started.elapsed() < Duration::from_secs(2));
+            assert_eq!(session.progress.applied, 0);
+        }
     }
 
     #[test]
