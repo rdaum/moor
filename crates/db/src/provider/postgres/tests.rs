@@ -696,7 +696,9 @@ fn out_of_order_encoders_hold_permits_and_rollups_have_an_independent_reply_path
     assert_eq!(coordinator.status().applied, 0);
     assert_eq!(coordinator.status().outstanding, (total - 1) as usize);
     submit(1);
-    let deadline = Instant::now() + Duration::from_secs(10);
+    // This test validates 200 one-MiB values in a debug build.
+    // Allow constrained CI runners to reach the lock; ordering is asserted below.
+    let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         let mut blocked = false;
         blocker.query(
@@ -731,7 +733,7 @@ fn out_of_order_encoders_hold_permits_and_rollups_have_an_independent_reply_path
         )
         .unwrap();
     coordinator
-        .wait_applied(through, Duration::from_secs(10))
+        .wait_applied(through, Duration::from_secs(60))
         .unwrap();
     assert_eq!(coordinator.status().outstanding, 0);
     assert_eq!(count(&config, "object_propvalues"), 8);
