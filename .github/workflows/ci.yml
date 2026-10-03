@@ -33,7 +33,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes clang-16 libclang-16-dev swig python3-dev cmake libsodium-dev pkg-config libssl-dev
 
-      - name: Install libpq 17
+      - name: Install compatible libpq
         run: sudo bash scripts/install-libpq.sh build
 
       - name: Install Rust 1.98.1
@@ -68,7 +68,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes clang-16 libclang-16-dev swig python3-dev cmake libsodium-dev pkg-config libssl-dev
 
-      - name: Install libpq 17
+      - name: Install compatible libpq
         run: sudo bash scripts/install-libpq.sh build
 
       - name: Install Rust toolchains
@@ -115,7 +115,7 @@ jobs:
           done
           python3 scripts/test-postgres-cli.py --disabled
       - name: Install minimum supported client
-        run: sudo bash scripts/install-libpq.sh build
+        run: sudo bash scripts/install-libpq.sh build "$(dpkg --print-architecture)" 17
       - name: Run PostgreSQL adapter, storage, and CLI contracts
         env:
           MOOR_PG_TEST_CLI: '1'
