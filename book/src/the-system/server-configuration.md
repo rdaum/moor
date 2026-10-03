@@ -396,6 +396,58 @@ errors. Validation retains object and definition indexes, row keys, and the curr
 Each query has the configured query timeout; the complete validation can take longer. A successful
 report describes that SQL snapshot. It does not establish a backup or inspect local stores.
 
+#### Format compatibility and conversion
+
+The PostgreSQL provider currently accepts one format combination:
+
+| Format marker                                  | Supported value                                               |
+| ---------------------------------------------- | ------------------------------------------------------------- |
+| SQL schema                                     | `1`                                                           |
+| Persistent literal format                      | `1`                                                           |
+| Persistent verb-source format                  | `1`                                                           |
+| Compiler profile identifier                    | `moo-v1`                                                      |
+| Profile language                               | `moo`                                                         |
+| Profile literal, source, and compiler versions | All `1`                                                       |
+| Enabled compiler options                       | `flyweight_type`, `bool_type`, `symbol_type`, `custom_errors` |
+| Disabled compiler options                      | `call_unsupported_builtins`, `legacy_type_constants`          |
+
+Both the metadata columns and the stored profile JSON must match. Row-level literal and source
+markers must also match. Startup rejects unsupported combinations before it accepts publications. It
+does not rewrite format markers, convert stored rows, or create missing tables. Installing optional
+inspection views does not change the authoritative schema version. Build identifiers are diagnostic;
+they are not format compatibility keys.
+
+There is no in-place SQL format upgrader. For a future incompatible schema or codec change, use
+objdef export and import into a separate database or schema. The old executable must still read the
+source format. A future release must qualify its old-to-new conversion before it claims support.
+Current tests rehearse this procedure with version 1 on both sides; they do not prove compatibility
+with an unreleased format. A compatible release can reopen the existing schema after backup and
+validation. A PostgreSQL server-major upgrade is separate from mooR's stored format versions.
+
+For an objdef conversion:
+
+1. Stop new world writes. Export the source with its compatible executable. Keep the source
+   database, executable, configuration, and local stores for rollback.
+2. Initialize a separate destination with the target executable and setup role. Apply the runtime
+   and inspection grants. Do not point the live service at this destination yet.
+3. Import the objdef directory with the target executable. Keep the required language feature
+   settings. Check import diagnostics, then run `--validate-storage` on the destination.
+4. Export the destination and compare its objects, values, verb source, permissions, and metadata
+   with the source export. Run application behavior probes before changing the service endpoint.
+5. Change the explicit endpoint only after those checks pass. Keep the old writer stopped. If the
+   new world accepts writes, restoring the old endpoint would discard those new writes.
+
+Objdef conversion transfers world content. It does not preserve PostgreSQL database identity, writer
+epochs, publication counters, physical property chains, or all physical identifiers. It also does
+not transfer the local task, connection, or event stores. Use SQL backup and restore when you need
+to preserve all stored SQL cells under a compatible format.
+
+If export or import is interrupted, keep the source unchanged and leave the service endpoint there.
+Discard the incomplete export directory or destination, then repeat the conversion into a fresh
+location. Do not treat a successful process exit, a partly populated schema, or edited version
+markers as a completed conversion. The CLI qualification suite kills a blocked destination import,
+then creates a fresh destination and verifies export equivalence and behavior.
+
 #### Database roles
 
 Use separate setup, runtime, and inspection logins. Provision their passwords and TLS configuration

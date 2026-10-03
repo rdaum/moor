@@ -19,6 +19,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -76,7 +77,9 @@ def backup_restore(root, env, first, features):
 
     suffix = uuid.uuid4().hex
     owner, runtime, reader = [f"{kind}_{suffix}" for kind in ["owner", "runtime", "reader"]]
-    source, whole, scoped = [f"{kind}_{suffix}" for kind in ["source", "whole", "scoped"]]
+    source, whole, scoped, interrupted, converted = [
+        f"{kind}_{suffix}" for kind in ["source", "whole", "scoped", "interrupted", "converted"]]
+    databases = [source, whole, scoped, interrupted, converted]
     service_file, pass_file = root / "restore-services", root / "restore-passwords"
     services = configparser.ConfigParser(interpolation=None)
     services.read(env["PGSERVICEFILE"])
@@ -86,7 +89,7 @@ def backup_restore(root, env, first, features):
         f"*:*:*:{role}:{password}\n" for role, password in passwords.items()), encoding="utf8")
     pass_file.chmod(0o600)
     test_env = {**env, "PGSERVICEFILE": str(service_file), "PGPASSFILE": str(pass_file)}
-    for database in [source, whole, scoped]:
+    for database in databases:
         for role in [owner, runtime, reader]:
             services[f"{database}_{role}"] = {**base, "dbname": database, "user": role}
         services[f"{database}_admin"] = {**base, "dbname": database}
@@ -94,7 +97,7 @@ def backup_restore(root, env, first, features):
         services.write(output, space_around_delimiters=False)
     service_file.chmod(0o600)
 
-    def utility(program, args, input=None):
+    def utility_command(program, args):
         # Match server/client major versions, including Docker fixtures with newer servers.
         container = env.get("MOOR_PG_TEST_CONTAINER_ID")
         if container:
@@ -102,7 +105,10 @@ def backup_restore(root, env, first, features):
         else:
             bindir = env.get("MOOR_PG_TEST_NATIVE_BIN", "/usr/lib/postgresql/17/bin")
             command = [str(Path(bindir) / program), *args]
-        result = subprocess.run(command, env={**env, "PGSERVICE": "moor_adapter"},
+        return command
+
+    def utility(program, args, input=None):
+        result = subprocess.run(utility_command(program, args), env={**env, "PGSERVICE": "moor_adapter"},
                                 input=input, capture_output=True, timeout=90)
         assert result.returncode == 0, (program, result.stderr.decode())
         return result.stdout
@@ -136,10 +142,73 @@ def backup_restore(root, env, first, features):
             GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA moor TO {runtime};
             GRANT SELECT ON ALL TABLES IN SCHEMA moor TO {reader};""")
 
+    def await_sql(database, statement):
+        deadline = time.monotonic() + 20
+        while sql(database, statement) != "t":
+            assert time.monotonic() < deadline, "conversion fixture did not reach its SQL barrier"
+            time.sleep(0.02)
+
+    def interrupted_conversion():
+        run("moorc", [*storage(interrupted, owner), "--init-storage"], test_env, True)
+        grants(interrupted)
+        blocker_name = "conversion_blocker_" + suffix
+        blocker_key = int(suffix[:7], 16)
+        # A trigger blocks execution only. A table lock could stop startup's prepared statements.
+        sql(interrupted, f"""CREATE FUNCTION moor.block_import() RETURNS trigger LANGUAGE plpgsql AS
+            $$ BEGIN PERFORM pg_advisory_xact_lock(347715,{blocker_key}); RETURN NEW; END $$;
+            CREATE TRIGGER block_import BEFORE INSERT ON moor.object_propvalues
+            FOR EACH ROW EXECUTE FUNCTION moor.block_import();""")
+        blocker = subprocess.Popen(utility_command("psql", [
+            "-X", "-q", "-v", "ON_ERROR_STOP=1", "-d", interrupted, "-c",
+            f"SET application_name='{blocker_name}'; BEGIN; SELECT pg_advisory_xact_lock(347715,{blocker_key}); SELECT pg_sleep(60);"
+        ]), env={**env, "PGSERVICE": "moor_adapter"}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        importer = None
+        try:
+            await_sql(interrupted, f"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name='{blocker_name}' AND wait_event='PgSleep');")
+            with (root / "interrupted-import.log").open("wb") as log:
+                importer = subprocess.Popen([str(ROOT / "target/debug/moorc"), *features,
+                    *storage(interrupted, runtime), "--src-objdef-dir", str(first)],
+                    env=test_env, stdout=log, stderr=log)
+                await_sql(interrupted, f"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname='{interrupted}' AND wait_event_type='Lock' AND query LIKE '%object_propvalues%');")
+                importer.kill()
+                assert importer.wait(timeout=10) != 0
+        finally:
+            if importer is not None and importer.poll() is None:
+                importer.kill()
+                importer.wait(timeout=10)
+            sql(interrupted, f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name='{blocker_name}';")
+            try:
+                blocker.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                blocker.kill()
+                blocker.wait(timeout=10)
+        # Recovery discards the interrupted destination; it never edits source format markers.
+        assert physical(source) == rows
+        assert validate(source) == before
+        run("moorc", [*storage(converted, owner), "--init-storage"], test_env, True)
+        grants(converted)
+        exported = root / "converted-export"
+        run("moorc", [*features, *storage(converted, runtime), "--src-objdef-dir", str(first),
+                      "--out-objdef-dir", str(exported)], test_env, True)
+        expected = {p.relative_to(first): p.read_bytes() for p in first.rglob("*") if p.is_file()}
+        actual = {p.relative_to(exported): p.read_bytes() for p in exported.rglob("*") if p.is_file()}
+        assert actual == expected
+        assert validate(converted)["database_id"] != before["database_id"]
+        empty = root / "conversion-empty"
+        empty.mkdir()
+        output = run("moorc", [*features, *storage(converted, runtime), "--src-objdef-dir", str(empty),
+                              "--run-tests=true", "--test-wizard=2", "--test-phases=3",
+                              "--test-filter=#668:test_string_history_append", "--test-timeout=30",
+                              "--test-args={2, 16, 128, 5, 0, 1, 1, 0}"], test_env, True)
+        assert "Test #668:test_string_history_append passed" in output
+        validate(converted)
+        assert physical(source) == rows
+        print("PostgreSQL: interrupted objdef conversion left the source unchanged; a fresh destination passed export comparison, validation, and behavior probes")
+
     try:
         for role, password in passwords.items():
             sql("postgres", f"CREATE ROLE {role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD '{password}';")
-        for database in [source, whole, scoped]:
+        for database in databases:
             sql("postgres", f"CREATE DATABASE {database} OWNER {owner} TEMPLATE template0 ENCODING 'UTF8';")
         run("moorc", [*storage(source, owner), "--init-storage"], test_env, True)
         grants(source)
@@ -180,9 +249,10 @@ def backup_restore(root, env, first, features):
                                   "--test-args={2, 16, 128, 5, 0, 1, 1, 0}"], test_env, True)
             assert "Test #668:test_string_history_append passed" in output
             validate(database)
+        interrupted_conversion()
         print("PostgreSQL: schema and whole-database restores preserved every stored cell; read-only validation, restricted runtime export, and functional probes passed")
     finally:
-        for database in [source, whole, scoped]:
+        for database in databases:
             sql("postgres", f"DROP DATABASE IF EXISTS {database} WITH (FORCE);")
         for role in [reader, runtime, owner]:
             sql("postgres", f"DROP ROLE IF EXISTS {role};")

@@ -2621,3 +2621,107 @@ fn inspection_reconstructs_nested_lists_in_record_order_and_checks_chain_shapes(
         }
     }
 }
+
+#[test]
+#[ignore = "requires PostgreSQL fixture"]
+fn incompatible_format_combinations_fail_before_claiming_a_writer_epoch() {
+    let config = config();
+    initialize_postgres_schema(&config).unwrap();
+    let mut connection = client(&config);
+    let table = config.schema.qualify("world_metadata").unwrap();
+    let original = serde_json::Value::Object(
+        state::singleton(
+            &mut connection,
+            &format!("SELECT to_jsonb(t)::text FROM {table} t"),
+            &[],
+            Instant::now() + config.query_timeout,
+        )
+        .unwrap(),
+    );
+    let before = state::read_progress(
+        &mut connection,
+        &config,
+        Instant::now() + config.query_timeout,
+    )
+    .unwrap();
+    let mut incompatible = Vec::new();
+    for field in ["schema_version", "literal_format", "source_format"] {
+        for version in [0, 2] {
+            let mut changed = original.clone();
+            changed[field] = json!(version);
+            incompatible.push(changed);
+        }
+    }
+    let mut changed = original.clone();
+    changed["compiler_profile"] = json!("moo-v2");
+    incompatible.push(changed);
+    for field in [
+        "literal_version",
+        "source_version",
+        "compiler_profile_version",
+    ] {
+        let mut changed = original.clone();
+        changed["profile"][field] = json!(2);
+        incompatible.push(changed);
+    }
+    let mut changed = original.clone();
+    changed["profile"]["language"] = json!("unknown");
+    incompatible.push(changed);
+    for option in [
+        "flyweight_type",
+        "bool_type",
+        "symbol_type",
+        "custom_errors",
+        "call_unsupported_builtins",
+        "legacy_type_constants",
+    ] {
+        let mut changed = original.clone();
+        changed["profile"]["options"][option] =
+            json!(!changed["profile"]["options"][option].as_bool().unwrap());
+        incompatible.push(changed);
+    }
+    for changed in incompatible.iter().chain(std::iter::once(&original)) {
+        connection.query(&format!("UPDATE {table} SET (schema_version,literal_format,source_format,compiler_profile,profile)=(SELECT schema_version,literal_format,source_format,compiler_profile,profile FROM pg_catalog.jsonb_populate_record(NULL::{table},$1))"),
+            &[PostgresParam::Text(3802, &changed.to_string())], Instant::now() + config.query_timeout,
+            |_| unreachable!()).unwrap();
+        if changed == &original {
+            break;
+        }
+        assert!(matches!(
+            Session::open(
+                config.clone(),
+                &Relations::init(),
+                WriterEpoch::random(),
+                PostgresShutdown::default()
+            ),
+            Err(PostgresError::Format {
+                field: "world_metadata",
+                ..
+            })
+        ));
+        assert!(validate_postgres_storage(&config).is_err());
+        assert_eq!(
+            state::read_progress(
+                &mut connection,
+                &config,
+                Instant::now() + config.query_timeout
+            )
+            .unwrap(),
+            before
+        );
+        let stored = state::singleton(
+            &mut connection,
+            &format!("SELECT to_jsonb(t)::text FROM {table} t"),
+            &[],
+            Instant::now() + config.query_timeout,
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::Value::Object(stored),
+            *changed,
+            "startup must not repair formats"
+        );
+    }
+    let (session, _, _) = open(&config);
+    assert_eq!(session.progress.commits, 0);
+}
