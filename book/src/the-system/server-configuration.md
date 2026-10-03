@@ -283,6 +283,31 @@ space, and allocation overhead also consume memory. The byte target is not a pro
 The PostgreSQL query timeout also bounds the wait for preparation before publication. Preparation
 errors and timeouts return a transaction error. They do not publish changes or disable the writer.
 
+### PostgreSQL capacity planning
+
+Set deployment budgets for write throughput, oldest unapplied write age, startup, export, and
+recovery. Test the selected commit policy with representative property values, verb source, and
+captured lambdas. Include overwrite and append workloads; their encoding and SQL costs differ.
+
+Measure the workload through both application and durability boundaries. Include the final drain
+when calculating throughput. A short drain does not establish low foreground cost: PostgreSQL
+renders and validates writes before publication. Compare encoding, SQL application, and commit
+timings with the workload's elapsed time. Aggregated worker timings are not process CPU time.
+
+Repeat sustained runs with the deployment's WAL and checkpoint settings. Correlate mooR counters
+with PostgreSQL query plans, waits, WAL sync time, checkpoints, and maintenance activity. Report the
+range as well as the median. Queue capacity can absorb bursts but cannot resolve sustained excess
+load.
+
+Startup rebuilds resident indexes and compiles stored verb source. Measure startup separately from
+archive restore, validation, and objdef export. Record world size, verb count, source bytes, peak
+memory, and whether filesystem and PostgreSQL caches are warm. A fast archive restore does not
+establish the time needed to resume service.
+
+Measure mooR and PostgreSQL memory separately. On Linux, proportional set size (PSS) accounts for
+shared PostgreSQL pages without counting them repeatedly. Include filesystem cache when planning
+host memory.
+
 ### PostgreSQL snapshots and objdef export
 
 `moorc --out-objdef-dir` and the `moor-emh` export command use the shared snapshot loader with
