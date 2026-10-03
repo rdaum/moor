@@ -23,6 +23,13 @@ use std::{
     time::Duration,
 };
 
+/// Backend preparation retained by the admission permit until publication or abandonment.
+#[cfg(feature = "postgres")]
+#[derive(Default)]
+pub(crate) struct StoragePreparation {
+    pub(crate) postgres: Option<Box<super::postgres::EncodedCommit>>,
+}
+
 pub(crate) enum StorageWriter {
     Fjall(BatchWriter),
     #[cfg(feature = "postgres")]
@@ -34,6 +41,22 @@ impl From<BatchWriter> for StorageWriter {
     }
 }
 impl StorageWriter {
+    pub(crate) fn prepare(
+        &self,
+        _changes: &crate::engine::moor_db::RelationWorkingSets,
+        _timestamp: crate::Timestamp,
+        _admission: &mut CommitAdmission,
+    ) -> Result<(), String> {
+        match self {
+            Self::Fjall(_) => Ok(()),
+            #[cfg(feature = "postgres")]
+            Self::Postgres(writer) => {
+                _admission.preparation.postgres =
+                    Some(Box::new(writer.prepare(_changes, _timestamp)?));
+                Ok(())
+            }
+        }
+    }
     pub(crate) fn health_flag(&self) -> Arc<AtomicBool> {
         match self {
             Self::Fjall(writer) => writer.health_flag(),

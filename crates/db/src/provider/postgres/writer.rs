@@ -19,12 +19,12 @@ use super::{
 };
 use crate::{
     ObjAndUUIDHolder, Timestamp,
-    engine::moor_db::Relations,
+    engine::moor_db::{RelationWorkingSets, Relations},
     provider::{
         backend::SeededWorld,
         batch_writer::WriterWaitError,
         coordinator::{COMMIT_ADMISSION_CAPACITY, CommitAdmission},
-        logical::{LogicalCommit, WriterEpoch},
+        logical::{LogicalCommit, PublicationId, WriterEpoch},
     },
 };
 use flume::{Receiver, Sender};
@@ -47,7 +47,10 @@ const GROUP_COMMITS: usize = 64;
 const GROUP_BYTES: usize = 1024 * 1024;
 const GROUP_OPERATIONS: usize = 4096;
 const GROUP_AGE: Duration = Duration::from_millis(1);
-type EncodingJob = (LogicalCommit, CommitAdmission);
+enum EncodingJob {
+    Prepare(LogicalCommit, Sender<Result<EncodedCommit, PostgresError>>),
+    Submit(LogicalCommit, CommitAdmission),
+}
 type EncodedJob = (u64, Result<EncodedCommit, PostgresError>, CommitAdmission);
 struct RollupJob {
     key: ObjAndUUIDHolder,
@@ -131,6 +134,8 @@ impl Shared {
 
 pub(crate) struct PostgresWriter {
     encoder: Sender<EncodingJob>,
+    preparation_timeout: Duration,
+    encoded: Sender<EncodedJob>,
     fences: Sender<u64>,
     shared: Arc<Shared>,
     submitted: AtomicU64,
@@ -159,7 +164,7 @@ impl PostgresWriter {
             io_shutdown: PostgresShutdown::default(),
         });
         let (encoder, jobs) = flume::bounded::<EncodingJob>(COMMIT_ADMISSION_CAPACITY);
-        let (encoded, ready) = flume::bounded::<EncodedJob>(64);
+        let (encoded, ready) = flume::bounded::<EncodedJob>(COMMIT_ADMISSION_CAPACITY);
         let (fences, fence_requests) = flume::bounded(64);
         let (rollup_sender, rollups) = flume::bounded::<RollupJob>(1);
         let (opened, opening) = flume::bounded(1);
@@ -262,19 +267,35 @@ impl PostgresWriter {
                 let jobs = jobs.clone();
                 let encoded = encoded.clone();
                 let profile = config.profile.clone();
+                let max_row_bytes = config.connection.max_row_bytes;
                 handles.push(
                     thread::Builder::new()
                         .name(format!("pg-encoder-{index}"))
                         .spawn(move || {
                             guarded(&shared, || {
                                 while shared.running() {
-                                    let (commit, permit) = match jobs.recv_timeout(POLL) {
+                                    let job = match jobs.recv_timeout(POLL) {
                                         Ok(job) => job,
                                         Err(flume::RecvTimeoutError::Timeout) => continue,
                                         Err(flume::RecvTimeoutError::Disconnected) => return Ok(()),
                                     };
+                                    let (commit, mut permit) = match job {
+                                        EncodingJob::Prepare(commit, reply) => {
+                                            let result =
+                                                encode::prepare(commit, &profile, max_row_bytes);
+                                            let _ = reply.send(result);
+                                            continue;
+                                        }
+                                        EncodingJob::Submit(commit, permit) => (commit, permit),
+                                    };
                                     let version = commit.publication.version();
-                                    let result = encode::encode(commit, &profile);
+                                    let result = match permit.preparation.postgres.take() {
+                                        Some(prepared) => {
+                                            Ok(encode::finish_prepared(*prepared, commit))
+                                        }
+                                        // Internal conformance tests can submit logical batches directly.
+                                        None => encode::prepare(commit, &profile, max_row_bytes),
+                                    };
                                     let mut message = (version, result, permit);
                                     loop {
                                         if !shared.running() {
@@ -312,6 +333,8 @@ impl PostgresWriter {
         Ok((
             Self {
                 encoder,
+                preparation_timeout: config.query_timeout,
+                encoded,
                 fences,
                 shared,
                 submitted: AtomicU64::new(0),
@@ -322,17 +345,62 @@ impl PostgresWriter {
             start_tx,
         ))
     }
+    pub(crate) fn prepare(
+        &self,
+        changes: &RelationWorkingSets,
+        timestamp: Timestamp,
+    ) -> Result<EncodedCommit, String> {
+        let (reply, result) = flume::bounded(1);
+        let commit = LogicalCommit {
+            // The actual publication is assigned only after validation and a successful CAS.
+            publication: PublicationId::new(WriterEpoch::random(), 0),
+            timestamp,
+            changes: changes.clone().into_changes(),
+            sequences: vec![],
+            property_definition_changes: vec![],
+        };
+        let deadline = Instant::now() + self.preparation_timeout;
+        self.encoder
+            .send_deadline(EncodingJob::Prepare(commit, reply), deadline)
+            .map_err(|_| "PostgreSQL preparation queue unavailable".to_owned())?;
+        loop {
+            if !self.shared.running() {
+                return Err("PostgreSQL writer is unavailable".into());
+            }
+            if Instant::now() >= deadline {
+                return Err("PostgreSQL encoding exceeded its preparation deadline".into());
+            }
+            match result.recv_timeout(POLL) {
+                Ok(result) => return result.map_err(|error| error.to_string()),
+                Err(flume::RecvTimeoutError::Timeout) => continue,
+                Err(flume::RecvTimeoutError::Disconnected) => {
+                    return Err("PostgreSQL encoder stopped".into());
+                }
+            }
+        }
+    }
+
     pub(crate) fn submit(
         &self,
         commit: LogicalCommit,
-        permit: CommitAdmission,
+        mut permit: CommitAdmission,
     ) -> Result<(), String> {
         let version = commit.publication.version();
         if !self.shared.running() {
             return Err("PostgreSQL writer is unavailable".into());
         }
-        self.encoder.try_send((commit, permit)).map_err(|_| {
-            let error = "PostgreSQL encoder queue unavailable after admission".to_string();
+        let submitted = if let Some(prepared) = permit.preparation.postgres.take() {
+            let commit = encode::finish_prepared(*prepared, commit);
+            self.encoded
+                .try_send((version, Ok(commit), permit))
+                .map_err(|_| ())
+        } else {
+            self.encoder
+                .try_send(EncodingJob::Submit(commit, permit))
+                .map_err(|_| ())
+        };
+        submitted.map_err(|()| {
+            let error = "PostgreSQL submission queue unavailable after admission".to_string();
             self.shared.fail(error.clone());
             error
         })?;

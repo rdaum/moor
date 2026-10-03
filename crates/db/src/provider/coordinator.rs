@@ -56,6 +56,8 @@ pub(crate) enum CommitAdmissionError {
 /// The permit is held from pre-publication reservation until the backend applies the commit.
 /// Dropping it returns the slot to the pool.
 pub(crate) struct CommitAdmission {
+    #[cfg(feature = "postgres")]
+    pub(crate) preparation: super::writer::StoragePreparation,
     return_to: Sender<()>,
     reservation: Option<SubmissionReservation>,
     healthy: Arc<AtomicBool>,
@@ -200,6 +202,8 @@ impl CommitAdmissionGate {
 
     fn permit(&self, reservation: SubmissionReservation) -> CommitAdmission {
         CommitAdmission {
+            #[cfg(feature = "postgres")]
+            preparation: Default::default(),
             return_to: self.return_to.clone(),
             reservation: Some(reservation),
             healthy: self.healthy.clone(),
@@ -418,6 +422,16 @@ impl PersistenceCoordinator {
             return Err(CommitAdmissionError::Unavailable);
         }
         self.admission.acquire(transaction)
+    }
+
+    /// Validate backend limits before any root can become visible.
+    pub(crate) fn prepare(
+        &self,
+        changes: &crate::engine::moor_db::RelationWorkingSets,
+        timestamp: Timestamp,
+        admission: &mut CommitAdmission,
+    ) -> Result<(), String> {
+        self.writer.prepare(changes, timestamp, admission)
     }
 
     /// Transfer a published logical commit and its permit to the backend.

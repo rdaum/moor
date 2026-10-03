@@ -11,10 +11,11 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-//! Thread-owned libpq connections with bounded network I/O.
+//! Readable PostgreSQL world storage with thread-owned connections and bounded network I/O.
 //!
 //! Connections must be created and used on persistence or administrative workers.
-//! This module does not implement world storage or run SQL on transaction workers.
+//! Encoder workers validate reload limits before publication. The ordered writer applies SQL
+//! asynchronously; transaction workers never access a libpq connection.
 
 mod apply;
 mod codec;
@@ -28,6 +29,7 @@ mod seed;
 mod sql;
 mod state;
 mod writer;
+pub(crate) use encode::EncodedCommit;
 pub(crate) use writer::PostgresWriter;
 
 pub use config::{PostgresCommitPolicy, PostgresStorageConfig};

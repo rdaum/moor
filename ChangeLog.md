@@ -141,6 +141,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 `db`:
 
+- Reject PostgreSQL writes before publication when their encoded rows exceed the configured read
+  limit. The same check covers future property rollups, so accepted values remain reloadable.
+
 - Support PostgreSQL 16 with thread-safe libpq 16 or newer, alongside PostgreSQL 17 and 18.
   PostgreSQL builds retain compatible installed client libraries.
 

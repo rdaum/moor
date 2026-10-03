@@ -455,6 +455,7 @@ macro_rules! define_relations {
             ///
             /// This struct contains only the working sets for relations, with caches
             /// separated out to handle ownership during commit processing.
+            #[derive(Clone)]
             pub(crate) struct RelationWorkingSets {
                 pub(crate) owner_change_reads: std::collections::HashSet<moor_var::Obj>,
                 pub(crate) inherited_policy_reads: std::collections::HashSet<crate::model::ObjAndUUIDHolder>,

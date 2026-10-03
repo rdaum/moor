@@ -92,6 +92,7 @@ where
 pub type WorkingSetTuples<Domain, Codomain> =
     HashMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>;
 
+#[derive(Clone)]
 pub struct WorkingSet<Domain, Codomain>
 where
     Domain: RelationDomain,

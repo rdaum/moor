@@ -1214,3 +1214,327 @@ fn rollup_expansion_seals_the_group_without_publishing_tentative_chains() {
         expected
     );
 }
+
+// Both codecs expand escaping before SQL adds its JSON transport representation.
+// Successful publication must remain reloadable under the same row limit.
+fn expanded_payload_is_rejected_or_reloadable(verb: bool) {
+    use crate::{Database, DatabaseConfig, PersistenceConfig, StorageConfig, TxDB};
+    use moor_common::{
+        model::{ObjAttrs, ObjectKind, VerbArgsSpec, VerbFlag},
+        util::BitEnum,
+    };
+    use moor_compiler::{
+        read_persistent_source, write_persistent_literal, write_persistent_source,
+    };
+    use moor_var::{NOTHING, Symbol, v_str};
+    use std::time::Duration;
+
+    let config = config();
+    initialize_postgres_schema(&config).unwrap();
+    let (db, _) = TxDB::try_open(
+        StorageConfig::postgres(config.clone()),
+        DatabaseConfig::default(),
+        PersistenceConfig::default(),
+    )
+    .unwrap();
+    let before = db.publication();
+    let mut loader = db.loader_client().unwrap();
+    let object = loader
+        .create_object(
+            ObjectKind::NextObjid,
+            &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "boundary"),
+        )
+        .unwrap();
+    let expected = v_str(&"\\".repeat(config.connection.max_row_bytes / 2));
+    let mut literal = String::new();
+    write_persistent_literal(&expected, &config.profile, &mut literal).unwrap();
+    let mut canonical_source = String::new();
+    if verb {
+        let program =
+            read_persistent_source(&format!("return {literal};"), &config.profile).unwrap();
+        write_persistent_source(&program, &config.profile, &mut canonical_source).unwrap();
+        loader
+            .add_verb(
+                &object,
+                &[Symbol::mk("boundary")],
+                &object,
+                BitEnum::new_with(VerbFlag::Exec),
+                VerbArgsSpec::this_none_this(),
+                program,
+            )
+            .unwrap();
+    } else {
+        loader
+            .define_property(
+                &object,
+                &object,
+                Symbol::mk("boundary"),
+                &object,
+                BitEnum::new(),
+                Some(expected.clone()),
+            )
+            .unwrap();
+    }
+    if loader.commit().is_err() {
+        assert_eq!(
+            db.publication(),
+            before,
+            "unsupported payload must fail before publication"
+        );
+        assert!(
+            db.persistence_status().healthy,
+            "rejection must not poison the writer"
+        );
+        return;
+    }
+    db.wait_for_durability(Duration::from_secs(60)).unwrap();
+    drop(db);
+    let (db, _) = TxDB::try_open(
+        StorageConfig::postgres(config.clone()),
+        DatabaseConfig::default(),
+        PersistenceConfig::default(),
+    )
+    .unwrap_or_else(|error| panic!("accepted payload cannot reload: {error}"));
+    let loader = db.loader_client().unwrap();
+    if verb {
+        let (uuid, _) = loader
+            .get_existing_verb_by_names(&object, &[Symbol::mk("boundary")])
+            .unwrap()
+            .unwrap();
+        let loaded = loader.get_verb_program(&object, uuid).unwrap();
+        let mut source = String::new();
+        write_persistent_source(&loaded, &config.profile, &mut source).unwrap();
+        assert_eq!(source, canonical_source);
+    } else {
+        assert_eq!(
+            loader
+                .get_existing_property_value(&object, Symbol::mk("boundary"))
+                .unwrap()
+                .unwrap()
+                .0,
+            expected
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires PostgreSQL fixture"]
+fn expanded_property_is_rejected_before_publication_or_reloads() {
+    expanded_payload_is_rejected_or_reloadable(false);
+}
+
+#[test]
+#[ignore = "requires PostgreSQL fixture"]
+fn expanded_verb_source_is_rejected_before_publication_or_reloads() {
+    expanded_payload_is_rejected_or_reloadable(true);
+}
+
+#[test]
+#[ignore = "requires PostgreSQL fixture"]
+fn near_limit_replacements_and_rollups_reload_and_rejections_leave_writer_usable() {
+    use crate::{Database, DatabaseConfig, PersistenceConfig, StorageConfig, TxDB};
+    use moor_common::{
+        model::{ObjAttrs, ObjectKind},
+        util::BitEnum,
+    };
+    use moor_var::{NOTHING, Symbol, v_str};
+    use std::time::Duration;
+    let mut config = config();
+    config.connection.max_row_bytes = 8192;
+    initialize_postgres_schema(&config).unwrap();
+    let (db, _) = TxDB::try_open(
+        StorageConfig::postgres(config.clone()),
+        DatabaseConfig::default(),
+        PersistenceConfig::default(),
+    )
+    .unwrap();
+    let mut loader = db.loader_client().unwrap();
+    let object = loader
+        .create_object(
+            ObjectKind::NextObjid,
+            &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "limits"),
+        )
+        .unwrap();
+    let property = Symbol::mk("boundary");
+    let mut expected = v_list(&[v_str(&"x".repeat(7000))]);
+    loader
+        .define_property(
+            &object,
+            &object,
+            property,
+            &object,
+            BitEnum::new(),
+            Some(expected.clone()),
+        )
+        .unwrap();
+    let source = format!("return \"{}\";", "x".repeat(7600));
+    let program = moor_compiler::read_persistent_source(&source, &config.profile).unwrap();
+    loader
+        .add_verb(
+            &object,
+            &[Symbol::mk("near_limit")],
+            &object,
+            BitEnum::new_with(moor_common::model::VerbFlag::Exec),
+            moor_common::model::VerbArgsSpec::this_none_this(),
+            program,
+        )
+        .unwrap();
+    loader.commit().unwrap();
+    let appends =
+        crate::provider::property_value_store::PROPERTY_VALUE_CHAIN_LIMITS.max_records + 1;
+    for n in 0..appends {
+        let mut loader = db.loader_client().unwrap();
+        expected = expected
+            .as_list()
+            .unwrap()
+            .clone()
+            .append_owned(&v_list(&[v_int(n as i64)]))
+            .unwrap();
+        loader
+            .set_property(&object, property, None, None, Some(expected.clone()))
+            .unwrap();
+        loader.commit().unwrap();
+    }
+    db.wait_for_durability(Duration::from_secs(20)).unwrap();
+    // A full replacement must have removed at least one earlier chain.
+    assert!(count(&config, "object_propvalues") < appends);
+    let before = db.publication();
+    let mut loader = db.loader_client().unwrap();
+    let too_large = expected
+        .as_list()
+        .unwrap()
+        .clone()
+        .append_owned(&v_list(&[v_str(&"\\".repeat(2048))]))
+        .unwrap();
+    loader
+        .set_property(&object, property, None, None, Some(too_large))
+        .unwrap();
+    let error = loader.commit().unwrap_err();
+    assert!(error.to_string().contains("row exceeds"));
+    assert_eq!(db.publication(), before);
+    assert!(db.persistence_status().healthy);
+    assert_eq!(db.persistence_status().outstanding, 0);
+    // An ordinary write after the rejection proves that the permit and encoder remain usable.
+    let mut loader = db.loader_client().unwrap();
+    loader
+        .set_object_name(&object, "after rejection".into())
+        .unwrap();
+    loader.commit().unwrap();
+    db.wait_for_durability(Duration::from_secs(20)).unwrap();
+    drop(db);
+    let (db, _) = TxDB::try_open(
+        StorageConfig::postgres(config.clone()),
+        DatabaseConfig::default(),
+        PersistenceConfig::default(),
+    )
+    .unwrap();
+    let loader = db.loader_client().unwrap();
+    assert_eq!(
+        loader
+            .get_existing_property_value(&object, property)
+            .unwrap()
+            .unwrap()
+            .0,
+        expected
+    );
+    assert_eq!(
+        loader
+            .get_existing_object(&object)
+            .unwrap()
+            .unwrap()
+            .name()
+            .as_deref(),
+        Some("after rejection")
+    );
+    let (uuid, _) = loader
+        .get_existing_verb_by_names(&object, &[Symbol::mk("near_limit")])
+        .unwrap()
+        .unwrap();
+    let program = loader.get_verb_program(&object, uuid).unwrap();
+    let mut loaded_source = String::new();
+    moor_compiler::write_persistent_source(&program, &config.profile, &mut loaded_source).unwrap();
+    assert_eq!(loaded_source, source);
+}
+
+#[test]
+#[ignore = "requires PostgreSQL fixture"]
+fn concurrent_preparations_persist_the_rows_of_successful_publications() {
+    use crate::{Database, DatabaseConfig, PersistenceConfig, StorageConfig, TxDB};
+    use moor_common::{
+        model::{CommitResult, ObjAttrs, ObjectKind},
+        util::BitEnum,
+    };
+    use moor_var::NOTHING;
+    use std::time::Duration;
+    let config = config();
+    initialize_postgres_schema(&config).unwrap();
+    let (db, _) = TxDB::try_open(
+        StorageConfig::postgres(config.clone()),
+        DatabaseConfig::default(),
+        PersistenceConfig::default(),
+    )
+    .unwrap();
+    let barrier = std::sync::Barrier::new(4);
+    let expected = std::thread::scope(|scope| {
+        let barrier = &barrier;
+        let handles: Vec<_> = (0..4)
+            .map(|worker| {
+                let db = &db;
+                scope.spawn(move || {
+                    barrier.wait();
+                    let mut created = Vec::new();
+                    for n in 0..25 {
+                        let name = format!("worker-{worker}-{n}");
+                        for attempt in 0..100 {
+                            assert!(attempt < 99, "concurrent commit did not make progress");
+                            let mut loader = db.loader_client().unwrap();
+                            let object = loader
+                                .create_object(
+                                    ObjectKind::NextObjid,
+                                    &ObjAttrs::new(
+                                        NOTHING,
+                                        NOTHING,
+                                        NOTHING,
+                                        BitEnum::new(),
+                                        &name,
+                                    ),
+                                )
+                                .unwrap();
+                            if matches!(loader.commit().unwrap(), CommitResult::Success { .. }) {
+                                created.push((object, name));
+                                break;
+                            }
+                        }
+                    }
+                    created
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    db.wait_for_durability(Duration::from_secs(20)).unwrap();
+    assert_eq!(db.publication().version(), 100);
+    assert_eq!(db.persistence_status().outstanding, 0);
+    drop(db);
+    let (db, _) = TxDB::try_open(
+        StorageConfig::postgres(config),
+        DatabaseConfig::default(),
+        PersistenceConfig::default(),
+    )
+    .unwrap();
+    let loader = db.loader_client().unwrap();
+    for (object, name) in expected {
+        assert_eq!(
+            loader
+                .get_existing_object(&object)
+                .unwrap()
+                .unwrap()
+                .name()
+                .as_deref(),
+            Some(name.as_str())
+        );
+    }
+}

@@ -179,7 +179,7 @@ impl<'db> PreparedCommit<'db> {
             checkers.build_snapshot(&current_root, tx_timestamp, combined_caches, bloom.clone());
         drop(_t);
 
-        let admission = db
+        let mut admission = db
             .coordinator
             .admit(tx_timestamp)
             .map_err(|error| match error {
@@ -192,6 +192,10 @@ impl<'db> PreparedCommit<'db> {
                     ))
                 }
             })?;
+
+        db.coordinator
+            .prepare(&relation_ws, tx_timestamp, &mut admission)
+            .map_err(|error| PrepareError::Database(WorldStateError::DatabaseError(error)))?;
 
         Ok(Self {
             data: CommitData {

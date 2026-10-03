@@ -101,6 +101,33 @@ use the Cowbell cluster. Use `17` or `18` to test those server versions. Omit `n
 Set `MOOR_PG_TEST_CLI=1` to include builds and configuration checks for all four storage-aware
 tools. Set `LD_LIBRARY_PATH` to test a separately installed libpq runtime.
 
+### PostgreSQL write limits
+
+Before publication, an encoder worker renders and validates each PostgreSQL write. A rejected write
+leaves the published world unchanged. Accepted writes retain their encoded rows for asynchronous SQL
+application. A successful transaction acknowledgment still does not establish durability.
+
+The `--pg-max-row-bytes` option limits the complete returned JSON row, including column names,
+whitespace, literal escaping, and JSON escaping. Its default is 16 MiB. An 8 MiB string of
+backslashes exceeds this default after escaping. The limit also applies to verb source, definitions,
+names, and metadata. Values and programs must pass the versioned persistence codecs. The literal
+codec permits at most 64 nesting levels, including nested container values and captured lambda
+values.
+
+Every property append must fit as both a suffix row and a complete replacement. This check permits
+later rollups under the same configuration. Property checks reserve 19 decimal digits for the future
+record sequence. Changing the row limit to a smaller value can prevent an existing world from
+opening.
+
+Each logical commit has a 256 MiB encoded payload budget. The budget includes possible complete
+property rollups, 128 bytes per mutation for keys and framing, and 1024 bytes for sequence updates.
+The writer can exceed its normal group budget for one indivisible commit, but this commit limit
+still applies. These limits do not establish a process memory ceiling: runtime values, compilation,
+transaction snapshots, and pending commits also consume memory.
+
+The PostgreSQL query timeout also bounds the wait for preparation before publication. Preparation
+errors and timeouts return a transaction error. They do not publish changes or disable the writer.
+
 ## Daemon, Hosts, Workers, and RPC (Advanced)
 
 For split-process or clustered deployment, the server is broken into separate binaries:

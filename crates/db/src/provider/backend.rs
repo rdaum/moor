@@ -69,6 +69,9 @@ impl StorageBackend {
         relations: &Arc<Relations>,
         _epoch: super::logical::WriterEpoch,
     ) -> Result<OpenedStorage, DatabaseOpenError> {
+        #[cfg(not(feature = "postgres"))]
+        let StorageConfig::Fjall(fjall) = storage;
+        #[cfg(feature = "postgres")]
         let fjall = match storage {
             StorageConfig::Fjall(fjall) => fjall,
             #[cfg(feature = "postgres")]
