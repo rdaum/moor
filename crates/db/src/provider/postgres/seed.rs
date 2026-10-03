@@ -80,7 +80,7 @@ pub(super) fn load(
     })
 }
 
-fn sequences(
+pub(super) fn sequences(
     connection: &mut PostgresConnection,
     config: &PostgresStorageConfig,
 ) -> Result<Vec<i64>, PostgresError> {
@@ -150,7 +150,7 @@ pub(super) fn check_timestamp(
 }
 
 /// Stream one chain at a time. Publication order, not timestamp order, chooses the final value.
-fn properties(
+pub(super) fn properties(
     connection: &mut PostgresConnection,
     config: &PostgresStorageConfig,
     progress: &Progress,

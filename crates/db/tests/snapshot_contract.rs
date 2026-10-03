@@ -221,5 +221,6 @@ fn postgres_snapshot_preserves_sparse_local_state_and_programs() {
         PostgresSchema::new(&format!("snapshot_{}", uuid::Uuid::new_v4().simple())).unwrap(),
     );
     initialize_postgres_schema(&config).unwrap();
-    contract(StorageConfig::postgres(config));
+    contract(StorageConfig::postgres(config.clone()));
+    moor_db::validate_postgres_storage(&config).unwrap();
 }

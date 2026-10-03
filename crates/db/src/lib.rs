@@ -401,5 +401,6 @@ mod relation_registry;
 pub use provider::postgres::{
     PostgresCommitPolicy, PostgresConnectOptions, PostgresConnection, PostgresEndpoint,
     PostgresError, PostgresParam, PostgresRow, PostgresSchema, PostgresShutdown,
-    PostgresStatementResult, PostgresStorageConfig, initialize_postgres_schema,
+    PostgresStatementResult, PostgresStorageConfig, PostgresValidationReport,
+    initialize_postgres_schema, validate_postgres_storage,
 };

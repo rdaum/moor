@@ -414,6 +414,10 @@ async fn run() -> Result<(), Report> {
         args.db.is_some(),
         config.database.is_some(),
     )?;
+    if let Some(report) = args.storage_args.validate(&storage)? {
+        println!("{report}");
+        return Ok(());
+    }
     if let Some(identity) = args.storage_args.initialize(&storage)? {
         println!("Initialized PostgreSQL database {identity}");
         return Ok(());

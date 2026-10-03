@@ -161,6 +161,148 @@ The `db_counters()` values `persistence_postgres_active_exports`,
 slots and the age of the oldest reservation. Reservations include connection setup. Long-held read
 transactions retain old row versions in PostgreSQL; close unused loaders promptly.
 
+### PostgreSQL validation and recovery
+
+All four storage tools accept `--validate-storage`. This command exits before opening the runtime or
+local stores. It uses a read-only, repeatable-read transaction and does not claim writer ownership
+or change the writer epoch. It can run while mooR is active.
+
+```bash
+moorc --storage-backend postgres --pg-service world_inspect \
+  --pg-hostaddr 192.0.2.10 --pg-schema moor --validate-storage > validation.json
+```
+
+The JSON report includes the database identity, progress counters, allocation counters, and physical
+row counts for each relation. Property counts distinguish reconstructed values from physical
+records. Validation checks format versions, literals, compiled verb source, property chains,
+timestamps, and allocation bounds. It also checks object relationships, definition references,
+canonical property permissions, and verb source pairs. Sparse inherited values and local permission
+overrides are valid. Reparenting and property deletion can leave inactive local property entries.
+Validation counts these separately; it does not treat them as active inherited state. Object
+references inside arbitrary values and ownership fields can refer to recycled objects.
+
+The command stops at the first error with a nonzero status. Errors identify the relation and row
+key; compiler errors include a source position. Stored values and source text do not appear in
+errors. Validation retains object and definition indexes, row keys, and the current property chain.
+Each query has the configured query timeout; the complete validation can take longer. A successful
+report describes that SQL snapshot. It does not establish a backup or inspect local stores.
+
+#### Database roles
+
+Use separate setup, runtime, and inspection logins. Provision their passwords and TLS configuration
+through the service and password files described above. These examples use the database `world` and
+schema `moor`.
+
+As the database administrator:
+
+```sql
+CREATE ROLE world_setup LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+CREATE ROLE world_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+CREATE ROLE world_inspect LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+CREATE DATABASE world OWNER world_setup TEMPLATE template0 ENCODING 'UTF8';
+```
+
+Run `--init-storage` through the setup service once. As `world_setup`, grant access to the new
+schema:
+
+```sql
+GRANT USAGE ON SCHEMA moor TO world_runtime, world_inspect;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA moor TO world_runtime;
+GRANT SELECT ON ALL TABLES IN SCHEMA moor TO world_inspect;
+```
+
+The runtime role does not need schema creation or table ownership. The inspection role can validate
+and back up this schema. Whole-database backups require read access to any other application
+schemas. These grants cover existing tables; apply grants again after an explicit schema upgrade
+creates tables.
+
+#### Logical backup and restore
+
+A logical backup contains the applied SQL prefix visible when its snapshot starts. It can lag the
+published in-memory world. In the same running mooR process, record `persistence_published` from
+`db_counters()`. Wait until a consistent, healthy sample has `persistence_applied` at least that
+high. Then start the dump. The dump can include later publications. If mooR restarts during this
+procedure, repeat it: publication numbers belong to one writer lifetime.
+
+For a backup that also includes local stores, stop mooR first. Check that persistence drained
+without errors. Keep mooR stopped until the SQL dump and local-store copies finish. With
+asynchronous SQL commits, shutdown drains application but does not itself request a WAL durability
+fence.
+
+Use PostgreSQL tools from the server's major version. Choose one archive scope:
+
+```bash
+# All schemas in this database.
+pg_dump --dbname='service=world_inspect' --format=custom --file=world.dump
+
+# Only the mooR schema, including its domains and tables.
+pg_dump --dbname='service=world_inspect' --format=custom --schema=moor --file=world-schema.dump
+```
+
+`pg_dump` produces a consistent database snapshot. It does not include cluster roles or tablespaces.
+Schema selection does not collect dependencies outside the selected schema. The mooR schema has no
+required user-defined dependencies outside itself. Preserve separately any dependencies that you
+add. See the [PostgreSQL pg_dump reference](https://www.postgresql.org/docs/16/app-pgdump.html).
+
+Create an empty UTF8 restore database owned by the setup role. Point `world_restore` at that
+isolated database. Keep its schema name unchanged, and do not run `--init-storage` there.
+
+```bash
+pg_restore --dbname='service=world_restore' --no-owner --no-acl \
+  --exit-on-error --single-transaction world-schema.dump
+```
+
+The same command accepts `world.dump`. The setup login owns the restored objects. Reapply the
+runtime and inspection grants in the target database. This procedure deliberately replaces archive
+ownership and grants with the target roles. See the
+[PostgreSQL pg_restore reference](https://www.postgresql.org/docs/16/app-pgrestore.html).
+
+Before opening a writer, run `--validate-storage` through the target inspection service. Compare its
+identity, counters, and counts with the backup record. A restore preserves the physical database
+UUID, verb and property UUIDs, timestamps, allocation counters, and property records. Opening a
+writer creates a new writer epoch, so compare the original epoch before that step.
+
+Export objdef through the target runtime service with `moorc`, using an empty source directory.
+
+```bash
+mkdir restore-empty
+moorc --storage-backend postgres --pg-service world_restore_runtime \
+  --pg-hostaddr 192.0.2.10 --pg-schema moor \
+  --src-objdef-dir restore-empty --out-objdef-dir restored.objdir
+```
+
+Compare the export with the expected world. Then run a known functional probe. Use an isolated data
+directory and endpoints throughout the rehearsal. Validation and source compilation alone do not
+establish that application behavior is correct.
+
+The CLI fixture tests both archive scopes with separate roles. It compares every stored table before
+writer opening, validates the restore, compares objdef files, and runs the benchmark world's append
+probe. Run it with `MOOR_PG_TEST_CLI=1 scripts/test-postgres-adapter.sh 17 native`.
+
+#### Local stores and physical recovery
+
+PostgreSQL stores world state. Task, connection, and event databases remain separate local stores. A
+world-only restore must start with fresh task and connection stores. Old suspended tasks can contain
+references or assumptions from a later world. Saved connections cannot restore live network
+sessions. Archive old event stores separately; they can describe actions absent from the restored
+world.
+
+For a full deployment restore, retain the stopped deployment's local stores, configuration, and keys
+with the SQL backup. Document their common shutdown boundary. mooR does not provide an atomic backup
+transaction across PostgreSQL and these local stores. Rehearse task resumption before reconnecting
+users.
+
+Physical recovery requires a PostgreSQL base backup and the required WAL sequence. It restores the
+cluster to a PostgreSQL recovery point, not an in-memory mooR publication number. Unapplied
+publications have no SQL transaction to recover. Asynchronous commits can also exceed the WAL
+available after a crash. A world-state durability fence does not make the separate local stores
+atomic with it. See
+[PostgreSQL continuous archiving](https://www.postgresql.org/docs/16/continuous-archiving.html).
+
+External SQL changes do not update the resident mooR world. Stop the writer before planned offline
+edits. Validate the edited database, rehearse export and behavior, then restart mooR. Validation
+does not repair data or authorize concurrent SQL writes.
+
 ### Persistence diagnostics
 
 The wizard-only `db_counters()` builtin exposes live persistence status. Status values use the

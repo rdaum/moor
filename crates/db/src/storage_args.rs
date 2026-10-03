@@ -27,6 +27,9 @@ pub struct StorageArgs {
     /// Initialize a new PostgreSQL schema and exit.
     #[arg(long)]
     pub init_storage: bool,
+    /// Validate PostgreSQL storage without claiming writer ownership, then exit.
+    #[arg(long, conflicts_with = "init_storage")]
+    pub validate_storage: bool,
     /// Service name in the explicit PGSERVICEFILE.
     #[arg(long)]
     pub pg_service: Option<String>,
@@ -98,12 +101,34 @@ impl StorageArgs {
         explicit_tables: bool,
     ) -> Result<StorageConfig, DatabaseOpenError> {
         let settings = self.merge(configured);
-        if self.init_storage && settings.backend != StorageBackendKind::Postgres {
+        if (self.init_storage || self.validate_storage)
+            && settings.backend != StorageBackendKind::Postgres
+        {
             return Err(DatabaseOpenError::StorageConfiguration(
-                "--init-storage requires PostgreSQL storage",
+                "storage administration requires PostgreSQL storage",
             ));
         }
         settings.resolve(fjall_path, explicit_db, explicit_tables)
+    }
+
+    /// Return a JSON validation report before any runtime or local stores are opened.
+    pub fn validate(&self, storage: &StorageConfig) -> Result<Option<String>, DatabaseOpenError> {
+        if !self.validate_storage {
+            return Ok(None);
+        }
+        match storage {
+            #[cfg(feature = "postgres")]
+            StorageConfig::Postgres(config) => {
+                let report = crate::validate_postgres_storage(config)?;
+                Ok(Some(
+                    serde_json::to_string_pretty(&report)
+                        .expect("validation report is serializable"),
+                ))
+            }
+            _ => Err(DatabaseOpenError::StorageConfiguration(
+                "--validate-storage requires PostgreSQL storage",
+            )),
+        }
     }
 
     /// Explicit setup returns a database identity. Ordinary startup never invokes initialization.

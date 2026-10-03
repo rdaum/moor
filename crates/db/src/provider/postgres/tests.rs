@@ -789,7 +789,7 @@ fn invalid_stored_source_reports_the_verb_and_source_position() {
     assert!(
         error.contains("object_verbs")
             && error.contains(&key.uuid().to_string())
-            && error.contains("@ 2/"),
+            && error.contains("line 2, column"),
         "{error}"
     );
     drop(snapshot);
@@ -807,7 +807,7 @@ fn invalid_stored_source_reports_the_verb_and_source_position() {
     let message = error.to_string();
     assert!(message.contains("object_verbs"), "{message}");
     assert!(message.contains(&format!("#7/{}", key.uuid())), "{message}");
-    assert!(message.contains("@ 2/"), "{message}");
+    assert!(message.contains("line 2, column"), "{message}");
 }
 
 #[test]
@@ -2049,4 +2049,219 @@ fn snapshots_preserve_value_only_rows_and_report_malformed_chains_without_payloa
             .contains("Cycle")
     );
     assert!(cyclic.begin_export(&[]).is_err());
+}
+
+#[test]
+#[ignore = "requires PostgreSQL fixture"]
+fn validation_is_read_only_and_detects_corrupt_rows_and_relationships() {
+    use crate::{Database, DatabaseConfig, PersistenceConfig, StorageConfig, TxDB};
+    use moor_common::{
+        model::{ObjAttrs, ObjectKind, VerbArgsSpec},
+        util::BitEnum,
+    };
+    use moor_var::{NOTHING, Symbol};
+    use std::time::Duration;
+    let config = config();
+    let identity = initialize_postgres_schema(&config).unwrap();
+    let (db, _) = TxDB::try_open(
+        StorageConfig::postgres(config.clone()),
+        DatabaseConfig::default(),
+        PersistenceConfig::default(),
+    )
+    .unwrap();
+    let mut loader = db.loader_client().unwrap();
+    let parent = loader
+        .create_object(
+            ObjectKind::NextObjid,
+            &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "root"),
+        )
+        .unwrap();
+    loader
+        .define_property(
+            &parent,
+            &parent,
+            Symbol::mk("history"),
+            &parent,
+            BitEnum::new(),
+            Some(v_list(&[v_int(1)])),
+        )
+        .unwrap();
+    let program = moor_compiler::read_persistent_source("return 42;", &config.profile).unwrap();
+    loader
+        .add_verb(
+            &parent,
+            &[Symbol::mk("answer")],
+            &parent,
+            BitEnum::new(),
+            VerbArgsSpec::this_none_this(),
+            program,
+        )
+        .unwrap();
+    loader
+        .create_object(
+            ObjectKind::NextObjid,
+            &ObjAttrs::new(parent, parent, NOTHING, BitEnum::new(), "child"),
+        )
+        .unwrap();
+    loader.commit().unwrap();
+    db.wait_for_durability(Duration::from_secs(10)).unwrap();
+    let mut admin = client(&config);
+    let before =
+        state::read_progress(&mut admin, &config, Instant::now() + config.query_timeout).unwrap();
+    // Writer still owns the schema lock. Validation must neither claim it nor advance progress.
+    let report = validate_postgres_storage(&config).unwrap();
+    assert_eq!(report.database_id, identity);
+    assert_eq!(report.writer_epoch, before.epoch);
+    assert_eq!(report.relation_rows["object_flags"], 2);
+    assert_eq!(report.relation_rows["object_verbs"], 1);
+    assert_eq!(report.property_values, 1);
+    assert_eq!(
+        before,
+        state::read_progress(&mut admin, &config, Instant::now() + config.query_timeout).unwrap()
+    );
+    drop(db);
+    let s = format!("\"{}\"", config.schema.as_str());
+    let cases = [
+        ("world_metadata", "SET source_format=999", "world_metadata"),
+        (
+            "sequence_slots",
+            "SET high_water=-1 WHERE slot=0",
+            "high-water",
+        ),
+        (
+            "object_name",
+            "SET logical_timestamp=18446744073709551615",
+            "object_name",
+        ),
+        (
+            "object_propvalues",
+            "SET value_literal='secret malformed ['",
+            "object_propvalues",
+        ),
+        (
+            "object_propvalues",
+            "SET record_kind='list_append'",
+            "property chain",
+        ),
+        (
+            "object_verbs",
+            "SET source='secret malformed ['",
+            "object_verbs",
+        ),
+        ("object_parent", "SET parent_ref='#1'", "cycle"),
+        ("object_parent", "SET parent_ref='#999'", "absent object"),
+    ];
+    for (table, mutation, expected) in cases {
+        admin
+            .query(
+                &format!("CREATE TEMP TABLE validation_backup AS SELECT * FROM {s}.{table}"),
+                &[],
+                Instant::now() + config.query_timeout,
+                |_| unreachable!(),
+            )
+            .unwrap();
+        admin
+            .query(
+                &format!("UPDATE {s}.{table} {mutation}"),
+                &[],
+                Instant::now() + config.query_timeout,
+                |_| unreachable!(),
+            )
+            .unwrap();
+        let error = validate_postgres_storage(&config).unwrap_err().to_string();
+        assert!(error.contains(expected), "{expected}: {error}");
+        assert!(!error.contains("secret"), "{error}");
+        if table == "object_verbs" {
+            assert!(error.contains("line"), "{error}");
+        }
+        for restore in [
+            format!("DELETE FROM {s}.{table}"),
+            format!("INSERT INTO {s}.{table} SELECT * FROM validation_backup"),
+            "DROP TABLE validation_backup".into(),
+        ] {
+            admin
+                .query(
+                    &restore,
+                    &[],
+                    Instant::now() + config.query_timeout,
+                    |_| unreachable!(),
+                )
+                .unwrap();
+        }
+        validate_postgres_storage(&config).unwrap();
+    }
+    for (table, expected) in [
+        ("sequence_slots", "missing slot"),
+        ("object_propflags", "canonical property permissions"),
+        ("object_verbs", "verb definition and source"),
+    ] {
+        admin
+            .query(
+                &format!("CREATE TEMP TABLE validation_backup AS SELECT * FROM {s}.{table}"),
+                &[],
+                Instant::now() + config.query_timeout,
+                |_| unreachable!(),
+            )
+            .unwrap();
+        admin
+            .query(
+                &format!("DELETE FROM {s}.{table}"),
+                &[],
+                Instant::now() + config.query_timeout,
+                |_| unreachable!(),
+            )
+            .unwrap();
+        let error = validate_postgres_storage(&config).unwrap_err().to_string();
+        assert!(error.contains(expected), "{expected}: {error}");
+        for restore in [
+            format!("INSERT INTO {s}.{table} SELECT * FROM validation_backup"),
+            "DROP TABLE validation_backup".into(),
+        ] {
+            admin
+                .query(
+                    &restore,
+                    &[],
+                    Instant::now() + config.query_timeout,
+                    |_| unreachable!(),
+                )
+                .unwrap();
+        }
+    }
+    admin
+        .query(
+            &format!("INSERT INTO {s}.object_name VALUES ('#999',0,'orphan','utf8')"),
+            &[],
+            Instant::now() + config.query_timeout,
+            |_| unreachable!(),
+        )
+        .unwrap();
+    assert!(
+        validate_postgres_storage(&config)
+            .unwrap_err()
+            .to_string()
+            .contains("absent object")
+    );
+    admin
+        .query(
+            &format!("DELETE FROM {s}.object_name WHERE object_ref='#999'"),
+            &[],
+            Instant::now() + config.query_timeout,
+            |_| unreachable!(),
+        )
+        .unwrap();
+    // Deleted definitions leave inactive stored values/permissions under the current engine contract.
+    admin
+        .query(
+            &format!("DELETE FROM {s}.object_propdefs"),
+            &[],
+            Instant::now() + config.query_timeout,
+            |_| unreachable!(),
+        )
+        .unwrap();
+    assert_eq!(
+        validate_postgres_storage(&config)
+            .unwrap()
+            .inactive_property_entries,
+        2
+    );
 }

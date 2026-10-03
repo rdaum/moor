@@ -31,6 +31,7 @@ mod seed;
 mod snapshot;
 mod sql;
 mod state;
+mod validation;
 mod writer;
 pub(crate) use encode::EncodedCommit;
 pub(crate) use writer::PostgresWriter;
@@ -39,6 +40,7 @@ pub use config::{PostgresCommitPolicy, PostgresStorageConfig};
 pub use connection::{PostgresConnection, PostgresParam, PostgresRow, PostgresStatementResult};
 pub use options::{PostgresConnectOptions, PostgresEndpoint, PostgresSchema};
 pub use schema::initialize_postgres_schema;
+pub use validation::{PostgresValidationReport, validate_postgres_storage};
 
 use std::{
     sync::{

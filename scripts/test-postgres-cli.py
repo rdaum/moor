@@ -14,6 +14,7 @@
 
 """Check storage CLI routing, setup isolation, and a cross-backend objdef round trip."""
 import argparse
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -24,11 +25,11 @@ ROOT = Path(__file__).resolve().parent.parent
 BINARIES = ["moor-daemon", "moor", "moorc", "moor-emh"]
 
 
-def run(binary, args, env, success):
+def run(binary, args, env, success, stdout_only=False):
     result = subprocess.run([str(ROOT / "target/debug" / binary), *args], env=env,
                             text=True, capture_output=True, timeout=45)
     assert (result.returncode == 0) == success, (binary, result.returncode, result.stdout, result.stderr)
-    return result.stdout + result.stderr
+    return result.stdout if stdout_only else result.stdout + result.stderr
 
 
 def snapshot_roundtrip(root, env):
@@ -50,9 +51,12 @@ def snapshot_roundtrip(root, env):
     def contents(path):
         return {file.relative_to(path): file.read_bytes() for file in path.rglob("*") if file.is_file()}
 
+    validation = json.loads(run("moorc", [*pg, "--validate-storage"], env, True, stdout_only=True))
+    assert validation["relation_rows"]["object_flags"] > 0
     original = contents(first)
     assert original and contents(postgres_dump) == original
     assert contents(final) == original
+    backup_restore(root, env, first, features)
     empty = root / "empty"
     empty.mkdir()
     for storage in [pg, restored]:
@@ -62,6 +66,117 @@ def snapshot_roundtrip(root, env):
                               "--test-args={2, 16, 128, 5, 0, 1, 1, 0}"], env, True)
         assert "Test #668:test_string_history_append passed" in output, output
     print(f"moorc: Fjall/objdef/PostgreSQL/objdef/Fjall round trip preserved {len(original)} files; both functional probes passed")
+
+
+def backup_restore(root, env, first, features):
+    """Restore schema and whole-database archives with distinct setup/runtime/read roles."""
+    import configparser
+    import hashlib
+    import secrets
+
+    suffix = uuid.uuid4().hex
+    owner, runtime, reader = [f"{kind}_{suffix}" for kind in ["owner", "runtime", "reader"]]
+    source, whole, scoped = [f"{kind}_{suffix}" for kind in ["source", "whole", "scoped"]]
+    service_file, pass_file = root / "restore-services", root / "restore-passwords"
+    services = configparser.ConfigParser(interpolation=None)
+    services.read(env["PGSERVICEFILE"])
+    base = dict(services["moor_adapter"])
+    passwords = {role: secrets.token_hex(24) for role in [owner, runtime, reader]}
+    pass_file.write_text(Path(env["PGPASSFILE"]).read_text() + "".join(
+        f"*:*:*:{role}:{password}\n" for role, password in passwords.items()), encoding="utf8")
+    pass_file.chmod(0o600)
+    test_env = {**env, "PGSERVICEFILE": str(service_file), "PGPASSFILE": str(pass_file)}
+    for database in [source, whole, scoped]:
+        for role in [owner, runtime, reader]:
+            services[f"{database}_{role}"] = {**base, "dbname": database, "user": role}
+        services[f"{database}_admin"] = {**base, "dbname": database}
+    with service_file.open("w") as output:
+        services.write(output, space_around_delimiters=False)
+    service_file.chmod(0o600)
+
+    def utility(program, args, input=None):
+        # Match server/client major versions, including Docker fixtures with newer servers.
+        container = env.get("MOOR_PG_TEST_CONTAINER_ID")
+        if container:
+            command = ["docker", "exec", "-i", container, program, "-h", "/moor-socket", "-U", "postgres", *args]
+        else:
+            bindir = env.get("MOOR_PG_TEST_NATIVE_BIN", "/usr/lib/postgresql/17/bin")
+            command = [str(Path(bindir) / program), *args]
+        result = subprocess.run(command, env={**env, "PGSERVICE": "moor_adapter"},
+                                input=input, capture_output=True, timeout=90)
+        assert result.returncode == 0, (program, result.stderr.decode())
+        return result.stdout
+
+    def sql(database, statement):
+        return utility("psql", ["-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-d", database],
+                       statement.encode()).decode().strip()
+
+    def storage(database, role):
+        return ["--storage-backend=postgres", "--pg-hostaddr=127.0.0.1", "--pg-schema=moor",
+                f"--pg-service={database}_{role}"]
+
+    def validate(database):
+        return json.loads(run("moorc", [*storage(database, reader), "--validate-storage"], test_env, True, stdout_only=True))
+
+    def physical(database):
+        tables = sql(database, "SELECT tablename FROM pg_tables WHERE schemaname='moor' ORDER BY tablename;").splitlines()
+        return {table: hashlib.sha256(sql(database,
+                f'SELECT to_jsonb(t)::text FROM moor."{table}" t ORDER BY to_jsonb(t)::text;').encode()).hexdigest()
+                for table in tables}
+
+    def grants(database):
+        sql(database, f"""GRANT USAGE ON SCHEMA moor TO {runtime}, {reader};
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA moor TO {runtime};
+            GRANT SELECT ON ALL TABLES IN SCHEMA moor TO {reader};""")
+
+    try:
+        for role, password in passwords.items():
+            sql("postgres", f"CREATE ROLE {role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD '{password}';")
+        for database in [source, whole, scoped]:
+            sql("postgres", f"CREATE DATABASE {database} OWNER {owner} TEMPLATE template0 ENCODING 'UTF8';")
+        run("moorc", [*storage(source, owner), "--init-storage"], test_env, True)
+        grants(source)
+        run("moorc", [*features, *storage(source, runtime), "--src-objdef-dir", str(first),
+                      "--out-objdef-dir", str(root / "backup-original")], test_env, True)
+        # Add a separate schema to prove whole-database versus schema-scoped selection.
+        sql(source, f"CREATE SCHEMA auxiliary AUTHORIZATION {owner}; CREATE TABLE auxiliary.marker(value int); INSERT INTO auxiliary.marker VALUES(42); GRANT USAGE ON SCHEMA auxiliary TO {reader}; GRANT SELECT ON auxiliary.marker TO {reader};")
+        before = validate(source)
+        rows = physical(source)
+        assert before["property_values"] > 0
+        # A genuine read-only login can validate but cannot claim a writer epoch or initialize.
+        run("moorc", [*storage(source, reader), "--src-objdef-dir", str(first),
+                      "--out-objdef-dir", str(root / "forbidden")], test_env, False)
+        assert validate(source) == before
+        for database, scope in [(whole, []), (scoped, ["--schema=moor"])]:
+            archive = utility("pg_dump", ["-d", source, "--format=custom", f"--role={reader}", *scope])
+            utility("pg_restore", ["-d", database, "--no-owner", "--no-acl", "--exit-on-error",
+                                   "--single-transaction", f"--role={owner}"], archive)
+            grants(database)
+            # No writer has opened the restore yet: identities, epochs, timestamps, counters,
+            # physical UUIDs, source, property records and every other stored cell must match.
+            assert physical(database) == rows
+            assert validate(database) == before
+            assert sql(database, "SELECT to_regclass('auxiliary.marker') IS NOT NULL;") == ("t" if database == whole else "f")
+            exported = root / database
+            empty = root / (database + "_empty")
+            empty.mkdir()
+            run("moorc", [*features, *storage(database, runtime), "--src-objdef-dir", str(empty),
+                          "--out-objdef-dir", str(exported)], test_env, True)
+            expected = {p.relative_to(first): p.read_bytes() for p in first.rglob("*") if p.is_file()}
+            actual = {p.relative_to(exported): p.read_bytes() for p in exported.rglob("*") if p.is_file()}
+            assert actual == expected
+            output = run("moorc", [*features, *storage(database, runtime), "--src-objdef-dir", str(empty),
+                                  "--run-tests=true", "--test-wizard=2", "--test-phases=3",
+                                  "--test-filter=#668:test_string_history_append", "--test-timeout=30",
+                                  "--test-args={2, 16, 128, 5, 0, 1, 1, 0}"], test_env, True)
+            assert "Test #668:test_string_history_append passed" in output
+            validate(database)
+        print("PostgreSQL: schema and whole-database restores preserved every stored cell; read-only validation, restricted runtime export, and functional probes passed")
+    finally:
+        for database in [source, whole, scoped]:
+            sql("postgres", f"DROP DATABASE IF EXISTS {database} WITH (FORCE);")
+        for role in [reader, runtime, owner]:
+            sql("postgres", f"DROP ROLE IF EXISTS {role};")
 
 
 def main():
@@ -77,9 +192,10 @@ def main():
             positional = [] if binary == "moorc" else [str(root / "data")]
             selected = [*positional, "--storage-backend", "postgres"]
             if args.disabled:
-                output = run(binary, selected, env, False)
-                assert "PostgreSQL support is disabled" in output, output
-                assert list(root.iterdir()) == [], list(root.iterdir())
+                for flags in [[], ["--validate-storage"]]:
+                    output = run(binary, [*selected, *flags], env, False)
+                    assert "PostgreSQL support is disabled" in output, output
+                    assert list(root.iterdir()) == [], list(root.iterdir())
                 print(f"{binary}: disabled feature rejected before filesystem changes")
                 continue
             postgres = ["--pg-service", "moor_adapter", "--pg-hostaddr", "127.0.0.1",
@@ -94,7 +210,12 @@ def main():
             output = run(binary, [*selected, *postgres, "--init-storage"], env, False)
             assert "42P06" in output, output
             assert list(root.iterdir()) == [], list(root.iterdir())
-            print(f"{binary}: explicit setup and path rejection passed")
+            output = run(binary, [*selected, *postgres, "--validate-storage"], env, True, stdout_only=True)
+            report = json.loads(output)
+            assert report["writer_epoch"] == 0 and report["relation_rows"]["object_flags"] == 0
+            assert list(root.iterdir()) == [], list(root.iterdir())
+            run(binary, [*selected, *postgres, "--validate-storage", "--init-storage"], env, False)
+            print(f"{binary}: explicit setup, read-only validation, and path rejection passed")
 
         if args.disabled:
             return

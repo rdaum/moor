@@ -141,6 +141,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 `db`:
 
+- Add `--validate-storage` for read-only PostgreSQL checks without writer ownership. Reports include
+  relation counts and row locations. Document and test schema and whole-database recovery.
+
 - Support consistent PostgreSQL snapshots for objdef export. Exports preserve sparse inherited
   properties and can finish after writer shutdown. Reader capacity is configurable.
 

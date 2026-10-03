@@ -24,9 +24,9 @@ use moor_common::{
     util::BitEnum,
 };
 use moor_compiler::{
-    PERSISTENT_LITERAL_VERSION, PERSISTENT_SOURCE_VERSION, SourceCodecError, SourceProfile,
-    read_persistent_literal, read_persistent_source, write_persistent_literal,
-    write_persistent_source,
+    LiteralDecodeError, LiteralEncodeError, ObjDefParseError, PERSISTENT_LITERAL_VERSION,
+    PERSISTENT_SOURCE_VERSION, SourceCodecError, SourceProfile, read_persistent_literal,
+    read_persistent_source, write_persistent_literal, write_persistent_source,
 };
 use moor_var::{Obj, Symbol, Var, program::ProgramType};
 use serde_json::{Map, Value, json};
@@ -268,7 +268,7 @@ impl RowValue for Var {
         write_persistent_literal(self, profile, &mut literal).map_err(|error| {
             PostgresError::Codec {
                 field: "value_literal",
-                detail: error.to_string(),
+                detail: literal_encode_error(error),
             }
         })?;
         Ok(fields(
@@ -286,15 +286,45 @@ impl RowValue for Var {
         read_persistent_literal(text(row, "value_literal")?, profile).map_err(|error| {
             PostgresError::Codec {
                 field: "value_literal",
-                detail: error.to_string(),
+                detail: literal_error(error),
             }
         })
     }
 }
+fn literal_error(error: LiteralDecodeError) -> String {
+    match error {
+        LiteralDecodeError::Source { offset, .. } => format!("invalid source at byte {offset}"),
+        LiteralDecodeError::Profile(_) => "unsupported literal profile".into(),
+        LiteralDecodeError::Parse(
+            ObjDefParseError::ParseError(error) | ObjDefParseError::VerbCompileError(error, _),
+        ) => compile_error(&error),
+        LiteralDecodeError::Parse(ObjDefParseError::LiteralNestingTooDeep { max_depth }) => {
+            format!("literal nesting exceeds {max_depth}")
+        }
+        LiteralDecodeError::Parse(_) => "invalid literal".into(),
+    }
+}
+fn literal_encode_error(error: LiteralEncodeError) -> String {
+    match error {
+        LiteralEncodeError::Validation(error) => literal_error(error),
+        LiteralEncodeError::Nesting(depth) => format!("literal nesting exceeds {depth}"),
+        LiteralEncodeError::Profile(_) => "unsupported literal profile".into(),
+        LiteralEncodeError::Render(_) => "literal rendering failed".into(),
+        LiteralEncodeError::Output(_) => "literal output failed".into(),
+    }
+}
+fn compile_error(error: &moor_common::model::CompileError) -> String {
+    let (line, column) = error.context().line_col;
+    format!("source compilation failed at line {line}, column {column}")
+}
 fn source_error(error: SourceCodecError) -> PostgresError {
     let detail = match error {
-        SourceCodecError::Compile(error) => error.to_string(),
-        error => error.to_string(),
+        SourceCodecError::Compile(error) => compile_error(&error),
+        SourceCodecError::Literal(error) => literal_error(error),
+        SourceCodecError::Constant(error) => literal_encode_error(error),
+        SourceCodecError::Profile(_) => "unsupported source profile".into(),
+        SourceCodecError::Render(_) => "source rendering failed".into(),
+        SourceCodecError::Output(_) => "source output failed".into(),
     };
     PostgresError::Codec {
         field: "source",
