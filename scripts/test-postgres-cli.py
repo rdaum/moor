@@ -199,6 +199,10 @@ def main():
         env["XDG_DATA_HOME"] = str(root / "xdg-data")
         for binary in BINARIES:
             positional = [] if binary == "moorc" else [str(root / "data")]
+            for seconds in ["0", "18446744073709551615"]:
+                output = run(binary, [*positional, "--persistence-shutdown-timeout-seconds", seconds], env, False)
+                assert "persistence shutdown timeout" in output, output
+                assert list(root.iterdir()) == [], list(root.iterdir())
             selected = [*positional, "--storage-backend", "postgres"]
             if args.disabled:
                 for flags in [[], ["--validate-storage"], ["--install-storage-views"]]:
@@ -210,7 +214,9 @@ def main():
             postgres = ["--pg-service", "moor_adapter", "--pg-hostaddr", "127.0.0.1",
                         "--pg-schema", "cli_" + uuid.uuid4().hex]
             for extra in [["--db", "world.db"], ["--pg-query-timeout-seconds", "0"],
-                          ["--pg-max-exports", "0"], ["--pg-max-exports", "65"]]:
+                          ["--pg-max-exports", "0"], ["--pg-max-exports", "65"],
+                          ["--persistence-shutdown-timeout-seconds", "0"],
+                          ["--persistence-shutdown-timeout-seconds", "18446744073709551615"]]:
                 run(binary, [*selected, *postgres, *extra, "--init-storage"], env, False)
                 assert list(root.iterdir()) == [], list(root.iterdir())
             output = run(binary, [*selected, *postgres, "--init-storage"], env, True)
@@ -239,6 +245,13 @@ def main():
             invocation = [str(root / "data"), "--config-file", str(config), "--init-storage"]
             run(binary, [*invocation, "--pg-schema", schema + "_override"], env, True)
             run(binary, invocation, env, True)
+            valid_config = config.read_text(encoding="utf8")
+            config.write_text(valid_config.replace("  backend: postgres", "  backend: postgres\n  shutdown_timeout_seconds: 0"), encoding="utf8")
+            output = run(binary, invocation, env, False)
+            assert "persistence shutdown timeout" in output, output
+            run(binary, [*invocation, "--pg-schema", schema + "_shutdown_override",
+                         "--persistence-shutdown-timeout-seconds", "9"], env, True)
+            config.write_text(valid_config, encoding="utf8")
             config.write_text(config.read_text(encoding="utf8") + "database: {}\n", encoding="utf8")
             output = run(binary, invocation, env, False)
             assert "Fjall database table settings" in output, output

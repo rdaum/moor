@@ -21,6 +21,8 @@ use std::{net::IpAddr, path::PathBuf};
 #[serde(default, deny_unknown_fields)]
 pub struct StorageSettings {
     pub backend: StorageBackendKind,
+    /// Backend-independent persistence drain and worker-stop budget (default: 30 seconds).
+    pub shutdown_timeout_seconds: Option<u64>,
     pub postgres: Option<PostgresSettings>,
 }
 
@@ -60,6 +62,20 @@ impl std::str::FromStr for PostgresCommitSetting {
 }
 
 impl StorageSettings {
+    pub fn persistence_config(&self) -> Result<crate::PersistenceConfig, DatabaseOpenError> {
+        let mut config = crate::PersistenceConfig::default();
+        if let Some(seconds) = self.shutdown_timeout_seconds {
+            let timeout = std::time::Duration::from_secs(seconds);
+            if timeout.is_zero() || std::time::Instant::now().checked_add(timeout).is_none() {
+                return Err(DatabaseOpenError::StorageConfiguration(
+                    "persistence shutdown timeout must be a finite positive duration",
+                ));
+            }
+            config.shutdown_timeout = timeout;
+        }
+        Ok(config)
+    }
+
     /// Validate before creating directories. Resolve a world path only for Fjall.
     pub fn resolve(
         &self,
@@ -68,6 +84,7 @@ impl StorageSettings {
         explicit_table_settings: bool,
     ) -> Result<StorageConfig, DatabaseOpenError> {
         self.backend.check_available()?;
+        self.persistence_config()?;
         if self.backend == StorageBackendKind::Fjall {
             if self.postgres.is_some() {
                 return Err(DatabaseOpenError::StorageConfiguration(

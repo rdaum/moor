@@ -101,6 +101,132 @@ use the Cowbell cluster. Use `17` or `18` to test those server versions. Omit `n
 Set `MOOR_PG_TEST_CLI=1` to include builds and configuration checks for all four storage-aware
 tools. Set `LD_LIBRARY_PATH` to test a separately installed libpq runtime.
 
+### PostgreSQL deployment configuration
+
+Initialize the schema through the setup role before starting the runtime. Use the role grants in the
+recovery section below. Keep credentials in a libpq service file and a separate password file. The
+adapter requires an explicit `PGSERVICEFILE` for service lookup. It rejects LDAP service lookup. The
+selected endpoint must be a numeric address or an absolute Unix socket directory.
+
+For a local Unix socket, define this service in `/etc/moor/pg_service.conf`:
+
+```ini
+[world_socket]
+host=/run/postgresql
+port=5432
+dbname=world
+user=world_runtime
+```
+
+Configure the host in `/etc/moor/moor.yaml`:
+
+```yaml
+storage:
+  backend: postgres
+  shutdown_timeout_seconds: 60
+  postgres:
+    service: world_socket
+    schema: moor
+    socket_dir: /run/postgresql
+    commit_policy: synchronous
+```
+
+Use socket permissions and PostgreSQL authentication rules appropriate for the runtime account. The
+Cowbell launcher uses a separate development configuration; it is not a production authentication
+example.
+
+For TCP with TLS, use a certificate-verified service:
+
+```ini
+[world_tls]
+host=db.example.net
+port=5432
+dbname=world
+user=world_runtime
+sslmode=verify-full
+sslrootcert=/etc/moor/postgres-ca.pem
+```
+
+Replace `service` and `socket_dir` in the YAML with:
+
+```yaml
+service: world_tls
+hostaddr: 192.0.2.10
+```
+
+The numeric address selects the server. The service hostname remains the certificate identity.
+Provision the matching password entry in `/run/secrets/moor.pgpass`, with permissions `0600`. Set
+`PGPASSFILE` to that file. Keep passwords out of command-line arguments and YAML.
+
+Specify local ancillary stores independently of PostgreSQL world storage:
+
+```bash
+export PGSERVICEFILE=/etc/moor/pg_service.conf
+export PGPASSFILE=/run/secrets/moor.pgpass
+moor /srv/moor/local --config-file /etc/moor/moor.yaml \
+  --connections-file /srv/moor/local/connections.db \
+  --tasks-db /srv/moor/local/tasks.db \
+  --events-db /srv/moor/local/events.db
+```
+
+The host also needs its configured keys and network listeners. The positional data directory remains
+local. Do not pass `--db` with PostgreSQL; that argument selects a Fjall world directory.
+
+One mooR writer owns one schema on one PostgreSQL database. Connections and recovery attempts use
+the configured endpoint. The adapter does not select replicas, resolve changing DNS addresses, or
+coordinate failover across independent clusters. PostgreSQL advisory locks do not fence writers on
+different clusters.
+
+For an endpoint change, stop the old writer and check its persistence drain. Fence access to the old
+server before promoting or restoring another server. Configure the new numeric address or socket,
+service identity, credentials, and TLS trust. Validate the target and rehearse recovery before
+starting one writer. Keep local stores consistent with the selected world recovery point. Do not
+change the service file during connection setup.
+
+### Persistence deadlines
+
+Set `--persistence-shutdown-timeout-seconds` or YAML `storage.shutdown_timeout_seconds` to control
+the persistence shutdown budget. This applies to both backends and all four storage tools. The
+default is 30 seconds. Values must be positive finite durations; explicit CLI values override YAML.
+The budget covers draining admitted work and stopping persistence workers. It is not the total
+process shutdown budget, which also includes scheduler and host shutdown.
+
+Admission thresholds are runtime properties on `$server_options`:
+
+| Property                          | Default | Effect                                        |
+| --------------------------------- | ------- | --------------------------------------------- |
+| `db_commit_queue_warn_seconds`    | `1`     | Log a warning for a blocked admission episode |
+| `db_commit_queue_timeout_seconds` | `5`     | Reject a blocked commit with `E_QUOTA`        |
+
+These properties accept non-negative integer or floating-point seconds. Zero timeout rejects a
+commit immediately when no permit is available. A warning threshold above the timeout is clamped to
+the timeout. After changing the properties, call the wizard-only `load_server_options()` builtin.
+Changing admission thresholds does not change SQL query or recovery deadlines.
+
+| PostgreSQL control              | Default | Scope                                                               |
+| ------------------------------- | ------- | ------------------------------------------------------------------- |
+| `--pg-connect-timeout-seconds`  | `10`    | One connection attempt                                              |
+| `--pg-query-timeout-seconds`    | `30`    | A SQL operation; also the separate prepublication encoding wait     |
+| `--pg-recovery-timeout-seconds` | `30`    | Reconnection, progress checks, and replay after a recoverable error |
+| `--pg-retry-interval-ms`        | `50`    | Delay between recovery attempts                                     |
+
+A transaction acquires admission before PostgreSQL preparation and publication. Its admission and
+preparation deadlines are separate. SQL application occurs after publication. Recovery begins after
+an application error; each connection or SQL attempt also respects the remaining recovery deadline.
+Snapshot acquisition has its own overall deadline, and subsequent reader requests use the query
+limit.
+
+A shutdown budget can expire before recovery completes. That outcome is an error, not a successful
+drain. Size the service manager's stop allowance to include scheduler shutdown and the configured
+persistence budget. Inspect applied progress and shutdown errors before treating the stopped world
+as a complete backup boundary. Asynchronous SQL application still does not establish WAL durability.
+
+Writer groups currently retain their fixed defaults: 64 commits, 1 MiB, 4,096 operations, and a 1 ms
+collection window. An indivisible commit can exceed a normal group limit. Admission capacity is
+1,000 commits; this count is not a memory budget. More queue capacity cannot resolve sustained SQL
+application lag. Use the persistence diagnostics to measure the workload before changing these
+implementation limits.
+
 ### PostgreSQL write limits
 
 Before publication, an encoder worker renders and validates each PostgreSQL write. A rejected write

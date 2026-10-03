@@ -24,6 +24,9 @@ pub struct StorageArgs {
     /// World storage backend: fjall or postgres (default: fjall).
     #[arg(long)]
     pub storage_backend: Option<StorageBackendKind>,
+    /// Persistence drain and worker-stop budget in seconds (default: 30; both backends).
+    #[arg(long)]
+    pub persistence_shutdown_timeout_seconds: Option<u64>,
     /// Initialize a new PostgreSQL schema and exit.
     #[arg(long)]
     pub init_storage: bool,
@@ -66,6 +69,9 @@ impl StorageArgs {
     /// Apply only explicit command-line values to the configured storage settings.
     pub fn merge(&self, configured: &StorageSettings) -> StorageSettings {
         let mut settings = configured.clone();
+        if let Some(seconds) = self.persistence_shutdown_timeout_seconds {
+            settings.shutdown_timeout_seconds = Some(seconds);
+        }
         if let Some(backend) = self.storage_backend {
             settings.backend = backend;
         }
@@ -234,6 +240,61 @@ mod tests {
         );
     }
     #[test]
+    fn shutdown_budget_defaults_and_cli_precedence_are_backend_independent() {
+        let configured = StorageSettings {
+            shutdown_timeout_seconds: Some(45),
+            ..Default::default()
+        };
+        let command = Command::try_parse_from(["test"]).unwrap();
+        assert_eq!(
+            command
+                .storage
+                .merge(&configured)
+                .persistence_config()
+                .unwrap()
+                .shutdown_timeout
+                .as_secs(),
+            45
+        );
+        let command =
+            Command::try_parse_from(["test", "--persistence-shutdown-timeout-seconds", "9"])
+                .unwrap();
+        assert_eq!(
+            command
+                .storage
+                .merge(&configured)
+                .persistence_config()
+                .unwrap()
+                .shutdown_timeout
+                .as_secs(),
+            9
+        );
+        assert_eq!(
+            StorageSettings::default()
+                .persistence_config()
+                .unwrap()
+                .shutdown_timeout
+                .as_secs(),
+            30
+        );
+        for seconds in [0, u64::MAX] {
+            let configured = StorageSettings {
+                shutdown_timeout_seconds: Some(seconds),
+                ..Default::default()
+            };
+            assert!(
+                configured
+                    .resolve(
+                        || panic!("invalid deadline must fail before resolving local paths"),
+                        false,
+                        false
+                    )
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
     fn explicit_export_limit_overrides_yaml_without_changing_the_endpoint() {
         let command = Command::try_parse_from(["test", "--pg-max-exports", "3"]).unwrap();
         let configured = StorageSettings {
@@ -243,6 +304,7 @@ mod tests {
                 max_exports: Some(1),
                 ..Default::default()
             }),
+            ..Default::default()
         };
         let merged = command.storage.merge(&configured).postgres.unwrap();
         assert_eq!(merged.max_exports, Some(3));
@@ -258,6 +320,7 @@ mod tests {
                 schema: Some("configured".into()),
                 ..Default::default()
             }),
+            ..Default::default()
         };
         let merged = command.storage.merge(&settings);
         assert_eq!(merged.backend, StorageBackendKind::Postgres);

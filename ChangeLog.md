@@ -141,6 +141,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 `db`:
 
+- Configure the persistence shutdown budget through `storage.shutdown_timeout_seconds` or
+  `--persistence-shutdown-timeout-seconds`. The default remains 30 seconds for both backends.
+
 - Add PostgreSQL inspection views for objects, verbs, properties, and persistence progress. A
   checked lookup reconstructs stored list chains. Existing schemas can install the views explicitly.
 

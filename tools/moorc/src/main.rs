@@ -401,7 +401,9 @@ fn main() -> Result<(), eyre::Report> {
     let (database, _) = TxDB::try_open(
         storage,
         DatabaseConfig::default(),
-        moor_db::PersistenceConfig::default(),
+        args.storage_args
+            .merge(&moor_db::StorageSettings::default())
+            .persistence_config()?,
     )?;
     // Retain a handle for persistence boundaries around test/benchmark runs.
     let persistence_handle = database.clone();

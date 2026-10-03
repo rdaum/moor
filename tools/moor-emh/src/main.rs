@@ -762,7 +762,10 @@ fn main() -> Result<(), Report> {
     let (database, _freshly_made) = TxDB::try_open(
         storage,
         DatabaseConfig::default(),
-        moor_db::PersistenceConfig::default(),
+        args.db_args
+            .storage_args
+            .merge(&moor_db::StorageSettings::default())
+            .persistence_config()?,
     )?;
     let export_database = database.clone();
     let database = Box::new(database);
