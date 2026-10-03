@@ -405,6 +405,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 `db`:
 
+- Use measured payload sizes for PostgreSQL write groups. This avoids premature group boundaries and
+  reduces synchronous commit overhead during sustained property updates.
+
 - Reuse validated property-version sizes for PostgreSQL list appends. Repeated appends can validate
   only the new suffix while preserving complete-value reload limits.
 

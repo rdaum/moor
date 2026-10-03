@@ -298,15 +298,14 @@ impl PostgresWriter {
                                         EncodingJob::Prepare(commit, reply, encoding_slot) => {
                                             let timer = shared.metrics.timer(moor_common::model::WorldStateTimerOp::PostgresEncode);
                                             let mut result = encode::prepare(commit, &profile, max_row_bytes, &shared.validation_cache);
-                                            let (bytes, retained, admission_bytes) = result.as_ref().map_or((0, 0, 0), EncodedCommit::payload_sizes);
+                                            let sizes = result.as_ref().map_or_else(|_| Default::default(), |commit| commit.sizes);
                                             shared.metrics.update(|m| {
                                                 m.encoding_calls += 1;
                                                 m.encoding_failures += u64::from(result.is_err());
-                                                m.encoded_bytes += bytes as u64;
+                                                m.encoded_bytes += sizes.encoded as u64;
                                             });
                                             if let Ok(commit) = &mut result {
-                                                commit.payload_lease = Some(shared.metrics.retain(bytes, retained));
-                                                commit.admission_bytes = admission_bytes;
+                                                commit.payload_lease = Some(shared.metrics.retain(sizes.encoded, sizes.retained));
                                             }
                                             drop(timer);
                                             let _ = reply.send(result);
@@ -423,7 +422,7 @@ impl PostgresWriter {
                     commit.byte_lease = Some(
                         self.shared
                             .byte_budget
-                            .reserve(commit.admission_bytes, policy, || {
+                            .reserve(commit.sizes.admission, policy, || {
                                 self.shared.running()
                                     && !self.shared.cancelled.load(Ordering::Acquire)
                             })

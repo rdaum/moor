@@ -53,10 +53,17 @@ pub(super) struct PropertyMutationRow {
     pub key: ObjAndUUIDHolder,
     pub mutation: PropertyMutation,
 }
+#[derive(Clone, Copy, Default)]
+pub(super) struct PayloadSizes {
+    pub encoded: usize,
+    pub retained: usize,
+    pub admission: usize,
+}
+
 pub(crate) struct EncodedCommit {
     pub(super) payload_lease: Option<super::metrics::PayloadLease>,
     pub(super) byte_lease: Option<super::byte_budget::ByteLease>,
-    pub(super) admission_bytes: usize,
+    pub(super) sizes: PayloadSizes,
     pub(super) publication: PublicationId,
     pub(super) timestamp: Timestamp,
     pub(super) ordinary: Vec<RelationBatch>,
@@ -69,7 +76,7 @@ pub(crate) struct EncodedCommit {
 
 impl EncodedCommit {
     /// Rendered bytes before SQL adds record sequences. Counting serialization retains no copy.
-    pub(super) fn payload_sizes(&self) -> (usize, usize, usize) {
+    fn payload_sizes(&self) -> PayloadSizes {
         struct Count(usize);
         impl std::io::Write for Count {
             fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
@@ -110,11 +117,11 @@ impl EncodedCommit {
             serde_json::to_writer(&mut count, row).expect("JSON value serialization is infallible");
             bytes += count.0;
         }
-        (
-            bytes,
+        PayloadSizes {
+            encoded: bytes,
             retained,
-            bytes.saturating_add(additional_charge).saturating_add(1024),
-        )
+            admission: bytes.saturating_add(additional_charge).saturating_add(1024),
+        }
     }
 }
 
@@ -305,48 +312,31 @@ pub(super) fn prepare(
             .map(|s| json!({"slot":s.slot,"high_water":s.value}))
             .collect(),
     );
-    let group_bytes = ordinary
-        .iter()
-        .map(RelationBatch::encoded_bytes)
-        .sum::<usize>()
-        + sequences.as_ref().map_or(0, String::len)
-        + properties
-            .iter()
-            .map(|property| match &property.mutation {
-                PropertyMutation::Delete => 192,
-                PropertyMutation::Full(row) | PropertyMutation::Append { row, .. } => {
-                    json_size_bound(row) + 128
-                }
-            })
-            .sum::<usize>();
-    Ok(EncodedCommit {
+    let mut encoded = EncodedCommit {
         payload_lease: None,
         byte_lease: None,
-        admission_bytes: 0,
+        sizes: PayloadSizes::default(),
         publication: commit.publication,
         timestamp: commit.timestamp,
         ordinary,
         properties,
         sequences,
-        group_bytes,
+        group_bytes: 0,
         group_operations,
-    })
-}
-
-// JSON escapes use at most six bytes per input byte. Avoid rendering large literals twice
-// just to bound a group; the allowance also covers record sequences added by the writer.
-fn json_size_bound(value: &Value) -> usize {
-    match value {
-        Value::String(text) => 2 + 6 * text.len(),
-        Value::Array(values) => 2 + values.iter().map(|v| 1 + json_size_bound(v)).sum::<usize>(),
-        Value::Object(values) => {
-            2 + values
-                .iter()
-                .map(|(k, v)| 4 + 6 * k.len() + json_size_bound(v))
-                .sum::<usize>()
-        }
-        _ => 32,
-    }
+    };
+    encoded.sizes = encoded.payload_sizes();
+    // Measure rendered JSON once on the encoder. Reserve deletion keys, record
+    // sequences, and array framing; the SQL planner rechecks expanded rollups.
+    encoded.group_bytes = encoded.sizes.encoded
+        + encoded
+            .properties
+            .iter()
+            .map(|property| match property.mutation {
+                PropertyMutation::Delete => 192,
+                PropertyMutation::Full(_) | PropertyMutation::Append { .. } => 256,
+            })
+            .sum::<usize>();
+    Ok(encoded)
 }
 
 /// Maximum encoded payload, including possible full property rollups, per logical commit.

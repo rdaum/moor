@@ -54,7 +54,7 @@ pub(super) fn empty(epoch: WriterEpoch, version: u64, timestamp: u64) -> Encoded
     EncodedCommit {
         payload_lease: None,
         byte_lease: None,
-        admission_bytes: 0,
+        sizes: Default::default(),
         publication: PublicationId::new(epoch, version),
         timestamp: Timestamp(timestamp),
         ordinary: vec![],
@@ -510,6 +510,87 @@ macro_rules! empty_changes {
     };
 }
 crate::relation_registry::relation_registry!(empty_changes);
+
+#[test]
+fn measured_group_sizes_pack_rendered_payloads_and_cover_sql_fields() {
+    use super::{plan::TransactionPlan, seed::Chains, state::Progress};
+    use crate::provider::logical::{
+        LogicalCommit, PreparedPropertyValueMutation, PreparedPropertyValueOp,
+    };
+    use moor_compiler::SourceProfile;
+    let epoch = WriterEpoch::random();
+    let profile = SourceProfile::default();
+    let cache = validation_cache::ValidationCache::default();
+    let key = ObjAndUUIDHolder::new(&Obj::mk_uuobjid_generated(), Uuid::new_v4());
+    let value = v_list(&[moor_var::v_str(
+        &"ordinary text with \"escaping\\\n牛".repeat(5000),
+    )]);
+    let mut chains = Chains::default();
+    chains.insert(
+        key.clone(),
+        crate::provider::property_value_store::PropertyValueChain::full(i64::MAX as u64 - 10),
+    );
+    let before = Progress {
+        epoch: epoch.as_u64(),
+        applied: 0,
+        commits: 0,
+        max_timestamp: 0,
+        property_sequence: i64::MAX - 10,
+        durable_fence: 0,
+    };
+    for mutation in [
+        PreparedPropertyValueMutation::Replace {
+            value: value.clone(),
+        },
+        PreparedPropertyValueMutation::AppendList {
+            suffix: value.as_list().unwrap().clone(),
+            final_value: value.clone(),
+        },
+        PreparedPropertyValueMutation::Delete,
+    ] {
+        let commits = (1..=4)
+            .map(|version| {
+                let mut changes = changes();
+                changes.object_propvalues.push(PreparedPropertyValueOp {
+                    property: key.clone(),
+                    base_timestamp: None,
+                    mutation: mutation.clone(),
+                });
+                encode::prepare(
+                    LogicalCommit {
+                        publication: PublicationId::new(epoch, version),
+                        timestamp: Timestamp(u64::MAX),
+                        changes,
+                        sequences: vec![],
+                        property_definition_changes: vec![],
+                    },
+                    &profile,
+                    usize::MAX,
+                    &cache,
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let estimated = commits.iter().map(|c| c.group_bytes).sum::<usize>();
+        assert!(
+            estimated < 1024 * 1024,
+            "four measured payloads should fit together"
+        );
+        let plan = TransactionPlan::group(
+            &before,
+            &chains,
+            &commits,
+            estimated,
+            |_, _, _| unreachable!(),
+        )
+        .unwrap();
+        assert_eq!(plan.commits.len(), 4);
+        assert!(
+            plan.bytes <= estimated,
+            "SQL keys and maximum-width sequences must fit"
+        );
+    }
+}
 
 #[test]
 #[ignore = "requires PostgreSQL fixture"]

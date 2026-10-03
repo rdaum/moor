@@ -229,10 +229,12 @@ persistence budget. Inspect applied progress and shutdown errors before treating
 as a complete backup boundary. Asynchronous SQL application still does not establish WAL durability.
 
 Writer groups currently retain their fixed defaults: 64 commits, 1 MiB, 4,096 operations, and a 1 ms
-collection window. An indivisible commit can exceed a normal group limit. Admission capacity is
-1,000 commits. PostgreSQL also has the payload byte target described below. More queue capacity
-cannot resolve sustained SQL application lag. Use the persistence diagnostics to measure the
-workload before changing these implementation limits.
+collection window. Group sizing uses measured encoded JSON bytes, with an allowance for SQL keys and
+record sequences. The SQL planner checks the final size again after expanding append rollups. An
+indivisible commit can exceed a normal group limit. Admission capacity is 1,000 commits. PostgreSQL
+also has the payload byte target described below. More queue capacity cannot resolve sustained SQL
+application lag. Use the persistence diagnostics to measure the workload before changing these
+implementation limits.
 
 ### PostgreSQL write limits
 
