@@ -211,7 +211,7 @@ mod tests {
         let match_result = matcher.match_object("#048D05-1234567890").unwrap();
         let obj = match_result.result.unwrap();
         assert!(obj.is_uuobjid());
-        assert_eq!(obj.to_literal(), "048D05-1234567890");
+        assert_eq!(obj.to_literal(), "#048D05-1234567890");
         assert!(match_result.candidates.is_empty());
     }
 
