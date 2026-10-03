@@ -37,7 +37,7 @@ fn connect() -> PostgresConnection {
 }
 
 #[test]
-#[ignore = "requires PostgreSQL 17/18 fixture and libpq 17+"]
+#[ignore = "requires PostgreSQL 16/17/18 fixture and libpq 16+"]
 fn parameters_preparation_and_streaming() {
     let mut conn = connect();
     let text = "quote '; SELECT 999; -- 🐄";
@@ -111,7 +111,7 @@ fn parameters_preparation_and_streaming() {
 }
 
 #[test]
-#[ignore = "requires PostgreSQL 17/18 fixture and libpq 17+"]
+#[ignore = "requires PostgreSQL 16/17/18 fixture and libpq 16+"]
 fn errors_limits_and_callback_abort_close_connection() {
     let mut conn = connect();
     let error = conn
@@ -166,7 +166,7 @@ fn errors_limits_and_callback_abort_close_connection() {
 }
 
 #[test]
-#[ignore = "requires PostgreSQL 17/18 fixture and libpq 17+"]
+#[ignore = "requires PostgreSQL 16/17/18 fixture and libpq 16+"]
 fn query_deadline_and_shutdown_are_bounded() {
     let mut conn = connect();
     let start = Instant::now();
@@ -198,7 +198,7 @@ fn query_deadline_and_shutdown_are_bounded() {
 }
 
 #[test]
-#[ignore = "requires libpq 17+"]
+#[ignore = "requires libpq 16+"]
 fn stalled_handshake_obeys_deadline_and_shutdown() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let config = PostgresConnectOptions::new(
@@ -232,7 +232,7 @@ fn stalled_handshake_obeys_deadline_and_shutdown() {
 }
 
 #[test]
-#[ignore = "requires PostgreSQL 17/18 fixture and libpq 17+"]
+#[ignore = "requires PostgreSQL 16/17/18 fixture and libpq 16+"]
 fn disconnect_does_not_reconnect() {
     let mut conn = connect();
     let mut pid = String::new();
@@ -313,7 +313,7 @@ fn configuration_and_expired_deadlines_fail_before_network_io() {
 }
 
 #[test]
-#[ignore = "requires PostgreSQL 17/18 fixture and libpq 17+"]
+#[ignore = "requires PostgreSQL 16/17/18 fixture and libpq 16+"]
 fn callback_panic_closes_unfinished_stream() {
     let mut conn = connect();
     let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -334,7 +334,10 @@ fn unix_endpoint_overrides_connection_address() {
     let path = std::env::var("MOOR_PG_TEST_SOCKET").unwrap();
     let mut options = options();
     // The mapped TCP port is not the port used for the Unix socket filename.
-    options.connection.push_str(" hostaddr=192.0.2.1 port=5432");
+    let port = std::env::var("MOOR_PG_TEST_SOCKET_PORT").unwrap_or_else(|_| "5432".into());
+    options
+        .connection
+        .push_str(&format!(" hostaddr=192.0.2.1 port={port}"));
     options.endpoint = PostgresEndpoint::Unix(path.into());
     let mut conn =
         PostgresConnection::connect(&options, deadline(), PostgresShutdown::default()).unwrap();
@@ -351,7 +354,7 @@ fn unix_endpoint_overrides_connection_address() {
 }
 
 #[test]
-#[ignore = "requires libpq 17+"]
+#[ignore = "requires libpq 16+"]
 fn stalled_upload_obeys_deadline() {
     use std::io::{Read, Write};
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();

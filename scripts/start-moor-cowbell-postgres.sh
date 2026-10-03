@@ -26,7 +26,7 @@ while [[ $# -gt 0 ]]; do
 Usage: scripts/start-moor-cowbell-postgres.sh [--debug|--release] [-- moor arguments]
 
 Builds moor with Cargo and runs Cowbell using native PostgreSQL. No containers.
-Requires PostgreSQL 17 or 18 and libpq 17+ development/runtime libraries.
+Requires PostgreSQL 16, 17, or 18 and libpq 16+ development/runtime libraries.
 Defaults to a debug build. PostgreSQL stays running when moor exits.
 
 Environment:
@@ -46,7 +46,7 @@ HELP
 done
 
 if [[ -z ${PG_BIN:-} ]]; then
-    for candidate in /usr/lib/postgresql/18/bin /usr/lib/postgresql/17/bin; do
+    for candidate in /usr/lib/postgresql/18/bin /usr/lib/postgresql/17/bin /usr/lib/postgresql/16/bin; do
         if [[ -x "$candidate/postgres" ]]; then PG_BIN=$candidate; break; fi
     done
 fi
@@ -55,18 +55,18 @@ if [[ -z ${PG_BIN:-} ]] && command -v pg_config >/dev/null; then
 fi
 for command in postgres initdb pg_ctl psql; do
     if [[ ! -x "${PG_BIN:-}/$command" ]]; then
-        echo "Missing native PostgreSQL tools. Install PostgreSQL 17 or 18, or set PG_BIN. See --help." >&2
+        echo "Missing native PostgreSQL tools. Install PostgreSQL 16, 17, or 18, or set PG_BIN. See --help." >&2
         exit 1
     fi
 done
 case "$("$PG_BIN/postgres" --version)" in
-    *" 17."*|*" 18."*) ;;
-    *) echo "PostgreSQL 17 or 18 is required; found $("$PG_BIN/postgres" --version). See --help." >&2; exit 1 ;;
+    *" 16."*|*" 17."*|*" 18."*) ;;
+    *) echo "PostgreSQL 16, 17, or 18 is required; found $("$PG_BIN/postgres" --version). See --help." >&2; exit 1 ;;
 esac
 if [[ -n ${PQ_LIB_DIR:-} ]]; then
     export LD_LIBRARY_PATH="$PQ_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-elif ! pkg-config --atleast-version=17 libpq; then
-    echo "libpq 17+ development/runtime libraries are required. Install them or set PQ_LIB_DIR. See --help." >&2
+elif ! pkg-config --atleast-version=16 libpq; then
+    echo "libpq 16+ development/runtime libraries are required. Install them or set PQ_LIB_DIR. See --help." >&2
     exit 1
 fi
 

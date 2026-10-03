@@ -18,8 +18,8 @@ mode=${1:-build}
 arch=${2:-$(dpkg --print-architecture)}
 client=${3:-system}
 case "$mode" in build|runtime) ;; *) echo 'Expected build or runtime' >&2; exit 2;; esac
-case "$client" in system|17|18) ;; *) echo 'Expected system, 17, or 18 client' >&2; exit 2;; esac
-minimum=17
+case "$client" in system|16|17|18) ;; *) echo 'Expected system, 16, 17, or 18 client' >&2; exit 2;; esac
+minimum=16
 packages=("libpq5:$arch")
 if [[ "$mode" == build ]]; then packages+=("libpq-dev:$arch"); fi
 

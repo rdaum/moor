@@ -54,6 +54,53 @@ removed when each request finishes. Limits apply to individual requests; excess 
 receives a busy response. Invalid limits or inaccessible job storage prevent startup before database
 import. Shutdown terminates active Git child processes before the worker detaches.
 
+## PostgreSQL requirements
+
+The optional `postgres` Cargo feature requires a thread-safe libpq 16 or newer. Supported servers
+are PostgreSQL 16, 17, and 18. The client and server major versions can differ. Default builds use
+Fjall and do not require libpq.
+
+On Debian or Ubuntu, install the build dependency with:
+
+```bash
+sudo bash scripts/install-libpq.sh build
+```
+
+The installer retains compatible installed libraries. If development headers are absent, it uses
+compatible distribution packages. It adds the PostgreSQL package repository only when necessary. For
+runtime images, use `runtime` instead of `build`. PostgreSQL package variants depend on
+`libpq5 (>= 16)`.
+
+Exact client versions are for compatibility tests. For example, this command can downgrade an
+existing client installation:
+
+```bash
+sudo bash scripts/install-libpq.sh build "$(dpkg --print-architecture)" 16
+```
+
+The adapter checks `PQisthreadsafe()` before connection setup. Each connection belongs to one worker
+thread. The connection options include `require_auth`, which requires libpq 16. The adapter uses
+nonblocking connections, parameterized queries, and single-row results. It does not require the
+cancellation or chunk APIs added in later versions. See the PostgreSQL documentation for
+[thread safety](https://www.postgresql.org/docs/16/libpq-threading.html) and
+[connection options](https://www.postgresql.org/docs/16/libpq-connect.html).
+
+The schema uses domains, JSONB, advisory locks, and conflict handling supported by PostgreSQL 16.
+The compatibility suite exercises schema creation, startup, prepared writes, recovery, and both SQL
+commit policies.
+
+For a disposable local fixture with TLS and SCRAM authentication, run:
+
+```bash
+scripts/test-postgres-adapter.sh 16 native
+```
+
+Set `PG_BIN` if the server tools are outside `/usr/lib/postgresql/16/bin`. The fixture creates a
+private temporary cluster and removes it after the tests. It also tests server crashes. It does not
+use the Cowbell cluster. Use `17` or `18` to test those server versions. Omit `native` for Docker.
+Set `MOOR_PG_TEST_CLI=1` to include builds and configuration checks for all four storage-aware
+tools. Set `LD_LIBRARY_PATH` to test a separately installed libpq runtime.
+
 ## Daemon, Hosts, Workers, and RPC (Advanced)
 
 For split-process or clustered deployment, the server is broken into separate binaries:

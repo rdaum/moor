@@ -112,9 +112,13 @@ impl PostgresConnection {
     ) -> Result<Self, PostgresError> {
         options.validate()?;
         shutdown.check(deadline)?;
-        // SAFETY: PQlibVersion has no arguments or per-connection state.
-        if unsafe { pq::PQlibVersion() } < 170000 {
+        // SAFETY: these getters have no arguments or per-connection state. libpq 16
+        // can be built without thread support; each connection still has one owner.
+        if unsafe { pq::PQlibVersion() } < 160000 {
             return Err(PostgresError::UnsupportedVersion);
+        }
+        if unsafe { pq::PQisthreadsafe() } != 1 {
+            return Err(PostgresError::ThreadSafety);
         }
         let connection = connection_settings(options)?;
         shutdown.check(deadline)?;
@@ -190,7 +194,7 @@ impl PostgresConnection {
                 return Err(PostgresError::Connection);
             }
             let version = pq::PQserverVersion(raw.as_ptr());
-            if !(170000..190000).contains(&version) {
+            if !(160000..190000).contains(&version) {
                 return Err(PostgresError::UnsupportedVersion);
             }
             for name in [c"server_encoding", c"client_encoding"] {

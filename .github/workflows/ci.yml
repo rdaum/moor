@@ -89,13 +89,14 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   postgres:
-    name: PostgreSQL ${{ matrix.server }} with libpq 17
+    name: PostgreSQL ${{ matrix.server }} with libpq ${{ matrix.client }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        server: [17, 18]
+        server: [16, 17, 18]
+        client: [16, system]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install build dependencies
@@ -114,8 +115,8 @@ jobs:
             if ldd "target/debug/$binary" | grep -q libpq; then exit 1; fi
           done
           python3 scripts/test-postgres-cli.py --disabled
-      - name: Install minimum supported client
-        run: sudo bash scripts/install-libpq.sh build "$(dpkg --print-architecture)" 17
+      - name: Install selected client
+        run: sudo bash scripts/install-libpq.sh build "$(dpkg --print-architecture)" "${{ matrix.client }}"
       - name: Run PostgreSQL adapter, storage, and CLI contracts
         env:
           MOOR_PG_TEST_CLI: '1'

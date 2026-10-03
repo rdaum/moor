@@ -109,4 +109,4 @@ trace_events = ["moor-kernel/trace_events"]
 [package.metadata.deb.variants.postgres]
 name = "moor-daemon"
 features = ["postgres"]
-depends = "$auto, systemd, openssl, libpq5 (>= 17)"
+depends = "$auto, systemd, openssl, libpq5 (>= 16)"

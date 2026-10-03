@@ -83,8 +83,10 @@ pub enum PostgresError {
     Protocol(&'static str),
     #[error("PostgreSQL row exceeds its configured limit")]
     RowLimit,
-    #[error("PostgreSQL requires libpq 17 or newer and server 17 or 18")]
+    #[error("PostgreSQL requires libpq 16 or newer and server 16, 17, or 18")]
     UnsupportedVersion,
+    #[error("PostgreSQL requires a thread-safe libpq build")]
+    ThreadSafety,
     #[error("PostgreSQL database and client encoding must be UTF8")]
     Encoding,
 }

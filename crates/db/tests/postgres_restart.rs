@@ -32,8 +32,14 @@ use uuid::Uuid;
 #[test]
 #[ignore = "requires exclusive restarting PostgreSQL fixture"]
 fn server_crash_preserves_fenced_progress_and_recovers_pending_appends() {
-    let container =
-        std::env::var("MOOR_PG_TEST_CONTAINER_ID").expect("run scripts/test-postgres-adapter.sh");
+    let container = std::env::var("MOOR_PG_TEST_CONTAINER_ID").ok();
+    let native = std::env::var("MOOR_PG_TEST_NATIVE_DATA")
+        .ok()
+        .map(|data| (std::env::var("MOOR_PG_TEST_NATIVE_BIN").unwrap(), data));
+    assert!(
+        container.is_some() || native.is_some(),
+        "run scripts/test-postgres-adapter.sh"
+    );
     for policy in [
         PostgresCommitPolicy::Synchronous,
         PostgresCommitPolicy::Asynchronous,
@@ -75,20 +81,27 @@ fn server_crash_preserves_fenced_progress_and_recovers_pending_appends() {
         loader.commit().unwrap();
         let epoch = db.publication().epoch();
         db.wait_for_durability(Duration::from_secs(10)).unwrap();
-        // Immediate shutdown skips a clean checkpoint. The fixture supervisor restarts PostgreSQL
-        // without removing its tmpfs volume or changing the database identity.
-        let stopped = Command::new("docker")
-            .args([
-                "exec",
-                "--user",
-                "postgres",
-                &container,
-                "sh",
-                "-c",
-                "pg_ctl -D \"$PGDATA\" -m immediate -w stop",
-            ])
-            .output()
-            .unwrap();
+        // Immediate shutdown skips a clean checkpoint. Both fixtures retain the data directory
+        // and database identity. The Docker supervisor restarts the server automatically.
+        let stopped = if let Some((bin, data)) = &native {
+            Command::new(format!("{bin}/pg_ctl"))
+                .args(["-D", data, "-m", "immediate", "-w", "stop"])
+                .output()
+                .unwrap()
+        } else {
+            Command::new("docker")
+                .args([
+                    "exec",
+                    "--user",
+                    "postgres",
+                    container.as_ref().unwrap(),
+                    "sh",
+                    "-c",
+                    "pg_ctl -D \"$PGDATA\" -m immediate -w stop",
+                ])
+                .output()
+                .unwrap()
+        };
         assert!(
             stopped.status.success(),
             "{}",
@@ -110,6 +123,24 @@ fn server_crash_preserves_fenced_progress_and_recovers_pending_appends() {
             .set_property(&object, property, None, None, Some(appended.clone()))
             .unwrap();
         loader.commit().unwrap();
+        if let Some((bin, data)) = &native {
+            let started = Command::new(format!("{bin}/pg_ctl"))
+                .args([
+                    "-D",
+                    data,
+                    "-l",
+                    &format!("{data}/restart.log"),
+                    "-w",
+                    "start",
+                ])
+                .output()
+                .unwrap();
+            assert!(
+                started.status.success(),
+                "{}",
+                String::from_utf8_lossy(&started.stderr)
+            );
+        }
         db.wait_for_durability(Duration::from_secs(20)).unwrap();
         assert_eq!(db.publication().epoch(), epoch);
         assert!(db.persistence_status().healthy);
