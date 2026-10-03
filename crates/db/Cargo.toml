@@ -37,6 +37,7 @@ harness = false
 edn-format.workspace = true
 eyre.workspace = true
 micromeasure.workspace = true
+moor-compiler = { path = "../compiler" }
 shuttle.workspace = true
 tempfile.workspace = true
 

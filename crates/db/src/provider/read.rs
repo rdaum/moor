@@ -13,7 +13,8 @@
 
 //! Snapshot-bound logical reads. Cursors decode at most one tuple per advance.
 //!
-//! All scans use object reference byte order, then UUID bytes and metadata name.
+//! All scans use object reference byte order, then UUID bytes. Metadata names within
+//! each entity use a stable backend order; the shared loader sorts visible names.
 //! This order is shared across relations for streaming export joins. Callers must
 //! not assume numeric object order. Runtime predicate scans use resident indexes.
 use crate::{

@@ -128,6 +128,39 @@ transaction snapshots, and pending commits also consume memory.
 The PostgreSQL query timeout also bounds the wait for preparation before publication. Preparation
 errors and timeouts return a transaction error. They do not publish changes or disable the writer.
 
+### PostgreSQL snapshots and objdef export
+
+`moorc --out-objdef-dir` and the `moor-emh` export command use the shared snapshot loader with
+PostgreSQL. Acquisition captures the current publication and waits for its applied prefix. It then
+reserves a reader slot and opens a dedicated read-only, repeatable-read transaction. The reader
+checks the writer epoch and applied prefix in that transaction. One deadline covers all acquisition
+steps; the default snapshot API allows 10 seconds. An explicit zero deadline returns `ResourceBusy`
+without starting a reader.
+
+The snapshot can include later publications. Both naming metadata and object export use the same
+transaction, so later writes cannot change an export in progress. Existing sparse inherited-property
+rules apply, including value-only, permission-only, and metadata-only local overrides.
+
+Set `--pg-max-exports` or YAML `storage.postgres.max_exports` to limit reader connections. The
+default is two; supported values are 1 through 64. Callers wait in arrival order for capacity,
+within the acquisition deadline. A loader holds its slot until it is dropped, including idle time
+before export. Each fetch has its own query deadline. An acquired snapshot can outlive writer
+shutdown.
+
+Relation scans use server-side cursors with at most eight returned rows per fetch. Each row remains
+subject to the configured row limit. Export retains naming, parent, and property-definition indexes,
+fetch buffers, and the current object's payload. It compiles stored verb source for the shared
+objdef interface. This does not establish a constant memory bound for an entire export.
+
+A lost connection ends the snapshot; readers never reconnect within an export. Restart a failed
+export. Failed output remains in its `.in-progress` directory until you remove it or choose another
+output path. Closing the reader connection releases the transaction without a rollback round trip.
+
+The `db_counters()` values `persistence_postgres_active_exports`,
+`persistence_postgres_export_limit`, and `persistence_postgres_oldest_export_micros` report reader
+slots and the age of the oldest reservation. Reservations include connection setup. Long-held read
+transactions retain old row versions in PostgreSQL; close unused loaders promptly.
+
 ### Persistence diagnostics
 
 The wizard-only `db_counters()` builtin exposes live persistence status. Status values use the

@@ -24,7 +24,7 @@ use crate::{
 };
 use moor_common::{
     model::{
-        HasUuid, Named, ObjAttrs, ObjSet, ObjectRef, PropDef, PropDefs, PropPerms,
+        HasUuid, Named, ObjAttrs, ObjSet, ObjectRef, PropDef, PropDefs, PropFlag, PropPerms,
         PropertySnapshot, ValSet, VerbDefs, WorldStateError,
         loader::{
             SnapshotExportMetadata, SnapshotExportObject, SnapshotExportSession,
@@ -1058,16 +1058,40 @@ impl SnapshotLoader {
         // Get property value
         let value = self.get_property_value(&key)?;
 
-        // Get property permissions - if not found, this property doesn't exist on this object
-        let Some(perms) = self.get_from_snapshot::<ObjAndUUIDHolder, PropPerms>(
+        if let Some(perms) = self.get_from_snapshot::<ObjAndUUIDHolder, PropPerms>(
             &self.readers.object_propflags,
             &key,
-        )?
-        else {
-            return Err(WorldStateError::PropertyNotFound(*obj, uuid.to_string()));
-        };
-
-        Ok((value, perms))
+        )? {
+            return Ok((value, perms));
+        }
+        // Sparse local values can omit permissions. Derive the same canonical policy as
+        // runtime reads, without creating a local row or resolving an inherited value.
+        for ancestor in self.get_ancestors(obj, true)?.iter() {
+            if let Some(definition) = self
+                .get_properties(&ancestor)?
+                .iter()
+                .find(|definition| definition.uuid() == uuid && definition.definer() == ancestor)
+            {
+                let key = ObjAndUUIDHolder::new(&definition.definer(), uuid);
+                let perms = self
+                    .get_from_snapshot::<ObjAndUUIDHolder, PropPerms>(
+                        &self.readers.object_propflags,
+                        &key,
+                    )?
+                    .ok_or_else(|| {
+                        WorldStateError::DatabaseError(format!(
+                            "Canonical property permissions missing on {ancestor} for {uuid}"
+                        ))
+                    })?;
+                let perms = if perms.flags().contains(PropFlag::Chown) && *obj != ancestor {
+                    perms.with_owner(self.get_object_owner(obj)?)
+                } else {
+                    perms
+                };
+                return Ok((value, perms));
+            }
+        }
+        Err(WorldStateError::PropertyNotFound(*obj, uuid.to_string()))
     }
 
     fn metadata_scan(&self, request: MetadataScan) -> Result<Vec<(Symbol, Var)>, WorldStateError> {
@@ -1090,6 +1114,7 @@ impl SnapshotLoader {
     fn get_ancestors(&self, obj: &Obj, include_self: bool) -> Result<ObjSet, WorldStateError> {
         let mut ancestors = Vec::new();
         let mut current = *obj;
+        let mut seen = ahash::AHashSet::from_iter([current]);
 
         if include_self {
             ancestors.push(current);
@@ -1099,13 +1124,14 @@ impl SnapshotLoader {
         while let Some(parent) =
             self.get_from_snapshot::<Obj, Obj>(&self.readers.object_parent, &current)?
         {
-            if parent == current {
-                // Avoid infinite loops in case of self-parenting
-                break;
-            }
             // Stop at NOTHING - don't add system objects to hierarchy
             if parent.is_nothing() {
                 break;
+            }
+            if !seen.insert(parent) {
+                return Err(WorldStateError::DatabaseError(
+                    "Cycle in snapshot object ancestry".into(),
+                ));
             }
             ancestors.push(parent);
             current = parent;

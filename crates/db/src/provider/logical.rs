@@ -97,6 +97,9 @@ pub struct PersistenceReceipt {
 /// Typed persistence failures shared by storage backends and the coordinator.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum PersistenceError {
+    #[error("snapshot reader resources are busy")]
+    ResourceBusy,
+
     #[error("publication {publication:?} belongs to a stale writer epoch")]
     StalePublication { publication: PublicationId },
 

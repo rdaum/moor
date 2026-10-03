@@ -493,6 +493,8 @@ impl Drop for WorkerHealthGuard {
 /// Wait failures surfaced to the coordinator.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum WriterWaitError {
+    #[error("snapshot reader resources are busy")]
+    ResourceBusy,
     #[error("timed out waiting for persistence through version {version}")]
     Timeout { version: u64 },
     #[error("persistence writer failed: {detail}")]

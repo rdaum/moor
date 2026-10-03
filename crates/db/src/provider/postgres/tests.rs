@@ -769,6 +769,31 @@ fn invalid_stored_source_reports_the_verb_and_source_position() {
             |_| unreachable!(),
         )
         .unwrap();
+    let pool = super::snapshot::ExportPool::new(1);
+    let read_session = super::snapshot::ReadSession::open(
+        config.clone(),
+        &pool,
+        PublicationId::new(epoch, 1),
+        Instant::now() + config.query_timeout,
+        || true,
+    )
+    .unwrap();
+    let snapshot = crate::provider::snapshot_loader::SnapshotLoader {
+        readers: super::reader::readers(read_session),
+    };
+    use moor_common::model::loader::SnapshotInterface;
+    let error = snapshot
+        .get_verb_program(&Obj::mk_id(7), key.uuid())
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("object_verbs")
+            && error.contains(&key.uuid().to_string())
+            && error.contains("@ 2/"),
+        "{error}"
+    );
+    drop(snapshot);
+    assert_eq!(pool.diagnostics().0, 0);
     let result = Session::open(
         config.clone(),
         &Relations::init(),
@@ -863,6 +888,29 @@ fn inherited_properties_remain_sparse_and_metadata_keeps_its_holder() {
         tx.property_metadata(&other, definition.uuid()).unwrap(),
         vec![(metadata, v_str("other metadata"))]
     );
+    let snapshot = db.create_snapshot().unwrap();
+    for (holder, expected) in [(child, "child metadata"), (other, "other metadata")] {
+        let properties = snapshot.get_property_snapshots(&holder).unwrap();
+        assert_eq!(properties.len(), 1);
+        assert!(properties[0].value.is_none() && properties[0].permissions.is_none());
+        assert_eq!(properties[0].metadata, vec![(metadata, v_str(expected))]);
+        assert_eq!(
+            snapshot
+                .get_property_metadata(&holder, definition.uuid())
+                .unwrap(),
+            vec![(metadata, v_str(expected))]
+        );
+    }
+    let mut export = snapshot.begin_export(&[]).unwrap();
+    while let Some(object) = export.next_object().unwrap() {
+        if object.oid == child || object.oid == other {
+            assert_eq!(object.properties.len(), 1);
+            assert!(
+                object.properties[0].value.is_none() && object.properties[0].permissions.is_none()
+            );
+            assert_eq!(object.properties[0].metadata.len(), 1);
+        }
+    }
     // A metadata-only local row must not materialize a property value or permission row.
     assert_eq!(count(&config, "object_propvalues"), 1);
     assert_eq!(count(&config, "object_propflags"), 1);
@@ -1643,6 +1691,11 @@ fn diagnostics_measure_blocked_payloads_then_release_them_after_application() {
         .set_property(&object, property, None, None, Some(appended))
         .unwrap();
     loader.commit().unwrap();
+    assert!(
+        db.create_snapshot_with_timeout(Duration::from_millis(20))
+            .is_err()
+    );
+    assert_eq!(db.persistence_status().postgres.unwrap().active_exports, 0);
     let status = db.persistence_status();
     assert_eq!(status.published, prior.published + 1);
     assert_eq!(status.applied, prior.applied);
@@ -1675,4 +1728,325 @@ fn diagnostics_measure_blocked_payloads_then_release_them_after_application() {
     assert!(done.group_sql_statements > 0 && done.group_payload_bytes > 0);
     assert_eq!(done.group_end_reasons.iter().sum::<u64>(), done.groups);
     assert_eq!(done.group_commits, status.applied);
+}
+
+#[test]
+#[ignore = "requires PostgreSQL fixture"]
+fn snapshots_keep_one_prefix_across_point_reads_export_and_writer_shutdown() {
+    use crate::{Database, DatabaseConfig, PersistenceConfig, StorageConfig, TxDB};
+    use moor_common::{
+        model::{HasUuid, ObjAttrs, ObjectKind, ValSet},
+        util::BitEnum,
+    };
+    use moor_var::{NOTHING, Symbol, v_str};
+    use std::{collections::BTreeMap, time::Duration};
+    let mut config = config();
+    config.max_exports = 1;
+    initialize_postgres_schema(&config).unwrap();
+    let (db, _) = TxDB::try_open(
+        StorageConfig::postgres(config),
+        DatabaseConfig::default(),
+        PersistenceConfig::default(),
+    )
+    .unwrap();
+    let root = Obj::mk_id(0);
+    let property = Symbol::mk("history");
+    let name_key = Symbol::mk("display\0name");
+    let mut loader = db.loader_client().unwrap();
+    loader
+        .create_object(
+            ObjectKind::Objid(root),
+            &ObjAttrs::new(root, NOTHING, NOTHING, BitEnum::new(), "root"),
+        )
+        .unwrap();
+    loader
+        .define_property(
+            &root,
+            &root,
+            property,
+            &root,
+            BitEnum::new(),
+            Some(v_list(&[v_int(1)])),
+        )
+        .unwrap();
+    let mut names = BTreeMap::from([(root, "root".to_owned())]);
+    for (index, kind) in [
+        ObjectKind::Objid(Obj::mk_id(1)),
+        ObjectKind::Objid(Obj::mk_id(256)),
+        ObjectKind::Objid(Obj::mk_id(65536)),
+        ObjectKind::UuObjId,
+        ObjectKind::Anonymous,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let name = format!("child-{index}");
+        let object = loader
+            .create_object(
+                kind,
+                &ObjAttrs::new(root, root, NOTHING, BitEnum::new(), &name),
+            )
+            .unwrap();
+        loader
+            .set_object_metadata(&object, name_key, v_str(&name))
+            .unwrap();
+        names.insert(object, name);
+    }
+    let uuid = loader
+        .get_existing_properties(&root)
+        .unwrap()
+        .iter()
+        .next()
+        .unwrap()
+        .uuid();
+    loader.commit().unwrap();
+    // Enough appended records to cross a fetch boundary without triggering a rollup.
+    for n in 2..=12 {
+        let mut loader = db.loader_client().unwrap();
+        loader
+            .set_property(
+                &root,
+                property,
+                None,
+                None,
+                Some(v_list(&(1..=n).map(v_int).collect::<Vec<_>>())),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+    }
+    let snapshot = db.create_snapshot().unwrap();
+    assert_eq!(db.persistence_status().postgres.unwrap().active_exports, 1);
+    let started = Instant::now();
+    assert!(
+        db.create_snapshot_with_timeout(Duration::from_millis(40))
+            .is_err()
+    );
+    assert!(started.elapsed() < Duration::from_secs(1));
+    assert_eq!(db.persistence_status().postgres.unwrap().active_exports, 1);
+    let before = snapshot.get_property_value(&root, uuid).unwrap().0.unwrap();
+    assert_eq!(before, v_list(&(1..=12).map(v_int).collect::<Vec<_>>()));
+    let mut export = snapshot.begin_export(&[name_key]).unwrap();
+    assert_eq!(export.object_count(), names.len());
+    let mut loader = db.loader_client().unwrap();
+    loader.set_object_name(&root, "later".into()).unwrap();
+    loader
+        .set_property(&root, property, None, None, Some(v_int(999)))
+        .unwrap();
+    loader.commit().unwrap();
+    db.wait_for_durability(Duration::from_secs(10)).unwrap();
+    assert_eq!(
+        snapshot.get_object(&root).unwrap().name().as_deref(),
+        Some("root")
+    );
+    assert_eq!(
+        snapshot.get_property_value(&root, uuid).unwrap().0,
+        Some(before.clone())
+    );
+    // The owned read session is independent of the writer and its shutdown signal.
+    drop(db);
+    let mut exported = BTreeMap::new();
+    while let Some(object) = export.next_object().unwrap() {
+        if object.oid == root {
+            assert_eq!(object.properties[0].value, Some(before.clone()));
+        } else {
+            assert!(object.properties.is_empty());
+        }
+        exported.insert(object.oid, object.name);
+    }
+    assert_eq!(exported, names);
+    drop(export);
+    assert_eq!(
+        snapshot.get_property_value(&root, uuid).unwrap().0,
+        Some(before)
+    );
+}
+
+#[test]
+#[ignore = "requires PostgreSQL fixture"]
+fn snapshot_disconnect_fails_without_reconnecting_and_releases_capacity() {
+    use crate::{Database, DatabaseConfig, PersistenceConfig, StorageConfig, TxDB};
+    use moor_common::{
+        model::{ObjAttrs, ObjectKind},
+        util::BitEnum,
+    };
+    use moor_var::NOTHING;
+    use std::time::Duration;
+    let mut config = config();
+    config.max_exports = 1;
+    initialize_postgres_schema(&config).unwrap();
+    let (db, _) = TxDB::try_open(
+        StorageConfig::postgres(config.clone()),
+        DatabaseConfig::default(),
+        PersistenceConfig::default(),
+    )
+    .unwrap();
+    let mut loader = db.loader_client().unwrap();
+    let object = loader
+        .create_object(
+            ObjectKind::NextObjid,
+            &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "before"),
+        )
+        .unwrap();
+    loader.commit().unwrap();
+    let snapshot = db.create_snapshot().unwrap();
+    // Only this schema's snapshot transaction has this exact last progress query.
+    let mut admin = client(&config);
+    let progress = config.schema.qualify("writer_progress").unwrap();
+    let mut killed = 0;
+    admin.query("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE pid<>pg_backend_pid() AND state='idle in transaction' AND query LIKE $1", &[PostgresParam::Text(25, &format!("%FROM {progress}%"))], Instant::now()+config.query_timeout, |_| { killed += 1; Ok(()) }).unwrap();
+    assert_eq!(killed, 1);
+    assert!(snapshot.get_object(&object).is_err());
+    assert!(snapshot.get_object(&object).is_err());
+    let replacement = db
+        .create_snapshot_with_timeout(Duration::from_secs(2))
+        .unwrap();
+    assert_eq!(
+        replacement.get_object(&object).unwrap().name().as_deref(),
+        Some("before")
+    );
+    drop(replacement);
+    assert_eq!(db.persistence_status().postgres.unwrap().active_exports, 0);
+}
+
+#[test]
+#[ignore = "requires PostgreSQL fixture"]
+fn snapshots_preserve_value_only_rows_and_report_malformed_chains_without_payloads() {
+    use crate::{Database, DatabaseConfig, PersistenceConfig, StorageConfig, TxDB};
+    use moor_common::{
+        model::{HasUuid, ObjAttrs, ObjectKind, ValSet},
+        util::BitEnum,
+    };
+    use moor_var::{NOTHING, Symbol, v_str};
+    use std::time::Duration;
+    let config = config();
+    initialize_postgres_schema(&config).unwrap();
+    let (db, _) = TxDB::try_open(
+        StorageConfig::postgres(config.clone()),
+        DatabaseConfig::default(),
+        PersistenceConfig::default(),
+    )
+    .unwrap();
+    let mut loader = db.loader_client().unwrap();
+    let parent = loader
+        .create_object(
+            ObjectKind::NextObjid,
+            &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
+        )
+        .unwrap();
+    let property = Symbol::mk("value");
+    loader
+        .define_property(
+            &parent,
+            &parent,
+            property,
+            &parent,
+            BitEnum::new(),
+            Some(v_int(1)),
+        )
+        .unwrap();
+    let child = loader
+        .create_object(
+            ObjectKind::NextObjid,
+            &ObjAttrs::new(parent, parent, NOTHING, BitEnum::new(), "child"),
+        )
+        .unwrap();
+    loader
+        .set_property(&child, property, None, None, Some(v_str("local")))
+        .unwrap();
+    let uuid = loader
+        .get_existing_properties(&parent)
+        .unwrap()
+        .iter()
+        .next()
+        .unwrap()
+        .uuid();
+    loader.commit().unwrap();
+    db.wait_for_durability(Duration::from_secs(10)).unwrap();
+    drop(db);
+    let mut admin = client(&config);
+    // Construct the supported value-only stored shape while the writer is offline.
+    admin
+        .query(
+            &format!(
+                "DELETE FROM {} WHERE object_ref=$1",
+                config.schema.qualify("object_propflags").unwrap()
+            ),
+            &[PostgresParam::Text(25, &child.to_literal())],
+            Instant::now() + config.query_timeout,
+            |_| unreachable!(),
+        )
+        .unwrap();
+    let (db, _) = TxDB::try_open(
+        StorageConfig::postgres(config.clone()),
+        DatabaseConfig::default(),
+        PersistenceConfig::default(),
+    )
+    .unwrap();
+    let snapshot = db.create_snapshot().unwrap();
+    let rows = snapshot.get_property_snapshots(&child).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].value, Some(v_str("local")));
+    assert!(rows[0].permissions.is_none());
+    let mut export = snapshot.begin_export(&[]).unwrap();
+    while let Some(object) = export.next_object().unwrap() {
+        if object.oid == child {
+            assert_eq!(object.properties[0].value, Some(v_str("local")));
+            assert!(object.properties[0].permissions.is_none());
+        }
+    }
+    drop(export);
+    // Corruption injection is fixture-only; snapshots must preserve safe row context.
+    admin.query(&format!("UPDATE {} SET value_literal='\"private-payload\"', value_kind='list' WHERE object_ref=$1",config.schema.qualify("object_propvalues").unwrap()), &[PostgresParam::Text(25,&child.to_literal())], Instant::now()+config.query_timeout, |_|unreachable!()).unwrap();
+    let malformed = db.create_snapshot().unwrap();
+    let message = malformed
+        .get_property_value(&child, uuid)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        message.contains("object_propvalues") && message.contains(&uuid.to_string()),
+        "{message}"
+    );
+    assert!(!message.contains("private-payload"));
+    assert_eq!(
+        snapshot.get_property_value(&child, uuid).unwrap().0,
+        Some(v_str("local"))
+    );
+    drop(malformed);
+    drop(snapshot);
+    assert_eq!(db.persistence_status().postgres.unwrap().active_exports, 0);
+    let pool = super::snapshot::ExportPool::new(1);
+    let error = super::snapshot::ReadSession::open(
+        config.clone(),
+        &pool,
+        PublicationId::new(WriterEpoch::random(), 0),
+        Instant::now() + config.query_timeout,
+        || true,
+    )
+    .err()
+    .unwrap();
+    assert_eq!(error, PostgresError::OwnershipLost);
+    assert_eq!(pool.diagnostics().0, 0);
+    admin
+        .query(
+            &format!(
+                "INSERT INTO {}(object_ref,logical_timestamp,parent_ref) VALUES($2,0,$1) ON CONFLICT(object_ref) DO UPDATE SET parent_ref=excluded.parent_ref",
+                config.schema.qualify("object_parent").unwrap()
+            ),
+            &[
+                PostgresParam::Text(25, &child.to_literal()),
+                PostgresParam::Text(25, &parent.to_literal()),
+            ],
+            Instant::now() + config.query_timeout,
+            |_| unreachable!(),
+        )
+        .unwrap();
+    let cyclic = db.create_snapshot().unwrap();
+    assert!(
+        cyclic
+            .get_property_snapshots(&parent)
+            .unwrap_err()
+            .to_string()
+            .contains("Cycle")
+    );
+    assert!(cyclic.begin_export(&[]).is_err());
 }

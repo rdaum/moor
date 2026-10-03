@@ -116,7 +116,7 @@ chmod 600 "$fixture/pgpass"
 export PGSERVICEFILE="$fixture/service.conf" PGPASSFILE="$fixture/pgpass"
 export MOOR_PG_TEST_CONNINFO='service=moor_adapter' MOOR_PG_TEST_TLS=1
 export MOOR_PG_TEST_SOCKET="$fixture/socket"
-cargo test --locked -p moor-db --features postgres --test postgres_adapter --test postgres_storage -- --ignored
+cargo test --locked -p moor-db --features postgres --test postgres_adapter --test postgres_storage --test snapshot_contract -- --ignored
 cargo test --locked -p moor-db --features postgres --lib provider::postgres:: -- --ignored
 cargo test --locked -p moor-db --features postgres --test postgres_restart -- --ignored --test-threads=1
 if [[ ${MOOR_PG_TEST_CLI:-0} == 1 ]]; then

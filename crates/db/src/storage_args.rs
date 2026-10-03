@@ -49,6 +49,9 @@ pub struct StorageArgs {
     pub pg_retry_interval_ms: Option<u64>,
     #[arg(long)]
     pub pg_max_row_bytes: Option<usize>,
+    /// Maximum concurrent PostgreSQL snapshot readers (default: 2, range: 1..64).
+    #[arg(long)]
+    pub pg_max_exports: Option<usize>,
     /// SQL commit policy: synchronous or asynchronous (default: synchronous).
     #[arg(long)]
     pub pg_commit_policy: Option<PostgresCommitSetting>,
@@ -82,6 +85,7 @@ impl StorageArgs {
         override_field!(pg_recovery_timeout_seconds, recovery_timeout_seconds);
         override_field!(pg_retry_interval_ms, retry_interval_ms);
         override_field!(pg_max_row_bytes, max_row_bytes);
+        override_field!(pg_max_exports, max_exports);
         override_field!(pg_commit_policy, commit_policy);
         settings
     }
@@ -183,6 +187,21 @@ mod tests {
                 .resolve(&StorageSettings::default(), || None, false, false)
                 .is_err()
         );
+    }
+    #[test]
+    fn explicit_export_limit_overrides_yaml_without_changing_the_endpoint() {
+        let command = Command::try_parse_from(["test", "--pg-max-exports", "3"]).unwrap();
+        let configured = StorageSettings {
+            backend: StorageBackendKind::Postgres,
+            postgres: Some(crate::PostgresSettings {
+                service: Some("world".into()),
+                max_exports: Some(1),
+                ..Default::default()
+            }),
+        };
+        let merged = command.storage.merge(&configured).postgres.unwrap();
+        assert_eq!(merged.max_exports, Some(3));
+        assert_eq!(merged.service.as_deref(), Some("world"));
     }
     #[test]
     fn absent_cli_backend_preserves_yaml_selection() {

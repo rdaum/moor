@@ -556,6 +556,7 @@ impl PersistenceCoordinator {
     ) -> PersistenceError {
         use crate::provider::batch_writer::WriterWaitError;
         match error {
+            WriterWaitError::ResourceBusy => PersistenceError::ResourceBusy,
             WriterWaitError::Timeout { .. } => PersistenceError::Timeout { version },
             WriterWaitError::Failed { detail } => PersistenceError::WriterFailed { detail },
             WriterWaitError::Unavailable => PersistenceError::WriterFailed {

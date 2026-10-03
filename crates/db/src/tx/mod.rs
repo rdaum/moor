@@ -162,6 +162,9 @@ pub enum Error {
     Conflict(ConflictInfo),
     #[error("Retrieval error from backing store")]
     RetrievalFailure(String),
+    /// Snapshot reader context already redacted by the storage adapter.
+    #[error("Snapshot read failed: {0}")]
+    SnapshotFailure(String),
     #[error("Store failure when writing to backing store: #{0}")]
     StorageFailure(String),
     #[error("Encoding error")]

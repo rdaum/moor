@@ -141,6 +141,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 `db`:
 
+- Support consistent PostgreSQL snapshots for objdef export. Exports preserve sparse inherited
+  properties and can finish after writer shutdown. Reader capacity is configurable.
+
 - Expose persistence health, progress, retained payload sizes, and PostgreSQL stage timings through
   `db_counters()`. Phased benchmarks also report group boundaries and recovery measurements.
 
@@ -387,6 +390,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   links containing decoded control characters or renderer delimiters.
 - Use the daemon's JSON boolean mode from the first GMCP message, including connections accepted
   during host startup. MSSP now reports the actual connected-player count.
+
+`db`:
+
+- Snapshot point reads derive missing local property permissions from the definer, including chown
+  behavior. Invalid ancestry cycles return an error.
 
 `kernel`:
 

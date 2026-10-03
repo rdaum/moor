@@ -38,6 +38,7 @@ pub struct PostgresSettings {
     pub recovery_timeout_seconds: Option<u64>,
     pub retry_interval_ms: Option<u64>,
     pub max_row_bytes: Option<usize>,
+    pub max_exports: Option<usize>,
     pub commit_policy: Option<PostgresCommitSetting>,
 }
 
@@ -142,6 +143,9 @@ impl PostgresSettings {
         }
         if let Some(millis) = self.retry_interval_ms {
             config.retry_interval = Duration::from_millis(millis);
+        }
+        if let Some(limit) = self.max_exports {
+            config.max_exports = limit;
         }
         if let Some(policy) = self.commit_policy {
             config.commit_policy = match policy {

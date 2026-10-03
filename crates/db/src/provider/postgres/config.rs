@@ -37,6 +37,7 @@ pub struct PostgresStorageConfig {
     pub recovery_timeout: Duration,
     pub retry_interval: Duration,
     pub commit_policy: PostgresCommitPolicy,
+    pub max_exports: usize,
 }
 impl PostgresStorageConfig {
     pub fn new(connection: PostgresConnectOptions, schema: PostgresSchema) -> Self {
@@ -49,10 +50,16 @@ impl PostgresStorageConfig {
             recovery_timeout: Duration::from_secs(30),
             retry_interval: Duration::from_millis(50),
             commit_policy: PostgresCommitPolicy::default(),
+            max_exports: 2,
         }
     }
     pub(crate) fn validate(&self) -> Result<(), PostgresError> {
         self.connection.validate()?;
+        if !(1..=64).contains(&self.max_exports) {
+            return Err(PostgresError::Configuration(
+                "max_exports must be between 1 and 64",
+            ));
+        }
         self.profile
             .validate()
             .map_err(|_| PostgresError::Configuration("unsupported compiler profile"))?;

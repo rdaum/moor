@@ -135,6 +135,9 @@ impl Shared {
 }
 
 pub(crate) struct PostgresWriter {
+    config: PostgresStorageConfig,
+    epoch: WriterEpoch,
+    exports: Arc<super::snapshot::ExportPool>,
     encoder: Sender<EncodingJob>,
     preparation_timeout: Duration,
     encoded: Sender<EncodedJob>,
@@ -347,6 +350,9 @@ impl PostgresWriter {
         Ok((
             Self {
                 encoder,
+                epoch,
+                exports: super::snapshot::ExportPool::new(config.max_exports),
+                config: config.clone(),
                 preparation_timeout: config.query_timeout,
                 encoded,
                 fences,
@@ -425,7 +431,34 @@ impl PostgresWriter {
         Ok(())
     }
     pub(crate) fn diagnostics(&self) -> crate::PostgresPersistenceStats {
-        self.shared.metrics.snapshot()
+        let mut stats = self.shared.metrics.snapshot();
+        (stats.active_exports, stats.oldest_export_micros) = self.exports.diagnostics();
+        stats.export_limit = self.config.max_exports as u64;
+        stats
+    }
+    pub(crate) fn snapshot(
+        &self,
+        version: u64,
+        timeout: Duration,
+    ) -> Result<crate::provider::read::SnapshotReaders, WriterWaitError> {
+        let deadline = Instant::now()
+            .checked_add(timeout)
+            .ok_or(WriterWaitError::Timeout { version })?;
+        self.shared.wait(version, false, Some(deadline))?;
+        let session = super::snapshot::ReadSession::open(
+            self.config.clone(),
+            &self.exports,
+            PublicationId::new(self.epoch, version),
+            deadline,
+            || self.shared.running(),
+        )
+        .map_err(|error| match error {
+            PostgresError::Timeout => WriterWaitError::Timeout { version },
+            other => WriterWaitError::Failed {
+                detail: other.to_string(),
+            },
+        })?;
+        Ok(super::reader::readers(session))
     }
     pub(crate) fn storage_bytes(&self) -> Arc<AtomicU64> {
         self.shared.storage_bytes.clone()

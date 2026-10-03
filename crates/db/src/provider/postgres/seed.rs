@@ -136,7 +136,10 @@ fn scan<K: RowKey + RelationDomain, V: RowValue + RelationCodomain>(
     Ok(())
 }
 
-fn check_timestamp(timestamp: Timestamp, progress: &Progress) -> Result<(), PostgresError> {
+pub(super) fn check_timestamp(
+    timestamp: Timestamp,
+    progress: &Progress,
+) -> Result<(), PostgresError> {
     if timestamp.0 > progress.max_timestamp {
         return Err(invalid(
             "logical_timestamp",
@@ -198,38 +201,70 @@ fn properties(
                     PropertyValueReconstructor::new(PROPERTY_VALUE_CHAIN_LIMITS),
                 )
             });
-            let sequence: i64 = rows::number(row, "record_sequence")?;
-            if sequence <= 0 || sequence > progress.property_sequence {
-                return Err(invalid(
-                    "record_sequence",
-                    "record exceeds persistent property counter",
-                ));
-            }
-            let timestamp = Timestamp(rows::number(row, "logical_timestamp")?);
-            check_timestamp(timestamp, progress)?;
-            let decoded = Var::decode_value(row, relation, &config.profile)
-                .map_err(|error| rows::contextual(relation, row, error))?;
-            if rows::text(row, "value_kind")? != codec::value_kind(&decoded) {
-                return Err(invalid("value_kind", "kind disagrees with literal"));
-            }
-            let kind = match rows::text(row, "record_kind")? {
-                "full" => PropertyValueRecordKind::Full,
-                "list_append" => PropertyValueRecordKind::ListAppend,
-                _ => return Err(invalid("record_kind", "unknown property record kind")),
-            };
+            let record = decode_property_record(row, config, progress)?;
             reconstructor
                 .push_decoded(
-                    sequence as u64,
-                    kind,
-                    timestamp,
-                    rows::text(row, "value_literal")?.len(),
-                    decoded,
+                    record.sequence,
+                    record.kind,
+                    record.timestamp,
+                    record.literal_bytes,
+                    record.value,
                 )
-                .map_err(|_| invalid("object_propvalues", "invalid property chain"))?;
+                .map_err(|_| {
+                    rows::contextual(
+                        relation,
+                        row,
+                        invalid("object_propvalues", "invalid property chain"),
+                    )
+                })?;
             Ok(())
         },
     )?;
     finish(&mut current, chains, emit)
+}
+
+pub(super) struct DecodedPropertyRecord {
+    pub sequence: u64,
+    pub timestamp: Timestamp,
+    pub kind: PropertyValueRecordKind,
+    pub literal_bytes: usize,
+    pub value: Var,
+}
+
+pub(super) fn decode_property_record(
+    row: &rows::Row,
+    config: &PostgresStorageConfig,
+    progress: &Progress,
+) -> Result<DecodedPropertyRecord, PostgresError> {
+    let relation = "object_propvalues";
+    (|| {
+        let sequence: i64 = rows::number(row, "record_sequence")?;
+        if sequence <= 0 || sequence > progress.property_sequence {
+            return Err(invalid(
+                "record_sequence",
+                "record exceeds persistent property counter",
+            ));
+        }
+        let timestamp = Timestamp(rows::number(row, "logical_timestamp")?);
+        check_timestamp(timestamp, progress)?;
+        let value = Var::decode_value(row, relation, &config.profile)?;
+        if rows::text(row, "value_kind")? != codec::value_kind(&value) {
+            return Err(invalid("value_kind", "kind disagrees with literal"));
+        }
+        let kind = match rows::text(row, "record_kind")? {
+            "full" => PropertyValueRecordKind::Full,
+            "list_append" => PropertyValueRecordKind::ListAppend,
+            _ => return Err(invalid("record_kind", "unknown property record kind")),
+        };
+        Ok(DecodedPropertyRecord {
+            sequence: sequence as u64,
+            timestamp,
+            kind,
+            literal_bytes: rows::text(row, "value_literal")?.len(),
+            value,
+        })
+    })()
+    .map_err(|error| rows::contextual(relation, row, error))
 }
 
 macro_rules! define_seed {

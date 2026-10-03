@@ -24,9 +24,11 @@ mod connection;
 mod encode;
 mod metrics;
 mod options;
+mod reader;
 mod rows;
 mod schema;
 mod seed;
+mod snapshot;
 mod sql;
 mod state;
 mod writer;
@@ -102,8 +104,11 @@ impl PostgresShutdown {
     pub fn request(&self) {
         self.0.store(true, Ordering::Release);
     }
+    pub(crate) fn is_requested(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
     pub(crate) fn check(&self, deadline: Instant) -> Result<(), PostgresError> {
-        if self.0.load(Ordering::Acquire) {
+        if self.is_requested() {
             return Err(PostgresError::Shutdown);
         }
         if Instant::now() >= deadline {

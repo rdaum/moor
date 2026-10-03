@@ -151,14 +151,18 @@ impl StorageWriter {
         version: u64,
         timeout: Duration,
     ) -> Result<StorageSnapshot, WriterWaitError> {
+        // A fresh read session cannot be acquired synchronously without any I/O budget.
+        if timeout.is_zero() {
+            return Err(WriterWaitError::ResourceBusy);
+        }
         match self {
             Self::Fjall(writer) => writer
                 .snapshot(version, timeout)
                 .map(StorageSnapshot::Fjall),
             #[cfg(feature = "postgres")]
-            Self::Postgres(_) => Err(WriterWaitError::Failed {
-                detail: "PostgreSQL snapshot export is not implemented yet".into(),
-            }),
+            Self::Postgres(writer) => writer
+                .snapshot(version, timeout)
+                .map(|readers| StorageSnapshot::Postgres(Box::new(readers))),
         }
     }
     #[cfg(test)]

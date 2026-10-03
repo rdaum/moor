@@ -29,6 +29,8 @@ use tempfile::TempDir;
 /// Backend snapshot receipt after its applied barrier.
 pub(crate) enum StorageSnapshot {
     Fjall(fjall::Snapshot),
+    #[cfg(feature = "postgres")]
+    Postgres(Box<super::read::SnapshotReaders>),
 }
 /// Keep temporary storage alive until the last reader and cursor release their leases.
 pub(crate) struct FjallReadSnapshot {
@@ -188,9 +190,11 @@ impl StorageBackend {
                 })
             }
             #[cfg(feature = "postgres")]
-            (Self::Postgres(_), _) => {
-                unreachable!("PostgreSQL writer cannot issue a Fjall snapshot")
+            (Self::Postgres(_), StorageSnapshot::Postgres(readers)) => {
+                Box::new(SnapshotLoader { readers: *readers })
             }
+            #[cfg(feature = "postgres")]
+            _ => unreachable!("snapshot belongs to another backend"),
         }
     }
     pub(crate) fn usage_bytes(&self) -> usize {

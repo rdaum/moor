@@ -17,6 +17,9 @@
 /// Durations are nanoseconds unless the field explicitly says microseconds.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PostgresPersistenceStats {
+    pub active_exports: u64,
+    pub oldest_export_micros: u64,
+    pub export_limit: u64,
     pub encoding_calls: u64,
     pub encoding_failures: u64,
     pub encoding_ns: u64,
@@ -66,6 +69,12 @@ pub enum PostgresGroupEnd {
 impl PostgresPersistenceStats {
     pub(crate) fn operator_metrics(&self) -> Vec<(&'static str, u64)> {
         let mut metrics = vec![
+            ("persistence_postgres_active_exports", self.active_exports),
+            (
+                "persistence_postgres_oldest_export_micros",
+                self.oldest_export_micros,
+            ),
+            ("persistence_postgres_export_limit", self.export_limit),
             (
                 "persistence_postgres_prepared_commits",
                 self.prepared_commits,

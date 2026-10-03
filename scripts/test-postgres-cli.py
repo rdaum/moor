@@ -12,7 +12,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Check storage CLI routing and setup without creating local world or ancillary files."""
+"""Check storage CLI routing, setup isolation, and a cross-backend objdef round trip."""
 import argparse
 import os
 from pathlib import Path
@@ -29,6 +29,39 @@ def run(binary, args, env, success):
                             text=True, capture_output=True, timeout=45)
     assert (result.returncode == 0) == success, (binary, result.returncode, result.stdout, result.stderr)
     return result.stdout + result.stderr
+
+
+def snapshot_roundtrip(root, env):
+    features = ["--use-boolean-returns=true", "--use-symbols-in-builtins=true",
+                "--custom-errors=true", "--use-uuobjids=true", "--anonymous-objects=false"]
+    first, postgres_dump, final = (root / name for name in ["first", "postgres", "final"])
+    pg = ["--storage-backend=postgres", "--pg-service=moor_adapter", "--pg-hostaddr=127.0.0.1",
+          "--pg-schema=roundtrip_" + uuid.uuid4().hex, "--pg-max-exports=1"]
+    run("moorc", [*features, "--db", str(root / "fjall-first"),
+                  "--src-objdef-dir", str(ROOT / "cores/benches/src"),
+                  "--out-objdef-dir", str(first)], env, True)
+    run("moorc", [*pg, "--init-storage"], env, True)
+    run("moorc", [*features, *pg, "--src-objdef-dir", str(first),
+                  "--out-objdef-dir", str(postgres_dump)], env, True)
+    restored = ["--db", str(root / "fjall-restored")]
+    run("moorc", [*features, *restored, "--src-objdef-dir", str(postgres_dump),
+                  "--out-objdef-dir", str(final)], env, True)
+
+    def contents(path):
+        return {file.relative_to(path): file.read_bytes() for file in path.rglob("*") if file.is_file()}
+
+    original = contents(first)
+    assert original and contents(postgres_dump) == original
+    assert contents(final) == original
+    empty = root / "empty"
+    empty.mkdir()
+    for storage in [pg, restored]:
+        output = run("moorc", [*features, *storage, "--src-objdef-dir", str(empty),
+                              "--run-tests=true", "--test-wizard=2", "--test-phases=3",
+                              "--test-filter=#668:test_string_history_append", "--test-timeout=30",
+                              "--test-args={2, 16, 128, 5, 0, 1, 1, 0}"], env, True)
+        assert "Test #668:test_string_history_append passed" in output, output
+    print(f"moorc: Fjall/objdef/PostgreSQL/objdef/Fjall round trip preserved {len(original)} files; both functional probes passed")
 
 
 def main():
@@ -51,7 +84,8 @@ def main():
                 continue
             postgres = ["--pg-service", "moor_adapter", "--pg-hostaddr", "127.0.0.1",
                         "--pg-schema", "cli_" + uuid.uuid4().hex]
-            for extra in [["--db", "world.db"], ["--pg-query-timeout-seconds", "0"]]:
+            for extra in [["--db", "world.db"], ["--pg-query-timeout-seconds", "0"],
+                          ["--pg-max-exports", "0"], ["--pg-max-exports", "65"]]:
                 run(binary, [*selected, *postgres, *extra, "--init-storage"], env, False)
                 assert list(root.iterdir()) == [], list(root.iterdir())
             output = run(binary, [*selected, *postgres, "--init-storage"], env, True)
@@ -77,6 +111,8 @@ def main():
             assert list(root.iterdir()) == [config], list(root.iterdir())
             config.unlink()
             print(f"{binary}: YAML selection and explicit CLI overrides passed")
+
+        snapshot_roundtrip(root, env)
 
 
 if __name__ == "__main__":
