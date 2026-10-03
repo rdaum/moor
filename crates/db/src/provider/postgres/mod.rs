@@ -22,6 +22,7 @@ mod codec;
 mod config;
 mod connection;
 mod encode;
+mod metrics;
 mod options;
 mod rows;
 mod schema;

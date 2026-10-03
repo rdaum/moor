@@ -204,6 +204,10 @@ impl TransactionContext for MoorDB {
     fn usage_bytes(&self) -> usize {
         self.usage_bytes()
     }
+
+    fn persistence_metrics(&self) -> Vec<(&'static str, u64)> {
+        self.persistence_status().operator_metrics()
+    }
 }
 
 impl MoorDB {
@@ -324,6 +328,7 @@ impl MoorDB {
             applied = status.applied,
             durable = status.durable,
             shutdown = status.shutdown,
+            postgres = ?status.postgres,
             "Persistence status at shutdown"
         );
         let final_completed = status.applied;

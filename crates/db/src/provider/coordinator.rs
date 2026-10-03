@@ -357,6 +357,9 @@ impl CommitAdmissionGate {
 /// Point-in-time persistence progress and health.
 #[derive(Clone, Copy, Debug)]
 pub struct PersistenceStatus {
+    pub postgres: Option<crate::PostgresPersistenceStats>,
+    /// False when concurrent publication prevented a stable progress/admission sample.
+    pub sampling_consistent: bool,
     pub epoch: WriterEpoch,
     /// Highest publication observed from a world root.
     pub published: u64,
@@ -368,6 +371,28 @@ pub struct PersistenceStatus {
     pub applied: u64,
     pub durable: u64,
     pub shutdown: bool,
+}
+
+impl PersistenceStatus {
+    /// Numeric operator values. The builtin exposes these as `{value, 0}` entries.
+    /// Backend payload gauges have their own sampling instant, after the progress sample.
+    pub fn operator_metrics(&self) -> Vec<(&'static str, u64)> {
+        let mut metrics = vec![
+            ("persistence_published", self.published),
+            ("persistence_applied", self.applied),
+            ("persistence_durable", self.durable),
+            ("persistence_outstanding", self.outstanding as u64),
+            ("persistence_healthy", u64::from(self.healthy)),
+            (
+                "persistence_sampling_consistent",
+                u64::from(self.sampling_consistent),
+            ),
+        ];
+        if let Some(pg) = &self.postgres {
+            metrics.extend(pg.operator_metrics());
+        }
+        metrics
+    }
 }
 
 /// Owns admission, publication tracking, waiters, and backend writer lifecycle.
@@ -555,19 +580,39 @@ impl PersistenceCoordinator {
     }
 
     pub(crate) fn status(&self) -> PersistenceStatus {
-        PersistenceStatus {
-            epoch: self.epoch,
-            published: self.published.load(Ordering::Acquire),
-            outstanding: self
+        // Read downstream progress first: its prerequisite is already visible. Bracket
+        // admission with publication reads and retry transient permit-return windows.
+        // Sampling must remain bounded even if a producer publishes continuously.
+        for attempt in 0..8 {
+            let before = self.published.load(Ordering::Acquire);
+            let outstanding = self
                 .admission
                 .capacity
-                .saturating_sub(self.admission.available.len()),
-            healthy: self.writer.healthy(),
-            last_submitted: self.last_submitted.load(Ordering::Acquire),
-            applied: self.writer.completed_version(),
-            durable: self.writer.durable_version(),
-            shutdown: self.shutdown.load(Ordering::Acquire),
+                .saturating_sub(self.admission.available.len());
+            let durable = self.writer.durable_version();
+            let applied = self.writer.completed_version();
+            let last_submitted = self.last_submitted.load(Ordering::Acquire);
+            let published = self.published.load(Ordering::Acquire);
+            let healthy = self.writer.healthy();
+            let sampling_consistent =
+                before == published && outstanding as u64 >= published.saturating_sub(applied);
+            if sampling_consistent || attempt == 7 {
+                return PersistenceStatus {
+                    postgres: self.writer.postgres_diagnostics(),
+                    sampling_consistent,
+                    epoch: self.epoch,
+                    published,
+                    outstanding,
+                    healthy,
+                    last_submitted,
+                    applied,
+                    durable,
+                    shutdown: self.shutdown.load(Ordering::Acquire),
+                };
+            }
+            std::hint::spin_loop();
         }
+        unreachable!()
     }
 
     pub(crate) fn set_commit_queue_policy(&self, warn_after: Duration, timeout: Duration) {

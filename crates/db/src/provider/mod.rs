@@ -16,6 +16,7 @@ use crate::{Error, Timestamp};
 
 pub mod batch_writer;
 pub(crate) mod coordinator;
+pub(crate) mod diagnostics;
 pub mod fjall_format;
 pub(crate) mod fjall_maintenance;
 pub mod fjall_provider;

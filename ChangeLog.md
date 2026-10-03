@@ -141,6 +141,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 `db`:
 
+- Expose persistence health, progress, retained payload sizes, and PostgreSQL stage timings through
+  `db_counters()`. Phased benchmarks also report group boundaries and recovery measurements.
+
 - Reject PostgreSQL writes before publication when their encoded rows exceed the configured read
   limit. The same check covers future property rollups, so accepted values remain reloadable.
 

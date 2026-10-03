@@ -14,7 +14,11 @@
 //! Sample persistence occupancy during explicitly phased benchmark tests.
 
 use moor_db::TxDB;
-use std::{sync::mpsc, thread::JoinHandle, time::Duration};
+use std::{
+    sync::mpsc,
+    thread::JoinHandle,
+    time::{Duration, Instant},
+};
 
 pub struct PersistenceProbe {
     stop: mpsc::Sender<()>,
@@ -28,10 +32,32 @@ impl PersistenceProbe {
             let mut max_outstanding = 0;
             let mut max_unapplied = 0;
             let mut samples = 0_u64;
+            let mut inconsistent_samples = 0_u64;
+            let mut max_encoded_bytes = 0;
+            let mut max_append_value_bytes = 0;
+            let mut max_unapplied_micros = 0;
+            let mut last_report = Instant::now();
             loop {
                 let status = db.persistence_status();
-                max_outstanding = max_outstanding.max(status.outstanding);
-                max_unapplied = max_unapplied.max(status.published.saturating_sub(status.applied));
+                if status.sampling_consistent {
+                    max_outstanding = max_outstanding.max(status.outstanding);
+                    max_unapplied =
+                        max_unapplied.max(status.published.saturating_sub(status.applied));
+                } else {
+                    inconsistent_samples += 1;
+                }
+                if let Some(postgres) = status.postgres {
+                    max_encoded_bytes = max_encoded_bytes.max(postgres.retained_encoded_bytes);
+                    max_append_value_bytes =
+                        max_append_value_bytes.max(postgres.retained_append_value_bytes);
+                    max_unapplied_micros =
+                        max_unapplied_micros.max(postgres.oldest_unapplied_micros);
+                    if last_report.elapsed() >= Duration::from_secs(1) {
+                        tracing::info!(%test, phase, published = status.published, applied = status.applied,
+                            durable = status.durable, healthy = status.healthy, sampling_consistent = status.sampling_consistent, ?postgres, "PERSISTENCE_SAMPLE");
+                        last_report = Instant::now();
+                    }
+                }
                 samples += 1;
                 if !matches!(
                     receiver.recv_timeout(Duration::from_millis(1)),
@@ -40,7 +66,9 @@ impl PersistenceProbe {
                     break;
                 }
             }
-            tracing::info!(%test, phase, samples, max_outstanding, max_unapplied, "PERSISTENCE_OCCUPANCY");
+            let final_status = db.persistence_status();
+            tracing::info!(%test, phase, samples, inconsistent_samples, max_outstanding, max_unapplied, max_encoded_bytes,
+                max_append_value_bytes, max_unapplied_micros, postgres = ?final_status.postgres, "PERSISTENCE_OCCUPANCY");
         });
         Self {
             stop,

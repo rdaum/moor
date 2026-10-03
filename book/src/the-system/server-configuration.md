@@ -128,6 +128,65 @@ transaction snapshots, and pending commits also consume memory.
 The PostgreSQL query timeout also bounds the wait for preparation before publication. Preparation
 errors and timeouts return a transaction error. They do not publish changes or disable the writer.
 
+### Persistence diagnostics
+
+The wizard-only `db_counters()` builtin exposes live persistence status. Status values use the
+existing map format: `name -> {value, 0}`. They describe the running writer, independent of the
+caller's transaction snapshot.
+
+| Name                                               | Meaning                                                           |
+| -------------------------------------------------- | ----------------------------------------------------------------- |
+| `persistence_published`                            | Highest observed in-memory publication                            |
+| `persistence_applied`                              | Highest prefix applied by the storage writer                      |
+| `persistence_durable`                              | Highest prefix with established durability                        |
+| `persistence_outstanding`                          | Reserved admission slots, including unpublished transactions      |
+| `persistence_healthy`                              | `1` while the writer reports healthy; otherwise `0`               |
+| `persistence_sampling_consistent`                  | `1` when progress and admission passed the bounded sampling check |
+| `persistence_postgres_prepared_commits`            | Validated commits waiting for publication                         |
+| `persistence_postgres_unapplied_commits`           | Published commits with retained encoded payloads                  |
+| `persistence_postgres_retained_encoded_bytes`      | Retained encoded JSON bytes                                       |
+| `persistence_postgres_retained_append_value_bytes` | Logical size of retained complete append values                   |
+| `persistence_postgres_oldest_unapplied_micros`     | Age of the oldest retained published payload, in microseconds     |
+
+Subtract applied from published to estimate application lag. Subtract durable from published to
+estimate the number of publications without established durability. If
+`persistence_sampling_consistent` is zero, retry before comparing lag with outstanding slots.
+Progress reads follow causal order. Payload gauges use a separate locked sample and can differ from
+progress during concurrent work. Neither a synchronous SQL policy nor in-memory publication makes
+the foreground acknowledgment a durability fence.
+
+Encoded byte counts exclude allocation overhead and property record sequences assigned later. Append
+byte counts can count shared allocations more than once. Neither count measures resident memory.
+Payload gauges fall when payloads are released, including failed or abandoned attempts.
+
+PostgreSQL also exposes cumulative values with the `persistence_postgres_` prefix:
+
+- `encoding_calls`, `encoding_failures`, `encoded_bytes`, and `encoding_ns` describe preparation,
+  including attempts that later conflict.
+- `sql_application_ns`, `sql_commit_ns`, and `fence_ns` separate SQL execution, COMMIT, and complete
+  durability-fence time. Failed attempts contribute time. Fence time includes its SQL stages.
+- `groups`, `group_commits`, `group_payload_bytes`, and `group_sql_statements` describe confirmed
+  groups. Statement counts include data mutations and sequence writes, excluding transaction control
+  and writer progress. Recovery retries do not count as additional confirmed groups.
+- `last_group_commits`, `last_group_payload_bytes`, `last_group_sql_statements`, `last_group_first`,
+  and `last_group_last` describe the last confirmed group and its publication range.
+- `group_end_available`, `group_end_commit_limit`, `group_end_payload_limit`,
+  `group_end_operation_limit`, `group_end_age_limit`, `group_end_fence`, and
+  `group_end_rollup_expansion` count group boundaries.
+- `recovery_attempts`, `recovery_ns`, `recovery_first`, and `recovery_last` describe reconnect
+  attempts, cumulative recovery time including an active recovery, and the most recent affected
+  publication range.
+
+Cumulative `_ns` values are nanoseconds stored in the first element. Totals reset when the writer
+restarts. The existing sampled timers also include `postgres_encode`, `postgres_apply`,
+`postgres_commit`, `postgres_fence`, and `postgres_recovery`, with durations in the second element.
+Diagnostics contain numeric progress, durations, and byte counts. They omit credentials and stored
+values.
+
+Phased `moorc` benchmarks emit `PERSISTENCE_SAMPLE` once per second and a final
+`PERSISTENCE_OCCUPANCY` report. The final report includes peak payload gauges and the number of
+inconsistent samples excluded from progress peaks.
+
 ## Daemon, Hosts, Workers, and RPC (Advanced)
 
 For split-process or clustered deployment, the server is broken into separate binaries:

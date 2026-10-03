@@ -149,6 +149,10 @@ macro_rules! define_relations {
                 fn commit_read_only(&self, snapshot_version: u64, caches: crate::engine::moor_db::Caches);
                 /// Get the current database disk usage in bytes.
                 fn usage_bytes(&self) -> usize;
+                /// Live operator diagnostics; mocks need not supply persistence metrics.
+                fn persistence_metrics(&self) -> Vec<(&'static str, u64)> {
+                    Vec::new()
+                }
             }
 
             // Instantiate these private methods inside the commit state module.

@@ -52,6 +52,7 @@ pub(super) fn open(
 }
 pub(super) fn empty(epoch: WriterEpoch, version: u64, timestamp: u64) -> EncodedCommit {
     EncodedCommit {
+        payload_lease: None,
         publication: PublicationId::new(epoch, version),
         timestamp: Timestamp(timestamp),
         ordinary: vec![],
@@ -305,6 +306,13 @@ fn ambiguous_commit_and_rollback_do_not_duplicate_suffixes() {
         apply(&mut session, &config, &second);
         assert_eq!(count(&config, "object_propvalues"), 2);
         assert_eq!(session.progress.commits, 2);
+        let diagnostics = session.metrics.snapshot();
+        assert!(diagnostics.recovery_attempts > 0);
+        assert!(diagnostics.recovery_ns > 0);
+        assert_eq!(
+            (diagnostics.recovery_first, diagnostics.recovery_last),
+            (2, 2)
+        );
         drop(session);
         let (_, seed, _) = open(&config);
         assert_eq!(
@@ -1183,6 +1191,11 @@ fn rollup_expansion_seals_the_group_without_publishing_tentative_chains() {
         encode::property_row(key, &value, ts, false, &config.profile)
     };
     assert_eq!(session.apply_group(&commits, 4096, &mut render).unwrap(), 1);
+    assert_eq!(
+        session.metrics.snapshot().group_end_reasons
+            [crate::PostgresGroupEnd::RollupExpansion as usize],
+        1
+    );
     assert_eq!(session.progress.applied, 1);
     assert_eq!(session.progress.property_sequence, 1);
     assert_eq!(count(&config, "object_propvalues"), 1);
@@ -1475,7 +1488,23 @@ fn concurrent_preparations_persist_the_rows_of_successful_publications() {
     )
     .unwrap();
     let barrier = std::sync::Barrier::new(4);
+    let sampling_done = std::sync::atomic::AtomicBool::new(false);
     let expected = std::thread::scope(|scope| {
+        let sampler = scope.spawn(|| {
+            let mut samples = 0;
+            while !sampling_done.load(std::sync::atomic::Ordering::Acquire) {
+                let status = db.persistence_status();
+                assert!(status.durable <= status.applied);
+                assert!(status.applied <= status.last_submitted);
+                assert!(status.last_submitted <= status.published);
+                if status.sampling_consistent && status.healthy {
+                    assert!(status.outstanding as u64 >= status.published - status.applied);
+                }
+                samples += 1;
+                std::thread::yield_now();
+            }
+            samples
+        });
         let barrier = &barrier;
         let handles: Vec<_> = (0..4)
             .map(|worker| {
@@ -1510,10 +1539,13 @@ fn concurrent_preparations_persist_the_rows_of_successful_publications() {
                 })
             })
             .collect();
-        handles
+        let expected = handles
             .into_iter()
             .flat_map(|handle| handle.join().unwrap())
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>();
+        sampling_done.store(true, std::sync::atomic::Ordering::Release);
+        assert!(sampler.join().unwrap() > 0);
+        expected
     });
     db.wait_for_durability(Duration::from_secs(20)).unwrap();
     assert_eq!(db.publication().version(), 100);
@@ -1537,4 +1569,110 @@ fn concurrent_preparations_persist_the_rows_of_successful_publications() {
             Some(name.as_str())
         );
     }
+}
+
+#[test]
+#[ignore = "requires PostgreSQL fixture"]
+fn diagnostics_measure_blocked_payloads_then_release_them_after_application() {
+    use crate::{Database, DatabaseConfig, PersistenceConfig, StorageConfig, TxDB};
+    use moor_common::{
+        model::{ObjAttrs, ObjectKind},
+        util::BitEnum,
+    };
+    use moor_var::{NOTHING, Symbol, v_str};
+    use std::time::Duration;
+    let mut config = config();
+    config.commit_policy = PostgresCommitPolicy::Asynchronous;
+    initialize_postgres_schema(&config).unwrap();
+    let (db, _) = TxDB::try_open(
+        StorageConfig::postgres(config.clone()),
+        DatabaseConfig::default(),
+        PersistenceConfig::default(),
+    )
+    .unwrap();
+    let mut loader = db.loader_client().unwrap();
+    let object = loader
+        .create_object(
+            ObjectKind::NextObjid,
+            &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "diagnostics"),
+        )
+        .unwrap();
+    let property = Symbol::mk("values");
+    let base = v_list(&[v_str(&"x".repeat(64 * 1024))]);
+    loader
+        .define_property(
+            &object,
+            &object,
+            property,
+            &object,
+            BitEnum::new(),
+            Some(base.clone()),
+        )
+        .unwrap();
+    loader.commit().unwrap();
+    db.wait_for_durability(Duration::from_secs(10)).unwrap();
+    let prior = db.persistence_status();
+    let mut blocker = client(&config);
+    blocker
+        .query(
+            "BEGIN",
+            &[],
+            Instant::now() + config.query_timeout,
+            |_| unreachable!(),
+        )
+        .unwrap();
+    blocker
+        .query(
+            &format!(
+                "LOCK TABLE {} IN ACCESS EXCLUSIVE MODE",
+                config.schema.qualify("object_propvalues").unwrap()
+            ),
+            &[],
+            Instant::now() + config.query_timeout,
+            |_| unreachable!(),
+        )
+        .unwrap();
+    let mut loader = db.loader_client().unwrap();
+    let appended = base
+        .as_list()
+        .unwrap()
+        .clone()
+        .append_owned(&v_list(&[v_str(&"y".repeat(64 * 1024))]))
+        .unwrap();
+    loader
+        .set_property(&object, property, None, None, Some(appended))
+        .unwrap();
+    loader.commit().unwrap();
+    let status = db.persistence_status();
+    assert_eq!(status.published, prior.published + 1);
+    assert_eq!(status.applied, prior.applied);
+    let held = status.postgres.unwrap();
+    assert_eq!(held.unapplied_commits, 1);
+    assert!(held.retained_encoded_bytes >= 64 * 1024);
+    assert!(held.retained_append_value_bytes >= 128 * 1024);
+    assert!(held.encoding_calls >= 2);
+    assert!(held.encoding_ns > 0);
+    blocker
+        .query(
+            "COMMIT",
+            &[],
+            Instant::now() + config.query_timeout,
+            |_| unreachable!(),
+        )
+        .unwrap();
+    db.wait_for_durability(Duration::from_secs(10)).unwrap();
+    let status = db.persistence_status();
+    assert!(
+        status.durable <= status.applied
+            && status.applied <= status.last_submitted
+            && status.last_submitted <= status.published
+    );
+    let done = status.postgres.unwrap();
+    assert_eq!(done.unapplied_commits, 0);
+    assert_eq!(done.retained_encoded_bytes, 0);
+    assert_eq!(done.retained_append_value_bytes, 0);
+    assert!(done.sql_application_ns > 0 && done.sql_commit_ns > 0 && done.fence_ns > 0);
+    assert!(done.group_sql_statements > 0 && done.group_payload_bytes > 0);
+    assert_eq!(done.group_end_reasons.iter().sum::<u64>(), done.groups);
+    assert_eq!(done.group_commits, status.applied);
 }

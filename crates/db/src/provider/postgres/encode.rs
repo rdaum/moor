@@ -48,6 +48,7 @@ pub(super) struct PropertyMutationRow {
     pub mutation: PropertyMutation,
 }
 pub(crate) struct EncodedCommit {
+    pub(super) payload_lease: Option<super::metrics::PayloadLease>,
     pub(super) publication: PublicationId,
     pub(super) timestamp: Timestamp,
     pub(super) ordinary: Vec<RelationBatch>,
@@ -56,6 +57,44 @@ pub(crate) struct EncodedCommit {
     /// Conservative encoded payload size, computed off the SQL writer thread.
     pub(super) group_bytes: usize,
     pub(super) group_operations: usize,
+}
+
+impl EncodedCommit {
+    /// Rendered bytes before SQL adds record sequences. Counting serialization retains no copy.
+    pub(super) fn payload_sizes(&self) -> (usize, usize) {
+        use moor_var::ByteSized;
+        struct Count(usize);
+        impl std::io::Write for Count {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0 += bytes.len();
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut bytes = self
+            .ordinary
+            .iter()
+            .map(RelationBatch::encoded_bytes)
+            .sum::<usize>()
+            + self.sequences.as_ref().map_or(0, String::len);
+        let mut retained = 0;
+        for property in &self.properties {
+            let row = match &property.mutation {
+                PropertyMutation::Delete => continue,
+                PropertyMutation::Full(row) => row,
+                PropertyMutation::Append { row, final_value } => {
+                    retained += final_value.size_bytes();
+                    row
+                }
+            };
+            let mut count = Count(0);
+            serde_json::to_writer(&mut count, row).expect("JSON value serialization is infallible");
+            bytes += count.0;
+        }
+        (bytes, retained)
+    }
 }
 
 fn json_array(rows: Vec<Value>) -> Option<String> {
@@ -215,6 +254,7 @@ pub(super) fn prepare(
             })
             .sum::<usize>();
     Ok(EncodedCommit {
+        payload_lease: None,
         publication: commit.publication,
         timestamp: commit.timestamp,
         ordinary,

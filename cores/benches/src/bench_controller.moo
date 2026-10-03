@@ -160,6 +160,10 @@ object BENCH_CONTROLLER [
     {before, after} = args;
     delta = [];
     for after_vals, op in (after)
+      "Persistence gauges and totals are not operation invocation counts.";
+      if (index(tostr(op), "persistence_") == 1)
+        continue;
+      endif
       before_vals = `before[op] ! E_RANGE => {0, 0}';
       calls = after_vals[1] - before_vals[1];
       nanos = after_vals[2] - before_vals[2];

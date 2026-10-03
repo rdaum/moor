@@ -57,6 +57,13 @@ impl StorageWriter {
             }
         }
     }
+    pub(crate) fn postgres_diagnostics(&self) -> Option<crate::PostgresPersistenceStats> {
+        match self {
+            Self::Fjall(_) => None,
+            #[cfg(feature = "postgres")]
+            Self::Postgres(writer) => Some(writer.diagnostics()),
+        }
+    }
     pub(crate) fn health_flag(&self) -> Arc<AtomicBool> {
         match self {
             Self::Fjall(writer) => writer.health_flag(),

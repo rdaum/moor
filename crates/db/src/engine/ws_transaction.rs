@@ -1960,6 +1960,10 @@ impl WorldStateTransaction {
         }
     }
 
+    pub fn persistence_metrics(&self) -> Vec<(&'static str, u64)> {
+        self.db.persistence_metrics()
+    }
+
     pub fn db_usage(&self) -> Result<usize, WorldStateError> {
         Ok(self.db.usage_bytes())
     }

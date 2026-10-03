@@ -16,9 +16,10 @@ use super::{
     PostgresCommitPolicy, PostgresError, PostgresShutdown, PostgresStorageConfig,
     apply::Session,
     encode::{self, EncodedCommit},
+    metrics::Metrics,
 };
 use crate::{
-    ObjAndUUIDHolder, Timestamp,
+    ObjAndUUIDHolder, PostgresGroupEnd, Timestamp,
     engine::moor_db::{RelationWorkingSets, Relations},
     provider::{
         backend::SeededWorld,
@@ -59,6 +60,7 @@ struct RollupJob {
     reply: Sender<Result<Value, PostgresError>>,
 }
 struct Shared {
+    metrics: Arc<Metrics>,
     healthy: Arc<AtomicBool>,
     stopping: AtomicBool,
     failure_reported: AtomicBool,
@@ -151,6 +153,7 @@ impl PostgresWriter {
     ) -> Result<(Self, SeededWorld, bool, u64), PostgresError> {
         config.validate()?;
         let shared = Arc::new(Shared {
+            metrics: Arc::new(Metrics::default()),
             healthy: Arc::new(AtomicBool::new(true)),
             stopping: AtomicBool::new(false),
             failure_reported: AtomicBool::new(false),
@@ -188,6 +191,7 @@ impl PostgresWriter {
                             return;
                         }
                     };
+                    session.metrics = writer_shared.metrics.clone();
                     let Some(start_tx) = session.progress.max_timestamp.checked_add(1) else {
                         let _ = opened.send(Err(super::codec::invalid(
                             "max_timestamp",
@@ -281,8 +285,18 @@ impl PostgresWriter {
                                     };
                                     let (commit, mut permit) = match job {
                                         EncodingJob::Prepare(commit, reply) => {
-                                            let result =
-                                                encode::prepare(commit, &profile, max_row_bytes);
+                                            let timer = shared.metrics.timer(moor_common::model::WorldStateTimerOp::PostgresEncode);
+                                            let mut result = encode::prepare(commit, &profile, max_row_bytes);
+                                            let (bytes, retained) = result.as_ref().map_or((0, 0), EncodedCommit::payload_sizes);
+                                            shared.metrics.update(|m| {
+                                                m.encoding_calls += 1;
+                                                m.encoding_failures += u64::from(result.is_err());
+                                                m.encoded_bytes += bytes as u64;
+                                            });
+                                            if let Ok(commit) = &mut result {
+                                                commit.payload_lease = Some(shared.metrics.retain(bytes, retained));
+                                            }
+                                            drop(timer);
                                             let _ = reply.send(result);
                                             continue;
                                         }
@@ -391,6 +405,9 @@ impl PostgresWriter {
         }
         let submitted = if let Some(prepared) = permit.preparation.postgres.take() {
             let commit = encode::finish_prepared(*prepared, commit);
+            if let Some(lease) = &commit.payload_lease {
+                lease.published();
+            }
             self.encoded
                 .try_send((version, Ok(commit), permit))
                 .map_err(|_| ())
@@ -406,6 +423,9 @@ impl PostgresWriter {
         })?;
         self.submitted.fetch_max(version, Ordering::Release);
         Ok(())
+    }
+    pub(crate) fn diagnostics(&self) -> crate::PostgresPersistenceStats {
+        self.shared.metrics.snapshot()
     }
     pub(crate) fn storage_bytes(&self) -> Arc<AtomicU64> {
         self.shared.storage_bytes.clone()
@@ -582,13 +602,14 @@ fn writer_loop(
         }) {
             continue;
         }
-        let (commits, permits) = take_group(
+        let (commits, permits, reason) = take_group(
             &mut pending,
             next_version,
             fence_requests.range(next_version..).next().copied(),
             Instant::now() + GROUP_AGE,
         )?;
         if !commits.is_empty() {
+            session.group_end = reason;
             let applied = session.apply_group(&commits, GROUP_BYTES, |key, value, timestamp| {
                 let (reply, response) = flume::bounded(1);
                 rollup
@@ -672,21 +693,31 @@ fn take_group<P>(
     mut next: u64,
     fence: Option<u64>,
     deadline: Instant,
-) -> Result<(Vec<EncodedCommit>, Vec<P>), PostgresError> {
+) -> Result<(Vec<EncodedCommit>, Vec<P>, PostgresGroupEnd), PostgresError> {
     let mut commits = Vec::new();
     let mut permits = Vec::new();
     let mut bytes = 0usize;
     let mut operations = 0usize;
+    let mut reason = PostgresGroupEnd::Available;
     while let Some((commit, _)) = pending.get(&next) {
         if !commits.is_empty() {
-            if commits.len() >= GROUP_COMMITS || Instant::now() >= deadline {
+            if commits.len() >= GROUP_COMMITS {
+                reason = PostgresGroupEnd::CommitLimit;
                 break;
             }
-            if let Ok(commit) = commit
-                && (bytes.saturating_add(commit.group_bytes) > GROUP_BYTES
-                    || operations.saturating_add(commit.group_operations) > GROUP_OPERATIONS)
-            {
+            if Instant::now() >= deadline {
+                reason = PostgresGroupEnd::AgeLimit;
                 break;
+            }
+            if let Ok(commit) = commit {
+                if bytes.saturating_add(commit.group_bytes) > GROUP_BYTES {
+                    reason = PostgresGroupEnd::PayloadLimit;
+                    break;
+                }
+                if operations.saturating_add(commit.group_operations) > GROUP_OPERATIONS {
+                    reason = PostgresGroupEnd::OperationLimit;
+                    break;
+                }
             }
         }
         let (commit, permit) = pending.remove(&next).unwrap();
@@ -695,12 +726,16 @@ fn take_group<P>(
         operations = operations.saturating_add(commit.group_operations);
         commits.push(commit);
         permits.push(permit);
-        if fence == Some(next) || next == u64::MAX {
+        if fence == Some(next) {
+            reason = PostgresGroupEnd::Fence;
+            break;
+        }
+        if next == u64::MAX {
             break;
         }
         next += 1;
     }
-    Ok((commits, permits))
+    Ok((commits, permits, reason))
 }
 
 #[cfg(test)]
@@ -742,20 +777,26 @@ mod tests {
 
     #[test]
     fn groups_stop_at_gaps_fences_and_work_limits() {
-        for (bytes, operations, expected) in [
-            (0, 0, GROUP_COMMITS),
-            (GROUP_BYTES / 3, 0, 3),
-            (0, GROUP_OPERATIONS / 3, 3),
-            (GROUP_BYTES + 1, GROUP_OPERATIONS + 1, 1),
+        for (bytes, operations, expected, reason) in [
+            (0, 0, GROUP_COMMITS, PostgresGroupEnd::CommitLimit),
+            (GROUP_BYTES / 3, 0, 3, PostgresGroupEnd::PayloadLimit),
+            (0, GROUP_OPERATIONS / 3, 3, PostgresGroupEnd::OperationLimit),
+            (
+                GROUP_BYTES + 1,
+                GROUP_OPERATIONS + 1,
+                1,
+                PostgresGroupEnd::PayloadLimit,
+            ),
         ] {
             let mut pending = pending(100, bytes, operations);
-            let (group, permits) = take_group(
+            let (group, permits, end) = take_group(
                 &mut pending,
                 1,
                 None,
                 Instant::now() + Duration::from_secs(2),
             )
             .unwrap();
+            assert_eq!(end, reason);
             assert_eq!(group.len(), expected);
             assert_eq!(permits.len(), expected);
             assert_eq!(pending.len(), 100 - expected);

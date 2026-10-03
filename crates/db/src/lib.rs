@@ -60,6 +60,7 @@ pub use model::{
 };
 
 pub use provider::coordinator::PersistenceStatus;
+pub use provider::diagnostics::{PostgresGroupEnd, PostgresPersistenceStats};
 pub use provider::logical::{PersistenceError, PersistenceReceipt, PublicationId, WriterEpoch};
 pub use tx::{
     CheckRelation, ConflictResolver, Error, FailOnConflict, PotentialConflict, ProposedOp,

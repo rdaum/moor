@@ -17,6 +17,7 @@ use super::{
     PostgresStorageConfig,
     codec::invalid,
     encode::{EncodedCommit, PropertyMutation, RelationBatch},
+    metrics::Metrics,
     rows::{self, RowKey},
     schema,
     seed::{self, Chains},
@@ -24,7 +25,7 @@ use super::{
     state::{self, Progress},
 };
 use crate::{
-    ObjAndUUIDHolder, Timestamp,
+    ObjAndUUIDHolder, PostgresGroupEnd, Timestamp,
     engine::moor_db::Relations,
     provider::{
         backend::SeededWorld,
@@ -32,12 +33,18 @@ use crate::{
         property_value_store::{PROPERTY_VALUE_CHAIN_LIMITS, PropertyValueChain},
     },
 };
+use moor_common::model::WorldStateTimerOp;
 use moor_var::Var;
 use serde_json::{Value, json};
-use std::time::{Duration, Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use uuid::Uuid;
 
 pub(super) struct Session {
+    pub metrics: Arc<Metrics>,
+    pub group_end: PostgresGroupEnd,
     config: PostgresStorageConfig,
     connection: Option<PostgresConnection>,
     shutdown: PostgresShutdown,
@@ -99,6 +106,8 @@ impl Session {
         );
         Ok((
             Self {
+                metrics: Arc::new(Metrics::default()),
+                group_end: PostgresGroupEnd::Available,
                 config,
                 connection: Some(connection),
                 shutdown,
@@ -190,16 +199,50 @@ impl Session {
                 }
                 apply_relation(connection, properties, deadline)?;
                 if let Some(sequences) = &commit.sequences {
-                    connection.execute_prepared(
-                        "sequence_maxima",
-                        &[PostgresParam::Text(3802, sequences)],
-                        deadline,
-                        |_| unreachable!(),
-                    )?;
+                    connection
+                        .execute_prepared(
+                            "sequence_maxima",
+                            &[PostgresParam::Text(3802, sequences)],
+                            deadline,
+                            |_| unreachable!(),
+                        )
+                        .map_err(|source| operation("sequences", "sequence_maxima", source))?;
                 }
             }
             Ok(())
         })?;
+        let statements = commits
+            .iter()
+            .zip(&properties)
+            .map(|(commit, properties)| {
+                commit
+                    .ordinary
+                    .iter()
+                    .chain(std::iter::once(properties))
+                    .map(|batch| {
+                        u64::from(batch.puts.is_some()) + u64::from(batch.deletes.is_some())
+                    })
+                    .sum::<u64>()
+                    + u64::from(commit.sequences.is_some())
+            })
+            .sum::<u64>();
+        self.metrics.update(|m| {
+            let reason = if properties.len() < commits.len() {
+                PostgresGroupEnd::RollupExpansion
+            } else {
+                self.group_end
+            };
+            m.group_end_reasons[reason as usize] += 1;
+            m.groups += 1;
+            m.group_commits += properties.len() as u64;
+            m.group_payload_bytes += bytes as u64;
+            m.group_sql_statements += statements;
+            m.last_group_commits = properties.len() as u64;
+            m.last_group_payload_bytes = bytes as u64;
+            m.last_group_sql_statements = statements;
+            m.last_group_first = commits[0].publication.version();
+            m.last_group_last = after.applied;
+        });
         for (key, chain) in changes {
             match chain {
                 Some(chain) => {
@@ -231,6 +274,8 @@ impl Session {
     }
 
     pub fn fence(&mut self) -> Result<(), PostgresError> {
+        let _timer = self.metrics.timer(WorldStateTimerOp::PostgresFence);
+        self.metrics.update(|m| m.fence_calls += 1);
         let mut after = self.progress.clone();
         after.durable_fence = after
             .durable_fence
@@ -325,9 +370,26 @@ impl Session {
         }
         // Drop the failed session before trying to acquire its lock again.
         self.connection.take();
+        let _timer = self.metrics.timer(WorldStateTimerOp::PostgresRecovery);
+        let first = if after.applied > self.progress.applied {
+            self.progress.applied + 1
+        } else {
+            after.applied
+        };
+        self.metrics.update(|m| {
+            m.recovery_first = first;
+            m.recovery_last = after.applied;
+        });
+        tracing::warn!(
+            epoch = after.epoch,
+            first,
+            last = after.applied,
+            "Recovering PostgreSQL publication range"
+        );
         let deadline = Instant::now() + self.config.recovery_timeout;
         loop {
             self.shutdown.check(deadline)?;
+            self.metrics.update(|m| m.recovery_attempts += 1);
             match self.reconnect(deadline) {
                 Ok(observed) => {
                     if observed == *after {
@@ -392,14 +454,19 @@ impl Session {
         deadline: Instant,
         apply: &impl Fn(&mut PostgresConnection, Instant) -> Result<(), PostgresError>,
     ) -> Result<(), PostgresError> {
+        let application_timer = self.metrics.timer(WorldStateTimerOp::PostgresApply);
         let connection = self.connection.as_mut().ok_or(PostgresError::Closed)?;
-        connection.query("BEGIN", &[], deadline, |_| unreachable!())?;
+        connection
+            .query("BEGIN", &[], deadline, |_| unreachable!())
+            .map_err(|source| operation("writer_progress", "BEGIN", source))?;
         let sync = if force_sync || self.config.commit_policy == PostgresCommitPolicy::Synchronous {
             "SET LOCAL synchronous_commit=on"
         } else {
             "SET LOCAL synchronous_commit=off"
         };
-        connection.query(sync, &[], deadline, |_| unreachable!())?;
+        connection
+            .query(sync, &[], deadline, |_| unreachable!())
+            .map_err(|source| operation("writer_progress", "SET synchronous_commit", source))?;
         let table = self.config.schema.qualify("writer_progress")?;
         let before = &self.progress;
         let numbers = [
@@ -420,7 +487,8 @@ impl Session {
             .iter()
             .map(|value| PostgresParam::Text(1700, value))
             .collect();
-        let result = connection.query(&format!("UPDATE {table} SET applied_version=$2,commit_sequence=$3,max_timestamp=GREATEST(max_timestamp,$4),durable_fence=$5,property_record_sequence=$10::bigint WHERE singleton AND writer_epoch=$1 AND applied_version=$6 AND commit_sequence=$7 AND max_timestamp=$8 AND durable_fence=$9 AND property_record_sequence=$11::bigint"), &params, deadline, |_| unreachable!())?;
+        let result = connection.query(&format!("UPDATE {table} SET applied_version=$2,commit_sequence=$3,max_timestamp=GREATEST(max_timestamp,$4),durable_fence=$5,property_record_sequence=$10::bigint WHERE singleton AND writer_epoch=$1 AND applied_version=$6 AND commit_sequence=$7 AND max_timestamp=$8 AND durable_fence=$9 AND property_record_sequence=$11::bigint"), &params, deadline, |_| unreachable!())
+            .map_err(|source| operation("writer_progress", "advance", source))?;
         if result.affected_rows != Some(1) {
             return Err(PostgresError::OwnershipLost);
         }
@@ -431,7 +499,12 @@ impl Session {
             self.connection.take();
             return Err(PostgresError::Connection);
         }
-        connection.query("COMMIT", &[], deadline, |_| unreachable!())?;
+        drop(application_timer);
+        let commit_timer = self.metrics.timer(WorldStateTimerOp::PostgresCommit);
+        connection
+            .query("COMMIT", &[], deadline, |_| unreachable!())
+            .map_err(|source| operation("writer_progress", "COMMIT", source))?;
+        drop(commit_timer);
         #[cfg(test)]
         if self.failure == Some(FailurePoint::AfterCommit) {
             self.failure = None;
@@ -439,6 +512,17 @@ impl Session {
             return Err(PostgresError::Connection);
         }
         Ok(())
+    }
+}
+fn operation(
+    relation: &'static str,
+    operation: &'static str,
+    source: PostgresError,
+) -> PostgresError {
+    PostgresError::Operation {
+        relation,
+        operation,
+        source: Box::new(source),
     }
 }
 fn array(rows: Vec<Value>) -> Option<String> {
