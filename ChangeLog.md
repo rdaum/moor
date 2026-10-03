@@ -393,6 +393,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 `db`:
 
+- Remove stored property overrides, permissions, verb programs, and move data when recycling
+  objects. Reusing an object ID no longer exposes values from the recycled object.
+
 - Snapshot point reads derive missing local property permissions from the definer, including chown
   behavior. Invalid ancestry cycles return an error.
 
