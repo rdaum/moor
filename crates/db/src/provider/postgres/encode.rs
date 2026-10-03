@@ -15,6 +15,7 @@
 use super::{
     PostgresError, codec,
     rows::{self, RowKey, RowValue},
+    validation_cache::{ListSize, ValidationCache},
 };
 use crate::{
     ObjAndUUIDHolder, Timestamp,
@@ -41,7 +42,11 @@ impl RelationBatch {
 pub(super) enum PropertyMutation {
     Delete,
     Full(Value),
-    Append { row: Value, final_value: Var },
+    Append {
+        row: Value,
+        final_value: Var,
+        retained_bytes: usize,
+    },
 }
 pub(super) struct PropertyMutationRow {
     pub key: ObjAndUUIDHolder,
@@ -62,7 +67,6 @@ pub(crate) struct EncodedCommit {
 impl EncodedCommit {
     /// Rendered bytes before SQL adds record sequences. Counting serialization retains no copy.
     pub(super) fn payload_sizes(&self) -> (usize, usize) {
-        use moor_var::ByteSized;
         struct Count(usize);
         impl std::io::Write for Count {
             fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
@@ -84,8 +88,12 @@ impl EncodedCommit {
             let row = match &property.mutation {
                 PropertyMutation::Delete => continue,
                 PropertyMutation::Full(row) => row,
-                PropertyMutation::Append { row, final_value } => {
-                    retained += final_value.size_bytes();
+                PropertyMutation::Append {
+                    row,
+                    retained_bytes,
+                    ..
+                } => {
+                    retained += retained_bytes;
                     row
                 }
             };
@@ -151,33 +159,64 @@ fn properties(
     timestamp: Timestamp,
     profile: &SourceProfile,
     limits: &mut PayloadLimits,
+    cache: &ValidationCache,
 ) -> Result<Vec<PropertyMutationRow>, PostgresError> {
     changes
         .into_iter()
         .map(|op| {
-            let mutation = match op.mutation {
-                PreparedPropertyValueMutation::Delete => PropertyMutation::Delete,
-                PreparedPropertyValueMutation::Replace { value } => PropertyMutation::Full(
-                    property_row(&op.property, &value, timestamp, false, profile)?,
-                ),
+            let (mutation, size) = match op.mutation {
+                PreparedPropertyValueMutation::Delete => (PropertyMutation::Delete, 192),
+                PreparedPropertyValueMutation::Replace { value } => {
+                    let row = property_row(&op.property, &value, timestamp, false, profile)?;
+                    let size = validate_row("object_propvalues", &row, limits.row_bytes)?;
+                    if value.as_list().is_some() {
+                        cache.insert(
+                            &op.property,
+                            timestamp,
+                            ListSize::measured(&value, literal(&row)),
+                        );
+                    }
+                    (PropertyMutation::Full(row), size)
+                }
                 PreparedPropertyValueMutation::AppendList {
                     suffix,
                     final_value,
-                } => PropertyMutation::Append {
-                    row: property_row(&op.property, &Var::from(suffix), timestamp, true, profile)?,
-                    final_value,
-                },
-            };
-            let size = match &mutation {
-                PropertyMutation::Delete => 192,
-                PropertyMutation::Full(row) => {
-                    validate_row("object_propvalues", row, limits.row_bytes)?
-                }
-                PropertyMutation::Append { row, final_value } => {
-                    let suffix = validate_row("object_propvalues", row, limits.row_bytes)?;
-                    // A valid suffix must also permit a future full replacement or rollup.
-                    let full = property_row(&op.property, final_value, timestamp, false, profile)?;
-                    suffix.max(validate_row("object_propvalues", &full, limits.row_bytes)?)
+                } => {
+                    let suffix = Var::from(suffix);
+                    let row = property_row(&op.property, &suffix, timestamp, true, profile)?;
+                    let suffix_size = validate_row("object_propvalues", &row, limits.row_bytes)?;
+                    let suffix_measurement = ListSize::measured(&suffix, literal(&row));
+                    let full_measurement = match cache.get(&op.property, op.base_timestamp) {
+                        Some(base) => base.append(suffix_measurement),
+                        None => {
+                            // First append after reopen or eviction validates the full value.
+                            let full = property_row(
+                                &op.property,
+                                &final_value,
+                                timestamp,
+                                false,
+                                profile,
+                            )?;
+                            validate_row("object_propvalues", &full, limits.row_bytes)?;
+                            ListSize::measured(&final_value, literal(&full))
+                        }
+                    };
+                    // Keys and timestamp are those of this append. Substitute only the literal
+                    // and record kind to account for its eventual full replacement or rollup.
+                    let full_size =
+                        suffix_size - suffix_measurement.json_bytes - "list_append".len()
+                            + "full".len()
+                            + full_measurement.json_bytes;
+                    check_row_size("object_propvalues", &row, full_size, limits.row_bytes)?;
+                    cache.insert(&op.property, timestamp, full_measurement);
+                    (
+                        PropertyMutation::Append {
+                            row,
+                            final_value,
+                            retained_bytes: full_measurement.logical_bytes,
+                        },
+                        suffix_size.max(full_size),
+                    )
                 }
             };
             limits.charge(size)?;
@@ -189,23 +228,29 @@ fn properties(
         .collect()
 }
 
+fn literal(row: &Value) -> &str {
+    row["value_literal"]
+        .as_str()
+        .expect("encoded property literal")
+}
+
 macro_rules! define_encode {
     ($( $field:ident $category:ident $policy:ident $arrow:tt $domain:ty, $codomain:ty ),* $(,)?) => {
         fn operation_count(changes: &RelationChanges) -> usize {
             0 $(+ changes.$field.len())*
         }
-        fn relations(changes: RelationChanges, timestamp: Timestamp, profile: &SourceProfile, limits: &mut PayloadLimits) -> Result<(Vec<RelationBatch>, Vec<PropertyMutationRow>), PostgresError> {
+        fn relations(changes: RelationChanges, timestamp: Timestamp, profile: &SourceProfile, limits: &mut PayloadLimits, cache: &ValidationCache) -> Result<(Vec<RelationBatch>, Vec<PropertyMutationRow>), PostgresError> {
             let mut ordinary = Vec::new();
             let mut properties = Vec::new();
-            $(define_encode!(@encode $category, changes.$field, stringify!($field), timestamp, profile, limits, ordinary, properties);)*
+            $(define_encode!(@encode $category, changes.$field, stringify!($field), timestamp, profile, limits, ordinary, properties, cache);)*
             Ok((ordinary, properties))
         }
     };
-    (@encode Ordinary, $changes:expr, $relation:expr, $ts:expr, $profile:expr, $limits:ident, $ordinary:ident, $properties:ident) => {
+    (@encode Ordinary, $changes:expr, $relation:expr, $ts:expr, $profile:expr, $limits:ident, $ordinary:ident, $properties:ident, $cache:ident) => {
         if !$changes.is_empty() { $ordinary.push(ordinary($relation, $changes, $ts, $profile, $limits)?); }
     };
-    (@encode PropertyValueChain, $changes:expr, $relation:expr, $ts:expr, $profile:expr, $limits:ident, $ordinary:ident, $properties:ident) => {
-        $properties.extend(properties($changes, $ts, $profile, $limits)?);
+    (@encode PropertyValueChain, $changes:expr, $relation:expr, $ts:expr, $profile:expr, $limits:ident, $ordinary:ident, $properties:ident, $cache:ident) => {
+        $properties.extend(properties($changes, $ts, $profile, $limits, $cache)?);
     };
 }
 crate::relation_registry::relation_registry!(define_encode);
@@ -215,6 +260,7 @@ pub(super) fn prepare(
     commit: LogicalCommit,
     profile: &SourceProfile,
     max_row_bytes: usize,
+    cache: &ValidationCache,
 ) -> Result<EncodedCommit, PostgresError> {
     // Count both the delete and insert work of a property replacement or rollup.
     let group_operations = operation_count(&commit.changes)
@@ -224,7 +270,13 @@ pub(super) fn prepare(
         row_bytes: max_row_bytes,
         commit_bytes: 1024,
     };
-    let (ordinary, properties) = relations(commit.changes, commit.timestamp, profile, &mut limits)?;
+    let (ordinary, properties) = relations(
+        commit.changes,
+        commit.timestamp,
+        profile,
+        &mut limits,
+        cache,
+    )?;
     if commit
         .sequences
         .iter()
@@ -292,6 +344,15 @@ fn validate_row(relation: &'static str, row: &Value, limit: usize) -> Result<usi
     if relation == "object_propvalues" {
         size += ", \"record_sequence\": 9223372036854775807".len();
     }
+    check_row_size(relation, row, size, limit)
+}
+
+fn check_row_size(
+    relation: &'static str,
+    row: &Value,
+    size: usize,
+    limit: usize,
+) -> Result<usize, PostgresError> {
     if size > limit {
         return Err(rows::contextual(
             relation,
@@ -302,7 +363,7 @@ fn validate_row(relation: &'static str, row: &Value, limit: usize) -> Result<usi
     Ok(size)
 }
 
-fn json_string_bytes(text: &str) -> usize {
+pub(super) fn json_string_bytes(text: &str) -> usize {
     2 + text
         .bytes()
         .map(|byte| match byte {
@@ -364,6 +425,97 @@ pub(super) fn finish_prepared(mut prepared: EncodedCommit, commit: LogicalCommit
 #[cfg(test)]
 mod limit_tests {
     use super::*;
+
+    #[test]
+    fn cached_append_limits_match_full_encoding_and_reject_one_byte_less() {
+        use moor_var::{Obj, v_int, v_list, v_str};
+        let key = ObjAndUUIDHolder::new(&Obj::mk_id(7), uuid::Uuid::nil());
+        let profile = SourceProfile::default();
+        for base in [
+            v_list(&[]),
+            v_list(&[v_str("quoted\"\\\n\0牛"), v_list(&[v_int(42)])]),
+        ] {
+            let suffix = v_list(&[v_str("\\suffix\"\t"), v_list(&[v_str("nested")])]);
+            let final_value = v_list(
+                &base
+                    .as_list()
+                    .unwrap()
+                    .iter_ref()
+                    .chain(suffix.as_list().unwrap().iter_ref())
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            );
+            let cache = ValidationCache::default();
+            let seed = PreparedPropertyValueOp {
+                property: key.clone(),
+                base_timestamp: None,
+                mutation: PreparedPropertyValueMutation::Replace {
+                    value: base.clone(),
+                },
+            };
+            let mut limits = PayloadLimits {
+                row_bytes: usize::MAX,
+                commit_bytes: 0,
+            };
+            properties(vec![seed], Timestamp(9), &profile, &mut limits, &cache).unwrap();
+            let full_row =
+                property_row(&key, &final_value, Timestamp(10), false, &profile).unwrap();
+            let suffix_row = property_row(&key, &suffix, Timestamp(10), true, &profile).unwrap();
+            let full_size = validate_row("object_propvalues", &full_row, usize::MAX).unwrap();
+            let suffix_size = validate_row("object_propvalues", &suffix_row, usize::MAX).unwrap();
+            let boundary = full_size.max(suffix_size);
+            let append = PreparedPropertyValueOp {
+                property: key.clone(),
+                base_timestamp: Some(Timestamp(9)),
+                mutation: PreparedPropertyValueMutation::AppendList {
+                    suffix: suffix.as_list().unwrap().clone(),
+                    final_value: final_value.clone(),
+                },
+            };
+            limits.row_bytes = boundary;
+            let encoded = properties(
+                vec![append.clone()],
+                Timestamp(10),
+                &profile,
+                &mut limits,
+                &cache,
+            )
+            .unwrap();
+            let PropertyMutation::Append { retained_bytes, .. } = &encoded[0].mutation else {
+                panic!()
+            };
+            assert_eq!(
+                *retained_bytes,
+                moor_var::ByteSized::size_bytes(&final_value)
+            );
+            assert_eq!(cache.stats(), (1, 0));
+            limits.row_bytes -= 1;
+            assert!(
+                properties(
+                    vec![append.clone()],
+                    Timestamp(10),
+                    &profile,
+                    &mut limits,
+                    &cache
+                )
+                .is_err()
+            );
+            assert_eq!(cache.stats(), (1 + u64::from(full_size > suffix_size), 0));
+
+            // After eviction or reopen the same boundary comes from full validation.
+            let empty_cache = ValidationCache::default();
+            limits.row_bytes = boundary;
+            properties(
+                vec![append],
+                Timestamp(10),
+                &profile,
+                &mut limits,
+                &empty_cache,
+            )
+            .unwrap();
+            assert_eq!(empty_cache.stats(), (0, 1));
+        }
+    }
 
     #[test]
     fn commit_budget_accepts_its_boundary_and_rejects_overflow() {

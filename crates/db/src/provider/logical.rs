@@ -121,6 +121,8 @@ const LIST_APPEND_COMPARISON_BUDGET: usize = 128;
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct PreparedPropertyValueOp {
     pub property: ObjAndUUIDHolder,
+    /// Version whose prefix was verified when classifying an append.
+    pub base_timestamp: Option<Timestamp>,
     pub mutation: PreparedPropertyValueMutation,
 }
 
@@ -139,10 +141,14 @@ pub(crate) fn prepare_property_value_working_set(
     let mut prepared = Vec::with_capacity(operation_count);
 
     for (property, operation) in operations {
-        let base = base_index.index_lookup(&property).map(|entry| &entry.value);
+        let base = base_index.index_lookup(&property);
         prepared.push(PreparedPropertyValueOp {
             property,
-            mutation: prepare_property_value_mutation(base, operation.operation),
+            base_timestamp: base.map(|entry| entry.ts),
+            mutation: prepare_property_value_mutation(
+                base.map(|entry| &entry.value),
+                operation.operation,
+            ),
         });
     }
     prepared

@@ -102,6 +102,7 @@ fn append(
         mutation: PropertyMutation::Append {
             row: encode::property_row(key, suffix, Timestamp(ts), true, &config.profile).unwrap(),
             final_value: final_value.clone(),
+            retained_bytes: moor_var::ByteSized::size_bytes(final_value),
         },
     }
 }
@@ -584,6 +585,7 @@ fn out_of_order_encoders_hold_permits_and_rollups_have_an_independent_reply_path
         };
         changes.object_propvalues.push(PreparedPropertyValueOp {
             property: key.clone(),
+            base_timestamp: None,
             mutation,
         });
         coordinator
@@ -1464,13 +1466,16 @@ fn near_limit_replacements_and_rollups_reload_and_rejections_leave_writer_usable
     db.wait_for_durability(Duration::from_secs(20)).unwrap();
     // A full replacement must have removed at least one earlier chain.
     assert!(count(&config, "object_propvalues") < appends);
+    let stats = db.persistence_status().postgres.unwrap();
+    assert_eq!(stats.append_validation_cache_hits, appends as u64);
+    assert_eq!(stats.append_validation_cache_misses, 0);
     let before = db.publication();
     let mut loader = db.loader_client().unwrap();
     let too_large = expected
         .as_list()
         .unwrap()
         .clone()
-        .append_owned(&v_list(&[v_str(&"\\".repeat(2048))]))
+        .append_owned(&v_list(&[v_str(&"\\".repeat(256))]))
         .unwrap();
     loader
         .set_property(&object, property, None, None, Some(too_large))
@@ -1520,6 +1525,45 @@ fn near_limit_replacements_and_rollups_reload_and_rejections_leave_writer_usable
     let mut loaded_source = String::new();
     moor_compiler::write_persistent_source(&program, &config.profile, &mut loaded_source).unwrap();
     assert_eq!(loaded_source, source);
+    expected = loader
+        .get_existing_property_value(&object, property)
+        .unwrap()
+        .unwrap()
+        .0;
+    drop(loader);
+    for n in 0..2 {
+        let mut loader = db.loader_client().unwrap();
+        expected = expected
+            .as_list()
+            .unwrap()
+            .clone()
+            .append_owned(&v_list(&[v_int(n)]))
+            .unwrap();
+        loader
+            .set_property(&object, property, None, None, Some(expected.clone()))
+            .unwrap();
+        loader.commit().unwrap();
+    }
+    let stats = db.persistence_status().postgres.unwrap();
+    assert_eq!(stats.append_validation_cache_misses, 1);
+    assert_eq!(stats.append_validation_cache_hits, 1);
+    db.wait_for_durability(Duration::from_secs(20)).unwrap();
+    drop(db);
+    let (db, _) = TxDB::try_open(
+        StorageConfig::postgres(config),
+        DatabaseConfig::default(),
+        PersistenceConfig::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        db.loader_client()
+            .unwrap()
+            .get_existing_property_value(&object, property)
+            .unwrap()
+            .unwrap()
+            .0,
+        expected
+    );
 }
 
 #[test]

@@ -23,6 +23,8 @@ pub struct PostgresPersistenceStats {
     pub encoding_calls: u64,
     pub encoding_failures: u64,
     pub encoding_ns: u64,
+    pub append_validation_cache_hits: u64,
+    pub append_validation_cache_misses: u64,
     pub encoded_bytes: u64,
     pub sql_application_ns: u64,
     pub sql_commit_ns: u64,
@@ -96,6 +98,14 @@ impl PostgresPersistenceStats {
                 self.oldest_unapplied_micros,
             ),
             ("persistence_postgres_encoding_calls", self.encoding_calls),
+            (
+                "persistence_postgres_append_validation_cache_hits",
+                self.append_validation_cache_hits,
+            ),
+            (
+                "persistence_postgres_append_validation_cache_misses",
+                self.append_validation_cache_misses,
+            ),
             (
                 "persistence_postgres_encoding_failures",
                 self.encoding_failures,

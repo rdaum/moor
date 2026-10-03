@@ -252,6 +252,11 @@ later rollups under the same configuration. Property checks reserve 19 decimal d
 record sequence. Changing the row limit to a smaller value can prevent an existing world from
 opening.
 
+Append validation caches size measurements for up to 4096 property versions. A matching base version
+lets the encoder validate only the new suffix and calculate the complete row size. The cache retains
+no property values. After restart or eviction, the next append validates the complete value before
+caching its measurements. Rollups still encode the complete value.
+
 Each logical commit has a 256 MiB encoded payload budget. The budget includes possible complete
 property rollups, 128 bytes per mutation for keys and framing, and 1024 bytes for sequence updates.
 The writer can exceed its normal group budget for one indivisible commit, but this commit limit
@@ -599,6 +604,8 @@ PostgreSQL also exposes cumulative values with the `persistence_postgres_` prefi
 
 - `encoding_calls`, `encoding_failures`, `encoded_bytes`, and `encoding_ns` describe preparation,
   including attempts that later conflict.
+- `append_validation_cache_hits` and `append_validation_cache_misses` count suffix-only and complete
+  append validation. The cache starts empty each time the database opens.
 - `sql_application_ns`, `sql_commit_ns`, and `fence_ns` separate SQL execution, COMMIT, and complete
   durability-fence time. Failed attempts contribute time. Fence time includes its SQL stages.
 - `groups`, `group_commits`, `group_payload_bytes`, and `group_sql_statements` describe confirmed

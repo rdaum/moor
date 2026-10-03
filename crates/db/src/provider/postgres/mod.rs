@@ -34,6 +34,7 @@ mod snapshot;
 mod sql;
 mod state;
 mod validation;
+mod validation_cache;
 mod writer;
 pub(crate) use encode::EncodedCommit;
 pub(crate) use writer::PostgresWriter;

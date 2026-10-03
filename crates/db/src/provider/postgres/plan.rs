@@ -196,7 +196,9 @@ fn plan_properties(
             PropertyMutation::Full(row) => {
                 (row.clone(), PropertyValueChain::full(sequence as u64), true)
             }
-            PropertyMutation::Append { row, final_value } => {
+            PropertyMutation::Append {
+                row, final_value, ..
+            } => {
                 let bytes = rows::text(
                     row.as_object()
                         .ok_or_else(|| invalid("row", "invalid property row"))?,

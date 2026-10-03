@@ -61,6 +61,7 @@ struct RollupJob {
 }
 struct Shared {
     metrics: Arc<Metrics>,
+    validation_cache: super::validation_cache::ValidationCache,
     healthy: Arc<AtomicBool>,
     stopping: AtomicBool,
     failure_reported: AtomicBool,
@@ -157,6 +158,7 @@ impl PostgresWriter {
         config.validate()?;
         let shared = Arc::new(Shared {
             metrics: Arc::new(Metrics::default()),
+            validation_cache: super::validation_cache::ValidationCache::default(),
             healthy: Arc::new(AtomicBool::new(true)),
             stopping: AtomicBool::new(false),
             failure_reported: AtomicBool::new(false),
@@ -289,7 +291,7 @@ impl PostgresWriter {
                                     let (commit, mut permit) = match job {
                                         EncodingJob::Prepare(commit, reply) => {
                                             let timer = shared.metrics.timer(moor_common::model::WorldStateTimerOp::PostgresEncode);
-                                            let mut result = encode::prepare(commit, &profile, max_row_bytes);
+                                            let mut result = encode::prepare(commit, &profile, max_row_bytes, &shared.validation_cache);
                                             let (bytes, retained) = result.as_ref().map_or((0, 0), EncodedCommit::payload_sizes);
                                             shared.metrics.update(|m| {
                                                 m.encoding_calls += 1;
@@ -311,7 +313,7 @@ impl PostgresWriter {
                                             Ok(encode::finish_prepared(*prepared, commit))
                                         }
                                         // Internal conformance tests can submit logical batches directly.
-                                        None => encode::prepare(commit, &profile, max_row_bytes),
+                                        None => encode::prepare(commit, &profile, max_row_bytes, &shared.validation_cache),
                                     };
                                     let mut message = (version, result, permit);
                                     loop {
@@ -432,6 +434,10 @@ impl PostgresWriter {
     }
     pub(crate) fn diagnostics(&self) -> crate::PostgresPersistenceStats {
         let mut stats = self.shared.metrics.snapshot();
+        (
+            stats.append_validation_cache_hits,
+            stats.append_validation_cache_misses,
+        ) = self.shared.validation_cache.stats();
         (stats.active_exports, stats.oldest_export_micros) = self.exports.diagnostics();
         stats.export_limit = self.config.max_exports as u64;
         stats

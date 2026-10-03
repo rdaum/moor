@@ -1036,7 +1036,9 @@ impl BatchWriter {
                     }
                     BatchOpType::PropertyValue(prepared) => {
                         let op_start = Instant::now();
-                        let PreparedPropertyValueOp { property, mutation } = prepared;
+                        let PreparedPropertyValueOp {
+                            property, mutation, ..
+                        } = prepared;
                         let mutation = match mutation {
                             PreparedPropertyValueMutation::Replace { value } => {
                                 let record =
@@ -1443,6 +1445,7 @@ mod tests {
                 partition: partition.clone(),
                 op_type: BatchOpType::PropertyValue(PreparedPropertyValueOp {
                     property: property.clone(),
+                    base_timestamp: None,
                     mutation,
                 }),
                 source: BatchOpSource::Property {

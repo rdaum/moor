@@ -402,6 +402,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 `db`:
 
+- Reuse validated property-version sizes for PostgreSQL list appends. Repeated appends can validate
+  only the new suffix while preserving complete-value reload limits.
+
 - Avoid growing PostgreSQL write delays during repeated property replacement. Deletes use current
   property records and refresh query plans as tables grow.
 
