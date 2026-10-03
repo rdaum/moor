@@ -310,7 +310,9 @@ impl Session {
             for relation in &commit.ordinary {
                 apply_relation(connection, relation, deadline)?;
             }
-            apply_relation(connection, properties, deadline)?;
+            for relation in properties {
+                apply_relation(connection, relation, deadline)?;
+            }
             if let Some(sequences) = &commit.sequences {
                 connection
                     .execute_prepared(

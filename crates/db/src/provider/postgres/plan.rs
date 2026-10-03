@@ -29,7 +29,7 @@ use serde_json::{Value, json};
 
 type ChainChanges = ahash::AHashMap<ObjAndUUIDHolder, Option<PropertyValueChain>>;
 struct PropertyPlan {
-    batch: RelationBatch,
+    batch: Vec<RelationBatch>,
     changes: Vec<(ObjAndUUIDHolder, Option<PropertyValueChain>)>,
 }
 
@@ -39,7 +39,7 @@ pub(super) struct TransactionPlan<'a> {
     pub before: Progress,
     pub after: Progress,
     pub commits: &'a [EncodedCommit],
-    pub properties: Vec<RelationBatch>,
+    pub properties: Vec<Vec<RelationBatch>>,
     pub changes: ChainChanges,
     pub bytes: usize,
     pub force_sync: bool,
@@ -92,7 +92,11 @@ impl<'a> TransactionPlan<'a> {
                 .iter()
                 .map(RelationBatch::encoded_bytes)
                 .sum::<usize>()
-                + plan.batch.encoded_bytes()
+                + plan
+                    .batch
+                    .iter()
+                    .map(RelationBatch::encoded_bytes)
+                    .sum::<usize>()
                 + commit.sequences.as_ref().map_or(0, String::len);
             // A rollup can expand a small suffix into a large full value. Seal before
             // that member; one indivisible commit may exceed the payload limit.
@@ -143,7 +147,7 @@ impl<'a> TransactionPlan<'a> {
                 commit
                     .ordinary
                     .iter()
-                    .chain(std::iter::once(properties))
+                    .chain(properties.iter())
                     .map(|batch| {
                         u64::from(batch.puts.is_some()) + u64::from(batch.deletes.is_some())
                     })
@@ -166,9 +170,26 @@ fn plan_properties(
     let mut changes = Vec::with_capacity(commit.properties.len());
     for property in &commit.properties {
         let key = &property.key;
+        let previous = match overlay.get(key) {
+            Some(chain) => chain.as_ref(),
+            None => chains.get(key),
+        };
+        let deletion = || {
+            let mut row = key.encode_key("object_propvalues");
+            row.insert(
+                "record_sequence".into(),
+                json!(previous.map_or(0, |chain| {
+                    chain
+                        .record_versions()
+                        .next()
+                        .expect("property chains have a full record")
+                })),
+            );
+            Value::Object(row)
+        };
         let (mut row, chain, replace) = match &property.mutation {
             PropertyMutation::Delete => {
-                deletes.push(Value::Object(key.encode_key("object_propvalues")));
+                deletes.push(deletion());
                 changes.push((key.clone(), None));
                 continue;
             }
@@ -182,10 +203,6 @@ fn plan_properties(
                     "value_literal",
                 )?
                 .len();
-                let previous = match overlay.get(key) {
-                    Some(chain) => chain.as_ref(),
-                    None => chains.get(key),
-                };
                 if previous
                     .is_none_or(|chain| chain.reaches_limit(bytes, PROPERTY_VALUE_CHAIN_LIMITS))
                 {
@@ -204,20 +221,139 @@ fn plan_properties(
         row["record_sequence"] = json!(sequence);
         puts.push(row);
         if replace {
-            deletes.push(Value::Object(key.encode_key("object_propvalues")));
+            deletes.push(deletion());
         }
         changes.push((key.clone(), Some(chain)));
     }
-    Ok(PropertyPlan {
-        batch: RelationBatch {
+    // Bound the SQL TID array: each valid key has at most 64 physical records.
+    // An indivisible commit can have many keys, so split only its delete statements.
+    let mut batch: Vec<_> = deletes
+        .chunks(1024)
+        .map(|keys| RelationBatch {
             relation: "object_propvalues",
-            puts: array(puts),
-            deletes: array(deletes),
-        },
-        changes,
-    })
+            puts: None,
+            deletes: Some(Value::Array(keys.to_vec()).to_string()),
+        })
+        .collect();
+    if let Some(puts) = array(puts) {
+        batch.push(RelationBatch {
+            relation: "object_propvalues",
+            puts: Some(puts),
+            deletes: None,
+        });
+    }
+    Ok(PropertyPlan { batch, changes })
 }
 
 fn array(rows: Vec<Value>) -> Option<String> {
     (!rows.is_empty()).then(|| Value::Array(rows).to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::provider::{
+        logical::WriterEpoch,
+        postgres::{encode::PropertyMutationRow, tests::empty},
+    };
+    use moor_var::Obj;
+    use uuid::Uuid;
+
+    #[test]
+    fn indivisible_delete_commit_keeps_bounded_arrays_and_every_key() {
+        let epoch = WriterEpoch::random();
+        let mut commit = empty(epoch, 1, 1);
+        for id in 0..2049 {
+            commit.properties.push(PropertyMutationRow {
+                key: ObjAndUUIDHolder::new(&Obj::mk_id(id), Uuid::nil()),
+                mutation: PropertyMutation::Delete,
+            });
+        }
+        let before = Progress {
+            epoch: epoch.as_u64(),
+            applied: 0,
+            commits: 0,
+            max_timestamp: 0,
+            property_sequence: 0,
+            durable_fence: 0,
+        };
+        let plan = TransactionPlan::group(
+            &before,
+            &Chains::default(),
+            std::slice::from_ref(&commit),
+            1,
+            |_, _, _| unreachable!(),
+        )
+        .unwrap();
+        assert_eq!(plan.commits.len(), 1);
+        assert_eq!(plan.after.applied, 1);
+        assert_eq!(plan.after.property_sequence, 1);
+        assert_eq!(plan.changes.len(), 2049);
+        let mut keys = std::collections::BTreeSet::new();
+        for batch in &plan.properties[0] {
+            assert!(batch.puts.is_none());
+            let rows: Vec<Value> = serde_json::from_str(batch.deletes.as_ref().unwrap()).unwrap();
+            assert!(rows.len() <= 1024);
+            for row in rows {
+                keys.insert(row["object_ref"].as_str().unwrap().to_owned());
+            }
+        }
+        assert_eq!(keys, (0..2049).map(|id| format!("#{id}")).collect());
+        assert_eq!(plan.statements(), 3);
+    }
+    #[test]
+    fn delete_bounds_follow_confirmed_and_tentative_full_records() {
+        use super::super::encode::property_row;
+        let epoch = WriterEpoch::random();
+        let key = ObjAndUUIDHolder::new(&Obj::mk_id(7), Uuid::nil());
+        let mut chain = PropertyValueChain::full(50);
+        chain.push_append(51, 3);
+        let chains = [(key.clone(), chain)].into_iter().collect();
+        let mut first = empty(epoch, 1, 1);
+        first.properties.push(PropertyMutationRow {
+            key: key.clone(),
+            mutation: PropertyMutation::Full(
+                property_row(
+                    &key,
+                    &moor_var::v_int(1),
+                    Timestamp(1),
+                    false,
+                    &moor_compiler::SourceProfile::default(),
+                )
+                .unwrap(),
+            ),
+        });
+        let mut second = empty(epoch, 2, 2);
+        second.properties.push(PropertyMutationRow {
+            key: key.clone(),
+            mutation: PropertyMutation::Delete,
+        });
+        let before = Progress {
+            epoch: epoch.as_u64(),
+            applied: 0,
+            commits: 0,
+            max_timestamp: 0,
+            property_sequence: 60,
+            durable_fence: 0,
+        };
+        let commits = [first, second];
+        let plan = TransactionPlan::group(
+            &before,
+            &chains,
+            &commits,
+            usize::MAX,
+            |_, _, _| unreachable!(),
+        )
+        .unwrap();
+        for (batches, expected) in plan.properties.iter().zip([50, 61]) {
+            let rows: Value = serde_json::from_str(batches[0].deletes.as_ref().unwrap()).unwrap();
+            assert_eq!(rows[0]["record_sequence"], json!(expected));
+        }
+        assert_eq!(plan.after.property_sequence, 62);
+        assert_eq!(plan.changes.get(&key), Some(&None));
+        assert_eq!(
+            chains[&key].record_versions().collect::<Vec<_>>(),
+            vec![50, 51]
+        );
+    }
 }

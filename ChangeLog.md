@@ -402,6 +402,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 `db`:
 
+- Avoid growing PostgreSQL write delays during repeated property replacement. Deletes use current
+  property records and refresh query plans as tables grow.
+
 - Remove stored property overrides, permissions, verb programs, and move data when recycling
   objects. Reusing an object ID no longer exposes values from the recycled object.
 

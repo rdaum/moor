@@ -169,7 +169,7 @@ fn properties(
                 },
             };
             let size = match &mutation {
-                PropertyMutation::Delete => 128,
+                PropertyMutation::Delete => 192,
                 PropertyMutation::Full(row) => {
                     validate_row("object_propvalues", row, limits.row_bytes)?
                 }
@@ -247,7 +247,7 @@ pub(super) fn prepare(
         + properties
             .iter()
             .map(|property| match &property.mutation {
-                PropertyMutation::Delete => 128,
+                PropertyMutation::Delete => 192,
                 PropertyMutation::Full(row) | PropertyMutation::Append { row, .. } => {
                     json_size_bound(row) + 128
                 }

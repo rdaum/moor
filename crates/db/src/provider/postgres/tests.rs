@@ -2725,3 +2725,150 @@ fn incompatible_format_combinations_fail_before_claiming_a_writer_epoch() {
     let (session, _, _) = open(&config);
     assert_eq!(session.progress.commits, 0);
 }
+
+#[test]
+#[ignore = "requires PostgreSQL fixture"]
+fn property_deletes_use_key_and_tuple_lookups_and_remove_complete_chains() {
+    let config = config();
+    initialize_postgres_schema(&config).unwrap();
+    let mut connection = client(&config);
+    let table = config.schema.qualify("object_propvalues").unwrap();
+    let deadline = Instant::now() + config.query_timeout;
+    sql::prepare(&mut connection, &config, deadline).unwrap();
+    // Exercise the prepared statement while the relation is empty, beyond the
+    // five executions after which PostgreSQL can select a generic plan.
+    for _ in 0..6 {
+        connection
+            .execute_prepared(
+                "delete_object_propvalues",
+                &[PostgresParam::Text(3802, "[]")],
+                deadline,
+                |_| unreachable!(),
+            )
+            .unwrap();
+    }
+    connection.query(&format!("INSERT INTO {table} SELECT '#'||n::text,'00000000-0000-0000-0000-000000000001'::uuid,1,1,'full',1,'list','{{1}}' FROM generate_series(1,20000) n"), &[], deadline, |_| unreachable!()).unwrap();
+    connection
+        .query(
+            &format!("ALTER TABLE {table} SET (autovacuum_enabled=false)"),
+            &[],
+            deadline,
+            |_| unreachable!(),
+        )
+        .unwrap();
+    // Leave dead index entries from many older full replacements, as sustained writes do.
+    connection.query(&format!("INSERT INTO {table} SELECT '#'||n::text,'00000000-0000-0000-0000-000000000001'::uuid,v,v,'full',1,'list','{{1}}' FROM generate_series(1,512) n CROSS JOIN generate_series(2,128) v"), &[], deadline, |_| unreachable!()).unwrap();
+    connection.query(&format!("DELETE FROM {table} WHERE record_sequence<128 AND object_ref IN (SELECT '#'||n::text FROM generate_series(1,512) n)"), &[], deadline, |_| unreachable!()).unwrap();
+    connection.query(&format!("INSERT INTO {table} SELECT '#'||n::text,'00000000-0000-0000-0000-000000000001'::uuid,129,129,'list_append',1,'list','{{2}}' FROM generate_series(1,512) n"), &[], deadline, |_| unreachable!()).unwrap();
+    connection
+        .query(
+            &format!("ANALYZE {table}"),
+            &[],
+            deadline,
+            |_| unreachable!(),
+        )
+        .unwrap();
+    let mut keys: Vec<_> = (1..=512).map(|id| json!({"object_ref":format!("#{id}"), "property_uuid":"00000000-0000-0000-0000-000000000001", "record_sequence":128})).collect();
+    keys.push(keys[0].clone()); // Repeated input keys must not delete a tuple twice.
+    let keys = serde_json::Value::Array(keys).to_string();
+    let predicate = "t.object_ref=d.object_ref AND t.property_uuid=d.property_uuid";
+    // The fixture keys contain no SQL quotes. Use the statement prepared before
+    // growth so this also covers the plan-cache behavior of a live writer.
+    assert!(!keys.contains('\''));
+    let indexed = format!("EXECUTE delete_object_propvalues('{keys}')");
+    let previous = format!(
+        "DELETE FROM {table} t USING pg_catalog.jsonb_populate_recordset(NULL::{table},$1) d WHERE {predicate}"
+    );
+    let mut plans = Vec::new();
+    for (name, statement) in [("previous", previous), ("indexed", indexed)] {
+        connection
+            .query("BEGIN", &[], deadline, |_| unreachable!())
+            .unwrap();
+        let mut plan = None;
+        let params = [PostgresParam::Text(3802, &keys)];
+        connection
+            .query(
+                &format!("EXPLAIN (ANALYZE,BUFFERS,WAL,FORMAT JSON) {statement}"),
+                if name == "previous" { &params } else { &[] },
+                deadline,
+                |row| {
+                    plan = Some(rows::parse_row(row)?);
+                    Ok(())
+                },
+            )
+            .unwrap();
+        connection.query(&format!("SELECT count(*),count(*) FILTER (WHERE object_ref='#1'),count(*) FILTER (WHERE object_ref='#513') FROM {table}"), &[], deadline,
+            |row| {
+                assert_eq!(row.columns[0].as_deref(), Some(b"19488".as_slice()));
+                assert_eq!(row.columns[1].as_deref(), Some(b"0".as_slice()));
+                assert_eq!(row.columns[2].as_deref(), Some(b"1".as_slice()));
+                Ok(())
+            }).unwrap();
+        connection
+            .query("ROLLBACK", &[], deadline, |_| unreachable!())
+            .unwrap();
+        let plan = plan.unwrap();
+        if name == "indexed" {
+            fn nodes<'a>(node: &'a serde_json::Value, out: &mut Vec<&'a serde_json::Value>) {
+                out.push(node);
+                if let Some(children) = node["Plans"].as_array() {
+                    for child in children {
+                        nodes(child, out);
+                    }
+                }
+            }
+            let mut all = Vec::new();
+            nodes(&plan[0]["Plan"], &mut all);
+            assert!(all.iter().any(|n| n["Node Type"] == "Tid Scan"), "{plan}");
+            assert!(
+                all.iter()
+                    .any(|n| n["Index Name"] == "object_propvalues_pkey"),
+                "{plan}"
+            );
+            for node in all
+                .iter()
+                .filter(|n| n["Index Name"] == "object_propvalues_pkey")
+            {
+                assert!(
+                    node["Index Cond"]
+                        .as_str()
+                        .unwrap()
+                        .contains("record_sequence"),
+                    "{plan}"
+                );
+                assert!(
+                    node["Actual Rows"].as_f64().unwrap() <= 2.0,
+                    "old index entries must be excluded: {plan}"
+                );
+            }
+            assert!(
+                !all.iter()
+                    .any(|n| n["Node Type"] == "Seq Scan"
+                        && n["Relation Name"] == "object_propvalues"),
+                "{plan}"
+            );
+        }
+        plans.push(json!({"variant":name,"plan":plan}));
+    }
+    assert_eq!(count(&config, "object_propvalues"), 20512);
+    connection
+        .query(
+            "SELECT generic_plans,custom_plans FROM pg_prepared_statements WHERE name='delete_object_propvalues'",
+            &[],
+            deadline,
+            |row| {
+                assert_eq!(row.columns[0].as_deref(), Some(b"0".as_slice()));
+                assert_eq!(row.columns[1].as_deref(), Some(b"7".as_slice()));
+                Ok(())
+            },
+        )
+        .unwrap();
+    if let Ok(directory) = std::env::var("MOOR_PG_PLAN_DIR") {
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            std::path::Path::new(&directory).join("property-delete.json"),
+            serde_json::to_vec_pretty(&plans).unwrap(),
+        )
+        .unwrap();
+    }
+}

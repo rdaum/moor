@@ -105,6 +105,15 @@ pub(super) fn prepare(
     config: &PostgresStorageConfig,
     deadline: Instant,
 ) -> Result<(), PostgresError> {
+    // A generic plan chosen for a new, tiny relation can retain a heap scan after
+    // update churn grows it by hundreds of megabytes, until ANALYZE invalidates it.
+    // Replan with current relation size on this private persistence connection.
+    connection.query(
+        "SET plan_cache_mode=force_custom_plan",
+        &[],
+        deadline,
+        |_| unreachable!(),
+    )?;
     for relation in RELATIONS {
         let name = relation.name;
         let table = config.schema.qualify(name)?;
@@ -129,11 +138,35 @@ pub(super) fn prepare(
             .map(|column| format!("t.{column}=d.{column}"))
             .collect::<Vec<_>>()
             .join(" AND ");
-        connection.prepare(&format!("delete_{name}"), &format!("DELETE FROM {table} t USING pg_catalog.jsonb_populate_recordset(NULL::{table},$1) d WHERE {predicate}"), &[3802], deadline)?;
+        let delete = delete_statement(name, &table, &predicate);
+        connection.prepare(&format!("delete_{name}"), &delete, &[3802], deadline)?;
     }
     let slots = config.schema.qualify("sequence_slots")?;
     connection.prepare("sequence_maxima", &format!("INSERT INTO {slots} (slot,high_water) SELECT slot,high_water FROM pg_catalog.jsonb_populate_recordset(NULL::{slots},$1) ON CONFLICT(slot) DO UPDATE SET high_water=GREATEST({slots}.high_water,EXCLUDED.high_water)"), &[3802], deadline)?;
     Ok(())
+}
+
+/// Look up property chains by their indexed logical keys, then delete those tuple versions.
+/// OFFSET 0 keeps the per-key lookup from becoming a hash join over the growing heap.
+/// The outer TID scan avoids scanning it again when matching the selected tuples.
+/// The planned base sequence excludes dead index entries from earlier full replacements.
+pub(super) fn delete_statement(name: &str, table: &str, predicate: &str) -> String {
+    if name == "object_propvalues" {
+        format!(
+            "DELETE FROM {table} WHERE ctid = ANY (ARRAY(
+            SELECT matched.ctid
+            FROM pg_catalog.jsonb_populate_recordset(NULL::{table},$1) d
+            CROSS JOIN LATERAL (
+                SELECT t.ctid FROM {table} t WHERE {predicate}
+                    AND t.record_sequence >= COALESCE(d.record_sequence,0) OFFSET 0
+            ) matched
+        ))"
+        )
+    } else {
+        format!(
+            "DELETE FROM {table} t USING pg_catalog.jsonb_populate_recordset(NULL::{table},$1) d WHERE {predicate}"
+        )
+    }
 }
 
 /// Compare the complete prior progress and install the exact planned result atomically.
