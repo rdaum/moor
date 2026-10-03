@@ -727,6 +727,11 @@ fn every_value_kind_and_large_full_values_survive_sql_and_restart() {
         write_persistent_literal(value, &config.profile, &mut expected).unwrap();
         write_persistent_literal(loaded, &config.profile, &mut actual).unwrap();
         assert_eq!(actual, expected);
+        let inspected = inspection_value(&config, key).unwrap();
+        let inspected = read_persistent_literal(&inspected[0], &config.profile).unwrap();
+        let mut inspected_text = String::new();
+        write_persistent_literal(&inspected, &config.profile, &mut inspected_text).unwrap();
+        assert_eq!(inspected_text, expected);
         if let (Some(expected), Some(actual)) = (value.as_float(), loaded.as_float()) {
             assert_eq!(expected.to_bits(), actual.to_bits());
         }
@@ -2264,4 +2269,355 @@ fn validation_is_read_only_and_detects_corrupt_rows_and_relationships() {
             .inactive_property_entries,
         2
     );
+}
+
+fn inspection_value(
+    config: &PostgresStorageConfig,
+    key: &ObjAndUUIDHolder,
+) -> Result<Vec<String>, PostgresError> {
+    let mut result = Vec::new();
+    client(config).query(
+        &format!(
+            "SELECT value_literal, logical_timestamp::text, record_count::text FROM {}($1,$2)",
+            config.schema.qualify("read_property_value").unwrap()
+        ),
+        &[
+            PostgresParam::Text(25, &key.obj().to_literal()),
+            PostgresParam::Text(2950, &key.uuid().to_string()),
+        ],
+        Instant::now() + config.query_timeout,
+        |row| {
+            result = row
+                .columns
+                .into_iter()
+                .map(|c| String::from_utf8(c.unwrap()).unwrap())
+                .collect();
+            Ok(())
+        },
+    )?;
+    Ok(result)
+}
+
+#[test]
+#[ignore = "requires PostgreSQL fixture"]
+fn inspection_reconstructs_nested_lists_in_record_order_and_checks_chain_shapes() {
+    use moor_compiler::{read_persistent_literal, write_persistent_literal};
+    use moor_var::{v_map, v_str};
+    let config = config();
+    initialize_postgres_schema(&config).unwrap();
+    let (mut session, _, epoch) = open(&config);
+    assert!(matches!(
+        install_postgres_inspection(&config),
+        Err(PostgresError::OwnershipLost)
+    ));
+    let key = ObjAndUUIDHolder::new(&Obj::mk_id(7), Uuid::new_v4());
+    let lambda =
+        read_persistent_literal("{} => x with captured [{x: 42}]", &config.profile).unwrap();
+    let first = v_list(&[v_str("braces }, {, quotes \" and NUL\0"), lambda.clone()]);
+    let suffix = v_list(&[v_map(&[(v_str("a,b"), v_list(&[v_int(3)]))]), lambda]);
+    let expected = first
+        .as_list()
+        .unwrap()
+        .clone()
+        .append_owned(&suffix)
+        .unwrap();
+    let mut batch = empty(epoch, 1, 100);
+    batch.properties.push(full(&config, &key, &first, 100));
+    use moor_common::{
+        model::{PropDef, PropDefs, ValSet, VerbArgsSpec, VerbDef, VerbDefs},
+        util::BitEnum,
+    };
+    use moor_var::Symbol;
+    let definitions = PropDefs::from_items(&[PropDef::new(
+        key.uuid(),
+        key.obj(),
+        key.obj(),
+        Symbol::mk("Named\0Property"),
+    )]);
+    let verbs = VerbDefs::from_items(&[VerbDef::new(
+        Uuid::new_v4(),
+        key.obj(),
+        key.obj(),
+        &[Symbol::mk("answer"), Symbol::mk("Alias\0Name")],
+        BitEnum::new(),
+        VerbArgsSpec::this_none_this(),
+    )]);
+    for (relation, row) in [
+        (
+            "object_propdefs",
+            rows::encode(
+                "object_propdefs",
+                Timestamp(100),
+                &key.obj(),
+                &definitions,
+                &config.profile,
+            )
+            .unwrap(),
+        ),
+        (
+            "object_verbdefs",
+            rows::encode(
+                "object_verbdefs",
+                Timestamp(100),
+                &key.obj(),
+                &verbs,
+                &config.profile,
+            )
+            .unwrap(),
+        ),
+    ] {
+        batch.ordinary.push(RelationBatch {
+            relation,
+            puts: Some(json!([row]).to_string()),
+            deletes: None,
+        });
+    }
+    apply(&mut session, &config, &batch);
+    let mut batch = empty(epoch, 2, 90);
+    batch
+        .properties
+        .push(append(&config, &key, &suffix, &expected, 90));
+    apply(&mut session, &config, &batch);
+    let value = inspection_value(&config, &key).unwrap();
+    assert_eq!(&value[1..], ["90", "2"]);
+    let mut expected_text = String::new();
+    let mut actual_text = String::new();
+    write_persistent_literal(&expected, &config.profile, &mut expected_text).unwrap();
+    write_persistent_literal(
+        &read_persistent_literal(&value[0], &config.profile).unwrap(),
+        &config.profile,
+        &mut actual_text,
+    )
+    .unwrap();
+    assert_eq!(actual_text, expected_text);
+    assert!(
+        inspection_value(
+            &config,
+            &ObjAndUUIDHolder::new(&Obj::mk_id(999), key.uuid())
+        )
+        .unwrap()
+        .is_empty()
+    );
+    drop(session);
+    let mut admin = client(&config);
+    for (view, projection, expected) in [
+        (
+            "property_definitions",
+            "property_name, name_encoding",
+            "Named\0Property",
+        ),
+        ("verb_names", "name, name_encoding", "Alias\0Name"),
+    ] {
+        let mut found = false;
+        admin
+            .query(
+                &format!(
+                    "SELECT {projection} FROM {} WHERE name_encoding='json_string'",
+                    config.schema.qualify(view).unwrap()
+                ),
+                &[],
+                Instant::now() + config.query_timeout,
+                |row| {
+                    assert_eq!(
+                        serde_json::from_slice::<String>(row.columns[0].as_ref().unwrap()).unwrap(),
+                        expected
+                    );
+                    assert_eq!(row.columns[1].as_deref(), Some(b"json_string".as_slice()));
+                    found = true;
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert!(found);
+    }
+    let before =
+        state::read_progress(&mut admin, &config, Instant::now() + config.query_timeout).unwrap();
+    admin
+        .query(
+            &format!("DROP VIEW {}", config.schema.qualify("objects").unwrap()),
+            &[],
+            Instant::now() + config.query_timeout,
+            |_| unreachable!(),
+        )
+        .unwrap();
+    install_postgres_inspection(&config).unwrap();
+    assert_eq!(
+        before,
+        state::read_progress(&mut admin, &config, Instant::now() + config.query_timeout).unwrap()
+    );
+    let table = config.schema.qualify("object_propvalues").unwrap();
+    admin
+        .query(
+            &format!("CREATE TEMP TABLE inspection_backup AS SELECT * FROM {table}"),
+            &[],
+            Instant::now() + config.query_timeout,
+            |_| unreachable!(),
+        )
+        .unwrap();
+    admin
+        .query(
+            &format!("UPDATE {table} SET value_literal='{{}}' WHERE record_sequence=1"),
+            &[],
+            Instant::now() + config.query_timeout,
+            |_| unreachable!(),
+        )
+        .unwrap();
+    let empty_base = inspection_value(&config, &key).unwrap();
+    let mut empty_base_text = String::new();
+    let mut suffix_text = String::new();
+    write_persistent_literal(
+        &read_persistent_literal(&empty_base[0], &config.profile).unwrap(),
+        &config.profile,
+        &mut empty_base_text,
+    )
+    .unwrap();
+    write_persistent_literal(&suffix, &config.profile, &mut suffix_text).unwrap();
+    assert_eq!(empty_base_text, suffix_text);
+    for restore in [
+        format!("DELETE FROM {table}"),
+        format!("INSERT INTO {table} SELECT * FROM inspection_backup"),
+    ] {
+        admin
+            .query(
+                &restore,
+                &[],
+                Instant::now() + config.query_timeout,
+                |_| unreachable!(),
+            )
+            .unwrap();
+    }
+    for mutation in [
+        "SET record_kind='list_append' WHERE record_sequence=1",
+        "SET record_kind='full' WHERE record_sequence=2",
+        "SET value_literal='{}' WHERE record_sequence=2",
+        "SET value_literal='7',value_kind='int' WHERE record_sequence=1",
+        "SET literal_format=99",
+        "SET value_literal='bad' WHERE record_sequence=1",
+        "SET value_literal='{' || repeat('1,',2097152) || '1}' WHERE record_sequence=2",
+    ] {
+        admin
+            .query(
+                &format!("UPDATE {table} {mutation}"),
+                &[],
+                Instant::now() + config.query_timeout,
+                |_| unreachable!(),
+            )
+            .unwrap();
+        assert_eq!(
+            inspection_value(&config, &key).unwrap_err(),
+            PostgresError::SqlState("22000".into())
+        );
+        for restore in [
+            format!("DELETE FROM {table}"),
+            format!("INSERT INTO {table} SELECT * FROM inspection_backup"),
+        ] {
+            admin
+                .query(
+                    &restore,
+                    &[],
+                    Instant::now() + config.query_timeout,
+                    |_| unreachable!(),
+                )
+                .unwrap();
+        }
+    }
+    admin.query(&format!("INSERT INTO {table} SELECT object_ref, property_uuid, n, logical_timestamp, 'list_append', literal_format, 'list', '{{1}}' FROM inspection_backup CROSS JOIN generate_series(3,65) n WHERE record_sequence=1"), &[], Instant::now() + config.query_timeout, |_| unreachable!()).unwrap();
+    assert_eq!(
+        inspection_value(&config, &key).unwrap_err(),
+        PostgresError::SqlState("22000".into())
+    );
+    for restore in [
+        format!("DELETE FROM {table}"),
+        format!("INSERT INTO {table} SELECT * FROM inspection_backup"),
+    ] {
+        admin
+            .query(
+                &restore,
+                &[],
+                Instant::now() + config.query_timeout,
+                |_| unreachable!(),
+            )
+            .unwrap();
+    }
+    // Scale the unrelated key range so targeted lookup must use the physical primary key.
+    admin.query(&format!("INSERT INTO {table} SELECT '#'||n, property_uuid, 1, 0, 'full', literal_format, 'list', '{{0}}' FROM inspection_backup CROSS JOIN generate_series(1000,20999) n WHERE record_sequence=1"), &[], Instant::now() + config.query_timeout, |_| unreachable!()).unwrap();
+    admin
+        .query(
+            &format!("VACUUM ANALYZE {table}"),
+            &[],
+            Instant::now() + config.query_timeout,
+            |_| unreachable!(),
+        )
+        .unwrap();
+    let views = config.schema.qualify("property_values").unwrap();
+    for (name, sql) in [
+        (
+            "records",
+            format!(
+                "SELECT * FROM {table} WHERE object_ref=$1 AND property_uuid=$2 ORDER BY record_sequence"
+            ),
+        ),
+        (
+            "view",
+            format!("SELECT * FROM {views} WHERE object_ref=$1 AND property_uuid=$2"),
+        ),
+    ] {
+        let mut plan = serde_json::Value::Null;
+        admin
+            .query(
+                &format!("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {sql}"),
+                &[
+                    PostgresParam::Text(25, "#7"),
+                    PostgresParam::Text(2950, &key.uuid().to_string()),
+                ],
+                Instant::now() + config.query_timeout,
+                |row| {
+                    plan = serde_json::from_slice(row.columns[0].as_ref().unwrap()).unwrap();
+                    Ok(())
+                },
+            )
+            .unwrap();
+        fn check_plan(node: &serde_json::Value, found: &mut bool) {
+            if node["Relation Name"] == "object_propvalues" {
+                assert!(
+                    matches!(
+                        node["Node Type"].as_str().unwrap(),
+                        "Index Scan" | "Index Only Scan" | "Bitmap Heap Scan"
+                    ),
+                    "{node}"
+                );
+                let condition = node["Index Cond"]
+                    .as_str()
+                    .or_else(|| node["Recheck Cond"].as_str())
+                    .unwrap();
+                assert!(
+                    condition.contains("object_ref") && condition.contains("property_uuid"),
+                    "{node}"
+                );
+                assert!(node["Actual Rows"].as_f64().unwrap() <= 2.0, "{node}");
+                *found = true;
+            }
+            if let Some(children) = node["Plans"].as_array() {
+                for child in children {
+                    check_plan(child, found);
+                }
+            }
+        }
+        let mut found = false;
+        check_plan(&plan[0]["Plan"], &mut found);
+        assert!(found, "{plan}");
+        println!(
+            "inspection {name}: 20000 unrelated properties; execution_ms={}, shared_hit_blocks={}",
+            plan[0]["Execution Time"], plan[0]["Plan"]["Shared Hit Blocks"]
+        );
+        if let Ok(directory) = std::env::var("MOOR_PG_PLAN_DIR") {
+            std::fs::create_dir_all(&directory).unwrap();
+            std::fs::write(
+                std::path::Path::new(&directory)
+                    .join(format!("{}-{name}.json", config.schema.as_str())),
+                serde_json::to_string_pretty(&plan).unwrap(),
+            )
+            .unwrap();
+        }
+    }
 }

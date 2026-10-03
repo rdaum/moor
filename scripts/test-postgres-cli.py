@@ -108,7 +108,7 @@ def backup_restore(root, env, first, features):
         return result.stdout
 
     def sql(database, statement):
-        return utility("psql", ["-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-d", database],
+        return utility("psql", ["-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-d", database],
                        statement.encode()).decode().strip()
 
     def storage(database, role):
@@ -123,6 +123,13 @@ def backup_restore(root, env, first, features):
         return {table: hashlib.sha256(sql(database,
                 f'SELECT to_jsonb(t)::text FROM moor."{table}" t ORDER BY to_jsonb(t)::text;').encode()).hexdigest()
                 for table in tables}
+
+    def inspection(database):
+        views = sql(database, "SELECT viewname FROM pg_views WHERE schemaname='moor' ORDER BY viewname;").splitlines()
+        assert len(views) == 9, views
+        return {view: hashlib.sha256(sql(database,
+                f'SET ROLE {reader}; SELECT to_jsonb(t)::text FROM moor."{view}" t ORDER BY to_jsonb(t)::text;').encode()).hexdigest()
+                for view in views}
 
     def grants(database):
         sql(database, f"""GRANT USAGE ON SCHEMA moor TO {runtime}, {reader};
@@ -142,6 +149,7 @@ def backup_restore(root, env, first, features):
         sql(source, f"CREATE SCHEMA auxiliary AUTHORIZATION {owner}; CREATE TABLE auxiliary.marker(value int); INSERT INTO auxiliary.marker VALUES(42); GRANT USAGE ON SCHEMA auxiliary TO {reader}; GRANT SELECT ON auxiliary.marker TO {reader};")
         before = validate(source)
         rows = physical(source)
+        inspected = inspection(source)
         assert before["property_values"] > 0
         # A genuine read-only login can validate but cannot claim a writer epoch or initialize.
         run("moorc", [*storage(source, reader), "--src-objdef-dir", str(first),
@@ -156,6 +164,7 @@ def backup_restore(root, env, first, features):
             # physical UUIDs, source, property records and every other stored cell must match.
             assert physical(database) == rows
             assert validate(database) == before
+            assert inspection(database) == inspected
             assert sql(database, "SELECT to_regclass('auxiliary.marker') IS NOT NULL;") == ("t" if database == whole else "f")
             exported = root / database
             empty = root / (database + "_empty")
@@ -192,7 +201,7 @@ def main():
             positional = [] if binary == "moorc" else [str(root / "data")]
             selected = [*positional, "--storage-backend", "postgres"]
             if args.disabled:
-                for flags in [[], ["--validate-storage"]]:
+                for flags in [[], ["--validate-storage"], ["--install-storage-views"]]:
                     output = run(binary, [*selected, *flags], env, False)
                     assert "PostgreSQL support is disabled" in output, output
                     assert list(root.iterdir()) == [], list(root.iterdir())
@@ -215,7 +224,11 @@ def main():
             assert report["writer_epoch"] == 0 and report["relation_rows"]["object_flags"] == 0
             assert list(root.iterdir()) == [], list(root.iterdir())
             run(binary, [*selected, *postgres, "--validate-storage", "--init-storage"], env, False)
-            print(f"{binary}: explicit setup, read-only validation, and path rejection passed")
+            run(binary, [*selected, *postgres, "--install-storage-views"], env, True)
+            after = json.loads(run(binary, [*selected, *postgres, "--validate-storage"], env, True, stdout_only=True))
+            assert after == report
+            assert list(root.iterdir()) == [], list(root.iterdir())
+            print(f"{binary}: explicit setup, view installation, read-only validation, and path rejection passed")
 
         if args.disabled:
             return

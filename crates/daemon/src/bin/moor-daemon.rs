@@ -47,6 +47,10 @@ fn main() -> Result<(), Report> {
         args.db_args.db.is_some(),
         config.database.is_some(),
     )?;
+    if args.db_args.storage_args.install_views(&storage)? {
+        println!("Installed PostgreSQL inspection views");
+        return Ok(());
+    }
     if let Some(report) = args.db_args.storage_args.validate(&storage)? {
         println!("{report}");
         return Ok(());

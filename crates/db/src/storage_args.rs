@@ -28,8 +28,11 @@ pub struct StorageArgs {
     #[arg(long)]
     pub init_storage: bool,
     /// Validate PostgreSQL storage without claiming writer ownership, then exit.
-    #[arg(long, conflicts_with = "init_storage")]
+    #[arg(long, conflicts_with_all = ["init_storage", "install_storage_views"])]
     pub validate_storage: bool,
+    /// Install PostgreSQL inspection views in an existing schema, then exit.
+    #[arg(long, conflicts_with = "init_storage")]
+    pub install_storage_views: bool,
     /// Service name in the explicit PGSERVICEFILE.
     #[arg(long)]
     pub pg_service: Option<String>,
@@ -101,7 +104,7 @@ impl StorageArgs {
         explicit_tables: bool,
     ) -> Result<StorageConfig, DatabaseOpenError> {
         let settings = self.merge(configured);
-        if (self.init_storage || self.validate_storage)
+        if (self.init_storage || self.validate_storage || self.install_storage_views)
             && settings.backend != StorageBackendKind::Postgres
         {
             return Err(DatabaseOpenError::StorageConfiguration(
@@ -109,6 +112,23 @@ impl StorageArgs {
             ));
         }
         settings.resolve(fjall_path, explicit_db, explicit_tables)
+    }
+
+    /// Explicitly add optional inspection projections without rewriting stored world rows.
+    pub fn install_views(&self, storage: &StorageConfig) -> Result<bool, DatabaseOpenError> {
+        if !self.install_storage_views {
+            return Ok(false);
+        }
+        match storage {
+            #[cfg(feature = "postgres")]
+            StorageConfig::Postgres(config) => {
+                crate::install_postgres_inspection(config)?;
+                Ok(true)
+            }
+            _ => Err(DatabaseOpenError::StorageConfiguration(
+                "--install-storage-views requires PostgreSQL storage",
+            )),
+        }
     }
 
     /// Return a JSON validation report before any runtime or local stores are opened.

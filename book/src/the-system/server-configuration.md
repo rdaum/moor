@@ -161,6 +161,82 @@ The `db_counters()` values `persistence_postgres_active_exports`,
 slots and the age of the oldest reservation. Reservations include connection setup. Long-held read
 transactions retain old row versions in PostgreSQL; close unused loaders promptly.
 
+### PostgreSQL inspection views
+
+New schemas include nine inspection views. For an existing schema, stop its writer and install the
+views through the setup service:
+
+```bash
+moorc --storage-backend postgres --pg-service world_setup \
+  --pg-hostaddr 192.0.2.10 --pg-schema moor --install-storage-views
+```
+
+Installation is transactional. It replaces inspection objects without rewriting world rows or
+changing the writer epoch. It requires schema ownership and fails while a writer holds the schema
+lock. Ordinary startup does not install or update views. These optional projections do not change
+the stored schema version.
+
+| View                   | Content                                                          |
+| ---------------------- | ---------------------------------------------------------------- |
+| `objects`              | Identity, name, owner, parent, location, and flags               |
+| `verb_definitions`     | Ordered definitions, UUIDs, names, owners, flags, and arguments  |
+| `verb_names`           | One name per row, with definition and name ordinals              |
+| `verbs`                | Definitions joined to stored source                              |
+| `property_definitions` | Ordered definitions, names, UUIDs, and defining locations        |
+| `property_permissions` | Stored local permission rows with available property names       |
+| `property_records`     | Physical full and append rows with available property names      |
+| `property_values`      | Reconstructed local values, record counts, and final timestamps  |
+| `persistence_status`   | Database identity, format markers, and persisted writer progress |
+
+Names with `name_encoding = 'json_string'` retain their JSON string representation, including NUL
+escapes. Other names are UTF8 text. The `names` array in `verb_definitions` and `verbs` retains the
+stored JSON name envelopes. Ordinals start at one.
+
+The SQL `durable_fence` field counts fences. It is not the live `persistence_durable` publication
+watermark.
+
+Property views describe stored local state. They do not resolve inheritance or synthesize
+permissions. An absent local value can still have an inherited value. Inactive entries left after
+reparenting or property deletion remain visible; their property name can be absent.
+
+```sql
+SELECT object_ref, name, parent_ref, owner_ref FROM moor.objects WHERE object_ref = '#42';
+SELECT names, source FROM moor.verbs WHERE object_ref = '#42';
+SELECT property_name, value_literal, logical_timestamp
+FROM moor.property_values WHERE object_ref = '#42';
+```
+
+For one large property, use the parameterized lookup to avoid definition joins:
+
+```sql
+PREPARE inspect_property(text, uuid) AS
+  SELECT * FROM moor.read_property_value($1, $2);
+EXECUTE inspect_property('#42', '00000000-0000-0000-0000-000000000001');
+```
+
+The lookup reads the requested key in record order. It checks the initial full record, append kinds,
+list boundaries, empty suffixes, format version, and chain bounds. It joins canonical list interiors
+without splitting nested values or compiling source. The final timestamp comes from the last record
+by sequence, which can differ from the maximum timestamp. A missing key returns no row. Use
+`--validate-storage` for complete literal parsing and semantic checks.
+
+Inspection computes values on demand; it does not store another complete value after each append.
+Cost grows with the requested value and chain size. Broad views can also scan definition arrays. The
+live fixture checks targeted plans against 20,000 unrelated property keys. Set `MOOR_PG_PLAN_DIR` to
+an output directory to retain its JSON execution plans. This test does not establish a production
+latency budget.
+
+Views use `security_invoker=true`, and the lookup function uses the caller's permissions. Grant the
+inspection role SELECT on the views and underlying tables. The function has the default PUBLIC
+EXECUTE grant; schema USAGE and table SELECT still apply. If your policy removes that grant, grant
+EXECUTE on `moor.read_property_value(text, uuid)` to the inspection role. See the PostgreSQL
+references for [views](https://www.postgresql.org/docs/16/sql-createview.html) and
+[functions](https://www.postgresql.org/docs/16/sql-createfunction.html).
+
+Both archive procedures below include the inspection objects. The restore fixture compares all nine
+views under the inspection role before opening a writer. Direct SQL writes through tables or views
+still require the offline procedure below.
+
 ### PostgreSQL validation and recovery
 
 All four storage tools accept `--validate-storage`. This command exits before opening the runtime or

@@ -402,5 +402,5 @@ pub use provider::postgres::{
     PostgresCommitPolicy, PostgresConnectOptions, PostgresConnection, PostgresEndpoint,
     PostgresError, PostgresParam, PostgresRow, PostgresSchema, PostgresShutdown,
     PostgresStatementResult, PostgresStorageConfig, PostgresValidationReport,
-    initialize_postgres_schema, validate_postgres_storage,
+    initialize_postgres_schema, install_postgres_inspection, validate_postgres_storage,
 };

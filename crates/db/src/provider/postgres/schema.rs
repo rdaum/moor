@@ -133,5 +133,6 @@ pub(super) fn ddl(config: &PostgresStorageConfig) -> Result<Vec<String>, Postgre
     Ok(statements
         .into_iter()
         .map(|statement| statement.replace("@s@", &s))
+        .chain(super::inspection::ddl(config))
         .collect())
 }

@@ -141,6 +141,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 `db`:
 
+- Add PostgreSQL inspection views for objects, verbs, properties, and persistence progress. A
+  checked lookup reconstructs stored list chains. Existing schemas can install the views explicitly.
+
 - Add `--validate-storage` for read-only PostgreSQL checks without writer ownership. Reports include
   relation counts and row locations. Document and test schema and whole-database recovery.
 
