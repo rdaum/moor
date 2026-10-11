@@ -156,11 +156,16 @@ the import. Existing databases still skip import entirely.
 
 When importing from a Git checkout, `moor`, `moor-daemon`, and `moorc` accept
 `--git-upstream origin/main` to establish the baseline from Git history. The development launcher
-passes this option through to the daemon:
+uses `origin/main` by default:
 
 ```bash
-scripts/dev.sh --git-upstream origin/main --curl-worker --git-worker
+scripts/dev.sh --curl-worker --git-worker
 ```
+
+The baseline comes from the common ancestor of `HEAD` and `origin/main`. Working files supply the
+live code, including local edits. Use `--git-upstream REF` to select another remote-tracking branch.
+Use `--baseline-objdef-dir PATH` to supply a baseline without Git. This replaces the Git default.
+The Git worker flag controls later fetching; it does not control import baseline preparation.
 
 Add `--clean` to discard the development database and create it again. Without `--clean`, an
 existing database is reused: neither source import nor baseline preparation runs. The flag does not
@@ -216,11 +221,12 @@ bindings. Local objects and verbs absent from the base receive no program baseli
 Import the prepared directory when creating the world, for example:
 
 ```bash
-scripts/dev.sh --core cowbell-prepared --curl-worker --git-worker
+moor --import cowbell-prepared --import-format objdef
 ```
 
-The development script reuses an existing database. Select a fresh data directory when creating a
-separate world. A prepared import does not repair baselines in a database that already exists.
+This direct import preserves the prepared baselines without another Git preparation step. Select a
+fresh data directory when creating a separate world. A prepared import does not repair baselines in
+a database that already exists.
 
 Each prepared program baseline includes Git provenance: repository, subtree, upstream branch, base
 commit, checkout commit, resolved upstream commit, and whether the source directory had working-tree

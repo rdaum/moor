@@ -27,8 +27,8 @@ Options:
   --curl-worker              Start the HTTP worker
   --git-worker               Start the Git worker
   --core PATH                Objdef core directory (default: cores/cowbell/src)
-  --git-upstream REF         Prepare import baselines from a local Git upstream (e.g. origin/main)
-  --baseline-objdef-dir PATH  Prepare import baselines from another objdef directory
+  --git-upstream REF         Git baseline branch (default: origin/main)
+  --baseline-objdef-dir PATH  Use this baseline directory instead of Git history
   --data-dir PATH            Database, keys, and IPC directory (default: moor-data)
   --clean                    Wipe the data directory before startup (fresh core import)
   --debug                    Build debug binaries (default)
@@ -44,11 +44,13 @@ Environment:
 
 Examples:
   scripts/dev.sh --curl-worker --git-worker
-  scripts/dev.sh --clean --git-upstream origin/main --curl-worker --git-worker
+  scripts/dev.sh --clean --curl-worker --git-worker
   MOOR_CORE=cores/snore/src scripts/dev.sh --curl-worker
 
 Existing databases are reused unless --clean is given.
 The core and its baseline are imported only for a new database.
+By default, the baseline comes from the common ancestor of HEAD and origin/main.
+Working files supply the live code, so local edits remain distinct from upstream.
 Git preparation uses local history; it does not fetch from the remote.
 Meadow: http://localhost:3000    Web host: http://localhost:8080
 Worker IPC sockets are printed at startup so other workers can attach.
@@ -92,6 +94,9 @@ done
 if [[ -n $git_upstream && -n $baseline_objdef_dir ]]; then
     echo "Choose either --git-upstream or --baseline-objdef-dir" >&2
     exit 2
+fi
+if [[ -z $git_upstream && -z $baseline_objdef_dir ]]; then
+    git_upstream=origin/main
 fi
 
 for tool in cargo node npm; do
