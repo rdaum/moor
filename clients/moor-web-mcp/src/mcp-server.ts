@@ -21,7 +21,7 @@ import type {
     ToolCallResult,
     ToolDefinition,
 } from "./mcp-types.js";
-import type { DynamicTool, MoorWebClient } from "./moor-service.js";
+import type { DynamicResource, DynamicTool, MoorWebClient } from "./moor-service.js";
 
 const JSONRPC_VERSION = "2.0";
 
@@ -96,6 +96,7 @@ export class McpServer {
     private readonly moos: MooConfig[];
     private readonly defaultCharacter: CharacterRef;
     private dynamicTools: DynamicTool[] = [];
+    private dynamicResources?: DynamicResource[];
     private dynamicLoaded = false;
 
     constructor(moor: MoorWebClient, moos: MooConfig[], defaultCharacter: CharacterRef) {
@@ -156,7 +157,7 @@ export class McpServer {
             case "tools/call":
                 return await this.callTool(request.params as Record<string, unknown>);
             case "resources/list":
-                return { resources: this.listResources() };
+                return { resources: await this.listResources() };
             case "resources/read":
                 return this.readResource(request.params as Record<string, unknown>);
             default:
@@ -495,14 +496,31 @@ export class McpServer {
 
         const dynamic = this.dynamicTools.find((tool) => tool.name === name);
         if (dynamic) {
-            const dynamicResult = await this.moor.executeDynamicTool(character, dynamic, argumentsObj);
-            return makeTextResult(`${dynamicResult.literal}\n\n${JSON.stringify(dynamicResult.js, null, 2)}`);
+            const input = { ...argumentsObj };
+            delete input.moo;
+            delete input.character;
+            delete input.wizard;
+            const dynamicResult = await this.moor.executeDynamicTool(character, dynamic, input);
+            const structured = dynamicResult.js !== null && typeof dynamicResult.js === "object"
+                    && !Array.isArray(dynamicResult.js)
+                ? dynamicResult.js as Record<string, unknown>
+                : { value: dynamicResult.js };
+            return {
+                content: [{ type: "text", text: JSON.stringify(structured) }],
+                structuredContent: structured,
+                isError: structured.ok === false,
+            };
         }
 
         return makeErrorResult(`Unknown tool: ${name}`);
     }
 
-    private listResources(): ResourceDefinition[] {
+    private async loadResources(): Promise<DynamicResource[]> {
+        this.dynamicResources ??= await this.moor.refreshDynamicResources(this.defaultCharacter);
+        return this.dynamicResources;
+    }
+
+    private async listResources(): Promise<ResourceDefinition[]> {
         const eventResources = this.moos.flatMap((moo) => {
             return moo.players.map((player) => ({
                 uri: `moor://events/${moo.id}/${player.id}`,
@@ -519,10 +537,11 @@ export class McpServer {
                 mimeType: "application/json",
             },
             ...eventResources,
+            ...(await this.loadResources()).map(({ content: _content, ...resource }) => resource),
         ];
     }
 
-    private readResource(params: Record<string, unknown>): { contents: Array<Record<string, string>> } {
+    private async readResource(params: Record<string, unknown>): Promise<{ contents: Array<Record<string, string>> }> {
         const uri = params.uri;
         if (typeof uri !== "string") {
             throw new Error("resources/read params.uri must be string");
@@ -535,6 +554,11 @@ export class McpServer {
                     text: JSON.stringify(this.moos, null, 2),
                 }],
             };
+        }
+
+        const dynamic = (await this.loadResources()).find(resource => resource.uri === uri);
+        if (dynamic) {
+            return { contents: [{ uri, mimeType: dynamic.mimeType, text: dynamic.content }] };
         }
 
         const match = /^moor:\/\/events\/([^/]+)\/([^/]+)$/.exec(uri);
@@ -703,6 +727,7 @@ export class McpServer {
     private async refreshDynamicTools(characterId?: CharacterRef): Promise<number> {
         const sourceCharacter = characterId ?? this.defaultCharacter;
         this.dynamicTools = await this.moor.refreshDynamicTools(sourceCharacter);
+        this.dynamicResources = undefined;
         this.dynamicLoaded = true;
         return this.dynamicTools.length;
     }

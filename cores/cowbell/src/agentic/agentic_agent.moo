@@ -181,9 +181,10 @@ object AGENTIC_AGENT [
       valid(this.tool_callback) && respond_to(this.tool_callback, 'on_tool_call) && $agentic.agent:_invoke_request_callback(this, request_principal, "on_tool_call", {tool_name, tool_args});
       result = $agentic.agent:_dispatch_tool(this, tool, tool_args, request_principal);
       suspend(0);
-      content_out = typeof(result) == TYPE_STR ? result | toliteral(result);
+      const structured = typeof(result) == TYPE_MAP && maphaskey(result, "ok");
+      content_out = structured ? generate_json(result) | typeof(result) == TYPE_STR ? result | toliteral(result);
       valid(this.tool_callback) && respond_to(this.tool_callback, 'on_tool_complete) && `$agentic.agent:_invoke_request_callback(this, request_principal, "on_tool_complete", {tool_name, tool_args, content_out}) ! ANY';
-      is_error_response = typeof(result) == TYPE_STR && (result:starts_with("ERROR:") || result:starts_with("TOOL BLOCKED:"));
+      is_error_response = structured ? !result["ok"] | typeof(result) == TYPE_STR && (result:starts_with("ERROR:") || result:starts_with("TOOL BLOCKED:"));
       if (is_error_response)
         failures[tool_name] = tool_failure_count + 1;
         this.consecutive_tool_failures = failures;

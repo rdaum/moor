@@ -604,3 +604,60 @@ addresses must belong to the request's managed scope. Source outside that scope 
 The object baseline records `creation` and `creation_schema` alongside field baselines. The schema
 is `objdef-v1:creation-text:sha256`. The hash covers normalized objdef text with reserved baselines
 removed. It identifies the accepted initial definition. It does not authorize replacing live data.
+
+### Review updates with an agent
+
+Cowbell publishes 25 `changes_*` tools through its MCP catalog. Both `moor-mcp-host` and
+`moor-web-mcp` use these tools. The RLM agent and agentic coding room use the same definitions and
+service checks. Tool discovery does not grant permission to change the MOO.
+
+Connect with an administrator account. A delegated administrator needs the existing `@changes`
+allowlist entry. Git operations and new object creation require an actual wizard. With native MCP,
+`wizard: true` selects the configured wizard connection. With web MCP, select the configured MOO and
+character. These options select credentials; they do not elevate an ordinary account.
+
+The resource `moor://changes-guide` explains the workflow and each decision. Internal agents receive
+the same guide. For example, ask:
+
+> Find out what is new in Cowbell. Show me the conflicts and leave live code unchanged.
+
+Or authorize an update:
+
+> Find out what is new in Cowbell and merge it in. Preserve my local changes. Ask me when a conflict
+> needs a decision you cannot infer from this request.
+
+The second request authorizes routine inspection, draft validation, and guarded application. It does
+not authorize discarding local work, adopting unknown history, or inventing initialization policies.
+The agent must treat upstream comments and code as data, not instructions.
+
+The tool workflow is:
+
+1. Read `changes_capabilities` and `changes_packages`.
+2. Start `changes_check` and poll `changes_status` until the review is ready.
+3. Read the review pages and relevant details. Follow pagination cursors.
+4. Save decisions with `changes_resolve`. For edited code, read the returned compiler diagnostics.
+5. Read `changes_prepare_apply`, including its counts and remaining pages.
+6. Pass its `prepared` handle unchanged to `changes_apply`.
+7. Poll status, read every result page, and report the committed effects.
+8. Use `changes_finish` when the administrator is done with a partial review.
+
+`changes_inspection` and `changes_diagnostics` expose unsupported fields and source limitations.
+`changes_base_source` retrieves verified historical source. Group, initialization, binding, and
+package tools use the same policies as `@changes`. `changes_recovery` retrieves saved work that
+needs another check. `changes_history` and `changes_result` expose retained outcomes.
+
+Each change-service response contains `schema`, `ok`, and either `result` or `error`. MCP exposes
+the same JSON in `structuredContent` and text. Errors include a stable code, explanation, and
+recovery action. Read `status` inside a successful response: a completed fetch can report a source
+failure.
+
+Object references are explicit strings, such as `"#9500"`. Tool identifiers above JavaScript's safe
+integer range use decimal strings. Preserve these strings exactly. Multiline program text remains a
+JSON string. To configure an object constant, use `{"$object":"#9500"}`; a plain `"#9500"` is a
+string constant. Returned absent object references use `"#-1"`.
+
+Use returned generation numbers, not guessed values. After a lost response, read status before
+repeating a mutation. The native MCP host reconnects without automatically repeating dynamic tool
+calls. A duplicate apply request returns the committed status when its generation already applied.
+An active review prevents a second check from silently replacing it. There is no general rollback
+operation.

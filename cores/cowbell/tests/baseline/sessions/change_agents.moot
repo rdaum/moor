@@ -1,0 +1,15 @@
+// Real RLM and agentic room orchestration with a deterministic model fixture.
+@wizard
+; return #90030:run_scenario("rlm", true);
+true
+; return #90030:run_scenario("rlm", false);
+true
+; return #90030:run_scenario("agentic", true);
+true
+; return #90030:run_scenario("agentic", false);
+true
+@programmer
+; return #90030:run_denied("rlm");
+true
+; return #90030:run_denied("agentic");
+true

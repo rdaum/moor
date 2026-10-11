@@ -165,3 +165,25 @@ export remains a separate representation of world objects.
 These checks do not exercise browser rendering or the Meadow websocket transport. Rich payload
 contracts and endpoint routing have in-process session coverage. Host-specific browser behavior
 requires a separate client check.
+
+## Change tools and agent workflows
+
+The MCP acceptance test starts an isolated daemon, web host, telnet host, and HTTP/Git workers. It
+serves a local Git repository with a nested source directory and an HTTP bundle. No external model
+or Git hosting account is required.
+
+```sh
+cargo build -p moor-daemon -p moor-web-host -p moor-telnet-host \
+  -p moor-mcp-host -p moor-git-worker -p moor-curl-worker
+node --import tsx cores/cowbell/tests/mcp/changes.ts
+```
+
+Run these commands from the repository root. The test drives review changes through real MCP stdio
+requests. It checks catalog discovery, the guide, argument errors, compiler errors, edited source,
+application, and retained results through both MCP hosts and both source transports.
+
+The `change_tools.moot` scenario checks the shared provider and requester permissions.
+`change_agents.moot` uses a deterministic model to exercise actual RLM and agentic room execution.
+Its inspection request leaves live code unchanged. Its update request validates and applies a
+multiline edited program through the shared tools. The session runner creates an ephemeral signing
+key so room authorization uses the normal capability checks.

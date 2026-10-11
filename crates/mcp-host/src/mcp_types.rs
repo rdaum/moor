@@ -257,6 +257,8 @@ pub struct ToolCallParams {
 pub struct ToolCallResult {
     pub content: Vec<ToolContent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structured_content: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_error: Option<bool>,
 }
 
@@ -269,6 +271,7 @@ impl ToolCallResult {
                 annotations: None,
             }],
             is_error: None,
+            structured_content: None,
         }
     }
 
@@ -283,6 +286,7 @@ impl ToolCallResult {
                 }),
             }],
             is_error: None,
+            structured_content: None,
         }
     }
 
@@ -294,7 +298,21 @@ impl ToolCallResult {
                 annotations: None,
             }],
             is_error: Some(true),
+            structured_content: None,
         }
+    }
+
+    /// Return machine-readable data and the same JSON for text-only clients.
+    pub fn structured(value: Value, is_error: bool) -> Self {
+        let value = if value.is_object() {
+            value
+        } else {
+            serde_json::json!({ "value": value })
+        };
+        let mut result = Self::text(value.to_string());
+        result.structured_content = Some(value);
+        result.is_error = Some(is_error);
+        result
     }
 }
 
@@ -447,4 +465,34 @@ pub struct PromptMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromptGetParams {
     pub name: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn structured_results_preserve_the_json_contract() {
+        for value in [
+            json!({"schema": 1, "ok": true, "result": {
+                "object": "#123", "absent": null, "review_id": "9007199254740993",
+                "program": "const s = \"λ\\path\";\nreturn s;", "eligible": false
+            }}),
+            json!({"schema": 1, "ok": false, "error": {"code": "stale_generation"}}),
+        ] {
+            let moo = moor_var::json::json_to_var(&value, true);
+            let round_trip = moor_var::json::var_to_json(&moo).unwrap();
+            assert_eq!(round_trip, value);
+            let result = ToolCallResult::structured(round_trip, value["ok"] == false);
+            let encoded = serde_json::to_value(&result).unwrap();
+            assert_eq!(encoded["structuredContent"], value);
+            assert_eq!(
+                serde_json::from_str::<Value>(encoded["content"][0]["text"].as_str().unwrap())
+                    .unwrap(),
+                value
+            );
+            assert_eq!(encoded["isError"], value["ok"] == false);
+        }
+    }
 }

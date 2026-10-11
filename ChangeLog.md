@@ -19,6 +19,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Cowbell exposes guarded change management through both MCP hosts and its internal agents. Tools
+  return structured results, preserve edited source, and report compiler errors and committed
+  outcomes. Native MCP no longer repeats dynamic calls automatically after a lost connection.
+
 - Cowbell change reviews can create objects at explicitly chosen IDs. Preview reserves no IDs, and
   apply rejects occupied addresses. New objects and their initial contents commit with their change
   groups without running initialization verbs. Package rules distinguish complete and partial

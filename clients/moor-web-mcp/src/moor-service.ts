@@ -34,6 +34,14 @@ export interface DynamicTool {
     targetVerb: string;
 }
 
+export interface DynamicResource {
+    uri: string;
+    name: string;
+    description: string;
+    mimeType: string;
+    content: string;
+}
+
 interface CharacterSessionState {
     authToken: string;
     clientToken: string | null;
@@ -354,12 +362,23 @@ export class MoorWebClient {
         return results;
     }
 
+    async refreshDynamicResources(character: CharacterRef): Promise<DynamicResource[]> {
+        const { js } = await this.evalExpression(character, "return #0:external_agent_resources();");
+        if (!Array.isArray(js)) return [];
+        return js.filter((entry): entry is DynamicResource =>
+            entry !== null && typeof entry === "object"
+            && ["uri", "name", "description", "mimeType", "content"].every(key => typeof entry[key] === "string")
+        );
+    }
+
     async executeDynamicTool(
         character: CharacterRef,
         tool: DynamicTool,
         args: unknown,
     ): Promise<{ js: unknown; literal: string }> {
-        const mooArgs = jsonToMooLiteral(args ?? {});
+        // Decode actual JSON in the world so booleans, strings and multiline
+        // programs use the same mapping as native MCP and internal agents.
+        const mooArgs = `parse_json(${jsonToMooLiteral(JSON.stringify(args ?? {}))})`;
         const expression = `return ${tool.targetObj}:${tool.targetVerb}(${mooArgs}, player);`;
         return this.evalExpression(character, expression);
     }

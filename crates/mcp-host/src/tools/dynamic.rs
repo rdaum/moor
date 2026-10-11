@@ -23,7 +23,7 @@ use moor_var::{Associative, Var, Variant};
 use serde_json::{Value, json};
 use tracing::{debug, info, warn};
 
-use super::helpers::{format_task_result, json_to_var, with_wizard_param};
+use super::helpers::with_wizard_param;
 
 /// A dynamically-defined resource from the MOO world
 #[derive(Debug, Clone)]
@@ -224,8 +224,13 @@ pub async fn execute_dynamic_tool(
     let obj_ref = super::helpers::parse_object_ref(&tool.target_obj)
         .ok_or_else(|| eyre!("Invalid target object: {}", tool.target_obj))?;
 
-    // Convert JSON arguments to MOO map
-    let moo_args = json_to_var(arguments);
+    // Connection selection belongs to the host, not the in-world argument schema.
+    // Preserve JSON strings (including "#123") for the handler's typed decoder.
+    let mut arguments = arguments.clone();
+    if let Some(fields) = arguments.as_object_mut() {
+        fields.remove("wizard");
+    }
+    let moo_args = moor_var::json::json_to_var(&arguments, true);
 
     // Get the authenticated player to pass as actor
     let actor = client
@@ -238,7 +243,16 @@ pub async fn execute_dynamic_tool(
         .invoke_verb(&obj_ref, &tool.target_verb, vec![moo_args, actor])
         .await?;
 
-    Ok(format_task_result(&result))
+    let value = match moor_var::json::var_to_json(&result.result) {
+        Ok(value) => value,
+        Err(error) => {
+            return Ok(ToolCallResult::error(format!(
+                "Tool result is not JSON: {error}"
+            )));
+        }
+    };
+    let is_error = !result.success || value.get("ok") == Some(&Value::Bool(false));
+    Ok(ToolCallResult::structured(value, is_error))
 }
 
 /// Fetch dynamic resources from the MOO world

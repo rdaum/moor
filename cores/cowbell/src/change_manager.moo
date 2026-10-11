@@ -34,6 +34,7 @@ object CHANGE_MANAGER [
         "BUILDER_HELP_TOPICS" -> BUILDER_HELP_TOPICS,
         "CAT_KIBBLE" -> CAT_KIBBLE,
         "CHANGE_MANAGER" -> CHANGE_MANAGER,
+        "CHANGE_TOOLS" -> CHANGE_TOOLS,
         "CONSUMABLE" -> CONSUMABLE,
         "CONTAINER" -> CONTAINER,
         "COUCH" -> COUCH,
@@ -148,6 +149,7 @@ object CHANGE_MANAGER [
         LOGIN,
         PASSWORD,
         CHANGE_MANAGER,
+        CHANGE_TOOLS,
         EVENT,
         EVENT_RECEIVER,
         MSG_BAG,
@@ -1228,6 +1230,9 @@ object CHANGE_MANAGER [
       return this:status(id);
     endif
     let record = this:_get(auth, id);
+    if (generation in `record["last_receipt"]["request_generations"] ! E_RANGE => {}')
+      return this:status(id);
+    endif
     if (record["status"] == "applying")
       return this:_summary(record);
     endif
@@ -1392,6 +1397,7 @@ object CHANGE_MANAGER [
       endif
       let receipt = ["schema" -> 1, "review_id" -> id, "generation" -> record["generation"], "package" -> record["package"], "status" -> record["status"], "task" -> 0, "error" -> []];
       receipt["actor"] = record["actor"];
+      receipt["request_generations"] = {@`record["last_receipt"]["request_generations"] ! E_RANGE => {}', generation - 1};
       receipt["provenance"] = record["provenance"];
       let labels = [];
       for effect in (effects)

@@ -496,7 +496,8 @@ impl McpServer {
         Ok(serde_json::to_value(result).unwrap())
     }
 
-    /// Execute a tool call, with automatic reconnection on connection failures
+    /// Reconnect on connection failures. Dynamic calls have unknown side effects
+    /// and must be reconciled by the caller instead of being silently repeated.
     async fn execute_tool_with_reconnect(
         &mut self,
         call_params: &ToolCallParams,
@@ -517,6 +518,22 @@ impl McpServer {
                 let error_str = e.to_string();
                 if !Self::is_connection_error(&error_str) {
                     return Err(JsonRpcError::internal_error(error_str));
+                }
+
+                if dynamic_tool.is_some() {
+                    let reconnected = self.connections.reconnect(wizard).await.is_ok();
+                    return Ok(serde_json::to_value(ToolCallResult::structured(
+                        serde_json::json!({
+                            "ok": false,
+                            "error": {
+                                "code": "outcome_unknown",
+                                "message": error_str,
+                                "reconnected": reconnected,
+                                "recovery": "The call was not repeated. Read the operation status before retrying a write."
+                            }
+                        }),
+                        true,
+                    )).unwrap());
                 }
 
                 warn!(
@@ -572,6 +589,7 @@ impl McpServer {
             || error_lower.contains("could not receive")
             || error_lower.contains("connection")
             || error_lower.contains("timeout")
+            || error_lower.contains("timed out")
             || error_lower.contains("not connected")
             || error_lower.contains("host unreachable")
             || error_lower.contains("network")

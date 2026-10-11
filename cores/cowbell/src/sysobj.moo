@@ -34,6 +34,7 @@ object SYSOBJ [
   };
   property cat_kibble (owner: HACKER, flags: "r") = CAT_KIBBLE;
   property change_manager (owner: ARCH_WIZARD, flags: "r") = CHANGE_MANAGER;
+  property change_tools (owner: ARCH_WIZARD, flags: "r") = CHANGE_TOOLS;
   property consumable (owner: ARCH_WIZARD, flags: "r") = CONSUMABLE;
   property container (owner: HACKER, flags: "r") = CONTAINER;
   property core_version (owner: ARCH_WIZARD, flags: "rc") = "0.3.0";
@@ -438,7 +439,7 @@ object SYSOBJ [
     callers() && !caller_perms().programmer && return E_PERM;
     tools = {};
     "Building tools from $agent_building_tools";
-    for tool in ($agent_building_tools:get_tools())
+    for tool in ({@$agent_building_tools:get_tools(), @$change_tools:get_tools()})
       tools = {@tools, tool:to_mcp_schema()};
     endfor
     return tools;
@@ -452,6 +453,7 @@ object SYSOBJ [
     resources = {};
     "Building guide from $agent_building_tools";
     resources = {@resources, ["uri" -> "moor://building-guide", "name" -> "Building Guide", "description" -> "Instructions for using building tools to create rooms, objects, and configure behaviors.", "mimeType" -> "text/plain", "content" -> $agent_building_tools.guide]};
+    resources = {@resources, ["uri" -> "moor://changes-guide", "name" -> "Change management", "description" -> "Review upstream updates, preserve local code, and apply guarded changes.", "mimeType" -> "text/plain", "content" -> $change_tools.guide]};
     return resources;
   endmethod
 

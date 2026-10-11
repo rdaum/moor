@@ -45,6 +45,7 @@ export interface ToolContentText {
 
 export interface ToolCallResult {
     content: ToolContentText[];
+    structuredContent?: Record<string, unknown>;
     isError?: boolean;
 }
 

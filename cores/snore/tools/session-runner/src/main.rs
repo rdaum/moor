@@ -578,6 +578,12 @@ fn parse_args() -> Result<Args> {
 
 fn run() -> Result<()> {
     let args = parse_args()?;
+    // Room tasks use server-signed capabilities. Keep the harness key ephemeral
+    // and confined to this process, as in an isolated server instance.
+    let mut key = [0u8; 32];
+    key[..16].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
+    key[16..].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
+    moor_kernel::initialize_server_symmetric_key(key).map_err(|error| eyre!(error))?;
     let moot_files = collect_moot_files(&args.moot)?;
     if moot_files.is_empty() {
         return Err(eyre!(
@@ -613,6 +619,7 @@ fn run() -> Result<()> {
 /// do not leak between files.
 fn run_scenario(args: &Args, path: &Path) -> Result<()> {
     let features = Arc::new(FeaturesConfig {
+        anonymous_objects: args.cowbell,
         bool_type: true,
         symbol_type: true,
         custom_errors: true,

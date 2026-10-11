@@ -1,0 +1,72 @@
+// The shared catalog and handlers run as the authenticated requester, with typed JSON arguments.
+@wizard
+; const tools = $external_agent_tools(); return {length({tool for tool in (tools) if (index(tool["name"], "changes_") == 1)}), length({resource for resource in ($external_agent_resources()) if (resource["uri"] == "moor://changes-guide")})};
+{25, 1}
+
+; return $change_tools:changes_capabilities([], player)["result"]["schema"];
+1
+
+; return $change_tools:changes_packages(["actor" -> "#2"], player)["error"]["code"];
+"invalid_request"
+
+; return $change_tools:changes_status(["review" -> "9007199254740993"], player)["error"]["code"];
+"missing_review"
+
+; return $change_tools:changes_status(["review" -> "0001"], player)["error"]["code"];
+"invalid_request"
+
+; load_object({"object #9500", tostr("owner: ", player), tostr("verb test (this none this) owner: ", player, " flags: \"rxd\""), "return 1;", "endverb", "endobject"}); add_property(#0, "tool_probe", [], {player, ""}); const result = $change_tools:changes_configure_package(["package" -> "tools", "objects" -> {"#9500"}, "constants" -> ["PROBE" -> ["$object" -> "#9500"], "LABEL" -> "#9500", "LARGE" -> 9007199254740993]], player); return {result["ok"], result["result"]["objects"], result["result"]["constants"]["LARGE"], $change_manager.packages["tools"]["constants"]["LABEL"] == "#9500", $change_manager.packages["tools"]["constants"]["PROBE"] == #9500};
+{true, {"#9500"}, "9007199254740993", true, true}
+
+; const result = $change_tools:changes_adopt(["package" -> "tools", "sources" -> {["label" -> "tools.moo", "text" -> dump_object(#9500)]}], player); #0.tool_probe = result["result"]; const prepared = $change_tools:changes_prepare_apply(["review" -> #0.tool_probe["review_id"], "generation" -> 1], player); return {result["ok"], prepared["result"]["counts"]["baseline"], $change_tools:changes_apply(["review" -> #0.tool_probe["review_id"], "generation" -> 1, "prepared" -> prepared["result"]["prepared"]], player)["result"]["status"]};
+{true, 1, "applying"}
+
+; for i in [1..100] const state = $change_tools:changes_status(["review" -> #0.tool_probe["review_id"]], player); if (state["result"]["status"] != "applying") return {state["ok"], state["result"]["status"]}; endif suspend(0.01); endfor return "timed out";
+{true, "complete"}
+
+; const sources = {["label" -> "tools.moo", "text" -> {"object #9500", tostr("owner: ", player), tostr("verb test (this none this) owner: ", player, " flags: \"rxd\""), "return 2;", "endverb", "endobject"}]}; const result = $change_tools:changes_check(["package" -> "tools", "sources" -> sources], player); #0.tool_probe = result["result"]; const page = $change_tools:changes_review(["review" -> #0.tool_probe["review_id"], "generation" -> 1], player); #0.tool_probe["row"] = page["result"]["rows"][1]["id"]; return {result["ok"], page["ok"], page["result"]["rows"][1]["object"]};
+{true, true, "#9500"}
+
+; const result = $change_tools:changes_resolve(["review" -> #0.tool_probe["review_id"], "generation" -> 1, "member" -> #0.tool_probe["row"], "choice" -> "edited", "program" -> "return (;"], player); return {result["ok"], result["result"]["validation"][1]["valid"], #9500:test()};
+{true, false, 1}
+
+; const result = $change_tools:changes_resolve(["review" -> #0.tool_probe["review_id"], "generation" -> 2, "member" -> #0.tool_probe["row"], "choice" -> "edited", "program" -> "const value = 3;\nreturn value;"], player); return {result["ok"], result["result"]["validation"][1]["valid"], $change_tools:changes_prepare_apply(["review" -> #0.tool_probe["review_id"], "generation" -> 3], player)["result"]["can_apply"]};
+{true, true, true}
+
+; return $change_tools:changes_set_bindings(["package" -> "tools", "generation" -> 1, "bindings" -> [], "complete" -> "yes"], player)["error"]["code"];
+"invalid_request"
+
+; return $change_tools:changes_resolve(["review" -> #0.tool_probe["review_id"], "generation" -> 2, "member" -> #0.tool_probe["row"], "choice" -> "incoming"], player)["error"]["code"];
+"stale_generation"
+
+@programmer
+; return $change_tools:changes_packages([], player)["error"]["code"];
+"permission_denied"
+; return $change_tools:changes_packages([], #90100)["error"]["code"];
+"permission_denied"
+; return $change_tools:_execute("packages", [], player, #90100);
+E_PERM
+@wizard
+; add_property(#0, "tool_auth", [], {player, ""}); add_verb(#0, {player, "xd", "tool_entry"}, {"this", "none", "this"}); add_verb(#0, {player, "xd", "tool_actor"}, {"this", "none", "this"}); set_verb_code(#0, "tool_actor", {"set_task_perms(player);", "return $change_tools:changes_packages([], player);"}); set_verb_code(#0, "tool_entry", {"#0.tool_auth = this:tool_actor();"}); return true;
+true
+@@ tool_entry #90102
+; return #0.tool_auth["error"]["code"];
+"permission_denied"
+
+// Supported delegation remains available, with actual-wizard operations restricted.
+; #90101.admin_features = {$admin_features}; $admin_features.sudo_delegates[#90101] = player; $admin_features.sudo_allowed[#90101] = {"@changes"}; return true;
+true
+@programmer
+; return $change_tools:changes_capabilities([], player)["result"]["actual_wizard"];
+false
+; return $change_tools:changes_packages([], player)["ok"];
+true
+; return $change_tools:changes_set_bindings(["package" -> "tools", "generation" -> 1, "bindings" -> []], player)["error"]["code"];
+"permission_denied"
+@wizard
+; $admin_features.sudo_allowed[#90101] = {}; return true;
+true
+@programmer
+; return $change_tools:changes_packages([], player)["error"]["code"];
+"permission_denied"
+@quiet

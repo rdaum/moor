@@ -12,7 +12,7 @@
 
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { createServer as createTcpServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -63,6 +63,10 @@ export class ChangesFixture {
     revisionB = "";
     private server?: Server;
     private world?: ChildProcess;
+    private hosts: ChildProcess[] = [];
+    private distributed = false;
+    rpcArgs: string[] = [];
+    telnetPort = 0;
     private vite?: ChildProcess;
     private log = "";
     private bundleGate?: Promise<void>;
@@ -73,7 +77,8 @@ export class ChangesFixture {
     private releaseGit?: () => void;
     private gitChildren = new Set<ChildProcess>();
 
-    async start() {
+    async start(options: { distributed?: boolean; browser?: boolean } = {}) {
+        this.distributed = options.distributed ?? false;
         this.directory = await mkdtemp(resolve(tmpdir(), "moor-changes-"));
         try {
             this.apiPort = await port();
@@ -186,8 +191,12 @@ export class ChangesFixture {
                 )
                 .replace("enabled: true\n    address:", "enabled: false\n    address:")
                 .replace("listen_address: \"0.0.0.0:8080\"", `listen_address: "127.0.0.1:${this.apiPort}"`);
-            await writeFile(resolve(this.directory, "config.yaml"), config);
+            await writeFile(
+                resolve(this.directory, "config.yaml"),
+                this.distributed ? config.split("services:")[0] : config,
+            );
             await this.startWorld();
+            if (options.browser === false) return;
             this.vite = this.launch(
                 process.execPath,
                 [
@@ -234,6 +243,71 @@ export class ChangesFixture {
         throw new Error(`Service did not start: ${url}\n${this.log}`);
     }
     private async startWorld() {
+        if (this.distributed) {
+            const sockets = ["rpc", "events", "workers-request", "workers-response"];
+            const address = (name: string) => `ipc://${this.directory}/${name}.sock`;
+            const enrollment = `tcp://127.0.0.1:${await port()}`;
+            const token = resolve(this.directory, "enrollment-token");
+            const common = [
+                "--enrollment-address",
+                enrollment,
+                "--enrollment-token-file",
+                token,
+                ...sockets.flatMap(name => [`--${name}-address`, address(name)]),
+            ];
+            this.rpcArgs = common;
+            this.world = this.launch(resolve(workspace, "target/debug/moor-daemon"), [
+                resolve(this.directory, "data"),
+                "--config-file",
+                resolve(this.directory, "config.yaml"),
+                "--generate-keypair",
+                "--private-key",
+                resolve(this.directory, "signing.pem"),
+                "--public-key",
+                resolve(this.directory, "verifying.pem"),
+                "--enrollment-listen",
+                enrollment,
+                "--enrollment-token-file",
+                token,
+                ...sockets.flatMap(name => [`--${name}-listen`, address(name)]),
+            ], this.directory);
+            for (let attempt = 0;; attempt++) {
+                if (this.world.exitCode !== null || attempt > 600) throw new Error(`Daemon did not start\n${this.log}`);
+                try {
+                    await access(token);
+                    await access(resolve(this.directory, "rpc.sock"));
+                    break;
+                } catch { /* starting */ }
+                await new Promise(done => setTimeout(done, 100));
+            }
+            this.telnetPort = await port();
+            for (
+                const [name, args] of [
+                    ["moor-web-host", ["--listen-address", `127.0.0.1:${this.apiPort}`]],
+                    ["moor-telnet-host", [
+                        "--telnet-address",
+                        "127.0.0.1",
+                        "--telnet-port",
+                        String(this.telnetPort),
+                        "--health-check-port",
+                        "0",
+                    ]],
+                    ["moor-curl-worker", []],
+                    ["moor-git-worker", ["--work-dir", resolve(this.directory, "jobs")]],
+                ] as [string, string[]][]
+            ) {
+                this.hosts.push(
+                    this.launch(resolve(workspace, "target/debug", name), [
+                        ...common,
+                        "--data-dir",
+                        resolve(this.directory, name),
+                        ...args,
+                    ], this.directory),
+                );
+            }
+            await this.ready(`http://127.0.0.1:${this.apiPort}/health`, this.hosts[0]);
+            return;
+        }
         this.world = this.launch(
             process.env.MOOR_TEST_BINARY ?? resolve(workspace, "target/debug/moor"),
             [
@@ -270,6 +344,8 @@ export class ChangesFixture {
         return { arrived, release: () => this.releaseGit?.() };
     }
     async restart() {
+        await Promise.all(this.hosts.map(stop));
+        this.hosts = [];
         await stop(this.world);
         await this.startWorld();
     }
@@ -280,6 +356,7 @@ export class ChangesFixture {
         this.releaseBundle?.();
         this.releaseGit?.();
         await stop(this.vite);
+        await Promise.all(this.hosts.map(stop));
         await stop(this.world);
         await Promise.all([...this.gitChildren].map(stop));
         if (this.server) {

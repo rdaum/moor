@@ -132,7 +132,7 @@ object AGENTIC_CODING_ROOM [
     except (ANY)
       building = {};
     endtry
-    return {@base, @extra, @building};
+    return {@base, @extra, @building, @{tool:to_mcp_schema() for tool in ($change_tools:get_tools())}};
   endmethod
 
   method _execute_task owner: ARCH_WIZARD
@@ -164,7 +164,7 @@ object AGENTIC_CODING_ROOM [
     this.agent = agent;
     agent.client = valid(this.llm_client) ? this.llm_client | $llm_client;
     agent.token_owner = task_player;
-    agent.system_prompt = `this.agentic_system_prompt ! ANY => "You are a room-based coding agent for MOO development."';
+    agent.system_prompt = `this.agentic_system_prompt ! ANY => "You are a room-based coding agent for MOO development."' + "\n\n" + $change_tools.guide;
     agent.tool_callback = this;
     agent.compaction_callback = this;
     agent:reset_context();
@@ -206,9 +206,8 @@ object AGENTIC_CODING_ROOM [
     const parent_tid = task_id();
     let run_tid = 0;
     fork child_tid (0)
-      set_task_perms(task_player);
       try
-        child_result = agent:send_message(run_prompt, false, task_player);
+        child_result = this:_send_as_requester(agent, run_prompt, task_player);
         child_status = typeof(child_result) == TYPE_STR && child_result:starts_with("Error:") ? 'failed | 'complete;
       except child_err (ANY)
         child_result = "Error: " + tostr(child_err[1]) + " - " + tostr(child_err[2]);
@@ -285,6 +284,14 @@ object AGENTIC_CODING_ROOM [
       agent:destroy();
     except (ANY)
     endtry
+  endmethod
+
+  method _send_as_requester owner: ARCH_WIZARD
+    "Confine requester permissions to model execution so the child can report completion to its parent task.";
+    caller == this && caller_perms().wizard || raise(E_PERM);
+    const {agent, prompt, requester} = args;
+    set_task_perms(requester);
+    return agent:send_message(prompt, false, requester);
   endmethod
 
   verb status (none none none) owner: ARCH_WIZARD flags: "xd"

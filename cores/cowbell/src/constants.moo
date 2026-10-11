@@ -10,6 +10,7 @@ define SERVER_OPTIONS = #52;
 define EXAMINATION = #56;
 define PLAYER_ACTIVITY = #113;
 define CHANGE_MANAGER = #2000;
+define CHANGE_TOOLS = #2001;
 
 // agentic
 define AGENTIC = #119;

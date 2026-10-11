@@ -135,8 +135,9 @@ object RLM_AGENT [
     else
       tool_args = raw_args;
     endif
-    "Coerce parameters - apply aggressive cleaning to strings and maps";
-    if (typeof(tool_args) == TYPE_MAP)
+    "Only legacy built-ins coerce arguments. Catalog tools validate their published schemas.";
+    typeof(tool_args) == TYPE_MAP || return ["tool_call_id" -> tool_call_id, "role" -> "tool", "name" -> tool_name, "content" -> "ERROR: Tool arguments must be a JSON object."];
+    if (tool_name in {"moo_eval", "spawn_agent", "report_finding", "think"})
       for key in (mapkeys(tool_args))
         val = tool_args[key];
         if (typeof(val) == TYPE_STR)
@@ -147,8 +148,6 @@ object RLM_AGENT [
           tool_args[key] = this:_coerce_string(val);
         endif
       endfor
-    else
-      return ["tool_call_id" -> tool_call_id, "role" -> "tool", "name" -> tool_name, "content" -> "ERROR: Tool arguments must be a JSON object."];
     endif
     "Handle built-in RLM tools first";
     if (tool_name == "moo_eval")
@@ -184,7 +183,11 @@ object RLM_AGENT [
         result = "ERROR: Invalid tool format for: " + tool_name;
       endif
     endif
-    "Truncate large results";
+    "Structured tool results carry their own paging contract. Do not truncate JSON or source.";
+    if (typeof(result) == TYPE_MAP && maphaskey(result, "ok"))
+      return ["tool_call_id" -> tool_call_id, "role" -> "tool", "name" -> tool_name, "content" -> generate_json(result)];
+    endif
+    "Truncate legacy text results";
     let content_out = typeof(result) == TYPE_STR ? result | toliteral(result);
     const max_len = 4000;
     if (length(content_out) > max_len)
@@ -661,7 +664,7 @@ object RLM_AGENT [
     elseif (change_score > 0 && inspect_score == 0)
       mode = "change";
     endif
-    const guide = this:_get_guide();
+    const guide = this:_get_guide() + "\n\n" + $change_tools.guide;
     let mode_policy = "MODE: MIXED - Inspect first, then change only where needed.";
     if (mode == "inspect")
       mode_policy = "MODE: INSPECT - Do not modify world state unless explicitly requested. Focus on reading and reporting.";
