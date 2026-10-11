@@ -39,6 +39,9 @@ false
 ; return $change_manager:details(#0.changes_probe["review_id"], 2, #0.changes_probe["row"])["row"]["choice"]["validated"];
 false
 
+; const row = $change_manager:details(#0.changes_probe["review_id"], 2, #0.changes_probe["row"])["row"]; return {row["choice"]["program"], row["validation"][1]["valid"], row["validation"][1]["pane"], row["validation"][1]["line"]};
+{"return (;", false, "result", 1}
+
 ; return `$change_manager:resolve(#0.changes_probe["review_id"], 1, #0.changes_probe["row"], "local") ! ANY => "stale"';
 "stale"
 

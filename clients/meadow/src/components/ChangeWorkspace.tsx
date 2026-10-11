@@ -29,6 +29,7 @@ interface Props {
     authToken: string;
     isWizard: boolean;
     onClose: () => void;
+    connectionRevision?: number;
 }
 function objectReferences(input: string): string[] {
     return input.split(/[\s,]+/).filter(Boolean).map(value => {
@@ -54,7 +55,7 @@ function bindingArguments(input: string): Record<string, ObjectArgument> {
     );
 }
 
-export function ChangeWorkspace({ service, authToken, isWizard, onClose }: Props) {
+export function ChangeWorkspace({ service, authToken, isWizard, onClose, connectionRevision = 0 }: Props) {
     const [packages, setPackages] = useState<ChangePackage[]>([]);
     const [selected, setSelected] = useState(service.capabilities.defaultPackage);
     const [history, setHistory] = useState<CompletedReview[]>([]);
@@ -115,7 +116,7 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose }: Props
         if (review) return;
         void load();
         return invalidate;
-    }, [load, review, invalidate]);
+    }, [load, review, invalidate, connectionRevision]);
     useEffect(() => {
         if (review || !["fetching", "applying"].includes(active?.status ?? "")) return;
         const timer = setTimeout(() => void load(), 1000);
@@ -205,7 +206,17 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose }: Props
             setFiles([]);
             await load();
         });
-    if (review) return <ChangeReview visible target={review} authToken={authToken} onClose={() => setReview(null)} />;
+    if (review) {
+        return (
+            <ChangeReview
+                visible
+                target={review}
+                authToken={authToken}
+                connectionRevision={connectionRevision}
+                onClose={() => setReview(null)}
+            />
+        );
+    }
     const gitRestricted = !files.length && typeof item?.upstream !== "string"
         && capabilities.gitAuthorization === "wizard" && !isWizard;
     const fetchTransport = typeof item?.upstream === "string" ? "http" : "git";

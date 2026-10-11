@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 
 import { buildStructuredArgs, SemanticAnnotation, StructuredArgument } from "@moor/web-sdk";
+import { changeServiceFailure } from "./change-service";
 import { invokeVerbFlatBuffer } from "./rpc-fb";
 
 export type ChangeTarget = Extract<SemanticAnnotation, { kind: "change" }>;
@@ -26,6 +27,28 @@ export const changeLabels = {
 } as const;
 export type Classification = keyof typeof changeLabels;
 export type Choice = "incoming" | "local" | "edited" | "defer" | "unresolved";
+export interface CompilerDiagnostic {
+    message: string;
+    startLineNumber: number;
+    startColumn: number;
+    endLineNumber: number;
+    endColumn: number;
+}
+export interface ReviewDiagnostic {
+    code: string;
+    label: string;
+    message?: string;
+}
+export interface DiagnosticPage {
+    rows: ReviewDiagnostic[];
+    next: number;
+    total: number;
+}
+export interface ReviewReceipt {
+    completedAt: number;
+    decisionCount: number;
+    decisions: { id: string; label: string; choice: string; accepted: string }[];
+}
 export interface ChangeRow {
     id: string;
     label: string;
@@ -49,6 +72,7 @@ export interface ChangeRow {
     live_present?: boolean;
     incoming_present?: boolean;
     inspection_error?: string;
+    validation?: CompilerDiagnostic[];
 }
 export interface ReviewPage {
     generation: number;
@@ -63,6 +87,8 @@ export interface ReviewStatus {
     package: string;
     status: string;
     error?: { message?: string };
+    provenance?: Record<string, unknown>;
+    receipt?: ReviewReceipt;
 }
 export interface InspectionPage {
     revision: string;
@@ -88,6 +114,33 @@ function choice(value: unknown): Choice {
         throw new Error("Invalid review choice.");
     }
     return value as Choice;
+}
+function compilerDiagnostic(value: unknown): CompilerDiagnostic {
+    const item = object(value);
+    return {
+        message: text(item.message),
+        startLineNumber: Math.max(1, number(item.line ?? 1)),
+        startColumn: Math.max(1, number(item.column ?? 1)),
+        endLineNumber: Math.max(1, number(item.end_line ?? item.line ?? 1)),
+        endColumn: Math.max(2, number(item.end_column ?? 2)),
+    };
+}
+function receipt(value: unknown): ReviewReceipt {
+    const item = object(value);
+    if (!Array.isArray(item.decisions)) throw new Error("Invalid review receipt.");
+    return {
+        completedAt: number(item.completed_at),
+        decisionCount: number(item.decision_count),
+        decisions: item.decisions.map(value => {
+            const decision = object(value);
+            return {
+                id: text(decision.id),
+                label: text(decision.label ?? decision.id),
+                choice: text(decision.choice),
+                accepted: text(decision.accepted),
+            };
+        }),
+    };
 }
 export function decodeChangeRow(value: unknown, details = false): ChangeRow {
     const row = object(value);
@@ -116,6 +169,7 @@ export function decodeChangeRow(value: unknown, details = false): ChangeRow {
         live_present: row.live_present !== false && row.live_present !== 0,
         incoming_present: row.incoming_present !== false && row.incoming_present !== 0,
         inspection_error: typeof row.inspection_error === "string" ? row.inspection_error : undefined,
+        validation: Array.isArray(row.validation) ? row.validation.map(compilerDiagnostic) : [],
         id: text(row.id),
         label,
         classification: classification as Classification,
@@ -153,7 +207,7 @@ export class ChangeReviewClient {
     constructor(private token: string, private target: ChangeTarget) {}
 
     private async invoke(
-        method: "status" | "review" | "details" | "inspection" | "resolve" | "apply" | "refresh",
+        method: "status" | "review" | "details" | "inspection" | "diagnostics" | "resolve" | "apply" | "refresh",
         args: StructuredArgument[],
     ) {
         const { result } = await invokeVerbFlatBuffer(
@@ -161,7 +215,9 @@ export class ChangeReviewClient {
             this.target.provider,
             method,
             buildStructuredArgs(args),
-        );
+        ).catch(failure => {
+            throw changeServiceFailure(failure);
+        });
         const response = object(result);
         if (response.schema !== 1 || response.review_id !== this.target.review) {
             throw new Error("Unexpected change review response.");
@@ -174,9 +230,33 @@ export class ChangeReviewClient {
             generation: number(status.generation),
             package: text(status.package),
             status: text(status.status),
+            provenance: object(status.provenance ?? {}),
+            ...(status.decision_count !== undefined
+                ? { receipt: receipt(status) }
+                : status.last_receipt
+                ? { receipt: receipt(status.last_receipt) }
+                : {}),
             ...(status.error && object(status.error).message
                 ? { error: { message: text(object(status.error).message) } }
                 : {}),
+        };
+    }
+    async diagnostics(generation: number, offset = 1): Promise<DiagnosticPage> {
+        const result = await this.invoke("diagnostics", [this.target.review, generation, offset]);
+        if (result.generation !== generation || !Array.isArray(result.diagnostics)) {
+            throw new Error("Review changed. Reload it before continuing.");
+        }
+        return {
+            rows: result.diagnostics.map(value => {
+                const item = object(value);
+                return {
+                    code: text(item.code),
+                    label: text(item.label ?? ""),
+                    ...(typeof item.message === "string" ? { message: item.message } : {}),
+                };
+            }),
+            next: number(result.next),
+            total: number(result.total),
         };
     }
     async page(generation: number, cursor: number[] = [], classification = ""): Promise<ReviewPage> {

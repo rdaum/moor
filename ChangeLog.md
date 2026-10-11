@@ -14,6 +14,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Meadow change reviews show source provenance, unsupported changes, and committed outcomes.
+  Compiler markers return when an invalid saved draft is reopened. Review controls follow service
+  capabilities, and reconnect preserves unsaved drafts while checking current review state.
+
 - Meadow's Changes workspace discovers compatible core services and provides package creation,
   upstream configuration, Git/HTTP fetches, source uploads, and baseline adoption. Administrators
   can reopen saved reviews, discard pending reviews, and view retained completed reviews. Cowbell

@@ -125,18 +125,20 @@ export const MainSurface: React.FC = () => {
     const [isEvalPanelOpen, setIsEvalPanelOpen] = useState<boolean>(false);
     const [isChangesOpen, setIsChangesOpen] = useState(false);
     const [changeService, setChangeService] = useState<ChangeServiceClient | null>(null);
+    const [changeConnectionRevision, setChangeConnectionRevision] = useState(0);
     useEffect(() => {
         setChangeService(null);
         setIsChangesOpen(false);
     }, [authToken]);
     useEffect(() => {
         if (!authToken || !isConnected) return;
+        setChangeConnectionRevision(previous => previous + 1);
         let cancelled = false;
         void discoverChangeService(authToken).then(service => {
             if (!cancelled) setChangeService(service);
         }).catch(() => {
             // Cores may omit this service or deny access to the current player.
-            if (!cancelled) setChangeService(null);
+            // Retain an open workspace during transient failures so unsaved text survives.
         });
         return () => {
             cancelled = true;
@@ -955,6 +957,7 @@ export const MainSurface: React.FC = () => {
                             service={changeService}
                             authToken={authToken}
                             isWizard={Boolean((playerFlags ?? 0) & OBJFLAG_WIZARD)}
+                            connectionRevision={changeConnectionRevision}
                             onClose={() => setIsChangesOpen(false)}
                         />
                     )}
@@ -966,6 +969,7 @@ export const MainSurface: React.FC = () => {
                                 changeReview.row ?? ""
                             }`}
                             target={changeReview}
+                            connectionRevision={changeConnectionRevision}
                             authToken={authToken}
                             onClose={() => setChangeReview(null)}
                         />

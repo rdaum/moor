@@ -121,6 +121,10 @@ test("Git review preserves choices and edited drafts across restart, then applie
         review,
         generation: status.generation,
     });
+    await page.getByText(/^Source and checks/).click();
+    await expect(page.locator(".change-review-source")).toContainText(`sha1:${fixture.revisionB}`);
+    await expect(page.locator(".change-review-source")).toContainText("does not establish compatibility");
+    await page.getByText(/^Source and checks/).click();
     await page.getByRole("button", { name: /:edited, Verb/ }).click();
     await page.getByRole("button", { name: "Edit resolution", exact: true }).click();
     const editor = page.locator(".change-review-draft").getByRole("textbox", { name: "Editor content", exact: true });
@@ -129,10 +133,19 @@ test("Git review preserves choices and edited drafts across restart, then applie
     await editor.pressSequentially("return (;");
     await page.getByRole("button", { name: "Save proposed program" }).click();
     await expect(page.getByText(/Line \d+:/)).toBeVisible();
+    const invalidGeneration = (await page.evaluate(id => window.changes.client(id).status(), review)).generation;
+    await page.evaluate(({ review, generation }) => window.changes.open(review, generation), {
+        review,
+        generation: invalidGeneration,
+    });
+    await page.getByRole("button", { name: /:edited, Verb/ }).click();
+
     await page.getByRole("button", { name: "Edit resolution", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.changes.markers())).toHaveLength(1);
     await editor.focus();
     await editor.press("ControlOrMeta+A");
     await editor.pressSequentially("return 9;");
+    await expect.poll(() => page.evaluate(() => window.changes.markers())).toHaveLength(0);
     await page.getByRole("button", { name: "Save proposed program" }).click();
     await expect(page.getByText("Choice saved. Live code has not changed.")).toBeVisible();
     expect(await programs(page)).toEqual([1, 3, 3, 3, 3]);
@@ -350,6 +363,9 @@ test("workspace configures bindings, fetches, discards, and adopts uploaded sour
         .click();
     await expect(page.getByText("Updates applied.", { exact: true })).toBeVisible();
     expect(await programs(page)).toEqual([1, 3, 3, 3, 3]);
+    await page.getByText(/^Source and checks/).click();
+    await expect(page.getByRole("region", { name: "Apply receipt" })).toContainText("#9500:edited");
+    await expect(page.getByRole("region", { name: "Apply receipt" })).toContainText("8 decisions committed");
     await page.getByRole("button", { name: "Close", exact: true }).click();
     await page.getByRole("button", { name: "Configure upstream" }).click();
     await page.getByRole("combobox", { name: "Source", exact: true }).selectOption("http");

@@ -48,6 +48,13 @@ const harness = {
     client(review: number) {
         return new ChangeReviewClient(token, target(review));
     },
+    async markers() {
+        const monaco = await import("../src/lib/monaco");
+        return monaco.editor.getModelMarkers({ owner: "change-review" }).map(marker => ({
+            message: marker.message,
+            line: marker.startLineNumber,
+        }));
+    },
     async workspace() {
         const service = await discoverChangeService(token);
         if (!service) throw new Error("No change service");

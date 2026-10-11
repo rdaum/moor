@@ -27,8 +27,9 @@ vi.mock("@monaco-editor/react", () => ({
         <div data-testid="diff">{original} → {modified}</div>
     ),
     default: (
-        { value, onChange, options }: {
-            value: string;
+        { value, defaultValue, onChange, options }: {
+            value?: string;
+            defaultValue?: string;
             onChange?: (value: string) => void;
             options?: { readOnly?: boolean };
         },
@@ -37,6 +38,7 @@ vi.mock("@monaco-editor/react", () => ({
             aria-label={options?.readOnly ? "Source" : "Proposed program"}
             readOnly={options?.readOnly}
             value={value}
+            defaultValue={defaultValue}
             onChange={event => onChange?.(event.target.value)}
         />
     ),
@@ -58,22 +60,41 @@ const baseRow = {
     default: "unresolved",
     choice: {},
 };
+const defaultCapabilities = {
+    schema: 1,
+    operations: ["packages", "status", "review", "details", "inspection", "diagnostics", "resolve", "apply", "refresh"],
+    fields: ["program"],
+    choices: ["incoming", "local", "edited", "defer"],
+    transports: ["upload"],
+    default_package: "cowbell",
+    max_source_bytes: 4194304,
+    max_packages: 32,
+    git_authorization: "wizard",
+};
+let capabilities = defaultCapabilities;
 let generation: number;
 let saved: Record<string, unknown>;
 let rejectChoice: boolean;
 let applied: boolean;
+let reviewStatus: string;
 
 beforeEach(() => {
+    capabilities = defaultCapabilities;
     generation = 1;
     saved = {};
     rejectChoice = false;
     applied = false;
+    reviewStatus = "ready";
     vi.mocked(invokeVerbFlatBuffer).mockReset().mockImplementation(async (_token, _provider, method, bytes) => {
         const args = new MoorVar(Var.getRootAsVar(new ByteBuffer(bytes!))).toJS() as unknown[];
+        if (method === "capabilities") return { result: capabilities, output: [] };
+        if (method === "diagnostics") {
+            return { result: { schema: 1, review_id: 1, generation, diagnostics: [], total: 0, next: 0 }, output: [] };
+        }
         const common = { schema: 1, review_id: 1, generation };
         if (method === "status") {
             return {
-                result: { ...common, package: "cowbell", status: applied ? "complete" : "ready", error: {} },
+                result: { ...common, package: "cowbell", status: applied ? "complete" : reviewStatus, error: {} },
                 output: [],
             };
         }
@@ -109,6 +130,7 @@ beforeEach(() => {
             return { result: { ...common, status: "applying" }, output: [] };
         }
         if (method === "refresh") {
+            reviewStatus = "ready";
             saved = {};
             rejectChoice = false;
             generation++;
@@ -225,6 +247,10 @@ it("browses local-only objects, verbs and properties without offering mutation c
     const common = { schema: 1, review_id: 1, generation: 1 };
     vi.mocked(invokeVerbFlatBuffer).mockImplementation(async (_token, _provider, method, bytes) => {
         const args = new MoorVar(Var.getRootAsVar(new ByteBuffer(bytes!))).toJS() as unknown[];
+        if (method === "capabilities") return { result: capabilities, output: [] };
+        if (method === "diagnostics") {
+            return { result: { schema: 1, review_id: 1, generation, diagnostics: [], total: 0, next: 0 }, output: [] };
+        }
         if (method === "status") return { result: { ...common, package: "cowbell", status: "ready" }, output: [] };
         if (method === "review") {
             return {
@@ -273,4 +299,56 @@ it("browses local-only objects, verbs and properties without offering mutation c
     expect(screen.getByRole("button", { name: /\$local.edited/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /\$test:verb/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /\$local:run/ })).toBeNull();
+});
+
+it("keeps unsaved text across reconnect and prevents browser unload", async () => {
+    const view = open();
+    fireEvent.click(await screen.findByRole("button", { name: "Edit resolution" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Proposed program" }), { target: { value: "return 99;" } });
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    generation++;
+    view.rerender(<ChangeReview visible target={target} authToken="token" onClose={vi.fn()} connectionRevision={1} />);
+    await screen.findByText(/Your unsaved text is retained/);
+    expect(screen.getByRole("textbox", { name: "Proposed program" })).toHaveProperty("value", "return 99;");
+    expect(screen.getByRole("button", { name: "Save proposed program" })).toHaveProperty("disabled", true);
+});
+
+it("reads the current saved draft on reconnect when there is no unsaved text", async () => {
+    const view = open();
+    await screen.findByRole("heading", { name: "$test:verb" });
+    generation++;
+    saved = { choice: "edited", program: "return 42;", validated: true };
+    view.rerender(<ChangeReview visible target={target} authToken="token" onClose={vi.fn()} connectionRevision={1} />);
+    await screen.findByText("Generation 2");
+    await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Edit resolution" })).toHaveProperty("disabled", false)
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit resolution" }));
+    expect(screen.getByRole("textbox", { name: "Proposed program" })).toHaveProperty("value", "return 42;");
+});
+
+it("does not offer unadvertised operations or call optional inspection APIs", async () => {
+    capabilities = { ...defaultCapabilities, operations: ["packages", "status", "review", "details"], choices: [] };
+    open();
+    await screen.findByRole("heading", { name: "$test:verb" });
+    expect(screen.queryByRole("button", { name: "Edit resolution" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Keep local" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Apply 0 choices" })).toHaveProperty("disabled", true);
+    const methods = vi.mocked(invokeVerbFlatBuffer).mock.calls.map(call => call[2]);
+    expect(methods).not.toContain("inspection");
+    expect(methods).not.toContain("diagnostics");
+});
+
+it("offers explicit recovery for an interrupted apply without needing a failed read", async () => {
+    reviewStatus = "interrupted";
+    open();
+    await screen.findByText("Apply was interrupted.");
+    fireEvent.click(screen.getByRole("button", { name: "Refresh comparison" }));
+    expect(generation).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm refresh" }));
+    await screen.findByRole("heading", { name: "$test:verb" });
+    expect(generation).toBe(2);
+    expect(applied).toBe(false);
 });

@@ -312,3 +312,20 @@
 .change-review-shell[aria-busy="true"] select:disabled {
   cursor: progress;
 }
+
+.change-review-source {
+  flex-shrink: 0;
+  max-height: 25vh;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.change-review-source dl > div {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.change-review-source dd {
+  margin: 0;
+}

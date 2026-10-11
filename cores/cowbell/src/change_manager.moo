@@ -807,7 +807,7 @@ object CHANGE_MANAGER [
     const record = this:_get(auth, id, generation);
     let request = record["request"];
     request["details"] = {row_id};
-    const current = preview_objdef_changes(record["sources"], request);
+    const current = preview_objdef_changes(record["sources"], request, record["choices"]);
     current["evidence"] == record["report"]["evidence"] || this:_error("stale_review", "Live state changed. Refresh before reading details.");
     for selected in (current["rows"])
       let row = selected;
@@ -817,6 +817,7 @@ object CHANGE_MANAGER [
         if (row["choice"])
           row["choice"]["validated"] = maphaskey(row["choice"], "validation");
         endif
+        row["validation"] = {item for item in (current["validation"]) if (item["id"] == row_id && !item["valid"])};
         value_bytes(row) <= 524288 || raise(E_QUOTA, "Selected details exceed the service limit.");
         return ["schema" -> 1, "review_id" -> id, "generation" -> generation, "row" -> row];
       endif
@@ -931,7 +932,16 @@ object CHANGE_MANAGER [
       receipt["actor"] = record["actor"];
       receipt["provenance"] = record["provenance"];
       receipt["decision_count"] = length(result["decisions"]);
-      receipt["decisions"] = result["decisions"][1..min(50, length(result["decisions"]))];
+      let labels = [];
+      for row in (record["report"]["rows"])
+        labels[row["id"]] = tostr(row["object"], ":", row["names"][1]);
+      endfor
+      let decisions = {};
+      for decision in (result["decisions"][1..min(50, length(result["decisions"]))])
+        decision["label"] = labels[decision["id"]];
+        decisions = {@decisions, decision};
+      endfor
+      receipt["decisions"] = decisions;
       receipt["source_digest"] = record["report"]["source_digest"];
       receipt["completed_at"] = time();
       if (deferred)

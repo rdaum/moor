@@ -260,6 +260,15 @@ opens saved reviews, discards pending reviews after confirmation, and lists reta
 reviews. Configuration saves use the generation observed when the form opened. A concurrent
 configuration change rejects the save and preserves the form for inspection.
 
+The review's **Source and checks** panel shows provenance, unsupported changes, and committed
+outcomes. Edited drafts show compiler diagnostics in the Monaco editor. Reopening an invalid saved
+draft restores its diagnostics. Changing the draft clears markers for the previous text.
+
+Meadow protects unsaved drafts during navigation and browser reload. After reconnect, it reads the
+current review state. If another client changed the review, Meadow retains unsaved text and requires
+an explicit reload before further choices. Copy that text before discarding it. Saved drafts remain
+in the service across disconnects and server restarts.
+
 Each core declares its default package and object bindings in its own source. Prepare upstream
 baselines with `moorc` before a fresh import, as described in
 [Preparing an upstream baseline](bootstrapping-from-source.md#preparing-an-upstream-baseline).

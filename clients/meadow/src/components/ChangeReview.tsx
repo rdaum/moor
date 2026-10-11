@@ -20,11 +20,16 @@ import {
     ChangeTarget,
     Choice,
     Classification,
+    CompilerDiagnostic,
+    DiagnosticPage,
     InspectionPage,
     ReviewPage,
     ReviewStatus,
 } from "../lib/change-review";
+import { ChangeServiceClient } from "../lib/change-service";
 import { ReviewDiffEditor } from "./ReviewDiffEditor";
+import { ReviewProgramEditor } from "./ReviewProgramEditor";
+import { ReviewSourceDetails } from "./ReviewSourceDetails";
 import "../lib/monaco";
 import { registerMooLanguage } from "../lib/monaco-moo";
 import { DialogSheet } from "./DialogSheet";
@@ -37,6 +42,7 @@ interface Props {
     target: ChangeTarget;
     authToken: string;
     onClose: () => void;
+    connectionRevision?: number;
 }
 const choices: Record<Choice, string> = {
     incoming: "Use upstream",
@@ -76,13 +82,16 @@ const categories: Classification[] = [
     "converged",
 ];
 type ReviewFilter = Classification | "all";
+const noCompilerDiagnostics: CompilerDiagnostic[] = [];
 
-export function ChangeReview({ target, authToken, onClose }: Props) {
+export function ChangeReview({ target, authToken, onClose, connectionRevision = 0 }: Props) {
     const id = useId();
     const { theme } = useTheme();
     const client = useMemo(() => new ChangeReviewClient(authToken, target), [authToken, target]);
     const [generation, setGeneration] = useState(target.generation);
     const [status, setStatus] = useState<ReviewStatus | null>(null);
+    const [service, setService] = useState<ChangeServiceClient | null>(null);
+    const [diagnostics, setDiagnostics] = useState<DiagnosticPage | null>(null);
     const [page, setPage] = useState<ReviewPage | null>(null);
     const [category, setCategory] = useState<ReviewFilter>("all");
     const [inspection, setInspection] = useState<InspectionPage | null>(null);
@@ -101,6 +110,18 @@ export function ChangeReview({ target, authToken, onClose }: Props) {
     const pendingNavigation = useRef<(() => void) | null>(null);
     const sequence = useRef(0);
     const dirty = editing && draft !== initialDraft;
+    const connection = useRef(connectionRevision);
+    const reviewState = useRef({ dirty, generation, row: row?.id, category });
+    reviewState.current = { dirty, generation, row: row?.id, category };
+    useEffect(() => {
+        if (!dirty) return;
+        const prevent = (event: BeforeUnloadEvent) => {
+            event.preventDefault();
+            event.returnValue = "";
+        };
+        window.addEventListener("beforeunload", prevent);
+        return () => window.removeEventListener("beforeunload", prevent);
+    }, [dirty]);
 
     const selectDetail = useCallback((detail: ChangeRow | null) => {
         setRow(detail);
@@ -121,22 +142,33 @@ export function ChangeReview({ target, authToken, onClose }: Props) {
         setError("");
         selectDetail(null);
         try {
+            const available = await ChangeServiceClient.connect(authToken, target.provider);
+            if (request !== sequence.current) return;
+            setService(available);
+            if (!available.supports("status")) throw new Error("This service does not expose review status.");
             const current = await client.status();
             if (request !== sequence.current) return;
             setStatus(current);
             if (!["ready", "partial", "rejected"].includes(current.status)) {
                 setPage(null);
+                setDiagnostics(null);
                 return;
+            }
+            if (!available.supports("review") || !available.supports("details")) {
+                throw new Error("This service does not expose review details.");
             }
             const detail = selected ? await client.details(version, selected) : null;
             const nextCategory = filter ?? "all";
-            const [overview, inspected] = await Promise.all([
+            const [overview, inspected, checks] = await Promise.all([
                 client.page(version, [], nextCategory === "all" ? "changed" : nextCategory),
-                client.inspection(
-                    version,
-                    1,
-                    nextCategory === "all" ? "" : nextCategory,
-                ),
+                available.supports("inspection")
+                    ? client.inspection(
+                        version,
+                        1,
+                        nextCategory === "all" ? "" : nextCategory,
+                    )
+                    : Promise.resolve({ rows: [], counts: {}, revision: "", next: 0 }),
+                available.supports("diagnostics") ? client.diagnostics(version) : Promise.resolve(null),
             ]);
             const shownRows = [...overview.rows, ...inspected.rows].sort((a, b) => a.label.localeCompare(b.label));
             const first = detail ?? (shownRows[0] ? await client.details(version, shownRows[0].id) : null);
@@ -145,6 +177,7 @@ export function ChangeReview({ target, authToken, onClose }: Props) {
             setCategory(nextCategory);
             setPage(overview);
             setInspection(inspected);
+            setDiagnostics(checks);
             setRows(overview.rows);
             selectDetail(first);
         } catch (failure) {
@@ -152,7 +185,7 @@ export function ChangeReview({ target, authToken, onClose }: Props) {
         } finally {
             if (request === sequence.current) setBusy(false);
         }
-    }, [client, selectDetail, fail]);
+    }, [client, selectDetail, fail, authToken, target.provider]);
     const invalidate = useCallback(() => {
         sequence.current++;
     }, []);
@@ -162,7 +195,30 @@ export function ChangeReview({ target, authToken, onClose }: Props) {
     }, [load, target.generation, target.row, invalidate]);
 
     useEffect(() => {
-        if (status?.status !== "applying") return;
+        if (connection.current === connectionRevision) return;
+        connection.current = connectionRevision;
+        let cancelled = false;
+        void client.status().then(current => {
+            if (cancelled) return;
+            setStatus(current);
+            const local = reviewState.current;
+            if (local.dirty) {
+                if (current.generation !== local.generation) {
+                    setError(
+                        "Review changed while disconnected. Your unsaved text is retained. Copy it before reloading the review.",
+                    );
+                }
+            } else void load(current.generation, local.row, local.category);
+        }).catch(failure => {
+            if (!cancelled) fail(failure);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [connectionRevision, client, load, fail]);
+
+    useEffect(() => {
+        if (!["applying", "fetching"].includes(status?.status ?? "")) return;
         let cancelled = false;
         let timer: ReturnType<typeof setTimeout>;
         const poll = async () => {
@@ -170,7 +226,7 @@ export function ChangeReview({ target, authToken, onClose }: Props) {
                 const current = await client.status();
                 if (cancelled) return;
                 setStatus(current);
-                if (current.status === "applying") timer = setTimeout(poll, 1000);
+                if (["applying", "fetching"].includes(current.status)) timer = setTimeout(poll, 1000);
                 else if (["partial", "ready", "rejected"].includes(current.status)) await load(current.generation);
             } catch (failure) {
                 if (!cancelled) fail(failure);
@@ -351,6 +407,8 @@ export function ChangeReview({ target, authToken, onClose }: Props) {
         ? "Applying updates…"
         : status?.status === "fetching"
         ? "Fetching upstream source…"
+        : status?.status === "interrupted"
+        ? "Apply was interrupted."
         : status?.status === "failed"
         ? "The upstream fetch failed."
         : status?.status === "complete"
@@ -359,7 +417,9 @@ export function ChangeReview({ target, authToken, onClose }: Props) {
         ? "This review was discarded."
         : "Compare local contents with the fetched source.";
     const canApply = Boolean(
-        page && selectedCount && !page.decision_counts.unresolved && !busy && !dirty && !error && !applying,
+        service?.supports("apply") && service.capabilities.fields.includes("program") && page && selectedCount
+            && !page.decision_counts.unresolved && !busy && !dirty
+            && !error && !applying,
     );
 
     return (
@@ -373,6 +433,16 @@ export function ChangeReview({ target, authToken, onClose }: Props) {
                 <div className="change-review-toolbar">
                     <span role="status">{statusText}</span>
                     <small>Generation {status?.generation ?? generation}</small>
+                    {service?.supports("refresh") && status
+                        && ["ready", "partial", "rejected", "interrupted"].includes(status.status) && (
+                        <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setConfirmation("refresh")}
+                        >
+                            Refresh comparison
+                        </button>
+                    )}
                     <button type="button" onClick={() => navigate(onClose)}>Close</button>
                 </div>
                 {error && (
@@ -389,19 +459,29 @@ export function ChangeReview({ target, authToken, onClose }: Props) {
                         >
                             Reload review
                         </button>
-                        {status && ["ready", "partial", "rejected"].includes(status.status) && (
-                            <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => setConfirmation("refresh")}
-                            >
-                                Refresh comparison
-                            </button>
-                        )}
                     </div>
                 )}
                 {notice && <p role="status" className="change-review-notice">{notice}</p>}
                 {status?.error?.message && <p role="alert">{status.error.message}</p>}
+                <ReviewSourceDetails
+                    status={status}
+                    diagnostics={diagnostics}
+                    busy={busy}
+                    onMore={() => {
+                        if (!diagnostics?.next) return;
+                        const request = sequence.current;
+                        setBusy(true);
+                        void client.diagnostics(generation, diagnostics.next).then(next => {
+                            if (request === sequence.current) {
+                                setDiagnostics({ ...next, rows: [...diagnostics.rows, ...next.rows] });
+                            }
+                        }).catch(failure => {
+                            if (request === sequence.current) fail(failure);
+                        }).finally(() => {
+                            if (request === sequence.current) setBusy(false);
+                        });
+                    }}
+                />
                 {page && !applying && (
                     <div className="change-review-workspace" aria-busy={busy}>
                         <aside className="change-review-sidebar" aria-label="Changes">
@@ -629,10 +709,13 @@ export function ChangeReview({ target, authToken, onClose }: Props) {
                                         {editing && (
                                             <section className="change-review-draft">
                                                 <h4>Proposed program</h4>
-                                                <Editor
+                                                <ReviewProgramEditor
                                                     language="moo"
                                                     theme={monacoThemeFor(theme)}
-                                                    value={draft}
+                                                    initialValue={initialDraft}
+                                                    diagnostics={draft === initialDraft
+                                                        ? row.validation ?? noCompilerDiagnostics
+                                                        : noCompilerDiagnostics}
                                                     onChange={value => setDraft(value ?? "")}
                                                     beforeMount={registerMooLanguage}
                                                     options={{
@@ -645,10 +728,13 @@ export function ChangeReview({ target, authToken, onClose }: Props) {
                                                 />
                                             </section>
                                         )}
-                                        {!row.read_only && (
+                                        {!row.read_only && service?.supports("resolve")
+                                            && service.capabilities.fields.includes("program") && (
                                             <div className="change-review-resolution">
                                                 <span>On apply: {choices[row.choice?.choice ?? row.default]}</span>
-                                                {row.choices.filter(value => value !== "edited").map(value => (
+                                                {row.choices.filter(value =>
+                                                    value !== "edited" && service.capabilities.choices.includes(value)
+                                                ).map(value => (
                                                     <button
                                                         type="button"
                                                         key={value}
@@ -663,7 +749,8 @@ export function ChangeReview({ target, authToken, onClose }: Props) {
                                                             : choices[value]}
                                                     </button>
                                                 ))}
-                                                {row.eligible && row.choices.includes("edited") && (
+                                                {row.eligible && row.choices.includes("edited")
+                                                    && service.capabilities.choices.includes("edited") && (
                                                     <button
                                                         type="button"
                                                         disabled={busy || !!error}
@@ -702,6 +789,12 @@ export function ChangeReview({ target, authToken, onClose }: Props) {
                                 ? `Accept ${selectedCount} baselines? Live code will stay as it is.`
                                 : `Apply ${selectedCount} program choices to the running MOO?`}
                         </p>
+                        {confirmation === "apply" && page?.operation !== "adopt" && (
+                            <p>
+                                Selected programs may depend on omitted property, definition, or object changes. This
+                                review does not establish that compatibility.
+                            </p>
+                        )}
                         <button type="button" onClick={() => setConfirmation(null)}>Cancel</button>
                         <button
                             type="button"

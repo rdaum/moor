@@ -80,3 +80,43 @@ describe("change review protocol", () => {
         ]);
     });
 });
+
+it("rejects diagnostics from another generation", async () => {
+    vi.mocked(invokeVerbFlatBuffer).mockResolvedValueOnce({
+        result: { schema: 1, review_id: 1, generation: 8, diagnostics: [], next: 0, total: 0 },
+        output: [],
+    });
+    await expect(new ChangeReviewClient("token", target).diagnostics(7)).rejects.toThrow("Review changed");
+});
+
+it("decodes saved compiler ranges and completed outcomes without reconstructing source", async () => {
+    const detail = decodeChangeRow({
+        ...row,
+        validation: [{ message: "Invalid expression", line: 2, column: 4, end_line: 2, end_column: 5 }],
+    }, true);
+    expect(detail.validation).toEqual([{
+        message: "Invalid expression",
+        startLineNumber: 2,
+        startColumn: 4,
+        endLineNumber: 2,
+        endColumn: 5,
+    }]);
+    vi.mocked(invokeVerbFlatBuffer).mockResolvedValueOnce({
+        result: {
+            schema: 1,
+            review_id: 1,
+            generation: 7,
+            package: "cowbell",
+            status: "complete",
+            provenance: { commit: "sha1:abc" },
+            completed_at: 10,
+            decision_count: 1,
+            decisions: [{ id: "row", label: "#1:run", choice: "edited", accepted: "hash" }],
+        },
+        output: [],
+    });
+    expect(await new ChangeReviewClient("token", target).status()).toMatchObject({
+        provenance: { commit: "sha1:abc" },
+        receipt: { decisionCount: 1, decisions: [{ label: "#1:run", choice: "edited" }] },
+    });
+});
