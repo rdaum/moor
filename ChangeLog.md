@@ -14,6 +14,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Cowbell change groups can create properties with an explicitly approved initial value. Existing
+  values stay unchanged. Adding a property to a parent requires permission for its descendants to
+  inherit it. Meadow and terminal reviews show these choices before apply.
+
 - Cowbell change reviews can add verbs to existing managed objects. Administrators declare groups
   for programs and the helpers they require. Apply rejects incomplete groups and conflicting verb
   names. Meadow and `help @changes` explain grouping, selection, and recovery.

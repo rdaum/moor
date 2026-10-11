@@ -30,6 +30,8 @@ mod additions;
 pub(crate) mod inspection;
 #[path = "review_policy.rs"]
 mod policy;
+#[path = "review_properties.rs"]
+mod properties;
 
 use crate::{
     Constants, ObjDefSet, ObjDefSource, ObjdefLoaderError,
@@ -202,18 +204,20 @@ pub fn classify(base: Option<&str>, live: &str, incoming: &str) -> &'static str 
     }
 }
 
-pub(crate) enum ProgramTarget {
+pub(crate) enum ChangeTarget {
     Existing(uuid::Uuid),
     AddVerb(moor_compiler::ObjVerbDef),
+    AddProperty(moor_compiler::ObjPropDef),
+    RetainProperty { accepted: String },
 }
 
-pub(crate) struct ProgramRow {
+pub(crate) struct ChangeRow {
     pub id: String,
     pub eligible: bool,
     pub object: moor_var::Obj,
-    pub target: ProgramTarget,
+    pub target: ChangeTarget,
     pub member: String,
-    pub incoming: ProgramType,
+    pub incoming: Option<ProgramType>,
     pub incoming_hash: String,
     pub incoming_source: Option<Var>,
     pub live_hash: String,
@@ -223,7 +227,7 @@ pub(crate) struct ProgramRow {
 pub(crate) struct Analysis {
     pub report: Var,
     pub evidence: Var,
-    pub rows: Vec<ProgramRow>,
+    pub rows: Vec<ChangeRow>,
     pub adoption: bool,
     policy: policy::Policy,
 }
@@ -346,10 +350,12 @@ pub(crate) fn analyze(
                     .into(),
             );
         }
-    } else if selected_fields.len() != 1
-        || selected_fields.iter().next().unwrap().as_string() != Some("program")
+    } else if selected_fields.is_empty()
+        || selected_fields
+            .iter()
+            .any(|field| !matches!(field.as_string(), Some("program" | "property")))
     {
-        return Err("only the program field is supported for updates"
+        return Err("update fields must be program or property"
             .to_owned()
             .into());
     }
@@ -533,7 +539,11 @@ pub(crate) fn analyze(
         let verbs = world.verbs(permissions, &object)?;
         let definitions = verbs.iter().collect::<Vec<_>>();
         let mut matched = BTreeSet::new();
-        for verb in &incoming.verbs {
+        for verb in incoming.verbs.iter().filter(|_| {
+            selected_fields
+                .iter()
+                .any(|field| field.as_string() == Some("program"))
+        }) {
             if report_rows.len() >= MAX_ROWS {
                 return Err("review exceeds 8192 rows".to_string().into());
             }
@@ -795,13 +805,13 @@ pub(crate) fn analyze(
                 }
             }
             report_rows.push(record(&output));
-            rows.push(ProgramRow {
+            rows.push(ChangeRow {
                 id,
                 eligible,
                 object,
-                target: ProgramTarget::Existing(definition.uuid()),
+                target: ChangeTarget::Existing(definition.uuid()),
                 member: additions::member_key(object, verb)?,
-                incoming: verb.program.clone(),
+                incoming: Some(verb.program.clone()),
                 incoming_hash,
                 incoming_source: provenance.map(|value| {
                     value
@@ -829,7 +839,61 @@ pub(crate) fn analyze(
                 ]));
             }
         }
-        // Structural fields remain outside this operation's managed policy.
+        if !adoption
+            && !incoming.property_definitions.is_empty()
+            && selected_fields
+                .iter()
+                .any(|field| field.as_string() == Some("property"))
+        {
+            let local = crate::collect_object_definitions(world, permissions, &[object])
+                .map_err(|error| error.to_string())?
+                .remove(0);
+            let context = properties::Context {
+                world,
+                permissions,
+                object,
+                trusted,
+                identity_matches,
+                trusted_owners: &trusted_owners,
+                policy: &policy,
+                local: &local,
+            };
+            for property in &incoming.property_definitions {
+                let member = properties::member_key(object, property.name);
+                // Existing data stays in inspection unless the administrator explicitly
+                // includes it in an initialization group.
+                let absent = matches!(
+                    world.get_property_info(permissions, &object, property.name),
+                    Err(WorldStateError::PropertyNotFound(_, _))
+                );
+                if !absent
+                    && local
+                        .property_definitions
+                        .iter()
+                        .any(|p| p.name == property.name)
+                    && !policy.initialization.contains_key(&member)
+                {
+                    continue;
+                }
+                let (row, report) = context.analyze(
+                    label,
+                    property,
+                    &mut guards,
+                    selected_details.contains(&format!("property/{member}")),
+                )?;
+                for field in ["live_text", "incoming_text"] {
+                    if let Ok(text) = report.as_map().unwrap().get(&v_str(field)) {
+                        detail_bytes += text.as_string().unwrap().len();
+                    }
+                }
+                if detail_bytes > MAX_SOURCE_BYTES {
+                    return Err("selected details exceed 16 MiB".to_owned().into());
+                }
+                rows.push(row);
+                report_rows.push(report);
+            }
+        }
+        // Existing fields and overrides remain read-only.
         if !incoming.property_definitions.is_empty() || !incoming.property_overrides.is_empty() {
             diagnostics.push(record(&[
                 ("object", v_obj(object)),
@@ -843,9 +907,12 @@ pub(crate) fn analyze(
     {
         return Err("unknown detail row".to_string().into());
     }
-    let has_additions = rows
-        .iter()
-        .any(|row| matches!(row.target, ProgramTarget::AddVerb(_)));
+    let has_additions = rows.iter().any(|row| {
+        matches!(
+            row.target,
+            ChangeTarget::AddVerb(_) | ChangeTarget::AddProperty(_)
+        )
+    });
     policy.annotate(&mut rows, &mut report_rows, has_additions)?;
     let evidence = record(&[
         ("schema", v_int(1)),
@@ -935,8 +1002,12 @@ fn validate_choices(
             if !matches!(kind, "incoming" | "local" | "edited" | "defer")
                 || (!row.eligible && kind != "defer")
                 || (analysis.adoption && !matches!(kind, "incoming" | "defer"))
-                || (matches!(row.target, ProgramTarget::AddVerb(_))
-                    && !matches!(kind, "incoming" | "defer"))
+                || (matches!(
+                    row.target,
+                    ChangeTarget::AddVerb(_) | ChangeTarget::AddProperty(_)
+                ) && !matches!(kind, "incoming" | "defer"))
+                || (matches!(row.target, ChangeTarget::RetainProperty { .. })
+                    && !matches!(kind, "local" | "defer"))
             {
                 return Err("choice is not allowed for this row".to_string().into());
             }
@@ -997,9 +1068,9 @@ pub enum ApplyError {
     Mutation(WorldStateError),
 }
 
-struct ProgramAction {
+struct ChangeAction {
     object: moor_var::Obj,
-    target: ProgramTarget,
+    target: ChangeTarget,
     program: Option<ProgramType>,
     baseline: Var,
 }
@@ -1131,10 +1202,10 @@ pub fn apply(
             ))
         } else if kind == "incoming"
             && !analysis.adoption
-            && matches!(row.target, ProgramTarget::Existing(_))
+            && matches!(row.target, ChangeTarget::Existing(_))
             && row.live_hash != row.incoming_hash
         {
-            Some(row.incoming)
+            row.incoming
         } else {
             None
         };
@@ -1145,7 +1216,7 @@ pub fn apply(
         if let Some(source) = row.incoming_source {
             baseline.push(("source", source));
         }
-        if let ProgramTarget::AddVerb(verb) = &row.target {
+        if let ChangeTarget::AddVerb(verb) = &row.target {
             created.push(record(&[
                 ("member", v_str(&row.member)),
                 ("object", v_obj(row.object)),
@@ -1153,7 +1224,20 @@ pub fn apply(
                 ("names", names(&verb.names)),
             ]));
         }
-        actions.push(ProgramAction {
+        if let ChangeTarget::AddProperty(property) = &row.target {
+            created.push(record(&[
+                ("member", v_str(&row.member)),
+                ("object", v_obj(row.object)),
+                ("field", v_str("property")),
+                ("names", names(&[property.name])),
+            ]));
+        }
+        let accepted = match &row.target {
+            ChangeTarget::RetainProperty { accepted } => accepted,
+            _ => &row.incoming_hash,
+        }
+        .clone();
+        actions.push(ChangeAction {
             object: row.object,
             target: row.target,
             program,
@@ -1162,7 +1246,7 @@ pub fn apply(
         decisions.push(record(&[
             ("id", v_str(&row.id)),
             ("choice", v_str(kind)),
-            ("accepted", v_str(&row.incoming_hash)),
+            ("accepted", v_str(&accepted)),
         ]));
     }
     let receipt = record(&[
@@ -1178,12 +1262,42 @@ pub fn apply(
 fn write_actions(
     world: &mut dyn WorldState,
     permissions: &TaskPermissions,
-    actions: Vec<ProgramAction>,
+    actions: Vec<ChangeAction>,
 ) -> Result<(), ApplyError> {
     for action in actions {
         let uuid = match action.target {
-            ProgramTarget::Existing(uuid) => uuid,
-            ProgramTarget::AddVerb(verb) => {
+            ChangeTarget::RetainProperty { .. } => continue,
+            ChangeTarget::AddProperty(property) => {
+                world
+                    .define_property(
+                        permissions,
+                        &action.object,
+                        &action.object,
+                        property.name,
+                        &property.perms.owner(),
+                        property.perms.flags(),
+                        property.value.clone(),
+                    )
+                    .map_err(ApplyError::Mutation)?;
+                for (key, value) in &property.metadata {
+                    if *key != Symbol::mk(BASE_KEY) {
+                        world
+                            .set_property_metadata(
+                                permissions,
+                                &action.object,
+                                property.name,
+                                *key,
+                                value.clone(),
+                            )
+                            .map_err(ApplyError::Mutation)?;
+                    }
+                }
+                properties::stamp(world, permissions, action.object, &property)
+                    .map_err(ApplyError::Mutation)?;
+                continue;
+            }
+            ChangeTarget::Existing(uuid) => uuid,
+            ChangeTarget::AddVerb(verb) => {
                 world
                     .add_verb(
                         permissions,

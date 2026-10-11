@@ -14,7 +14,7 @@
 //! Explicit dependency groups for guarded changes. Group declarations are caller policy,
 //! never inferred from program text or imported as authority from objdef metadata.
 
-use super::{Analysis, MAX_ROWS, ProgramRow, ReviewError, fields, record, required};
+use super::{Analysis, ChangeRow, MAX_ROWS, ReviewError, fields, record, required};
 use moor_var::{Associative, ByteSized, Var, v_bool, v_list, v_map, v_str};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -22,6 +22,8 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(super) struct Policy {
     groups: BTreeMap<String, Group>,
     membership: BTreeMap<String, String>,
+    /// Explicit absent-only property initialization, keyed by semantic member.
+    pub initialization: BTreeMap<String, bool>,
 }
 
 struct Group {
@@ -58,7 +60,7 @@ impl Policy {
         if input.size_bytes() > 1024 * 1024 {
             return Err("change policy exceeds 1 MiB".to_string().into());
         }
-        let input = fields(input, &["schema", "groups"])?;
+        let input = fields(input, &["schema", "groups", "initialization"])?;
         if required(&input, "schema")?.as_integer() != Some(1) {
             return Err("unsupported change policy schema".to_string().into());
         }
@@ -69,6 +71,41 @@ impl Policy {
             return Err("at most 32 change groups are supported".to_string().into());
         }
         let mut policy = Self::default();
+        if let Some(initialization) = input.get("initialization") {
+            let entries = initialization
+                .as_list()
+                .ok_or_else(|| ReviewError::Invalid("initialization must be a list".into()))?;
+            if entries.len() > MAX_ROWS {
+                return Err("too many initialization entries".to_owned().into());
+            }
+            for entry in entries.iter() {
+                let entry = fields(&entry, &["member", "mode", "descendants"])?;
+                let member = required(&entry, "member")?.as_string().ok_or_else(|| {
+                    ReviewError::Invalid("initialization member must be text".into())
+                })?;
+                if member.is_empty()
+                    || member.len() > 256
+                    || required(&entry, "mode")?.as_string() != Some("absent")
+                {
+                    return Err("property initialization requires a member and absent mode"
+                        .to_owned()
+                        .into());
+                }
+                let descendants = required(&entry, "descendants")?;
+                if !matches!(descendants.as_integer(), Some(0 | 1))
+                    && descendants.as_bool().is_none()
+                {
+                    return Err("descendants must be a boolean".to_owned().into());
+                }
+                if policy
+                    .initialization
+                    .insert(member.into(), descendants.is_true())
+                    .is_some()
+                {
+                    return Err("duplicate initialization member".to_owned().into());
+                }
+            }
+        }
         for group in groups.iter() {
             let data = fields(&group, &["name", "members", "requires"])?;
             let name = required(&data, "name")?
@@ -151,7 +188,7 @@ impl Policy {
     /// cannot be hidden by a partial source bundle.
     pub fn annotate(
         &self,
-        rows: &mut [ProgramRow],
+        rows: &mut [ChangeRow],
         reports: &mut [Var],
         additions: bool,
     ) -> Result<(), ReviewError> {
@@ -195,7 +232,7 @@ impl Policy {
         Ok(())
     }
 
-    pub fn report(&self, rows: &[ProgramRow]) -> Var {
+    pub fn report(&self, rows: &[ChangeRow]) -> Var {
         v_list(
             &self
                 .groups

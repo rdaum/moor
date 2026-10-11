@@ -154,7 +154,7 @@ E_PERM
 @wizard
 // The installed core is configured by source; another package cannot claim its objects.
 ; const name = $change_manager:capabilities()["default_package"]; const package = $change_manager:packages()["packages"][name]; return {#0 in package["objects"] != 0, package["fields"], package["generation"]};
-{true, {"program"}, 1}
+{true, {"program", "property"}, 1}
 
 ; try $change_manager:configure("overlap", {#0}, []); except failure (ANY) return failure[3]["code"]; endtry return "not rejected";
 "overlapping_package"
@@ -225,7 +225,7 @@ E_PERM
 ; const source = {"object #9504", tostr("owner: ", player), tostr("verb test (this none this) owner: ", player, " flags: \"rxd\""), "return this:helper();", "endverb", tostr("verb helper (this none this) owner: ", player, " flags: \"rxd\""), "return 42;", "endverb", "endobject"}; #0.changes_probe = $change_manager:stage("addition_probe", {["label" -> "caller.moo", "text" -> source]}); const id = #0.changes_probe["review_id"]; const rows = $change_manager:review(id, 1)["rows"]; return {length(rows), {row["eligible"] for row in (rows)}, length(verbs(#9504)), #9504:test()};
 {2, {false, false}, 1, 10}
 
-; const id = #0.changes_probe["review_id"]; const text = $format.block:mk(@$change_manager:command({"diff", tostr(id)})):compose(player, 'text_plain, false); return index(text, "new verb") != 0;
+; const id = #0.changes_probe["review_id"]; const text = $format.block:mk(@$change_manager:command({"diff", tostr(id)})):compose(player, 'text_plain, false); return index(text, "new member") != 0;
 true
 
 ; const id = #0.changes_probe["review_id"]; $change_manager:command({"group", tostr(id), "1", "helper-update", "1", "2"}); return $change_manager:status(id)["generation"];
@@ -262,3 +262,34 @@ true
 
 ; const id = #0.changes_probe["review_id"]; const receipt = $change_manager:status(id); const installed_review = $change_manager:stage("addition_probe", {["label" -> "installed.moo", "text" -> dump_object(#9504)]}); const rows = $change_manager:review(installed_review["review_id"], 1)["rows"]; $change_manager:discard(installed_review["review_id"], 1); return {receipt["decision_count"], {row["classification"] for row in (rows)}, {item["group"] for item in (rows)}};
 {2, {"unchanged", "unchanged"}, {"helper-update", "helper-update"}}
+
+// Initial values require a separate choice and never replace later application data.
+@wizard
+; load_object({"object #9505", tostr("owner: ", player), tostr("verb test (this none this) owner: ", player, " flags: \"rxd\""), "return 10;", "endverb", "endobject"}); $change_manager:configure("property_probe", {#9505}, []); #0.changes_probe = $change_manager:stage("property_probe", {["label" -> "caller.moo", "text" -> dump_object(#9505)]}, "adopt"); return $change_manager:apply(#0.changes_probe["review_id"], 1)["status"];
+"applying"
+
+; for i in [1..100] const status = $change_manager:status(#0.changes_probe["review_id"]); if (status["status"] != "applying") return status["status"]; endif suspend(0.01); endfor return "timed out";
+"complete"
+
+; const source = {"object #9505", tostr("owner: ", player), tostr("verb test (this none this) owner: ", player, " flags: \"rxd\""), "return this.helper_value;", "endverb", tostr("property helper_value (owner: ", player, ", flags: \"r\") = 42;"), "endobject"}; #0.changes_probe = $change_manager:stage("property_probe", {["label" -> "property.moo", "text" -> source]}); const rows = $change_manager:review(#0.changes_probe["review_id"], 1)["rows"]; #0.changes_probe["property"] = rows[2]["id"]; return {rows[2]["field"], "initialization_required" in rows[2]["blockers"] != 0, length(properties(#9505))};
+{"property", true, 0}
+
+@nonprogrammer
+; return $change_manager:initialize_property(#0.changes_probe["review_id"], 1, #0.changes_probe["property"]);
+E_PERM
+
+@wizard
+; const id = #0.changes_probe["review_id"]; $change_manager:command({"initialize", tostr(id), "1", "2"}); return {$change_manager:status(id)["generation"], `$change_manager:initialize_property(id, 1, #0.changes_probe["property"]) ! ANY => "stale"', length(properties(#9505))};
+{2, "stale", 0}
+
+; const id = #0.changes_probe["review_id"]; $change_manager:command({"group", tostr(id), "2", "property-update", "1", "2"}); $change_manager:resolve_group(id, 3, "property-update", "incoming"); return $change_manager:apply(id, 4)["status"];
+"applying"
+
+; for i in [1..100] const status = $change_manager:status(#0.changes_probe["review_id"]); if (status["status"] != "applying") return {status["status"], #9505:test(), length($change_manager.packages["property_probe"]["members"])}; endif suspend(0.01); endfor return "timed out";
+{"complete", 42, 1}
+
+; const source = dump_object(#9505); #9505.helper_value = 99; #0.changes_probe = $change_manager:stage("property_probe", {["label" -> "property.moo", "text" -> source]}); const id = #0.changes_probe["review_id"]; const rows = $change_manager:review(id, 1)["rows"]; $change_manager:resolve_group(id, 1, "property-update", "incoming"); const chosen = $change_manager:review(id, 2)["rows"]; return {rows[2]["classification"], chosen[2]["choice"]["choice"], $change_manager:apply(id, 2)["status"]};
+{"local", "local", "applying"}
+
+; for i in [1..100] const status = $change_manager:status(#0.changes_probe["review_id"]); if (status["status"] != "applying") return {status["status"], #9505:test()}; endif suspend(0.01); endfor return "timed out";
+{"complete", 99}

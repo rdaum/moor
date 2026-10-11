@@ -132,7 +132,7 @@ object CHANGE_MANAGER [
         "WIZ_FEATURES" -> WIZ_FEATURES,
         "WIZARD_HELP_TOPICS" -> WIZARD_HELP_TOPICS
       ],
-      "fields" -> {"program"},
+      "fields" -> {"program", "property"},
       "generation" -> 1,
       "objects" -> {
         ACTOR,
@@ -335,7 +335,7 @@ object CHANGE_MANAGER [
     "Describe the versioned review API and its limits.";
     const auth = this:_entry(caller_perms());
     set_task_perms(auth[2]);
-    return ["schema" -> 1, "operations" -> {"packages", "history", "configure", "upstream", "stage", "status", "review", "inspection", "diagnostics", "details", "base_source", "set_group", "resolve_group", "resolve", "apply", "refresh", "discard"}, "fields" -> {"program"}, "choices" -> {"incoming", "local", "edited", "defer"}, "transports" -> {"upload", "http", "git"}, "git_authorization" -> "wizard", "authorization" -> "administrator", "default_package" -> this.default_package, "max_source_bytes" -> 4194304, "max_pending_bytes" -> 33554432, "max_packages" -> 32, "page_rows" -> 50, "max_detail_bytes" -> 524288, "max_page_bytes" -> 262144, "receipt_decisions" -> 50];
+    return ["schema" -> 1, "operations" -> {"packages", "history", "configure", "upstream", "stage", "status", "review", "inspection", "diagnostics", "details", "base_source", "set_group", "initialize_property", "resolve_group", "resolve", "apply", "refresh", "discard"}, "fields" -> {"program", "property"}, "choices" -> {"incoming", "local", "edited", "defer"}, "transports" -> {"upload", "http", "git"}, "git_authorization" -> "wizard", "authorization" -> "administrator", "default_package" -> this.default_package, "max_source_bytes" -> 4194304, "max_pending_bytes" -> 33554432, "max_packages" -> 32, "page_rows" -> 50, "max_detail_bytes" -> 524288, "max_page_bytes" -> 262144, "receipt_decisions" -> 50];
   endmethod
 
   method packages owner: ARCH_WIZARD
@@ -397,7 +397,7 @@ object CHANGE_MANAGER [
       length(this.packages) < 32 || raise(E_QUOTA);
     endif
     generation == expected || this:_error("stale_generation", "Package settings changed.");
-    const package = ["schema" -> 1, "generation" -> generation + 1, "objects" -> objects, "fields" -> {"program"}, "constants" -> constants, "trusted_owners" -> trusted_owners, "upstream" -> upstream, "active" -> 0];
+    const package = ["schema" -> 1, "generation" -> generation + 1, "objects" -> objects, "fields" -> {"program", "property"}, "constants" -> constants, "trusted_owners" -> trusted_owners, "upstream" -> upstream, "active" -> 0];
     let configured = package;
     if (maphaskey(this.packages, name))
       configured["policy"] = `this.packages[name]["policy"] ! E_RANGE => ["schema" -> 1, "groups" -> {}]';
@@ -558,6 +558,7 @@ object CHANGE_MANAGER [
     const id = this.next_review;
     this.next_review = id + 1;
     let record = ["id" -> id, "generation" -> 1, "actor" -> auth[1], "authority" -> auth[2], "package" -> name, "package_generation" -> package["generation"], "upstream" -> package["upstream"], "status" -> "fetching", "task" -> 0, "error" -> [], "sources" -> {}, "report" -> [], "choices" -> [], "provenance" -> [], "request" -> ["schema" -> 1, "operation" -> operation, "objects" -> package["objects"], "fields" -> package["fields"], "constants" -> package["constants"], "trusted_owners" -> package["trusted_owners"]]];
+    record["request"]["fields"] = {"program", "property"};
     record["request"]["policy"] = `package["policy"] ! E_RANGE => ["schema" -> 1, "groups" -> {}]';
     this.packages[name]["active"] = id;
     this.pending[id] = record;
@@ -731,7 +732,7 @@ object CHANGE_MANAGER [
         continue;
       endif
       const choice = `record["choices"][row["id"]] ! E_RANGE => []';
-      row["label"] = this:_command_label(row["object"], names, row["names"][1]);
+      row["label"] = row["field"] == "property" ? this:_command_label(row["object"], names) + "." + row["names"][1] | this:_command_label(row["object"], names, row["names"][1]);
       row["choice"] = choice ? ["choice" -> choice["choice"], "validated" -> maphaskey(choice, "validation")] | [];
       if (value_bytes(page) + value_bytes(row) > 262144)
         length(page) > 0 || raise(E_QUOTA, "Row exceeds the page limit.");
@@ -787,18 +788,18 @@ object CHANGE_MANAGER [
     request["details"] = selected ? {selected} | {};
     const report = preview_objdef_changes(record["sources"], request);
     !expected || expected == report["revision"] || this:_error("stale_inspection", "Local contents changed. Reload the review.");
-    let additions = [];
+    let managed = [];
     for update in (record["report"]["rows"])
-      if (`update["operation"] ! E_RANGE => ""' == "add_verb")
-        additions[tostr(update["object"], ":", update["names"][1])] = true;
+      if (`update["operation"] ! E_RANGE => ""' in {"add_verb", "add_property", "retain_property"})
+        managed[tostr(update["object"], "/", update["field"], "/", update["names"][1])] = true;
       endif
     endfor
     let inspected = {};
     let counts = report["counts"];
     for inspected_row in (report["rows"])
-      const member = inspected_row["field"] == "program" ? inspected_row["name"][index(inspected_row["name"], ":") + 1..$] | "";
-      if (inspected_row["field"] == "program" && inspected_row["classification"] == "incoming_only" && maphaskey(additions, tostr(inspected_row["object"], ":", member)))
-        counts["incoming_only"] = counts["incoming_only"] - 1;
+      const member = inspected_row["field"] == "program" ? inspected_row["name"][index(inspected_row["name"], ":") + 1..$] | inspected_row["name"];
+      if (maphaskey(managed, tostr(inspected_row["object"], "/", inspected_row["field"], "/", member)))
+        counts[inspected_row["classification"]] = counts[inspected_row["classification"]] - 1;
       else
         inspected = {@inspected, inspected_row};
       endif
@@ -842,7 +843,7 @@ object CHANGE_MANAGER [
     for selected in (current["rows"])
       let row = selected;
       if (row["id"] == row_id)
-        row["label"] = this:_command_label(row["object"], this:_command_names(), row["names"][1]);
+        row["label"] = row["field"] == "property" ? this:_command_label(row["object"], this:_command_names()) + "." + row["names"][1] | this:_command_label(row["object"], this:_command_names(), row["names"][1]);
         row["base_fetch_available"] = auth[1].wizard && `row["base_source"]["transport"] == "git" ! E_RANGE => false';
         row["choice"] = `record["choices"][row_id] ! E_RANGE => []';
         if (row["choice"])
@@ -911,6 +912,36 @@ object CHANGE_MANAGER [
     endif
     policy["groups"] = groups;
     record["request"]["policy"] = policy;
+    return this:_save_policy(record, policy, generation);
+  endmethod
+
+  method initialize_property owner: ARCH_WIZARD
+    "Permit the reviewed initial value only when absent; descendants require an explicit choice.";
+    const auth = this:_entry(caller_perms());
+    set_task_perms(auth[2]);
+    const {id, generation, row_id, ?descendants = false} = args;
+    let record = this:_get(auth, id, generation);
+    record["status"] in {"ready", "partial", "rejected"} || this:_error("not_ready", "Review is not ready.");
+    descendants in {false, true, 0, 1} || raise(E_TYPE);
+    const current = preview_objdef_changes(record["sources"], record["request"]);
+    current["evidence"] == record["report"]["evidence"] || this:_error("stale_review", "Live state changed. Refresh before changing groups.");
+    let policy = `record["request"]["policy"] ! E_RANGE => ["schema" -> 1, "groups" -> {}]';
+    const rows = {row for row in (current["rows"]) if (row["id"] == row_id)};
+    length(rows) == 1 && `rows[1]["operation"] == "add_property" ! E_RANGE => false' || this:_error("not_an_addition", "Choose a proposed property addition.");
+    const member = rows[1]["member"];
+    let initialization = {entry for entry in (`policy["initialization"] ! E_RANGE => {}') if (entry["member"] != member)};
+    initialization = {@initialization, ["member" -> member, "mode" -> "absent", "descendants" -> descendants]};
+    policy["initialization"] = initialization;
+    record["request"]["policy"] = policy;
+    return this:_save_policy(record, policy, generation);
+  endmethod
+
+  method _save_policy owner: ARCH_WIZARD
+    "Save an already validated administrator policy edit and invalidate earlier choices.";
+    caller == this || raise(E_PERM);
+    let {record, policy, generation} = args;
+    set_task_perms(record["authority"]);
+    const id = record["id"];
     const report = preview_objdef_changes(record["sources"], record["request"]);
     let package = this.packages[record["package"]];
     package["generation"] == record["package_generation"] && package["active"] == id || this:_error("stale_package", "Package settings changed.");
@@ -942,7 +973,8 @@ object CHANGE_MANAGER [
     length(groups) == 1 || this:_error("missing_group", "No change group has that name.");
     kind == "defer" || groups[1]["complete"] || this:_error("incomplete_group", "Some required changes are missing or blocked. Resolve those problems before selecting this group.");
     for row_id in (groups[1]["members"])
-      record["choices"][row_id] = ["choice" -> kind];
+      const selected = {row for row in (record["report"]["rows"]) if (row["id"] == row_id)}[1];
+      record["choices"][row_id] = ["choice" -> kind == "incoming" && `selected["operation"] ! E_RANGE => ""' == "retain_property" ? "local" | kind];
     endfor
     const current = preview_objdef_changes(record["sources"], record["request"], record["choices"]);
     current["evidence"] == record["report"]["evidence"] || this:_error("stale_review", "Live state changed. Refresh before choosing.");
@@ -1304,7 +1336,7 @@ object CHANGE_MANAGER [
     const counts = record["report"]["counts"];
     const names = this:_command_names();
     let output = {$format.title:mk(tostr(record["package"], " · Review ", id, " · Generation ", generation), 3)};
-    const labels = ["upstream" -> {"upstream update", "upstream updates"}, "local" -> {"local edit", "local edits"}, "conflict" -> {"conflict", "conflicts"}, "converged" -> {"program already matches upstream", "programs already match upstream"}, "unbased" -> {"program without a baseline", "programs without a baseline"}, "incoming_only" -> {"new verb", "new verbs"}];
+    const labels = ["upstream" -> {"upstream update", "upstream updates"}, "local" -> {"local edit", "local edits"}, "conflict" -> {"conflict", "conflicts"}, "converged" -> {"program already matches upstream", "programs already match upstream"}, "unbased" -> {"program without a baseline", "programs without a baseline"}, "incoming_only" -> {"new member", "new members"}];
     let summary = "";
     for classification in ({"upstream", "local", "conflict", "converged", "unbased", "incoming_only"})
       const count = `counts[classification] ! E_RANGE => 0';
@@ -1313,7 +1345,7 @@ object CHANGE_MANAGER [
       endif
     endfor
     const unchanged = `counts["unchanged"] ! E_RANGE => 0';
-    summary = tostr(summary, summary ? ". " | "", unchanged, " verb programs match the accepted baseline and upstream.");
+    summary = tostr(summary, summary ? ". " | "", unchanged, " members match the accepted baseline and upstream.");
     output = {@output, $format.paragraph:mk(summary)};
     for group in (record["report"]["groups"])
       const dependency = group["requires"] ? tostr(" Requires: ", toliteral(group["requires"]), ".") | "";
@@ -1327,9 +1359,9 @@ object CHANGE_MANAGER [
     const choice_counts = this:_review_decisions(record);
     const selected = choice_counts["selected"];
     const unresolved = choice_counts["unresolved"];
-    const descriptions = ["upstream" -> "Upstream edit", "local" -> "Local edit", "conflict" -> "Conflict", "converged" -> "Already matches", "unbased" -> "No baseline", "unchanged" -> "Unchanged", "incoming_only" -> "New verb"];
+    const descriptions = ["upstream" -> "Upstream edit", "local" -> "Local edit", "conflict" -> "Conflict", "converged" -> "Already matches", "unbased" -> "No baseline", "unchanged" -> "Unchanged", "incoming_only" -> "New member"];
     const decisions = ["incoming" -> "Use upstream", "local" -> "Keep local", "edited" -> "Use edited program", "defer" -> "Skip", "unresolved" -> "Choose"];
-    const reasons = ["adoption_required" -> "Adopt a baseline first", "untrusted_target_authority" -> "Ownership or permissions block upgrades", "object_identity_mismatch" -> "Object identity doesn’t match", "change_group_required" -> "Declare the required change group first", "change_group_member_missing" -> "A required group member is missing", "verb_name_collision" -> "A local or inherited verb uses a conflicting name"];
+    const reasons = ["adoption_required" -> "Adopt a baseline first", "untrusted_target_authority" -> "Ownership or permissions block upgrades", "object_identity_mismatch" -> "Object identity doesn’t match", "change_group_required" -> "Declare the required change group first", "change_group_member_missing" -> "A required group member is missing", "verb_name_collision" -> "A local or inherited verb uses a conflicting name", "initialization_required" -> "Review the initial value, then use @changes initialize", "initial_value_required" -> "Supply an explicit initial value", "inherited_effects_require_approval" -> "Explicitly permit descendants to inherit this property", "property_name_collision" -> "An existing property conflicts with this addition"];
     for i in [1..length(rows)]
       const row = rows[i];
       const choice = `record["choices"][row["id"]] ! E_RANGE => []';
@@ -1355,7 +1387,7 @@ object CHANGE_MANAGER [
       elseif (kind == "defer" && row["classification"] in {"local", "unchanged"})
         decision = "Keep local";
       endif
-      const label = this:_command_label(row["object"], names, row["names"][1]);
+      const label = row["field"] == "property" ? this:_command_label(row["object"], names) + "." + row["names"][1] | this:_command_label(row["object"], names, row["names"][1]);
       const link = this:_command_review_link(record, label, row["id"]);
       const displayed = $format.paragraph:inline(tostr(i, ". "), link, " — ", descriptions[row["classification"]], ". ", decision, ".");
       value_bytes(change_rows) + value_bytes(displayed) <= 60000 || raise(E_QUOTA, "Review page is too large.");
@@ -1364,7 +1396,7 @@ object CHANGE_MANAGER [
     if (change_rows)
       output = {@output, $format.list:mk(change_rows)};
     else
-      output = {@output, $format.paragraph:mk(offset == 1 ? "No program updates to apply." | "No more program changes on this page.")};
+      output = {@output, $format.paragraph:mk(offset == 1 ? "No selected changes to apply." | "No more changes on this page.")};
     endif
     let local_rows = {};
     let local_total = 0;
@@ -1390,7 +1422,7 @@ object CHANGE_MANAGER [
       commands = {@commands, this:_command_action(tostr("@changes diff ", id, " ", next_offset), "Next page")};
     endif
     if (unresolved)
-      output = {@output, $format.paragraph:mk(tostr(unresolved, unresolved == 1 ? " program needs a choice before applying." | " programs need choices before applying."))};
+      output = {@output, $format.paragraph:mk(tostr(unresolved, unresolved == 1 ? " member or group needs a choice before applying." | " members or groups need choices before applying."))};
     elseif (selected)
       commands = {@commands, this:_command_action(tostr("@changes apply ", id, " ", generation), "Apply choices")};
     endif
@@ -1422,11 +1454,11 @@ object CHANGE_MANAGER [
       output = {@output, $format.title:mk("Source", 4), $format.table:mk({"Field", "Value"}, source)};
     endif
     let checks = {};
-    const reasons = ["adoption_required" -> "Adopt a baseline first", "untrusted_target_authority" -> "Ownership or permissions block upgrades", "object_identity_mismatch" -> "Object identity doesn’t match", "change_group_required" -> "Declare the required change group first", "change_group_member_missing" -> "A required group member is missing", "verb_name_collision" -> "A local or inherited verb uses a conflicting name"];
+    const reasons = ["adoption_required" -> "Adopt a baseline first", "untrusted_target_authority" -> "Ownership or permissions block upgrades", "object_identity_mismatch" -> "Object identity doesn’t match", "change_group_required" -> "Declare the required change group first", "change_group_member_missing" -> "A required group member is missing", "verb_name_collision" -> "A local or inherited verb uses a conflicting name", "initialization_required" -> "Review the initial value, then use @changes initialize", "initial_value_required" -> "Supply an explicit initial value", "inherited_effects_require_approval" -> "Explicitly permit descendants to inherit this property", "property_name_collision" -> "An existing property conflicts with this addition"];
     for row in (record["report"]["rows"])
       if (!row["eligible"])
         const explanation = {`reasons[reason] ! E_RANGE => reason' for reason in (row["blockers"])}:join("; ");
-        checks = {@checks, {this:_command_item(row["object"], names, row["names"][1]), tostr(explanation, row["classification"] == "unchanged" ? " (program unchanged)" | "")}};
+        checks = {@checks, {this:_command_item(row["object"], names, row["names"][1]), tostr(explanation, row["classification"] == "unchanged" ? " (member unchanged)" | "")}};
       endif
     endfor
     let property_objects = 0;
@@ -1448,7 +1480,7 @@ object CHANGE_MANAGER [
         output = {@output, $format.list:actions({this:_command_action(tostr("@changes details ", id, " ", offset + length(page)), "More checks")})};
       endif
     endif
-    output = {@output, $format.paragraph:mk("Properties and object attributes are compared read-only; apply updates selected verb programs only.")};
+    output = {@output, $format.paragraph:mk("Apply updates selected programs and creates approved verbs and properties. Existing property values and object attributes stay unchanged.")};
     if (property_objects)
       output = {@output, $format.paragraph:mk(tostr("The source contains property declarations on ", property_objects, " objects; this isn’t a count of property changes."))};
     endif
@@ -1477,7 +1509,7 @@ object CHANGE_MANAGER [
       return this:_command_overview();
     endif
     const action = words[1];
-    action in {"packages", "package", "upstream", "fetch", "stage", "adopt", "status", "diff", "details", "source", "base", "apply", "refresh", "discard", "resolve", "group", "select-group", "skip-group"} || raise(E_INVARG, tostr("Unknown @changes command: ", action, ". Use help @changes."));
+    action in {"packages", "package", "upstream", "fetch", "stage", "adopt", "status", "diff", "details", "source", "base", "apply", "refresh", "discard", "resolve", "group", "select-group", "skip-group", "initialize"} || raise(E_INVARG, tostr("Unknown @changes command: ", action, ". Use help @changes."));
     if (action == "upstream" && length(words) >= 2)
       const git_index = words[2] == "git" ? 2 | 3;
       if (length(words) >= git_index && words[git_index] == "git")
@@ -1557,6 +1589,10 @@ object CHANGE_MANAGER [
       raise(E_INVARG, "Use help @changes for command syntax.");
     endif
     const generation = toint(words[3]);
+    if (action == "initialize" && length(words) in {4, 5})
+      length(words) == 4 || words[5] == "descendants" || raise(E_INVARG);
+      return this:_command_status(this:initialize_property(id, generation, this:_command_row(auth, id, generation, words[4]), length(words) == 5));
+    endif
     if (action == "group" && length(words) >= 5)
       let members = {};
       let requires = {};
@@ -1597,7 +1633,7 @@ object CHANGE_MANAGER [
         code = {@code, tostr(i, ": ", lines[i])};
       endfor
       const names = this:_command_names();
-      let output = {$format.title:mk(tostr(words[5] == "live" ? "Local program" | words[5] == "base" ? "Accepted baseline" | "Upstream program"), 3), $format.paragraph:mk(this:_command_review_link(detail, this:_command_label(detail["row"]["object"], names, detail["row"]["names"][1]), detail["row"]["id"])), $format.code:mk(code, "moo")};
+      let output = {$format.title:mk(tostr(words[5] == "live" ? "Local contents" | words[5] == "base" ? "Accepted baseline" | "Upstream contents"), 3), $format.paragraph:mk(this:_command_review_link(detail, this:_command_label(detail["row"]["object"], names, detail["row"]["names"][1]), detail["row"]["id"])), $format.code:mk(code, "moo")};
       if (offset == 1 && words[5] == "incoming" && maphaskey(detail["row"], "definition_text"))
         output = {$format.paragraph:mk("Apply creates this verb with the following definition. Flags: r permits reading, x permits calls from programs, and d enables error reporting. Arguments control command matching."), $format.code:mk(explode(detail["row"]["definition_text"], "\n", true)), @output};
       endif

@@ -159,13 +159,13 @@ observe current local state against the saved incoming source and do not change 
 
 ## Read-only program review
 
-`preview_objdef_changes(sources, request [, choices])` compares existing verb programs and proposed
-verb additions without changing content or baseline metadata. It requires wizard authority or an
-explicit builtin grant, plus permission to read the selected definitions.
+`preview_objdef_changes(sources, request [, choices])` compares existing programs and proposed verb
+and property additions without changing content or baseline metadata. It requires wizard authority
+or an explicit builtin grant, plus permission to read the selected definitions.
 
 Each source unit has a diagnostic `label` and `text`. Text can be a string or a list of lines.
 Labels grant no filesystem access. Source input is limited to 4,096 units and 16 MiB in total.
-Reports contain at most 8,192 program rows.
+Reports contain at most 8,192 change rows.
 
 ```moo
 sources = {["label" -> "login.moo", "text" -> incoming_lines]};
@@ -203,8 +203,8 @@ previous baseline. Detail rows expose existing hints as `base_source`. These hin
 fingerprint verification.
 
 The report's `evidence` binds the source, scope, compilation options, target identities, authority,
-live programs, and baselines. Evidence grants no permission. Property and definition fields remain
-unmanaged; diagnostics identify unsupported declarations and fields.
+live programs, and baselines. Evidence grants no permission. Existing property values and definition
+fields remain unchanged. Diagnostics identify unsupported declarations and fields.
 
 Choices are a map from row ID to a map containing `choice`. Supported values are `incoming`,
 `local`, `edited`, and `defer`. Adoption permits only `incoming` and `defer`. An edited choice also
@@ -298,8 +298,8 @@ the caller and other changes untouched. Refresh the review to see the current de
 Successful apply records the new member and its accepted program baseline with the completion
 receipt.
 
-New properties and objects remain unsupported in this increment. Existing property values remain
-unchanged. Group membership does not authorize unsupported operations.
+New objects remain unsupported in this increment. Existing property values remain unchanged. Group
+membership does not authorize unsupported operations.
 
 The native request's optional `policy` has schema 1 and a `groups` list. Each group has `name`,
 `members`, and optional `requires` entries. `members` contains opaque membership keys from report
@@ -310,7 +310,54 @@ and dependency cycles are rejected. Limits are 32 groups, 8,192 members, and 1 M
 Cowbell stores this policy in package configuration. Uploaded source cannot change it. For reviews
 with proposed additions, ungrouped program updates remain blocked. Preview returns `groups` and
 `group_validation` alongside individual choices. Apply rechecks group selection before any write.
-The service methods are `set_group(ID, GENERATION, NAME, MEMBERS, REQUIRES)` and
+
+### Initialize new properties
+
+A new property can hold a schema version, an empty collection, or another initial value. That value
+applies only when the property is absent. It never replaces existing application data.
+
+For example, `store:validate_item` can need a new `store.item_schema` property. Include the
+property, helper, and caller in one group. Apply creates the property and helper before the
+transaction commits. Other tasks see the complete change after commit.
+
+In Meadow:
+
+1. Select the proposed property in the review.
+2. Read its initial value, owner, flags, and metadata.
+3. If the object has descendants, decide whether they can inherit this new property.
+4. Select **Permit initialization and clear choices**.
+5. Add the property and all dependent programs to a change group.
+6. Select the group, then apply it.
+
+The terminal command is `@changes initialize ID GENERATION ROW`. To permit inheritance by existing
+descendants, add `descendants` after ROW. Use `@changes source ID GENERATION ROW incoming` to read
+the initial value and permissions first.
+
+Initialization permission becomes a package rule for this member. Saving it clears previous choices
+and advances the review generation. It does not write the value. Apply still requires a complete
+group, current authority, and unchanged review evidence.
+
+A local, inherited, or descendant property with the same name blocks creation. Apply rechecks
+absence and inheritance. If another task creates a conflicting property, refresh the review before
+making another choice. A failed apply leaves the entire selected group unchanged.
+
+After installation, group selection keeps the property's current value, permissions, metadata, and
+accepted baseline. The comparison can still show local data changes or a different upstream initial
+value. Neither change authorizes replacement. Property overrides, clear operations, and data
+migrations remain outside guarded apply.
+
+Property flags have these meanings:
+
+- `r` permits reading by other users.
+- `w` permits writing by other users.
+- `c` gives the owner of each descendant ownership of its inherited property.
+- `o` permits concurrent writes to the value. The last committed write wins.
+
+Native requests include `property` alongside `program` in `fields`. The policy's `initialization`
+list contains `member`, `mode: "absent"`, and a boolean `descendants` for each permitted property.
+New-property rows permit `incoming` or `defer`. Installed-property rows permit `local` or `defer`.
+For installed properties, `local` preserves the accepted baseline as well as the live state. The
+service methods are `set_group(ID, GENERATION, NAME, MEMBERS, REQUIRES)` and
 `resolve_group(ID, GENERATION, NAME, CHOICE)`. An empty member list removes a group. Selection
 choices are `incoming` and `defer`.
 

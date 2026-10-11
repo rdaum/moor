@@ -98,7 +98,7 @@ export function ChangeGroupEditor({ client, generation, groups, group, onSaved, 
         >
             <div className="change-group-editor" aria-busy={busy}>
                 <p>
-                    A group contains changes that must be installed together. Include each new helper and every program
+                    A group contains changes that must be installed together. Include each new member and every program
                     that needs it.
                 </p>
                 <p>
@@ -137,7 +137,13 @@ export function ChangeGroupEditor({ client, generation, groups, group, onSaved, 
                                 }}
                             />
                             {row.label}
-                            {row.operation === "add_verb" ? " — new verb" : " — existing program"}
+                            {row.operation === "add_verb"
+                                ? " — new verb"
+                                : row.operation === "add_property"
+                                ? " — new property"
+                                : row.operation === "retain_property"
+                                ? " — keep existing property"
+                                : " — existing program"}
                             {row.group && row.group !== group && ` (belongs to ${row.group})`}
                         </label>
                     ))}

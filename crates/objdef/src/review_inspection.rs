@@ -84,6 +84,32 @@ fn inherited_permissions(
     None
 }
 
+pub(super) fn property_value(property: &moor_compiler::ObjPropDef) -> Var {
+    record(&[
+        ("kind", v_str("definition")),
+        ("owner", v_obj(property.perms.owner())),
+        (
+            "flags",
+            v_str(&moor_common::model::prop_flags_string(
+                property.perms.flags(),
+            )),
+        ),
+        (
+            "state",
+            v_str(if property.value.is_some() {
+                "value"
+            } else {
+                "clear"
+            }),
+        ),
+        (
+            "value",
+            property.value.clone().unwrap_or_else(|| v_list(&[])),
+        ),
+        ("metadata", metadata(&property.metadata)),
+    ])
+}
+
 fn properties(
     object: &ObjectDefinition,
     graph: Option<&ProposedObjectGraph>,
@@ -94,29 +120,7 @@ fn properties(
             property.name.to_folded_case(),
             Property {
                 permissions_known: true,
-                value: record(&[
-                    ("kind", v_str("definition")),
-                    ("owner", v_obj(property.perms.owner())),
-                    (
-                        "flags",
-                        v_str(&moor_common::model::prop_flags_string(
-                            property.perms.flags(),
-                        )),
-                    ),
-                    (
-                        "state",
-                        v_str(if property.value.is_some() {
-                            "value"
-                        } else {
-                            "clear"
-                        }),
-                    ),
-                    (
-                        "value",
-                        property.value.clone().unwrap_or_else(|| v_list(&[])),
-                    ),
-                    ("metadata", metadata(&property.metadata)),
-                ]),
+                value: property_value(property),
             },
         );
     }
@@ -160,7 +164,7 @@ fn properties(
 }
 
 // This metadata records hashes, not copies of the imported object graph.
-const FIELD_SCHEMA: &str = "objdef-v1:fields:sha256";
+pub(super) const FIELD_SCHEMA: &str = "objdef-v1:fields:sha256";
 
 pub(crate) fn baseline(
     object: &ObjectDefinition,
@@ -197,7 +201,11 @@ pub(crate) fn baseline(
     record(&fields)
 }
 
-fn baseline_hash(object: Option<&ObjectDefinition>, field: &str, name: &str) -> Option<String> {
+pub(super) fn baseline_hash(
+    object: Option<&ObjectDefinition>,
+    field: &str,
+    name: &str,
+) -> Option<String> {
     let (_, baseline) = object?
         .metadata
         .iter()
@@ -216,7 +224,7 @@ fn baseline_hash(object: Option<&ObjectDefinition>, field: &str, name: &str) -> 
     (hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit())).then(|| hash.to_owned())
 }
 
-fn render(value: &Var, field: &str) -> String {
+pub(super) fn render(value: &Var, field: &str) -> String {
     if field == "program" {
         return value.as_string().unwrap().to_owned();
     }

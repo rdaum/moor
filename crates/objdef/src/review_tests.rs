@@ -610,9 +610,9 @@ fn late_writer_failure_requires_rollback_of_program_and_baseline() {
         .unwrap();
     let original = program_fingerprint(&live_program(world.as_ref())).unwrap();
     let actions = vec![
-        ProgramAction {
+        ChangeAction {
             object: ROOT,
-            target: ProgramTarget::Existing(definition.uuid()),
+            target: ChangeTarget::Existing(definition.uuid()),
             program: Some(ProgramType::MooR(
                 compile("return 9;", CompileOptions::default()).unwrap(),
             )),
@@ -621,9 +621,9 @@ fn late_writer_failure_requires_rollback_of_program_and_baseline() {
                 ("program", v_str("injected")),
             ]),
         },
-        ProgramAction {
+        ChangeAction {
             object: ROOT,
-            target: ProgramTarget::Existing(uuid::Uuid::nil()),
+            target: ChangeTarget::Existing(uuid::Uuid::nil()),
             program: None,
             baseline: v_int(0),
         },
@@ -988,7 +988,14 @@ fn bundled_cores_declare_complete_default_package_bindings() {
             .map(|v| v.as_object().unwrap())
             .collect::<BTreeSet<_>>();
         assert_eq!(objects, imported.loaded_objects.iter().copied().collect());
-        assert_eq!(get(&package, "fields"), v_list(&[v_str("program")]));
+        assert_eq!(
+            get(&package, "fields"),
+            v_list(&if core == "cowbell" {
+                vec![v_str("program"), v_str("property")]
+            } else {
+                vec![v_str("program")]
+            })
+        );
         let constants = get(&package, "constants");
         assert!(!constants.as_map().unwrap().is_empty());
         let default = loader
@@ -2085,15 +2092,15 @@ fn a_late_failure_rolls_back_a_new_verb_and_its_baseline() {
         ),
     ]);
     let actions = vec![
-        ProgramAction {
+        ChangeAction {
             object: ROOT,
-            target: ProgramTarget::AddVerb(helper),
+            target: ChangeTarget::AddVerb(helper),
             program: None,
             baseline: baseline.clone(),
         },
-        ProgramAction {
+        ChangeAction {
             object: ROOT,
-            target: ProgramTarget::Existing(uuid::Uuid::nil()),
+            target: ChangeTarget::Existing(uuid::Uuid::nil()),
             program: None,
             baseline,
         },
@@ -2108,5 +2115,497 @@ fn a_late_failure_rolls_back_a_new_verb_and_its_baseline() {
     assert_eq!(
         program_text(&live_program(world.as_ref())).unwrap(),
         v_str("return \"Base\";")
+    );
+}
+
+fn property_source() -> String {
+    source_with_helper()
+        .replace("return 42;", "return this.item_schema;")
+        .replace(
+            "endobject",
+            "property item_schema (owner: #1, flags: \"r\") = 42;\nendobject",
+        )
+}
+fn property_request(report: &Var, descendants: bool) -> Var {
+    let grouped = grouped_request(report);
+    let policy = with_field(
+        &get(&grouped, "policy"),
+        "initialization",
+        &v_list(&[record(&[
+            (
+                "member",
+                v_str(&properties::member_key(ROOT, Symbol::mk("item_schema"))),
+            ),
+            ("mode", v_str("absent")),
+            ("descendants", v_bool(descendants)),
+        ])]),
+    );
+    with_field(
+        &with_field(&grouped, "policy", &policy),
+        "fields",
+        &v_list(&[v_str("program"), v_str("property")]),
+    )
+}
+fn all_incoming(report: &Var) -> Var {
+    v_map(
+        &get(report, "rows")
+            .as_list()
+            .unwrap()
+            .iter()
+            .map(|row| {
+                let choices = get(&row, "choices");
+                let choice = if choices
+                    .as_list()
+                    .unwrap()
+                    .iter()
+                    .any(|v| v == v_str("incoming"))
+                {
+                    "incoming"
+                } else {
+                    "local"
+                };
+                (get(&row, "id"), record(&[("choice", v_str(choice))]))
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
+#[test]
+fn property_initialization_is_absent_only_and_keeps_later_live_data() {
+    let db = database();
+    let mut world = db.new_world_state().unwrap();
+    stamp(world.as_mut());
+    let incoming = sources(&property_source());
+    let fields_request = with_field(
+        &request("update"),
+        "fields",
+        &v_list(&[v_str("program"), v_str("property")]),
+    );
+    let initial = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &fields_request,
+        None,
+    )
+    .unwrap();
+    assert_eq!(get(&initial, "rows").as_list().unwrap().len(), 3);
+    let properties_only = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &with_field(&fields_request, "fields", &v_list(&[v_str("property")])),
+        None,
+    )
+    .unwrap();
+    assert_eq!(get(&properties_only, "rows").as_list().unwrap().len(), 1);
+    assert_eq!(get(&row(&properties_only), "field"), v_str("property"));
+    assert!(
+        world
+            .get_property_info(&permissions(), &ROOT, Symbol::mk("item_schema"))
+            .is_err()
+    );
+    let req = property_request(&initial, false);
+    let report = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    let choices = all_incoming(&report);
+    let receipt = apply(
+        world.as_mut(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        &get(&report, "evidence"),
+        &choices,
+    )
+    .unwrap();
+    assert_eq!(get(&receipt, "created").as_list().unwrap().len(), 2);
+    assert_eq!(
+        world
+            .retrieve_property(&permissions(), &ROOT, Symbol::mk("item_schema"))
+            .unwrap(),
+        v_int(42)
+    );
+    let metadata = world
+        .get_object_metadata(&permissions(), &ROOT, Symbol::mk(BASE_KEY))
+        .unwrap();
+    world
+        .update_property(&permissions(), &ROOT, Symbol::mk("item_schema"), &v_int(99))
+        .unwrap();
+    let report = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    let property = get(&report, "rows")
+        .as_list()
+        .unwrap()
+        .iter()
+        .find(|row| get(row, "field") == v_str("property"))
+        .unwrap();
+    assert_eq!(get(&property, "classification"), v_str("local"));
+    assert_eq!(
+        get(&property, "choices"),
+        v_list(&[v_str("local"), v_str("defer")])
+    );
+    apply(
+        world.as_mut(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        &get(&report, "evidence"),
+        &all_incoming(&report),
+    )
+    .unwrap();
+    assert_eq!(
+        world
+            .retrieve_property(&permissions(), &ROOT, Symbol::mk("item_schema"))
+            .unwrap(),
+        v_int(99)
+    );
+    assert_eq!(
+        world
+            .get_object_metadata(&permissions(), &ROOT, Symbol::mk(BASE_KEY))
+            .unwrap(),
+        metadata
+    );
+}
+
+#[test]
+fn property_addition_rechecks_absence_and_rolls_back_late_failure() {
+    let db = database();
+    let mut world = db.new_world_state().unwrap();
+    stamp(world.as_mut());
+    world.commit().unwrap();
+    let mut world = db.new_world_state().unwrap();
+    let incoming = sources(&property_source());
+    let fields_request = with_field(
+        &request("update"),
+        "fields",
+        &v_list(&[v_str("program"), v_str("property")]),
+    );
+    let initial = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &fields_request,
+        None,
+    )
+    .unwrap();
+    let req = property_request(&initial, false);
+    let report = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    world
+        .define_property(
+            &permissions(),
+            &ROOT,
+            &ROOT,
+            Symbol::mk("item_schema"),
+            &ROOT,
+            moor_common::model::PropFlag::r(),
+            Some(v_int(77)),
+        )
+        .unwrap();
+    assert!(
+        apply(
+            world.as_mut(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &req,
+            &get(&report, "evidence"),
+            &all_incoming(&report)
+        )
+        .is_err()
+    );
+    assert_eq!(world.verbs(&permissions(), &ROOT).unwrap().len(), 1);
+    drop(world);
+    let mut world = db.new_world_state().unwrap();
+    let set = ObjDefSet::parse_sources(
+        &CompileOptions::default(),
+        None,
+        None,
+        vec![ObjDefSource::new("property.moo", property_source())],
+    )
+    .unwrap();
+    let property = set.graph().object_definitions()[&ROOT]
+        .1
+        .property_definitions[0]
+        .clone();
+    let result = write_actions(
+        world.as_mut(),
+        &permissions(),
+        vec![
+            ChangeAction {
+                object: ROOT,
+                target: ChangeTarget::AddProperty(property),
+                program: None,
+                baseline: v_list(&[]),
+            },
+            ChangeAction {
+                object: ROOT,
+                target: ChangeTarget::Existing(uuid::Uuid::nil()),
+                program: None,
+                baseline: v_list(&[]),
+            },
+        ],
+    );
+    assert!(matches!(result, Err(ApplyError::Mutation(_))));
+    drop(world);
+    let world = db.new_world_state().unwrap();
+    assert!(
+        world
+            .get_property_info(&permissions(), &ROOT, Symbol::mk("item_schema"))
+            .is_err()
+    );
+    assert!(
+        world
+            .get_object_metadata(&permissions(), &ROOT, Symbol::mk(BASE_KEY))
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn property_additions_require_explicit_descendant_permission_and_reject_collisions() {
+    let db = database();
+    let mut world = db.new_world_state().unwrap();
+    stamp(world.as_mut());
+    let child = world
+        .create_object(
+            &permissions(),
+            &ROOT,
+            &ROOT,
+            BitEnum::new(),
+            moor_common::model::ObjectKind::NextObjid,
+        )
+        .unwrap();
+    let incoming = sources(&property_source());
+    let fields_request = with_field(
+        &request("update"),
+        "fields",
+        &v_list(&[v_str("program"), v_str("property")]),
+    );
+    let initial = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &fields_request,
+        None,
+    )
+    .unwrap();
+    let req = property_request(&initial, false);
+    let report = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    let property = get(&report, "rows")
+        .as_list()
+        .unwrap()
+        .iter()
+        .find(|row| get(row, "field") == v_str("property"))
+        .unwrap();
+    assert_eq!(get(&property, "descendants"), v_int(1));
+    assert!(
+        get(&property, "blockers")
+            .as_list()
+            .unwrap()
+            .iter()
+            .any(|value| value == v_str("inherited_effects_require_approval"))
+    );
+    let req = property_request(&initial, true);
+    let report = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    world
+        .define_property(
+            &permissions(),
+            &child,
+            &child,
+            Symbol::mk("item_schema"),
+            &ROOT,
+            moor_common::model::PropFlag::r(),
+            Some(v_int(77)),
+        )
+        .unwrap();
+    assert!(
+        apply(
+            world.as_mut(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &req,
+            &get(&report, "evidence"),
+            &all_incoming(&report)
+        )
+        .is_err()
+    );
+    let current = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    let property = get(&current, "rows")
+        .as_list()
+        .unwrap()
+        .iter()
+        .find(|row| get(row, "field") == v_str("property"))
+        .unwrap();
+    assert!(
+        get(&property, "blockers")
+            .as_list()
+            .unwrap()
+            .iter()
+            .any(|value| value == v_str("property_name_collision"))
+    );
+    world
+        .delete_property(&permissions(), &child, Symbol::mk("item_schema"))
+        .unwrap();
+    let report = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    apply(
+        world.as_mut(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        &get(&report, "evidence"),
+        &all_incoming(&report),
+    )
+    .unwrap();
+    assert_eq!(
+        world
+            .retrieve_property(&permissions(), &child, Symbol::mk("item_schema"))
+            .unwrap(),
+        v_int(42)
+    );
+}
+
+#[test]
+fn concurrent_property_creation_prevents_partial_group_publication() {
+    let db = database();
+    let mut initial = db.new_world_state().unwrap();
+    stamp(initial.as_mut());
+    initial.commit().unwrap();
+    let mut review = db.new_world_state().unwrap();
+    let incoming = sources(&property_source());
+    let fields_request = with_field(
+        &request("update"),
+        "fields",
+        &v_list(&[v_str("program"), v_str("property")]),
+    );
+    let first = preview(
+        review.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &fields_request,
+        None,
+    )
+    .unwrap();
+    let req = property_request(&first, false);
+    let report = preview(
+        review.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    let mut concurrent = db.new_world_state().unwrap();
+    concurrent
+        .define_property(
+            &permissions(),
+            &ROOT,
+            &ROOT,
+            Symbol::mk("item_schema"),
+            &ROOT,
+            moor_common::model::PropFlag::r(),
+            Some(v_int(77)),
+        )
+        .unwrap();
+    assert!(matches!(
+        concurrent.commit().unwrap(),
+        CommitResult::Success { .. }
+    ));
+    apply(
+        review.as_mut(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        &get(&report, "evidence"),
+        &all_incoming(&report),
+    )
+    .unwrap();
+    assert!(matches!(
+        review.commit().unwrap(),
+        CommitResult::ConflictRetry { .. }
+    ));
+    let mut fresh = db.new_world_state().unwrap();
+    assert!(
+        apply(
+            fresh.as_mut(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &req,
+            &get(&report, "evidence"),
+            &all_incoming(&report)
+        )
+        .is_err()
+    );
+    assert_eq!(fresh.verbs(&permissions(), &ROOT).unwrap().len(), 1);
+    assert_eq!(
+        fresh
+            .retrieve_property(&permissions(), &ROOT, Symbol::mk("item_schema"))
+            .unwrap(),
+        v_int(77)
     );
 }

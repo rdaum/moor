@@ -14,7 +14,7 @@
 //! Analysis of absent verb definitions. Preview constructs data only; UUID allocation
 //! and definition writes happen later in the caller's guarded transaction.
 
-use super::{ProgramRow, ProgramTarget, ReviewError, digest, names, program_text, record};
+use super::{ChangeRow, ChangeTarget, ReviewError, digest, names, program_text, record};
 use moor_common::model::{
     HasUuid, Named, ObjFlag, PrepSpec, TaskPermissions, ValSet, VerbArgsSpec, VerbFlag, WorldState,
     verb_perms_string,
@@ -72,7 +72,7 @@ impl VerbContext<'_> {
         siblings: &[ObjVerbDef],
         guards: &mut Vec<Var>,
         details: bool,
-    ) -> Result<(ProgramRow, Var), ReviewError> {
+    ) -> Result<(ChangeRow, Var), ReviewError> {
         let member = member_key(self.object, verb)?;
         let id = format!("add/{member}");
         let mut blockers = Vec::new();
@@ -153,13 +153,13 @@ impl VerbContext<'_> {
                 .unwrap()
         });
         let eligible = blockers.is_empty();
-        let row = ProgramRow {
+        let row = ChangeRow {
             id: id.clone(),
             member,
             eligible,
             object: self.object,
-            target: ProgramTarget::AddVerb(verb.clone()),
-            incoming: verb.program.clone(),
+            target: ChangeTarget::AddVerb(verb.clone()),
+            incoming: Some(verb.program.clone()),
             incoming_hash: incoming_hash.clone(),
             incoming_source,
             live_hash: String::new(),

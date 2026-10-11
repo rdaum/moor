@@ -20,7 +20,8 @@ const explanations: Record<string, string> = {
         "The upstream verb cannot be matched to an existing definition. Definition changes are not supported.",
     definition_fields_unmanaged:
         "The source includes verb metadata or different ownership or flags. Apply does not update these fields.",
-    property_fields_unmanaged: "Property declarations are available for inspection. Apply does not update properties.",
+    property_fields_unmanaged:
+        "Existing property values and overrides remain unchanged. Only approved absent properties can be created.",
 };
 const sourceFields: Record<string, string> = {
     transport: "Transport",
@@ -51,8 +52,8 @@ export function ReviewSourceDetails({ status, diagnostics, busy, onMore }: {
         <details className="change-review-source">
             <summary>Source and checks{diagnostics ? ` (${diagnostics.total})` : ""}</summary>
             <p>
-                Apply updates selected programs and installs declared verb additions. Grouping does not establish
-                compatibility with omitted property or object changes.
+                Apply updates selected programs and installs declared verb and property additions. Grouping does not
+                establish compatibility with omitted structural changes.
             </p>
             {provenance.length > 0 && (
                 <dl>
@@ -85,8 +86,8 @@ export function ReviewSourceDetails({ status, diagnostics, busy, onMore }: {
                         {new Date(receipt.completedAt * 1000).toLocaleString()}.
                     </p>
                     <p>
-                        This receipt acknowledges upstream baselines. Local and edited choices can retain code that
-                        differs from those baselines.
+                        Program decisions acknowledge upstream baselines. Local and edited choices can retain different
+                        code. Existing properties retain their live state and accepted baselines.
                     </p>
                     <ul>
                         {receipt.decisions.map(item => (

@@ -524,14 +524,15 @@ test("historical Git retrieval rechecks authority after worker suspension", asyn
     await administrator.close();
 });
 
-test("a declared group installs a new helper with its caller through Meadow", async ({ page }) => {
+test("a declared group installs a helper and property with its caller through Meadow", async ({ page }) => {
     const browserErrors: string[] = [];
     page.on("pageerror", error => browserErrors.push(error.message));
     await login(page);
     await page.evaluate(() => window.changes.evaluate("return $change_manager:configure(\"addition\", {#9500}, []);"));
     const input = "object #9500 [import_export_id -> \"changes_acceptance\"]\nowner: #2\n"
         + "verb upstream (this none this) owner: #2 flags: \"rxd\"\nreturn this:added_helper();\nendverb\n"
-        + "verb added_helper (this none this) owner: #2 flags: \"rxd\"\nreturn 42;\nendverb\nendobject";
+        + "verb added_helper (this none this) owner: #2 flags: \"rxd\"\nreturn this.item_schema;\nendverb\n"
+        + "property item_schema (owner: #2, flags: \"r\") = 42;\nendobject";
     const review = await page.evaluate(
         async text =>
             (await window.changes.invoke("stage", ["addition", [{ label: "addition.moo", text }]]) as {
@@ -540,6 +541,12 @@ test("a declared group installs a new helper with its caller through Meadow", as
         input,
     );
     await page.evaluate(id => window.changes.open(id, 1), review);
+    await page.getByRole("button", { name: /\.item_schema, Property/ }).click();
+    await expect(page.getByRole("region", { name: "Property initialization" })).toContainText(
+        "Existing data stays unchanged",
+    );
+    await page.getByRole("button", { name: "Permit initialization and clear choices", exact: true }).click();
+    await expect(page.getByText("Absent-only initialization is already permitted.")).toBeVisible();
     await expect(page.getByRole("button", { name: /:added_helper, Verb/ })).toHaveCount(1);
     await page.getByRole("button", { name: /:added_helper, Verb/ }).click();
     await expect(page.getByRole("region", { name: "New verb definition" })).toContainText("Owner: #2");
@@ -551,16 +558,18 @@ test("a declared group installs a new helper with its caller through Meadow", as
     await editor.getByLabel("Group name").fill("helper-update");
     await editor.getByRole("checkbox", { name: "#9500:added_helper — new verb", exact: true }).check();
     await editor.getByRole("checkbox", { name: "#9500:upstream — existing program", exact: true }).check();
+    await editor.getByRole("checkbox", { name: "#9500 (Acceptance package).item_schema — new property", exact: true })
+        .check();
     await editor.getByRole("button", { name: "Save group and clear choices", exact: true }).click();
     await expect(editor).toHaveCount(0);
     await page.getByRole("button", { name: "Select helper-update", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Apply 2 choices", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Apply 3 choices", exact: true })).toBeEnabled();
     expect(
         await page.evaluate(() =>
             window.changes.evaluate("return {#9500:upstream(), \"added_helper\" in verbs(#9500)};")
         ),
     ).toEqual([1, 0]);
-    await page.getByRole("button", { name: "Apply 2 choices", exact: true }).click();
+    await page.getByRole("button", { name: "Apply 3 choices", exact: true }).click();
     await page.getByRole("button", { name: "Confirm apply", exact: true }).click();
     await expect.poll(() => page.evaluate(id => window.changes.client(id).status(), review)).toMatchObject({
         status: "complete",
@@ -571,6 +580,6 @@ test("a declared group installs a new helper with its caller through Meadow", as
                 "return {#9500:upstream(), #9500:added_helper(), length($change_manager.packages[\"addition\"][\"members\"])};",
             )
         ),
-    ).toEqual([42, 42, 1]);
+    ).toEqual([42, 42, 2]);
     expect(browserErrors).toEqual([]);
 });

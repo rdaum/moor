@@ -70,6 +70,9 @@ export interface ChangeRow {
     live_text?: string;
     incoming_text?: string;
     definition_text?: string;
+    descendants?: number;
+    initialization_approved?: boolean;
+    descendants_approved?: boolean;
     base_text?: string;
     base_fetch_available?: boolean;
     read_only?: boolean;
@@ -177,6 +180,9 @@ export function decodeChangeRow(value: unknown, details = false): ChangeRow {
         member: typeof row.member === "string" ? row.member : undefined,
         group: typeof row.group === "string" ? row.group : undefined,
         operation: typeof row.operation === "string" ? row.operation : undefined,
+        descendants: typeof row.descendants === "number" ? row.descendants : undefined,
+        initialization_approved: row.initialization_approved === true || row.initialization_approved === 1,
+        descendants_approved: row.descendants_approved === true || row.descendants_approved === 1,
         read_only: row.read_only === true || row.read_only === 1,
         field,
         objectKey: row.object ? JSON.stringify(row.object) : objectLabel,
@@ -233,6 +239,7 @@ export class ChangeReviewClient {
             | "details"
             | "base_source"
             | "set_group"
+            | "initialize_property"
             | "resolve_group"
             | "inspection"
             | "diagnostics"
@@ -342,6 +349,18 @@ export class ChangeReviewClient {
     async setGroup(generation: number, name: string, members: string[], requires: string[]) {
         const result = await this.invoke("set_group", [this.target.review, generation, name, members, requires]);
         if (result.generation !== generation + 1) throw new Error("Review changed. Reload before changing groups.");
+        return result.generation as number;
+    }
+    async initializeProperty(generation: number, row: string, descendants: boolean) {
+        const result = await this.invoke("initialize_property", [
+            this.target.review,
+            generation,
+            row,
+            descendants ? 1 : 0,
+        ]);
+        if (result.generation !== generation + 1) {
+            throw new Error("Review changed. Reload before permitting initialization.");
+        }
         return result.generation as number;
     }
     async resolveGroup(generation: number, name: string, choice: "incoming" | "defer") {

@@ -60,6 +60,12 @@ const blockers: Record<string, string> = {
     change_group_member_missing: "This group requires a member that is missing from the supplied source.",
     verb_name_collision:
         "A local or inherited verb already uses a conflicting name. Choose a distinct name and review again.",
+    initialization_required: "Review the initial value and permissions, then permit initialization below.",
+    initial_value_required: "Supply an explicit initial value for the new property, then stage the source again.",
+    inherited_effects_require_approval:
+        "This object has descendants. Permit their inherited property explicitly before applying.",
+    property_name_collision:
+        "A property with this name already exists on this object, an ancestor, or a descendant. Creation is blocked.",
 };
 const fieldLabels: Record<string, string> = {
     program: "Verb",
@@ -96,6 +102,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
     const [generation, setGeneration] = useState(target.generation);
     const [status, setStatus] = useState<ReviewStatus | null>(null);
     const [groupEditor, setGroupEditor] = useState<{ generation: number; group?: string } | null>(null);
+    const [allowDescendants, setAllowDescendants] = useState(false);
     const [service, setService] = useState<ChangeServiceClient | null>(null);
     const [diagnostics, setDiagnostics] = useState<DiagnosticPage | null>(null);
     const [page, setPage] = useState<ReviewPage | null>(null);
@@ -131,6 +138,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
 
     const selectDetail = useCallback((detail: ChangeRow | null) => {
         setRow(detail);
+        setAllowDescendants(false);
         setEditing(false);
         setComparison("local-upstream");
         const saved = detail?.choice?.program ?? detail?.live_text ?? "";
@@ -306,6 +314,25 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
             if (request !== sequence.current) return;
             setNotice(saved.errors.length ? saved.errors.join("\n") : "Choice saved. Live code has not changed.");
             await load(saved.generation, row.id, category);
+        } catch (failure) {
+            if (request === sequence.current) {
+                fail(failure);
+                setBusy(false);
+            }
+        }
+    };
+    const initializeProperty = async () => {
+        if (!row || busy || dirty) return;
+        const request = ++sequence.current;
+        setBusy(true);
+        setError("");
+        try {
+            const next = await client.initializeProperty(generation, row.id, allowDescendants);
+            if (request !== sequence.current) return;
+            await load(next, row.id, category);
+            setNotice(
+                "Initialization permitted. Saved choices were cleared. Select the required group before applying.",
+            );
         } catch (failure) {
             if (request === sequence.current) {
                 fail(failure);
@@ -674,7 +701,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                 )}
                             </div>
                             <small>
-                                {page.counts.unchanged ?? 0} unchanged programs.
+                                {page.counts.unchanged ?? 0} unchanged members.
                             </small>
                         </aside>
                         <main className="change-review-code">
@@ -687,6 +714,58 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                             </h3>
                                             <span>{changeLabels[row.classification]}</span>
                                         </header>
+                                        {row.operation === "add_property" && (
+                                            <section aria-label="Property initialization">
+                                                <h4>Initial value, only if absent</h4>
+                                                <p>
+                                                    Review the value, owner, flags, and metadata below. Apply uses them
+                                                    only to create this property. Existing data stays unchanged.
+                                                </p>
+                                                <p>
+                                                    Flags: r permits reading and w permits writing. With c, each
+                                                    descendant's owner also owns the inherited property. The o flag
+                                                    permits concurrent value writes. The last committed write wins.
+                                                </p>
+                                                {(row.descendants ?? 0) > 0 && (
+                                                    <label>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={allowDescendants}
+                                                            disabled={busy || dirty}
+                                                            onChange={event =>
+                                                                setAllowDescendants(event.target.checked)}
+                                                        />
+                                                        Permit the {row.descendants}{" "}
+                                                        existing descendants to inherit this new property
+                                                    </label>
+                                                )}
+                                                <p>
+                                                    This permission becomes a package rule. Saving it clears the
+                                                    review's choices. It does not create the property until you apply
+                                                    its group.
+                                                </p>
+                                                {service?.supports("initialize_property") && (
+                                                    <button
+                                                        type="button"
+                                                        disabled={busy || dirty
+                                                            || ((row.descendants ?? 0) > 0 && !allowDescendants)}
+                                                        onClick={() => void initializeProperty()}
+                                                    >
+                                                        Permit initialization and clear choices
+                                                    </button>
+                                                )}
+                                                {row.initialization_approved && (
+                                                    <p>Absent-only initialization is already permitted.</p>
+                                                )}
+                                            </section>
+                                        )}
+                                        {row.operation === "retain_property" && (
+                                            <p>
+                                                This property already exists. Selecting its group keeps the live value,
+                                                permissions, metadata, and accepted baseline unchanged. The upstream
+                                                value is for comparison only.
+                                            </p>
+                                        )}
                                         {row.definition_text && (
                                             <section aria-label="New verb definition">
                                                 <h4>Definition to install</h4>
@@ -756,7 +835,8 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                                 )}
                                             </div>
                                         )}
-                                        {!row.read_only && row.base && service?.supports("base_source") && (
+                                        {!row.read_only && row.field === "program" && row.base
+                                            && service?.supports("base_source") && (
                                             <div className="change-review-base-source">
                                                 {row.base_fetch_available && (
                                                     <button
@@ -993,7 +1073,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                 ? "Compare the fetched source with the running MOO again? This clears all saved choices and any unsaved draft."
                                 : page?.operation === "adopt"
                                 ? `Accept ${selectedCount} baselines? Live code will stay as it is.`
-                                : `Apply ${selectedCount} program choices to the running MOO?`}
+                                : `Apply ${selectedCount} choices to the running MOO?`}
                         </p>
                         {confirmation === "apply" && page?.operation !== "adopt" && (
                             <p>
@@ -1029,7 +1109,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                 ? `${page.decision_counts.unresolved} choices or group requirements remain unresolved. `
                                 : ""}
                             {page.decision_counts.blocked
-                                ? `${page.decision_counts.blocked} blocked programs will be kept. `
+                                ? `${page.decision_counts.blocked} blocked members will be kept. `
                                 : ""}
                         </small>
                         <button
