@@ -55,6 +55,9 @@ export interface ChangeRow {
     objectKey: string;
     objectLabel: string;
     memberLabel: string;
+    member?: string;
+    group?: string;
+    operation?: string;
     classification: Classification;
     eligible: boolean;
     blockers: string[];
@@ -66,6 +69,7 @@ export interface ChangeRow {
     incoming: string;
     live_text?: string;
     incoming_text?: string;
+    definition_text?: string;
     base_text?: string;
     base_fetch_available?: boolean;
     read_only?: boolean;
@@ -75,12 +79,20 @@ export interface ChangeRow {
     inspection_error?: string;
     validation?: CompilerDiagnostic[];
 }
+export interface ChangeGroup {
+    name: string;
+    requires: string[];
+    complete: boolean;
+    count: number;
+}
 export interface ReviewPage {
     generation: number;
     rows: ChangeRow[];
     cursor: number[];
     counts: Partial<Record<Classification, number>>;
     decision_counts: { selected: number; unresolved: number; blocked: number };
+    groups: ChangeGroup[];
+    groupValidation: string[];
     operation: "update" | "adopt";
 }
 export interface ReviewStatus {
@@ -162,6 +174,9 @@ export function decodeChangeRow(value: unknown, details = false): ChangeRow {
         : label;
     const saved = object(row.choice ?? {});
     return {
+        member: typeof row.member === "string" ? row.member : undefined,
+        group: typeof row.group === "string" ? row.group : undefined,
+        operation: typeof row.operation === "string" ? row.operation : undefined,
         read_only: row.read_only === true || row.read_only === 1,
         field,
         objectKey: row.object ? JSON.stringify(row.object) : objectLabel,
@@ -192,6 +207,7 @@ export function decodeChangeRow(value: unknown, details = false): ChangeRow {
         live: text(row.live),
         incoming: text(row.incoming),
         ...(details ? { live_text: text(row.live_text), incoming_text: text(row.incoming_text) } : {}),
+        ...(details && typeof row.definition_text === "string" ? { definition_text: row.definition_text } : {}),
         ...((row.base_text_available === true || row.base_text_available === 1) && typeof row.base_text === "string"
             ? { base_text: row.base_text }
             : {}),
@@ -216,6 +232,8 @@ export class ChangeReviewClient {
             | "review"
             | "details"
             | "base_source"
+            | "set_group"
+            | "resolve_group"
             | "inspection"
             | "diagnostics"
             | "resolve"
@@ -297,6 +315,19 @@ export class ChangeReviewClient {
                 unresolved: number(decisions.unresolved),
                 blocked: number(decisions.blocked),
             },
+            groups: (Array.isArray(page.groups) ? page.groups : []).map(value => {
+                const group = object(value);
+                if (!Array.isArray(group.requires)) throw new Error("Invalid change group.");
+                return {
+                    name: text(group.name),
+                    requires: group.requires.map(text),
+                    complete: group.complete === true || group.complete === 1,
+                    count: number(group.count),
+                };
+            }),
+            groupValidation: (Array.isArray(page.group_validation) ? page.group_validation : []).map(value =>
+                text(object(value).message)
+            ),
             operation: page.operation === "adopt" ? "adopt" : "update",
         };
     }
@@ -307,6 +338,16 @@ export class ChangeReviewClient {
             throw new Error("Review changed. Reload it before continuing.");
         }
         return detail;
+    }
+    async setGroup(generation: number, name: string, members: string[], requires: string[]) {
+        const result = await this.invoke("set_group", [this.target.review, generation, name, members, requires]);
+        if (result.generation !== generation + 1) throw new Error("Review changed. Reload before changing groups.");
+        return result.generation as number;
+    }
+    async resolveGroup(generation: number, name: string, choice: "incoming" | "defer") {
+        const result = await this.invoke("resolve_group", [this.target.review, generation, name, choice]);
+        if (result.generation !== generation + 1) throw new Error("Review changed. Reload before selecting a group.");
+        return result.generation as number;
     }
     async baseSource(generation: number, row: string, sources: { label: string; text: string }[] = []) {
         const result = await this.invoke("base_source", [this.target.review, generation, row, sources]);

@@ -367,3 +367,32 @@
   padding: 0.5rem;
   font-size: 0.875rem;
 }
+
+.change-review-groups {
+  padding: 8px;
+  border-bottom: 1px solid var(--color-border-medium);
+  max-height: 220px;
+  overflow: auto;
+}
+
+.change-review-group,
+.change-group-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.change-group-editor fieldset {
+  max-height: 300px;
+  overflow: auto;
+  margin: 12px 0;
+}
+
+.change-group-editor label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}

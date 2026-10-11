@@ -36,6 +36,29 @@ const row = {
 };
 
 describe("change review protocol", () => {
+    it("guards group changes and selections with the current generation", async () => {
+        const client = new ChangeReviewClient("token", target);
+        for (const operation of ["set_group", "resolve_group"]) {
+            for (const generation of [7, 8]) {
+                vi.mocked(invokeVerbFlatBuffer).mockResolvedValueOnce({
+                    result: { schema: 1, review_id: 1, generation },
+                    output: [],
+                });
+                const result = operation === "set_group"
+                    ? client.setGroup(7, "helper update", ["opaque/member"], ["prerequisite"])
+                    : client.resolveGroup(7, "helper update", "incoming");
+                if (generation === 8) await expect(result).resolves.toBe(8);
+                else await expect(result).rejects.toThrow("Review changed");
+                const call = vi.mocked(invokeVerbFlatBuffer).mock.lastCall!;
+                expect(call[2]).toBe(operation);
+                expect(new MoorVar(Var.getRootAsVar(new ByteBuffer(call[3]!))).toJS()).toEqual(
+                    operation === "set_group"
+                        ? [1, 7, "helper update", ["opaque/member"], ["prerequisite"]]
+                        : [1, 7, "helper update", "incoming"],
+                );
+            }
+        }
+    });
     it("preserves typed generations, cursors and literal multiline programs on the wire", () => {
         const args = [1, 7, [1, 7, 51], "return `$x ! ANY';\nreturn \"`$foo`\";"];
         const decoded = new MoorVar(Var.getRootAsVar(new ByteBuffer(buildStructuredArgs(args))));

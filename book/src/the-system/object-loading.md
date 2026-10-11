@@ -159,9 +159,9 @@ observe current local state against the saved incoming source and do not change 
 
 ## Read-only program review
 
-`preview_objdef_changes(sources, request [, choices])` compares existing verb programs without
-changing content or baseline metadata. It requires wizard authority or an explicit builtin grant,
-plus permission to read the selected definitions.
+`preview_objdef_changes(sources, request [, choices])` compares existing verb programs and proposed
+verb additions without changing content or baseline metadata. It requires wizard authority or an
+explicit builtin grant, plus permission to read the selected definitions.
 
 Each source unit has a diagnostic `label` and `text`. Text can be a string or a list of lines.
 Labels grant no filesystem access. Source input is limited to 4,096 units and 16 MiB in total.
@@ -249,11 +249,70 @@ Adoption writes source-derived baselines without changing programs. An incoming 
 incoming program. Local preserves the live program; edited installs the validated draft. All three
 record incoming as the accepted baseline. Defer writes nothing.
 
-Program writes preserve definition UUIDs, aliases, owners, flags, lookup order, and ordinary
-metadata. The receipt contains decisions and hashes, without historical source. It remains
+Updates to existing programs preserve definition UUIDs, aliases, owners, flags, lookup order, and
+ordinary metadata. The receipt contains decisions and hashes, without historical source. It remains
 uncommitted until the calling task commits. If a write fails, the whole task rolls back. Core
 applications must save their completion record in that same transaction and abort if that
 bookkeeping fails.
+
+### Add verbs with explicit change groups
+
+Cowbell can add a verb to an existing managed object. The new verb uses the supplied owner, flags,
+argument specification, program, and ordinary metadata. Its owner must meet the review's trust
+policy. A local or inherited alias collision blocks creation. Uncertain wildcard overlaps also block
+creation. Preview allocates no verb UUID. Apply allocates it only within the transaction.
+
+A new helper often needs an update to the caller that uses it. A change group declares that these
+changes must be installed together. The service cannot discover every dependency from program text.
+The administrator must declare those dependencies.
+
+For example, an update to `store:put` calls a new `store:validate_item` helper. Put both changes in
+a group named `store-update`. Selecting only the caller would leave broken code, so apply rejects
+that selection. Selecting the group installs the helper and updates the caller in one transaction.
+
+In Meadow:
+
+1. Open the review and select **Create a change group**.
+2. Enter a name and select all required changes.
+3. If another group must apply too, select it under **Other groups required by this group**.
+4. Save the group. This clears previous choices in the review without changing running code.
+5. Select the group, review each program, then apply.
+
+For an existing program, **Keep local** or an edited result remains available after selecting the
+group. A new verb uses the supplied definition and program. **Skip GROUP** defers the whole group.
+Apply rejects a partly selected group, a missing member, or an unselected required group.
+
+The terminal equivalents are:
+
+```text
+@changes group ID GENERATION NAME ROW ... [requires=NAME,NAME]
+@changes select-group ID GENERATION NAME
+@changes skip-group ID GENERATION NAME
+```
+
+Use row numbers from the review and a single word for the command-line group name. Changing a group
+clears saved choices, so use the new generation for subsequent commands.
+
+If another task creates a conflicting verb after preview, apply rejects the old review. It leaves
+the caller and other changes untouched. Refresh the review to see the current definitions.
+Successful apply records the new member and its accepted program baseline with the completion
+receipt.
+
+New properties and objects remain unsupported in this increment. Existing property values remain
+unchanged. Group membership does not authorize unsupported operations.
+
+The native request's optional `policy` has schema 1 and a `groups` list. Each group has `name`,
+`members`, and optional `requires` entries. `members` contains opaque membership keys from report
+rows. These keys identify object, verb names, and argument specification across initial creation and
+later reviews. `requires` contains other group names. Duplicate membership, unknown prerequisites,
+and dependency cycles are rejected. Limits are 32 groups, 8,192 members, and 1 MiB of policy data.
+
+Cowbell stores this policy in package configuration. Uploaded source cannot change it. For reviews
+with proposed additions, ungrouped program updates remain blocked. Preview returns `groups` and
+`group_validation` alongside individual choices. Apply rechecks group selection before any write.
+The service methods are `set_group(ID, GENERATION, NAME, MEMBERS, REQUIRES)` and
+`resolve_group(ID, GENERATION, NAME, CHOICE)`. An empty member list removes a group. Selection
+choices are `incoming` and `defer`.
 
 ## Review packages with `@changes`
 

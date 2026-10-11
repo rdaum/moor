@@ -612,7 +612,7 @@ fn late_writer_failure_requires_rollback_of_program_and_baseline() {
     let actions = vec![
         ProgramAction {
             object: ROOT,
-            uuid: definition.uuid(),
+            target: ProgramTarget::Existing(definition.uuid()),
             program: Some(ProgramType::MooR(
                 compile("return 9;", CompileOptions::default()).unwrap(),
             )),
@@ -623,7 +623,7 @@ fn late_writer_failure_requires_rollback_of_program_and_baseline() {
         },
         ProgramAction {
             object: ROOT,
-            uuid: uuid::Uuid::nil(),
+            target: ProgramTarget::Existing(uuid::Uuid::nil()),
             program: None,
             baseline: v_int(0),
         },
@@ -1648,4 +1648,465 @@ fn provenance_is_bounded_and_requires_a_map() {
             .is_err()
         );
     }
+}
+
+fn source_with_helper() -> String {
+    SOURCE
+        .replace("return \"Base\";", "return this:helper();")
+        .replace(
+            "endobject",
+            "verb helper (this none this) owner: #1 flags: \"rxd\"\nreturn 42;\nendverb\nendobject",
+        )
+}
+
+fn grouped_request(report: &Var) -> Var {
+    let members = get(report, "rows")
+        .as_list()
+        .unwrap()
+        .iter()
+        .map(|row| get(&row, "member"))
+        .collect::<Vec<_>>();
+    with_field(
+        &request("update"),
+        "policy",
+        &record(&[
+            ("schema", v_int(1)),
+            (
+                "groups",
+                v_list(&[record(&[
+                    ("name", v_str("feature")),
+                    ("members", v_list(&members)),
+                    ("requires", v_list(&[])),
+                ])]),
+            ),
+        ]),
+    )
+}
+
+#[test]
+fn verb_additions_require_a_complete_explicit_group_and_allocate_only_on_apply() {
+    let db = database();
+    let mut world = db.new_world_state().unwrap();
+    stamp(world.as_mut());
+    world.commit().unwrap();
+    let mut world = db.new_world_state().unwrap();
+    let incoming = sources(&source_with_helper());
+    let blocked = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &request("update"),
+        None,
+    )
+    .unwrap();
+    assert_eq!(get(&blocked, "rows").as_list().unwrap().len(), 2);
+    for row in get(&blocked, "rows").as_list().unwrap().iter() {
+        assert!(!get(&row, "eligible").is_true());
+        assert!(
+            get(&row, "blockers")
+                .as_list()
+                .unwrap()
+                .iter()
+                .any(|reason| reason == v_str("change_group_required"))
+        );
+    }
+    let grouped = grouped_request(&blocked);
+    let report = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &grouped,
+        None,
+    )
+    .unwrap();
+    assert_eq!(world.verbs(&permissions(), &ROOT).unwrap().len(), 1);
+    let rows = get(&report, "rows");
+    let addition = rows
+        .as_list()
+        .unwrap()
+        .iter()
+        .find(|row| get(row, "classification") == v_str("incoming_only"))
+        .unwrap();
+    let detailed = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &with_field(&grouped, "details", &v_list(&[get(&addition, "id")])),
+        None,
+    )
+    .unwrap();
+    let definition = get(&detailed, "rows")
+        .as_list()
+        .unwrap()
+        .iter()
+        .find(|row| get(row, "id") == get(&addition, "id"))
+        .unwrap();
+    assert_eq!(
+        get(&definition, "definition_text"),
+        v_str("Owner: #1\nFlags: rxd\nArguments: this none this")
+    );
+    let caller = rows
+        .as_list()
+        .unwrap()
+        .iter()
+        .find(|row| get(row, "classification") == v_str("upstream"))
+        .unwrap();
+    let only_caller = v_map(&[(get(&caller, "id"), record(&[("choice", v_str("incoming"))]))]);
+    let draft = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &grouped,
+        Some(&only_caller),
+    )
+    .unwrap();
+    assert_eq!(get(&draft, "group_validation").as_list().unwrap().len(), 1);
+    assert!(
+        apply(
+            world.as_mut(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &grouped,
+            &get(&report, "evidence"),
+            &only_caller
+        )
+        .is_err()
+    );
+    assert_eq!(
+        program_text(&live_program(world.as_ref())).unwrap(),
+        v_str("return \"Base\";")
+    );
+    let choices = v_map(
+        &rows
+            .as_list()
+            .unwrap()
+            .iter()
+            .map(|row| (get(&row, "id"), record(&[("choice", v_str("incoming"))])))
+            .collect::<Vec<_>>(),
+    );
+    apply(
+        world.as_mut(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &grouped,
+        &get(&report, "evidence"),
+        &choices,
+    )
+    .unwrap();
+    world.commit().unwrap();
+    let world = db.new_world_state().unwrap();
+    assert_eq!(world.verbs(&permissions(), &ROOT).unwrap().len(), 2);
+    let next = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &grouped,
+        None,
+    )
+    .unwrap();
+    for row in get(&next, "rows").as_list().unwrap().iter() {
+        assert_eq!(get(&row, "classification"), v_str("unchanged"));
+        assert_eq!(get(&row, "group"), v_str("feature"));
+        assert!(get(&row, "eligible").is_true());
+    }
+}
+
+#[test]
+fn concurrent_verb_creation_rejects_reviewed_absence_without_touching_the_caller() {
+    let db = database();
+    let mut world = db.new_world_state().unwrap();
+    stamp(world.as_mut());
+    world.commit().unwrap();
+    let mut reviewed = db.new_world_state().unwrap();
+    let incoming = sources(&source_with_helper());
+    let blocked = preview(
+        reviewed.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &request("update"),
+        None,
+    )
+    .unwrap();
+    let grouped = grouped_request(&blocked);
+    let report = preview(
+        reviewed.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &grouped,
+        None,
+    )
+    .unwrap();
+    let choices = v_map(
+        &get(&report, "rows")
+            .as_list()
+            .unwrap()
+            .iter()
+            .map(|row| (get(&row, "id"), record(&[("choice", v_str("incoming"))])))
+            .collect::<Vec<_>>(),
+    );
+    let mut other = db.new_world_state().unwrap();
+    let definition = other
+        .get_verb(&permissions(), &ROOT, Symbol::mk("test"))
+        .unwrap();
+    other
+        .add_verb(
+            &permissions(),
+            &ROOT,
+            vec![Symbol::mk("helper")],
+            &ROOT,
+            definition.flags(),
+            definition.args(),
+            ProgramType::MooR(compile("return 99;", Default::default()).unwrap()),
+        )
+        .unwrap();
+    other.commit().unwrap();
+    // The original snapshot cannot commit its addition over a concurrent definition.
+    apply(
+        reviewed.as_mut(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &grouped,
+        &get(&report, "evidence"),
+        &choices,
+    )
+    .unwrap();
+    assert!(matches!(
+        reviewed.commit().unwrap(),
+        CommitResult::ConflictRetry { .. }
+    ));
+    let mut current = db.new_world_state().unwrap();
+    assert!(
+        apply(
+            current.as_mut(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &grouped,
+            &get(&report, "evidence"),
+            &choices
+        )
+        .is_err()
+    );
+    assert_eq!(
+        program_text(&live_program(current.as_ref())).unwrap(),
+        v_str("return \"Base\";")
+    );
+    assert_eq!(current.verbs(&permissions(), &ROOT).unwrap().len(), 2);
+}
+
+#[test]
+fn groups_reject_cycles_duplicate_members_and_missing_prerequisites() {
+    let db = database();
+    let mut world = db.new_world_state().unwrap();
+    stamp(world.as_mut());
+    let incoming = sources(&source_with_helper());
+    let initial = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &request("update"),
+        None,
+    )
+    .unwrap();
+    let rows: Vec<_> = get(&initial, "rows").as_list().unwrap().iter().collect();
+    let group = |name: &str, member: Var, requires: &[Var]| {
+        record(&[
+            ("name", v_str(name)),
+            ("members", v_list(&[member])),
+            ("requires", v_list(requires)),
+        ])
+    };
+    let policy_request = |groups: &[Var]| {
+        with_field(
+            &request("update"),
+            "policy",
+            &record(&[("schema", v_int(1)), ("groups", v_list(groups))]),
+        )
+    };
+    for invalid in [
+        vec![group("caller", get(&rows[0], "member"), &[v_str("helper")])],
+        vec![
+            group("caller", get(&rows[0], "member"), &[v_str("helper")]),
+            group("helper", get(&rows[1], "member"), &[v_str("caller")]),
+        ],
+        vec![
+            group("caller", get(&rows[0], "member"), &[]),
+            group("helper", get(&rows[0], "member"), &[]),
+        ],
+    ] {
+        assert!(
+            preview(
+                world.as_ref(),
+                &permissions(),
+                &CompileOptions::default(),
+                &incoming,
+                &policy_request(&invalid),
+                None
+            )
+            .is_err()
+        );
+    }
+    let request = policy_request(&[
+        group("caller", get(&rows[0], "member"), &[v_str("helper")]),
+        group("helper", get(&rows[1], "member"), &[]),
+    ]);
+    let choices = v_map(&[(
+        get(&rows[0], "id"),
+        record(&[("choice", v_str("incoming"))]),
+    )]);
+    let report = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &request,
+        Some(&choices),
+    )
+    .unwrap();
+    let issue = get(&report, "group_validation")
+        .as_list()
+        .unwrap()
+        .iter()
+        .next()
+        .unwrap();
+    assert_eq!(get(&issue, "code"), v_str("missing_prerequisite"));
+    assert!(
+        apply(
+            world.as_mut(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &request,
+            &get(&report, "evidence"),
+            &choices
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn new_verbs_reject_alias_collisions_and_untrusted_definition_owners() {
+    for source in [
+        source_with_helper().replace("verb helper", "verb \"te*st\""),
+        source_with_helper().replace("verb helper", "verb \"*suffix\""),
+        source_with_helper().replace(
+            "verb helper (this none this) owner: #1",
+            "verb helper (this none this) owner: #9",
+        ),
+    ] {
+        let db = database();
+        let mut world = db.new_world_state().unwrap();
+        stamp(world.as_mut());
+        let incoming = sources(&source);
+        let initial = preview(
+            world.as_ref(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &request("update"),
+            None,
+        )
+        .unwrap();
+        let request = grouped_request(&initial);
+        let report = preview(
+            world.as_ref(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &request,
+            None,
+        )
+        .unwrap();
+        let addition = get(&report, "rows")
+            .as_list()
+            .unwrap()
+            .iter()
+            .find(|row| get(row, "classification") == v_str("incoming_only"))
+            .unwrap();
+        assert!(!get(&addition, "eligible").is_true());
+        let choices = v_map(&[(
+            get(&addition, "id"),
+            record(&[("choice", v_str("incoming"))]),
+        )]);
+        assert!(
+            apply(
+                world.as_mut(),
+                &permissions(),
+                &CompileOptions::default(),
+                &incoming,
+                &request,
+                &get(&report, "evidence"),
+                &choices
+            )
+            .is_err()
+        );
+        assert_eq!(world.verbs(&permissions(), &ROOT).unwrap().len(), 1);
+    }
+}
+
+#[test]
+fn a_late_failure_rolls_back_a_new_verb_and_its_baseline() {
+    let db = database();
+    let mut world = db.new_world_state().unwrap();
+    let parsed = ObjDefSet::parse_sources(
+        &CompileOptions::default(),
+        None,
+        None,
+        decode_sources(&sources(&source_with_helper())).unwrap(),
+    )
+    .unwrap();
+    let helper = parsed
+        .graph()
+        .object_definitions()
+        .get(&ROOT)
+        .unwrap()
+        .1
+        .verbs
+        .iter()
+        .find(|verb| verb.names == vec![Symbol::mk("helper")])
+        .unwrap()
+        .clone();
+    let baseline = record(&[
+        ("schema", v_str(PROGRAM_SCHEMA)),
+        (
+            "program",
+            v_str(&program_fingerprint(&helper.program).unwrap()),
+        ),
+    ]);
+    let actions = vec![
+        ProgramAction {
+            object: ROOT,
+            target: ProgramTarget::AddVerb(helper),
+            program: None,
+            baseline: baseline.clone(),
+        },
+        ProgramAction {
+            object: ROOT,
+            target: ProgramTarget::Existing(uuid::Uuid::nil()),
+            program: None,
+            baseline,
+        },
+    ];
+    assert!(matches!(
+        write_actions(world.as_mut(), &permissions(), actions),
+        Err(ApplyError::Mutation(_))
+    ));
+    drop(world);
+    let world = db.new_world_state().unwrap();
+    assert_eq!(world.verbs(&permissions(), &ROOT).unwrap().len(), 1);
+    assert_eq!(
+        program_text(&live_program(world.as_ref())).unwrap(),
+        v_str("return \"Base\";")
+    );
 }

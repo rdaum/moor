@@ -213,3 +213,52 @@ E_PERM
 @wizard
 ; const id = #0.changes_probe["review_id"]; $change_manager:refresh(id, 3); const row = $change_manager:details(id, 4, #0.changes_probe["row"])["row"]; $change_manager:discard(id, 4); return {row["base_text_available"], #9503:test(), maphaskey($change_manager.pending, id)};
 {false, 13, false}
+
+// New verbs require an explicit group with the caller that needs them.
+@wizard
+; load_object({"object #9504", tostr("owner: ", player), tostr("verb test (this none this) owner: ", player, " flags: \"rxd\""), "return 10;", "endverb", "endobject"}); $change_manager:configure("addition_probe", {#9504}, []); #0.changes_probe = $change_manager:stage("addition_probe", {["label" -> "caller.moo", "text" -> dump_object(#9504)]}, "adopt"); return $change_manager:apply(#0.changes_probe["review_id"], 1)["status"];
+"applying"
+
+; for i in [1..100] const status = $change_manager:status(#0.changes_probe["review_id"]); if (status["status"] != "applying") return status["status"]; endif suspend(0.01); endfor return "timed out";
+"complete"
+
+; const source = {"object #9504", tostr("owner: ", player), tostr("verb test (this none this) owner: ", player, " flags: \"rxd\""), "return this:helper();", "endverb", tostr("verb helper (this none this) owner: ", player, " flags: \"rxd\""), "return 42;", "endverb", "endobject"}; #0.changes_probe = $change_manager:stage("addition_probe", {["label" -> "caller.moo", "text" -> source]}); const id = #0.changes_probe["review_id"]; const rows = $change_manager:review(id, 1)["rows"]; return {length(rows), {row["eligible"] for row in (rows)}, length(verbs(#9504)), #9504:test()};
+{2, {false, false}, 1, 10}
+
+; const id = #0.changes_probe["review_id"]; const text = $format.block:mk(@$change_manager:command({"diff", tostr(id)})):compose(player, 'text_plain, false); return index(text, "new verb") != 0;
+true
+
+; const id = #0.changes_probe["review_id"]; $change_manager:command({"group", tostr(id), "1", "helper-update", "1", "2"}); return $change_manager:status(id)["generation"];
+2
+
+@nonprogrammer
+; return $change_manager:set_group(#0.changes_probe["review_id"], 2, "unauthorized", {"member"});
+E_PERM
+
+; return $change_manager:resolve_group(#0.changes_probe["review_id"], 2, "helper-update", "incoming");
+E_PERM
+
+@wizard
+; const id = #0.changes_probe["review_id"]; return {`$change_manager:set_group(id, 1, "helper-update", {"member"}) ! ANY => "stale"', `$change_manager:resolve_group(id, 1, "helper-update", "incoming") ! ANY => "stale"', $change_manager:status(id)["generation"]};
+{"stale", "stale", 2}
+
+; const id = #0.changes_probe["review_id"]; const text = $format.block:mk(@$change_manager:command({"source", tostr(id), "2", "2", "incoming"})):compose(player, 'text_plain, false); return index(text, "Flags: rxd") != 0;
+true
+
+; const id = #0.changes_probe["review_id"]; const rows = $change_manager:review(id, 2)["rows"]; #0.changes_probe["caller"] = rows[1]["id"]; $change_manager:resolve(id, 2, rows[1]["id"], "incoming"); const page = $change_manager:review(id, 3); return {page["decision_counts"]["unresolved"], length(page["group_validation"]), #9504:test()};
+{1, 1, 10}
+
+; return $change_manager:apply(#0.changes_probe["review_id"], 3)["status"];
+"applying"
+
+; for i in [1..100] const status = $change_manager:status(#0.changes_probe["review_id"]); if (status["status"] != "applying") return {status["status"], #9504:test(), length(verbs(#9504))}; endif suspend(0.01); endfor return "timed out";
+{"rejected", 10, 1}
+
+; const id = #0.changes_probe["review_id"]; const generation = $change_manager:status(id)["generation"]; const result = $change_manager:resolve_group(id, generation, "helper-update", "incoming"); return $change_manager:apply(id, result["generation"])["status"];
+"applying"
+
+; for i in [1..100] const status = $change_manager:status(#0.changes_probe["review_id"]); if (status["status"] != "applying") return {status["status"], #9504:test(), length(verbs(#9504)), length($change_manager.packages["addition_probe"]["members"])}; endif suspend(0.01); endfor return "timed out";
+{"complete", 42, 2, 1}
+
+; const id = #0.changes_probe["review_id"]; const receipt = $change_manager:status(id); const installed_review = $change_manager:stage("addition_probe", {["label" -> "installed.moo", "text" -> dump_object(#9504)]}); const rows = $change_manager:review(installed_review["review_id"], 1)["rows"]; $change_manager:discard(installed_review["review_id"], 1); return {receipt["decision_count"], {row["classification"] for row in (rows)}, {item["group"] for item in (rows)}};
+{2, {"unchanged", "unchanged"}, {"helper-update", "helper-update"}}

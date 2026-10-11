@@ -14,6 +14,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Cowbell change reviews can add verbs to existing managed objects. Administrators declare groups
+  for programs and the helpers they require. Apply rejects incomplete groups and conflicting verb
+  names. Meadow and `help @changes` explain grouping, selection, and recovery.
+
 - Cowbell change reviews can verify historical objdefs from an upload or the accepted Git commit.
   Meadow shows the accepted baseline beside local and upstream code, with a separate edited result.
   Accepted program baselines retain source provenance, including when local or edited code is kept.

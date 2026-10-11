@@ -27,6 +27,7 @@ import {
     ReviewStatus,
 } from "../lib/change-review";
 import { ChangeServiceClient } from "../lib/change-service";
+import { ChangeGroupEditor } from "./ChangeGroupEditor";
 import { ReviewDiffEditor } from "./ReviewDiffEditor";
 import { ReviewProgramEditor } from "./ReviewProgramEditor";
 import { ReviewSourceDetails } from "./ReviewSourceDetails";
@@ -55,6 +56,10 @@ const blockers: Record<string, string> = {
     untrusted_target_authority: "Ownership or permissions prevent updating this verb.",
     object_identity_mismatch: "The installed object and upstream object have different identities.",
     adoption_required: "Accept an upstream baseline before updating this verb.",
+    change_group_required: "Declare which changes must be installed together before selecting this program.",
+    change_group_member_missing: "This group requires a member that is missing from the supplied source.",
+    verb_name_collision:
+        "A local or inherited verb already uses a conflicting name. Choose a distinct name and review again.",
 };
 const fieldLabels: Record<string, string> = {
     program: "Verb",
@@ -90,6 +95,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
     const client = useMemo(() => new ChangeReviewClient(authToken, target), [authToken, target]);
     const [generation, setGeneration] = useState(target.generation);
     const [status, setStatus] = useState<ReviewStatus | null>(null);
+    const [groupEditor, setGroupEditor] = useState<{ generation: number; group?: string } | null>(null);
     const [service, setService] = useState<ChangeServiceClient | null>(null);
     const [diagnostics, setDiagnostics] = useState<DiagnosticPage | null>(null);
     const [page, setPage] = useState<ReviewPage | null>(null);
@@ -307,6 +313,27 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
             }
         }
     };
+    const resolveGroup = async (name: string, choice: "incoming" | "defer") => {
+        if (busy || dirty) return;
+        const request = ++sequence.current;
+        setBusy(true);
+        setError("");
+        try {
+            const next = await client.resolveGroup(generation, name, choice);
+            if (request !== sequence.current) return;
+            await load(next, row?.id, category);
+            setNotice(
+                choice === "incoming"
+                    ? "Group selected. Review the programs, then apply when ready."
+                    : "Group skipped. Live code has not changed.",
+            );
+        } catch (failure) {
+            if (request === sequence.current) {
+                fail(failure);
+                setBusy(false);
+            }
+        }
+    };
     const loadBase = async (files?: FileList | null) => {
         if (!row || dirty || busy || !service?.supports("base_source")) return;
         const request = ++sequence.current;
@@ -504,6 +531,63 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                         });
                     }}
                 />
+                {page && !applying && service?.supports("set_group") && page.operation !== "adopt" && (
+                    <details
+                        className="change-review-groups"
+                        open={rows.some(row => row.operation === "add_verb") || Boolean(page.groupValidation.length)}
+                    >
+                        <summary>Changes that belong together ({page.groups.length} groups)</summary>
+                        <p>
+                            A group keeps a program and its required additions together. Select every required group,
+                            then review the choices before applying.
+                        </p>
+                        <p>
+                            New verbs appear only when you apply. A conflicting local or inherited name blocks creation.
+                            Existing property values stay unchanged.
+                        </p>
+                        {page.groups.map(group => (
+                            <div className="change-review-group" key={group.name}>
+                                <strong>{group.name}</strong>
+                                <span>{group.count} required changes</span>
+                                {group.requires.length > 0 && <span>Also requires: {group.requires.join(", ")}</span>}
+                                {!group.complete && <span>Some required changes are missing or blocked.</span>}
+                                <button
+                                    type="button"
+                                    disabled={busy || dirty}
+                                    onClick={() => setGroupEditor({ generation, group: group.name })}
+                                >
+                                    Edit {group.name}
+                                </button>
+                                {service.supports("resolve_group") && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            disabled={busy || dirty || !group.complete || Boolean(error)}
+                                            onClick={() => void resolveGroup(group.name, "incoming")}
+                                        >
+                                            Select {group.name}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={busy || dirty || Boolean(error)}
+                                            onClick={() => void resolveGroup(group.name, "defer")}
+                                        >
+                                            Skip {group.name}
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        ))}
+                        {page.groupValidation.map(message => <p key={message} role="status">{message}</p>)}
+                        <button
+                            type="button"
+                            disabled={busy || dirty || Boolean(error)}
+                            onClick={() => setGroupEditor({ generation })}
+                        >
+                            Create a change group
+                        </button>
+                    </details>
+                )}
                 {page && !applying && (
                     <div className="change-review-workspace" aria-busy={busy}>
                         <aside className="change-review-sidebar" aria-label="Changes">
@@ -603,6 +687,20 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                             </h3>
                                             <span>{changeLabels[row.classification]}</span>
                                         </header>
+                                        {row.definition_text && (
+                                            <section aria-label="New verb definition">
+                                                <h4>Definition to install</h4>
+                                                <p>
+                                                    Apply creates this verb with the owner, permissions, and metadata
+                                                    shown here. The program appears below.
+                                                </p>
+                                                <pre>{row.definition_text}</pre>
+                                                <p>
+                                                    Flags: r permits reading, x permits calls from programs, and d
+                                                    enables error reporting. Arguments control command matching.
+                                                </p>
+                                            </section>
+                                        )}
                                         {!row.read_only && !row.eligible && (
                                             <p role="status">
                                                 {row.blockers.map(reason => blockers[reason] ?? reason).join(" ")}
@@ -928,7 +1026,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                     <footer className="change-review-footer">
                         <small>
                             {page.decision_counts.unresolved
-                                ? `${page.decision_counts.unresolved} programs still need a choice. `
+                                ? `${page.decision_counts.unresolved} choices or group requirements remain unresolved. `
                                 : ""}
                             {page.decision_counts.blocked
                                 ? `${page.decision_counts.blocked} blocked programs will be kept. `
@@ -947,6 +1045,19 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                     </footer>
                 )}
             </DialogSheet>
+            {groupEditor && page && (
+                <ChangeGroupEditor
+                    client={client}
+                    generation={groupEditor.generation}
+                    groups={page.groups}
+                    group={groupEditor.group}
+                    onClose={() => setGroupEditor(null)}
+                    onSaved={next => {
+                        setGroupEditor(null);
+                        void load(next, row?.id, category);
+                    }}
+                />
+            )}
         </div>
     );
 }

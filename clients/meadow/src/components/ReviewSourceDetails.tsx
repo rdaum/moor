@@ -51,8 +51,8 @@ export function ReviewSourceDetails({ status, diagnostics, busy, onMore }: {
         <details className="change-review-source">
             <summary>Source and checks{diagnostics ? ` (${diagnostics.total})` : ""}</summary>
             <p>
-                Apply updates selected programs only. Selecting programs does not establish compatibility with omitted
-                structural changes.
+                Apply updates selected programs and installs declared verb additions. Grouping does not establish
+                compatibility with omitted property or object changes.
             </p>
             {provenance.length > 0 && (
                 <dl>

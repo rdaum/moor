@@ -523,3 +523,54 @@ test("historical Git retrieval rechecks authority after worker suspension", asyn
     expect(await programs(administrator)).toEqual([1, 3, 3, 3, 3]);
     await administrator.close();
 });
+
+test("a declared group installs a new helper with its caller through Meadow", async ({ page }) => {
+    const browserErrors: string[] = [];
+    page.on("pageerror", error => browserErrors.push(error.message));
+    await login(page);
+    await page.evaluate(() => window.changes.evaluate("return $change_manager:configure(\"addition\", {#9500}, []);"));
+    const input = "object #9500 [import_export_id -> \"changes_acceptance\"]\nowner: #2\n"
+        + "verb upstream (this none this) owner: #2 flags: \"rxd\"\nreturn this:added_helper();\nendverb\n"
+        + "verb added_helper (this none this) owner: #2 flags: \"rxd\"\nreturn 42;\nendverb\nendobject";
+    const review = await page.evaluate(
+        async text =>
+            (await window.changes.invoke("stage", ["addition", [{ label: "addition.moo", text }]]) as {
+                review_id: number;
+            }).review_id,
+        input,
+    );
+    await page.evaluate(id => window.changes.open(id, 1), review);
+    await expect(page.getByRole("button", { name: /:added_helper, Verb/ })).toHaveCount(1);
+    await page.getByRole("button", { name: /:added_helper, Verb/ }).click();
+    await expect(page.getByRole("region", { name: "New verb definition" })).toContainText("Owner: #2");
+    await expect(page.getByRole("region", { name: "New verb definition" })).toContainText("Flags: rxd");
+    await expect(page.getByText("Declare which changes must be installed together before selecting this program."))
+        .toBeVisible();
+    await page.getByRole("button", { name: "Create a change group", exact: true }).click();
+    const editor = page.getByRole("dialog", { name: "Create a change group", exact: true });
+    await editor.getByLabel("Group name").fill("helper-update");
+    await editor.getByRole("checkbox", { name: "#9500:added_helper — new verb", exact: true }).check();
+    await editor.getByRole("checkbox", { name: "#9500:upstream — existing program", exact: true }).check();
+    await editor.getByRole("button", { name: "Save group and clear choices", exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await page.getByRole("button", { name: "Select helper-update", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Apply 2 choices", exact: true })).toBeEnabled();
+    expect(
+        await page.evaluate(() =>
+            window.changes.evaluate("return {#9500:upstream(), \"added_helper\" in verbs(#9500)};")
+        ),
+    ).toEqual([1, 0]);
+    await page.getByRole("button", { name: "Apply 2 choices", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm apply", exact: true }).click();
+    await expect.poll(() => page.evaluate(id => window.changes.client(id).status(), review)).toMatchObject({
+        status: "complete",
+    });
+    expect(
+        await page.evaluate(() =>
+            window.changes.evaluate(
+                "return {#9500:upstream(), #9500:added_helper(), length($change_manager.packages[\"addition\"][\"members\"])};",
+            )
+        ),
+    ).toEqual([42, 42, 1]);
+    expect(browserErrors).toEqual([]);
+});

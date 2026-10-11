@@ -24,8 +24,12 @@
 //! `base_sources` supplies historical objdefs for selected `details` rows only. These
 //! read-only sources must match each selected member's accepted program fingerprint.
 
+#[path = "review_additions.rs"]
+mod additions;
 #[path = "review_inspection.rs"]
 pub(crate) mod inspection;
+#[path = "review_policy.rs"]
+mod policy;
 
 use crate::{
     Constants, ObjDefSet, ObjDefSource, ObjdefLoaderError,
@@ -198,11 +202,17 @@ pub fn classify(base: Option<&str>, live: &str, incoming: &str) -> &'static str 
     }
 }
 
+pub(crate) enum ProgramTarget {
+    Existing(uuid::Uuid),
+    AddVerb(moor_compiler::ObjVerbDef),
+}
+
 pub(crate) struct ProgramRow {
     pub id: String,
     pub eligible: bool,
     pub object: moor_var::Obj,
-    pub uuid: uuid::Uuid,
+    pub target: ProgramTarget,
+    pub member: String,
     pub incoming: ProgramType,
     pub incoming_hash: String,
     pub incoming_source: Option<Var>,
@@ -215,6 +225,7 @@ pub(crate) struct Analysis {
     pub evidence: Var,
     pub rows: Vec<ProgramRow>,
     pub adoption: bool,
+    policy: policy::Policy,
 }
 
 fn names(names: &[Symbol]) -> Var {
@@ -303,6 +314,7 @@ pub(crate) fn analyze(
             "trusted_owners",
             "provenance",
             "base_sources",
+            "policy",
         ],
     )?;
     if required(&req, "schema")?.as_integer() != Some(1) {
@@ -315,6 +327,7 @@ pub(crate) fn analyze(
         return Err("unsupported operation".to_string().into());
     }
     let adoption = operation == "adopt";
+    let policy = policy::Policy::parse(req.get("policy"))?;
     let selected_fields = required(&req, "fields")?
         .as_list()
         .ok_or_else(|| ReviewError::Invalid("fields must be a list".into()))?;
@@ -456,6 +469,7 @@ pub(crate) fn analyze(
             evidence: v_list(&[]),
             rows: Vec::new(),
             adoption: false,
+            policy,
         });
     }
     let source_digest = digest(sources)?;
@@ -527,6 +541,37 @@ pub(crate) fn analyze(
                 .iter()
                 .filter(|d| d.names() == verb.names && d.args() == verb.argspec)
                 .collect::<Vec<_>>();
+            if matches.is_empty() && !adoption {
+                let member = additions::member_key(object, verb)?;
+                let context = additions::VerbContext {
+                    world,
+                    permissions,
+                    object,
+                    trusted,
+                    identity_matches,
+                    trusted_owners: &trusted_owners,
+                    provenance,
+                    source_digest: &source_digest,
+                };
+                let (row, report) = context.analyze(
+                    label,
+                    verb,
+                    &incoming.verbs,
+                    &mut guards,
+                    selected_details.contains(&format!("add/{member}")),
+                )?;
+                for field in ["incoming_text", "definition_text"] {
+                    if let Ok(text) = report.as_map().unwrap().get(&v_str(field)) {
+                        detail_bytes += text.as_string().unwrap().len();
+                        if detail_bytes > MAX_SOURCE_BYTES {
+                            return Err("selected details exceed 16 MiB".to_string().into());
+                        }
+                    }
+                }
+                report_rows.push(report);
+                rows.push(row);
+                continue;
+            }
             if matches.len() != 1 || !matched.insert(matches[0].uuid()) {
                 diagnostics.push(record(&[
                     ("object", v_obj(object)),
@@ -754,7 +799,8 @@ pub(crate) fn analyze(
                 id,
                 eligible,
                 object,
-                uuid: definition.uuid(),
+                target: ProgramTarget::Existing(definition.uuid()),
+                member: additions::member_key(object, verb)?,
                 incoming: verb.program.clone(),
                 incoming_hash,
                 incoming_source: provenance.map(|value| {
@@ -797,6 +843,10 @@ pub(crate) fn analyze(
     {
         return Err("unknown detail row".to_string().into());
     }
+    let has_additions = rows
+        .iter()
+        .any(|row| matches!(row.target, ProgramTarget::AddVerb(_)));
+    policy.annotate(&mut rows, &mut report_rows, has_additions)?;
     let evidence = record(&[
         ("schema", v_int(1)),
         ("guard", v_str(&digest(&v_list(&guards))?)),
@@ -823,6 +873,7 @@ pub(crate) fn analyze(
         ("source_digest", v_str(&source_digest)),
         ("evidence", evidence.clone()),
         ("rows", v_list(&report_rows)),
+        ("groups", policy.report(&rows)),
         ("diagnostics", v_list(&diagnostics)),
     ]);
     Ok(Analysis {
@@ -830,6 +881,7 @@ pub(crate) fn analyze(
         evidence,
         rows,
         adoption,
+        policy,
     })
 }
 
@@ -846,6 +898,10 @@ pub fn preview(
     let validation = validate_choices(&analysis, options, choices)?;
     let mut output = analysis.report.as_map().unwrap().iter().collect::<Vec<_>>();
     output.push((v_str("validation"), v_list(&validation)));
+    output.push((
+        v_str("group_validation"),
+        v_list(&analysis.policy.selection_issues(&analysis, choices)),
+    ));
     Ok(v_map(&output))
 }
 
@@ -879,6 +935,8 @@ fn validate_choices(
             if !matches!(kind, "incoming" | "local" | "edited" | "defer")
                 || (!row.eligible && kind != "defer")
                 || (analysis.adoption && !matches!(kind, "incoming" | "defer"))
+                || (matches!(row.target, ProgramTarget::AddVerb(_))
+                    && !matches!(kind, "incoming" | "defer"))
             {
                 return Err("choice is not allowed for this row".to_string().into());
             }
@@ -941,7 +999,7 @@ pub enum ApplyError {
 
 struct ProgramAction {
     object: moor_var::Obj,
-    uuid: uuid::Uuid,
+    target: ProgramTarget,
     program: Option<ProgramType>,
     baseline: Var,
 }
@@ -993,10 +1051,25 @@ pub fn apply(
     }
     // Preview's choice decoder supplies the same strict eligibility and draft checks.
     let validation = validate_choices(&analysis, options, Some(choices))?;
+    let group_issues = analysis.policy.selection_issues(&analysis, Some(choices));
+    if let Some(issue) = group_issues.first() {
+        return Err(ReviewError::Invalid(
+            issue
+                .as_map()
+                .unwrap()
+                .get(&v_str("message"))
+                .unwrap()
+                .as_string()
+                .unwrap()
+                .to_owned(),
+        )
+        .into());
+    }
     let choice_map = choices.as_map().unwrap();
 
     let mut actions = Vec::new();
     let mut decisions = Vec::new();
+    let mut created = Vec::new();
     for row in analysis.rows {
         let choice = choice_map
             .iter()
@@ -1056,7 +1129,11 @@ pub fn apply(
             Some(ProgramType::MooR(
                 compile(&text, options.clone()).map_err(|e| ReviewError::Invalid(e.to_string()))?,
             ))
-        } else if kind == "incoming" && !analysis.adoption && row.live_hash != row.incoming_hash {
+        } else if kind == "incoming"
+            && !analysis.adoption
+            && matches!(row.target, ProgramTarget::Existing(_))
+            && row.live_hash != row.incoming_hash
+        {
             Some(row.incoming)
         } else {
             None
@@ -1068,9 +1145,17 @@ pub fn apply(
         if let Some(source) = row.incoming_source {
             baseline.push(("source", source));
         }
+        if let ProgramTarget::AddVerb(verb) = &row.target {
+            created.push(record(&[
+                ("member", v_str(&row.member)),
+                ("object", v_obj(row.object)),
+                ("field", v_str("program")),
+                ("names", names(&verb.names)),
+            ]));
+        }
         actions.push(ProgramAction {
             object: row.object,
-            uuid: row.uuid,
+            target: row.target,
             program,
             baseline: record(&baseline),
         });
@@ -1084,6 +1169,7 @@ pub fn apply(
         ("schema", v_int(1)),
         ("evidence", analysis.evidence),
         ("decisions", v_list(&decisions)),
+        ("created", v_list(&created)),
     ]);
     write_actions(world, permissions, actions)?;
     Ok(receipt)
@@ -1095,12 +1181,55 @@ fn write_actions(
     actions: Vec<ProgramAction>,
 ) -> Result<(), ApplyError> {
     for action in actions {
+        let uuid = match action.target {
+            ProgramTarget::Existing(uuid) => uuid,
+            ProgramTarget::AddVerb(verb) => {
+                world
+                    .add_verb(
+                        permissions,
+                        &action.object,
+                        verb.names.clone(),
+                        &verb.owner,
+                        verb.flags,
+                        verb.argspec,
+                        verb.program,
+                    )
+                    .map_err(ApplyError::Mutation)?;
+                let definitions = world
+                    .verbs(permissions, &action.object)
+                    .map_err(ApplyError::Mutation)?;
+                let definition = definitions
+                    .iter()
+                    .find(|definition| {
+                        definition.names() == verb.names && definition.args() == verb.argspec
+                    })
+                    .ok_or_else(|| {
+                        ApplyError::Mutation(WorldStateError::DatabaseError(
+                            "new verb is not visible in its transaction".into(),
+                        ))
+                    })?;
+                for (key, value) in verb.metadata {
+                    if key != Symbol::mk(BASE_KEY) {
+                        world
+                            .set_verb_metadata(
+                                permissions,
+                                &action.object,
+                                definition.uuid(),
+                                key,
+                                value,
+                            )
+                            .map_err(ApplyError::Mutation)?;
+                    }
+                }
+                definition.uuid()
+            }
+        };
         if let Some(program) = action.program {
             world
                 .update_verb_with_id(
                     permissions,
                     &action.object,
-                    action.uuid,
+                    uuid,
                     moor_common::model::VerbAttrs {
                         program: Some(program),
                         definer: None,
@@ -1116,7 +1245,7 @@ fn write_actions(
             .set_verb_metadata(
                 permissions,
                 &action.object,
-                action.uuid,
+                uuid,
                 Symbol::mk(BASE_KEY),
                 action.baseline,
             )
