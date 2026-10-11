@@ -62,7 +62,18 @@ const baseRow = {
 };
 const defaultCapabilities = {
     schema: 1,
-    operations: ["packages", "status", "review", "details", "inspection", "diagnostics", "resolve", "apply", "refresh"],
+    operations: [
+        "packages",
+        "status",
+        "review",
+        "details",
+        "inspection",
+        "diagnostics",
+        "resolve",
+        "apply",
+        "refresh",
+        "prepare_apply",
+    ],
     fields: ["program"],
     choices: ["incoming", "local", "edited", "defer"],
     transports: ["upload"],
@@ -143,7 +154,32 @@ beforeEach(() => {
             generation++;
             return { result: { ...common, generation, validation: [] }, output: [] };
         }
+        if (method === "prepare_apply") {
+            return {
+                result: {
+                    ...common,
+                    prepared: {
+                        review_id: 1,
+                        generation,
+                        package_generation: 1,
+                        evidence: { schema: 1, guard: "evidence" },
+                    },
+                    counts: { baseline: 1 },
+                    effects: [{ id: target.row, label: "$test:verb", effect: "baseline", defaulted: false }],
+                    next: 0,
+                    total: 1,
+                    can_apply: true,
+                },
+                output: [],
+            };
+        }
         if (method === "apply") {
+            expect(args[2]).toEqual({
+                review_id: 1,
+                generation,
+                package_generation: 1,
+                evidence: { schema: 1, guard: "evidence" },
+            });
             applied = true;
             return { result: { ...common, status: "applying" }, output: [] };
         }
@@ -167,19 +203,19 @@ it("opens a review-specific comparison and tells the truth about missing baselin
     expect(screen.getByTestId("diff").textContent).toBe("return 1; → return 2;");
     expect(screen.getByText("Load the accepted source to compare all three versions.")).toBeTruthy();
     expect(screen.queryByRole("option", { name: "Accepted baseline → Local" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Apply 0 choices" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Review planned effects" })).toHaveProperty("disabled", true);
 });
 
 it("advances the generation after a choice and requires a separate explicit apply", async () => {
     open();
-    fireEvent.click(await screen.findByRole("button", { name: "Keep local" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Keep my code" }));
     await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Apply 1 choice" })).toHaveProperty("disabled", false)
+        expect(screen.getByRole("button", { name: "Review planned effects" })).toHaveProperty("disabled", false)
     );
     expect(applied).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Apply 1 choice" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review planned effects" }));
     expect(applied).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Confirm apply" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm apply" }));
     await screen.findByText("Updates applied.");
     expect(applied).toBe(true);
 });
@@ -191,7 +227,7 @@ it("keeps an edited resolution separate from the running verb and protects unsav
         target: { value: "return 3;\nreturn 4;" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    expect(screen.getByText("Discard the unsaved draft?")).toBeTruthy();
+    expect(screen.getByText("Discard the unsaved draft before leaving this item?")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     fireEvent.click(screen.getByRole("button", { name: "Save proposed program" }));
     await waitFor(() => expect(saved.choice).toBe("edited"));
@@ -201,14 +237,14 @@ it("keeps an edited resolution separate from the running verb and protects unsav
 
 it("requires confirmation to rebuild stale evidence and clear choices", async () => {
     open();
-    fireEvent.click(await screen.findByRole("button", { name: "Keep local" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Keep my code" }));
     await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Apply 1 choice" })).toHaveProperty("disabled", false)
+        expect(screen.getByRole("button", { name: "Review planned effects" })).toHaveProperty("disabled", false)
     );
     rejectChoice = true;
     fireEvent.click(await screen.findByRole("button", { name: "Use upstream" }));
     await screen.findByText("Live state changed. Refresh before choosing.");
-    expect(screen.getByRole("button", { name: "Apply 1 choice" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Review planned effects" })).toHaveProperty("disabled", true);
     fireEvent.click(screen.getByRole("button", { name: "Reload review" }));
     await screen.findByText("Live state changed. Refresh before choosing.");
     fireEvent.click(screen.getByRole("button", { name: "Refresh comparison" }));
@@ -221,11 +257,11 @@ it("requires confirmation to rebuild stale evidence and clear choices", async ()
     await screen.findByRole("heading", { name: "$test:verb" });
     expect(saved).toEqual({});
     expect(generation).toBe(3);
-    expect(screen.getByRole("button", { name: "Apply 0 choices" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Review planned effects" })).toHaveProperty("disabled", true);
     expect(applied).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Use upstream" }));
     await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Apply 1 choice" })).toHaveProperty("disabled", false)
+        expect(screen.getByRole("button", { name: "Review planned effects" })).toHaveProperty("disabled", false)
     );
 });
 
@@ -261,7 +297,7 @@ it("browses local-only objects, verbs and properties without offering mutation c
         incoming_present: true,
         incoming_text: "value: Original",
     });
-    const program = { ...baseRow, classification: "local" };
+    const program = { ...baseRow, classification: "local", default: "local" };
     const common = { schema: 1, review_id: 1, generation: 1 };
     vi.mocked(invokeVerbFlatBuffer).mockImplementation(async (_token, _provider, method, bytes) => {
         const args = new MoorVar(Var.getRootAsVar(new ByteBuffer(bytes!))).toJS() as unknown[];
@@ -274,7 +310,7 @@ it("browses local-only objects, verbs and properties without offering mutation c
             return {
                 result: {
                     ...common,
-                    rows: args[3] === "changed" || args[3] === "local" ? [program] : [],
+                    rows: !args[3] || args[3] === "changed" || args[3] === "local" ? [program] : [],
                     cursor: [],
                     counts: { local: 1 },
                     decision_counts: { selected: 0, unresolved: 0, blocked: 0 },
@@ -310,8 +346,9 @@ it("browses local-only objects, verbs and properties without offering mutation c
     );
     expect(screen.queryByRole("button", { name: "Use upstream" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Edit resolution" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Apply 0 choices" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Review planned effects" })).toHaveProperty("disabled", true);
     fireEvent.change(screen.getByRole("combobox", { name: "Show" }), { target: { value: "local" } });
+    fireEvent.click(screen.getByRole("button", { name: /\$local.edited/ }));
     await screen.findByRole("heading", { name: "$local.edited" });
     expect(screen.getByRole("option", { name: "Local edits (2)" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /\$local.edited/ })).toBeTruthy();
@@ -339,7 +376,7 @@ it("reads the current saved draft on reconnect when there is no unsaved text", a
     generation++;
     saved = { choice: "edited", program: "return 42;", validated: true };
     view.rerender(<ChangeReview visible target={target} authToken="token" onClose={vi.fn()} connectionRevision={1} />);
-    await screen.findByText("Generation 2");
+    await screen.findByText("Saved: Use my edited code");
     await waitFor(() =>
         expect(screen.getByRole("button", { name: "Edit resolution" })).toHaveProperty("disabled", false)
     );
@@ -352,8 +389,8 @@ it("does not offer unadvertised operations or call optional inspection APIs", as
     open();
     await screen.findByRole("heading", { name: "$test:verb" });
     expect(screen.queryByRole("button", { name: "Edit resolution" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Keep local" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Apply 0 choices" })).toHaveProperty("disabled", true);
+    expect(screen.queryByRole("button", { name: "Keep my code" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Review planned effects" })).toHaveProperty("disabled", true);
     const methods = vi.mocked(invokeVerbFlatBuffer).mock.calls.map(call => call[2]);
     expect(methods).not.toContain("inspection");
     expect(methods).not.toContain("diagnostics");
@@ -381,11 +418,11 @@ it("keeps source details and empty groups out of the comparison", async () => {
     await screen.findByRole("heading", { name: "$test:verb" });
     expect(screen.queryByRole("button", { name: /^Groups/ })).toBeNull();
     expect(screen.queryByRole("table")).toBeNull();
-    expect(screen.getByRole("button", { name: "Create group" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Create group" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Upstream source" }));
     expect(screen.getByRole("row", { name: "URL https://example.test/core.moo" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "$test:verb" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Left unchanged" }));
+    fireEvent.click(screen.getByRole("button", { name: "Limitations" }));
     expect(screen.getByText("Existing property values and overrides")).toBeTruthy();
     expect(screen.getAllByText(/Existing property values and overrides remain unchanged/)).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Changes" }));

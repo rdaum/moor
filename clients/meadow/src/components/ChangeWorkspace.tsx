@@ -56,6 +56,7 @@ function bindingArguments(input: string): Record<string, ObjectArgument> {
 }
 
 export function ChangeWorkspace({ service, authToken, isWizard, onClose, connectionRevision = 0 }: Props) {
+    const [section, setSection] = useState<"updates" | "settings" | "history" | "upload" | "repair">("updates");
     const [packages, setPackages] = useState<ChangePackage[]>([]);
     const [selected, setSelected] = useState(service.capabilities.defaultPackage);
     const [history, setHistory] = useState<CompletedReview[]>([]);
@@ -211,9 +212,9 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
             const size = files.reduce((sum, file) => sum + file.size, 0);
             if (size > capabilities.maxSourceBytes) throw new Error("Source exceeds the service limit.");
             const sources = await Promise.all(files.map(async file => ({ label: file.name, text: await file.text() })));
-            await service.stage(selected, sources, adopting ? "adopt" : "update");
+            const started = await service.stage(selected, sources, adopting ? "adopt" : "update");
             setFiles([]);
-            await load();
+            setReview(started);
         });
     if (review) {
         return (
@@ -242,25 +243,51 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
                 }}
             >
                 <div className="change-workspace">
-                    <p>Review upstream programs against this world's accepted baseline and local changes.</p>
+                    <p>Find upstream updates, preserve local work, and review what will change before applying.</p>
+                    <nav className="change-workspace-actions" aria-label="Update tasks">
+                        {([["updates", "Updates"], ["history", "History"], ["settings", "Settings"], [
+                            "upload",
+                            "Review files",
+                        ], ["repair", "Repair history"]] as const).map(([key, label]) => (
+                            <button
+                                key={key}
+                                type="button"
+                                aria-pressed={section === key}
+                                disabled={busy}
+                                onClick={() =>
+                                    navigate(() => {
+                                        setSection(key);
+                                        setEditor(null);
+                                        setAdopting(key === "repair");
+                                    })}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                        <button type="button" disabled={busy} onClick={() => navigate(onClose)}>Close</button>
+                    </nav>
                     {error && <p role="alert">{error}</p>}
                     <div className="change-workspace-actions">
-                        <label>
-                            Package{" "}
-                            <select
-                                aria-label="Package"
-                                disabled={busy || editor !== null}
-                                value={selected}
-                                onChange={event => navigate(() => setSelected(event.target.value))}
-                            >
-                                {!packages.some(item => item.name === selected) && (
-                                    <option value={selected}>{selected || "Select a package"}</option>
-                                )}
-                                {packages.map(item => <option key={item.name}>{item.name}</option>)}
-                            </select>
-                        </label>
-                        <button type="button" disabled={busy} onClick={() => void load()}>Reload packages</button>
-                        {service.supports("configure") && (
+                        {(packages.length > 1 || section === "settings") && (
+                            <label>
+                                Package{" "}
+                                <select
+                                    aria-label="Package"
+                                    disabled={busy || editor !== null}
+                                    value={selected}
+                                    onChange={event => navigate(() => setSelected(event.target.value))}
+                                >
+                                    {!packages.some(item => item.name === selected) && (
+                                        <option value={selected}>{selected || "Select a package"}</option>
+                                    )}
+                                    {packages.map(item => <option key={item.name}>{item.name}</option>)}
+                                </select>
+                            </label>
+                        )}
+                        {section === "settings" && (
+                            <button type="button" disabled={busy} onClick={() => void load()}>Reload packages</button>
+                        )}
+                        {section === "settings" && service.supports("configure") && (
                             <button
                                 type="button"
                                 disabled={busy || editor !== null || packages.length >= capabilities.maxPackages}
@@ -269,7 +296,6 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
                                 New package
                             </button>
                         )}
-                        <button type="button" disabled={busy} onClick={() => navigate(onClose)}>Close</button>
                     </div>
                     {editor
                         ? (
@@ -433,44 +459,70 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
                         )
                         : item && (
                             <>
-                                <p>
-                                    {item.objects.length} managed objects · Configuration generation {item.generation}
-                                </p>
-                                <p>
-                                    Source scope: {item.complete.length === item.objects.length && item.objects.length
-                                        ? "complete"
-                                        : item.complete.length
-                                        ? "mixed"
-                                        : "partial"}. Omitted members stay unchanged.
-                                </p>
-                                {isWizard && service.supports("propose_objects") && (
-                                    <button
-                                        type="button"
-                                        disabled={busy || Boolean(item.active)}
-                                        onClick={() => navigate(() => edit("bindings"))}
-                                    >
-                                        Object bindings and source scope
-                                    </button>
+                                {section === "settings" && (
+                                    <section aria-label="Package settings">
+                                        <p>
+                                            {item.objects.length} managed objects · Configuration generation{" "}
+                                            {item.generation}
+                                        </p>
+                                        <p>
+                                            Source scope:{" "}
+                                            {item.complete.length === item.objects.length && item.objects.length
+                                                ? "complete"
+                                                : item.complete.length
+                                                ? "mixed"
+                                                : "partial"}. Omitted members stay unchanged.
+                                        </p>
+                                        {isWizard && service.supports("propose_objects") && (
+                                            <button
+                                                type="button"
+                                                disabled={busy || Boolean(item.active)}
+                                                onClick={() => navigate(() => edit("bindings"))}
+                                            >
+                                                Object bindings and source scope
+                                            </button>
+                                        )}
+                                        <p>
+                                            Upstream: {typeof item.upstream === "string"
+                                                ? item.upstream || "Upload only"
+                                                : `${item.upstream.repository} / ${item.upstream.path} (${
+                                                    Object.values(item.upstream.revision)[0]
+                                                })`}
+                                        </p>
+                                        {service.supports("upstream") && (
+                                            <button
+                                                type="button"
+                                                disabled={busy || Boolean(item.active)}
+                                                onClick={() => navigate(() => edit("upstream"))}
+                                            >
+                                                Configure upstream
+                                            </button>
+                                        )}
+                                    </section>
                                 )}
-                                <p>
-                                    Upstream: {typeof item.upstream === "string"
-                                        ? item.upstream || "Upload only"
-                                        : `${item.upstream.repository} / ${item.upstream.path} (${
-                                            Object.values(item.upstream.revision)[0]
-                                        })`}
-                                </p>
-                                {service.supports("upstream") && (
-                                    <button
-                                        type="button"
-                                        disabled={busy || Boolean(item.active)}
-                                        onClick={() => navigate(() => edit("upstream"))}
-                                    >
-                                        Configure upstream
-                                    </button>
+                                {section === "updates" && !item.active && (
+                                    <section className="change-workspace-primary" aria-label="Check upstream">
+                                        <h3>{item.name} updates</h3>
+                                        <p>
+                                            {item.upstream
+                                                ? "Check the configured upstream. Nothing changes in the running MOO until you review and apply."
+                                                : "Configure an upstream in Settings, or review supplied objdef files."}
+                                        </p>
+                                        {gitRestricted && <p>Fetching Git source requires wizard authority.</p>}
+                                        <button
+                                            type="button"
+                                            className="btn-primary"
+                                            disabled={busy || !canStage}
+                                            onClick={() =>
+                                                void stage()}
+                                        >
+                                            Check for updates
+                                        </button>
+                                    </section>
                                 )}
                                 {item.active
                                     ? (
-                                        <section aria-label="Active review">
+                                        <section aria-label="Active review" hidden={section !== "updates"}>
                                             <h3>Review {item.active}</h3>
                                             <p role="status">{active?.status ?? "Loading review status…"}</p>
                                             {active?.error?.message && <p role="alert">{active.error.message}</p>}
@@ -481,6 +533,24 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
                                                     onClick={() => setReview(target(item.active, active.generation))}
                                                 >
                                                     Open review
+                                                </button>
+                                            )}
+                                            {active?.status === "failed" && service.supports("discard") && (
+                                                <button
+                                                    type="button"
+                                                    disabled={busy}
+                                                    onClick={() =>
+                                                        void run(async () => {
+                                                            await service.discard(item.active, active.generation);
+                                                            const started = await service.stage(
+                                                                item.name,
+                                                                [],
+                                                                "update",
+                                                            );
+                                                            setReview(started);
+                                                        })}
+                                                >
+                                                    Retry after fixing the source or worker
                                                 </button>
                                             )}
                                             {active && service.supports("discard") && (
@@ -495,8 +565,22 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
                                         </section>
                                     )
                                     : (
-                                        <section aria-label="Stage source">
-                                            <h3>Prepare a review</h3>
+                                        <section
+                                            aria-label="Stage source"
+                                            hidden={section !== "upload" && section !== "repair"}
+                                        >
+                                            <h3>
+                                                {section === "repair"
+                                                    ? "Repair accepted history"
+                                                    : "Review supplied files"}
+                                            </h3>
+                                            {section === "repair" && (
+                                                <p>
+                                                    Use the original upstream source that this world accepted. Adoption
+                                                    records that version for future comparisons without replacing live
+                                                    code. It is not a way to merge an unknown version.
+                                                </p>
+                                            )}
                                             {capabilities.transports.includes("upload") && (
                                                 <label>
                                                     Upload objdef files<input
@@ -514,7 +598,7 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
                                                     ? `${files.length} files selected.`
                                                     : "Fetch uses the configured upstream."}
                                             </p>
-                                            <label>
+                                            <label hidden={section !== "repair"}>
                                                 <input
                                                     type="checkbox"
                                                     checked={adopting}
@@ -540,7 +624,7 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
                                         </section>
                                     )}
                                 {service.supports("history") && (
-                                    <section aria-label="Completed reviews">
+                                    <section aria-label="Completed reviews" hidden={section !== "history"}>
                                         <h3>Completed reviews</h3>
                                         {!history.length && <p>No retained completed reviews.</p>}
                                         {history.map(receipt => (
@@ -553,8 +637,12 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
                                                 >
                                                     Review {receipt.review}
                                                 </button>{" "}
-                                                · {receipt.status} · {receipt.decisionCount} decisions ·{" "}
+                                                · {receipt.status} · {receipt.decisionCount} decisions · by{" "}
+                                                {receipt.actor || "the requesting administrator"} ·{" "}
                                                 {new Date(receipt.completedAt * 1000).toLocaleString()}
+                                                <small>
+                                                    {String(receipt.provenance.commit ?? receipt.provenance.url ?? "")}
+                                                </small>
                                             </p>
                                         ))}
                                     </section>

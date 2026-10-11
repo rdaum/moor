@@ -1751,7 +1751,7 @@ object CHANGE_MANAGER [
     const selected = choice_counts["selected"];
     const unresolved = choice_counts["unresolved"];
     const descriptions = ["upstream" -> "Upstream edit", "local" -> "Local edit", "conflict" -> "Conflict", "converged" -> "Already matches", "unbased" -> "No baseline", "unchanged" -> "Unchanged", "incoming_only" -> "New member"];
-    const decisions = ["incoming" -> "Use upstream", "local" -> "Keep local", "edited" -> "Use edited program", "defer" -> "Skip", "unresolved" -> "Choose"];
+    const decisions = ["incoming" -> "Use upstream", "local" -> "Keep my code", "edited" -> "Use my edited code", "defer" -> "Decide later", "unresolved" -> "Choose"];
     const reasons = ["adoption_required" -> "Accepted upstream history is unknown; review history repair before adoption", "untrusted_target_authority" -> "Ownership or permissions block upgrades", "object_identity_mismatch" -> "Object identity doesn’t match", "change_group_required" -> "Declare the required change group first", "change_group_member_missing" -> "A required group member is missing", "verb_name_collision" -> "A local or inherited verb uses a conflicting name", "initialization_required" -> "Review the initial value, then use @changes initialize", "initial_value_required" -> "Supply an explicit initial value", "inherited_effects_require_approval" -> "Explicitly permit descendants to inherit this property", "property_name_collision" -> "An existing property conflicts with this addition", "object_address_occupied" -> "Object ID is occupied; discard, choose another binding, and fetch again", "object_binding_changed" -> "Object no longer matches its creation receipt", "creation_requires_wizard" -> "Object creation requires wizard authority", "invalid_object_parent" -> "A parent is missing or inheritance contains a cycle", "invalid_object_location" -> "A location is missing or containment contains a cycle", "missing_inherited_property" -> "An override names a property no parent defines"];
     for i in [1..length(rows)]
       const row = rows[i];
@@ -1776,7 +1776,7 @@ object CHANGE_MANAGER [
       elseif (kind == "incoming" && (record["request"]["operation"] == "adopt" || row["classification"] in {"unchanged", "converged"}))
         decision = "Record baseline";
       elseif (kind == "defer" && row["classification"] in {"local", "unchanged"})
-        decision = "Keep local";
+        decision = "Keep my code";
       endif
       const label = row["field"] == "object" ? this:_command_label(row["object"], names) | row["field"] == "property" ? this:_command_label(row["object"], names) + "." + row["names"][1] | this:_command_label(row["object"], names, row["names"][1]);
       const link = this:_command_review_link(record, label, row["id"]);
@@ -2536,7 +2536,7 @@ object CHANGE_MANAGER [
       endfor
       const row_id = this:_command_row(auth, id, generation, words[4]);
       const result = this:resolve(id, generation, row_id, words[5], program);
-      const labels = ["incoming" -> "Use upstream", "local" -> "Keep local", "defer" -> "Skip", "edited" -> "Use edited program"];
+      const labels = ["incoming" -> "Use upstream", "local" -> "Keep my code", "defer" -> "Decide later", "edited" -> "Use my edited code"];
       let output = {$format.title:mk(tostr("Review ", id, " · Generation ", result["generation"]), 3), $format.paragraph:mk(tostr(labels[words[5]], " saved for ", this:details(id, result["generation"], row_id)["row"]["label"], "."))};
       for validation in (result["validation"])
         if (validation["id"] == row_id && !validation["valid"])

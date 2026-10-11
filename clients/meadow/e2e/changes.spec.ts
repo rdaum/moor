@@ -15,9 +15,9 @@ import type {} from "./review";
 import { ChangesFixture, source } from "./changes-fixture";
 
 let fixture: ChangesFixture;
-test.beforeEach(async () => {
+test.beforeEach(async ({}, testInfo) => {
     fixture = new ChangesFixture();
-    await fixture.start();
+    await fixture.start({ extraMembers: testInfo.title.includes("large review") ? 65 : 0 });
 });
 test.afterEach(async () => {
     await fixture?.close();
@@ -125,8 +125,8 @@ test("Git review preserves choices and edited drafts across restart, then applie
     await page.getByRole("button", { name: "Upstream source", exact: true }).click();
     await expect(page.getByRole("region", { name: "Upstream source" })).toContainText(`sha1:${fixture.revisionB}`);
     await expect(page.getByRole("table")).toBeVisible();
-    await page.getByRole("button", { name: "Left unchanged", exact: true }).click();
-    await expect(page.getByRole("region", { name: "Left unchanged" })).toContainText(
+    await page.getByRole("button", { name: "Limitations", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Limitations" })).toContainText(
         "Existing property values and overrides",
     );
     await page.getByRole("button", { name: "Changes", exact: true }).click();
@@ -178,7 +178,7 @@ test("Git review preserves choices and edited drafts across restart, then applie
         review,
         generation: saved.status.generation,
     });
-    await page.getByRole("button", { name: /^Apply \d+ choices?$/ }).click();
+    await page.getByRole("button", { name: "Review planned effects" }).click();
     await page.getByRole("button", { name: "Confirm apply" }).click();
     await expect.poll(() => page.evaluate(id => window.changes.client(id).status(), review)).toMatchObject({
         status: "partial",
@@ -332,6 +332,7 @@ test("a failure after native writes rolls back programs, baselines, and receipts
 test("workspace configures bindings, fetches, discards, and adopts uploaded source", async ({ page }) => {
     await login(page);
     await page.evaluate(() => window.changes.workspace());
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: "New package", exact: true }).click();
     await page.getByLabel("Package name", { exact: true }).fill("workspace");
     await page.getByLabel("Managed objects").fill("#9500 #9501");
@@ -343,9 +344,8 @@ test("workspace configures bindings, fetches, discards, and adopts uploaded sour
     await page.getByRole("button", { name: "Save configuration" }).click();
     await expect(page.getByLabel("Package", { exact: true })).toHaveValue("workspace");
     await expect(page.getByText("2 managed objects", { exact: false })).toBeVisible();
-    await page.getByRole("button", { name: "Fetch source", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Open review", exact: true })).toBeEnabled();
-    await page.getByRole("button", { name: "Open review", exact: true }).click();
+    await page.getByRole("button", { name: "Updates", exact: true }).click();
+    await page.getByRole("button", { name: "Check for updates", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "workspace · Review 1", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Close", exact: true }).click();
     await page.getByRole("button", { name: "Discard review", exact: true }).click();
@@ -353,6 +353,7 @@ test("workspace configures bindings, fetches, discards, and adopts uploaded sour
     await expect(page.getByRole("region", { name: "Active review" })).toHaveCount(0);
 
     const { source } = await import("./changes-fixture");
+    await page.getByRole("button", { name: "Repair history", exact: true }).click();
     await page.getByLabel("Upload objdef files").setInputFiles({
         name: "base.moo",
         mimeType: "text/plain",
@@ -360,20 +361,21 @@ test("workspace configures bindings, fetches, discards, and adopts uploaded sour
     });
     await page.getByLabel("Adopt supplied source as the baseline").check();
     await page.getByRole("button", { name: "Review uploaded source" }).click();
-    await page.getByRole("button", { name: "Open review", exact: true }).click();
-    await page.getByRole("button", { name: "Accept 8 baselines", exact: true }).click();
+    await page.getByRole("button", { name: "Review history changes", exact: true }).click();
     await page.getByRole("button", { name: "Confirm apply", exact: true }).click();
     await expect(page.getByText("Updates applied.", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.getByRole("button", { name: "History", exact: true }).click();
     await expect(page.getByRole("region", { name: "Completed reviews" })).toContainText("Review 2");
     await page.getByRole("region", { name: "Completed reviews" }).getByRole("button", { name: "Review 2", exact: true })
         .click();
     await expect(page.getByText("Updates applied.", { exact: true })).toBeVisible();
     expect(await programs(page)).toEqual([1, 3, 3, 3, 3]);
     await page.getByRole("button", { name: "Results", exact: true }).click();
-    await expect(page.getByRole("region", { name: "Apply receipt" })).toContainText("#9500:edited");
-    await expect(page.getByRole("region", { name: "Apply receipt" })).toContainText("8 choices applied");
+    await expect(page.getByRole("region", { name: "Committed results" })).toContainText("#9500:edited");
+    await expect(page.getByRole("region", { name: "Committed results" })).toContainText("8 recorded decisions");
     await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: "Configure upstream" }).click();
     await page.getByRole("combobox", { name: "Source", exact: true }).selectOption("http");
     await page.getByLabel("Bundle URL").fill(fixture.httpUrl);
@@ -427,6 +429,7 @@ test("historical source verifies uploads and pinned Git revisions, survives rest
     const generation = (await page.evaluate(id => window.changes.client(id).status(), review)).generation;
     await page.evaluate(({ review, generation }) => window.changes.open(review, generation), { review, generation });
     await page.getByRole("button", { name: /:edited, Verb/ }).click();
+    await page.getByText("Accepted source for comparison", { exact: true }).click();
     await page.getByLabel("Upload accepted objdefs").setInputFiles({
         name: "wrong.moo",
         mimeType: "text/plain",
@@ -445,10 +448,14 @@ test("historical source verifies uploads and pinned Git revisions, survives rest
     await editor.focus();
     await editor.press("End");
     await editor.pressSequentially(" ");
+    await page.getByText("Accepted source for comparison", { exact: true }).click();
     await expect(page.getByRole("button", { name: "Fetch accepted source" })).toBeDisabled();
     await page.getByRole("button", { name: "Save proposed program" }).click();
     await expect(page.getByText("Choice saved. Live code has not changed.")).toBeVisible();
     await page.getByRole("button", { name: /:deferred, Verb/ }).click();
+    if (await page.locator("details.change-review-base-source").getAttribute("open") === null) {
+        await page.getByText("Accepted source for comparison", { exact: true }).click();
+    }
     await page.getByLabel("Upload accepted objdefs").setInputFiles({
         name: "ancestor.moo",
         mimeType: "text/plain",
@@ -570,13 +577,13 @@ test("a declared group installs a helper and property with its caller through Me
     await editor.getByRole("button", { name: "Save group", exact: true }).click();
     await expect(editor).toHaveCount(0);
     await page.getByRole("button", { name: "Select helper-update", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Apply 3 choices", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Review planned effects", exact: true })).toBeEnabled();
     expect(
         await page.evaluate(() =>
             window.changes.evaluate("return {#9500:upstream(), \"added_helper\" in verbs(#9500)};")
         ),
     ).toEqual([1, 0]);
-    await page.getByRole("button", { name: "Apply 3 choices", exact: true }).click();
+    await page.getByRole("button", { name: "Review planned effects", exact: true }).click();
     await page.getByRole("button", { name: "Confirm apply", exact: true }).click();
     await expect.poll(() => page.evaluate(id => window.changes.client(id).status(), review)).toMatchObject({
         status: "complete",
@@ -596,6 +603,7 @@ test("workspace binds a new object before preview and installs it without initia
     page.on("pageerror", error => browserErrors.push(error.message));
     await login(page);
     await page.evaluate(() => window.changes.workspace());
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: "New package", exact: true }).click();
     await page.getByLabel("Package name", { exact: true }).fill("new-objects");
     await page.getByRole("button", { name: "Save configuration", exact: true }).click();
@@ -609,13 +617,13 @@ test("workspace binds a new object before preview and installs it without initia
         + "property counter (owner: #2, flags: \"r\") = 42;\n"
         + "method run owner: #2\nreturn this.counter;\nendmethod\n"
         + "method initialize owner: #2\nthis.counter = 999;\nendmethod\nendobject";
+    await page.getByRole("button", { name: "Review files", exact: true }).click();
     await page.getByLabel("Upload objdef files").setInputFiles({
         name: "helper.moo",
         mimeType: "text/plain",
         buffer: Buffer.from(source),
     });
     await page.getByRole("button", { name: "Review uploaded source", exact: true }).click();
-    await page.getByRole("button", { name: "Open review", exact: true }).click();
     await expect(page.getByRole("region", { name: "New object definition" })).toContainText(
         "does not run initialization verbs",
     );
@@ -626,7 +634,7 @@ test("workspace binds a new object before preview and installs it without initia
     await editor.getByRole("checkbox", { name: "#9600 — new object and contents", exact: true }).check();
     await editor.getByRole("button", { name: "Save group", exact: true }).click();
     await page.getByRole("button", { name: "Select install-helper", exact: true }).click();
-    await page.getByRole("button", { name: "Apply 1 choice", exact: true }).click();
+    await page.getByRole("button", { name: "Review planned effects", exact: true }).click();
     await page.getByRole("button", { name: "Confirm apply", exact: true }).click();
     await expect(page.getByText("Updates applied.", { exact: true })).toBeVisible();
     expect(
@@ -637,13 +645,145 @@ test("workspace binds a new object before preview and installs it without initia
         ),
     ).toEqual([42, 4]);
     await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.getByRole("button", { name: "Review files", exact: true }).click();
     await page.getByLabel("Upload objdef files").setInputFiles({
         name: "helper.moo",
         mimeType: "text/plain",
         buffer: Buffer.from(source),
     });
     await page.getByRole("button", { name: "Review uploaded source", exact: true }).click();
-    await page.getByRole("button", { name: "Open review", exact: true }).click();
     await expect(page.getByText("3 unchanged members.", { exact: true })).toBeVisible();
     expect(browserErrors).toEqual([]);
+});
+
+test(
+    "a large review keeps decisions and drafts visible, previews all effects, and finishes through the UI",
+    async ({ page }, testInfo) => {
+        test.setTimeout(120_000);
+        const errors: string[] = [];
+        page.on("pageerror", error => errors.push(error.message));
+        await login(page);
+        await configure(page, "http");
+        await page.evaluate(() =>
+            window.changes.evaluate("$change_manager.default_package = \"acceptance\"; return true;")
+        );
+        await page.getByLabel("World command").focus();
+        await page.evaluate(() => window.changes.workspace());
+        await expect(page.getByRole("button", { name: "Check for updates", exact: true })).toBeEnabled();
+        await expect(page.getByLabel("Upload objdef files")).not.toBeVisible();
+        await expect(page.getByRole("button", { name: "New package", exact: true })).toHaveCount(0);
+        await page.getByRole("button", { name: "Check for updates", exact: true }).focus();
+        await page.keyboard.press("Enter");
+        await expect(
+            page.getByRole("group", { name: "Review summary" }).or(page.locator("[aria-label=\"Review summary\"]")),
+        ).toBeVisible();
+        await expect(page.getByRole("button", { name: /^Groups/ })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "Create group", exact: true })).toHaveCount(0);
+        const search = page.getByRole("searchbox", { name: "Find an object or member" });
+        await search.fill("extra_63");
+        await expect(page.getByRole("button", { name: /:extra_63, Verb/ })).toContainText("Automatic: Use upstream");
+        await search.fill("");
+        await page.getByRole("button", { name: /:conflict, Verb/ }).click();
+        await page.getByRole("button", { name: "Keep my code", exact: true }).click();
+        await expect(page.getByRole("button", { name: /:conflict, Verb/ })).toContainText("Saved: Keep my code");
+        await page.getByRole("button", { name: /:deferred, Verb/ }).click();
+        await page.getByRole("button", { name: "Decide later", exact: true }).click();
+        await page.getByRole("button", { name: /:edited, Verb/ }).click();
+        await page.getByRole("button", { name: "Edit resolution", exact: true }).click();
+        const editor = page.locator(".change-review-draft").getByRole("textbox", {
+            name: "Editor content",
+            exact: true,
+        });
+        await editor.focus();
+        await editor.press("ControlOrMeta+A");
+        await editor.pressSequentially("return 42;");
+        await page.getByRole("button", { name: "Consult the world", exact: true }).focus();
+        await page.keyboard.press("Enter");
+        await expect(page.locator(".change-review-shell")).toBeHidden();
+        await page.getByLabel("World command").fill("look");
+        await page.getByRole("button", { name: "Return to change review — unsaved draft", exact: true }).focus();
+        await page.keyboard.press("Enter");
+        await expect(page.getByRole("button", { name: "Consult the world", exact: true })).toBeFocused();
+        await expect(page.locator(".change-review-draft .view-lines")).toContainText("return 42;");
+        await page.getByRole("button", { name: "Save proposed program", exact: true }).click();
+        await expect(page.getByRole("button", { name: /:edited, Verb/ })).toContainText("Saved: Use my edited code");
+        await expect(page.locator(".change-review-diff")).toContainText("return 3;");
+        await expect(page.locator(".change-review-diff")).toContainText("return 2;");
+        await page.screenshot({ path: testInfo.outputPath("review-desktop.png") });
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect(page.locator(".change-review-pane-labels")).toHaveAttribute("data-layout", "unified");
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await page.locator(".change-review-diff").scrollIntoViewIfNeeded();
+        await expect(page.locator(".change-review-diff")).toContainText("return 3;");
+        await expect(page.locator(".change-review-diff")).toContainText("return 2;");
+        const codeBounds = await page.locator(".change-review-diff").boundingBox();
+        const actionsBounds = await page.locator(".change-review-resolution").boundingBox();
+        expect(actionsBounds!.y).toBeGreaterThanOrEqual(codeBounds!.y + codeBounds!.height);
+        await page.screenshot({ path: testInfo.outputPath("review-narrow.png") });
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await page.getByRole("button", { name: "Review planned effects", exact: true }).click();
+        const plan = page.getByRole("region", { name: "Planned effects" });
+        await expect(plan).toContainText("including automatic choices on pages you have not opened");
+        await expect(plan.locator("dl")).toContainText("68");
+        await page.getByRole("button", { name: "More planned effects", exact: true }).click();
+        await expect(plan).toContainText("extra_65");
+        await page.getByRole("button", { name: "Cancel", exact: true }).focus();
+        await page.keyboard.press("Shift+Tab");
+        expect(await page.evaluate(() => Boolean(document.activeElement?.closest("[role=\"alertdialog\"]")))).toBe(
+            true,
+        );
+        // Another administrator changes a saved choice after this prepared summary.
+        await choose(page, 1, "upstream", "incoming");
+        await page.getByRole("button", { name: "Confirm apply", exact: true }).click();
+        await expect(page.locator(".change-review-error")).toContainText("Review choices changed");
+        await page.getByRole("button", { name: "Reload review", exact: true }).click();
+        await expect(page.getByRole("button", { name: /:edited, Verb/ })).toContainText("Saved: Use my edited code");
+        await page.getByRole("button", { name: "Review planned effects", exact: true }).click();
+        await page.getByRole("button", { name: "Confirm apply", exact: true }).click();
+        const result = page.getByRole("region", { name: "Committed results" });
+        await expect(result).toContainText("The selected changes are installed.");
+        await page.getByRole("button", { name: "More recorded decisions", exact: true }).click();
+        await expect(result).toContainText("extra_65");
+        await page.getByRole("button", { name: "Finish review", exact: true }).click();
+        await expect(page.getByRole("alertdialog")).toContainText("Deferred contents and baselines stay unchanged");
+        await page.getByRole("button", { name: "Confirm finish", exact: true }).click();
+        await expect(result).toContainText("This review is closed.");
+        expect(await programs(page)).toEqual([2, 3, 3, 42, 3]);
+        await page.getByRole("button", { name: "Close", exact: true }).click();
+        await page.getByRole("button", { name: "History", exact: true }).click();
+        await expect(page.getByRole("region", { name: "Completed reviews" })).toContainText("finished");
+        await page.getByRole("button", { name: "Updates", exact: true }).click();
+        await page.getByRole("button", { name: "Check for updates", exact: true }).click();
+        await expect(page.getByRole("button", { name: /:deferred, Verb, Conflict/ })).toBeVisible();
+        expect(errors).toEqual([]);
+    },
+);
+
+test("refresh exposes saved work and restores its edited program without installing it", async ({ page }) => {
+    await login(page);
+    await configure(page, "git");
+    const review = await stage(page);
+    await choose(page, review, "edited", "edited", "return 42;");
+    const status = await page.evaluate(id => window.changes.client(id).status(), review);
+    await page.evaluate(({ review, generation }) => window.changes.open(review, generation), {
+        review,
+        generation: status.generation,
+    });
+    await expect(page.getByRole("button", { name: /:edited, Verb/ })).toContainText("Saved: Use my edited code");
+    // Simulate another administrator changing this member while the review is open.
+    await page.evaluate(() => window.changes.evaluate("return set_verb_code(#9500, \"edited\", {\"return 4;\"});"));
+    await page.getByRole("button", { name: "Refresh comparison", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm refresh", exact: true }).click();
+    await expect(page.getByRole("button", { name: /:edited, Verb/ })).toContainText("Check saved work");
+    await page.getByRole("button", { name: "Saved work", exact: true }).click();
+    const saved = page.getByRole("region", { name: "Saved work", exact: true });
+    await expect(saved).toContainText("contents or permissions changed");
+    await expect(saved.getByRole("textbox")).toHaveValue("return 42;");
+    await page.getByRole("button", { name: "Changes", exact: true }).click();
+    await page.getByRole("button", { name: /:edited, Verb/ }).click();
+    await page.getByRole("button", { name: "Edit resolution", exact: true }).click();
+    await expect(page.locator(".change-review-draft .view-lines")).toContainText("return 42;");
+    await page.getByRole("button", { name: "Save proposed program", exact: true }).click();
+    await expect(page.getByRole("button", { name: /:edited, Verb/ })).toContainText("Saved: Use my edited code");
+    expect(await page.evaluate(() => window.changes.evaluate("return #9500:edited();"))).toBe(4);
 });

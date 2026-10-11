@@ -40,7 +40,7 @@ true
 ; const text = $format.block:mk(@$change_manager:command({"diff", "3"})):compose(player, 'text_plain, false); return {index(text, "52 upstream updates; 1 local edit; 1 conflict. 56 members match the accepted baseline and upstream.") != 0, index(text, "$diff_target:update1") != 0, index(text, "$diff_target:update20") != 0, index(text, "$diff_target:update21") == 0, index(text, "$diff_target:same1") == 0};
 {true, true, true, true, true}
 
-; const text = $format.block:mk(@$change_manager:command({"diff", "3", "106"})):compose(player, 'text_plain, false); return {index(text, "$diff_target:update51") != 0, index(text, "$diff_target:local") != 0, index(text, "Keep local") != 0, index(text, "$diff_target:conflict") != 0, index(text, "Ownership or permissions") != 0, index(text, "1 member or group needs a choice") != 0};
+; const text = $format.block:mk(@$change_manager:command({"diff", "3", "106"})):compose(player, 'text_plain, false); return {index(text, "$diff_target:update51") != 0, index(text, "$diff_target:local") != 0, index(text, "Keep my code") != 0, index(text, "$diff_target:conflict") != 0, index(text, "Ownership or permissions") != 0, index(text, "1 member or group needs a choice") != 0};
 {true, true, true, true, true, true}
 
 ; const review = $change_manager:review(3, 1); return {review["decision_counts"], review["operation"]};
@@ -49,14 +49,14 @@ true
 ; const text = $format.block:mk(@$change_manager:command({"source", "3", "1", "56", "incoming"})):compose(player, 'text_plain, false); return {index(text, "Upstream contents") != 0, index(text, "$diff_target:update1") != 0, index(text, "1: return 2;") != 0};
 {true, true, true}
 
-; const text = $format.block:mk(@$change_manager:command({"resolve", "3", "1", "108", "local"})):compose(player, 'text_plain, false); return {index(text, "Generation 2") != 0, index(text, "Keep local saved") != 0};
+; const text = $format.block:mk(@$change_manager:command({"resolve", "3", "1", "108", "local"})):compose(player, 'text_plain, false); return {index(text, "Generation 2") != 0, index(text, "Keep my code saved") != 0};
 {true, true}
 
 // Numeric selectors retain stale-generation protection.
 ; return `$change_manager:command({"source", "3", "1", "56", "incoming"}) ! E_INVARG => "stale"';
 "stale"
 
-; const text = $format.block:mk(@$change_manager:command({"diff", "3", "106"})):compose(player, 'text_plain, false); return {index(text, "Keep local") != 0, index(text, "needs a choice") == 0};
+; const text = $format.block:mk(@$change_manager:command({"diff", "3", "106"})):compose(player, 'text_plain, false); return {index(text, "Keep my code") != 0, index(text, "needs a choice") == 0};
 {true, true}
 
 ; const page = $change_manager:review(3, 2); return {page["decision_counts"], page["rows"][1]["label"]};

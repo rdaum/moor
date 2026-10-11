@@ -23,13 +23,18 @@ import {
     CompilerDiagnostic,
     DiagnosticPage,
     InspectionPage,
+    needsAttention,
+    PreparedReview,
     ReviewPage,
     ReviewStatus,
 } from "../lib/change-review";
 import { ChangeServiceClient } from "../lib/change-service";
 import { ChangeGroupEditor } from "./ChangeGroupEditor";
 import { ReviewDiffEditor } from "./ReviewDiffEditor";
+import { ReviewEffects } from "./ReviewEffects";
 import { ReviewProgramEditor } from "./ReviewProgramEditor";
+import { ReviewRecovery } from "./ReviewRecovery";
+import { ReviewResult } from "./ReviewResult";
 import { ReviewSourceDetails } from "./ReviewSourceDetails";
 import "../lib/monaco";
 import { registerMooLanguage } from "../lib/monaco-moo";
@@ -47,15 +52,16 @@ interface Props {
 }
 const choices: Record<Choice, string> = {
     incoming: "Use upstream",
-    local: "Keep local",
-    edited: "Use edited program",
-    defer: "Skip",
+    local: "Keep my code",
+    edited: "Use my edited code",
+    defer: "Decide later",
     unresolved: "Choose a version",
 };
 const blockers: Record<string, string> = {
     untrusted_target_authority: "Ownership or permissions prevent updating this verb.",
     object_identity_mismatch: "The installed object and upstream object have different identities.",
-    adoption_required: "Accept an upstream baseline before updating this verb.",
+    adoption_required:
+        "The accepted upstream version is unknown, so local edits cannot be identified reliably. Repair history with the original upstream source before applying. Adoption records history; it does not merge code.",
     change_group_required: "Declare which changes must be installed together before selecting this program.",
     change_group_member_missing: "This group requires a member that is missing from the supplied source.",
     verb_name_collision:
@@ -88,7 +94,7 @@ const rowLabels: Record<Classification, string> = {
     upstream: "Upstream",
     local: "Local",
     converged: "Match",
-    unbased: "No baseline",
+    unbased: "History unknown",
     unchanged: "Unchanged",
     local_only: "Local only",
     incoming_only: "Upstream only",
@@ -102,14 +108,14 @@ const categories: Classification[] = [
     "unbased",
     "converged",
 ];
-type ReviewFilter = Classification | "all";
+type ReviewFilter = Classification | "all" | "attention";
 const noCompilerDiagnostics: CompilerDiagnostic[] = [];
 
 export function ChangeReview({ target, authToken, onClose, connectionRevision = 0 }: Props) {
     const id = useId();
     const { theme } = useTheme();
     const client = useMemo(() => new ChangeReviewClient(authToken, target), [authToken, target]);
-    const [view, setView] = useState<"changes" | "groups" | "source" | "unchanged" | "results">("changes");
+    const [view, setView] = useState<"changes" | "groups" | "source" | "unchanged" | "results" | "recovery">("changes");
     const [generation, setGeneration] = useState(target.generation);
     const [status, setStatus] = useState<ReviewStatus | null>(null);
     const [groupEditor, setGroupEditor] = useState<{ generation: number; group?: string } | null>(null);
@@ -117,6 +123,14 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
     const [service, setService] = useState<ChangeServiceClient | null>(null);
     const [diagnostics, setDiagnostics] = useState<DiagnosticPage | null>(null);
     const [page, setPage] = useState<ReviewPage | null>(null);
+    const [mobileView, setMobileView] = useState<"list" | "code">("code");
+    const [query, setQuery] = useState("");
+    const [plan, setPlan] = useState<PreparedReview | null>(null);
+    const [minimized, setMinimized] = useState(false);
+    const originFocus = useRef(document.activeElement as HTMLElement | null);
+    const hideButton = useRef<HTMLButtonElement>(null);
+    const resumeButton = useRef<HTMLButtonElement>(null);
+    const detailHeading = useRef<HTMLHeadingElement>(null);
     const [category, setCategory] = useState<ReviewFilter>("all");
     const [inspection, setInspection] = useState<InspectionPage | null>(null);
     const [rows, setRows] = useState<ChangeRow[]>([]);
@@ -128,13 +142,22 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
     const [draft, setDraft] = useState("");
     const [initialDraft, setInitialDraft] = useState("");
     const [comparison, setComparison] = useState("local-upstream");
-    const [sideBySide, setSideBySide] = useState(true);
+    const [sideBySide, setSideBySide] = useState(() => window.innerWidth >= 900);
     const [collapsedObjects, setCollapsedObjects] = useState<Set<string>>(() => new Set());
-    const [confirmation, setConfirmation] = useState<"apply" | "discard" | "refresh" | null>(null);
+    const [confirmation, setConfirmation] = useState<"apply" | "discard" | "refresh" | "finish" | null>(null);
     const pendingNavigation = useRef<(() => void) | null>(null);
     const sequence = useRef(0);
     const dirty = editing && draft !== initialDraft;
     const connection = useRef(connectionRevision);
+    useEffect(() => {
+        const media = window.matchMedia?.("(max-width: 899px)");
+        if (!media) return;
+        const resize = () => {
+            if (media.matches) setSideBySide(false);
+        };
+        media.addEventListener("change", resize);
+        return () => media.removeEventListener("change", resize);
+    }, []);
     const reviewState = useRef({ dirty, generation, row: row?.id, category });
     reviewState.current = { dirty, generation, row: row?.id, category };
     useEffect(() => {
@@ -152,7 +175,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
         setAllowDescendants(false);
         setEditing(false);
         setComparison("local-upstream");
-        const saved = detail?.choice?.program ?? detail?.live_text ?? "";
+        const saved = detail?.choice?.program ?? detail?.recovery?.program ?? detail?.live_text ?? "";
         setDraft(saved);
         setInitialDraft(saved);
     }, []);
@@ -166,6 +189,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
         setBusy(true);
         setError("");
         selectDetail(null);
+        setPlan(null);
         try {
             const available = await ChangeServiceClient.connect(authToken, target.provider);
             if (request !== sequence.current) return;
@@ -174,6 +198,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
             const current = await client.status();
             if (request !== sequence.current) return;
             setStatus(current);
+            if (current.receipt && !selected) setView("results");
             if (!["ready", "partial", "rejected"].includes(current.status)) {
                 setPage(null);
                 setDiagnostics(null);
@@ -185,25 +210,51 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
             const detail = selected ? await client.details(version, selected) : null;
             const nextCategory = filter ?? "all";
             const [overview, inspected, checks] = await Promise.all([
-                client.page(version, [], nextCategory === "all" ? "changed" : nextCategory),
+                client.page(version),
                 available.supports("inspection")
                     ? client.inspection(
                         version,
                         1,
-                        nextCategory === "all" ? "" : nextCategory,
+                        "",
                     )
                     : Promise.resolve({ rows: [], counts: {}, revision: "", next: 0 }),
                 available.supports("diagnostics") ? client.diagnostics(version) : Promise.resolve(null),
             ]);
-            const shownRows = [...overview.rows, ...inspected.rows].sort((a, b) => a.label.localeCompare(b.label));
+            // Load the member index, not source bodies, so search and attention navigation span every page.
+            const indexed = [...overview.rows];
+            let cursor = overview.cursor;
+            const seen = new Set<string>();
+            while (cursor.length) {
+                const key = JSON.stringify(cursor);
+                if (seen.has(key)) throw new Error("The service repeated a review page.");
+                seen.add(key);
+                const next = await client.page(version, cursor);
+                if (request !== sequence.current) return;
+                indexed.push(...next.rows);
+                cursor = next.cursor;
+            }
+            let inspectedPage = inspected;
+            const inspectedRows = [...inspected.rows];
+            const offsets = new Set<number>();
+            while (inspectedPage.next) {
+                if (offsets.has(inspectedPage.next)) throw new Error("The service repeated an inspection page.");
+                offsets.add(inspectedPage.next);
+                inspectedPage = await client.inspection(version, inspectedPage.next, "", inspected.revision);
+                if (request !== sequence.current) return;
+                inspectedRows.push(...inspectedPage.rows);
+            }
+            const shownRows = [...indexed, ...inspectedRows].filter(item => item.classification !== "unchanged")
+                .sort((a, b) =>
+                    Number(needsAttention(b)) - Number(needsAttention(a)) || a.label.localeCompare(b.label)
+                );
             const first = detail ?? (shownRows[0] ? await client.details(version, shownRows[0].id) : null);
             if (request !== sequence.current) return;
             setGeneration(version);
             setCategory(nextCategory);
-            setPage(overview);
-            setInspection(inspected);
+            setPage({ ...overview, cursor: [] });
+            setInspection({ ...inspectedPage, rows: inspectedRows });
             setDiagnostics(checks);
-            setRows(overview.rows);
+            setRows(indexed);
             selectDetail(first);
         } catch (failure) {
             if (request === sequence.current) fail(failure);
@@ -252,7 +303,10 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                 if (cancelled) return;
                 setStatus(current);
                 if (["applying", "fetching"].includes(current.status)) timer = setTimeout(poll, 1000);
-                else if (["partial", "ready", "rejected"].includes(current.status)) await load(current.generation);
+                else {
+                    if (current.receipt) setView("results");
+                    if (["partial", "ready", "rejected"].includes(current.status)) await load(current.generation);
+                }
             } catch (failure) {
                 if (!cancelled) fail(failure);
             }
@@ -276,38 +330,10 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
         setError("");
         try {
             const detail = await client.details(generation, selected.id);
-            if (request === sequence.current) selectDetail(detail);
-        } catch (failure) {
-            if (request === sequence.current) fail(failure);
-        } finally {
-            if (request === sequence.current) setBusy(false);
-        }
-    };
-    const more = async () => {
-        if (!page || (!page.cursor.length && !inspection?.next)) return;
-        const request = ++sequence.current;
-        setBusy(true);
-        try {
-            const [next, inspected] = await Promise.all([
-                page.cursor.length
-                    ? client.page(generation, page.cursor, category === "all" ? "changed" : category)
-                    : null,
-                inspection?.next
-                    ? client.inspection(
-                        generation,
-                        inspection.next,
-                        category === "all" ? "" : category,
-                        inspection.revision,
-                    )
-                    : null,
-            ]);
-            if (request !== sequence.current) return;
-            if (next) {
-                setRows(previous => [...previous, ...next.rows]);
-                setPage(next);
-            }
-            if (inspected) {
-                setInspection(previous => ({ ...inspected, rows: [...(previous?.rows ?? []), ...inspected.rows] }));
+            if (request === sequence.current) {
+                selectDetail(detail);
+                setMobileView("code");
+                if (window.innerWidth < 900) requestAnimationFrame(() => detailHeading.current?.focus());
             }
         } catch (failure) {
             if (request === sequence.current) fail(failure);
@@ -342,7 +368,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
             if (request !== sequence.current) return;
             await load(next, row.id, category);
             setNotice(
-                "Initialization permitted. Saved choices were cleared. Select the required group before applying.",
+                "Initialization permitted. Saved decisions remain available. Review the required group before applying.",
             );
         } catch (failure) {
             if (request === sequence.current) {
@@ -400,9 +426,12 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
         setBusy(true);
         setError("");
         try {
-            const result = await client.apply(generation);
+            if (!plan?.canApply) throw new Error("Read the planned effects before applying.");
+            const result = await client.apply(plan.generation, plan.handle);
             if (request !== sequence.current) return;
             setStatus(result);
+            if (result.receipt) setView("results");
+            setPlan(null);
             selectDetail(null);
             if (["partial", "ready", "rejected"].includes(result.status)) await load(result.generation);
             else setPage(null);
@@ -410,6 +439,46 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
             if (request === sequence.current) fail(failure);
         } finally {
             if (request === sequence.current) setBusy(false);
+        }
+    };
+
+    const prepare = async (offset = 1) => {
+        if (busy || dirty) return;
+        const request = ++sequence.current;
+        setBusy(true);
+        setError("");
+        try {
+            const next = await client.prepare(generation, offset);
+            if (request !== sequence.current) return;
+            if (offset > 1 && plan && JSON.stringify(next.handle) !== JSON.stringify(plan.handle)) {
+                throw new Error("The prepared selection changed. Read its effects again.");
+            }
+            setPlan(offset > 1 && plan ? { ...next, effects: [...plan.effects, ...next.effects] } : next);
+            setConfirmation("apply");
+        } catch (failure) {
+            if (request === sequence.current) {
+                setPlan(null);
+                setConfirmation(null);
+                fail(failure);
+            }
+        } finally {
+            if (request === sequence.current) setBusy(false);
+        }
+    };
+    const finish = async () => {
+        setConfirmation(null);
+        setBusy(true);
+        try {
+            const result = await client.finish(status?.generation ?? generation);
+            setStatus(result);
+            setPage(null);
+            setPlan(null);
+            selectDetail(null);
+            setView("results");
+        } catch (failure) {
+            fail(failure);
+        } finally {
+            setBusy(false);
         }
     };
 
@@ -430,7 +499,22 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
         }
     };
 
-    const displayedRows = [...rows, ...(inspection?.rows ?? [])].sort((a, b) => a.label.localeCompare(b.label));
+    const allRows = [...rows, ...(inspection?.rows ?? [])]
+        .sort((a, b) => Number(needsAttention(b)) - Number(needsAttention(a)) || a.label.localeCompare(b.label));
+    const attention = allRows.filter(needsAttention);
+    const displayedRows = allRows.filter(item =>
+        (category === "all"
+            ? item.classification !== "unchanged"
+            : category === "attention"
+            ? needsAttention(item)
+            : item.classification === category)
+        && item.label.toLocaleLowerCase().includes(query.toLocaleLowerCase())
+    );
+    const nextAttention =
+        attention.find(item =>
+            item.id !== row?.id && allRows.indexOf(item) > allRows.findIndex(item => item.id === row?.id)
+        )
+            ?? attention.find(item => item.id !== row?.id);
     const groups = new Map<string, { label: string; object?: ChangeRow; members: ChangeRow[] }>();
     for (const item of displayedRows) {
         let group = groups.get(item.objectKey);
@@ -449,10 +533,31 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
             else next.add(key);
             return next;
         });
+    const choiceLabel = (item: ChangeRow, selected: Choice) => {
+        if (page?.operation === "adopt" && selected === "incoming") return "Accept baseline";
+        if (item.field !== "program") {
+            if (selected === "incoming") {
+                return item.operation === "add_object"
+                    ? "Create object"
+                    : item.operation === "add_property"
+                    ? "Create property"
+                    : "Keep live contents";
+            }
+            if (selected === "local") return "Keep live contents";
+        }
+        if (item.operation === "add_verb" && selected === "incoming") return "Add verb";
+        return choices[selected];
+    };
     const itemButton = (item: ChangeRow, object = false) => {
         const blocked = !item.read_only && !item.eligible;
         const description = `${item.label}, ${fieldLabels[item.field ?? "program"]}, ${rowLabels[item.classification]}${
-            blocked ? ", Blocked" : ""
+            blocked ? ", Cannot apply" : ""
+        }${
+            item.read_only
+                ? ""
+                : item.needsReview
+                ? ", Check saved work"
+                : `, ${item.choice ? "Saved" : "Automatic"}: ${choiceLabel(item, item.choice?.choice ?? item.default)}`
         }`;
         return (
             <button
@@ -469,7 +574,16 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
             >
                 <code>{object ? item.objectLabel : item.memberLabel}</code>
                 {(category === "all" || blocked) && (
-                    <small>{blocked ? "Blocked" : rowLabels[item.classification]}</small>
+                    <small>{blocked ? "Cannot apply" : rowLabels[item.classification]}</small>
+                )}
+                {!item.read_only && (
+                    <small className="change-review-saved-choice">
+                        {item.needsReview ? "Check saved work" : item.choice
+                            ? `Saved: ${choiceLabel(item, item.choice.choice)}`
+                            : item.default === "unresolved"
+                            ? "Choose a version"
+                            : `Automatic: ${choiceLabel(item, item.default)}`}
+                    </small>
                 )}
             </button>
         );
@@ -500,749 +614,963 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
         ? "The upstream fetch failed."
         : status?.status === "complete"
         ? "Updates applied."
+        : status?.status === "finished"
+        ? "Review finished."
         : status?.status === "discarded"
         ? "This review was discarded."
         : "Compare local contents with the fetched source.";
     const canApply = Boolean(
-        service?.supports("apply") && service.capabilities.fields.includes("program") && page && selectedCount
+        service?.supports("prepare_apply") && service.supports("apply")
+            && service.capabilities.fields.includes("program") && page && selectedCount
             && !page.decision_counts.unresolved && !busy && !dirty
             && !error && !applying,
     );
 
     return (
-        <div className="change-review-shell" aria-busy={busy || applying}>
-            <DialogSheet
-                title={`${status?.package ?? "Changes"} · Review ${target.review}`}
-                titleId={id}
-                onCancel={() => navigate(onClose)}
-                maxWidth="1440px"
+        <>
+            {minimized && (
+                <button
+                    type="button"
+                    ref={resumeButton}
+                    className="change-review-resume"
+                    onClick={() => {
+                        setMinimized(false);
+                        requestAnimationFrame(() => hideButton.current?.focus());
+                    }}
+                >
+                    Return to change review{dirty ? " — unsaved draft" : ""}
+                </button>
+            )}
+            <div
+                hidden={minimized}
+                className="change-review-shell"
+                data-mobile-view={mobileView}
+                aria-busy={busy || applying}
             >
-                <div className="change-review-toolbar">
-                    <span role="status">{statusText}</span>
-                    <small>Generation {status?.generation ?? generation}</small>
-                    {service?.supports("refresh") && status
-                        && ["ready", "partial", "rejected", "interrupted"].includes(status.status) && (
+                <DialogSheet
+                    modal={false}
+                    title={`${status?.package ?? "Changes"} · Review ${target.review}`}
+                    titleId={id}
+                    onCancel={() => navigate(onClose)}
+                    maxWidth="1440px"
+                >
+                    <div className="change-review-toolbar">
+                        <span role="status">
+                            {statusText === "Compare local contents with the fetched source." ? "" : statusText}
+                        </span>
                         <button
                             type="button"
-                            disabled={busy}
-                            onClick={() => setConfirmation("refresh")}
+                            ref={hideButton}
+                            onClick={() => {
+                                setMinimized(true);
+                                requestAnimationFrame(() => {
+                                    if (
+                                        originFocus.current?.isConnected && !originFocus.current.closest("[hidden]")
+                                    ) originFocus.current.focus();
+                                    else resumeButton.current?.focus();
+                                });
+                            }}
                         >
-                            Refresh comparison
+                            Consult the world
                         </button>
-                    )}
-                    <button type="button" onClick={() => navigate(onClose)}>Close</button>
-                </div>
-                {error && (
-                    <div role="alert" className="change-review-error">
-                        {error}
-                        <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() =>
-                                navigate(() => {
-                                    void client.status().then(current => load(current.generation, undefined, category))
-                                        .catch(fail);
-                                })}
-                        >
-                            Reload review
-                        </button>
-                    </div>
-                )}
-                {notice && <p role="status" className="change-review-notice">{notice}</p>}
-                {status?.error?.message && <p role="alert">{status.error.message}</p>}
-                <nav className="change-review-nav" aria-label="Review sections">
-                    <button type="button" aria-pressed={view === "changes"} onClick={() => setView("changes")}>
-                        Changes
-                    </button>
-                    {!!page?.groups.length && (
-                        <button
-                            type="button"
-                            aria-pressed={view === "groups"}
-                            onClick={() => setView("groups")}
-                        >
-                            Groups ({page.groups.length})
-                        </button>
-                    )}
-                    {!!diagnostics?.total && (
-                        <button
-                            type="button"
-                            aria-pressed={view === "unchanged"}
-                            onClick={() => setView("unchanged")}
-                        >
-                            Left unchanged
-                        </button>
-                    )}
-                    {Object.keys(status?.provenance ?? {}).length > 0 && (
-                        <button
-                            type="button"
-                            aria-pressed={view === "source"}
-                            onClick={() => setView("source")}
-                        >
-                            Upstream source
-                        </button>
-                    )}
-                    {status?.receipt && (
-                        <button
-                            type="button"
-                            aria-pressed={view === "results"}
-                            onClick={() => setView("results")}
-                        >
-                            Results
-                        </button>
-                    )}
-                    {page && !applying && service?.supports("set_group") && page.operation !== "adopt" && (
-                        <button
-                            type="button"
-                            className="change-review-new-group"
-                            disabled={busy || dirty || Boolean(error)}
-                            onClick={() => setGroupEditor({ generation })}
-                        >
-                            Create group
-                        </button>
-                    )}
-                </nav>
-                {view !== "changes" && view !== "groups" && (
-                    <ReviewSourceDetails
-                        view={view}
-                        status={status}
-                        diagnostics={diagnostics}
-                        busy={busy}
-                        onMore={() => {
-                            if (!diagnostics?.next) return;
-                            const request = sequence.current;
-                            setBusy(true);
-                            void client.diagnostics(generation, diagnostics.next).then(next => {
-                                if (request === sequence.current) {
-                                    setDiagnostics({ ...next, rows: [...diagnostics.rows, ...next.rows] });
-                                }
-                            }).catch(failure => {
-                                if (request === sequence.current) fail(failure);
-                            }).finally(() => {
-                                if (request === sequence.current) setBusy(false);
-                            });
-                        }}
-                    />
-                )}
-                {view === "groups" && page && (
-                    <section className="change-review-details" aria-label="Change groups">
-                        <h3>Groups</h3>
-                        <p>Each group applies together. If one change fails, none of the group's changes are saved.</p>
-                        <table className="change-review-table">
-                            <thead>
-                                <tr>
-                                    <th scope="col">Group</th>
-                                    <th scope="col">Changes</th>
-                                    <th scope="col">Status</th>
-                                    <th scope="col">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {page.groups.map(group => (
-                                    <tr key={group.name}>
-                                        <th scope="row">
-                                            {group.name}
-                                            {group.requires.length > 0 && (
-                                                <small>Requires: {group.requires.join(", ")}</small>
-                                            )}
-                                        </th>
-                                        <td>{group.count}</td>
-                                        <td>
-                                            {group.complete
-                                                ? "Ready to select"
-                                                : "Required changes are missing or blocked"}
-                                        </td>
-                                        <td>
-                                            <div className="change-group-actions">
-                                                {service?.supports("set_group") && (
-                                                    <button
-                                                        type="button"
-                                                        disabled={busy || dirty || applying}
-                                                        aria-label={`Edit ${group.name}`}
-                                                        onClick={() =>
-                                                            setGroupEditor({ generation, group: group.name })}
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                )}
-                                                {service?.supports("resolve_group") && (
-                                                    <>
-                                                        <button
-                                                            type="button"
-                                                            aria-label={`Select ${group.name}`}
-                                                            disabled={busy || dirty || applying || !group.complete
-                                                                || Boolean(error)}
-                                                            onClick={() => void resolveGroup(group.name, "incoming")}
-                                                        >
-                                                            Select
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            aria-label={`Skip ${group.name}`}
-                                                            disabled={busy || dirty || applying || Boolean(error)}
-                                                            onClick={() => void resolveGroup(group.name, "defer")}
-                                                        >
-                                                            Skip
-                                                        </button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        {page.groupValidation.map(message => <p key={message} role="status">{message}</p>)}
-                    </section>
-                )}
-                {page && !applying && (
-                    <div className="change-review-workspace" aria-busy={busy} hidden={view !== "changes"}>
-                        <aside className="change-review-sidebar" aria-label="Changes">
-                            <label htmlFor={`${id}-filter`}>Show</label>
-                            <select
-                                id={`${id}-filter`}
-                                value={category}
+                        {service?.supports("refresh") && status
+                            && ["ready", "partial", "rejected", "interrupted"].includes(status.status) && (
+                            <button
+                                type="button"
                                 disabled={busy}
-                                onChange={event =>
+                                onClick={() => setConfirmation("refresh")}
+                            >
+                                Refresh comparison
+                            </button>
+                        )}
+                        <button type="button" onClick={() => navigate(onClose)}>Close</button>
+                    </div>
+                    {error && (
+                        <div role="alert" className="change-review-error">
+                            {error}
+                            <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
                                     navigate(() => {
-                                        void load(generation, undefined, event.target.value as ReviewFilter);
+                                        void client.status().then(current =>
+                                            load(current.generation, undefined, category)
+                                        )
+                                            .catch(fail);
                                     })}
                             >
-                                <option value="all">All differences ({total})</option>
-                                {(category === "unchanged" ? [...categories, "unchanged" as const] : categories).map(
-                                    key => (
-                                        <option key={key} value={key}>
-                                            {changeLabels[key]} ({counts[key] ?? 0})
-                                        </option>
-                                    ),
-                                )}
-                            </select>
-                            <div className="change-review-programs">
-                                {[...groups.entries()].map(([key, group]) => (
-                                    <section className="change-review-object" key={key} aria-label={group.label}>
-                                        <div className="change-review-object-heading">
-                                            {group.members.length > 0 && (
-                                                <button
-                                                    type="button"
-                                                    className="change-review-disclosure"
-                                                    aria-label={`${
-                                                        collapsedObjects.has(key) ? "Expand" : "Collapse"
-                                                    } ${group.label}`}
-                                                    aria-expanded={!collapsedObjects.has(key)}
-                                                    onClick={() => toggleObject(key)}
-                                                >
-                                                    <span aria-hidden="true">
-                                                        {collapsedObjects.has(key) ? "▸" : "▾"}
-                                                    </span>
-                                                </button>
-                                            )}
-                                            {group.object
-                                                ? itemButton(group.object, true)
-                                                : (
-                                                    <button
-                                                        type="button"
-                                                        className="change-review-item"
-                                                        aria-label={`${
-                                                            collapsedObjects.has(key) ? "Expand" : "Collapse"
-                                                        } members of ${group.label}`}
-                                                        aria-expanded={!collapsedObjects.has(key)}
-                                                        onClick={() => toggleObject(key)}
-                                                        title={group.label}
-                                                    >
-                                                        <code>{group.label}</code>
-                                                    </button>
+                                Reload review
+                            </button>
+                        </div>
+                    )}
+                    {notice && <p role="status" className="change-review-notice">{notice}</p>}
+                    {status?.error?.message && <p role="alert">{status.error.message}</p>}
+                    {page && (
+                        <div className="change-review-summary" aria-label="Review summary">
+                            <span>
+                                <strong>{page.decision_counts.selected}</strong> selected
+                            </span>
+                            <span>
+                                <strong>{attention.length}</strong> need attention
+                            </span>
+                            {allRows.some(item => item.operation?.startsWith("add_")) && (
+                                <span>
+                                    <strong>{allRows.filter(item => item.operation?.startsWith("add_")).length}</strong>
+                                    {" "}
+                                    additions
+                                </span>
+                            )}
+                            {page.decision_counts.blocked > 0 && (
+                                <span>
+                                    <strong>{page.decision_counts.blocked}</strong> cannot apply
+                                </span>
+                            )}
+                        </div>
+                    )}
+                    <nav className="change-review-nav" aria-label="Review sections">
+                        <button type="button" aria-pressed={view === "changes"} onClick={() => setView("changes")}>
+                            Changes
+                        </button>
+                        {!!page?.groups.length && (
+                            <button
+                                type="button"
+                                aria-pressed={view === "groups"}
+                                onClick={() => setView("groups")}
+                            >
+                                Groups ({page.groups.length})
+                            </button>
+                        )}
+                        {!!diagnostics?.total && (
+                            <button
+                                type="button"
+                                aria-pressed={view === "unchanged"}
+                                onClick={() => setView("unchanged")}
+                            >
+                                Limitations
+                            </button>
+                        )}
+                        {Object.keys(status?.provenance ?? {}).length > 0 && (
+                            <button
+                                type="button"
+                                aria-pressed={view === "source"}
+                                onClick={() => setView("source")}
+                            >
+                                Upstream source
+                            </button>
+                        )}
+                        {status?.receipt && (
+                            <button
+                                type="button"
+                                aria-pressed={view === "results"}
+                                onClick={() => setView("results")}
+                            >
+                                Results
+                            </button>
+                        )}
+                        {page && Boolean(status?.recoveryCount) && service?.supports("recovery") && (
+                            <button
+                                type="button"
+                                aria-pressed={view === "recovery"}
+                                onClick={() => setView("recovery")}
+                            >
+                                Saved work
+                            </button>
+                        )}
+                    </nav>
+                    {(view === "source" || view === "unchanged") && (
+                        <ReviewSourceDetails
+                            view={view}
+                            status={status}
+                            diagnostics={diagnostics}
+                            busy={busy}
+                            onMore={() => {
+                                if (!diagnostics?.next) return;
+                                const request = sequence.current;
+                                setBusy(true);
+                                void client.diagnostics(generation, diagnostics.next).then(next => {
+                                    if (request === sequence.current) {
+                                        setDiagnostics({ ...next, rows: [...diagnostics.rows, ...next.rows] });
+                                    }
+                                }).catch(failure => {
+                                    if (request === sequence.current) fail(failure);
+                                }).finally(() => {
+                                    if (request === sequence.current) setBusy(false);
+                                });
+                            }}
+                        />
+                    )}
+                    {view === "results" && status && service?.supports("result") && (
+                        <ReviewResult
+                            key={status.generation}
+                            client={client}
+                            status={status}
+                            canFinish={status.status === "partial" && service.supports("finish")}
+                            onContinue={() => setView("changes")}
+                            onFinish={() => setConfirmation("finish")}
+                        />
+                    )}
+                    {view === "recovery" && page && (
+                        <ReviewRecovery key={generation} client={client} generation={generation} />
+                    )}
+                    {view === "groups" && page && (
+                        <section className="change-review-details" aria-label="Change groups">
+                            <h3>Groups</h3>
+                            {service?.supports("set_group") && (
+                                <button
+                                    type="button"
+                                    disabled={busy || dirty}
+                                    onClick={() => setGroupEditor({ generation })}
+                                >
+                                    Create another group
+                                </button>
+                            )}
+                            <p>
+                                Each group applies together. If one change fails, none of the group's changes are saved.
+                            </p>
+                            <table className="change-review-table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Group</th>
+                                        <th scope="col">Changes</th>
+                                        <th scope="col">Status</th>
+                                        <th scope="col">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {page.groups.map(group => (
+                                        <tr key={group.name}>
+                                            <th scope="row">
+                                                {group.name}
+                                                {group.requires.length > 0 && (
+                                                    <small>Requires: {group.requires.join(", ")}</small>
                                                 )}
-                                        </div>
-                                        {!collapsedObjects.has(key) && group.members.length > 0
-                                            && (
-                                                <ul>
-                                                    {group.members.map(item => (
-                                                        <li key={item.id}>{itemButton(item)}</li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                    </section>
-                                ))}
-                                {!displayedRows.length && (
-                                    <p>
-                                        No {category === "all" ? "differences" : changeLabels[category].toLowerCase()}.
-                                    </p>
-                                )}
-                                {(!!page.cursor.length || !!inspection?.next) && (
-                                    <button
-                                        type="button"
-                                        disabled={busy}
-                                        onClick={() => {
-                                            void more();
-                                        }}
-                                    >
-                                        Load more ({displayedRows.length} shown)
-                                    </button>
-                                )}
-                            </div>
-                            <small>
-                                {page.counts.unchanged ?? 0} unchanged members.
-                            </small>
-                        </aside>
-                        <main className="change-review-code">
-                            {row
-                                ? (
-                                    <>
-                                        <header>
-                                            <h3>
-                                                <code>{row.label}</code>
-                                            </h3>
-                                            <span>{changeLabels[row.classification]}</span>
-                                        </header>
-                                        {row.operation === "add_object" && (
-                                            <section aria-label="New object definition">
-                                                <h4>Create at the chosen object ID</h4>
-                                                <p>
-                                                    Review the full definition below, including owners, flags, initial
-                                                    properties, overrides, and programs.
-                                                </p>
-                                                <p>
-                                                    Apply creates this object only if its ID is still absent. It
-                                                    installs all these contents together. It does not run initialization
-                                                    verbs or choose another ID after a conflict.
-                                                </p>
-                                                <p>
-                                                    Include the object and every program that needs it in a change
-                                                    group. Required new parents, owners, and locations must apply too.
-                                                </p>
-                                            </section>
-                                        )}
-                                        {row.operation === "retain_object" && (
-                                            <p>
-                                                This object is already installed. Selecting this row keeps its structure
-                                                and creation receipt. Separate program rows control code updates.
-                                                Property data stays unchanged.
-                                            </p>
-                                        )}
-                                        {row.operation === "add_property" && (
-                                            <section aria-label="Property initialization">
-                                                <h4>Initial value, only if absent</h4>
-                                                <p>
-                                                    Review the value, owner, flags, and metadata below. Apply uses them
-                                                    only to create this property. Existing data stays unchanged.
-                                                </p>
-                                                <p>
-                                                    Flags: r permits reading and w permits writing. With c, each
-                                                    descendant's owner also owns the inherited property. The o flag
-                                                    permits concurrent value writes. The last committed write wins.
-                                                </p>
-                                                {(row.descendants ?? 0) > 0 && (
-                                                    <label>
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={allowDescendants}
-                                                            disabled={busy || dirty}
-                                                            onChange={event =>
-                                                                setAllowDescendants(event.target.checked)}
-                                                        />
-                                                        Permit the {row.descendants}{" "}
-                                                        existing descendants to inherit this new property
-                                                    </label>
-                                                )}
-                                                <p>
-                                                    This permission becomes a package rule. Saving it clears the
-                                                    review's choices. It does not create the property until you apply
-                                                    its group.
-                                                </p>
-                                                {service?.supports("initialize_property") && (
-                                                    <button
-                                                        type="button"
-                                                        disabled={busy || dirty
-                                                            || ((row.descendants ?? 0) > 0 && !allowDescendants)}
-                                                        onClick={() => void initializeProperty()}
-                                                    >
-                                                        Permit initialization
-                                                    </button>
-                                                )}
-                                                {row.initialization_approved && (
-                                                    <p>Absent-only initialization is already permitted.</p>
-                                                )}
-                                            </section>
-                                        )}
-                                        {row.operation === "retain_property" && (
-                                            <p>
-                                                This property already exists. Selecting its group keeps the live value,
-                                                permissions, metadata, and accepted baseline unchanged. The upstream
-                                                value is for comparison only.
-                                            </p>
-                                        )}
-                                        {row.definition_text && (
-                                            <section aria-label="New verb definition">
-                                                <h4>Definition to install</h4>
-                                                <p>
-                                                    Apply creates this verb with the owner, permissions, and metadata
-                                                    shown here. The program appears below.
-                                                </p>
-                                                <pre>{row.definition_text}</pre>
-                                                <p>
-                                                    Flags: r permits reading, x permits calls from programs, and d
-                                                    enables error reporting. Arguments control command matching.
-                                                </p>
-                                            </section>
-                                        )}
-                                        {!row.read_only && !row.eligible && (
-                                            <p role="status">
-                                                {row.blockers.map(reason => blockers[reason] ?? reason).join(" ")}
-                                            </p>
-                                        )}
-                                        {row.live_present !== false && row.incoming_present !== false && (
-                                            <div className="change-review-comparison">
-                                                <label htmlFor={`${id}-comparison`}>Compare</label>
-                                                <select
-                                                    id={`${id}-comparison`}
-                                                    value={comparison}
-                                                    onChange={event => setComparison(event.target.value)}
-                                                >
-                                                    <option value="local-upstream">Local → Upstream</option>
-                                                    {baseline !== undefined && (
+                                            </th>
+                                            <td>{group.count}</td>
+                                            <td>
+                                                {({
+                                                    blocked: "Required changes are missing or cannot apply",
+                                                    needs_review: "Saved decisions need another check",
+                                                    selected: "Selected",
+                                                    deferred: "Decide later",
+                                                    partial: "Some members selected",
+                                                })[group.status] ?? group.status}
+                                                <small>{group.selected} of {group.count} selected</small>
+                                            </td>
+                                            <td>
+                                                <div className="change-group-actions">
+                                                    {service?.supports("set_group") && (
+                                                        <button
+                                                            type="button"
+                                                            disabled={busy || dirty || applying}
+                                                            aria-label={`Edit ${group.name}`}
+                                                            onClick={() =>
+                                                                setGroupEditor({ generation, group: group.name })}
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                    )}
+                                                    {service?.supports("resolve_group") && (
                                                         <>
-                                                            <option value="three-way">Three-way comparison</option>
-                                                            <option value="baseline-local">
-                                                                Accepted baseline → Local
-                                                            </option>
-                                                            <option value="baseline-upstream">
-                                                                Accepted baseline → Upstream
-                                                            </option>
+                                                            <button
+                                                                type="button"
+                                                                aria-label={`Select ${group.name}`}
+                                                                disabled={busy || dirty || applying || !group.complete
+                                                                    || Boolean(error)}
+                                                                onClick={() =>
+                                                                    void resolveGroup(group.name, "incoming")}
+                                                            >
+                                                                Select
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                aria-label={`Skip ${group.name}`}
+                                                                disabled={busy || dirty || applying || Boolean(error)}
+                                                                onClick={() => void resolveGroup(group.name, "defer")}
+                                                            >
+                                                                Skip
+                                                            </button>
                                                         </>
                                                     )}
-                                                </select>
-                                                <div
-                                                    className="change-review-layout"
-                                                    role="group"
-                                                    aria-label="Diff layout"
-                                                >
-                                                    <button
-                                                        type="button"
-                                                        aria-pressed={sideBySide}
-                                                        onClick={() => setSideBySide(true)}
-                                                    >
-                                                        Side by side
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        aria-pressed={!sideBySide}
-                                                        onClick={() => setSideBySide(false)}
-                                                    >
-                                                        Unified
-                                                    </button>
                                                 </div>
-                                                {baseline === undefined && (
-                                                    <small>
-                                                        {row.base
-                                                            ? "Load the accepted source to compare all three versions."
-                                                            : "This item has no accepted baseline."}
-                                                    </small>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            {page.groupValidation.map(message => <p key={message} role="status">{message}</p>)}
+                        </section>
+                    )}
+                    {page && !applying && view === "changes" && (
+                        <div className="change-review-mobile-nav" role="group" aria-label="Review layout">
+                            <button
+                                type="button"
+                                aria-pressed={mobileView === "list"}
+                                onClick={() =>
+                                    setMobileView("list")}
+                            >
+                                Browse changes
+                            </button>
+                            <button
+                                type="button"
+                                aria-pressed={mobileView === "code"}
+                                onClick={() =>
+                                    setMobileView("code")}
+                            >
+                                Selected item
+                            </button>
+                        </div>
+                    )}
+                    {page && !applying && (
+                        <div className="change-review-workspace" aria-busy={busy} hidden={view !== "changes"}>
+                            <aside className="change-review-sidebar" aria-label="Changes">
+                                <label htmlFor={`${id}-filter`}>Show</label>
+                                <select
+                                    id={`${id}-filter`}
+                                    value={category}
+                                    disabled={busy}
+                                    onChange={event =>
+                                        setCategory(event.target.value as ReviewFilter)}
+                                >
+                                    <option value="all">All differences ({total})</option>
+                                    <option value="attention">Needs attention ({attention.length})</option>
+                                    {[...categories, "unchanged" as const].map(
+                                        key => (
+                                            <option key={key} value={key}>
+                                                {changeLabels[key]} ({counts[key] ?? 0})
+                                            </option>
+                                        ),
+                                    )}
+                                </select>
+                                <input
+                                    aria-label="Find an object or member"
+                                    placeholder="Find an object or member"
+                                    type="search"
+                                    value={query}
+                                    onChange={event =>
+                                        setQuery(event.target.value)}
+                                />
+                                {attention.length > 0 && (
+                                    <button
+                                        type="button"
+                                        disabled={busy || !nextAttention}
+                                        onClick={() =>
+                                            nextAttention && navigate(() => {
+                                                void select(nextAttention);
+                                            })}
+                                    >
+                                        Next item needing attention
+                                    </button>
+                                )}
+                                <div className="change-review-programs">
+                                    {[...groups.entries()].map(([key, group]) => (
+                                        <section className="change-review-object" key={key} aria-label={group.label}>
+                                            <div className="change-review-object-heading">
+                                                {group.members.length > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        className="change-review-disclosure"
+                                                        aria-label={`${
+                                                            collapsedObjects.has(key) ? "Expand" : "Collapse"
+                                                        } ${group.label}`}
+                                                        aria-expanded={!collapsedObjects.has(key)}
+                                                        onClick={() => toggleObject(key)}
+                                                    >
+                                                        <span aria-hidden="true">
+                                                            {collapsedObjects.has(key) ? "▸" : "▾"}
+                                                        </span>
+                                                    </button>
                                                 )}
+                                                {group.object
+                                                    ? itemButton(group.object, true)
+                                                    : (
+                                                        <button
+                                                            type="button"
+                                                            className="change-review-item"
+                                                            aria-label={`${
+                                                                collapsedObjects.has(key) ? "Expand" : "Collapse"
+                                                            } members of ${group.label}`}
+                                                            aria-expanded={!collapsedObjects.has(key)}
+                                                            onClick={() => toggleObject(key)}
+                                                            title={group.label}
+                                                        >
+                                                            <code>{group.label}</code>
+                                                        </button>
+                                                    )}
                                             </div>
-                                        )}
-                                        {!row.read_only && row.field === "program" && row.base
-                                            && service?.supports("base_source") && (
-                                            <div className="change-review-base-source">
-                                                {row.base_fetch_available && (
+                                            {!collapsedObjects.has(key) && group.members.length > 0
+                                                && (
+                                                    <ul>
+                                                        {group.members.map(item => (
+                                                            <li key={item.id}>{itemButton(item)}</li>
+                                                        ))}
+                                                    </ul>
+                                                )}
+                                        </section>
+                                    ))}
+                                    {!displayedRows.length && (
+                                        <p>
+                                            No items match this view.
+                                        </p>
+                                    )}
+                                </div>
+                                <small>
+                                    {page.counts.unchanged ?? 0} unchanged members.
+                                </small>
+                            </aside>
+                            <main className="change-review-code">
+                                {row
+                                    ? (
+                                        <>
+                                            <header>
+                                                <h3 ref={detailHeading} tabIndex={-1}>
+                                                    <code>{row.label}</code>
+                                                </h3>
+                                                <span>{changeLabels[row.classification]}</span>
+                                            </header>
+                                            {row.needsReview && (
+                                                <p role="status">
+                                                    This saved decision needs another check. Your earlier edited code is
+                                                    retained in Saved work and in the editor.
+                                                </p>
+                                            )}
+                                            {row.group && (
+                                                <section
+                                                    className="change-review-inline-group"
+                                                    aria-label="Required group"
+                                                >
+                                                    <p>
+                                                        This item belongs to{" "}
+                                                        <strong>{row.group}</strong>. Its required members apply
+                                                        together.
+                                                    </p>
+                                                    <button type="button" onClick={() => setView("groups")}>
+                                                        Review group requirements
+                                                    </button>
+                                                </section>
+                                            )}
+                                            {(row.blockers.includes("change_group_required")
+                                                || row.operation?.startsWith("add_"))
+                                                && service?.supports("set_group") && !row.group && (
+                                                <section
+                                                    className="change-review-inline-group"
+                                                    aria-label="Required group"
+                                                >
+                                                    <p>
+                                                        Declare this item and the programs that need it in one group
+                                                        before applying. The service cannot infer dependencies.
+                                                    </p>
                                                     <button
                                                         type="button"
                                                         disabled={busy || dirty}
-                                                        onClick={() => void loadBase()}
+                                                        onClick={() => setGroupEditor({ generation })}
                                                     >
-                                                        Fetch accepted source
+                                                        Create group
                                                     </button>
-                                                )}
-                                                <label>
-                                                    Upload accepted objdefs
-                                                    <input
-                                                        type="file"
-                                                        multiple
-                                                        accept=".moo"
-                                                        disabled={busy || dirty}
-                                                        onChange={event => {
-                                                            if (event.currentTarget.files?.length) {
-                                                                void loadBase(event.currentTarget.files);
-                                                            }
-                                                            event.currentTarget.value = "";
-                                                        }}
-                                                    />
-                                                </label>
-                                                {dirty && (
-                                                    <small>
-                                                        Save your edited program before loading accepted source.
-                                                    </small>
+                                                </section>
+                                            )}
+                                            {row.operation === "add_object" && (
+                                                <section aria-label="New object definition">
+                                                    <h4>Create at the chosen object ID</h4>
+                                                    <p>
+                                                        Review the full definition below, including owners, flags,
+                                                        initial properties, overrides, and programs.
+                                                    </p>
+                                                    <p>
+                                                        Apply creates this object only if its ID is still absent. It
+                                                        installs all these contents together. It does not run
+                                                        initialization verbs or choose another ID after a conflict.
+                                                    </p>
+                                                    <p>
+                                                        Include the object and every program that needs it in a change
+                                                        group. Required new parents, owners, and locations must apply
+                                                        too.
+                                                    </p>
+                                                </section>
+                                            )}
+                                            {row.operation === "retain_object" && (
+                                                <p>
+                                                    This object is already installed. Selecting this row keeps its
+                                                    structure and creation receipt. Separate program rows control code
+                                                    updates. Property data stays unchanged.
+                                                </p>
+                                            )}
+                                            {row.operation === "add_property" && (
+                                                <section aria-label="Property initialization">
+                                                    <h4>Initial value, only if absent</h4>
+                                                    <p>
+                                                        Review the value, owner, flags, and metadata below. Apply uses
+                                                        them only to create this property. Existing data stays
+                                                        unchanged.
+                                                    </p>
+                                                    <p>
+                                                        Flags: r permits reading and w permits writing. With c, each
+                                                        descendant's owner also owns the inherited property. The o flag
+                                                        permits concurrent value writes. The last committed write wins.
+                                                    </p>
+                                                    {(row.descendants ?? 0) > 0 && (
+                                                        <label>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={allowDescendants}
+                                                                disabled={busy || dirty}
+                                                                onChange={event =>
+                                                                    setAllowDescendants(event.target.checked)}
+                                                            />
+                                                            Permit the {row.descendants}{" "}
+                                                            existing descendants to inherit this new property
+                                                        </label>
+                                                    )}
+                                                    <p>
+                                                        This permission becomes a package rule. Saved decisions stay
+                                                        available and are checked against the changed policy. It does
+                                                        not create the property until you apply its group.
+                                                    </p>
+                                                    {service?.supports("initialize_property") && (
+                                                        <button
+                                                            type="button"
+                                                            disabled={busy || dirty
+                                                                || ((row.descendants ?? 0) > 0 && !allowDescendants)}
+                                                            onClick={() => void initializeProperty()}
+                                                        >
+                                                            Permit initialization
+                                                        </button>
+                                                    )}
+                                                    {row.initialization_approved && (
+                                                        <p>Absent-only initialization is already permitted.</p>
+                                                    )}
+                                                </section>
+                                            )}
+                                            {row.operation === "retain_property" && (
+                                                <p>
+                                                    This property already exists. Selecting its group keeps the live
+                                                    value, permissions, metadata, and accepted baseline unchanged. The
+                                                    upstream value is for comparison only.
+                                                </p>
+                                            )}
+                                            {row.definition_text && (
+                                                <section aria-label="New verb definition">
+                                                    <h4>Definition to install</h4>
+                                                    <p>
+                                                        Apply creates this verb with the owner, permissions, and
+                                                        metadata shown here. The program appears below.
+                                                    </p>
+                                                    <pre>{row.definition_text}</pre>
+                                                    <p>
+                                                        Flags: r permits reading, x permits calls from programs, and d
+                                                        enables error reporting. Arguments control command matching.
+                                                    </p>
+                                                </section>
+                                            )}
+                                            {!row.read_only && !row.eligible && (
+                                                <p role="status">
+                                                    {row.blockers.map(reason => blockers[reason] ?? reason).join(" ")}
+                                                </p>
+                                            )}
+                                            {row.live_present !== false && row.incoming_present !== false && (
+                                                <div
+                                                    className="change-review-comparison"
+                                                    data-has-baseline={baseline !== undefined}
+                                                >
+                                                    <label htmlFor={`${id}-comparison`}>Compare</label>
+                                                    <select
+                                                        id={`${id}-comparison`}
+                                                        value={comparison}
+                                                        onChange={event => setComparison(event.target.value)}
+                                                    >
+                                                        <option value="local-upstream">Local → Upstream</option>
+                                                        {baseline !== undefined && (
+                                                            <>
+                                                                <option value="three-way">Three-way comparison</option>
+                                                                <option value="baseline-local">
+                                                                    Accepted baseline → Local
+                                                                </option>
+                                                                <option value="baseline-upstream">
+                                                                    Accepted baseline → Upstream
+                                                                </option>
+                                                            </>
+                                                        )}
+                                                    </select>
+                                                    <div
+                                                        className="change-review-layout"
+                                                        role="group"
+                                                        aria-label="Diff layout"
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            aria-pressed={sideBySide}
+                                                            onClick={() => setSideBySide(true)}
+                                                        >
+                                                            Side by side
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            aria-pressed={!sideBySide}
+                                                            onClick={() => setSideBySide(false)}
+                                                        >
+                                                            Unified
+                                                        </button>
+                                                    </div>
+                                                    {baseline === undefined
+                                                        && (!row.base || !service?.supports("base_source")) && (
+                                                        <small>
+                                                            {row.base
+                                                                ? "Load the accepted source to compare all three versions."
+                                                                : "This item has no accepted baseline."}
+                                                        </small>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {!row.read_only && row.field === "program" && row.base
+                                                && service?.supports("base_source") && (
+                                                <details className="change-review-base-source">
+                                                    <summary>Accepted source for comparison</summary>
+                                                    <p>Load the accepted source to compare all three versions.</p>
+                                                    {row.base_fetch_available && (
+                                                        <button
+                                                            type="button"
+                                                            disabled={busy || dirty}
+                                                            onClick={() => void loadBase()}
+                                                        >
+                                                            Fetch accepted source
+                                                        </button>
+                                                    )}
+                                                    <label>
+                                                        Upload accepted objdefs
+                                                        <input
+                                                            type="file"
+                                                            multiple
+                                                            accept=".moo"
+                                                            disabled={busy || dirty}
+                                                            onChange={event => {
+                                                                if (event.currentTarget.files?.length) {
+                                                                    void loadBase(event.currentTarget.files);
+                                                                }
+                                                                event.currentTarget.value = "";
+                                                            }}
+                                                        />
+                                                    </label>
+                                                    {dirty && (
+                                                        <small>
+                                                            Save your edited program before loading accepted source.
+                                                        </small>
+                                                    )}
+                                                </details>
+                                            )}
+                                            {row.read_only && (
+                                                <p className="change-review-inspection-note">
+                                                    {row.live_present === false
+                                                        ? "No local definition."
+                                                        : row.incoming_present === false
+                                                        ? "No upstream definition."
+                                                        : ""} Read only.
+                                                </p>
+                                            )}
+                                            {row.inspection_error && <p role="status">{row.inspection_error}</p>}
+                                            <div
+                                                className="change-review-pane-labels"
+                                                hidden={comparison === "three-way"}
+                                                data-layout={sideBySide ? "split" : "unified"}
+                                            >
+                                                <span>
+                                                    {!sideBySide && row.live_present !== false
+                                                        && row.incoming_present !== false && "− "}
+                                                    {row.live_present === false
+                                                        ? "Upstream"
+                                                        : comparison === "local-upstream"
+                                                        ? "Local"
+                                                        : "Accepted baseline"}
+                                                </span>
+                                                {row.live_present !== false && row.incoming_present !== false && (
+                                                    <span>
+                                                        {!sideBySide && "+ "}
+                                                        {comparison === "baseline-local" ? "Local" : "Upstream"}
+                                                    </span>
                                                 )}
                                             </div>
-                                        )}
-                                        {row.read_only && (
-                                            <p className="change-review-inspection-note">
-                                                {row.live_present === false
-                                                    ? "No local definition."
-                                                    : row.incoming_present === false
-                                                    ? "No upstream definition."
-                                                    : ""} Read only.
-                                            </p>
-                                        )}
-                                        {row.inspection_error && <p role="status">{row.inspection_error}</p>}
-                                        <div
-                                            className="change-review-pane-labels"
-                                            hidden={comparison === "three-way"}
-                                            data-layout={sideBySide ? "split" : "unified"}
-                                        >
-                                            <span>
-                                                {!sideBySide && row.live_present !== false
-                                                    && row.incoming_present !== false && "− "}
-                                                {row.live_present === false
-                                                    ? "Upstream"
-                                                    : comparison === "local-upstream"
-                                                    ? "Local"
-                                                    : "Accepted baseline"}
-                                            </span>
-                                            {row.live_present !== false && row.incoming_present !== false && (
-                                                <span>
-                                                    {!sideBySide && "+ "}
-                                                    {comparison === "baseline-local" ? "Local" : "Upstream"}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="change-review-diff">
-                                            {comparison === "three-way" && baseline !== undefined
-                                                ? (
-                                                    <div className="change-review-three-way">
-                                                        {[{ label: "Accepted baseline", text: baseline }, {
-                                                            label: "Local",
-                                                            text: row.live_text ?? "",
-                                                        }, { label: "Upstream", text: row.incoming_text ?? "" }].map((
-                                                            pane,
-                                                            index,
-                                                        ) => (
-                                                            <section key={pane.label} aria-label={pane.label}>
-                                                                <h4>{pane.label}</h4>
-                                                                {index === 0
-                                                                    ? (
-                                                                        <Editor
-                                                                            defaultValue={pane.text}
-                                                                            language="moo"
-                                                                            theme={monacoThemeFor(theme)}
-                                                                            beforeMount={registerMooLanguage}
-                                                                            options={{
-                                                                                readOnly: true,
-                                                                                automaticLayout: true,
-                                                                                minimap: { enabled: false },
-                                                                                wordWrap: "on",
-                                                                                scrollBeyondLastLine: false,
-                                                                            }}
-                                                                        />
-                                                                    )
-                                                                    : (
-                                                                        <ReviewDiffEditor
-                                                                            original={baseline}
-                                                                            modified={pane.text}
-                                                                            language="moo"
-                                                                            theme={monacoThemeFor(theme)}
-                                                                            beforeMount={registerMooLanguage}
-                                                                            options={{
-                                                                                readOnly: true,
-                                                                                originalEditable: false,
-                                                                                automaticLayout: true,
-                                                                                minimap: { enabled: false },
-                                                                                renderSideBySide: false,
-                                                                                useInlineViewWhenSpaceIsLimited: false,
-                                                                                diffWordWrap: "on",
-                                                                                scrollBeyondLastLine: false,
-                                                                            }}
-                                                                        />
-                                                                    )}
-                                                            </section>
-                                                        ))}
-                                                    </div>
-                                                )
-                                                : row.live_present === false || row.incoming_present === false
-                                                ? (
-                                                    <Editor
-                                                        key={row.id}
-                                                        value={row.live_present === false
-                                                            ? row.incoming_text
-                                                            : row.live_text}
+                                            <div className="change-review-diff">
+                                                {comparison === "three-way" && baseline !== undefined
+                                                    ? (
+                                                        <div className="change-review-three-way">
+                                                            {[{ label: "Accepted baseline", text: baseline }, {
+                                                                label: "Local",
+                                                                text: row.live_text ?? "",
+                                                            }, { label: "Upstream", text: row.incoming_text ?? "" }]
+                                                                .map((
+                                                                    pane,
+                                                                    index,
+                                                                ) => (
+                                                                    <section key={pane.label} aria-label={pane.label}>
+                                                                        <h4>{pane.label}</h4>
+                                                                        {index === 0
+                                                                            ? (
+                                                                                <Editor
+                                                                                    defaultValue={pane.text}
+                                                                                    language="moo"
+                                                                                    theme={monacoThemeFor(theme)}
+                                                                                    beforeMount={registerMooLanguage}
+                                                                                    options={{
+                                                                                        readOnly: true,
+                                                                                        automaticLayout: true,
+                                                                                        minimap: { enabled: false },
+                                                                                        wordWrap: "on",
+                                                                                        scrollBeyondLastLine: false,
+                                                                                    }}
+                                                                                />
+                                                                            )
+                                                                            : (
+                                                                                <ReviewDiffEditor
+                                                                                    original={baseline}
+                                                                                    modified={pane.text}
+                                                                                    language="moo"
+                                                                                    theme={monacoThemeFor(theme)}
+                                                                                    beforeMount={registerMooLanguage}
+                                                                                    options={{
+                                                                                        readOnly: true,
+                                                                                        originalEditable: false,
+                                                                                        automaticLayout: true,
+                                                                                        minimap: { enabled: false },
+                                                                                        renderSideBySide: false,
+                                                                                        useInlineViewWhenSpaceIsLimited:
+                                                                                            true,
+                                                                                        diffWordWrap: "on",
+                                                                                        scrollBeyondLastLine: false,
+                                                                                    }}
+                                                                                />
+                                                                            )}
+                                                                    </section>
+                                                                ))}
+                                                        </div>
+                                                    )
+                                                    : row.live_present === false || row.incoming_present === false
+                                                    ? (
+                                                        <Editor
+                                                            key={row.id}
+                                                            value={row.live_present === false
+                                                                ? row.incoming_text
+                                                                : row.live_text}
+                                                            language="moo"
+                                                            theme={monacoThemeFor(theme)}
+                                                            beforeMount={registerMooLanguage}
+                                                            options={{
+                                                                readOnly: true,
+                                                                automaticLayout: true,
+                                                                minimap: { enabled: false },
+                                                                wordWrap: "on",
+                                                                scrollBeyondLastLine: false,
+                                                            }}
+                                                        />
+                                                    )
+                                                    : (
+                                                        <ReviewDiffEditor
+                                                            key={row.id}
+                                                            original={original ?? ""}
+                                                            modified={modified ?? ""}
+                                                            language="moo"
+                                                            theme={monacoThemeFor(theme)}
+                                                            beforeMount={registerMooLanguage}
+                                                            options={{
+                                                                readOnly: true,
+                                                                originalEditable: false,
+                                                                automaticLayout: true,
+                                                                minimap: { enabled: false },
+                                                                renderSideBySide: sideBySide,
+                                                                useInlineViewWhenSpaceIsLimited: false,
+                                                                diffWordWrap: "on",
+                                                                scrollBeyondLastLine: false,
+                                                            }}
+                                                        />
+                                                    )}
+                                            </div>
+                                            {editing && (
+                                                <section className="change-review-draft">
+                                                    <h4>Proposed program</h4>
+                                                    <ReviewProgramEditor
                                                         language="moo"
                                                         theme={monacoThemeFor(theme)}
+                                                        initialValue={initialDraft}
+                                                        diagnostics={draft === initialDraft
+                                                            ? row.validation ?? noCompilerDiagnostics
+                                                            : noCompilerDiagnostics}
+                                                        onChange={value => setDraft(value ?? "")}
                                                         beforeMount={registerMooLanguage}
                                                         options={{
-                                                            readOnly: true,
+                                                            readOnly: busy,
                                                             automaticLayout: true,
                                                             minimap: { enabled: false },
                                                             wordWrap: "on",
                                                             scrollBeyondLastLine: false,
                                                         }}
                                                     />
-                                                )
-                                                : (
-                                                    <ReviewDiffEditor
-                                                        key={row.id}
-                                                        original={original ?? ""}
-                                                        modified={modified ?? ""}
-                                                        language="moo"
-                                                        theme={monacoThemeFor(theme)}
-                                                        beforeMount={registerMooLanguage}
-                                                        options={{
-                                                            readOnly: true,
-                                                            originalEditable: false,
-                                                            automaticLayout: true,
-                                                            minimap: { enabled: false },
-                                                            renderSideBySide: sideBySide,
-                                                            useInlineViewWhenSpaceIsLimited: false,
-                                                            diffWordWrap: "on",
-                                                            scrollBeyondLastLine: false,
-                                                        }}
-                                                    />
-                                                )}
-                                        </div>
-                                        {editing && (
-                                            <section className="change-review-draft">
-                                                <h4>Proposed program</h4>
-                                                <ReviewProgramEditor
-                                                    language="moo"
-                                                    theme={monacoThemeFor(theme)}
-                                                    initialValue={initialDraft}
-                                                    diagnostics={draft === initialDraft
-                                                        ? row.validation ?? noCompilerDiagnostics
-                                                        : noCompilerDiagnostics}
-                                                    onChange={value => setDraft(value ?? "")}
-                                                    beforeMount={registerMooLanguage}
-                                                    options={{
-                                                        readOnly: busy,
-                                                        automaticLayout: true,
-                                                        minimap: { enabled: false },
-                                                        wordWrap: "on",
-                                                        scrollBeyondLastLine: false,
-                                                    }}
-                                                />
-                                            </section>
-                                        )}
-                                        {!row.read_only && service?.supports("resolve")
-                                            && service.capabilities.fields.includes("program") && (
-                                            <div className="change-review-resolution">
-                                                <span>On apply: {choices[row.choice?.choice ?? row.default]}</span>
-                                                {row.choices.filter(value =>
-                                                    value !== "edited" && service.capabilities.choices.includes(value)
-                                                ).map(value => (
-                                                    <button
-                                                        type="button"
-                                                        key={value}
-                                                        disabled={busy || !!error || !row.eligible && value !== "defer"}
-                                                        onClick={() =>
-                                                            navigate(() => {
-                                                                void resolve(value);
-                                                            })}
-                                                    >
-                                                        {value === "incoming" && page.operation === "adopt"
-                                                            ? "Accept baseline"
-                                                            : choices[value]}
-                                                    </button>
-                                                ))}
-                                                {row.eligible && row.choices.includes("edited")
-                                                    && service.capabilities.choices.includes("edited") && (
-                                                    <button
-                                                        type="button"
-                                                        disabled={busy || !!error}
-                                                        onClick={() => {
-                                                            if (editing) void resolve("edited");
-                                                            else setEditing(true);
-                                                        }}
-                                                    >
-                                                        {editing ? "Save proposed program" : "Edit resolution"}
-                                                    </button>
-                                                )}
-                                            </div>
-                                        )}
-                                    </>
-                                )
-                                : (
-                                    <p>
-                                        {busy
-                                            ? "Loading source…"
-                                            : total > 0
-                                            ? "Select an item from the list."
-                                            : "No differences to review."}
-                                    </p>
-                                )}
-                        </main>
-                    </div>
-                )}
-                {confirmation && (
-                    <div className="change-review-confirmation" role="alert">
-                        <p>
-                            {confirmation === "discard"
-                                ? "Discard the unsaved draft?"
+                                                </section>
+                                            )}
+                                            {!row.read_only && service?.supports("resolve")
+                                                && service.capabilities.fields.includes("program") && (
+                                                <div className="change-review-resolution">
+                                                    {row.field === "program" && row.operation !== "add_verb"
+                                                        && page.operation !== "adopt" && (
+                                                        <details className="change-review-choice-help">
+                                                            <summary>What each choice does</summary>
+                                                            <p>
+                                                                Use upstream replaces the program. Keep my code
+                                                                preserves it and acknowledges this upstream version.
+                                                                Decide later preserves both code and accepted history.
+                                                            </p>
+                                                        </details>
+                                                    )}
+                                                    <span>
+                                                        On apply: {choiceLabel(row, row.choice?.choice ?? row.default)}
+                                                    </span>
+                                                    {row.choices.filter(value =>
+                                                        value !== "edited"
+                                                        && service.capabilities.choices.includes(value)
+                                                    ).map(value => (
+                                                        <button
+                                                            type="button"
+                                                            key={value}
+                                                            disabled={busy || !!error
+                                                                || !row.eligible && value !== "defer"}
+                                                            onClick={() =>
+                                                                navigate(() => {
+                                                                    void resolve(value);
+                                                                })}
+                                                        >
+                                                            {choiceLabel(row, value)}
+                                                        </button>
+                                                    ))}
+                                                    {row.eligible && row.choices.includes("edited")
+                                                        && service.capabilities.choices.includes("edited") && (
+                                                        <button
+                                                            type="button"
+                                                            disabled={busy || !!error}
+                                                            onClick={() => {
+                                                                if (editing) void resolve("edited");
+                                                                else setEditing(true);
+                                                            }}
+                                                        >
+                                                            {editing ? "Save proposed program" : "Edit resolution"}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </>
+                                    )
+                                    : (
+                                        <p>
+                                            {busy
+                                                ? "Loading source…"
+                                                : total > 0
+                                                ? "Select an item from the list."
+                                                : "No differences to review."}
+                                        </p>
+                                    )}
+                            </main>
+                        </div>
+                    )}
+                    {confirmation && (
+                        <DialogSheet
+                            title={confirmation === "apply"
+                                ? "Review planned effects"
+                                : confirmation === "finish"
+                                ? "Finish this review?"
                                 : confirmation === "refresh"
-                                ? "Compare the fetched source with the running MOO again? Saved decisions are checked again. This discards the unsaved draft."
-                                : page?.operation === "adopt"
-                                ? `Accept ${selectedCount} baselines? Live code will stay as it is.`
-                                : `Apply ${selectedCount} choices to the running MOO?`}
-                        </p>
-                        {confirmation === "apply" && page?.operation !== "adopt" && (
-                            <p>
-                                Selected programs may depend on omitted property, definition, or object changes. This
-                                review does not establish that compatibility.
-                            </p>
-                        )}
-                        <button type="button" onClick={() => setConfirmation(null)}>Cancel</button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                if (confirmation === "apply") void apply();
-                                else if (confirmation === "refresh") void refresh();
-                                else {
-                                    setConfirmation(null);
-                                    pendingNavigation.current?.();
-                                    pendingNavigation.current = null;
-                                }
+                                ? "Refresh comparison?"
+                                : "Discard unsaved draft?"}
+                            titleId={`${id}-confirm`}
+                            onCancel={() => {
+                                if (!busy) setConfirmation(null);
                             }}
+                            maxWidth="900px"
+                            role="alertdialog"
                         >
-                            {confirmation === "apply"
-                                ? "Confirm apply"
-                                : confirmation === "refresh"
-                                ? "Confirm refresh"
-                                : "Discard draft"}
-                        </button>
-                    </div>
+                            <div className="change-review-confirmation">
+                                {confirmation === "apply" && plan
+                                    ? <ReviewEffects plan={plan} busy={busy} onMore={() => void prepare(plan.next)} />
+                                    : (
+                                        <p>
+                                            {confirmation === "finish"
+                                                ? "Earlier committed changes remain installed. Deferred contents and baselines stay unchanged. You can check upstream again afterward."
+                                                : confirmation === "refresh"
+                                                ? "Compare with the running MOO again. Saved decisions and drafts remain available. Changed members need another check. This discards the unsaved draft."
+                                                : "Discard the unsaved draft before leaving this item?"}
+                                        </p>
+                                    )}
+                                <div className="change-group-actions">
+                                    <button type="button" disabled={busy} onClick={() => setConfirmation(null)}>
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={busy || (confirmation === "apply" && !plan?.canApply)}
+                                        onClick={() => {
+                                            if (confirmation === "apply") void apply();
+                                            else if (confirmation === "refresh") void refresh();
+                                            else if (confirmation === "finish") void finish();
+                                            else {
+                                                setConfirmation(null);
+                                                pendingNavigation.current?.();
+                                                pendingNavigation.current = null;
+                                            }
+                                        }}
+                                    >
+                                        {confirmation === "apply"
+                                            ? "Confirm apply"
+                                            : confirmation === "refresh"
+                                            ? "Confirm refresh"
+                                            : confirmation === "finish"
+                                            ? "Confirm finish"
+                                            : "Discard draft"}
+                                    </button>
+                                </div>
+                            </div>
+                        </DialogSheet>
+                    )}
+                    {page && view !== "results" && (
+                        <footer className="change-review-footer">
+                            <small id={`${id}-apply-reason`}>
+                                {dirty ? "Save your edited program before reviewing its effects. " : ""}
+                                {page.decision_counts.unresolved
+                                    ? `${page.decision_counts.unresolved} choices or group requirements remain unresolved. `
+                                    : ""}
+                                {page.decision_counts.blocked
+                                    ? `${page.decision_counts.blocked} blocked members will be kept. `
+                                    : ""}
+                            </small>
+                            {service?.supports("finish") && (
+                                <button
+                                    type="button"
+                                    disabled={busy || dirty || applying}
+                                    onClick={() => setConfirmation("finish")}
+                                >
+                                    Finish without applying more
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                className="btn-primary"
+                                disabled={!canApply}
+                                aria-describedby={`${id}-apply-reason`}
+                                onClick={() => void prepare()}
+                            >
+                                {page.operation === "adopt" ? "Review history changes" : "Review planned effects"}
+                            </button>
+                        </footer>
+                    )}
+                </DialogSheet>
+                {groupEditor && page && (
+                    <ChangeGroupEditor
+                        client={client}
+                        generation={groupEditor.generation}
+                        groups={page.groups}
+                        group={groupEditor.group}
+                        onClose={() => setGroupEditor(null)}
+                        onSaved={(next, removed) => {
+                            setGroupEditor(null);
+                            setView(removed ? "changes" : "groups");
+                            void load(next, row?.id, category);
+                        }}
+                    />
                 )}
-                {page && (
-                    <footer className="change-review-footer">
-                        <small>
-                            {page.decision_counts.unresolved
-                                ? `${page.decision_counts.unresolved} choices or group requirements remain unresolved. `
-                                : ""}
-                            {page.decision_counts.blocked
-                                ? `${page.decision_counts.blocked} blocked members will be kept. `
-                                : ""}
-                        </small>
-                        <button
-                            type="button"
-                            className="btn-primary"
-                            disabled={!canApply}
-                            onClick={() => setConfirmation("apply")}
-                        >
-                            {page.operation === "adopt"
-                                ? `Accept ${selectedCount} baselines`
-                                : `Apply ${selectedCount} ${selectedCount === 1 ? "choice" : "choices"}`}
-                        </button>
-                    </footer>
-                )}
-            </DialogSheet>
-            {groupEditor && page && (
-                <ChangeGroupEditor
-                    client={client}
-                    generation={groupEditor.generation}
-                    groups={page.groups}
-                    group={groupEditor.group}
-                    onClose={() => setGroupEditor(null)}
-                    onSaved={(next, removed) => {
-                        setGroupEditor(null);
-                        setView(removed ? "changes" : "groups");
-                        void load(next, row?.id, category);
-                    }}
-                />
-            )}
-        </div>
+            </div>
+        </>
     );
 }

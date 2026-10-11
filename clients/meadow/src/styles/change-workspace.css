@@ -34,3 +34,18 @@
 .change-workspace p {
   overflow-wrap: anywhere;
 }
+
+.change-workspace [hidden] {
+  display: none !important;
+}
+.change-workspace-primary .btn-primary {
+  padding: 0.75rem 1rem;
+}
+.change-workspace nav {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border-light);
+}
+.change-workspace nav button[aria-pressed="true"] {
+  font-weight: bold;
+  border-color: var(--color-text-primary);
+}

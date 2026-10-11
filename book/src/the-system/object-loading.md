@@ -272,13 +272,13 @@ that selection. Selecting the group installs the helper and updates the caller i
 
 In Meadow:
 
-1. Open the review and select **Create group**.
+1. Select an addition or another item that requires a group. Select **Create group**.
 2. Enter a name and select all required changes.
 3. If another group must apply too, select it under **Other groups required by this group**.
 4. Save the group. This preserves previous decisions and drafts without changing running code.
 5. Select the group, review each program, then apply.
 
-For an existing program, **Keep local** or an edited result remains available after selecting the
+For an existing program, **Keep my code** or an edited result remains available after selecting the
 group. A new verb uses the supplied definition and program. **Skip GROUP** defers the whole group.
 Apply rejects a partly selected group, a missing member, or an unselected required group.
 
@@ -369,23 +369,51 @@ terminal commands. Snore requires a wizard. Cowbell also accepts current adminis
 with an `@changes` allowlist entry. Each API call and background job checks that authority again.
 Source, drafts, and saved reviews are private administrator data.
 
-In Meadow, **Changes** appears in the navigation bar when the core exposes an accessible, compatible
-service. Select a package to configure its upstream, fetch source, or upload objdef files. **New
-package** accepts explicit managed objects, object constant bindings, and trusted owners. Git
-configuration accepts a full ref or commit and a repository subdirectory.
+In Meadow, **Changes** appears in the navigation bar when the core exposes a compatible service. For
+configured Cowbell, select **Check for updates**. The ready review opens automatically.
+**Settings**, **History**, **Review files**, and **Repair history** are separate tasks.
 
-Select **Adopt supplied source as the baseline** when supplying original upstream source. Adoption
-creates a review; applying it records baselines without replacing live programs. The workspace also
-opens saved reviews, discards pending reviews after confirmation, and lists retained completed
-reviews. Configuration saves use the generation observed when the form opened. A concurrent
-configuration change rejects the save and preserves the form for inspection.
+**Settings** controls upstream sources, additional packages, trusted owners, and proposed object
+IDs. Configuration saves use the version observed when the form opened. A concurrent settings change
+rejects the save and retains the form. Git fetching requires a wizard.
 
-The review opens on **Changes**. **Upstream source** identifies the repository, revision, or URL.
-**Left unchanged** groups unsupported fields by reason. **Groups** appears only when groups exist.
-**Results** lists the choices from a completed apply. These views leave the comparison area
-available for code. Edited drafts show compiler diagnostics in the Monaco editor. Reopening an
-invalid saved draft restores its diagnostics. Changing the draft clears markers for the previous
-text.
+Use **Repair history** only with the original upstream source that the world accepted. Adoption
+creates a separate review. Applying it records accepted history without replacing live programs. It
+does not merge an unknown version or resolve a conflict.
+
+The review summary counts selected changes, items needing attention, additions, and items that
+cannot apply. Search covers every review page. The list puts items needing attention first and shows
+saved decisions beside them. **Next item needing attention** moves to another unresolved item. On
+narrow screens, **Browse changes** and **Selected item** switch between the list and the code.
+Narrow comparisons use a unified diff.
+
+**Use upstream** replaces the program. **Keep my code** preserves it and acknowledges the incoming
+version for future comparisons. **Decide later** preserves both live code and its accepted history.
+Edited programs must compile before apply. Properties and object additions show their separate
+rules.
+
+**Review planned effects** shows counts for the entire review, including automatic choices on
+unopened pages. Its item list has additional pages. **Confirm apply** submits that exact prepared
+selection. Changes to choices, policy, or live evidence require another check.
+
+**Results** opens after apply and lists committed effects. Every recorded decision remains available
+through pagination. A partial result offers **Continue remaining work** or **Finish review**. Finish
+keeps installed changes and releases the review without accepting deferred baselines. A later update
+still sees those deferred changes. History does not provide a general rollback command.
+
+**Upstream source** identifies the repository, revision, or URL. **Limitations** describes fields
+the updater does not manage. These notes do not mean that each listed field changed upstream. Group
+controls appear beside additions and other members that need them. Existing groups have a separate
+view with their dependencies and selection state.
+
+Expand **Accepted source for comparison** to retrieve historical text or supply an original objdef.
+Known history without loaded source differs from unknown accepted history. **Saved work** appears
+when changed or missing members have retained decisions that need another check. Their earlier
+edited programs remain readable and never move silently to another member.
+
+**Consult the world** hides the panel and preserves its unsaved draft. **Return to change review**
+restores the panel. Edited drafts show compiler errors in the editor. Reopening an invalid saved
+draft restores its diagnostics. Changing the draft clears markers for the previous text.
 
 Meadow protects unsaved drafts during navigation and browser reload. After reconnect, it reads the
 current review state. If another client changed the review, Meadow retains unsaved text and requires

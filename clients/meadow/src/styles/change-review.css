@@ -16,7 +16,11 @@
 }
 
 .change-review-shell .dialog-sheet-header {
-  padding-bottom: 12px;
+  padding: 8px 12px;
+}
+.change-review-shell .dialog-sheet-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
 }
 
 .change-review-toolbar, .change-review-footer, .change-review-comparison, .change-review-resolution {
@@ -245,33 +249,6 @@
   border-top: 1px solid var(--color-border-light);
 }
 
-@media (max-width: 700px) {
-  .change-review-shell > .dialog-sheet {
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 100dvh;
-    max-height: 100dvh;
-    border-radius: 0;
-    padding: 10px;
-  }
-  .change-review-workspace {
-    flex-direction: column;
-  }
-  .change-review-sidebar {
-    width: auto;
-    max-height: 170px;
-  }
-  .change-review-sidebar > small {
-    display: none;
-  }
-  .change-review-code {
-    min-height: 250px;
-  }
-}
-
 .change-review-shell button, .change-review-shell select {
   font: inherit;
   color: var(--color-text-primary);
@@ -423,11 +400,8 @@
 }
 
 .change-review-base-source {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem;
+  display: block;
+  padding: 0;
 }
 
 .change-review-base-source label {
@@ -482,4 +456,150 @@
   align-items: center;
   gap: 8px;
   margin: 6px 0;
+}
+
+.change-review-shell[hidden], .change-review-workspace[hidden] {
+  display: none !important;
+}
+.change-review-resume {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: var(--z-dialog, 1000);
+  padding: 0.75rem 1rem;
+}
+.change-review-summary, .change-review-effect-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  margin: 0;
+}
+.change-review-summary {
+  color: var(--color-text-secondary);
+}
+.change-review-summary strong {
+  color: var(--color-text-primary);
+}
+.change-review-effect-counts > div {
+  display: flex;
+  gap: 0.5rem;
+}
+.change-review-effect-counts dd {
+  font-weight: bold;
+  margin: 0;
+}
+.change-review-saved-choice {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+.change-review-item {
+  flex-wrap: wrap;
+}
+.change-review-inline-group {
+  border-left: 3px solid var(--color-border-medium);
+  padding: 0.25rem 0.75rem;
+}
+.change-review-confirmation {
+  overflow: auto;
+  max-height: 70vh;
+}
+.change-review-details textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+.change-review-sidebar input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-medium);
+  padding: 0.5rem;
+}
+
+
+
+
+.change-review-base-source summary {
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  padding: 0.25rem 0;
+}
+.change-review-base-source label {
+  margin-top: 0.5rem;
+}
+.change-review-choice-help {
+  width: 100%;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+.change-review-mobile-nav {
+  display: none;
+}
+
+
+.change-review-comparison[data-has-baseline="false"] > label,
+.change-review-comparison[data-has-baseline="false"] > select {
+  display: none;
+}
+.change-review-choice-help summary {
+  cursor: pointer;
+}
+.change-review-resolution {
+  border-top: 1px solid var(--color-border-light);
+  padding-top: 0.5rem;
+  flex-shrink: 0;
+}
+
+
+
+
+@media (max-width: 899px) {
+  .change-review-shell > .dialog-sheet {
+    inset: 1vh 2vw;
+    height: 98vh;
+    padding: 10px;
+    overflow: auto;
+  }
+  .change-review-workspace {
+    flex-direction: column;
+    flex: none;
+    min-height: 400px;
+    overflow: visible;
+  }
+  .change-review-sidebar {
+    width: 100%;
+    height: 400px;
+    max-height: none;
+    min-height: 0;
+    flex: none;
+  }
+  .change-review-code {
+    min-height: 0;
+    flex: none;
+    overflow: visible;
+  }
+  .change-review-diff {
+    height: 260px;
+    flex: none;
+  }
+  .change-review-three-way {
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+  }
+  .change-review-three-way > section {
+    min-height: 240px;
+  }
+  .change-review-mobile-nav {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .change-review-shell[data-mobile-view="code"] .change-review-sidebar,
+  .change-review-shell[data-mobile-view="list"] .change-review-code,
+  .change-review-comparison .change-review-layout,
+  .change-review-comparison[data-has-baseline="false"] {
+    display: none;
+  }
 }

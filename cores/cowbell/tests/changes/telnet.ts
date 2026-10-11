@@ -100,8 +100,8 @@ try {
     const comparison = await terminal.command("@changes compare 5", "leave both code and baseline unchanged.");
     assert.match(comparison, /- local 1: return 3;/);
     assert.match(comparison, /\+ upstream 1: return 2;/);
-    await terminal.command("@changes keep 5", "Keep local saved for");
-    await terminal.command("@changes later 7", "Skip saved for");
+    await terminal.command("@changes keep 5", "Keep my code saved for");
+    await terminal.command("@changes later 7", "Decide later saved for");
     await terminal.command("@changes edit 6", "Prefix a literal dot with another dot.");
     terminal.send("const value = \"#9500\";");
     await terminal.command("@abort", "Live code and the review choice are unchanged.");

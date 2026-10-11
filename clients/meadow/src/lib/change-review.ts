@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with
 // this program. If not, see <https://www.gnu.org/licenses/>.
 
-import { buildStructuredArgs, SemanticAnnotation, StructuredArgument } from "@moor/web-sdk";
+import { buildStructuredArgs, jsObjectRefToCurie, SemanticAnnotation, StructuredArgument } from "@moor/web-sdk";
 import { changeServiceFailure } from "./change-service";
 import { invokeVerbFlatBuffer } from "./rpc-fb";
 
@@ -20,7 +20,7 @@ export const changeLabels = {
     upstream: "Upstream edits",
     local: "Local edits",
     converged: "Already match",
-    unbased: "Without a baseline",
+    unbased: "History unknown",
     unchanged: "Unchanged",
     local_only: "Local only",
     incoming_only: "Upstream only",
@@ -47,7 +47,9 @@ export interface DiagnosticPage {
 export interface ReviewReceipt {
     completedAt: number;
     decisionCount: number;
-    decisions: { id: string; label: string; choice: string; accepted: string }[];
+    next: number;
+    actor: string;
+    decisions: { id: string; label: string; choice: string; accepted: string; effect: string }[];
 }
 export interface ChangeRow {
     id: string;
@@ -64,6 +66,8 @@ export interface ChangeRow {
     choices: Choice[];
     default: Choice;
     choice?: { choice: Choice; program?: string; validated?: boolean };
+    needsReview?: boolean;
+    recovery?: { program?: string; reason: string };
     base?: string;
     live: string;
     incoming: string;
@@ -87,6 +91,8 @@ export interface ChangeGroup {
     requires: string[];
     complete: boolean;
     count: number;
+    selected: number;
+    status: string;
 }
 export interface ReviewPage {
     generation: number;
@@ -105,12 +111,51 @@ export interface ReviewStatus {
     error?: { message?: string };
     provenance?: Record<string, unknown>;
     receipt?: ReviewReceipt;
+    recoveryCount: number;
 }
 export interface InspectionPage {
     revision: string;
     rows: ChangeRow[];
     counts: Partial<Record<Classification, number>>;
     next: number;
+}
+
+export const effectLabels: Record<string, string> = {
+    program: "Replace program",
+    add_verb: "Add verb",
+    add_property: "Create property with its initial value",
+    add_object: "Create object",
+    baseline: "Acknowledge upstream; keep live contents",
+    retained: "Keep live contents",
+    deferred: "Decide later; keep contents and baseline",
+    blocked: "Cannot apply",
+};
+export interface ReviewEffect {
+    id: string;
+    label: string;
+    effect: string;
+    defaulted: boolean;
+}
+export interface PreparedReview {
+    generation: number;
+    handle: Record<string, StructuredArgument>;
+    counts: Record<string, number>;
+    effects: ReviewEffect[];
+    next: number;
+    total: number;
+    canApply: boolean;
+}
+export interface RecoveryPage {
+    items: { id: string; label: string; reason: string; program?: string }[];
+    next: number;
+    total: number;
+}
+export function needsAttention(row: ChangeRow): boolean {
+    if (row.read_only) return false;
+    if (row.needsReview) return true;
+    if (row.choice?.choice === "defer") return false;
+    return !row.eligible || (row.choice?.choice ?? row.default) === "unresolved"
+        || row.choice?.choice === "edited" && !row.choice.validated;
 }
 
 function object(value: unknown): Record<string, unknown> {
@@ -146,6 +191,9 @@ function receipt(value: unknown): ReviewReceipt {
     if (!Array.isArray(item.decisions)) throw new Error("Invalid review receipt.");
     return {
         completedAt: number(item.completed_at),
+        next: number(item.next_decision ?? 0),
+        actor: (jsObjectRefToCurie(item.actor)?.replace(/^oid:/, "#")
+            ?? (typeof item.actor === "string" ? item.actor : "")),
         decisionCount: number(item.decision_count),
         decisions: item.decisions.map(value => {
             const decision = object(value);
@@ -154,6 +202,7 @@ function receipt(value: unknown): ReviewReceipt {
                 label: text(decision.label ?? decision.id),
                 choice: text(decision.choice),
                 accepted: text(decision.accepted),
+                effect: text(decision.effect ?? "retained"),
             };
         }),
     };
@@ -177,6 +226,17 @@ export function decodeChangeRow(value: unknown, details = false): ChangeRow {
         : label;
     const saved = object(row.choice ?? {});
     return {
+        needsReview: row.needs_review === true || row.needs_review === 1,
+        ...(row.recovery && Object.keys(object(row.recovery)).length
+            ? {
+                recovery: {
+                    reason: text(object(row.recovery).reason),
+                    program: typeof object(object(row.recovery).choice).program === "string"
+                        ? text(object(object(row.recovery).choice).program)
+                        : undefined,
+                },
+            }
+            : {}),
         member: typeof row.member === "string" ? row.member : undefined,
         group: typeof row.group === "string" ? row.group : undefined,
         operation: typeof row.operation === "string" ? row.operation : undefined,
@@ -245,7 +305,11 @@ export class ChangeReviewClient {
             | "diagnostics"
             | "resolve"
             | "apply"
-            | "refresh",
+            | "refresh"
+            | "prepare_apply"
+            | "result"
+            | "recovery"
+            | "finish",
         args: StructuredArgument[],
     ) {
         const { result } = await invokeVerbFlatBuffer(
@@ -267,6 +331,7 @@ export class ChangeReviewClient {
         return {
             generation: number(status.generation),
             package: text(status.package),
+            recoveryCount: number(status.recovery_count ?? 0),
             status: text(status.status),
             provenance: object(status.provenance ?? {}),
             ...(status.decision_count !== undefined
@@ -330,6 +395,8 @@ export class ChangeReviewClient {
                     requires: group.requires.map(text),
                     complete: group.complete === true || group.complete === 1,
                     count: number(group.count),
+                    selected: number(group.selected ?? 0),
+                    status: text(group.status ?? (group.complete ? "partial" : "blocked")),
                 };
             }),
             groupValidation: (Array.isArray(page.group_validation) ? page.group_validation : []).map(value =>
@@ -406,8 +473,71 @@ export class ChangeReviewClient {
             .map(item => `Line ${number(item.line ?? 1)}: ${text(item.message)}`);
         return { generation: next, errors };
     }
-    async apply(generation: number): Promise<ReviewStatus> {
-        await this.invoke("apply", [this.target.review, generation]);
+    async prepare(generation: number, offset = 1): Promise<PreparedReview> {
+        const result = await this.invoke("prepare_apply", [this.target.review, generation, offset]);
+        if (result.generation !== generation || !Array.isArray(result.effects)) {
+            throw new Error("Review changed. Read the planned effects again.");
+        }
+        const guard = object(result.prepared);
+        if (guard.review_id !== this.target.review || guard.generation !== generation) {
+            throw new Error("Unexpected prepared selection.");
+        }
+        return {
+            generation,
+            handle: {
+                review_id: number(guard.review_id),
+                generation: number(guard.generation),
+                package_generation: number(guard.package_generation),
+                evidence: { schema: number(object(guard.evidence).schema), guard: text(object(guard.evidence).guard) },
+            },
+            counts: Object.fromEntries(
+                Object.entries(object(result.counts)).map(([key, value]) => [key, number(value)]),
+            ),
+            effects: result.effects.map(value => {
+                const effect = object(value);
+                return {
+                    id: text(effect.id),
+                    label: text(effect.label),
+                    effect: text(effect.effect),
+                    defaulted: effect.defaulted === true || effect.defaulted === 1,
+                };
+            }),
+            next: number(result.next),
+            total: number(result.total),
+            canApply: result.can_apply === true || result.can_apply === 1,
+        };
+    }
+    async result(generation: number, offset = 1): Promise<ReviewReceipt> {
+        const result = await this.invoke("result", [this.target.review, generation, offset]);
+        if (result.generation !== generation) throw new Error("Results changed. Reload the review.");
+        return receipt(result);
+    }
+    async recovery(generation: number, offset = 1): Promise<RecoveryPage> {
+        const result = await this.invoke("recovery", [this.target.review, generation, offset]);
+        if (result.generation !== generation || !Array.isArray(result.items)) {
+            throw new Error("Saved decisions changed. Reload the review.");
+        }
+        return {
+            total: number(result.total),
+            next: number(result.next),
+            items: result.items.map(value => {
+                const item = object(value);
+                const saved = object(item.choice);
+                return {
+                    id: text(item.id),
+                    label: text(item.label ?? item.member),
+                    reason: text(item.reason),
+                    ...(typeof saved.program === "string" ? { program: saved.program } : {}),
+                };
+            }),
+        };
+    }
+    async finish(generation: number): Promise<ReviewStatus> {
+        await this.invoke("finish", [this.target.review, generation]);
+        return this.status();
+    }
+    async apply(generation: number, prepared?: Record<string, StructuredArgument>): Promise<ReviewStatus> {
+        await this.invoke("apply", [this.target.review, generation, ...(prepared ? [prepared] : [])]);
         return this.status();
     }
     async refresh(generation: number): Promise<number> {

@@ -39,12 +39,6 @@ const sourceFields: Record<string, string> = {
     etag: "ETag",
     digest: "Source digest",
 };
-const outcomes: Record<string, string> = {
-    incoming: "Accepted upstream",
-    local: "Kept local",
-    edited: "Used edited program",
-    defer: "Deferred",
-};
 const noteTitles: Record<string, string> = {
     missing_source: "Objects missing from the source",
     live_definition_unmatched: "Local verbs missing from the source",
@@ -66,7 +60,7 @@ function sourceValue(value: unknown): string {
 }
 
 export function ReviewSourceDetails({ view, status, diagnostics, busy, onMore }: {
-    view: "source" | "unchanged" | "results";
+    view: "source" | "unchanged";
     status: ReviewStatus | null;
     diagnostics: DiagnosticPage | null;
     busy: boolean;
@@ -75,7 +69,6 @@ export function ReviewSourceDetails({ view, status, diagnostics, busy, onMore }:
     const provenance = Object.keys(sourceFields)
         .map(key => [key, status?.provenance?.[key]] as const)
         .filter(([, value]) => value != null && sourceValue(value) !== "");
-    const receipt = status?.receipt;
     const notes = new Map<string, ReviewDiagnostic[]>();
     for (const item of diagnostics?.rows ?? []) {
         notes.set(item.code, [...(notes.get(item.code) ?? []), item]);
@@ -83,7 +76,7 @@ export function ReviewSourceDetails({ view, status, diagnostics, busy, onMore }:
     return (
         <section
             className="change-review-details"
-            aria-label={view === "source" ? "Upstream source" : view === "results" ? "Apply receipt" : "Left unchanged"}
+            aria-label={view === "source" ? "Upstream source" : "Limitations"}
         >
             {view === "source" && (
                 <>
@@ -105,10 +98,11 @@ export function ReviewSourceDetails({ view, status, diagnostics, busy, onMore }:
             )}
             {view === "unchanged" && (
                 <>
-                    <h3>Left unchanged</h3>
+                    <h3>Limitations</h3>
                     <p>
-                        Apply does not change these parts of the supplied source. Expand a reason to see the affected
-                        items.
+                        These notes describe fields this updater does not manage. Their presence does not mean those
+                        fields changed upstream. The comparison shows actual differences; Results shows committed
+                        effects.
                     </p>
                     {[...notes].map(([code, items]) => (
                         <details className="change-review-note" key={code}>
@@ -140,36 +134,6 @@ export function ReviewSourceDetails({ view, status, diagnostics, busy, onMore }:
                     ))}
                     {diagnostics && diagnostics.next > 0 && (
                         <button type="button" disabled={busy} onClick={onMore}>Load more items</button>
-                    )}
-                </>
-            )}
-            {view === "results" && receipt && (
-                <>
-                    <h3>Results</h3>
-                    <p>
-                        {receipt.decisionCount} choices applied at{" "}
-                        {new Date(receipt.completedAt * 1000).toLocaleString()}.
-                    </p>
-                    <table className="change-review-table">
-                        <thead>
-                            <tr>
-                                <th scope="col">Item</th>
-                                <th scope="col">Result</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {receipt.decisions.map(item => (
-                                <tr key={item.id}>
-                                    <th scope="row">
-                                        <code>{item.label}</code>
-                                    </th>
-                                    <td>{outcomes[item.choice] ?? item.choice}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {receipt.decisions.length < receipt.decisionCount && (
-                        <p>Details are available for the first {receipt.decisions.length} choices.</p>
                     )}
                 </>
             )}

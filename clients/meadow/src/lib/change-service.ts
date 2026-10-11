@@ -57,6 +57,8 @@ export interface CompletedReview {
     status: string;
     completedAt: number;
     decisionCount: number;
+    actor: string;
+    provenance: Record<string, unknown>;
 }
 export interface PackageConfiguration {
     name: string;
@@ -244,17 +246,30 @@ export class ChangeServiceClient {
         if (result.review_id !== review || result.status !== "discarded") throw new Error("Unexpected discard result.");
     }
     async history(name: string): Promise<CompletedReview[]> {
-        const result = await this.invoke("history", [name]);
-        if (result.package !== name || !Array.isArray(result.reviews)) throw new Error("Unexpected review history.");
-        return result.reviews.map(value => {
-            const item = record(value);
-            return {
-                review: integer(item.review_id),
-                generation: integer(item.generation),
-                status: text(item.status),
-                completedAt: integer(item.completed_at),
-                decisionCount: integer(item.decision_count),
-            };
-        }).sort((left, right) => right.review - left.review);
+        const reviews: CompletedReview[] = [];
+        let offset = 1;
+        const seen = new Set<number>();
+        do {
+            if (seen.has(offset)) throw new Error("The service repeated a history page.");
+            seen.add(offset);
+            const result = await this.invoke("history", [name, offset]);
+            if (result.package !== name || !Array.isArray(result.reviews)) {
+                throw new Error("Unexpected review history.");
+            }
+            reviews.push(...result.reviews.map(value => {
+                const item = record(value);
+                return {
+                    review: integer(item.review_id),
+                    generation: integer(item.generation),
+                    status: text(item.status),
+                    completedAt: integer(item.completed_at),
+                    decisionCount: integer(item.decision_count),
+                    actor: jsObjectRefToCurie(item.actor)?.replace(/^oid:/, "#") ?? "",
+                    provenance: record(item.provenance ?? {}),
+                };
+            }));
+            offset = integer(result.next ?? 0);
+        } while (offset);
+        return reviews.sort((left, right) => right.review - left.review);
     }
 }

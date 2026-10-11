@@ -24,6 +24,12 @@ interface DialogSheetProps {
     ariaDescribedBy?: string;
 }
 
+const visibleFocusable = (root: HTMLElement) =>
+    Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(element =>
+        !element.matches(":disabled") && !element.closest("[hidden], [inert]")
+        && element.getClientRects().length > 0
+    );
+
 const FOCUSABLE_SELECTOR = "button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])";
 
 export const DialogSheet: React.FC<DialogSheetProps> = ({
@@ -47,7 +53,7 @@ export const DialogSheet: React.FC<DialogSheetProps> = ({
         // Focus the first focusable element in the dialog
         const focusFirstElement = () => {
             if (dialogRef.current) {
-                const focusableElements = dialogRef.current.querySelectorAll(FOCUSABLE_SELECTOR);
+                const focusableElements = visibleFocusable(dialogRef.current);
                 if (focusableElements.length > 0) {
                     (focusableElements[0] as HTMLElement).focus();
                 } else {
@@ -58,10 +64,11 @@ export const DialogSheet: React.FC<DialogSheetProps> = ({
         };
 
         // Use requestAnimationFrame to ensure DOM is ready
-        requestAnimationFrame(focusFirstElement);
+        const frame = requestAnimationFrame(focusFirstElement);
 
         // Cleanup: restore focus when dialog unmounts
         return () => {
+            cancelAnimationFrame(frame);
             if (previouslyFocusedRef.current && previouslyFocusedRef.current.focus) {
                 previouslyFocusedRef.current.focus();
             }
@@ -73,13 +80,14 @@ export const DialogSheet: React.FC<DialogSheetProps> = ({
         (e: React.KeyboardEvent) => {
             if (e.key === "Escape") {
                 e.preventDefault();
+                e.stopPropagation();
                 onCancel();
                 return;
             }
 
             // Focus trapping for Tab key
             if (modal && e.key === "Tab" && dialogRef.current) {
-                const focusableElements = dialogRef.current.querySelectorAll(FOCUSABLE_SELECTOR);
+                const focusableElements = visibleFocusable(dialogRef.current);
                 if (focusableElements.length === 0) return;
 
                 const firstElement = focusableElements[0] as HTMLElement;
